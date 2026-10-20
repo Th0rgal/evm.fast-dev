@@ -1066,6 +1066,192 @@ theorem stack_halt_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
         s k k0 res res0 post post0 hrun hnt hrun0 hnt0
       exact ⟨hr ▸ hclass0, congrArg HolFfiState.ioEvents hffi⟩
 
+/-- Syntactic predicate characterizing `StackLang` programs that `StackAlloc.comp` leaves
+completely unchanged (no `.alloc`, no `.storeConsts _ _ (some _)`, and no handler on tail calls). -/
+def noAllocOrStoreConsts {width : Nat} [NeZero width] : HolProg width → Bool
+  | .seq p1 p2 => noAllocOrStoreConsts p1 && noAllocOrStoreConsts p2
+  | .ite _ _ _ p1 p2 => noAllocOrStoreConsts p1 && noAllocOrStoreConsts p2
+  | .loop p1 => noAllocOrStoreConsts p1
+  | .call none _ none => true
+  | .call none _ (some _) => false
+  | .call (some (p1, _, _, _)) _ none => noAllocOrStoreConsts p1
+  | .call (some (p1, _, _, _)) _ (some (p2, _, _)) =>
+      noAllocOrStoreConsts p1 && noAllocOrStoreConsts p2
+  | .alloc _ => false
+  | .storeConsts _ _ (some _) => false
+  | _ => true
+
+/-- When `noAllocOrStoreConsts p = true`, `StackAlloc.comp n m p` is the exact identity `(p, m)`. -/
+theorem stack_alloc_comp_eq_self {width : Nat} [NeZero width] :
+    ∀ (n m : Nat) (p : HolProg width),
+      noAllocOrStoreConsts p = true → StackAlloc.comp n m p = (p, m)
+  | n, m, .seq p1 p2, h => by
+      simp only [noAllocOrStoreConsts, Bool.and_eq_true] at h
+      simp only [StackAlloc.comp, stack_alloc_comp_eq_self n m p1 h.1,
+        stack_alloc_comp_eq_self n m p2 h.2]
+  | n, m, .ite c r ri p1 p2, h => by
+      simp only [noAllocOrStoreConsts, Bool.and_eq_true] at h
+      simp only [StackAlloc.comp, stack_alloc_comp_eq_self n m p1 h.1,
+        stack_alloc_comp_eq_self n m p2 h.2]
+  | n, m, .loop p1, h => by
+      simp only [noAllocOrStoreConsts] at h
+      simp only [StackAlloc.comp, stack_alloc_comp_eq_self n m p1 h]
+  | n, m, .call none dest none, _ => rfl
+  | _, _, .call none _ (some _), h => by simp [noAllocOrStoreConsts] at h
+  | n, m, .call (some (p1, lr, l1, l2)) dest none, h => by
+      simp only [noAllocOrStoreConsts] at h
+      simp only [StackAlloc.comp, stack_alloc_comp_eq_self n m p1 h]
+  | n, m, .call (some (p1, lr, l1, l2)) dest (some (p2, k1, k2)), h => by
+      simp only [noAllocOrStoreConsts, Bool.and_eq_true] at h
+      simp only [StackAlloc.comp, stack_alloc_comp_eq_self n m p1 h.1,
+        stack_alloc_comp_eq_self n m p2 h.2]
+  | _, _, .alloc _, h => by simp [noAllocOrStoreConsts] at h
+  | _, _, .storeConsts _ _ (some _), h => by simp [noAllocOrStoreConsts] at h
+  | _, _, .storeConsts _ _ none, _ | _, _, .skip, _ | _, _, .halt _, _ | _, _, .tick, _
+  | _, _, .ret _, _ | _, _, .raise _, _ | _, _, .break _, _ | _, _, .continue _, _
+  | _, _, .inst _, _ | _, _, .get _ _, _ | _, _, .set _ _, _ | _, _, .opCurrHeap _ _ _, _
+  | _, _, .jumpLower _ _ _, _ | _, _, .rawCall _, _ | _, _, .install _ _ _ _ _, _
+  | _, _, .shMemOp _ _ _, _ | _, _, .codeBufferWrite _ _, _ | _, _, .dataBufferWrite _ _, _
+  | _, _, .ffi _ _ _ _ _ _, _ | _, _, .locValue _ _ _, _ | _, _, .stackAlloc _, _
+  | _, _, .stackFree _, _ | _, _, .stackLoad _ _, _ | _, _, .stackLoadAny _ _, _
+  | _, _, .stackStore _ _, _ | _, _, .stackStoreAny _ _, _ | _, _, .stackGetSize _, _
+  | _, _, .stackSetSize _, _ | _, _, .bitmapLoad _ _, _ => rfl
+termination_by _ _ p => sizeOf p
+decreasing_by all_goals simp_wf <;> omega
+
+/-- When `noAllocOrStoreConsts p = true`, `StackAlloc.progComp (n, p) = (n, p)`. -/
+theorem stack_alloc_progComp_eq_self {width : Nat} [NeZero width]
+    (n : Nat) (p : HolProg width) (h : noAllocOrStoreConsts p = true) :
+    StackAlloc.progComp (n, p) = (n, p) := by
+  simp [StackAlloc.progComp, stack_alloc_comp_eq_self n (StackAlloc.nextLabHOL p 2) p h]
+
+/-- Same-clock `WordToStack` non-timeout run agreement: if the compiled `StackSem` entry call
+does not time out at clock `k`, then its result and FFI state agree with the source `WordSem`
+entry call at the exact same clock `k`! -/
+theorem word_to_stack_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (ac : AsmConfigExact width) (k_reg : Nat)
+    (s : WordSemStateFiniteExact width (Nat × C) F)
+    (t : StackSemStateFiniteExact width C F)
+    (start k : Nat)
+    (res : Option (WordSemResult width))
+    (s1 : WordSemStateFiniteExact width (Nat × C) F)
+    (res_t : Option (StackSemResult width))
+    (t1 : StackSemStateFiniteExact width C F)
+    (related : WordToStackProofs.stateRel ac k_reg 0 0 s t [] 0)
+    (safe : WordSemStateFiniteExact.wordLangSafeForSpace s start)
+    (hrun_s : WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
+      { s with clock := k } = (res, s1))
+    (hne : res ≠ some .error)
+    (hrun_t : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { t with clock := k }) = (res_t, t1))
+    (hnt : res_t ≠ some .timeOut) :
+    res_t = res.map WordToStackProofs.CompCorrect.compileResult ∧ t1.ffi = s1.ffi := by
+  obtain ⟨ck, t_ck, hrun_ck, hffi_ck⟩ := word_to_stack_clocked_sim ac k_reg s t start k res s1
+    related safe hrun_s hne
+  have hadd := StackProps.evaluateAddClock ck (.call none (.inl start) none)
+    { t with clock := k } res_t t1 ⟨hrun_t, hnt⟩
+  rw [hadd] at hrun_ck
+  injection hrun_ck with hr hpost
+  exact ⟨hr, (congrArg StackSemStateFiniteExact.ffi hpost).trans hffi_ck.symm⟩
+
+/-- Same-clock `StackRawCall` non-timeout run agreement: if the `StackRawCall`-compiled state
+does not time out at `clock`, its result and FFI state agree with the source `StackSem` run at
+the exact same `clock`! -/
+theorem stack_rawcall_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (code : List (Nat × HolProg width)) (source : StackSemStateFiniteExact width C F)
+    (start clock : Nat) (result targetResult : Option (StackSemResult width))
+    (post targetPost : StackSemStateFiniteExact width C F)
+    (distinct : (code.map Prod.fst).Nodup) (sourceCode : source.code = sptFromAList code)
+    (run : StackSemEvaluate.evaluate
+      ((.call none (.inl start) none : HolProg width), { source with clock := clock }) =
+      (result, post))
+    (nonError : result ≠ some .error)
+    (targetRun : StackSemEvaluate.evaluate
+      ((.call none (.inl start) none : HolProg width),
+        { source with code := sptFromAList (StackRawCall.compile code), clock := clock }) =
+      (targetResult, targetPost))
+    (nonTimeout : targetResult ≠ some .timeOut) :
+    targetResult = result ∧ targetPost.ffi = post.ffi := by
+  obtain ⟨extra, post_ex, hrun_ex, hffi_ex⟩ := stack_rawcall_clocked_sim code source start clock
+    result post distinct sourceCode run nonError
+  have hadd := StackProps.evaluateAddClock extra (.call none (.inl start) none)
+    { source with code := sptFromAList (StackRawCall.compile code), clock := clock }
+    targetResult targetPost ⟨targetRun, nonTimeout⟩
+  rw [hadd] at hrun_ex
+  injection hrun_ex with hr hpost
+  exact ⟨hr, (congrArg StackSemStateFiniteExact.ffi hpost).trans hffi_ex⟩
+
+/-- Same-clock `StackAlloc` non-timeout run agreement: if the `StackAlloc`-compiled state
+does not time out at clock `k`, its result and FFI state agree with the source `StackSem` run
+at the exact same clock `k`! -/
+theorem stack_alloc_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    {s : StackSemStateFiniteExact width C F} {c : DataToWord.Config}
+    {compile_rest : C → List (Nat × HolProg width) → Option (List (BitVec 8) × C)}
+    {start : Nat} {anything : WordSemGcFun width}
+    (hcode : ∀ k prog, sptLookup k s.code = some prog → k ≠ gcStubLocation ∧ StackProps.allocArg prog)
+    (horacle : ∀ (i k : Nat) (q : HolProg width), (k, q) ∈ (s.compileOracle i).2.1 →
+      k ≠ gcStubLocation ∧ StackProps.allocArg q)
+    (hgc : s.gcFun = WordGcFunctions.wordGcFun c)
+    (hbuf : s.bitmaps.length + s.dataBuffer.buffer.length + s.dataBuffer.spaceLeft < 2 ^ width - 1)
+    (hst : s.stack.length * (width / 8) < 2 ^ width)
+    (hK : s.useStack = true) (hA : s.useAlloc = true)
+    (hC : s.compile = (fun cfg => compile_rest cfg ∘ List.map StackAlloc.progComp))
+    (k : Nat) (r r_t : Option (StackSemResult width))
+    (t t_post : StackSemStateFiniteExact width C F)
+    (he : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { s with clock := k }) = (r, t))
+    (hr : r ≠ some .error)
+    (he_t : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { s with
+        code := sptFromAList (StackAlloc.compile c (sptToAList s.code))
+        gcFun := anything
+        compile := compile_rest
+        compileOracle := Prod.map id (Prod.map (List.map StackAlloc.progComp) id) ∘ s.compileOracle
+        useStore := true, useStack := true, useAlloc := false, clock := k }) = (r_t, t_post))
+    (hnt : r_t ≠ some .timeOut) :
+    r_t = r ∧ t_post.ffi = t.ffi := by
+  obtain ⟨ck, hr_ck, hffi_ck⟩ := stack_alloc_clocked_sim (anything := anything)
+    hcode horacle hgc hbuf hst hK hA hC k r t he hr
+  have hadd := StackProps.evaluateAddClock ck (.call none (.inl start) none)
+    { s with
+      code := sptFromAList (StackAlloc.compile c (sptToAList s.code))
+      gcFun := anything
+      compile := compile_rest
+      compileOracle := Prod.map id (Prod.map (List.map StackAlloc.progComp) id) ∘ s.compileOracle
+      useStore := true, useStack := true, useAlloc := false, clock := k }
+    r_t t_post ⟨he_t, hnt⟩
+  rw [hadd] at hr_ck hffi_ck
+  exact ⟨hr_ck, hffi_ck⟩
+
+/-- Same-clock `StackRemove` non-timeout run agreement: if the `StackRemove`-compiled state
+does not time out at `clock`, its result and FFI state agree with the source `StackSem` run
+at the exact same `clock`! -/
+theorem stack_remove_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (jump : Bool) (bounds : BitVec width × BitVec width) (pointer start clock : Nat)
+    (source target postSource postTarget : StackSemStateFiniteExact width C F)
+    (sourceResult targetResult : Option (StackSemResult width))
+    (relation : StackRemove.stateRelHOL jump bounds pointer source target)
+    (sourceRun : StackSemEvaluate.evaluate
+      ((.call none (.inl start) none : HolProg width), { source with clock := clock }) =
+      (sourceResult, postSource))
+    (nonError : sourceResult ≠ some .error)
+    (targetRun : StackSemEvaluate.evaluate
+      ((.call none (.inl start) none : HolProg width), { target with clock := clock }) =
+      (targetResult, postTarget))
+    (nonTimeout : targetResult ≠ some .timeOut) :
+    targetResult = sourceResult ∧ postTarget.ffi = postSource.ffi := by
+  obtain ⟨extra, compiledPost, compiledRun, ffi⟩ :=
+    stack_remove_clocked_sim jump bounds pointer start clock source target postSource sourceResult
+      relation sourceRun nonError
+  have boostedRun := StackProps.evaluateAddClock extra (.call none (.inl start) none)
+    { target with clock := clock } targetResult postTarget ⟨targetRun, nonTimeout⟩
+  have same : (targetResult, { postTarget with clock := postTarget.clock + extra }) =
+      (sourceResult, compiledPost) := by
+    rw [← boostedRun]
+    simpa only [Nat.add_comm] using compiledRun
+  rcases Prod.mk.inj same with ⟨resultEqual, postEqual⟩
+  exact ⟨resultEqual, (congrArg StackSemStateFiniteExact.ffi postEqual).trans ffi⟩
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -1081,5 +1267,11 @@ theorem stack_halt_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
 #print axioms word_halt_of_not_timeOut
 #print axioms stackEvaluateIgnoreClocks
 #print axioms stack_halt_of_not_timeOut
+#print axioms stack_alloc_comp_eq_self
+#print axioms stack_alloc_progComp_eq_self
+#print axioms word_to_stack_run_agree_of_not_timeOut
+#print axioms stack_rawcall_run_agree_of_not_timeOut
+#print axioms stack_alloc_run_agree_of_not_timeOut
+#print axioms stack_remove_run_agree_of_not_timeOut
 
 end InitE

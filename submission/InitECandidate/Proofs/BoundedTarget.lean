@@ -764,6 +764,54 @@ theorem oracle_full_baseline_certificate_of_not_timeOut (submission : Submission
     post outcome events K_post hsem).mpr
     (not_timeOut_post input hgas outcome events source covered post related)
 
+/-- Constructive target halt transfer: if a target execution halts at some clock `k0` with
+`(.halt outcome, ms0, ffi0)` and does not time out at clock `K`, then it halts at clock `K`
+with the exact same `outcome` and `ffi0` (without `machineSemHOL`). -/
+theorem evaluateTarget_halt_of_not_timeOut_and_halt {width : Nat} [NeZero width] {S Q σ : Type}
+    (mc : MachineConfig width S Q) (ffi : HolFfiState σ) (ms : S)
+    (k0 K : Nat) (outcome : HolOutcome) (ms0 : S) (ffi0 : HolFfiState σ)
+    (hhalt0 : evaluateTargetHOL mc ffi k0 ms = (.halt outcome, ms0, ffi0))
+    (hnt : (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut) :
+    ∃ ms1, evaluateTargetHOL mc ffi K ms = (.halt outcome, ms1, ffi0) := by
+  rcases hrun1 : evaluateTargetHOL mc ffi K ms with ⟨r1, ms1, ffi1⟩
+  rw [hrun1] at hnt
+  have heq := evaluateTargetIgnoreClocks mc ffi K k0 ms r1 (.halt outcome) ms1 ms0 ffi1 ffi0
+    ⟨hrun1, hnt, hhalt0, by simp⟩
+  have hr1 : r1 = .halt outcome := congrArg Prod.fst heq
+  have hffi1 : ffi1 = ffi0 := congrArg (fun p => p.2.2) heq
+  subst hr1 hffi1
+  exact ⟨ms1, rfl⟩
+
+/-- Same-clock `LabToTarget` non-timeout run agreement: if the target machine does not time out
+at clock `K` and `LabSem.evaluate` does not error at clock `K`, then `LabSem.evaluate` at clock `K`
+produces the exact same result and FFI state as the target machine at clock `K`! -/
+theorem lab_to_target_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q F : Type}
+    (mc : MachineConfig width S Q) (p : BitVec width) (ms : S)
+    (s : Flapjack.Compiler.Backend.LabSem.State width LabToTarget.Config F)
+    (hencoder : encoderCorrect mc.target)
+    (hinit : initOk (mc, p) s ms)
+    (K : Nat)
+    (hne : (LabSem.evaluate { s with clock := K }).1 ≠ .error)
+    (hnt : (evaluateTargetHOL mc s.ffi K ms).1 ≠ .timeOut) :
+    (LabSem.evaluate { s with clock := K }).1 = (evaluateTargetHOL mc s.ffi K ms).1 ∧
+      (LabSem.evaluate { s with clock := K }).2.ffi = (evaluateTargetHOL mc s.ffi K ms).2.2 := by
+  obtain ⟨code2, labs, t1, hrel, htie⟩ := hinit
+  rcases hev : LabSem.evaluate { s with clock := K } with ⟨res_lab, next_lab⟩
+  have hres_ne : res_lab ≠ .error := by
+    rw [hev] at hne
+    exact hne
+  obtain ⟨extra, _, ms2, htarget⟩ := LabToTarget.compileCorrect (T := Unit) p
+    { s with clock := K } res_lab mc next_lab code2 labs t1 ms
+    ⟨oracleTie_clock mc ms s K htie, hev, hres_ne, hencoder,
+      stateRelClock (mc, code2, labs, p) s t1 ms K hrel⟩
+  rcases hrunK : evaluateTargetHOL mc s.ffi K ms with ⟨res_t, ms_t, ffi_t⟩
+  rw [hrunK] at hnt
+  have hadd := evaluateTargetAddClock mc s.ffi K ms extra res_t ms_t ffi_t hrunK hnt
+  rw [hadd] at htarget
+  injection htarget with hres hrest
+  injection hrest with _ hffi
+  exact ⟨hres.symm, hffi.symm⟩
+
 #print axioms certificate_of_exact_behaviour_and_bound
 #print axioms targetTerminatesAt_mono
 #print axioms targetTerminatesAt_of_not_timeOut
@@ -778,5 +826,7 @@ theorem oracle_full_baseline_certificate_of_not_timeOut (submission : Submission
 #print axioms pan_to_target_machine_lab_clocked_halt
 #print axioms oracle_full_baseline_bounded_certificate
 #print axioms oracle_full_baseline_certificate_of_not_timeOut
+#print axioms evaluateTarget_halt_of_not_timeOut_and_halt
+#print axioms lab_to_target_run_agree_of_not_timeOut
 
 end InitE

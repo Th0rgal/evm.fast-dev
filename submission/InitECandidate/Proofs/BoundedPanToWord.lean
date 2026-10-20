@@ -2038,6 +2038,147 @@ theorem oracle_full_baseline_terminate_clocked_halt (oracles : List (Option (Spt
   exact oracle_full_baseline_clocked_halt_at oracles input c depth compiled depthBound installed
     outcome events source stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hnt
 
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Compiler.Encoders.RiscV.Target
+open Flapjack.Pancake.PanToTarget (semanticsDecls_mainFirstHOL) in
+/-- Constructive post-bootstrap target halt witness from `sourceBehaviour input = .terminate outcome events`
+through `oracle_baseline_endpoint_clocked_halt`, bypassing `target_has_behaviour` completely! -/
+theorem oracle_baseline_endpoint_terminate_clocked_halt (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (ms : RiscV.L3.riscv_state)
+    (related : targetStateRel riscvTarget installedAsm ms)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (source : sourceBehaviour input = .terminate outcome events) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL baselineMachineConfig (sourceFfi input) k_target ms = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = events := by
+  have nonfail : sourceBehaviour input ≠ HolBehaviour.fail := by
+    rw [source]; intro h; cases h
+  have hsem := semanticsDecls_mainFirstHOL (sourceInitialState input) (ofString "main")
+    (Guest.guestAst.map Pancake.PanLang.declToHOL) sourceHasMain
+  have hterm : PanSemStateFiniteExact.semanticsDecls (sourceInitialState input)
+      (ofString "main") sourceDeclarations = .terminate outcome events :=
+    hsem.trans source
+  obtain ⟨stCtxt, s_decls, hst, hev_decls, _, k_pan, res_src, s_src_post, hev_call, hclass_src, hio_src⟩ :=
+    semanticsDecls_terminate_extract (sourceInitialState input) (ofString "main")
+      sourceDeclarations outcome events hterm
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_baseline_endpoint_clocked_halt oracles input c depth ms related compiled depthBound
+      installed nonfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+  exact ⟨k_target, ms2, ffi2, htarget, hio.trans hio_src⟩
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig in
+/-- Constructive `matchingExecutionAt` witness directly from `oracle_full_baseline_terminate_clocked_halt`,
+bypassing `target_has_behaviour`, `machineSemHOL`, and `OracleBaselineCorrectness` completely! -/
+theorem oracle_full_baseline_matchingExecutionAt_of_clocked_halt (submission : Submission)
+    (hmc : submission.machineConfig = baselineMachineConfig)
+    (hinit : submission.initialState = baselineInitialState)
+    (oracles : List (Option (Spt Nat)))
+    (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (input : Guest.InputBlob) (outcome : HolOutcome) (events : List HolIoEvent)
+    (source : sourceBehaviour input = .terminate outcome events)
+    (covered : coveredOutcome outcome) :
+    ∃ k_target, matchingExecutionAt submission input outcome events (bootstrapSteps + k_target) := by
+  have hmem : panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+      c.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
+      baselineMachineConfig c.labConf.shmemExtra baselineInstalledState
+      (wlabWlocExact ∘ (sourceInitialState input).memory)
+      (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs := by
+    rw [hlab]
+    exact baseline_pan_installed input
+  have hinst := oracle_baseline_installation input c hmem
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_full_baseline_terminate_clocked_halt oracles input c depth compiled depthBound
+      hinst outcome events source
+  refine ⟨k_target, outcome, ms2, ffi2, ?_, ?_⟩
+  · rw [hmc, hinit]
+    exact htarget
+  · rw [← hio]
+    exact matchingResult_refl input outcome ffi2.ioEvents covered
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig in
+/-- Direct `InitE.Certificate submission .infinity` proved constructively from
+`oracle_full_baseline_matchingExecutionAt_of_clocked_halt` without `target_has_behaviour`! -/
+theorem oracle_full_baseline_certificate_infinity_of_clocked_halt (submission : Submission)
+    (score : submission.K = .infinity)
+    (admitted : submission.Admitted)
+    (hmc : submission.machineConfig = baselineMachineConfig)
+    (hinit : submission.initialState = baselineInitialState)
+    (oracles : List (Option (Spt Nat)))
+    (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480) :
+    InitE.Certificate submission .infinity := by
+  refine ⟨score, admitted, ?_⟩
+  intro input _ outcome events source covered
+  obtain ⟨k_target, hmatch⟩ :=
+    oracle_full_baseline_matchingExecutionAt_of_clocked_halt submission hmc hinit oracles c depth
+      hlab compiled depthBound input outcome events source covered
+  exact ⟨bootstrapSteps + k_target, trivial, hmatch⟩
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Compiler.Encoders.RiscV.Target in
+/-- Direct finite-`K` `InitE.Certificate submission (.finite K)` proved constructively from
+`oracle_baseline_endpoint_terminate_clocked_halt` + `evaluateTarget_halt_of_not_timeOut_and_halt`,
+bypassing `target_has_behaviour` and `machineSemHOL` completely! -/
+theorem oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut (submission : Submission)
+    (K K_post : Nat)
+    (score : submission.K = .finite K)
+    (admitted : submission.Admitted)
+    (hmc : submission.machineConfig = baselineMachineConfig)
+    (hinit : submission.initialState = baselineInitialState)
+    (oracles : List (Option (Spt Nat)))
+    (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (hK : bootstrapSteps + K_post ≤ K)
+    (not_timeOut_post : ∀ input : Guest.InputBlob,
+      Guest.GasLimit.declaredGasLimit input ≤ 200000000 →
+      ∀ outcome events,
+        sourceBehaviour input = .terminate outcome events →
+        coveredOutcome outcome →
+        ∀ post : RiscV.L3.riscv_state,
+          targetStateRel riscvTarget installedAsm post →
+          (evaluateTargetHOL baselineMachineConfig (sourceFfi input) K_post post).1 ≠ .timeOut) :
+    InitE.Certificate submission (.finite K) := by
+  refine certificate_of_bounded_behaviour submission K score admitted ?_
+  intro input hgas outcome events source covered
+  obtain ⟨post, shift, related⟩ := full_baseline_evaluator_exact input
+  have hmem : panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+      c.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
+      baselineMachineConfig c.labConf.shmemExtra baselineInstalledState
+      (wlabWlocExact ∘ (sourceInitialState input).memory)
+      (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs := by
+    rw [hlab]
+    exact baseline_pan_installed input
+  have hinst := oracle_baseline_installation input c hmem
+  obtain ⟨k0, ms0, ffi0, hhalt0, hio0⟩ :=
+    oracle_baseline_endpoint_terminate_clocked_halt oracles input c depth post related
+      compiled depthBound hinst outcome events source
+  have hnt := not_timeOut_post input hgas outcome events source covered post related
+  obtain ⟨ms1, hhaltK⟩ := evaluateTarget_halt_of_not_timeOut_and_halt
+    baselineMachineConfig (sourceFfi input) post k0 K_post outcome ms0 ffi0 hhalt0 hnt
+  refine ⟨bootstrapSteps + K_post, hK, outcome, ms1, ffi0, ?_, ?_⟩
+  · rw [hmc, hinit]
+    exact (shift K_post).trans hhaltK
+  · rw [← hio0]
+    exact matchingResult_refl input outcome ffi0.ioEvents covered
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -2061,5 +2202,9 @@ theorem oracle_full_baseline_terminate_clocked_halt (oracles : List (Option (Spt
 #print axioms semanticsDecls_terminate_at_clock
 #print axioms oracle_full_baseline_clocked_halt_at
 #print axioms oracle_full_baseline_terminate_clocked_halt
+#print axioms oracle_baseline_endpoint_terminate_clocked_halt
+#print axioms oracle_full_baseline_matchingExecutionAt_of_clocked_halt
+#print axioms oracle_full_baseline_certificate_infinity_of_clocked_halt
+#print axioms oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut
 
 end InitE
