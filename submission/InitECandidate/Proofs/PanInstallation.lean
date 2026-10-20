@@ -1,5 +1,6 @@
 import InitECandidate.Proofs.CompilerComputation
 import InitECandidate.Proofs.PanInstallationCore
+import InitECandidate.Proofs.BaselineArtifact
 
 open scoped InitECandidate.Proofs.CompilerComputation
 
