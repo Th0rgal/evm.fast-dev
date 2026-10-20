@@ -2454,6 +2454,259 @@ theorem oracle_full_baseline_halt_agree_of_not_timeOut (oracles : List (Option (
   rw [hhaltK]
   exact ⟨rfl, hio⟩
 
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Compiler.Encoders.RiscV.Target in
+/-- Non-timeout post-bootstrap target halt agreement for `oracle_baseline_endpoint_clocked_halt`:
+at any post-bootstrap state `ms` related to `installedAsm`, if `sourceDeclarations` halts on
+`sourceInitialState input` at clock `k_pan` with `outcome`, and `evaluateTargetHOL baselineMachineConfig
+(sourceFfi input) K ms` does not time out at clock `K`, then it halts with `outcome` and the exact
+same I/O events! -/
+theorem oracle_baseline_endpoint_halt_agree_of_not_timeOut (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (ms : RiscV.L3.riscv_state)
+    (related : targetStateRel riscvTarget installedAsm ms)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K : Nat)
+    (hnt : (evaluateTargetHOL baselineMachineConfig (sourceFfi input) K ms).1 ≠ .timeOut) :
+    (evaluateTargetHOL baselineMachineConfig (sourceFfi input) K ms).1 = .halt outcome ∧
+      (evaluateTargetHOL baselineMachineConfig (sourceFfi input) K ms).2.2.ioEvents =
+        s_src_post.ffi.ioEvents := by
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_baseline_endpoint_clocked_halt oracles input c depth ms related compiled depthBound
+      installed nonfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+  obtain ⟨ms1, hhaltK⟩ := evaluateTarget_halt_of_not_timeOut_and_halt
+    baselineMachineConfig (sourceFfi input) ms k_target K outcome ms2 ffi2 htarget hnt
+  rw [hhaltK]
+  exact ⟨rfl, hio⟩
+
+open Classical Flapjack.Compiler.Backend Flapjack.Pancake.Proofs.PanToTarget
+open StackToLab.Proofs.FullMakeInitSemantics LoopToWordStateRelImpSemanticsSupport in
+/-- Non-timeout `WordSem` run agreement for the `PanToWord` stage (`wst0`) inside `PanToTarget`:
+under the hypotheses of `pan_to_target_pan_to_word_stage_lab_clocked_sim`, if `s_decls` runs `start`
+at clock `k_pan` without `.RunError`, and `wst0` does not time out at clock `K_word`, then `wst0`
+at clock `K_word` has `wordEntryClass res_word = panEntryClass res_src` and identical I/O events! -/
+theorem pan_to_target_pan_to_word_stage_lab_run_agree_of_not_timeOut
+    {width : Nat} [NeZero width] {S Q C σ : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × StackLang.HolProg width)} {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × StackLang.HolProg width) × List (BitVec width)}
+    {sst x : StackSemStateFiniteExact width C σ}
+    (mc : MachineConfig width S Q) (ffi : HolFfiState σ) (tAsm : AsmState width)
+    (m : BitVec width → WordLocW width) (dm dm' sdm : BitVec width → Bool) (ms : S)
+    (lcode : LabSem.LabProgHOL width)
+    (comp : C → LabSem.LabProgHOL width → Option (List (BitVec 8) × C))
+    (cbpos : BitVec width) (cbspace : Nat) (lorac : Nat → C × LabSem.LabProgHOL width)
+    (bytes : List (BitVec 8))
+    (ac : AsmConfigExact width) (k_reg : Nat) (wcode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (worac : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (s : PanSemStateFiniteExact width σ) (isa : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS) (globalsSize heapLen : Nat)
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle)
+    (hfmi : StackToLab.Proofs.FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset
+      bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle = (sst, some x))
+    (hmc : LabToTarget.mcConfOk mc)
+    (hpm : ∀ a, decide (s.memaddrs a) = true → m a = wlabWlocExact (s.memory a))
+    (hgi : goodInitState mc ms bytes cbspace tAsm m dm' sdm)
+    (hsdm : (fun a => decide (s.shMemaddrs a)) = fun a => sdm a && holByteAligned a)
+    (hbase : mc.target.getReg ms mc.lenReg = s.baseAddr)
+    (hlt : mc.target.getReg ms mc.lenReg < mc.target.getReg ms mc.ptr2Reg)
+    (hlo : mc.target.getReg ms mc.lenReg +
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ≤
+        mc.target.getReg ms mc.ptr2Reg)
+    (hhi : mc.target.getReg ms mc.ptr2Reg ≤ mc.target.getReg ms mc.len2Reg -
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc)
+    (hheap : (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg).toNat ≤
+      (StackRemove.bytesInWord width).toNat * maxHeap)
+    (hheapLt : (StackRemove.bytesInWord width).toNat * maxHeap < 2 ^ width)
+    (halign : holAligned (wordShiftAmount width + 1)
+      (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg) = true)
+    (hbe : mc.target.config.bigEndian = s.be) (hffi : s.ffi = ffi)
+    (hheapLen : heapLen = (mc.target.getReg ms mc.ptr2Reg + -1 * s.baseAddr).toNat / (width / 8))
+    (hglobLe : globalsSize ≤ heapLen)
+    (hmemaddrs : s.memaddrs =
+      StackRemove.addresses (mc.target.getReg ms mc.lenReg) (heapLen - globalsSize))
+    (htop : s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heapLen -
+      BitVec.ofNat width (globalsSize * width / 8))
+    (hstart : start = ofString "main")
+    (hsize : globalsSize = ((decShapesHOL panCode).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] panCode)))).sum)
+    (hparams : distinctParamsHOL (functionsHOL panCode))
+    (hnodup : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (halloc : globalsAllocatableHOL s panCode) (hcode : s.code = HolFiniteMapExact.empty)
+    (hglobals : s.globals = HolFiniteMapExact.empty)
+    (hlocals : s.locals = HolFiniteMapExact.empty) (heids : sizeOfEidsHOL panCode < 2 ^ width)
+    (heshapes : s.eshapes = HolFiniteMapExact.empty)
+    (hfail : PanSemStateFiniteExact.semanticsDecls s start panCode ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] panCode = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      panCode = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError)
+    (res_word : Option (WordSemResult width))
+    (t_word : WordSemStateFiniteExact width (Nat × C) σ)
+    (hrun_w : WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+      { { WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac with
+          code := sptFromAList (panToWordCompileProgHOL isa panCode) } with clock := k_pan + 1 } =
+      (res_word, t_word))
+    (hnt_w : res_word ≠ some .timeOut) :
+    wordEntryClass res_word = panEntryClass res_src ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨k', t_word', res_word', hrun_w', hio_w', hclass_w'⟩ :=
+    pan_to_target_pan_to_word_stage_lab_clocked_sim mc ffi tAsm m dm dm' sdm ms lcode comp
+      cbpos cbspace lorac bytes ac k_reg wcode worac s isa panCode start globalsSize heapLen
+      hA hfmi hmc hpm hgi hsdm hbase hlt hlo hhi hheap hheapLt halign hbe hffi hheapLen hglobLe
+      hmemaddrs htop hstart hsize hparams hnodup halloc hcode hglobals hlocals heids heshapes
+      hfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hne_src
+  have hadd := WordSemStateFiniteExact.evaluate_add_clock k'
+    (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+    { { WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac with
+        code := sptFromAList (panToWordCompileProgHOL isa panCode) } with clock := k_pan + 1 }
+    res_word t_word ⟨hrun_w, hnt_w⟩
+  simp only at hadd
+  rw [hadd] at hrun_w'
+  injection hrun_w' with hr hpost
+  subst hr
+  have hffi_eq : t_word.ffi = t_word'.ffi := by rw [← hpost]
+  exact ⟨hclass_w', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
+
+open Classical Flapjack.Compiler.Backend Flapjack.Pancake.Proofs.PanToTarget
+open StackToLab.Proofs.FullMakeInitSemantics LoopToWordStateRelImpSemanticsSupport in
+/-- Arbitrary-clock `WordSem` halt agreement for the `PanToWord` stage (`wst0`) inside `PanToTarget`:
+under the hypotheses of `pan_to_target_pan_to_word_stage_lab_clocked_sim`, if `s_decls` runs `start`
+at clock `k_pan` with `panEntryClass res_src = .CompleteResult outcome`, and `wst0` does not time out
+at any clock `K_word`, then `wst0` at clock `K_word` completes with `wordEntryClass res_word =
+.CompleteResult outcome` and identical I/O events! -/
+theorem pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
+    {width : Nat} [NeZero width] {S Q C σ : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × StackLang.HolProg width)} {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × StackLang.HolProg width) × List (BitVec width)}
+    {sst x : StackSemStateFiniteExact width C σ}
+    (mc : MachineConfig width S Q) (ffi : HolFfiState σ) (tAsm : AsmState width)
+    (m : BitVec width → WordLocW width) (dm dm' sdm : BitVec width → Bool) (ms : S)
+    (lcode : LabSem.LabProgHOL width)
+    (comp : C → LabSem.LabProgHOL width → Option (List (BitVec 8) × C))
+    (cbpos : BitVec width) (cbspace : Nat) (lorac : Nat → C × LabSem.LabProgHOL width)
+    (bytes : List (BitVec 8))
+    (ac : AsmConfigExact width) (k_reg : Nat) (wcode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (worac : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (s : PanSemStateFiniteExact width σ) (isa : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS) (globalsSize heapLen : Nat)
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle)
+    (hfmi : StackToLab.Proofs.FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset
+      bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle = (sst, some x))
+    (hmc : LabToTarget.mcConfOk mc)
+    (hpm : ∀ a, decide (s.memaddrs a) = true → m a = wlabWlocExact (s.memory a))
+    (hgi : goodInitState mc ms bytes cbspace tAsm m dm' sdm)
+    (hsdm : (fun a => decide (s.shMemaddrs a)) = fun a => sdm a && holByteAligned a)
+    (hbase : mc.target.getReg ms mc.lenReg = s.baseAddr)
+    (hlt : mc.target.getReg ms mc.lenReg < mc.target.getReg ms mc.ptr2Reg)
+    (hlo : mc.target.getReg ms mc.lenReg +
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ≤
+        mc.target.getReg ms mc.ptr2Reg)
+    (hhi : mc.target.getReg ms mc.ptr2Reg ≤ mc.target.getReg ms mc.len2Reg -
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc)
+    (hheap : (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg).toNat ≤
+      (StackRemove.bytesInWord width).toNat * maxHeap)
+    (hheapLt : (StackRemove.bytesInWord width).toNat * maxHeap < 2 ^ width)
+    (halign : holAligned (wordShiftAmount width + 1)
+      (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg) = true)
+    (hbe : mc.target.config.bigEndian = s.be) (hffi : s.ffi = ffi)
+    (hheapLen : heapLen = (mc.target.getReg ms mc.ptr2Reg + -1 * s.baseAddr).toNat / (width / 8))
+    (hglobLe : globalsSize ≤ heapLen)
+    (hmemaddrs : s.memaddrs =
+      StackRemove.addresses (mc.target.getReg ms mc.lenReg) (heapLen - globalsSize))
+    (htop : s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heapLen -
+      BitVec.ofNat width (globalsSize * width / 8))
+    (hstart : start = ofString "main")
+    (hsize : globalsSize = ((decShapesHOL panCode).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] panCode)))).sum)
+    (hparams : distinctParamsHOL (functionsHOL panCode))
+    (hnodup : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (halloc : globalsAllocatableHOL s panCode) (hcode : s.code = HolFiniteMapExact.empty)
+    (hglobals : s.globals = HolFiniteMapExact.empty)
+    (hlocals : s.locals = HolFiniteMapExact.empty) (heids : sizeOfEidsHOL panCode < 2 ^ width)
+    (heshapes : s.eshapes = HolFiniteMapExact.empty)
+    (hfail : PanSemStateFiniteExact.semanticsDecls s start panCode ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] panCode = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      panCode = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K_word : Nat)
+    (res_word : Option (WordSemResult width))
+    (t_word : WordSemStateFiniteExact width (Nat × C) σ)
+    (hrun_w : WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+      { { WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac with
+          code := sptFromAList (panToWordCompileProgHOL isa panCode) } with clock := K_word } =
+      (res_word, t_word))
+    (hnt_w : res_word ≠ some .timeOut) :
+    wordEntryClass res_word = .CompleteResult outcome ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+  have hne_src : panEntryClass res_src ≠ .RunError := by
+    rw [hclass_src]; intro herr; cases herr
+  obtain ⟨k', t_word', res_word', hrun_w', hio_w', hclass_w'⟩ :=
+    pan_to_target_pan_to_word_stage_lab_clocked_sim mc ffi tAsm m dm dm' sdm ms lcode comp
+      cbpos cbspace lorac bytes ac k_reg wcode worac s isa panCode start globalsSize heapLen
+      hA hfmi hmc hpm hgi hsdm hbase hlt hlo hhi hheap hheapLt halign hbe hffi hheapLen hglobLe
+      hmemaddrs htop hstart hsize hparams hnodup halloc hcode hglobals hlocals heids heshapes
+      hfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hne_src
+  have hcw' : wordEntryClass res_word' = .CompleteResult outcome := hclass_w'.trans hclass_src
+  have hnt_w' : res_word' ≠ some .timeOut := by
+    intro h; subst h; cases hcw'
+  obtain ⟨hr, hffi_eq⟩ := wordEvaluateIgnoreClocks
+    (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+    { WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac with
+      code := sptFromAList (panToWordCompileProgHOL isa panCode) }
+    K_word ((k_pan + 1) + k') res_word res_word' t_word t_word'
+    hrun_w hnt_w hrun_w' hnt_w'
+  subst hr
+  exact ⟨hcw', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -2486,5 +2739,8 @@ theorem oracle_full_baseline_halt_agree_of_not_timeOut (oracles : List (Option (
 #print axioms pan_to_target_compile_halt_agree_of_not_timeOut
 #print axioms oracle_baseline_halt_agree_of_not_timeOut
 #print axioms oracle_full_baseline_halt_agree_of_not_timeOut
+#print axioms oracle_baseline_endpoint_halt_agree_of_not_timeOut
+#print axioms pan_to_target_pan_to_word_stage_lab_run_agree_of_not_timeOut
+#print axioms pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
 
 end InitE
