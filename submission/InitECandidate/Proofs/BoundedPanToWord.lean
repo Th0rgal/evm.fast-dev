@@ -1849,6 +1849,195 @@ theorem oracle_full_baseline_clocked_halt (oracles : List (Option (Spt Nat)))
       k_pan res_src s_src_post outcome hev_call hclass_src
   exact ⟨k_target, ms2, ffi2, (shift k_target).trans htarget, hio⟩
 
+open Classical in
+/-- If `PanSemStateFiniteExact.semanticsDecls s start decls = .terminate outcome events`,
+then declaration evaluation succeeds (`stCtxt`, `s_decls`), no clock ever produces `.RunError`,
+and there exists a finite clock `k_pan` at which `evaluateHOLFiniteState { s_decls with clock := k_pan }`
+completes with `panEntryClass res_src = .CompleteResult outcome` and `s_src_post.ffi.ioEvents = events`. -/
+theorem semanticsDecls_terminate_extract {width : Nat} [NeZero width] {σ : Type}
+    (s : PanSemStateFiniteExact width σ) (start : MlS) (decls : List (DeclHOL width))
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hterm : PanSemStateFiniteExact.semanticsDecls s start decls = .terminate outcome events) :
+    ∃ stCtxt s_decls,
+      decsStcnamesHOLExact [] decls = some stCtxt ∧
+      @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+        decls = some s_decls ∧
+      (∀ k, panEntryClass (PanSemStateFiniteExact.evaluateHOLFiniteState
+        { s_decls with clock := k } (.call none start [] : ProgHOL width)).1 ≠ .RunError) ∧
+      ∃ k_pan res_src s_src_post,
+        PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+          (.call none start [] : ProgHOL width) = (res_src, s_src_post) ∧
+        panEntryClass res_src = .CompleteResult outcome ∧
+        s_src_post.ffi.ioEvents = events := by
+  unfold PanSemStateFiniteExact.semanticsDecls at hterm
+  cases hst : decsStcnamesHOLExact [] decls with
+  | none => rw [hst] at hterm; cases hterm
+  | some stCtxt =>
+    rw [hst] at hterm
+    dsimp only at hterm
+    have hdec_eq : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { s with structs := stCtxt } (Classical.decPred _) decls =
+      @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a)) decls := by
+      congr
+    rw [hdec_eq] at hterm
+    cases hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a)) decls with
+    | none => rw [hev_decls] at hterm; cases hterm
+    | some s_decls =>
+      rw [hev_decls] at hterm
+      dsimp only at hterm
+      rw [panSemIsWrapper] at hterm
+      unfold crepToLoopSemanticsWrapper at hterm
+      by_cases herr : ∃ k v,
+          (Prod.map panEntryClass (fun t : PanSemStateFiniteExact width σ => t.ffi.ioEvents) ∘
+            fun k => PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+              (.call none start [] : ProgHOL width)) k = (.RunError, v)
+      · rw [if_pos herr] at hterm; cases hterm
+      · rw [if_neg herr] at hterm
+        cases hsome : holOptionSome (fun res => ∃ k r ev,
+            (Prod.map panEntryClass (fun t : PanSemStateFiniteExact width σ => t.ffi.ioEvents) ∘
+              fun k => PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+                (.call none start [] : ProgHOL width)) k = (.CompleteResult r, ev) ∧
+            res = HolBehaviour.terminate r ev) with
+        | none => rw [hsome] at hterm; cases hterm
+        | some res =>
+          rw [hsome] at hterm
+          subst hterm
+          obtain ⟨k_pan, r, ev, hk, heq⟩ := holOptionSome_some hsome
+          injection heq with hr hev
+          subst hr hev
+          refine ⟨stCtxt, s_decls, rfl, hev_decls, ?_, ?_⟩
+          · intro k hk_err
+            apply herr
+            exact ⟨k, (PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+              (.call none start [])).2.ffi.ioEvents, Prod.ext hk_err rfl⟩
+          · rcases hrun : PanSemStateFiniteExact.evaluateHOLFiniteState
+              { s_decls with clock := k_pan } (.call none start []) with ⟨res_src, s_src_post⟩
+            simp only [Function.comp_apply, Prod.map, hrun, Prod.mk.injEq] at hk
+            exact ⟨k_pan, res_src, s_src_post, hrun, hk.1, hk.2⟩
+
+open Classical in
+/-- Under `PanSemStateFiniteExact.semanticsDecls s start decls = .terminate outcome events`,
+any clock `K_pan` at which `{ s_decls with clock := K_pan }` does not time out (`res_src ≠ some .timeOut`)
+necessarily completes with `panEntryClass res_src = .CompleteResult outcome` and
+`s_src_post.ffi.ioEvents = events`! -/
+theorem semanticsDecls_terminate_at_clock {width : Nat} [NeZero width] {σ : Type}
+    (s : PanSemStateFiniteExact width σ) (start : MlS) (decls : List (DeclHOL width))
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hterm : PanSemStateFiniteExact.semanticsDecls s start decls = .terminate outcome events)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] decls = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      decls = some s_decls)
+    (K_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := K_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hnt : res_src ≠ some .timeOut) :
+    panEntryClass res_src = .CompleteResult outcome ∧
+    s_src_post.ffi.ioEvents = events := by
+  obtain ⟨stCtxt', s_decls', hst', hev_decls', _, k_pan, res0, post0, hev0, hclass0, hio0⟩ :=
+    semanticsDecls_terminate_extract s start decls outcome events hterm
+  rw [hst] at hst'; cases hst'
+  rw [hev_decls] at hev_decls'; cases hev_decls'
+  have hnt0 : res0 ≠ some .timeOut := by
+    intro h; subst h; cases hclass0
+  have hadd0 := panPropsEvaluateAddClockEq (.call none start [])
+    { s_decls with clock := k_pan } res0 post0 K_pan ⟨hev0, hnt0⟩
+  have haddK := panPropsEvaluateAddClockEq (.call none start [])
+    { s_decls with clock := K_pan } res_src s_src_post k_pan ⟨hev_call, hnt⟩
+  simp only [ Nat.add_comm K_pan k_pan ] at haddK
+  rw [hadd0] at haddK
+  injection haddK with hres hpost
+  have hffi : s_src_post.ffi = post0.ffi := by
+    have := congrArg PanSemStateFiniteExact.ffi hpost
+    exact this.symm
+  exact ⟨hres ▸ hclass0, (congrArg HolFfiState.ioEvents hffi).trans hio0⟩
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Pancake.PanToTarget (semanticsDecls_mainFirstHOL) in
+/-- Direct clocked target halt from `sourceBehaviour input = .terminate outcome events`
+and any clock `K_pan` at which `{ s_decls with clock := K_pan }` does not time out! -/
+theorem oracle_full_baseline_clocked_halt_at (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (source : sourceBehaviour input = .terminate outcome events)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (K_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := K_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hnt : res_src ≠ some .timeOut) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+        (bootstrapSteps + k_target)
+        (baselineInitialState input) = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = events := by
+  have nonfail : sourceBehaviour input ≠ HolBehaviour.fail := by
+    rw [source]; intro h; cases h
+  have hsem := semanticsDecls_mainFirstHOL (sourceInitialState input) (ofString "main")
+    (Guest.guestAst.map Pancake.PanLang.declToHOL) sourceHasMain
+  have hterm : PanSemStateFiniteExact.semanticsDecls (sourceInitialState input)
+      (ofString "main") sourceDeclarations = .terminate outcome events :=
+    hsem.trans source
+  obtain ⟨hclass_src, hio_src⟩ :=
+    semanticsDecls_terminate_at_clock (sourceInitialState input) (ofString "main")
+      sourceDeclarations outcome events hterm stCtxt s_decls hst hev_decls
+      K_pan res_src s_src_post hev_call hnt
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_full_baseline_clocked_halt oracles input c depth compiled depthBound installed
+      nonfail stCtxt s_decls hst hev_decls K_pan res_src s_src_post outcome hev_call hclass_src
+  exact ⟨k_target, ms2, ffi2, htarget, hio.trans hio_src⟩
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Pancake.PanToTarget (semanticsDecls_mainFirstHOL) in
+/-- Direct constructive target halt witness from `sourceBehaviour input = .terminate outcome events`
+through the complete 14-pass clocked compiler chain (`oracle_full_baseline_clocked_halt`),
+bypassing `target_has_behaviour` completely! -/
+theorem oracle_full_baseline_terminate_clocked_halt (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (source : sourceBehaviour input = .terminate outcome events) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+        (bootstrapSteps + k_target)
+        (baselineInitialState input) = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = events := by
+  have hsem := semanticsDecls_mainFirstHOL (sourceInitialState input) (ofString "main")
+    (Guest.guestAst.map Pancake.PanLang.declToHOL) sourceHasMain
+  have hterm : PanSemStateFiniteExact.semanticsDecls (sourceInitialState input)
+      (ofString "main") sourceDeclarations = .terminate outcome events :=
+    hsem.trans source
+  obtain ⟨stCtxt, s_decls, hst, hev_decls, _, k_pan, res_src, s_src_post, hev_call, hclass_src, _⟩ :=
+    semanticsDecls_terminate_extract (sourceInitialState input) (ofString "main")
+      sourceDeclarations outcome events hterm
+  have hnt : res_src ≠ some .timeOut := by
+    intro h; subst h; cases hclass_src
+  exact oracle_full_baseline_clocked_halt_at oracles input c depth compiled depthBound installed
+    outcome events source stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hnt
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -1868,5 +2057,9 @@ theorem oracle_full_baseline_clocked_halt (oracles : List (Option (Spt Nat)))
 #print axioms oracle_baseline_clocked_halt
 #print axioms oracle_baseline_endpoint_clocked_halt
 #print axioms oracle_full_baseline_clocked_halt
+#print axioms semanticsDecls_terminate_extract
+#print axioms semanticsDecls_terminate_at_clock
+#print axioms oracle_full_baseline_clocked_halt_at
+#print axioms oracle_full_baseline_terminate_clocked_halt
 
 end InitE
