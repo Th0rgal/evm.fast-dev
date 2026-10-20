@@ -1,7 +1,5 @@
 import InitECandidate.Proofs.NativeBaseline
-import InitECandidate.Proofs.StartupEnvironment
-import InitECandidate.Proofs.BootstrapTrace
-import InitECandidate.Proofs.BootstrapComposition
+import InitECandidate.Proofs.OracleBaselineCertificate
 
 namespace InitE
 open InitECandidate.Proofs
@@ -15,8 +13,7 @@ theorem full_baseline_correct (input : Guest.InputBlob)
       machineSemHOL baselineMachineConfig (sourceFfi input)
         (baselineInitialState input) behaviour →
       behaviour = sourceBehaviour input := by
-  obtain ⟨count, post, shift, related⟩ := BootstrapTrace.full_evaluator
-    (sourceFfi input) (baselineInitialState input) (baselineInitialState_related input)
+  obtain ⟨post, shift, related⟩ := full_baseline_evaluator_exact input
   exact Bootstrap.behavior_property_from_clock_shift (sourceFfi input) shift
     (fun behaviour => behaviour = sourceBehaviour input)
     (native_baseline_correct input post related nonfail)
@@ -30,8 +27,7 @@ theorem full_baseline_terminates (input : Guest.InputBlob)
       (baselineInitialState input) (.terminate outcome events) ∧
       targetTerminatesWithin .infinity baselineMachineConfig (sourceFfi input)
         (baselineInitialState input) := by
-  obtain ⟨count, post, shift, related⟩ := BootstrapTrace.full_evaluator
-    (sourceFfi input) (baselineInitialState input) (baselineInitialState_related input)
+  obtain ⟨post, shift, related⟩ := full_baseline_evaluator_exact input
   have terminal := Bootstrap.termination_from_clock_shift (sourceFfi input) shift
     outcome events (native_baseline_terminates input post related outcome events source).1
   exact ⟨terminal, (target_termination_iff_infinity _ _ _).mp ⟨outcome, events, terminal⟩⟩

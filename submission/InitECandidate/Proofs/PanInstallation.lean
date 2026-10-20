@@ -1,6 +1,5 @@
 import InitECandidate.Proofs.CompilerComputation
 import InitECandidate.Proofs.PanInstallationCore
-import InitECandidate.Proofs.BaselineArtifact
 
 open scoped InitECandidate.Proofs.CompilerComputation
 
@@ -16,13 +15,13 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
 open Flapjack.Compiler.Backend.BackendProof
 open Flapjack.Pancake.Proofs.PanToTarget
 set_option maxRecDepth 10000 in
-private theorem baseline_mmio_projection : baselineConfig.labConf.shmemExtra = baselineMmio := by decide_cbv
+private theorem baseline_mmio_projection : baselineLabConfig.shmemExtra = baselineMmio := by decide_cbv
 
 set_option maxRecDepth 10000 in
 theorem baseline_pan_installed_metadata :
     panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
-      baselineConfig.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
-      baselineMachineConfig baselineConfig.labConf.shmemExtra baselineInstalledState
+      baselineLabConfig.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
+      baselineMachineConfig baselineLabConfig.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ sourceMemory) ordinaryDomain sharedDomain := by
   have hregs : heapRegs pancakeRiscVBackendConfig.stackConf.regNames = (11,13) := by
     unfold pancakeRiscVBackendConfig
@@ -35,12 +34,12 @@ theorem baseline_pan_installed_metadata :
 /-- Every compiler installation premise is certified after the bootstrap. -/
 theorem baseline_pan_installed (input : Guest.InputBlob) :
     panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
-      baselineConfig.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
-      baselineMachineConfig baselineConfig.labConf.shmemExtra baselineInstalledState
+      baselineLabConfig.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
+      baselineMachineConfig baselineLabConfig.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ (sourceInitialState input).memory)
       (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs := by
-  exact panInstalled_metadata_congr _ _ _ _ _ baselineConfig.labConf.ffiNames
-    _ (heapRegs pancakeRiscVBackendConfig.stackConf.regNames) _ _ baselineConfig.labConf.shmemExtra
+  exact panInstalled_metadata_congr _ _ _ _ _ baselineLabConfig.ffiNames
+    _ (heapRegs pancakeRiscVBackendConfig.stackConf.regNames) _ _ baselineLabConfig.shmemExtra
     _ _ (wlabWlocExact ∘ sourceMemory) _ ordinaryDomain _ sharedDomain
     rfl rfl rfl rfl (source_memory_domain input) rfl baseline_pan_installed_metadata
 

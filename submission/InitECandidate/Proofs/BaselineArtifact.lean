@@ -15,9 +15,6 @@ def baselineArtifact : RiscV.NativeSource.Artifact :=
   Pancake.Proofs.PanToTarget.compileProgAsmFast baselineCompilerConfig
     Compiler.Encoders.RiscV.Target.riscvConfig sourceDeclarations
 
-/-- Certified literal metadata, so installation facts do not recompile the guest. -/
-def baselineConfig : Compiler.Backend.Backend.Config := baselineConfigLiteralWithOracles
-
 def baselineOutput : RiscV.NativeSource.Output :=
   { declarations := sourceDeclarations
     artifact := baselineArtifact
