@@ -1252,6 +1252,377 @@ theorem stack_remove_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F 
   rcases Prod.mk.inj same with ⟨resultEqual, postEqual⟩
   exact ⟨resultEqual, (congrArg StackSemStateFiniteExact.ffi postEqual).trans ffi⟩
 
+/-- Same-clock `StackToLab` non-timeout run agreement: if `LabSem.evaluate` at clock `k - 1`
+(`labRuns s2 k`) does not time out and `stackRuns start s1 k` does not produce `.RunError`,
+then `stackRuns start s1 k` equals `labRuns s2 k` at the exact same clock `k`! -/
+theorem stack_to_lab_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    {start : Nat}
+    {s1 : StackSemStateFiniteExact width C F}
+    {s2 : Flapjack.Compiler.Backend.LabSem.State width C F}
+    (halt : FlattenCallCorrect.haltAssum C F s1.code)
+    (rel : StateRel.stateRel s1 s2)
+    (hpc : LabSem.locToPc start 0 s2.code = some s2.pc)
+    (k : Nat)
+    (hne : (FlattenSemantics.stackRuns start s1 k).1 ≠ .RunError)
+    (hnt : (FlattenSemantics.labRuns s2 k).1 ≠ .Incomplete) :
+    FlattenSemantics.stackRuns start s1 k = FlattenSemantics.labRuns s2 k := by
+  rcases hs : FlattenSemantics.stackRuns start s1 k with ⟨r_s, ev_s⟩
+  have hr_ne : r_s ≠ .RunError := by
+    rw [hs] at hne; exact hne
+  obtain ⟨ck, hlab_ck⟩ := FlattenSemantics.stackRunsSim halt rel hpc k r_s ev_s hs hr_ne
+  simp only [FlattenSemantics.labRuns] at hnt hlab_ck ⊢
+  rcases he : LabSem.evaluate { s2 with clock := k - 1 } with ⟨m, next⟩
+  rw [he] at hnt
+  simp only [Prod.map] at hnt
+  have hm_nt : m ≠ .timeOut := by
+    rintro rfl
+    exact hnt rfl
+  have kpos : k ≠ 0 := by
+    rintro rfl
+    rw [LabSem.evaluate, if_pos rfl] at he
+    exact hm_nt (Prod.mk.inj he).1.symm
+  have hadd := LabProps.evaluateAddClock { s2 with clock := k - 1 } m next ck ⟨he, hm_nt⟩
+  simp only at hadd
+  rw [show k + ck - 1 = k - 1 + ck by omega, hadd] at hlab_ck
+  exact hlab_ck.symm
+
+/-- Same-clock `fullMakeInit` non-timeout run agreement (`StackRawCall` + `StackAlloc` +
+`StackRemove` + `StackNames` + `StackToLab`): if `fullMakeInit` succeeds (`= (s, opt)`) under
+`Assumptions` and `LabSem.evaluate` on `t` at clock `k` does not time out (`≠ .timeOut`),
+and the intermediate `StackSem` runs at clock `k` do not error (`≠ some .error`), then
+`FlattenSemantics.stackRuns BvlToBvi.initGlobalsLocation s k` agrees with
+`FlattenSemantics.labRuns t (k + 1)` (`LabSem.evaluate { t with clock := k }`) at the exact
+same clock `k`! -/
+theorem full_make_init_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × HolProg width)} {t : Flapjack.Compiler.Backend.LabSem.State width C F}
+    {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × HolProg width) × List (BitVec width)}
+    {s : StackSemStateFiniteExact width C F}
+    {opt : Option (StackSemStateFiniteExact width C F)}
+    (hfm : FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code t
+      saveRegs dataSp coracle = (s, opt))
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code t saveRegs dataSp coracle)
+    (k : Nat) (res : Option (StackSemResult width)) (s_post : StackSemStateFiniteExact width C F)
+    (hrun : StackSemEvaluate.evaluate
+      ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+        { s with clock := k }) = (res, s_post))
+    (hclass_ne : FlattenSemantics.stackEntryClass res ≠ .RunError)
+    (hnt_lab : (LabSem.evaluate { t with clock := k }).1 ≠ .timeOut) :
+    (FlattenSemantics.labEntryClass (LabSem.evaluate { t with clock := k }).1,
+      (LabSem.evaluate { t with clock := k }).2.ffi.ioEvents) =
+      (FlattenSemantics.stackEntryClass res, s_post.ffi.ioEvents) := by
+  have hne : res ≠ some .error := by
+    rintro rfl
+    exact hclass_ne rfl
+  rw [fullMakeInit_eq] at hfm
+  simp only [Prod.mk.injEq] at hfm
+  obtain ⟨rfl, rfl⟩ := hfm
+  obtain ⟨-, -, -, -, -, -, -, -, -, -, -, -, hgood, hgoodO, -, -, -, -, -, -, -, -⟩ := id hA
+  have hdis := dischargeThese_s2 hA
+  have hprop2 := propagateThese_s2 hA
+  obtain ⟨⟨every, oracleBound, oracleEq, codeEq, k8, entry1, save, noStack, noStore, noAlloc,
+    maxOk⟩, good, ptr2, ptr3, ptr4, bp, r2, r3, r4, m0, m1, m2, m3, m4, cbEmpty, le, al2, al4,
+    albp, big, heap⟩ := And.intro hdis hprop2
+  have codeRel : StackRemove.codeRelHOL stackConf.jump offset sp
+      (sptFromAList (code1 dataConf code))
+      (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle).code :=
+    StackRemove.Proofs.InitCodeRelation.impCodeRel stackConf.jump offset
+      (StackToLab.isGenGc dataConf.gcKind) maxHeap sp BvlToBvi.initGlobalsLocation
+      (code1 dataConf code) _ ⟨every, codeEq⟩
+  have errLab : sptLookup StackRemove.stackErrLab
+      (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle).code =
+      some (StackRemove.haltInst (BitVec.ofNat width 2)) := by
+    rw [codeEq, sptLookup_sptFromAList]
+    simp [StackRemove.compileHOL, StackRemove.initStubs, sptAListLookup, StackRemove.stackErrLab]
+  have pre : StackRemove.Proofs.InitMake.initPre (StackToLab.isGenGc dataConf.gcKind) maxHeap
+      bitmaps dataSp sp BvlToBvi.initGlobalsLocation
+      (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle) := by
+    refine ⟨?_, ?_, maxOk⟩
+    · rw [codeEq, sptLookup_sptFromAList]
+      simp [StackRemove.compileHOL, StackRemove.initStubs, sptAListLookup]
+    · have sub : -1 * ptr2 + ptr4 = ptr4 - ptr2 := by
+        rw [BitVec.neg_mul]; simp [BitVec.sub_eq_add_neg, BitVec.add_comm]
+      rw [sub] at heap
+      exact ⟨ptr2, ptr3, ptr4, bp, good, k8, entry1, save, noStack, noStore, noAlloc, r2, r3, r4,
+        m0, m1, m2, m3, m4, le, big, al2, al4, albp, cbEmpty, heap⟩
+  have hinit := StackRemove.Proofs.InitSemantics.evaluateInitCode
+    (StackToLab.isGenGc dataConf.gcKind) maxHeap bitmaps dataSp sp BvlToBvi.initGlobalsLocation
+    (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+    stackConf.jump offset (coracle1 coracle) (sptFromAList (code1 dataConf code))
+    ⟨pre, oracleEq, oracleBound, errLab, codeRel⟩
+  revert hinit
+  cases hinitRun : StackSemEvaluate.evaluate
+      (StackRemove.initCode (StackToLab.isGenGc dataConf.gcKind) maxHeap sp,
+        s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle) with
+  | mk initRes t_rem =>
+    cases initRes with
+    | some _ => intro h; exact False.elim h
+    | none =>
+      rintro ⟨s1, hopt, rel_rem, _⟩
+      have hs1 : StackRemove.Proofs.InitMake.makeInitAny (StackToLab.isGenGc dataConf.gcKind)
+          maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+          (sptFromAList (code1 dataConf code))
+          (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle) = s1 := by
+        unfold StackRemove.Proofs.InitMake.makeInitAny
+        rw [hopt]
+      rw [hs1] at hrun
+      obtain ⟨post, hpost, hprop⟩ := StackRemove.Proofs.InitAny.makeInitOpt_eq_some hopt
+      obtain ⟨ck1, t_rc, hrun_rc, hffi_rc⟩ := stack_rawcall_clocked_sim code
+        (StackAlloc.makeInit dataConf (sptFromAList code) coracle s1)
+        BvlToBvi.initGlobalsLocation k res s_post hgood.1 rfl hrun hne
+      have hm : { StackAlloc.makeInit dataConf (sptFromAList code) coracle s1 with
+          code := sptFromAList (StackRawCall.compile code), clock := k + ck1 } =
+          { StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1 with
+            clock := k + ck1 } := by
+        simp [StackAlloc.makeInit]
+      rw [hm] at hrun_rc
+      have hu := StackRemove.Proofs.InitAny.makeInitAnyUseStack (StackToLab.isGenGc dataConf.gcKind)
+        maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+        (sptFromAList (code1 dataConf code))
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+      have hus := StackRemove.Proofs.InitAny.makeInitAnyUseStore (StackToLab.isGenGc dataConf.gcKind)
+        maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+        (sptFromAList (code1 dataConf code))
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+      have hua := StackRemove.Proofs.InitAny.makeInitAnyUseAlloc (StackToLab.isGenGc dataConf.gcKind)
+        maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+        (sptFromAList (code1 dataConf code))
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+      have hcd := StackRemove.Proofs.InitAny.makeInitAnyCode (StackToLab.isGenGc dataConf.gcKind)
+        maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+        (sptFromAList (code1 dataConf code))
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+      have hco := StackRemove.Proofs.InitAny.makeInitAnyCompileOracle
+        (StackToLab.isGenGc dataConf.gcKind)
+        maxHeap bitmaps dataSp (coracle1 coracle) stackConf.jump offset sp
+        (sptFromAList (code1 dataConf code))
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+      rw [hs1] at hu hus hua hcd hco
+      have hcode_sa : ∀ k prog,
+          sptLookup k (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).code = some prog →
+          k ≠ gcStubLocation ∧ StackProps.allocArg prog := by
+        intro k0 prog hk0
+        simp only [StackAlloc.makeInit, sptLookup_sptFromAList] at hk0
+        obtain ⟨⟨n0, p0⟩, hm0, he⟩ := List.mem_map.mp (sptAListLookup_mem hk0)
+        simp only [Prod.mk.injEq] at he
+        obtain ⟨rfl, rfl⟩ := he
+        obtain ⟨hst, hal⟩ := hgood.2.1 _ hm0
+        exact ⟨by simp only [stackNumStubs, gcStubLocation] at hst ⊢; omega,
+          (StackRawCall.callArgComp _ _).2.mpr hal⟩
+      have horacle_sa : ∀ (i k : Nat) (q : HolProg width),
+          (k, q) ∈ ((StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).compileOracle i).2.1 →
+          k ≠ gcStubLocation ∧ StackProps.allocArg q := by
+        intro i k0 q hq
+        obtain ⟨hst, hal⟩ := (hgoodO i).2.1 _ hq
+        exact ⟨by simp only [stackNumStubs, gcStubLocation] at hst ⊢; omega, hal⟩
+      have hbuf_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).bitmaps.length +
+          (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.buffer.length +
+          (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.spaceLeft <
+          2 ^ width - 1 := by
+        subst hpost
+        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+          hdb, _, _, _, hbl, _⟩
+        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce] at hbl hdb ⊢
+        simp only [List.length_nil, Nat.add_zero]
+        omega
+      have hst_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).stack.length *
+          (width / 8) < 2 ^ width := by
+        subst hpost
+        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+          _, _, _, _, _, _, _, hsb, _⟩
+        exact hsb
+      obtain ⟨ck2, hrun_sa1, hffi_sa⟩ := stack_alloc_clocked_sim
+        (s := StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1)
+        (c := dataConf) (compile_rest := s1.compile) (start := BvlToBvi.initGlobalsLocation)
+        (anything := s1.gcFun)
+        hcode_sa horacle_sa rfl hbuf_sa hst_sa rfl rfl rfl (k + ck1) res t_rc hrun_rc hne
+      let m_sa := StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1
+      have hs1_eq : { m_sa with
+          code := sptFromAList (StackAlloc.compile dataConf (sptToAList m_sa.code))
+          gcFun := s1.gcFun
+          compile := s1.compile
+          compileOracle := Prod.map id (Prod.map (List.map StackAlloc.progComp) id) ∘ m_sa.compileOracle
+          useStore := true, useStack := true, useAlloc := false, clock := k + ck1 + ck2 } =
+          { s1 with clock := k + ck1 + ck2 } := by
+        have hcc : sptFromAList (StackAlloc.compile dataConf
+            (sptToAList (sptFromAList (StackRawCall.compile code)))) = s1.code := by
+          rw [hcd, code1]
+          refine (sptEqThm _ _ ⟨sptWfFromAList _, sptWfFromAList _⟩).mpr fun n => ?_
+          rw [StackAlloc.CompCorrect.sptLookup_compile, StackAlloc.CompCorrect.sptLookup_compile,
+            StackAlloc.ProgCompSupport.sptAListLookup_sptToAList, sptLookup_sptFromAList]
+        cases s1
+        simp only [m_sa, StackAlloc.makeInit, coracle1] at hcc hco hus hu hua ⊢
+        simp only [Bool.not_eq_true] at hua
+        subst hus hu hua
+        rw [hcc, hco]
+      change (StackSemEvaluate.evaluate
+        ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+          { m_sa with
+            code := sptFromAList (StackAlloc.compile dataConf (sptToAList m_sa.code))
+            gcFun := s1.gcFun
+            compile := s1.compile
+            compileOracle := Prod.map id (Prod.map (List.map StackAlloc.progComp) id) ∘ m_sa.compileOracle
+            useStore := true, useStack := true, useAlloc := false, clock := k + ck1 + ck2 })).1 = res at hrun_sa1
+      change (StackSemEvaluate.evaluate
+        ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+          { m_sa with
+            code := sptFromAList (StackAlloc.compile dataConf (sptToAList m_sa.code))
+            gcFun := s1.gcFun
+            compile := s1.compile
+            compileOracle := Prod.map id (Prod.map (List.map StackAlloc.progComp) id) ∘ m_sa.compileOracle
+            useStore := true, useStack := true, useAlloc := false, clock := k + ck1 + ck2 })).2.ffi = t_rc.ffi at hffi_sa
+      rw [hs1_eq] at hrun_sa1 hffi_sa
+      rcases hrun_s1 : StackSemEvaluate.evaluate
+        ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+          { s1 with clock := k + ck1 + ck2 }) with ⟨res_s1, post_s1⟩
+      rw [hrun_s1] at hrun_sa1 hffi_sa
+      simp only at hrun_sa1 hffi_sa
+      subst res_s1
+      obtain ⟨ck3, post_rem, hrun_rem, hffi_rem⟩ := stack_remove_clocked_sim
+        stackConf.jump offset sp BvlToBvi.initGlobalsLocation (k + ck1 + ck2)
+        s1 t_rem post_s1 res rel_rem hrun_s1 hne
+      have hshift := stack_remove_init_clocked_shift
+        (StackToLab.isGenGc dataConf.gcKind) maxHeap sp BvlToBvi.initGlobalsLocation
+        (s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle) t_rem
+        (ck3 + (k + ck1 + ck2)) pre.1 hinitRun
+      let s3_st := s3 stackConf dataConf maxHeap sp offset code t saveRegs coracle
+      let s2_st := s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle
+      have hbij := hA.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+      have hnames := stack_names_clocked_agree
+        (c := s3_st.compile)
+        (f := stackConf.regNames)
+        (s := s2_st)
+        hbij
+        (by simp [s2_st, noAlloc])
+        (by simp [s2_st, noStore])
+        (by simp [s2_st, noStack])
+        rfl 0 (ck3 + (k + ck1 + ck2) + 1)
+      have hs3_def : StackNames.renameState s3_st.compile stackConf.regNames s2_st = s3_st := by
+        have hinv : ∀ y, StackNames.findNameSpt stackConf.regNames
+            (holLinv (StackNames.findNameSpt stackConf.regNames) (fun _ => True) y) = y :=
+          apply_holLinv_of_surjective hbij.2
+        have hc : sptFromAList (StackNames.compileHOL stackConf.regNames
+            (sptToAList (sptFromAList (code2 stackConf dataConf maxHeap sp offset code)))) =
+            s3_st.code := by
+          change _ = sptFromAList (StackNames.compileHOL stackConf.regNames
+            (code2 stackConf dataConf maxHeap sp offset code))
+          refine (sptEqThm _ _ ⟨sptWfFromAList _, sptWfFromAList _⟩).mpr fun n => ?_
+          rw [sptLookup_sptFromAList, StackNames.sptAListLookup_compileHOL, ← sptLookup_sptFromAList,
+            sptLookup_sptFromAList_sptToAList, sptLookup_sptFromAList, sptLookup_sptFromAList,
+            StackNames.sptAListLookup_compileHOL]
+        classical
+        have hsave : (fun y => decide (∃ x, decide (∃ z, s3_st.ffiSaveRegs z = true ∧
+            x = holLinv (StackNames.findNameSpt stackConf.regNames) (fun _ => True) z) = true ∧
+            y = StackNames.findNameSpt stackConf.regNames x)) = s3_st.ffiSaveRegs := by
+          funext y
+          by_cases hy : s3_st.ffiSaveRegs y = true
+          · rw [hy, decide_eq_true_iff]
+            exact ⟨holLinv (StackNames.findNameSpt stackConf.regNames) (fun _ => True) y,
+              decide_eq_true_iff.mpr ⟨y, hy, rfl⟩, (hinv y).symm⟩
+          · rw [Bool.not_eq_true] at hy
+            rw [hy, decide_eq_false_iff_not]
+            rintro ⟨x, hx, rfl⟩
+            obtain ⟨z, hz, rfl⟩ := decide_eq_true_iff.mp hx
+            rw [hinv z, hz] at hy
+            exact Bool.noConfusion hy
+        have hor : s3_st.compileOracle =
+            Prod.map id (Prod.map (StackNames.compileHOL stackConf.regNames) id) ∘
+              coracle2 stackConf sp offset coracle := rfl
+        simp only [s2_st, s2, StackNames.renameState, StackNames.makeInit,
+          StackNames.MakeInit.mapKeys_mapKeys_linv hbij, hc, ← hor]
+        refine Eq.trans ?_ (show { s3_st with ffiSaveRegs := s3_st.ffiSaveRegs } = s3_st from rfl)
+        congr 1
+      rw [hs3_def] at hnames
+      have hruns_s3 : FlattenSemantics.stackRuns 0
+          (s3 stackConf dataConf maxHeap sp offset code t saveRegs coracle)
+          (ck3 + (k + ck1 + ck2) + 1) =
+          (FlattenSemantics.stackEntryClass res, s_post.ffi.ioEvents) := by
+        simp only [FlattenSemantics.stackRuns, Prod.map]
+        rcases hev_s3 : StackSemEvaluate.evaluate
+          ((.call none (.inl 0) none : HolProg width),
+            { s3 stackConf dataConf maxHeap sp offset code t saveRegs coracle with
+              clock := ck3 + (k + ck1 + ck2) + 1 }) with ⟨r_s3, p_s3⟩
+        have hnames1 := hnames.1
+        change (StackSemEvaluate.evaluate
+          ((.call none (.inl 0) none : HolProg width),
+            { s3 stackConf dataConf maxHeap sp offset code t saveRegs coracle with
+              clock := ck3 + (k + ck1 + ck2) + 1 })).1 =
+          (StackSemEvaluate.evaluate
+            ((.call none (.inl 0) none : HolProg width),
+              { s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle with
+                clock := ck3 + (k + ck1 + ck2) + 1 })).1 at hnames1
+        have hnames2 := hnames.2
+        change (StackSemEvaluate.evaluate
+          ((.call none (.inl 0) none : HolProg width),
+            { s3 stackConf dataConf maxHeap sp offset code t saveRegs coracle with
+              clock := ck3 + (k + ck1 + ck2) + 1 })).2.ffi =
+          (StackSemEvaluate.evaluate
+            ((.call none (.inl 0) none : HolProg width),
+              { s2 stackConf dataConf maxHeap sp offset code t saveRegs coracle with
+                clock := ck3 + (k + ck1 + ck2) + 1 })).2.ffi at hnames2
+        have hr_eq : r_s3 = res := by
+          rw [hev_s3, hshift.1, hrun_rem] at hnames1
+          exact hnames1
+        have hffi_eq : p_s3.ffi = s_post.ffi := by
+          rw [hev_s3, hshift.2, hrun_rem] at hnames2
+          exact hnames2.trans (hffi_rem.trans (hffi_sa.trans hffi_rc))
+        rw [hr_eq, hffi_eq]
+      obtain ⟨ck4, hlab⟩ := FlattenSemantics.stackRunsSim
+        MakeInit.haltAssumLemma (stateRel_s3 hA) (locToPc_start hA)
+        (ck3 + (k + ck1 + ck2) + 1) (FlattenSemantics.stackEntryClass res) s_post.ffi.ioEvents
+        hruns_s3 hclass_ne
+      simp only [FlattenSemantics.labRuns] at hlab
+      rcases he_k : LabSem.evaluate { t with clock := k } with ⟨m_k, next_k⟩
+      rw [he_k] at hnt_lab
+      have hadd := LabProps.evaluateAddClock { t with clock := k } m_k next_k
+        (ck3 + ck1 + ck2 + ck4) ⟨he_k, hnt_lab⟩
+      simp only at hadd
+      rw [show ck3 + (k + ck1 + ck2) + 1 + ck4 - 1 = k + (ck3 + ck1 + ck2 + ck4) by omega,
+        hadd] at hlab
+      exact hlab
+
+/-- Same-clock `WordToStack.Native` non-timeout run agreement under `wordLangSafeForSpace`:
+if the compiled `StackSem` entry call on `t` does not time out at clock `clk`, then it produces
+the exact mapped result `res.map compileResult` and identical FFI state as the source `WordSem`
+entry call at the exact same clock `clk`! -/
+theorem word_to_stack_compile_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (asmConf : AsmConfigExact width) (code : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (t : StackSemStateFiniteExact width C F) (k : Nat)
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (start clk : Nat)
+    (res : Option (WordSemResult width))
+    (s1 : WordSemStateFiniteExact width (Nat × C) F)
+    (res_t : Option (StackSemResult width))
+    (t1 : StackSemStateFiniteExact width C F)
+    (codeEq : t.code = sptFromAList (WordToStack.Native.compileNative asmConf false code).2.2.2)
+    (kEq : k = asmConf.regCount - (5 + asmConf.avoidRegs.length))
+    (ok : WordToStackProofs.InitializationStateRel.initStateOk asmConf k t coracle)
+    (noRaise : panPropsALookupEq raiseStubLocation code = none)
+    (noStore : panPropsALookupEq storeConstsStubLocation code = none)
+    (bitmapsPrefix : (WordToStack.Native.compileNative asmConf false code).1 <+: t.bitmaps)
+    (conventions : ∀ entry ∈ code, flatExpConventions entry.2.2 = true ∧
+      postAllocConventionsHOL (asmConf.regCount - (5 + asmConf.avoidRegs.length))
+        entry.2.2 = true)
+    (safe : WordSemStateFiniteExact.wordLangSafeForSpace
+      (WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle) start)
+    (hrun : WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
+      { WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle with
+        clock := clk } = (res, s1))
+    (hne : res ≠ some .error)
+    (hrun_t : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { t with clock := clk }) = (res_t, t1))
+    (hnt : res_t ≠ some .timeOut) :
+    res_t = res.map WordToStackProofs.CompCorrect.compileResult ∧ t1.ffi = s1.ffi := by
+  obtain ⟨ck, t_post, hrun_post, hffi_post⟩ := word_to_stack_compile_clocked_sim asmConf code t k
+    coracle start clk res s1 codeEq kEq ok noRaise noStore bitmapsPrefix conventions safe hrun hne
+  have hadd := StackProps.evaluateAddClock ck (.call none (.inl start) none)
+    { t with clock := clk } res_t t1 ⟨hrun_t, hnt⟩
+  rw [hadd] at hrun_post
+  injection hrun_post with hr hpost
+  exact ⟨hr, (congrArg StackSemStateFiniteExact.ffi hpost).trans hffi_post.symm⟩
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -1273,5 +1644,8 @@ theorem stack_remove_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F 
 #print axioms stack_rawcall_run_agree_of_not_timeOut
 #print axioms stack_alloc_run_agree_of_not_timeOut
 #print axioms stack_remove_run_agree_of_not_timeOut
+#print axioms stack_to_lab_run_agree_of_not_timeOut
+#print axioms full_make_init_run_agree_of_not_timeOut
+#print axioms word_to_stack_compile_run_agree_of_not_timeOut
 
 end InitE

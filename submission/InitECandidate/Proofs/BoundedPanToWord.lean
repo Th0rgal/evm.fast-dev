@@ -2179,6 +2179,281 @@ theorem oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut (submis
   · rw [← hio0]
     exact matchingResult_refl input outcome ffi0.ioEvents covered
 
+/-- Same-clock `CrepToLoop` non-timeout run agreement: if the compiled `LoopSem` entry call
+does not time out at clock `k`, then its result and FFI state agree with the source `CrepSem`
+entry call at the exact same clock `k`! -/
+theorem crep_to_loop_run_agree_of_not_timeOut {width : Nat} [NeZero width] {σ : Type}
+    (s : CrepSemHOLState width σ) (t : LoopSemStateFiniteExact width σ)
+    (crep_code : List (MlString × List Nat × CrepProgHOL width))
+    (start : MlString) (lc : Nat) (c : AsmArchitecture)
+    (prog : CrepProgHOL width) (k : Nat)
+    (res : Option (CrepResultHOLExact width)) (s1 : CrepSemHOLState width σ)
+    (res_loop : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (t1 : LoopSemStateFiniteExact width σ)
+    (hmd : s.memaddrs = (fun address => t.mdomain address = true))
+    (hbe : s.be = t.be)
+    (hsh : s.shMemaddrs = (fun address => t.shMdomain address = true))
+    (hffi : s.ffi = t.ffi)
+    (hbase : s.baseAddr = t.baseAddr)
+    (htop : s.topAddr = t.topAddr)
+    (hmem : crepToLoopMemRelHOLExact s.memory t.memory s.memaddrs)
+    (hglob : crepToLoopGlobalsRelHOLExact s.globals t.globals)
+    (hdist : (crep_code.map Prod.fst).Nodup)
+    (hscode : s.code = alistToFmapCodeExact crep_code)
+    (htcode : t.code = sptFromAList (compileProgHOLExact c crep_code))
+    (hloc : s.locals = HolFiniteMapExact.empty)
+    (hmf : (crepToLoopMakeFuncsExactHOL crep_code).lookup start = some (lc, 0))
+    (hprog : holAlookup crep_code start = some ([], prog))
+    (hev : evalCrepSemHOLProgExact { s with clock := k } (.call none start []) = (res, s1))
+    (hne : res ≠ some .error)
+    (hev_t : LoopSemStateFiniteExact.evaluate
+      (.call none (some lc) [] none : HolLoopProg width)
+      { t with clock := k } = (res_loop, t1))
+    (hnt : res_loop ≠ some .timeOut) :
+    res_loop = Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res ∧
+      t1.ffi = s1.ffi := by
+  obtain ⟨k', t', hrun', hffi'⟩ := crep_to_loop_clocked_sim s t crep_code start lc c prog k
+    res s1 hmd hbe hsh hffi hbase htop hmem hglob hdist hscode htcode hloc hmf hprog hev hne
+  have hadd := LoopSemStateFiniteExact.evaluate_add_clock_eq
+    (.call none (some lc) [] none : HolLoopProg width)
+    { t with clock := k } res_loop t1 k' hev_t hnt
+  simp only at hadd
+  rw [hadd] at hrun'
+  injection hrun' with hr hpost
+  exact ⟨hr, (congrArg LoopSemStateFiniteExact.ffi hpost).trans hffi'.symm⟩
+
+open LoopToWordStateRelImpSemanticsSupport in
+/-- Same-clock `PanToWord` non-timeout run agreement: under the 24 hypotheses of
+`panToWordStateRelImpSemantics`, if `code` evaluates declarations to `s_decls`,
+`s_decls` runs `start` at clock `k` without `.RunError`, and `target` (`WordSem`) does
+not time out at clock `k + 1`, then `target` at clock `k + 1` has `wordEntryClass res_word =
+panEntryClass res_src` and the exact same FFI I/O events `s_src_post.ffi.ioEvents`! -/
+theorem pan_to_word_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C σ : Type}
+    (source : PanSemStateFiniteExact width σ) (target : WordSemStateFiniteExact width C σ)
+    (arch : AsmArchitecture) (code : List (DeclHOL width)) (start : MlS)
+    (globalsSize : Nat) (heapLen : BitVec width)
+    (h : (∀ address, source.memaddrs address → target.memory address = wlabWlocExact (source.memory address)) ∧
+      noLabelsHOL target.memory (fun address => target.mdomain address = true) ∧
+      start = ofString "main" ∧
+      globalsSize = ((decShapesHOL code).map
+        (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] code)))).sum ∧
+      distinctParamsHOL (functionsHOL code) ∧
+      (fun address => target.mdomain address = true) =
+        (fun address => source.memaddrs address ∨ Compiler.Backend.StackRemove.addresses source.topAddr globalsSize address) ∧
+      (fun address => target.shMdomain address = true) = source.shMemaddrs ∧
+      target.be = source.be ∧ target.ffi = source.ffi ∧
+      target.store.lookup .currHeap = some (.word source.baseAddr) ∧
+      target.store.lookup .heapLength = some (.word heapLen) ∧
+      source.topAddr = source.baseAddr + (2 : BitVec width) * heapLen - panBytesInWord width * BitVec.ofNat width globalsSize ∧
+      ((functionsHOL code).map Prod.fst).Nodup ∧ panGlobalsByteAlignedHOL source.topAddr ∧
+      globalsAllocatableHOL source code ∧ source.code = HolFiniteMapExact.empty ∧
+      target.code = sptFromAList (panToWordCompileProgHOL arch code) ∧
+      source.globals = HolFiniteMapExact.empty ∧ source.locals = HolFiniteMapExact.empty ∧
+      sizeOfEidsHOL code < 2 ^ width ∧ source.eshapes = HolFiniteMapExact.empty ∧
+      sptLookup 0 target.locals = some (WordLocW.loc 1 0) ∧ goodDimindex width ∧
+      PanSemStateFiniteExact.semanticsDecls source start code ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { source with structs := stCtxt } (fun a => Classical.propDecidable (source.memaddrs a))
+      code = some s_decls)
+    (k : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError)
+    (res_word : Option (WordSemResult width))
+    (t_word : WordSemStateFiniteExact width C σ)
+    (hrun_w : WordSemStateFiniteExact.evaluate
+      (.call none (some firstLoopName) [0] none : WordLangProgHOL (BitVec width))
+      { target with clock := k + 1 } = (res_word, t_word))
+    (hnt_w : res_word ≠ some .timeOut) :
+    wordEntryClass res_word = panEntryClass res_src ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨k', t_word', res_word', hrun_w', hio_w', hclass_w'⟩ :=
+    pan_to_word_clocked_sim source target arch code start globalsSize heapLen h
+      stCtxt s_decls hst hev_decls k res_src s_src_post hev_call hne_src
+  have hadd := WordSemStateFiniteExact.evaluate_add_clock k'
+    (.call none (some firstLoopName) [0] none : WordLangProgHOL (BitVec width))
+    { target with clock := k + 1 } res_word t_word ⟨hrun_w, hnt_w⟩
+  simp only at hadd
+  rw [hadd] at hrun_w'
+  injection hrun_w' with hr hpost
+  subst hr
+  have hffi_eq : t_word.ffi = t_word'.ffi := by rw [← hpost]
+  exact ⟨hclass_w', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
+
+open Classical Flapjack.Compiler.Backend Flapjack.Compiler.Backend.BackendProof
+open Flapjack.Pancake.Proofs.PanToTarget LoopToWordStateRelImpSemanticsSupport in
+/-- Non-timeout target halt agreement for the complete 14-pass `PanToTarget` compiler:
+under the 35 hypotheses of `panToTargetCompileSemantics` and the resource-limit guard,
+if `pan_code` evaluates declarations to `s_decls`, `s_decls` runs `start` at clock `k_pan`
+with `panEntryClass res_src = .CompleteResult outcome`, and `evaluateTargetHOL mc ffi K ms`
+does not time out at clock `K`, then `evaluateTargetHOL mc ffi K ms` halts with `outcome`
+and the exact same FFI I/O events `s_src_post.ffi.ioEvents`! -/
+theorem pan_to_target_compile_halt_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q σ : Type}
+    (c : Backend.Config) (mc : MachineConfig width S Q) (pan_code : List (DeclHOL width))
+    (bytes : List (BitVec 8)) (bitmaps : List (BitVec width)) (c' : Backend.Config)
+    (stack_max : Option Nat) (s : PanSemStateFiniteExact width σ) (ffi : HolFfiState σ)
+    (ms : S) (globals_size heap_len : Nat) (adj_ptr2 adj_ptr4 : BitVec width)
+    (cbspace data_sp : Nat) (start : MlS)
+    (h :
+      let getReg := mc.target.getReg ms
+      compileProgMax c mc pan_code = (some (bytes, bitmaps, c'), stack_max) ∧
+      pancakeGoodCodeHOL pan_code = true ∧
+      distinctParamsHOL (functionsHOL pan_code) ∧
+      ((functionsHOL pan_code).map Prod.fst).Nodup ∧
+      s.code = HolFiniteMapExact.empty ∧
+      s.locals = HolFiniteMapExact.empty ∧
+      s.globals = HolFiniteMapExact.empty ∧
+      sizeOfEidsHOL pan_code < 2 ^ width ∧
+      s.eshapes = HolFiniteMapExact.empty ∧
+      backendConfigOk mc.target.config c ∧ LabToTarget.mcConfOk mc ∧
+      mcInitOk mc.target.config c mc ∧ mc.target.config.isa ≠ .ag32 ∧
+      (0 : BitVec width) < getReg mc.lenReg ∧
+      globals_size =
+        (let dec_shs := decShapesHOL pan_code
+         let struct_ctxt := decsStcnamesHOLExact (width := width) [] pan_code
+         (dec_shs.map (sizeOfShapeWithContextHOL (holThe struct_ctxt))).sum) ∧
+      getReg mc.lenReg < getReg mc.ptr2Reg ∧
+      getReg mc.lenReg = s.baseAddr ∧
+      globalsAllocatableHOL s pan_code ∧
+      heap_len = (getReg mc.ptr2Reg + -1 * s.baseAddr).toNat / (width / 8) ∧
+      s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heap_len -
+        BitVec.ofNat width (globals_size * width / 8) ∧
+      globals_size ≤ heap_len ∧
+      s.memaddrs = StackRemove.addresses (getReg mc.lenReg) (heap_len - globals_size) ∧
+      holAligned (wordShiftAmount width + 1) (getReg mc.ptr2Reg + -1 * getReg mc.lenReg) = true ∧
+      adj_ptr2 = getReg mc.lenReg +
+        StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ∧
+      adj_ptr4 = getReg mc.len2Reg -
+        StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ∧
+      adj_ptr2 ≤ getReg mc.ptr2Reg ∧
+      getReg mc.ptr2Reg ≤ adj_ptr4 ∧
+      (getReg mc.ptr2Reg + -1 * getReg mc.lenReg).toNat ≤
+        (StackRemove.bytesInWord width).toNat * (2 * DataToWord.maxHeapLimit width c.dataConf - 1) ∧
+      (StackRemove.bytesInWord width).toNat * (2 * DataToWord.maxHeapLimit width c.dataConf - 1) <
+        2 ^ width ∧
+      s.ffi = ffi ∧ mc.target.config.bigEndian = s.be ∧
+      (match c.labConf.ffiNames with
+        | none => True
+        | some l => ∀ x ∈ l, ∃ s, x = HolFfiName.extCall s) ∧
+      panInstalled bytes cbspace bitmaps data_sp c'.labConf.ffiNames
+        (heapRegs c.stackConf.regNames) mc c'.labConf.shmemExtra ms
+        (wlabWlocExact ∘ s.memory) s.memaddrs s.shMemaddrs ∧
+      start = ofString "main" ∧
+      PanSemStateFiniteExact.semanticsDecls s start pan_code ≠ HolBehaviour.fail)
+    (hresLimit : optionLt stack_max (some (readLimits mc.target.config c mc ms).1) = true)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] pan_code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      pan_code = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K : Nat)
+    (hnt : (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut) :
+    (evaluateTargetHOL mc ffi K ms).1 = .halt outcome ∧
+      (evaluateTargetHOL mc ffi K ms).2.2.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    pan_to_target_compile_clocked_halt c mc pan_code bytes bitmaps c' stack_max s ffi ms
+      globals_size heap_len adj_ptr2 adj_ptr4 cbspace data_sp start h hresLimit
+      stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+  obtain ⟨ms1, hhaltK⟩ := evaluateTarget_halt_of_not_timeOut_and_halt
+    mc ffi ms k_target K outcome ms2 ffi2 htarget hnt
+  rw [hhaltK]
+  exact ⟨rfl, hio⟩
+
+open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.BackendProof
+open Flapjack.Compiler.Backend.RiscVConfig Flapjack.Compiler.Encoders.RiscV.Target
+open Flapjack.Pancake.Proofs.PanToTarget Flapjack.Pancake.PanToTarget in
+/-- Non-timeout target halt agreement for `oracle_baseline_clocked_halt`:
+for any validated allocation oracles and certified compiler depth `≤ 7480`, if
+`sourceDeclarations` runs `"main"` at clock `k_pan` with `.CompleteResult outcome` and
+`evaluateTargetHOL mc (sourceFfi input) K ms` does not time out at clock `K`, then
+`evaluateTargetHOL mc (sourceFfi input) K ms` halts with `outcome` and identical I/O events! -/
+theorem oracle_baseline_halt_agree_of_not_timeOut (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (ms : RiscV.L3.riscv_state) (bytes : List (BitVec 8)) (bitmaps : List (BitVec 64))
+    (c : Backend.Config) (depth heapLen : Nat) (adj2 adj4 : BitVec 64)
+    (cbspace dataSp : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (bytes, bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input mc ms bytes bitmaps c heapLen adj2 adj4 cbspace dataSp)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K : Nat)
+    (hnt : (evaluateTargetHOL mc (sourceFfi input) K ms).1 ≠ .timeOut) :
+    (evaluateTargetHOL mc (sourceFfi input) K ms).1 = .halt outcome ∧
+      (evaluateTargetHOL mc (sourceFfi input) K ms).2.2.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_baseline_clocked_halt oracles input mc ms bytes bitmaps c depth heapLen adj2 adj4
+      cbspace dataSp compiled depthBound installed nonfail stCtxt s_decls hst hev_decls
+      k_pan res_src s_src_post outcome hev_call hclass_src
+  obtain ⟨ms1, hhaltK⟩ := evaluateTarget_halt_of_not_timeOut_and_halt
+    mc (sourceFfi input) ms k_target K outcome ms2 ffi2 htarget hnt
+  rw [hhaltK]
+  exact ⟨rfl, hio⟩
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig in
+/-- Full end-to-end non-timeout target halt agreement from `baselineInitialState input`
+(including the 23,132-step bootstrap): if `sourceDeclarations` halts on `sourceInitialState input`
+at clock `k_pan` with `outcome`, and `baselineInitialState input` does not time out at
+`bootstrapSteps + K_post`, then `baselineInitialState input` halts at `bootstrapSteps + K_post`
+with `outcome` and the exact same I/O events! -/
+theorem oracle_full_baseline_halt_agree_of_not_timeOut (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K_post : Nat)
+    (hnt : (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+      (bootstrapSteps + K_post) (baselineInitialState input)).1 ≠ .timeOut) :
+    (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+      (bootstrapSteps + K_post) (baselineInitialState input)).1 = .halt outcome ∧
+      (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+        (bootstrapSteps + K_post) (baselineInitialState input)).2.2.ioEvents =
+        s_src_post.ffi.ioEvents := by
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_full_baseline_clocked_halt oracles input c depth compiled depthBound installed
+      nonfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+  obtain ⟨ms1, hhaltK⟩ := evaluateTarget_halt_of_not_timeOut_and_halt
+    baselineMachineConfig (sourceFfi input) (baselineInitialState input)
+    (bootstrapSteps + k_target) (bootstrapSteps + K_post) outcome ms2 ffi2 htarget hnt
+  rw [hhaltK]
+  exact ⟨rfl, hio⟩
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -2206,5 +2481,10 @@ theorem oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut (submis
 #print axioms oracle_full_baseline_matchingExecutionAt_of_clocked_halt
 #print axioms oracle_full_baseline_certificate_infinity_of_clocked_halt
 #print axioms oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut
+#print axioms crep_to_loop_run_agree_of_not_timeOut
+#print axioms pan_to_word_run_agree_of_not_timeOut
+#print axioms pan_to_target_compile_halt_agree_of_not_timeOut
+#print axioms oracle_baseline_halt_agree_of_not_timeOut
+#print axioms oracle_full_baseline_halt_agree_of_not_timeOut
 
 end InitE

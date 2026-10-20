@@ -812,6 +812,434 @@ theorem lab_to_target_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q
   injection hrest with _ hffi
   exact ⟨hres.symm, hffi.symm⟩
 
+/-- Same-clock `alignDm`/`alignSdm` + `filterSkip` non-timeout run agreement:
+if the aligned unfiltered `LabSem` state `alignDm (alignSdm t)` does not time out at clock `k`,
+then the `filterSkip`-related `LabSem` state `s` at clock `k` has the exact same result and
+FFI state as `alignDm (alignSdm t)` at clock `k`! -/
+theorem lab_filter_align_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (hw : goodDimindex width)
+    (s t : Flapjack.Compiler.Backend.LabSem.State width C F)
+    (hr : LabFilter.Proofs.stateRel s t)
+    (k : Nat)
+    (hnt : (LabSem.evaluate { alignDm (alignSdm t) with clock := k }).1 ≠ .timeOut) :
+    (LabSem.evaluate { s with clock := k }).1 =
+      (LabSem.evaluate { alignDm (alignSdm t) with clock := k }).1 ∧
+    (LabSem.evaluate { s with clock := k }).2.ffi =
+      (LabSem.evaluate { alignDm (alignSdm t) with clock := k }).2.ffi := by
+  have hdm : LabSem.evaluate { alignDm (alignSdm t) with clock := k } =
+      ((LabSem.evaluate { alignSdm t with clock := k }).1,
+        alignDm (LabSem.evaluate { alignSdm t with clock := k }).2) := by
+    change LabSem.evaluate (alignDm { alignSdm t with clock := k }) = _
+    have h := evaluateAlignDM hw { alignSdm t with clock := k }
+    cases he : LabSem.evaluate { alignSdm t with clock := k }
+    simpa only [he] using h
+  have hsdm : LabSem.evaluate { alignSdm t with clock := k } =
+      ((LabSem.evaluate { t with clock := k }).1,
+        alignSdm (LabSem.evaluate { t with clock := k }).2) := by
+    change LabSem.evaluate (alignSdm { t with clock := k }) = _
+    have h := evaluateAlignSDM hw { t with clock := k }
+    cases he : LabSem.evaluate { t with clock := k }
+    simpa only [he] using h
+  have hres_align : (LabSem.evaluate { alignDm (alignSdm t) with clock := k }).1 =
+      (LabSem.evaluate { t with clock := k }).1 := by
+    rw [hdm, hsdm]
+  have hffi_align : (LabSem.evaluate { alignDm (alignSdm t) with clock := k }).2.ffi =
+      (LabSem.evaluate { t with clock := k }).2.ffi := by
+    rw [hdm, hsdm]
+    rfl
+  have hrc : LabFilter.Proofs.stateRel { s with clock := k } { t with clock := k } := by
+    rcases hr with ⟨⟨compile, hs, hcomp⟩, hf⟩
+    subst s
+    exact ⟨⟨compile, rfl, hcomp⟩, hf⟩
+  obtain ⟨extra, t2, he, hf⟩ := LabFilter.Proofs.filterCorrect
+    { s with clock := k } { t with clock := k }
+    (LabSem.evaluate { s with clock := k }).1
+    (LabSem.evaluate { s with clock := k }).2
+    ⟨rfl, hrc, hrc.2⟩
+  have hnt_t : (LabSem.evaluate { t with clock := k }).1 ≠ .timeOut :=
+    hres_align ▸ hnt
+  have hadd := evaluateAddClock { t with clock := k }
+    (LabSem.evaluate { t with clock := k }).1
+    (LabSem.evaluate { t with clock := k }).2 extra
+    ⟨rfl, hnt_t⟩
+  rw [hadd] at he
+  constructor
+  · exact (congrArg Prod.fst he).symm.trans hres_align.symm
+  · have ht2 : (LabSem.evaluate { t with clock := k }).2.ffi = t2.ffi :=
+      congrArg (fun p => p.2.ffi) he
+    rw [hf, ← ht2]
+    exact hffi_align.symm
+
+/-- Same-clock `LabToTarget.semanticsMakeInit` non-timeout run agreement:
+if the target machine does not time out at clock `K` and `LabSem.evaluate` does not error
+at clock `K`, then `LabSem.evaluate` on `makeInit` at clock `K` produces the exact same
+result and FFI state as the target machine at clock `K`. -/
+theorem lab_to_target_make_init_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q F : Type}
+    (mc : MachineConfig width S Q) (ms : S) (ffi : HolFfiState F)
+    (code code2 : LabProgHOL width) (labs : Spt (Spt Nat))
+    (clock i cbspace : Nat) (t : AsmState width)
+    (m : BitVec width → WordLocW width) (dm sdm : BitVec width → Bool)
+    (coracle : Nat → LabToTarget.Config × LabProgHOL width)
+    (newFfiNames : List HolFfiName) (shmemInfo newShmemInfo : List ShmemInfoNum)
+    (hencoder : encoderCorrect mc.target)
+    (hgood : goodCode mc.target.config (.ln : Spt (Spt Nat)) code)
+    (hmc : mcConfOk mc)
+    (horacle : noShareMemInst code → compilerOracleOk coracle labs (progToBytes code2).length
+      mc.target.config mc.ffiNames)
+    (hffis : listSubset ((findFfiNames code).filter (fun x => match x with
+      | .extCall _ => true | _ => false)) (mc.ffiNames.take i) = true)
+    (hremove : removeLabels clock mc.target.config 0 .ln (mc.ffiNames.take i) code =
+      some (code2, labs))
+    (hinit : goodInitState mc ms (progToBytes code2) cbspace t m dm sdm)
+    (hinfo : getShmemInfo code2 0 [] [] = (newFfiNames, shmemInfo))
+    (hoff : newShmemInfo = shmemInfo.map (fun rec => { rec with
+      entryPc := (mc.target.getPc ms).toNat + rec.entryPc,
+      exitPc := (mc.target.getPc ms).toNat + rec.exitPc }))
+    (hdrop : mc.ffiNames.drop i = newFfiNames)
+    (hboundary : mmioPcsMinIndex mc.ffiNames = some i)
+    (hentries : newShmemInfo.map ShmemInfoNum.entryPc = (mc.ffiEntryPcs.map BitVec.toNat).drop i)
+    (hmmio : mc.mmioInfo = List.zip ((List.range newShmemInfo.length).map (fun index => index + i))
+      (newShmemInfo.map (fun rec => (rec.nbytes,
+        HolAddr.addr rec.addrReg (BitVec.ofNat width rec.addrOff), rec.reg,
+        BitVec.ofNat width rec.exitPc))))
+    (hsafe : noInstallOrNoShareMem code mc.ffiNames)
+    (hbuffer : ∀ bn, bn < cbspace → BitVec.ofNat width bn +
+      BitVec.ofNat width (progToBytes code2).length + mc.target.getPc ms ∉ mc.ffiEntryPcs.take i)
+    (K : Nat)
+    (hne : (LabSem.evaluate { makeInit mc ffi t m dm sdm ms code (compileLab mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat width (progToBytes code2).length) cbspace coracle with
+        clock := K }).1 ≠ .error)
+    (hnt : (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut) :
+    (LabSem.evaluate { makeInit mc ffi t m dm sdm ms code (compileLab mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat width (progToBytes code2).length) cbspace coracle with
+        clock := K }).1 = (evaluateTargetHOL mc ffi K ms).1 ∧
+    (LabSem.evaluate { makeInit mc ffi t m dm sdm ms code (compileLab mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat width (progToBytes code2).length) cbspace coracle with
+        clock := K }).2.ffi = (evaluateTargetHOL mc ffi K ms).2.2 := by
+  have hentry := makeInit_initOk mc ms ffi code code2 labs clock i cbspace t m dm sdm
+    coracle newFfiNames shmemInfo newShmemInfo
+    ⟨hgood, hmc, horacle, hffis, hremove, hinit, hinfo, hoff, hdrop, hboundary,
+      hentries, hmmio, hsafe, hbuffer⟩
+  exact lab_to_target_run_agree_of_not_timeOut mc (mc.target.getPc ms) ms
+    (makeInit mc ffi t m dm sdm ms code (compileLab mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat width (progToBytes code2).length) cbspace coracle)
+    hencoder hentry K hne hnt
+
+/-- Same-clock `LabToTarget.semanticsCompile` non-timeout run agreement:
+if the target machine does not time out at clock `K` and the aligned unfiltered `LabSem`
+state does not error at clock `K`, then the aligned unfiltered `LabSem` state at clock `K`
+produces the exact same result and FFI state as the target machine at clock `K`! -/
+theorem lab_to_target_compile_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q F : Type}
+    (mc : MachineConfig width S Q) (ffi : HolFfiState F) (ms : S)
+    (code : LabProgHOL width) (asmConf : AsmConfigExact width) (c cNext : LabToTarget.Config)
+    (bytes : List (BitVec 8)) (cbspace i : Nat) (t : AsmState width)
+    (m : BitVec width → WordLocW width) (dm sdm : BitVec width → Bool)
+    (coracle : Nat → LabToTarget.Config × LabProgHOL width)
+    (hmc : mcConfOk mc)
+    (horacle : noShareMemInst code → compilerOracleOk coracle cNext.labels bytes.length
+      asmConf mc.ffiNames)
+    (hgood : goodCode asmConf c.labels code)
+    (hasm : asmConf = mc.target.config)
+    (hlabs : c.labels = .ln)
+    (hpos : c.pos = 0)
+    (hcompile : LabToTarget.compile asmConf c code = some (bytes, cNext))
+    (hffi : cNext.ffiNames = some mc.ffiNames)
+    (hinit : goodInitState mc ms bytes cbspace t m dm sdm)
+    (hboundary : mmioPcsMinIndex mc.ffiNames = some i)
+    (hentries : cNext.shmemExtra.map (fun rec => (mc.target.getPc ms).toNat + rec.entryPc) =
+      (mc.ffiEntryPcs.map BitVec.toNat).drop i)
+    (hmmio : mc.mmioInfo = List.zip ((List.range cNext.shmemExtra.length).map (fun index => index + i))
+      (cNext.shmemExtra.map (fun rec => (rec.nbytes,
+        HolAddr.addr rec.addrReg (BitVec.ofNat width rec.addrOff), rec.reg,
+        BitVec.ofNat width rec.exitPc + mc.target.getPc ms))))
+    (hsafe : noInstallOrNoShareMem code mc.ffiNames)
+    (hbound : cbspace + bytes.length + ffiOffset * (i + 3) < 2 ^ width)
+    (hprovided : ∀ ffis, c.ffiNames = some ffis → ∀ name ∈ ffis, ∃ s, name = .extCall s)
+    (K : Nat)
+    (hne : ∀ k, (LabSem.evaluate { makeInit mc ffi t m (fun a => dm a && holByteAligned a)
+      (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile asmConf)
+      (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace coracle with
+        clock := k }).1 ≠ .error)
+    (hnt_lab : (LabSem.evaluate { makeInit mc ffi t m (fun a => dm a && holByteAligned a)
+      (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile asmConf)
+      (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace coracle with
+        clock := K }).1 ≠ .timeOut)
+    (hnt : (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut) :
+    (LabSem.evaluate { makeInit mc ffi t m (fun a => dm a && holByteAligned a)
+      (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile asmConf)
+      (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace coracle with
+        clock := K }).1 = (evaluateTargetHOL mc ffi K ms).1 ∧
+    (LabSem.evaluate { makeInit mc ffi t m (fun a => dm a && holByteAligned a)
+      (fun a => sdm a && holByteAligned a) ms code (LabToTarget.compile asmConf)
+      (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace coracle with
+        clock := K }).2.ffi = (evaluateTargetHOL mc ffi K ms).2.2 := by
+  subst hasm
+  let tUnaligned := makeInit mc ffi t m dm sdm ms code (LabToTarget.compile mc.target.config)
+    (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace coracle
+  let sFiltered := makeInit mc ffi t m dm sdm ms (filterSkip code)
+    (compileLab mc.target.config)
+    (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+    (fun n => ((coracle n).1, filterSkip (coracle n).2))
+  have hr : LabFilter.Proofs.stateRel sFiltered tUnaligned := by
+    refine ⟨⟨compileLab mc.target.config, ?_, rfl⟩, rfl⟩
+    have hadj : LabFilter.Proofs.adjustPc tUnaligned.pc tUnaligned.code = tUnaligned.pc := by
+      rw [show tUnaligned.pc = 0 from rfl, LabFilter.Proofs.adjustPc.eq_def]
+      simp
+    rw [hadj]
+    rfl
+  obtain ⟨hres_align0, hffi_align0⟩ :=
+    lab_filter_align_run_agree_of_not_timeOut hmc.1 sFiltered tUnaligned hr K hnt_lab
+  have hne_s : (LabSem.evaluate { sFiltered with clock := K }).1 ≠ .error := by
+    rw [hres_align0]
+    exact hne K
+  have hgoodNat : goodCode mc.target.config (.ln : Spt (Spt Nat)) code := by
+    simpa only [hlabs] using hgood
+  have hcomp := hcompile
+  simp only [LabToTarget.compile, compileLab, hlabs, hpos] at hcomp
+  generalize hchoice : (match c.ffiNames with
+    | some names => (names, listSubset (findFfiNames (filterSkip code)) names)
+    | none => (findFfiNames (filterSkip code), true)) = choice at hcomp
+  rcases choice with ⟨ffis, ffisOk⟩
+  let finish (names : List HolFfiName) (ok : Bool) :=
+    if ok then
+      match removeLabels c.initClock mc.target.config 0 .ln names (filterSkip code) with
+      | none => none
+      | some (output, labs) =>
+          let (newNames, info) := getShmemInfo output 0 [] []
+          some (progToBytes output, { c with
+            labels := labs
+            pos := (progToBytes output).length + 0
+            secPosLen := getSymbols 0 output
+            ffiNames := some (names ++ newNames)
+            shmemExtra := info })
+    else none
+  have hfinished : finish ffis ffisOk = some (bytes, cNext) := by
+    cases hcfg : c.ffiNames with
+    | none =>
+      simp only [hcfg, Prod.mk.injEq] at hchoice
+      rw [← hchoice.1, ← hchoice.2]
+      cases hr : removeLabels c.initClock mc.target.config 0 .ln
+          (findFfiNames (filterSkip code)) (filterSkip code) <;>
+        simpa only [finish, hcfg, hr] using hcomp
+    | some supplied =>
+      simp only [hcfg, Prod.mk.injEq] at hchoice
+      rw [← hchoice.1, ← hchoice.2]
+      cases hr : removeLabels c.initClock mc.target.config 0 .ln supplied
+          (filterSkip code) <;>
+        simpa only [finish, hcfg, hr] using hcomp
+  clear hcomp
+  have hcomp := hfinished
+  dsimp only [finish] at hcomp
+  by_cases hok : ffisOk = true
+  · simp only [hok, ↓reduceIte] at hcomp
+    cases hremove : removeLabels c.initClock mc.target.config 0 .ln ffis
+        (filterSkip code) with
+    | none => simp only [hremove, reduceCtorEq] at hcomp
+    | some output =>
+      rcases output with ⟨code2, labs⟩
+      simp only [hremove] at hcomp
+      cases hinfo : getShmemInfo code2 0 [] [] with
+      | mk newNames info =>
+        simp only [hinfo, Option.some.injEq, Prod.mk.injEq] at hcomp
+        obtain ⟨rfl, rfl⟩ := hcomp
+        have hnames : mc.ffiNames = ffis ++ newNames := by
+          simpa only [Option.some.injEq] using hffi.symm
+        have hffis : ∀ name ∈ ffis, ∃ s, name = HolFfiName.extCall s := by
+          cases hcfg : c.ffiNames with
+          | none =>
+            simp only [hcfg, Prod.mk.injEq] at hchoice
+            rw [← hchoice.1]
+            exact findFfiNamesEvery (filterSkip code) _ rfl
+          | some supplied =>
+            simp only [hcfg, Prod.mk.injEq] at hchoice
+            rw [← hchoice.1]
+            exact hprovided supplied hcfg
+        have hnew : ∀ name ∈ newNames, ∀ s, name ≠ HolFfiName.extCall s := by
+          obtain ⟨suffix, heq, hshared⟩ := getShmemInfo_mappedNames code2 0 [] [] newNames info hinfo
+          simp only [List.nil_append] at heq
+          rw [heq]
+          intro name hmem s
+          obtain ⟨op, rfl⟩ := hshared name hmem
+          intro heq
+          cases heq
+        have hb : mmioPcsMinIndex mc.ffiNames = some ffis.length := by
+          rw [hnames]
+          exact mmioPcsMinIndex_append newNames ffis ⟨hnew, hffis⟩
+        have hilen : i = ffis.length := Option.some.inj (hboundary.symm.trans hb)
+        have htake : mc.ffiNames.take i = ffis := by
+          rw [hnames, hilen, List.take_append_length]
+        have hdrop : mc.ffiNames.drop i = newNames := by
+          rw [hnames, hilen, List.drop_append_length]
+        have hsubset : listSubset (findFfiNames (filterSkip code)) ffis = true := by
+          cases hcfg : c.ffiNames with
+          | none =>
+            simp only [hcfg, Prod.mk.injEq] at hchoice
+            rw [← hchoice.1]
+            exact listSubsetRefl _
+          | some supplied =>
+            simp only [hcfg, Prod.mk.injEq] at hchoice
+            rw [← hchoice.1]
+            exact hchoice.2.trans hok
+        let shiftedInfo := info.map (fun rec => { rec with
+          entryPc := (mc.target.getPc ms).toNat + rec.entryPc,
+          exitPc := (mc.target.getPc ms).toNat + rec.exitPc })
+        obtain ⟨hres_s, hffi_s⟩ := lab_to_target_make_init_run_agree_of_not_timeOut mc ms ffi
+          (filterSkip code) code2 labs c.initClock i cbspace t m dm sdm
+          (fun n => ((coracle n).1, filterSkip (coracle n).2))
+          newNames info shiftedInfo
+          hmc.2.1 (goodCodeFiltered_local _ _ _ hgoodNat) hmc
+          (by
+            intro hno
+            obtain ⟨hall, hzero⟩ := horacle ((noShareMemFilterSkip code).mp hno)
+            refine ⟨?_, hzero⟩
+            intro k'
+            exact ⟨goodCodeFiltered_local _ _ _ (hall k').1,
+              (noShareMemFilterSkip (coracle k').2).mpr (hall k').2⟩)
+          (by
+            rw [htake]
+            simp only [listSubset, List.all_eq_true, decide_eq_true_eq] at hsubset ⊢
+            intro name hmem
+            exact hsubset name (List.mem_filter.mp hmem).1)
+          (by simpa only [htake] using hremove)
+          hinit hinfo rfl hdrop hboundary
+          (by simpa only [shiftedInfo, List.map_map, Function.comp_def] using hentries)
+          (by simpa only [shiftedInfo, List.length_map, List.map_map, Function.comp_def,
+              BitVec.ofNat_add, BitVec.ofNat_toNat, BitVec.setWidth_eq, BitVec.add_comm] using hmmio)
+          (noInstallOrNoShareMemFilterSkip code mc.ffiNames hsafe)
+          (by
+            have hstart : startPcOk mc (mc.target.getPc ms) := by
+              rw [← hinit.2.2.1]
+              exact hinit.2.2.2.1
+            exact bufferNotFfi_local mc _ _ cbspace i hstart hboundary hbound)
+          K hne_s hnt
+        exact ⟨hres_align0.symm.trans hres_s, hffi_align0.symm.trans hffi_s⟩
+  · simp only [hok, ↓reduceIte, reduceCtorEq] at hcomp
+
+/-- Same-clock stage A4 (`panToTargetMachineLabSource`) non-timeout run agreement:
+if the target machine and `labst` do not time out at clock `K` and `labst` does not error at
+any clock, then `labst` at clock `K` has the exact same result and FFI state as the target
+machine at clock `K`! -/
+theorem pan_to_target_machine_lab_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q σ : Type}
+    (c : Backend.Config) (mc : MachineConfig width S Q) (ffi : HolFfiState σ)
+    (t : AsmState width) (m : BitVec width → WordLocW width)
+    (bitmapsDm sdm : BitVec width → Bool) (ms : S) (bytes : List (BitVec 8)) (cbspace : Nat)
+    (panCode : List (Pancake.PanLang.DeclHOL width)) (col : List (Option (Spt Nat)))
+    (wprog : List (Nat × Nat × WordLangProgHOL (BitVec width))) (bitmaps : List (BitVec width))
+    (wconf : WordToStack.Native.Config) (fs : List Nat) (p : List (Nat × StackLang.HolProg width))
+    (ltconf : LabToTarget.Config)
+    (hcfg : BackendProof.backendConfigOk mc.target.config c) (hmc : mcConfOk mc)
+    (hisa : mc.target.config.isa ≠ .ag32)
+    (hwtw : WordToWord.compile c.wordToWordConf mc.target.config
+      (panToWordCompileProgHOL mc.target.config.isa panCode) = (col, wprog))
+    (hwts : WordToStack.Native.compileNative mc.target.config false wprog =
+      (bitmaps, wconf, fs, p))
+    (hlab : LabToTarget.compile mc.target.config c.labConf
+      (StackToLab.compile c.stackConf c.dataConf (2 * DataToWord.maxHeapLimit width c.dataConf - 1)
+        (mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3))
+        mc.target.config.addrOffset p) = some (bytes, ltconf))
+    (hnodup : ((Pancake.PanLang.functionsHOL panCode).map Prod.fst).Nodup)
+    (hffiOk : match c.labConf.ffiNames with
+      | none => True
+      | some l => ∀ x ∈ l, ∃ s, x = HolFfiName.extCall s)
+    (hgi : goodInitState mc ms bytes cbspace t m
+      (fun w => decide (t.regs (StackNames.findNameSpt c.stackConf.regNames 2) ≤ w ∧
+        w < t.regs (StackNames.findNameSpt c.stackConf.regNames 4)) || bitmapsDm w) sdm)
+    (hffi : ltconf.ffiNames = some mc.ffiNames)
+    (hmmio : ∀ i, mmioPcsMinIndex mc.ffiNames = some i →
+      ltconf.shmemExtra.map (fun rec => (mc.target.getPc ms).toNat + rec.entryPc) =
+          (mc.ffiEntryPcs.map BitVec.toNat).drop i ∧
+        mc.mmioInfo = List.zip ((List.range ltconf.shmemExtra.length).map (fun index => index + i))
+          (ltconf.shmemExtra.map fun rec => (rec.nbytes,
+            HolAddr.addr rec.addrReg (BitVec.ofNat width rec.addrOff),
+            rec.reg, BitVec.ofNat width rec.exitPc + mc.target.getPc ms)) ∧
+        cbspace + bytes.length + ffiOffset * (i + 3) < 2 ^ width)
+    (hsource : pancakeGoodCodeHOL panCode = true)
+    (K : Nat)
+    (hne : ∀ k, (LabSem.evaluate {
+      (let regNames := c.stackConf.regNames
+       let r1 := StackNames.findNameSpt regNames 2
+       let r2 := StackNames.findNameSpt regNames 4
+       let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+       let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+       let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+       LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+         (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+         (fun a => sdm a && holByteAligned a) ms
+         (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+         (LabToTarget.compile mc.target.config)
+         (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+         (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+           mc.target.config.addrOffset sp []))) with clock := k }).1 ≠ .error)
+    (hnt_lab : (LabSem.evaluate {
+      (let regNames := c.stackConf.regNames
+       let r1 := StackNames.findNameSpt regNames 2
+       let r2 := StackNames.findNameSpt regNames 4
+       let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+       let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+       let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+       LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+         (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+         (fun a => sdm a && holByteAligned a) ms
+         (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+         (LabToTarget.compile mc.target.config)
+         (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+         (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+           mc.target.config.addrOffset sp []))) with clock := K }).1 ≠ .timeOut)
+    (hnt : (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut) :
+    (LabSem.evaluate {
+      (let regNames := c.stackConf.regNames
+       let r1 := StackNames.findNameSpt regNames 2
+       let r2 := StackNames.findNameSpt regNames 4
+       let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+       let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+       let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+       LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+         (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+         (fun a => sdm a && holByteAligned a) ms
+         (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+         (LabToTarget.compile mc.target.config)
+         (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+         (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+           mc.target.config.addrOffset sp []))) with clock := K }).1 =
+      (evaluateTargetHOL mc ffi K ms).1 ∧
+    (LabSem.evaluate {
+      (let regNames := c.stackConf.regNames
+       let r1 := StackNames.findNameSpt regNames 2
+       let r2 := StackNames.findNameSpt regNames 4
+       let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+       let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+       let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+       LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+         (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+         (fun a => sdm a && holByteAligned a) ms
+         (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+         (LabToTarget.compile mc.target.config)
+         (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+         (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+           mc.target.config.addrOffset sp []))) with clock := K }).2.ffi =
+      (evaluateTargetHOL mc ffi K ms).2.2 := by
+  have hpos : c.labConf.pos = 0 := hcfg.2.2.2.2.1
+  have hlabels : c.labConf.labels = .ln := hcfg.2.2.2.2.2.1
+  obtain ⟨ffis, hffis, i, hi⟩ := BackendProof.compileLabIMPMmioPcsMinIndex mc.target.config
+    c.labConf _ bytes ltconf ⟨hlab, hffiOk⟩
+  rw [hffi] at hffis
+  cases hffis
+  obtain ⟨hshm, hmmioI, hbound⟩ := hmmio i hi
+  have horacle := panToTargetCompilerOracleOk mc.target.config c.labConf ltconf _ bytes
+    mc.ffiNames c.stackConf.regNames c.stackConf.jump mc.target.config.addrOffset
+    (mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)) hlab hpos hffi
+  have hnis := panToTargetNoInstallOrNoShareMem panCode mc.target.config mc.target.config.isa _
+    c.wordToWordConf col wprog bitmaps wconf fs p c.stackConf c.dataConf
+    (2 * DataToWord.maxHeapLimit width c.dataConf - 1)
+    (mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3))
+    mc.target.config.addrOffset mc.ffiNames ⟨hnodup, hisa, rfl, hwtw, hwts⟩
+  have hgc := panToTargetGoodCodeFromSource (β := Nat) c mc panCode col wprog bitmaps wconf fs p
+    hcfg hmc.1 hisa hwtw hwts hnodup hsource
+  exact lab_to_target_compile_run_agree_of_not_timeOut mc ffi ms _ mc.target.config c.labConf ltconf bytes
+    cbspace i t m _ sdm _ hmc (fun _ => horacle) (by rw [hlabels]; exact hgc) rfl hlabels hpos
+    hlab hffi hgi hi hshm hmmioI hnis hbound
+    (fun ffis h => by rw [h] at hffiOk; exact hffiOk) K hne hnt_lab hnt
+
 #print axioms certificate_of_exact_behaviour_and_bound
 #print axioms targetTerminatesAt_mono
 #print axioms targetTerminatesAt_of_not_timeOut
@@ -828,5 +1256,9 @@ theorem lab_to_target_run_agree_of_not_timeOut {width : Nat} [NeZero width] {S Q
 #print axioms oracle_full_baseline_certificate_of_not_timeOut
 #print axioms evaluateTarget_halt_of_not_timeOut_and_halt
 #print axioms lab_to_target_run_agree_of_not_timeOut
+#print axioms lab_filter_align_run_agree_of_not_timeOut
+#print axioms lab_to_target_make_init_run_agree_of_not_timeOut
+#print axioms lab_to_target_compile_run_agree_of_not_timeOut
+#print axioms pan_to_target_machine_lab_run_agree_of_not_timeOut
 
 end InitE
