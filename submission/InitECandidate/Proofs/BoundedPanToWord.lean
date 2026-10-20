@@ -2987,6 +2987,439 @@ theorem loop_halt_of_not_timeOut {width : Nat} [NeZero width] {F : Type}
         simp at hclass0 ⊢ <;> exact hclass0.symm
     · cases hsem
 
+mutual
+/-- Exact structural count of `.cmp` nodes in a `CrepExpHOL` expression (and expression list).
+Every `.cmp` node compiles via `progIfHOLExact` (`.ite`), whose exit `cutRes` consumes
+at most 1 clock tick in `LoopSemStateFiniteExact.evaluate`; all other expression
+constructors consume 0 clock ticks. -/
+def crepExpCmpCount {width : Nat} [NeZero width] : CrepExpHOL width → Nat
+  | .baseAddr | .topAddr | .const _ | .var _ | .loadGlob _ => 0
+  | .load a | .load32 a | .loadByte a => crepExpCmpCount a
+  | .op _ es | .crepOp _ es => crepExpsCmpCount es
+  | .cmp _ e1 e2 => crepExpCmpCount e1 + crepExpCmpCount e2 + 1
+  | .shift _ e1 e2 => crepExpCmpCount e1 + crepExpCmpCount e2
+termination_by e => sizeOf e
+
+/-- Exact structural count of `.cmp` nodes across a `List (CrepExpHOL width)`. -/
+def crepExpsCmpCount {width : Nat} [NeZero width] : List (CrepExpHOL width) → Nat
+  | [] => 0
+  | e :: es => crepExpCmpCount e + crepExpsCmpCount es
+termination_by es => sizeOf es
+end
+
+mutual
+/-- `crepExpCmpCount e` is bounded by `sizeOf e`. -/
+theorem crepExpCmpCount_le_sizeOf {width : Nat} [NeZero width] :
+    ∀ e : CrepExpHOL width, crepExpCmpCount e ≤ sizeOf e
+  | .baseAddr | .topAddr | .const _ | .var _ | .loadGlob _ => by simp [crepExpCmpCount]
+  | .load a => by have := crepExpCmpCount_le_sizeOf a; simp [crepExpCmpCount]; omega
+  | .load32 a => by have := crepExpCmpCount_le_sizeOf a; simp [crepExpCmpCount]; omega
+  | .loadByte a => by have := crepExpCmpCount_le_sizeOf a; simp [crepExpCmpCount]; omega
+  | .op _ es => by have := crepExpsCmpCount_le_sizeOf es; simp [crepExpCmpCount]; omega
+  | .crepOp _ es => by have := crepExpsCmpCount_le_sizeOf es; simp [crepExpCmpCount]; omega
+  | .cmp _ e1 e2 => by
+      have h1 := crepExpCmpCount_le_sizeOf e1
+      have h2 := crepExpCmpCount_le_sizeOf e2
+      simp [crepExpCmpCount]; omega
+  | .shift _ e1 e2 => by
+      have h1 := crepExpCmpCount_le_sizeOf e1
+      have h2 := crepExpCmpCount_le_sizeOf e2
+      simp [crepExpCmpCount]; omega
+termination_by e => sizeOf e
+
+/-- `crepExpsCmpCount es` is bounded by `sizeOf es`. -/
+theorem crepExpsCmpCount_le_sizeOf {width : Nat} [NeZero width] :
+    ∀ es : List (CrepExpHOL width), crepExpsCmpCount es ≤ sizeOf es
+  | [] => by simp [crepExpsCmpCount]
+  | e :: es => by
+      have h1 := crepExpCmpCount_le_sizeOf e
+      have h2 := crepExpsCmpCount_le_sizeOf es
+      simp [crepExpsCmpCount]; omega
+termination_by es => sizeOf es
+end
+
+/-- Exact structural count of `.ite` nodes in a loop-free `HolLoopProg` (such as
+any program produced by `compileExpHOLExact`). -/
+def loopProgIteCount {width : Nat} [NeZero width] : HolLoopProg width → Nat
+  | .seq c1 c2 => loopProgIteCount c1 + loopProgIteCount c2
+  | .ite _ _ _ c1 c2 _ => loopProgIteCount c1 + loopProgIteCount c2 + 1
+  | _ => 0
+
+theorem loopProgIteCount_nestedSeq_append {width : Nat} [NeZero width] :
+    ∀ (p q : List (HolLoopProg width)),
+      loopProgIteCount (loopNestedSeqHOL (p ++ q)) =
+        loopProgIteCount (loopNestedSeqHOL p) + loopProgIteCount (loopNestedSeqHOL q)
+  | [], q => by simp [loopNestedSeqHOL, loopProgIteCount]
+  | c :: p, q => by
+      simp only [List.cons_append, loopNestedSeqHOL, loopProgIteCount,
+        loopProgIteCount_nestedSeq_append p q]
+      omega
+
+theorem loopProgIteCount_zipWith_assign {width : Nat} [NeZero width] (m : Nat) :
+    ∀ (is : List Nat) (vs : List (HolLoopExp width)),
+      loopProgIteCount (loopNestedSeqHOL
+        (List.zipWith (fun i v => HolLoopProg.assign (m + i) v) is vs)) = 0
+  | [], _ => by simp [loopNestedSeqHOL, loopProgIteCount]
+  | _ :: _, [] => by simp [loopNestedSeqHOL, loopProgIteCount]
+  | _ :: is, _ :: vs => by
+      simp [List.zipWith_cons_cons, loopNestedSeqHOL, loopProgIteCount,
+        loopProgIteCount_zipWith_assign m is vs]
+
+mutual
+/-- The number of `.ite` nodes in the compiled `HolLoopProg` of `e`
+equals `crepExpCmpCount e`. -/
+theorem compileExpHOLExact_iteCount {width : Nat} [NeZero width]
+    (ct : CrepToLoopContextExact) (tmp : Nat) (l : NumSet) :
+    ∀ e : CrepExpHOL width,
+      loopProgIteCount (loopNestedSeqHOL (compileExpHOLExact ct tmp l e).1) =
+        crepExpCmpCount e
+  | .baseAddr | .topAddr | .const _ | .var _ | .loadGlob _ => by
+      simp [compileExpHOLExact, loopNestedSeqHOL, loopProgIteCount, crepExpCmpCount]
+  | .load a => by
+      have ih := compileExpHOLExact_iteCount ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, o⟩
+      rw [hA] at ih; simp [compileExpHOLExact, hA, crepExpCmpCount, ih]
+  | .load32 a | .loadByte a => by
+      have ih := compileExpHOLExact_iteCount ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, o⟩
+      rw [hA] at ih
+      simp [compileExpHOLExact, hA, crepExpCmpCount, loopProgIteCount_nestedSeq_append,
+        loopNestedSeqHOL, loopProgIteCount, ih]
+  | .op o es => by
+      have ih := compileExpsHOLExact_iteCount ct tmp l es
+      rcases hA : compileExpsHOLExact ct tmp l es with ⟨c, vs, m, ol⟩
+      rw [hA] at ih; simp [compileExpHOLExact, hA, crepExpCmpCount, ih]
+  | .crepOp o es => by
+      have ih := compileExpsHOLExact_iteCount ct tmp l es
+      rcases hA : compileExpsHOLExact ct tmp l es with ⟨c, vs, m, ol⟩
+      rw [hA] at ih
+      cases o
+      simp only [compileExpHOLExact, hA, compileCrepopHOLExact, crepExpCmpCount]
+      split <;>
+        simp [loopProgIteCount_nestedSeq_append, loopProgIteCount_zipWith_assign,
+          loopNestedSeqHOL, loopProgIteCount, ih]
+  | .cmp o a b => by
+      have iha := compileExpHOLExact_iteCount ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpHOLExact_iteCount ct m ol b
+      rcases hB : compileExpHOLExact ct m ol b with ⟨c', v', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpHOLExact, hA, hB, progIfHOLExact, crepExpCmpCount,
+        loopProgIteCount_nestedSeq_append, loopNestedSeqHOL, loopProgIteCount, iha, ihb]
+      omega
+  | .shift o a b => by
+      have iha := compileExpHOLExact_iteCount ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpHOLExact_iteCount ct m ol b
+      rcases hB : compileExpHOLExact ct m ol b with ⟨c', v', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpHOLExact, hA, hB, crepExpCmpCount,
+        loopProgIteCount_nestedSeq_append, iha, ihb]
+termination_by e => sizeOf e
+
+/-- The number of `.ite` nodes in the compiled `HolLoopProg` of `es`
+equals `crepExpsCmpCount es`. -/
+theorem compileExpsHOLExact_iteCount {width : Nat} [NeZero width]
+    (ct : CrepToLoopContextExact) (tmp : Nat) (l : NumSet) :
+    ∀ es : List (CrepExpHOL width),
+      loopProgIteCount (loopNestedSeqHOL (compileExpsHOLExact ct tmp l es).1) =
+        crepExpsCmpCount es
+  | [] => by simp [compileExpsHOLExact, loopNestedSeqHOL, loopProgIteCount, crepExpsCmpCount]
+  | e :: es => by
+      have iha := compileExpHOLExact_iteCount ct tmp l e
+      rcases hA : compileExpHOLExact ct tmp l e with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpsHOLExact_iteCount ct m ol es
+      rcases hB : compileExpsHOLExact ct m ol es with ⟨c', vs', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpsHOLExact, hA, hB, crepExpsCmpCount,
+        loopProgIteCount_nestedSeq_append, iha, ihb]
+termination_by es => sizeOf es
+end
+
+/-- Exact structural predicate for loop-free `HolLoopProg` programs whose only
+clock-consuming construct is `.ite` (via `cutRes`). -/
+def loopProgExpOnly {width : Nat} [NeZero width] : HolLoopProg width → Bool
+  | .skip | .assign _ _ | .arith _ | .load32 _ _ | .loadByte _ _
+  | .store _ _ | .store32 _ _ | .storeByte _ _ | .setGlobal _ _ | .shMem _ _ _ => true
+  | .seq c1 c2 => loopProgExpOnly c1 && loopProgExpOnly c2
+  | .ite _ _ _ c1 c2 _ => loopProgExpOnly c1 && loopProgExpOnly c2
+  | _ => false
+
+theorem loopProgExpOnly_nestedSeq_append {width : Nat} [NeZero width] :
+    ∀ (p q : List (HolLoopProg width)),
+      loopProgExpOnly (loopNestedSeqHOL (p ++ q)) =
+        (loopProgExpOnly (loopNestedSeqHOL p) && loopProgExpOnly (loopNestedSeqHOL q))
+  | [], q => by simp [loopNestedSeqHOL, loopProgExpOnly]
+  | c :: p, q => by
+      simp only [List.cons_append, loopNestedSeqHOL, loopProgExpOnly,
+        loopProgExpOnly_nestedSeq_append p q, Bool.and_assoc]
+
+theorem loopProgExpOnly_zipWith_assign {width : Nat} [NeZero width] (m : Nat) :
+    ∀ (is : List Nat) (vs : List (HolLoopExp width)),
+      loopProgExpOnly (loopNestedSeqHOL
+        (List.zipWith (fun i v => HolLoopProg.assign (m + i) v) is vs)) = true
+  | [], _ => by simp [loopNestedSeqHOL, loopProgExpOnly]
+  | _ :: _, [] => by simp [loopNestedSeqHOL, loopProgExpOnly]
+  | _ :: is, _ :: vs => by
+      simp [List.zipWith_cons_cons, loopNestedSeqHOL, loopProgExpOnly,
+        loopProgExpOnly_zipWith_assign m is vs]
+
+mutual
+/-- Every compiled expression `compileExpHOLExact` produces a `loopProgExpOnly` program. -/
+theorem compileExpHOLExact_expOnly {width : Nat} [NeZero width]
+    (ct : CrepToLoopContextExact) (tmp : Nat) (l : NumSet) :
+    ∀ e : CrepExpHOL width,
+      loopProgExpOnly (loopNestedSeqHOL (compileExpHOLExact ct tmp l e).1) = true
+  | .baseAddr | .topAddr | .const _ | .var _ | .loadGlob _ => by
+      simp [compileExpHOLExact, loopNestedSeqHOL, loopProgExpOnly]
+  | .load a => by
+      have ih := compileExpHOLExact_expOnly ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, o⟩
+      rw [hA] at ih; simp [compileExpHOLExact, hA, ih]
+  | .load32 a | .loadByte a => by
+      have ih := compileExpHOLExact_expOnly ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, o⟩
+      rw [hA] at ih
+      simp [compileExpHOLExact, hA, loopProgExpOnly_nestedSeq_append,
+        loopNestedSeqHOL, loopProgExpOnly, ih]
+  | .op o es => by
+      have ih := compileExpsHOLExact_expOnly ct tmp l es
+      rcases hA : compileExpsHOLExact ct tmp l es with ⟨c, vs, m, ol⟩
+      rw [hA] at ih; simp [compileExpHOLExact, hA, ih]
+  | .crepOp o es => by
+      have ih := compileExpsHOLExact_expOnly ct tmp l es
+      rcases hA : compileExpsHOLExact ct tmp l es with ⟨c, vs, m, ol⟩
+      rw [hA] at ih
+      cases o
+      simp only [compileExpHOLExact, hA, compileCrepopHOLExact]
+      split <;>
+        simp [loopProgExpOnly_nestedSeq_append, loopProgExpOnly_zipWith_assign,
+          loopNestedSeqHOL, loopProgExpOnly, ih]
+  | .cmp o a b => by
+      have iha := compileExpHOLExact_expOnly ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpHOLExact_expOnly ct m ol b
+      rcases hB : compileExpHOLExact ct m ol b with ⟨c', v', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpHOLExact, hA, hB, progIfHOLExact,
+        loopProgExpOnly_nestedSeq_append, loopNestedSeqHOL, loopProgExpOnly, iha, ihb]
+  | .shift o a b => by
+      have iha := compileExpHOLExact_expOnly ct tmp l a
+      rcases hA : compileExpHOLExact ct tmp l a with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpHOLExact_expOnly ct m ol b
+      rcases hB : compileExpHOLExact ct m ol b with ⟨c', v', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpHOLExact, hA, hB,
+        loopProgExpOnly_nestedSeq_append, iha, ihb]
+termination_by e => sizeOf e
+
+/-- Every compiled expression list `compileExpsHOLExact` produces a `loopProgExpOnly` program. -/
+theorem compileExpsHOLExact_expOnly {width : Nat} [NeZero width]
+    (ct : CrepToLoopContextExact) (tmp : Nat) (l : NumSet) :
+    ∀ es : List (CrepExpHOL width),
+      loopProgExpOnly (loopNestedSeqHOL (compileExpsHOLExact ct tmp l es).1) = true
+  | [] => by simp [compileExpsHOLExact, loopNestedSeqHOL, loopProgExpOnly]
+  | e :: es => by
+      have iha := compileExpHOLExact_expOnly ct tmp l e
+      rcases hA : compileExpHOLExact ct tmp l e with ⟨c, v, m, ol⟩
+      rw [hA] at iha
+      have ihb := compileExpsHOLExact_expOnly ct m ol es
+      rcases hB : compileExpsHOLExact ct m ol es with ⟨c', vs', m', ol'⟩
+      rw [hB] at ihb
+      simp [compileExpsHOLExact, hA, hB,
+        loopProgExpOnly_nestedSeq_append, iha, ihb]
+termination_by es => sizeOf es
+end
+
+/-- `cutRes` decreases the clock by at most 1 tick. -/
+theorem loop_cutRes_clock_bound {width : Nat} [NeZero width] {F : Type} (live : NumSet)
+    (r : Option (LoopSemStateFiniteExact.LoopResultExact width) × LoopSemStateFiniteExact width F) :
+    r.2.clock ≤ (LoopSemStateFiniteExact.cutRes live r).2.clock + 1 := by
+  obtain ⟨res, s⟩ := r
+  cases res with
+  | some _ => simp [LoopSemStateFiniteExact.cutRes]
+  | none =>
+    simp only [LoopSemStateFiniteExact.cutRes]
+    cases hc : LoopSemStateFiniteExact.cutState live s with
+    | none => simp
+    | some s1 =>
+      simp only; have := LoopSemStateFiniteExact.cutState_clock hc
+      split <;> simp [LoopSemStateFiniteExact.decClock] <;> omega
+
+/-- Every `loopProgExpOnly` program consumes at most `loopProgIteCount p` clock ticks
+(`s.clock ≤ (evaluate p s).2.clock + loopProgIteCount p`). -/
+theorem loop_evaluate_clock_bound_of_expOnly {width : Nat} [NeZero width] {F : Type} :
+    ∀ (p : HolLoopProg width) (s : LoopSemStateFiniteExact width F),
+      loopProgExpOnly p = true →
+      s.clock ≤ (LoopSemStateFiniteExact.evaluate p s).2.clock + loopProgIteCount p
+  | .skip, s, _ => by simp [LoopSemStateFiniteExact.evaluate, loopProgIteCount]
+  | .assign v exp, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      split <;> simp [LoopSemStateFiniteExact.setVar, loopProgIteCount]
+  | .arith arith, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      cases ha : LoopSemStateFiniteExact.loopArith s arith with
+      | none => simp [loopProgIteCount]
+      | some s' =>
+        have hc := LoopSemStateFiniteExact.loopArith_clock ha
+        simp [loopProgIteCount, hc]
+  | .load32 a v, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [LoopSemStateFiniteExact.setVar, loopProgIteCount]
+  | .loadByte a v, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [LoopSemStateFiniteExact.setVar, loopProgIteCount]
+  | .store exp v, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      · have hc := LoopSemStateFiniteExact.memStore_clock ‹_›
+        simp [loopProgIteCount, hc]
+      all_goals simp [loopProgIteCount]
+  | .store32 a w, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [loopProgIteCount]
+  | .storeByte a w, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [loopProgIteCount]
+  | .setGlobal dst exp, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [LoopSemStateFiniteExact.setGlobals, loopProgIteCount]
+  | .shMem op v ad, s, _ => by
+      rw [LoopSemStateFiniteExact.evaluate]
+      repeat' split
+      all_goals simp [LoopSemStateFiniteExact.shMemOp_clock, loopProgIteCount]
+  | .seq c1 c2, s, hok => by
+      rw [loopProgExpOnly, Bool.and_eq_true] at hok
+      rw [LoopSemStateFiniteExact.evaluate_seq]
+      have hb1 := loop_evaluate_clock_bound_of_expOnly c1 s hok.1
+      rcases he1 : LoopSemStateFiniteExact.evaluate c1 s with ⟨r1, s1⟩
+      rw [he1] at hb1
+      cases r1 with
+      | some _ => simp only [loopProgIteCount] at hb1 ⊢; omega
+      | none =>
+        have hb2 := loop_evaluate_clock_bound_of_expOnly c2 s1 hok.2
+        simp only [loopProgIteCount] at hb1 hb2 ⊢
+        omega
+  | .ite cmp r1 ri c1 c2 live, s, hok => by
+      rw [loopProgExpOnly, Bool.and_eq_true] at hok
+      rw [LoopSemStateFiniteExact.evaluate]
+      split
+      · split
+        · have hb1 := loop_evaluate_clock_bound_of_expOnly c1 s hok.1
+          have hcr := loop_cutRes_clock_bound live (LoopSemStateFiniteExact.evaluate c1 s)
+          simp only [loopProgIteCount]
+          omega
+        · have hb2 := loop_evaluate_clock_bound_of_expOnly c2 s hok.2
+          have hcr := loop_cutRes_clock_bound live (LoopSemStateFiniteExact.evaluate c2 s)
+          simp only [loopProgIteCount]
+          omega
+      · simp [loopProgIteCount]
+  | .fail, _, hok | .primitive _ _ _, _, hok | .mark _, _, hok
+  | .break _, _, hok | .continue _, _, hok | .loop _ _ _, _, hok
+  | .raise _, _, hok | .return _, _, hok | .tick, _, hok
+  | .locValue _ _, _, hok | .call _ _ _ _, _, hok
+  | .ffi _ _ _ _ _ _, _, hok => by simp [loopProgExpOnly] at hok
+
+/-- Quantitative bound on `crepToLoop_comp_exp_preserves_eval`: the clock witness
+`ck` returned by `crepToLoop_comp_exp_preserves_eval` satisfies
+`ck ≤ crepExpCmpCount e` (and hence `ck ≤ sizeOf e`), so running at any clock
+`t.clock + B` with `crepExpCmpCount e ≤ B` succeeds and preserves all state/memory/globals/code/locals relations! -/
+theorem crepToLoop_comp_exp_preserves_eval_clock_bound {width : Nat} [NeZero width] {σ : Type}
+    (s : CrepSemHOLState width σ) (e : CrepExpHOL width)
+    (v : HolWordLab width) (t : LoopSemStateFiniteExact width σ)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (l : NumSet)
+    (p : List (HolLoopProg width)) (le : HolLoopExp width) (ntmp : Nat) (nl : NumSet)
+    (h : evalCrepSemHOLExp s e = some v ∧
+      crepToLoopStateRelExact s t ∧
+      crepToLoopMemRelHOLExact s.memory t.memory s.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact s.globals t.globals ∧
+      crepToLoopCodeRelExact ctxt s.code t.code ∧
+      crepToLoopLocalsRelExact ctxt l s.locals t.locals ∧
+      compileExpHOLExact ctxt tmp l e = (p, le, ntmp, nl) ∧
+      ctxt.vmax < tmp) :
+    ∃ (ck : Nat) (st : LoopSemStateFiniteExact width σ),
+      ck ≤ crepExpCmpCount e ∧
+      LoopSemStateFiniteExact.evaluate (loopNestedSeqHOL p)
+          { t with clock := t.clock + ck } = (none, st) ∧
+      LoopSemStateFiniteExact.eval st le = some (wlabWlocExact v) ∧
+      crepToLoopStateRelExact s st ∧
+      crepToLoopMemRelHOLExact s.memory st.memory s.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact s.globals st.globals ∧
+      crepToLoopCodeRelExact ctxt s.code st.code ∧
+      crepToLoopLocalsRelExact ctxt nl s.locals st.locals := by
+  obtain ⟨ck, st, heval, hle, hsr, hmr, hgr, hcr, hlr⟩ :=
+    crepToLoop_comp_exp_preserves_eval s e v t ctxt tmp l p le ntmp nl h
+  have hexp : loopProgExpOnly (loopNestedSeqHOL p) = true := by
+    have := compileExpHOLExact_expOnly ctxt tmp l e
+    rw [h.2.2.2.2.2.2.1] at this
+    exact this
+  have hite : loopProgIteCount (loopNestedSeqHOL p) = crepExpCmpCount e := by
+    have := compileExpHOLExact_iteCount ctxt tmp l e
+    rw [h.2.2.2.2.2.2.1] at this
+    exact this
+  have hb := loop_evaluate_clock_bound_of_expOnly (loopNestedSeqHOL p)
+    { t with clock := t.clock + ck } hexp
+  have hclk : s.clock = t.clock ∧ s.clock = st.clock := ⟨h.2.1.2.2.1, hsr.2.2.1⟩
+  have hck : ck ≤ crepExpCmpCount e := by
+    rw [heval, hite] at hb
+    simp only at hb
+    omega
+  exact ⟨ck, st, hck, heval, hle, hsr, hmr, hgr, hcr, hlr⟩
+
+/-- Quantitative bound on `crepToLoop_comp_exps_preserves_eval`: the clock witness
+`ck` satisfies `ck ≤ crepExpsCmpCount es` (and hence `ck ≤ sizeOf es`). -/
+theorem crepToLoop_comp_exps_preserves_eval_clock_bound {width : Nat} [NeZero width] {σ : Type}
+    (es : List (CrepExpHOL width)) (s : CrepSemHOLState width σ)
+    (vs : List (HolWordLab width)) (t : LoopSemStateFiniteExact width σ)
+    (ctxt : CrepToLoopContextExact) (tmp : Nat) (l : NumSet)
+    (p : List (HolLoopProg width)) (les : List (HolLoopExp width)) (ntmp : Nat) (nl : NumSet)
+    (h : es.mapM (evalCrepSemHOLExp s) = some vs ∧
+      crepToLoopStateRelExact s t ∧
+      crepToLoopMemRelHOLExact s.memory t.memory s.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact s.globals t.globals ∧
+      crepToLoopCodeRelExact ctxt s.code t.code ∧
+      crepToLoopLocalsRelExact ctxt l s.locals t.locals ∧
+      compileExpsHOLExact ctxt tmp l es = (p, les, ntmp, nl) ∧
+      ctxt.vmax < tmp) :
+    ∃ (ck : Nat) (st : LoopSemStateFiniteExact width σ),
+      ck ≤ crepExpsCmpCount es ∧
+      LoopSemStateFiniteExact.evaluate (loopNestedSeqHOL p)
+          { t with clock := t.clock + ck } = (none, st) ∧
+      les.mapM (LoopSemStateFiniteExact.eval st) = some (vs.map wlabWlocExact) ∧
+      crepToLoopStateRelExact s st ∧
+      crepToLoopMemRelHOLExact s.memory st.memory s.memaddrs ∧
+      crepToLoopGlobalsRelHOLExact s.globals st.globals ∧
+      crepToLoopCodeRelExact ctxt s.code st.code ∧
+      crepToLoopLocalsRelExact ctxt nl s.locals st.locals := by
+  obtain ⟨ck, st, heval, hles, hsr, hmr, hgr, hcr, hlr⟩ :=
+    crepToLoop_comp_exps_preserves_eval es s vs t ctxt tmp l p les ntmp nl h
+  have hexp : loopProgExpOnly (loopNestedSeqHOL p) = true := by
+    have := compileExpsHOLExact_expOnly ctxt tmp l es
+    rw [h.2.2.2.2.2.2.1] at this
+    exact this
+  have hite : loopProgIteCount (loopNestedSeqHOL p) = crepExpsCmpCount es := by
+    have := compileExpsHOLExact_iteCount ctxt tmp l es
+    rw [h.2.2.2.2.2.2.1] at this
+    exact this
+  have hb := loop_evaluate_clock_bound_of_expOnly (loopNestedSeqHOL p)
+    { t with clock := t.clock + ck } hexp
+  have hclk : s.clock = t.clock ∧ s.clock = st.clock := ⟨h.2.1.2.2.1, hsr.2.2.1⟩
+  have hck : ck ≤ crepExpsCmpCount es := by
+    rw [heval, hite] at hb
+    simp only at hb
+    omega
+  exact ⟨ck, st, hck, heval, hles, hsr, hmr, hgr, hcr, hlr⟩
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -3029,5 +3462,14 @@ theorem loop_halt_of_not_timeOut {width : Nat} [NeZero width] {F : Type}
 #print axioms panEvaluateIgnoreClocks
 #print axioms crep_halt_of_not_timeOut
 #print axioms loop_halt_of_not_timeOut
+#print axioms crepExpCmpCount_le_sizeOf
+#print axioms crepExpsCmpCount_le_sizeOf
+#print axioms compileExpHOLExact_iteCount
+#print axioms compileExpsHOLExact_iteCount
+#print axioms compileExpHOLExact_expOnly
+#print axioms compileExpsHOLExact_expOnly
+#print axioms loop_evaluate_clock_bound_of_expOnly
+#print axioms crepToLoop_comp_exp_preserves_eval_clock_bound
+#print axioms crepToLoop_comp_exps_preserves_eval_clock_bound
 
 end InitE

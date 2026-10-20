@@ -1240,6 +1240,83 @@ theorem pan_to_target_machine_lab_run_agree_of_not_timeOut {width : Nat} [NeZero
     hlab hffi hgi hi hshm hmmioI hnis hbound
     (fun ffis h => by rw [h] at hffiOk; exact hffiOk) K hne hnt_lab hnt
 
+/-- Every successful `asmFetchAux position code = some line` occurs at a non-label
+instruction index strictly bounded by `asmCodeLength code`. -/
+theorem asmFetchAux_some_lt_asmCodeLength {width : Nat} [NeZero width]
+    (code : LabProgHOL width) :
+    ∀ (position : Nat) (line : LabLineHOL width),
+      asmFetchAux position code = some line → position < asmCodeLength code := by
+  induction code with
+  | nil => intro position line h; simp [asmFetchAux] at h
+  | cons sect rest ih =>
+    rcases sect with ⟨sid, lines⟩
+    induction lines with
+    | nil =>
+      intro position line h
+      rw [asmFetchAux] at h
+      rw [asmCodeLength]
+      exact ih position line h
+    | cons l ls ihl =>
+      intro position line h
+      rw [asmFetchAux] at h
+      rw [asmCodeLength]
+      by_cases hl : isLabelHOL l = true
+      · simp only [hl, if_true, Nat.add_zero] at h ⊢
+        exact ihl position line h
+      · simp only [hl, Bool.false_eq_true, if_false] at h ⊢
+        by_cases hp : position = 0
+        · omega
+        · simp only [hp, if_false] at h
+          have hlt := ihl (position - 1) line h
+          omega
+
+/-- Any contiguous run of `.skip` instructions `allSkips pc code count` has length
+`count ≤ asmCodeLength code` (and if `count > 0`, `pc + count ≤ asmCodeLength code`). -/
+theorem allSkips_count_le_asmCodeLength {width : Nat} [NeZero width]
+    (pc : Nat) (code : LabProgHOL width) (count : Nat)
+    (hs : LabFilter.Proofs.allSkips pc code count) :
+    count ≤ asmCodeLength code := by
+  by_cases hc : count = 0
+  · omega
+  · obtain ⟨bytes, len, hfetch⟩ := hs.2 (count - 1) (by omega)
+    have hlt := asmFetchAux_some_lt_asmCodeLength code (pc + (count - 1)) _ hfetch
+    omega
+
+/-- Quantitative refinement of `LabFilter.Proofs.asmFetchAuxEq`: the number of
+skipped `.skip` instructions `count` at any `pc` is bounded by `asmCodeLength code`. -/
+theorem asmFetchAuxEq_bounded {width : Nat} [NeZero width]
+    (pc : Nat) (code : LabProgHOL width) :
+    ∃ count ≤ asmCodeLength code,
+      asmFetchAux (pc + count) code =
+        asmFetchAux (LabFilter.Proofs.adjustPc pc code) (filterSkip code) ∧
+      LabFilter.Proofs.allSkips pc code count := by
+  obtain ⟨count, heq, hs⟩ := LabFilter.Proofs.asmFetchAuxEq pc code
+  exact ⟨count, allSkips_count_le_asmCodeLength pc code count hs, heq, hs⟩
+
+/-- Quantitative clock-overhead version of `LabToTarget.compileCorrect_step`:
+if one `LabSem` step takes `l` target instructions (`l ≠ 0`) to transition from
+`(mc, ms1)` to `(mc', ms2)` and the remaining `s1'.clock = s1.clock - 1` steps
+have target clock overhead `k' ≤ M`, then `s1` runs in `s1.clock + k` target steps
+with `k ≤ M + l - 1`. -/
+theorem lab_to_target_step_clock_bound {width : Nat} [NeZero width] {S Q F : Type}
+    {mc mc' : MachineConfig width S Q}
+    {s1 s1' s2 : LabSem.State width LabToTarget.Config F}
+    {ms1 ms2 : S} {res : MachineResult} {l M : Nat}
+    (hclock : s1.clock ≠ 0)
+    (hl : ∀ k, evaluateTargetHOL mc s1.ffi (k + l) ms1 =
+        evaluateTargetHOL mc' s1.ffi k ms2)
+    (hl0 : l ≠ 0)
+    (hc : s1'.clock = s1.clock - 1)
+    (hffi : s1'.ffi = s1.ffi)
+    (ih : ∃ k' ≤ M, ∃ ms3,
+      evaluateTargetHOL mc' s1'.ffi (s1'.clock + k') ms2 = (res, ms3, s2.ffi)) :
+    ∃ k ≤ M + l - 1, ∃ ms3,
+      evaluateTargetHOL mc s1.ffi (s1.clock + k) ms1 = (res, ms3, s2.ffi) := by
+  obtain ⟨k', hk', ms3, hk⟩ := ih
+  refine ⟨k' + l - 1, by omega, ms3, ?_⟩
+  rw [show s1.clock + (k' + l - 1) = (s1'.clock + k') + l by omega, hl _, ← hffi]
+  exact hk
+
 #print axioms certificate_of_exact_behaviour_and_bound
 #print axioms targetTerminatesAt_mono
 #print axioms targetTerminatesAt_of_not_timeOut
@@ -1260,5 +1337,9 @@ theorem pan_to_target_machine_lab_run_agree_of_not_timeOut {width : Nat} [NeZero
 #print axioms lab_to_target_make_init_run_agree_of_not_timeOut
 #print axioms lab_to_target_compile_run_agree_of_not_timeOut
 #print axioms pan_to_target_machine_lab_run_agree_of_not_timeOut
+#print axioms asmFetchAux_some_lt_asmCodeLength
+#print axioms allSkips_count_le_asmCodeLength
+#print axioms asmFetchAuxEq_bounded
+#print axioms lab_to_target_step_clock_bound
 
 end InitE
