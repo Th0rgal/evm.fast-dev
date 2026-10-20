@@ -96,6 +96,111 @@ theorem targetTerminatesAt_of_bootstrap_shift (input : Guest.InputBlob)
   obtain ⟨outcome, ms', ffi', hrun⟩ := hterm
   exact ⟨outcome, ms', ffi', (shift steps).trans hrun⟩
 
+/-- Target termination is monotone in the step budget by `evaluateTargetAddClock`. -/
+theorem targetTerminatesAt_mono {S Q σ : Type} (mc : MachineConfig 64 S Q)
+    (ffi : HolFfiState σ) (ms : S) {steps₁ steps₂ : Nat} (hle : steps₁ ≤ steps₂)
+    (hterm : targetTerminatesAt mc ffi ms steps₁) :
+    targetTerminatesAt mc ffi ms steps₂ := by
+  obtain ⟨outcome, ms', ffi', hrun⟩ := hterm
+  have hadd := evaluateTargetAddClock mc ffi steps₁ ms (steps₂ - steps₁)
+    (.halt outcome) ms' ffi' hrun (by simp)
+  rw [Nat.add_sub_of_le hle] at hadd
+  exact ⟨outcome, ms', ffi', hadd⟩
+
+/-- Under `machineSemHOL mc ffi ms (.terminate outcome events)`, any non-`.timeOut`
+target evaluation at `steps` is already a `.halt outcome` witness (`targetTerminatesAt`). -/
+theorem targetTerminatesAt_of_not_timeOut {S Q σ : Type} (mc : MachineConfig 64 S Q)
+    (ffi : HolFfiState σ) (ms : S) (outcome : HolOutcome) (events : List HolIoEvent)
+    (steps : Nat)
+    (hsem : machineSemHOL mc ffi ms (.terminate outcome events))
+    (hnt : (evaluateTargetHOL mc ffi steps ms).1 ≠ .timeOut) :
+    targetTerminatesAt mc ffi ms steps := by
+  obtain ⟨k0, ms0, ffi0, hrun0, _⟩ := hsem
+  generalize hrun1 : evaluateTargetHOL mc ffi steps ms = run1 at hnt
+  rcases run1 with ⟨r1, ms1, ffi1⟩
+  have heq := evaluateTargetIgnoreClocks mc ffi steps k0 ms r1 (.halt outcome) ms1 ms0 ffi1 ffi0
+    ⟨hrun1, hnt, hrun0, by simp⟩
+  have hr1 : r1 = .halt outcome := congrArg Prod.fst heq
+  subst hr1
+  exact ⟨outcome, ms1, ffi1, hrun1⟩
+
+/-- Under `machineSemHOL mc ffi ms (.terminate outcome events)`, `targetTerminatesAt` at
+`steps` is equivalent to `(evaluateTargetHOL mc ffi steps ms).1 ≠ .timeOut`. -/
+theorem targetTerminatesAt_iff_not_timeOut {S Q σ : Type} (mc : MachineConfig 64 S Q)
+    (ffi : HolFfiState σ) (ms : S) (outcome : HolOutcome) (events : List HolIoEvent)
+    (steps : Nat)
+    (hsem : machineSemHOL mc ffi ms (.terminate outcome events)) :
+    targetTerminatesAt mc ffi ms steps ↔ (evaluateTargetHOL mc ffi steps ms).1 ≠ .timeOut := by
+  constructor
+  · rintro ⟨out1, ms1, ffi1, hrun1⟩
+    rw [hrun1]
+    simp
+  · exact targetTerminatesAt_of_not_timeOut mc ffi ms outcome events steps hsem
+
+/-- Under `machineSemHOL mc ffi ms (.terminate outcome events)`, `targetTerminatesWithin (.finite K)`
+is equivalent to `(evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut`. -/
+theorem targetTerminatesWithin_finite_iff_not_timeOut {S Q σ : Type} (mc : MachineConfig 64 S Q)
+    (ffi : HolFfiState σ) (ms : S) (outcome : HolOutcome) (events : List HolIoEvent)
+    (K : Nat)
+    (hsem : machineSemHOL mc ffi ms (.terminate outcome events)) :
+    targetTerminatesWithin (.finite K) mc ffi ms ↔ (evaluateTargetHOL mc ffi K ms).1 ≠ .timeOut := by
+  constructor
+  · rintro ⟨steps, hle, hterm⟩
+    exact (targetTerminatesAt_iff_not_timeOut mc ffi ms outcome events K hsem).mp
+      (targetTerminatesAt_mono mc ffi ms hle hterm)
+  · intro hnt
+    exact ⟨K, Nat.le_refl K, targetTerminatesAt_of_not_timeOut mc ffi ms outcome events K hsem hnt⟩
+
+/-- Two non-`.timeOut` `LabSem.evaluate` runs on the same state `s` (at clocks `k` and `k'`)
+produce the exact same result and FFI state (`evaluateAddClock`). -/
+theorem labEvaluateIgnoreClocks {width : Nat} [NeZero width] {C F : Type}
+    (s : Flapjack.Compiler.Backend.LabSem.State width C F)
+    (k k' : Nat) (r1 r2 : MachineResult)
+    (next1 next2 : Flapjack.Compiler.Backend.LabSem.State width C F)
+    (h1 : LabSem.evaluate { s with clock := k } = (r1, next1))
+    (hnt1 : r1 ≠ .timeOut)
+    (h2 : LabSem.evaluate { s with clock := k' } = (r2, next2))
+    (hnt2 : r2 ≠ .timeOut) :
+    r1 = r2 ∧ next1.ffi = next2.ffi := by
+  have ha1 := evaluateAddClock { s with clock := k } r1 next1 k' ⟨h1, hnt1⟩
+  have ha2 := evaluateAddClock { s with clock := k' } r2 next2 k ⟨h2, hnt2⟩
+  simp only [Nat.add_comm k' k] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hnext
+  have hffi := congrArg Flapjack.Compiler.Backend.LabSem.State.ffi hnext
+  exact ⟨hr, hffi⟩
+
+/-- Under `LabSem.semantics s = .terminate outcome events`, any clock `k` at which
+`(LabSem.evaluate { s with clock := k }).1 ≠ .timeOut` is already a `.halt outcome`
+witness with `ioEvents = events`! -/
+theorem lab_halt_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (s : Flapjack.Compiler.Backend.LabSem.State width C F)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hsem : LabSem.semantics s = .terminate outcome events)
+    (k : Nat)
+    (hnt : (LabSem.evaluate { s with clock := k }).1 ≠ .timeOut) :
+    (LabSem.evaluate { s with clock := k }).1 = .halt outcome ∧
+      (LabSem.evaluate { s with clock := k }).2.ffi.ioEvents = events := by
+  unfold LabSem.semantics at hsem
+  by_cases herr : ∃ clock, (LabSem.evaluate { s with clock := clock }).1 = .error
+  · rw [if_pos herr] at hsem; cases hsem
+  · rw [if_neg herr] at hsem
+    cases hsome : holOptionSome (fun result => ∃ clock next outcome,
+        LabSem.evaluate { s with clock := clock } = (.halt outcome, next) ∧
+        result = HolBehaviour.terminate outcome next.ffi.ioEvents) with
+    | none => rw [hsome] at hsem; cases hsem
+    | some result =>
+      rw [hsome] at hsem
+      subst hsem
+      obtain ⟨k0, next0, out0, hrun0, heq⟩ := holOptionSome_some hsome
+      injection heq with hout0 hev0
+      subst hout0 hev0
+      rcases hrun1 : LabSem.evaluate { s with clock := k } with ⟨r1, next1⟩
+      rw [hrun1] at hnt
+      obtain ⟨hr, hffi⟩ := labEvaluateIgnoreClocks s k k0 r1 (.halt outcome) next1 next0
+        hrun1 hnt hrun0 (by simp)
+      exact ⟨hr, congrArg HolFfiState.ioEvents hffi⟩
+
 /-- Clock-preserving domain alignment (`alignDm` + `alignSdm`) and `filterSkip` bridge:
 if the aligned unfiltered `LabSem` state halts at clock `k`, then the `filterSkip`-related
 state `s` halts at the exact same clock `k` with the same outcome and FFI state. -/
@@ -618,12 +723,60 @@ theorem oracle_full_baseline_bounded_certificate (submission : Submission)
     refine ⟨bootstrapSteps + steps, Nat.le_trans (Nat.add_le_add_left hle' bootstrapSteps) hK, ?_⟩
     exact targetTerminatesAt_of_bootstrap_shift input post steps shift hterm
 
+/-- End-to-end finite-`K` `InitE.Certificate submission (.finite K)` reduced to proving
+that the post-bootstrap target evaluation at `K_post` is not `.timeOut` (`≠ .timeOut`). -/
+theorem oracle_full_baseline_certificate_of_not_timeOut (submission : Submission)
+    (K K_post : Nat)
+    (score : submission.K = .finite K)
+    (admitted : submission.Admitted)
+    (hmc : submission.machineConfig = baselineMachineConfig)
+    (hinit : submission.initialState = baselineInitialState)
+    (oracles : List (Option (Spt Nat)))
+    (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (hK : bootstrapSteps + K_post ≤ K)
+    (not_timeOut_post : ∀ input : Guest.InputBlob,
+      Guest.GasLimit.declaredGasLimit input ≤ 200000000 →
+      ∀ outcome events,
+        sourceBehaviour input = .terminate outcome events →
+        coveredOutcome outcome →
+        ∀ post : RiscV.L3.riscv_state,
+          targetStateRel riscvTarget installedAsm post →
+          (evaluateTargetHOL baselineMachineConfig (sourceFfi input) K_post post).1 ≠ .timeOut) :
+    InitE.Certificate submission (.finite K) := by
+  apply oracle_full_baseline_bounded_certificate submission K K_post score admitted hmc hinit
+    oracles c depth hlab compiled depthBound hK
+  intro input hgas outcome events source covered post related
+  have hmem : panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+      c.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
+      baselineMachineConfig c.labConf.shmemExtra baselineInstalledState
+      (wlabWlocExact ∘ (sourceInitialState input).memory)
+      (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs := by
+    rw [hlab]
+    exact baseline_pan_installed input
+  have hinst := oracle_baseline_installation input c hmem
+  have hsem := (oracle_baseline_endpoint_terminates oracles input c depth post related
+    compiled depthBound hinst outcome events source).1
+  exact (targetTerminatesWithin_finite_iff_not_timeOut baselineMachineConfig (sourceFfi input)
+    post outcome events K_post hsem).mpr
+    (not_timeOut_post input hgas outcome events source covered post related)
+
 #print axioms certificate_of_exact_behaviour_and_bound
+#print axioms targetTerminatesAt_mono
+#print axioms targetTerminatesAt_of_not_timeOut
+#print axioms targetTerminatesAt_iff_not_timeOut
+#print axioms targetTerminatesWithin_finite_iff_not_timeOut
+#print axioms labEvaluateIgnoreClocks
+#print axioms lab_halt_of_not_timeOut
 #print axioms lab_filter_align_clocked_halt
 #print axioms lab_to_target_clocked_halt
 #print axioms lab_to_target_make_init_clocked_halt
 #print axioms lab_to_target_compile_clocked_halt
 #print axioms pan_to_target_machine_lab_clocked_halt
 #print axioms oracle_full_baseline_bounded_certificate
+#print axioms oracle_full_baseline_certificate_of_not_timeOut
 
 end InitE

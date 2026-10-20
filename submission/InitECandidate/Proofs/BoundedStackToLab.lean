@@ -932,6 +932,140 @@ theorem pan_to_target_backend_clocked_halt {width : Nat} [NeZero width] {S Q σ 
   refine ⟨k_lab + extra_t, ms2, next_lab.ffi, htarget, ?_⟩
   rw [hev_lab, ← hffi_wts, hffi_w]
 
+/-- Two non-`.timeOut` `WordSemStateFiniteExact.evaluate` runs on the same program and state
+(at clocks `k` and `k'`) produce the exact same result and FFI state (`evaluate_add_clock`). -/
+theorem wordEvaluateIgnoreClocks {width : Nat} [NeZero width] {C F : Type}
+    (prog : WordLangProgHOL (BitVec width))
+    (s : WordSemStateFiniteExact width C F)
+    (k k' : Nat) (r1 r2 : Option (WordSemResult width))
+    (post1 post2 : WordSemStateFiniteExact width C F)
+    (h1 : WordSemStateFiniteExact.evaluate prog { s with clock := k } = (r1, post1))
+    (hnt1 : r1 ≠ some .timeOut)
+    (h2 : WordSemStateFiniteExact.evaluate prog { s with clock := k' } = (r2, post2))
+    (hnt2 : r2 ≠ some .timeOut) :
+    r1 = r2 ∧ post1.ffi = post2.ffi := by
+  have ha1 := WordSemStateFiniteExact.evaluate_add_clock k' prog { s with clock := k } r1 post1
+    ⟨h1, hnt1⟩
+  have ha2 := WordSemStateFiniteExact.evaluate_add_clock k prog { s with clock := k' } r2 post2
+    ⟨h2, hnt2⟩
+  simp only [Nat.add_comm k' k] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hpost
+  have hffi := congrArg WordSemStateFiniteExact.ffi hpost
+  exact ⟨hr, hffi⟩
+
+/-- Under `WordSemStateFiniteExact.semantics s start = .terminate outcome events`, any clock `k`
+at which `(WordSemStateFiniteExact.evaluate (.call none (some start) [0] none) { s with clock := k }).1 ≠ some .timeOut`
+completes with `semTermOutcome res outcome` and `post.ffi.ioEvents = events`! -/
+theorem word_halt_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (s : WordSemStateFiniteExact width C F) (start : Nat)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hsem : WordSemStateFiniteExact.semantics s start = .terminate outcome events)
+    (k : Nat) (res : Option (WordSemResult width))
+    (post : WordSemStateFiniteExact width C F)
+    (hrun : WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
+      { s with clock := k } = (res, post))
+    (hnt : res ≠ some .timeOut) :
+    (match res with
+      | some (.finalFfi e) => outcome = .ffiOutcome e
+      | some (.result (WordLocW.loc 1 0) _) => outcome = .success
+      | some .notEnoughSpace => outcome = .resourceLimitHit
+      | _ => False) ∧
+    post.ffi.ioEvents = events := by
+  have hsem0 := hsem
+  unfold WordSemStateFiniteExact.semantics at hsem
+  dsimp only at hsem
+  split at hsem
+  · cases hsem
+  · rename_i hnobad
+    split at hsem
+    · rename_i b hsome
+      subst hsem
+      obtain ⟨k0, post0, res0, out0, hrun0, hm0, heq⟩ := holOptionSome_some hsome
+      injection heq with hout0 hev0
+      subst hout0 hev0
+      have hnt0 : res0 ≠ some .timeOut := by
+        intro h; subst h; exact hm0
+      obtain ⟨hr, hffi⟩ := wordEvaluateIgnoreClocks (.call none (some start) [0] none)
+        s k k0 res res0 post post0 hrun hnt hrun0 hnt0
+      subst hr
+      refine ⟨?_, congrArg HolFfiState.ioEvents hffi⟩
+      rcases res with _ | r_val
+      · exact hm0
+      · cases r_val with
+        | result ret_loc ys =>
+          by_cases hloc : ret_loc = WordLocW.loc 1 0
+          · subst hloc; exact hm0
+          · exfalso
+            apply hnobad
+            refine ⟨k, ?_⟩
+            rw [hrun]
+            exact hloc
+        | _ => exact hm0
+    · cases hsem
+
+/-- Two non-`.timeOut` `StackSemEvaluate.evaluate` runs on the same program and state
+(at clocks `k` and `k'`) produce the exact same result and FFI state (`StackProps.evaluateAddClock`). -/
+theorem stackEvaluateIgnoreClocks {width : Nat} [NeZero width] {C F : Type}
+    (prog : HolProg width)
+    (s : StackSemStateFiniteExact width C F)
+    (k k' : Nat) (r1 r2 : Option (StackSemResult width))
+    (post1 post2 : StackSemStateFiniteExact width C F)
+    (h1 : StackSemEvaluate.evaluate (prog, { s with clock := k }) = (r1, post1))
+    (hnt1 : r1 ≠ some .timeOut)
+    (h2 : StackSemEvaluate.evaluate (prog, { s with clock := k' }) = (r2, post2))
+    (hnt2 : r2 ≠ some .timeOut) :
+    r1 = r2 ∧ post1.ffi = post2.ffi := by
+  have ha1 := StackProps.evaluateAddClock k' prog { s with clock := k } r1 post1 ⟨h1, hnt1⟩
+  have ha2 := StackProps.evaluateAddClock k prog { s with clock := k' } r2 post2 ⟨h2, hnt2⟩
+  simp only [Nat.add_comm k' k] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hpost
+  have hffi := congrArg StackSemStateFiniteExact.ffi hpost
+  exact ⟨hr, hffi⟩
+
+/-- Under `StackSemEvaluate.semantics start s = .terminate outcome events`, any clock `k`
+at which `(StackSemEvaluate.evaluate ((.call none (.inl start) none), { s with clock := k })).1 ≠ some .timeOut`
+completes with `FlattenSemantics.stackEntryClass res = .CompleteResult outcome` and
+`post.ffi.ioEvents = events`! -/
+theorem stack_halt_of_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (s : StackSemStateFiniteExact width C F) (start : Nat)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hsem : StackSemEvaluate.semantics start s = .terminate outcome events)
+    (k : Nat) (res : Option (StackSemResult width))
+    (post : StackSemStateFiniteExact width C F)
+    (hrun : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { s with clock := k }) = (res, post))
+    (hnt : res ≠ some .timeOut) :
+    FlattenSemantics.stackEntryClass res = .CompleteResult outcome ∧
+    post.ffi.ioEvents = events := by
+  rw [FlattenSemantics.stackSemIsWrapper] at hsem
+  unfold crepToLoopSemanticsWrapper at hsem
+  by_cases herr : ∃ k v, FlattenSemantics.stackRuns start s k = (.RunError, v)
+  · rw [if_pos herr] at hsem; cases hsem
+  · rw [if_neg herr] at hsem
+    cases hsome : holOptionSome (fun res => ∃ k r ev,
+        FlattenSemantics.stackRuns start s k = (.CompleteResult r, ev) ∧
+        res = HolBehaviour.terminate r ev) with
+    | none => rw [hsome] at hsem; cases hsem
+    | some b =>
+      rw [hsome] at hsem
+      subst hsem
+      obtain ⟨k0, out0, ev0, hk0, heq⟩ := holOptionSome_some hsome
+      injection heq with hout0 hev0
+      subst hout0 hev0
+      simp only [FlattenSemantics.stackRuns] at hk0
+      rcases hrun0 : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+        { s with clock := k0 }) with ⟨res0, post0⟩
+      rw [hrun0] at hk0
+      simp only [Prod.map, Prod.mk.injEq] at hk0
+      obtain ⟨hclass0, rfl⟩ := hk0
+      have hnt0 : res0 ≠ some .timeOut := by
+        intro h; subst h; simp [FlattenSemantics.stackEntryClass] at hclass0
+      obtain ⟨hr, hffi⟩ := stackEvaluateIgnoreClocks (.call none (.inl start) none)
+        s k k0 res res0 post post0 hrun hnt hrun0 hnt0
+      exact ⟨hr ▸ hclass0, congrArg HolFfiState.ioEvents hffi⟩
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -943,5 +1077,9 @@ theorem pan_to_target_backend_clocked_halt {width : Nat} [NeZero width] {S Q σ 
 #print axioms full_make_init_clocked_halt
 #print axioms word_to_stack_compile_clocked_sim
 #print axioms pan_to_target_backend_clocked_halt
+#print axioms wordEvaluateIgnoreClocks
+#print axioms word_halt_of_not_timeOut
+#print axioms stackEvaluateIgnoreClocks
+#print axioms stack_halt_of_not_timeOut
 
 end InitE
