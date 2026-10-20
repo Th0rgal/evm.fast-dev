@@ -1,4 +1,5 @@
 import InitECandidate.Proofs.BoundedStackToLab
+import Flapjack.Pancake.Proofs.PanToTarget.AssemblyTop
 import Flapjack.Pancake.LoopToWord.Proofs.StateRelImpSemantics
 import Flapjack.Pancake.CrepToLoop.Proofs.StateRelImpSemantics
 import Flapjack.Pancake.Proofs.PanToCrep.StateRelImpSemanticsTop
@@ -151,7 +152,8 @@ theorem crep_inline_clocked_agree {width : Nat} [NeZero width] {σ : Type}
 
 /-- Clock-preserving `PanToCrep` (pre-inline) simulation: at any clock `k`, a non-error
 `PanSem` entry call on `s` produces a `CrepSem` entry call on `t` at the **same** clock `k`
-(`extra = 0`) with matching entry classification (`panEntryClass`) and identical FFI state. -/
+(`extra = 0`) with `res1 ≠ some .error`, matching entry classification (`panEntryClass`),
+and identical FFI state. -/
 theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
     (s : PanSemStateFiniteExact width σ) (t : CrepSemHOLState width σ)
     (pan_code : List (DeclHOL width)) (start : MlS) (k : Nat)
@@ -171,6 +173,7 @@ theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
     ∃ res1 t1,
       evalCrepSemHOLProgExact { t with clock := k }
         (.call none start [] : CrepProgHOL width) = (res1, t1) ∧
+      res1 ≠ some .error ∧
       t1.ffi = s1.ffi ∧
       (match res1 with
        | some .timeOut => .Incomplete
@@ -205,9 +208,11 @@ theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
       (.call none start [] : CrepProgHOL width) := by
     simp [compileProgExactHOLW, compileCallNoReturnExactHOLW, compileExpExactHOLWList]
   rw [hcomp] at hrun
-  refine ⟨res1, t1, hrun, hsr1.2.2.2.2.2.2.2.1.symm, ?_⟩
-  rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
-    (try split at hres) <;> simp_all [panEntryClass]
+  refine ⟨res1, t1, hrun, ?_, hsr1.2.2.2.2.2.2.2.1.symm, ?_⟩
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
+      (try split at hres) <;> simp_all
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
+      (try split at hres) <;> simp_all [panEntryClass]
 
 /-- Clock-preserving `PanSimp` simulation: at any clock `k`, a non-error entry call
 on `s` produces the exact same result and FFI state on `t` at the same clock `k` (`extra = 0`). -/
@@ -362,6 +367,1488 @@ theorem pan_globals_init_call_clocked_shift {width : Nat} [NeZero width] {σ : T
     simpa only [tin, Nat.zero_add] using h
   exact SemInitSupport.step s s' start start' body body' args' rshape h1 h2 hstep c
 
+private theorem bvSubZero_local {width : Nat} (x : BitVec width) : x - 0 = x := by
+  apply BitVec.eq_of_toNat_eq
+  simp
+
+open PanGlobalsCompileDecsStructural PanGlobalsDeclListExact PanGlobalsCompileTopSemanticsDecls PanSemStateFiniteExact in
+/-- Clocked `PanGlobals.compileTopExactHOL` declaration + entry-call simulation (+1 clock shift):
+under the 14 hypotheses of `compileTopSemanticsDeclsHOL`, if `code` evaluates declarations to `s1`
+and `s1` runs `start` at clock `k` without `.error`, then `compileTopExactHOL code start`
+evaluates declarations to `T` and `T` runs `start` at clock `k + 1` with the exact same result
+and FFI I/O events! -/
+theorem pan_globals_compile_top_clocked_shift {width : Nat} [NeZero width] {σ : Type}
+    (s t : PanSemStateFiniteExact width σ) (code : List (DeclHOL width)) (start : MlS)
+    (mgs : BitVec width) (freeAddrs : BitVec width → Prop)
+    (tmem : BitVec width → HolWordLab width)
+    (tlocals : HolFiniteMapExact MlS (ValueHOL width))
+    (h : ((functionsHOL code).map Prod.fst).Nodup ∧
+      t = { s with
+        topAddr := s.topAddr + mgs
+        memaddrs := fun address => s.memaddrs address ∨ freeAddrs address
+        memory := tmem
+        locals := tlocals } ∧
+      s.code = HolFiniteMapExact.empty ∧
+      s.globals = HolFiniteMapExact.empty ∧
+      panGlobalsByteAlignedHOL s.topAddr ∧
+      goodDimindex width ∧
+      mgs = panBytesInWord width *
+        BitVec.ofNat width ((decShapesHOL code).map sizeOfShapeHOL).sum ∧
+      freeAddrs = Flapjack.Compiler.Backend.StackRemove.addresses s.topAddr
+        ((decShapesHOL code).map sizeOfShapeHOL).sum ∧
+      (∀ address, s.memaddrs address → ¬ freeAddrs address) ∧
+      (∀ address, s.memaddrs address → s.memory address = tmem address) ∧
+      ¬ s.memaddrs (s.topAddr + mgs) ∧
+      (panBytesInWord width).toNat * ((decShapesHOL code).map sizeOfShapeHOL).sum <
+        2 ^ width ∧
+      (∀ d ∈ code, isFunctionHOL d = true ∨ isDeclHOL d = true ∨ isExnDeclHOL d = true) ∧
+      PanSemStateFiniteExact.semanticsDecls s start code ≠ .fail)
+    (s1 : PanSemStateFiniteExact width σ) (k : Nat)
+    (hs1 : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := [] } (fun a => Classical.propDecidable (s.memaddrs a)) code = some s1)
+    (hne : (PanSemStateFiniteExact.evaluateHOLFiniteState { s1 with clock := k }
+      (.call none start [] : ProgHOL width)).1 ≠ some .error) :
+    ∃ T,
+      @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { t with structs := [] } (fun a => Classical.propDecidable (t.memaddrs a))
+        (compileTopExactHOL code start) = some T ∧
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := k + 1 }
+        (.call none start [] : ProgHOL width)).1 =
+        (PanSemStateFiniteExact.evaluateHOLFiniteState { s1 with clock := k }
+          (.call none start [] : ProgHOL width)).1 ∧
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := k + 1 }
+        (.call none start [] : ProgHOL width)).2.ffi.ioEvents =
+        (PanSemStateFiniteExact.evaluateHOLFiniteState { s1 with clock := k }
+          (.call none start [] : ProgHOL width)).2.ffi.ioEvents := by
+  classical
+  obtain ⟨hdistinct, ht, hcode, hglobals, halign, hgood, rfl, rfl, hdisj, hmem,
+    htopNot, hbound, hkinds, hnf⟩ := h
+  obtain ⟨body, rshape, hmain⟩ := PanPropsHasMain.semanticsDeclsHasMainPrime s start code hnf
+  have hkindsB : code.all (fun d => isFunctionHOL d || isDeclHOL d || isExnDeclHOL d) =
+      true := by
+    apply List.all_eq_true.mpr
+    intro d hd
+    rcases hkinds d hd with h | h | h <;> simp [h]
+  have hstartLookup : (functionsHOL code).lookup start = some ([], body, rshape) := by
+    rw [hcode, emptyUpdateListLookup _ _ hdistinct] at hmain; exact hmain
+  have hevT := evaluateCompileTopOfSource _ s1 { t with structs := [] } code start _ hs1 hstartLookup
+    hkinds rfl (by rw [ht])
+  have hpart : resortDeclsHOL code = code.filter isExnDeclHOL ++ code.filter isDeclHOL ++
+      code.filter isFunctionHOL := by
+    have hnames : code.filter isNameHOL = [] := by
+      apply List.filter_eq_nil_iff.mpr
+      intro d hd
+      rcases hkinds d hd with h | h | h <;> cases d <;>
+        simp_all [isNameHOL, isFunctionHOL, isDeclHOL, isExnDeclHOL]
+    simp [resortDeclsHOL, hnames]
+  have hs1orig := hs1
+  have hres := Flapjack.resortDeclsEvaluate { s with structs := [] } code hkindsB
+  rw [← hres, hpart, Flapjack.evaluateDeclsHOLFinite_append,
+    Flapjack.evaluateDeclsHOLFinite_append] at hs1
+  cases hsE : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := [] } (fun a => Classical.propDecidable (s.memaddrs a))
+      (code.filter isExnDeclHOL) with
+  | none => simp [hsE] at hs1
+  | some sE =>
+  cases hsD : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      sE (fun a => Classical.propDecidable (sE.memaddrs a)) (code.filter isDeclHOL) with
+  | none => simp [hsE, hsD] at hs1
+  | some sD =>
+  simp only [hsE, hsD, Option.bind_some] at hs1
+  have hsEform := evalExnsForm _ _ sE (fun d hd => (List.mem_filter.mp hd).2) hsE
+  have hs1form := evalFunsForm _ _ s1 (fun d hd => (List.mem_filter.mp hd).2) hs1
+  have hsDcode : sD.code = sE.code := by
+    have := evaluateDeclsHOLFinite_functions sE _ sD hsD
+    rw [this, functionsHOL_filter_isDecl]
+    rfl
+  rcases hc : compileDecsExactHOL
+      ({ globals := HolFiniteMapExact.empty, globalsSize := 0,
+         maxGlobalsSize := cakeBytesInWord width * BitVec.ofNat width
+           ((decShapesHOL code).map sizeOfShapeHOL).sum } : PanGlobalsContextExact width)
+      (fpermDecsHOL start (newMainNameHOL code) (resortDeclsHOL code)) with
+    ⟨inits, funsC, exnsC, ctx⟩
+  have hexplicit := PanGlobalsCompileTopSemanticsExact.evaluateDeclsCompileTopHOLFinite
+    _ s1 code start [] body rshape inits funsC exnsC ctx ⟨hs1orig, hstartLookup, hkinds, hc⟩
+  have hgeneric := evaluateCompileTopOfSource _ s1 { s with structs := [] } code start _ hs1orig
+    hstartLookup hkinds rfl rfl
+  rw [hgeneric] at hexplicit
+  have htable := congrArg PanSemStateFiniteExact.code (Option.some.inj hexplicit)
+  simp only at htable
+  clear hexplicit hgeneric hres
+  subst hsEform
+  clear hsE hs1orig hpart hmain
+  simp only at hsD hsDcode
+  obtain ⟨N, hNdef⟩ : ∃ N, N = ((decShapesHOL code).map sizeOfShapeHOL).sum := ⟨_, rfl⟩
+  obtain ⟨nm, hnm⟩ : ∃ nm, nm = newMainNameHOL code := ⟨_, rfl⟩
+  rw [← hNdef] at ht hdisj htopNot hbound hc
+  rw [← hnm] at hc htable
+  obtain ⟨T, hT⟩ : ∃ T : PanSemStateFiniteExact width σ, T = { t with
+    structs := []
+    code := t.code.updateList (functionsHOL (compileTopExactHOL code start))
+    eshapes := t.eshapes.updateList (exceptionsHOL (compileTopExactHOL code start)) } :=
+    ⟨_, rfl⟩
+  have hTcode : T.code = (HolFiniteMapExact.empty.update
+      (start, [], .seq (nestedSeqHOL inits) (.call none nm []), rshape)).updateList
+      ((functionsHOL (fpermDecsHOL start nm code)).map (fun entry =>
+        (entry.1, entry.2.1, compileProgExactHOL ctx entry.2.2.1, entry.2.2.2))) := by
+    rw [hT]; simp only; rw [ht]; simp only; rw [htable, hcode]; rfl
+  have hcD : compileDecsExactHOL
+      ({ globals := HolFiniteMapExact.empty, globalsSize := 0,
+         maxGlobalsSize := cakeBytesInWord width * BitVec.ofNat width N } :
+         PanGlobalsContextExact width) (code.filter isDeclHOL) = (inits, [], [], ctx) := by
+    have := compile_decs_FILTER_declsHOL _ _ _ _ _ _ hc
+    rwa [filterDeclFperm, filterDeclResort] at this
+  have hND : ((decShapesHOL (code.filter isDeclHOL)).map sizeOfShapeHOL).sum = N := by
+    rw [(dec_shapes_FILTERHOL code).2.2.1]; exact hNdef.symm
+  obtain ⟨t', hrun, hrel', hclk, hffi, hloc, -⟩ :=
+    PanGlobalsInitGlobalsAssembly.initGlobalsAll _ (code.filter isDeclHOL) _ sD
+      inits [] [] ctx { T with locals := HolFiniteMapExact.empty } _
+      ⟨hsD, fun d hd => (List.mem_filter.mp hd).2, hcD, by
+        unfold panGlobalsStateRelHOLExact
+        subst hT ht
+        refine ⟨?_, fun h => absurd h (by decide), rfl, rfl, ?_, rfl, rfl, rfl, ?_, ?_,
+          fun a h => Or.inl h, rfl, hmem, rfl, ?_, ?_, ?_, ?_, hgood⟩
+        · change s.topAddr = s.topAddr + panBytesInWord width * BitVec.ofNat width N -
+            panBytesInWord width * BitVec.ofNat width N
+          rw [BitVec.add_sub_cancel]
+        · rw [exceptionsFilterExn, exceptions_compile_topHOL code start _ hstartLookup]
+        · intro name value h
+          rw [hglobals] at h
+          cases h
+        · intro name shape address h
+          cases h
+        · intro f ps p rs h
+          rw [hcode] at h
+          cases h
+        · intro _ _ _ _ _ _ _ h
+          exact absurd (by rw [hglobals]; rfl) h
+        · rintro (h | h)
+          · exact htopNot h
+          · exact topNotInAddresses hgood _ _ hbound h
+        · exact alignedAdd hgood _ _ halign
+            (PanGlobalsInitGlobalsAlignment.byteAlignedBytesInWordMulHOL _ hgood), rfl, by
+      intro a h
+      rw [hND]
+      subst hT ht
+      change ¬ Flapjack.Compiler.Backend.StackRemove.addresses
+        (s.topAddr + panBytesInWord width * BitVec.ofNat width N -
+          panBytesInWord width * BitVec.ofNat width N - 0) N a
+      rw [bvSubZero_local, BitVec.add_sub_cancel]
+      exact hdisj a h, by
+      intro a h
+      rw [hND] at h
+      subst hT ht
+      change Flapjack.Compiler.Backend.StackRemove.addresses
+        (s.topAddr + panBytesInWord width * BitVec.ofNat width N -
+          panBytesInWord width * BitVec.ofNat width N - 0) N a at h
+      rw [bvSubZero_local, BitVec.add_sub_cancel] at h
+      exact Or.inr h,
+      alignedZero, hcode, by
+      rintro v sh addr ⟨h1, -⟩
+      change (s.globals.lookup v).isSome = true at h1
+      rw [hglobals] at h1
+      (cases h1), by rw [hND]; exact hbound⟩
+  have hnmFresh : nm ∉ (functionsHOL code).map Prod.fst := by
+    rw [hnm]; exact new_main_name_correctHOL code
+  have hstartMem : start ∈ (functionsHOL code).map Prod.fst :=
+    List.mem_map.mpr ⟨_, lookupMem _ _ _ hstartLookup, rfl⟩
+  have hnmStart : nm ≠ start := fun h => hnmFresh (h ▸ hstartMem)
+  have hfpNodup := ALL_DISTINCT_fperm_decsHOL start nm code hdistinct
+  have hLkeys : ((functionsHOL (fpermDecsHOL start nm code)).map (fun entry =>
+      (entry.1, entry.2.1, compileProgExactHOL ctx entry.2.2.1, entry.2.2.2))).map Prod.fst =
+      (functionsHOL (fpermDecsHOL start nm code)).map Prod.fst := by
+    rw [List.map_map]; rfl
+  have hLNodup := hLkeys ▸ hfpNodup
+  have hTlookup : ∀ f entry, (f, entry) ∈ functionsHOL (fpermDecsHOL start nm code) →
+      T.code.lookup f = some (entry.1, compileProgExactHOL ctx entry.2.1, entry.2.2) := by
+    intro f entry hmem'
+    rw [hTcode, HolFiniteMapExact.lookup_updateList, fupdateListLookup,
+      lookupReverseOfNodup _ _ hLNodup,
+      lookupOfMemNodup _ f (entry.1, compileProgExactHOL ctx entry.2.1, entry.2.2)
+        (List.mem_map.mpr ⟨(f, entry), hmem', rfl⟩) hLNodup]
+  have hstartNotRenamed : start ∉ (functionsHOL (fpermDecsHOL start nm code)).map Prod.fst := by
+    rw [functionsFpermDecsHOL, List.map_map]
+    intro hmem'
+    obtain ⟨entry, hentry, heq⟩ := List.mem_map.mp hmem'
+    simp only [Function.comp, fpermName] at heq
+    by_cases h1 : start = entry.1
+    · rw [if_pos h1] at heq; exact hnmStart heq
+    · rw [if_neg h1] at heq
+      by_cases h2 : nm = entry.1
+      · exact hnmFresh (List.mem_map.mpr ⟨entry, hentry, h2.symm⟩)
+      · rw [if_neg h2] at heq; exact h1 heq.symm
+  have hL1 : T.code.lookup start =
+      some ([], .seq (nestedSeqHOL inits) (.call none nm []), rshape) := by
+    rw [hTcode, HolFiniteMapExact.lookup_updateList, fupdateListLookup,
+      lookupNoneOfNotMem _ _ (by
+        rw [List.map_reverse, List.mem_reverse, hLkeys]; exact hstartNotRenamed)]
+    simp [HolFiniteMapExact.update, FUPDATE]
+  have hbodyMem : (nm, ([] : List (MlS × ShapeHOL)), fpermHOL start nm body, rshape) ∈
+      functionsHOL (fpermDecsHOL start nm code) := by
+    rw [functionsFpermDecsHOL]
+    refine List.mem_map.mpr ⟨(start, [], body, rshape), lookupMem _ _ _ hstartLookup, ?_⟩
+    simp [fpermName]
+  have hL2 := hTlookup nm _ hbodyMem
+  have hsDempty : sD.code = HolFiniteMapExact.empty := hsDcode.trans hcode
+  have hupd : ∀ (m : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL))
+      (l : List (MlS × List (MlS × ShapeHOL) × ProgHOL width × ShapeHOL)),
+      m.updateList l = m.updateListEq l := by
+    intro m l
+    apply HolFiniteMapExact.ext
+    funext k'
+    simp only [HolFiniteMapExact.lookup_updateList, HolFiniteMapExact.lookup_updateListEq]
+    rw [FUPDATE_LIST_HOL_eq_FUPDATE_LIST]
+  have hC2 : fpermCodeHOL start nm s1.code =
+      HolFiniteMapExact.empty.updateList (functionsHOL (fpermDecsHOL start nm code)) := by
+    rw [hs1form]
+    simp only
+    rw [hsDempty, functionsHOL_filter_isFunction, hupd, hupd,
+      fpermCodeHOL_updateList_functions, fpermCodeHOL_empty]
+  have hinv := Flapjack.evaluateInvariantsHOLFinite (nestedSeqHOL inits)
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite { T with locals := HolFiniteMapExact.empty })
+    none (PanPropsEvalStateFiniteExact.ofPanSemFinite t') (by
+      simp [PanPropsEvalStateFiniteExact.evaluateHOLFinitePair,
+        PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite, hrun])
+  have htcode : t'.code = T.code := hinv.2.2.2.2.2.2.1
+  have hrelT : panGlobalsStateRelHOLExact true ctx
+      (emptyLocalsHOLFinite { s1 with code := (HolFiniteMapExact.empty.updateList
+        (functionsHOL (fpermDecsHOL start nm code))) }) t' := by
+    subst hs1form
+    obtain ⟨h1, -, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, -, h16, h17, h18,
+      h19⟩ := hrel'
+    refine ⟨h1, fun _ => ?_, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, ?_, h16,
+      h17, h18, h19⟩
+    · rw [hloc]; rfl
+    · intro f ps p rs hlk
+      change (HolFiniteMapExact.empty.updateList
+        (functionsHOL (fpermDecsHOL start nm code))).lookup f = _ at hlk
+      rw [emptyUpdateListLookup _ _ hfpNodup] at hlk
+      rw [htcode]
+      exact hTlookup f (ps, p, rs) (lookupMem _ _ _ hlk)
+  -- Clocked chain: T at k + 1 -> t' at k -> emptyLocals s1_fperm at k -> s1_fperm at k -> s1 at k
+  have hshift := pan_globals_init_call_clocked_shift T t' start nm
+    (nestedSeqHOL inits) (compileProgExactHOL ctx (fpermHOL start nm body)) [] rshape
+    hL1 hL2 hrun hclk k
+  have hfperm_k : PanSemStateFiniteExact.evaluateHOLFiniteState
+      { s1 with code := fpermCodeHOL start nm s1.code, clock := k }
+      (.call none (fpermName start nm start) [] : ProgHOL width) =
+      (fun outcome : Option (PanSemResultExact width) × PanSemStateFiniteExact width σ =>
+        (outcome.1, { outcome.2 with code := fpermCodeHOL start nm outcome.2.code }))
+        (PanSemStateFiniteExact.evaluateHOLFiniteState { s1 with clock := k }
+          (.call none start [] : ProgHOL width)) := by
+    simpa [fpermHOL] using evaluateFpermPrimeHOL start nm (.call none start []) s1 k
+  have hname : fpermName start nm start = nm := by simp [fpermName]
+  rw [hname, hC2] at hfperm_k
+  let fpermCode := HolFiniteMapExact.empty.updateList (functionsHOL (fpermDecsHOL start nm code))
+  have hempty_obs := Flapjack.panGlobals_call_emptyLocals_observation
+    { s1 with code := fpermCode, clock := k } nm
+  have hempty_eq : ({ emptyLocalsHOLFinite { s1 with code := fpermCode } with clock := k } :
+      PanSemStateFiniteExact width σ) =
+      emptyLocalsHOLFinite { s1 with code := fpermCode, clock := k } := rfl
+  have hne_empty : (PanSemStateFiniteExact.evaluateHOLFiniteState
+      { emptyLocalsHOLFinite { s1 with code := fpermCode } with clock := k }
+      (.call none nm [] : ProgHOL width)).1 ≠ some .error := by
+    rw [hempty_eq, ← (Prod.mk.inj hempty_obs).1, show fpermCode = _ from rfl, hfperm_k]
+    exact hne
+  have hglob_k := pan_globals_clocked_agree ctx
+    (emptyLocalsHOLFinite { s1 with code := fpermCode }) t' nm k hrelT hne_empty
+  refine ⟨T, ?_, ?_, ?_⟩
+  · rw [hT]
+    exact hevT
+  · rw [hshift.1, hglob_k.1, hempty_eq, ← (Prod.mk.inj hempty_obs).1, show fpermCode = _ from rfl,
+      hfperm_k]
+  · rw [hshift.2, hglob_k.2, hempty_eq, ← (Prod.mk.inj hempty_obs).2, show fpermCode = _ from rfl,
+      hfperm_k]
+
+open Pancake.PanStructs.CompileShapeExact
+open Pancake.Proofs.PanStructs.ConvertState
+open Pancake.Proofs.PanStructs.ShapeMap
+open Pancake.Proofs.PanStructs.StructInfosOkExact
+open Pancake.Proofs.PanToWord.InitialComposition in
+/-- Clocked `InitialComposition.initialToGlobalsSemantics` (`PanSimp` + `PanStructs` + `PanGlobals`):
+if `code` evaluates declarations to `s_decls` and `s_decls` runs `start` at clock `k` with
+`(res_src, s_src_post)` (`res_src ≠ some .error`), then `compileTopExactHOL (compileTopExact (panSimpDeclsHOL code)) start`
+evaluates declarations on `globalState` to `T` and `T` runs `start` at clock **`k + 1`** with
+`(convertResHOL res_src, ...)` and the exact same FFI I/O events `s_src_post.ffi.ioEvents`! -/
+theorem pan_simp_structs_globals_clocked_sim {width : Nat} [NeZero width] {C σ : Type}
+    (source : PanSemStateFiniteExact width σ) (target : WordSemStateFiniteExact width C σ)
+    (code : List (DeclHOL width)) (start : MlS) (globalsSize : Nat)
+    (hfail : PanSemStateFiniteExact.semanticsDecls source start code ≠ .fail)
+    (hdist : ((functionsHOL code).map Prod.fst).Nodup)
+    (hcode : source.code = HolFiniteMapExact.empty)
+    (hlocals : source.locals = HolFiniteMapExact.empty)
+    (hglobals : source.globals = HolFiniteMapExact.empty)
+    (heshapes : source.eshapes = HolFiniteMapExact.empty)
+    (hsize : globalsSize = ((decShapesHOL code).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] code)))).sum)
+    (halloc : globalsAllocatableHOL source code)
+    (halign : panGlobalsByteAlignedHOL source.topAddr) (hdim : goodDimindex width)
+    (hmem : ∀ address, source.memaddrs address →
+      target.memory address = wlabWlocExact (source.memory address))
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { source with structs := stCtxt } (fun a => Classical.propDecidable (source.memaddrs a))
+      code = some s_decls)
+    (k : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : res_src ≠ some .error) :
+    let globalState : PanSemStateFiniteExact width σ :=
+      { source with
+        topAddr := source.topAddr + panBytesInWord width * BitVec.ofNat width globalsSize
+        memaddrs := fun address => source.memaddrs address ∨
+          Compiler.Backend.StackRemove.addresses source.topAddr globalsSize address
+        memory := wlocWlabHOL ∘ target.memory
+        locals := source.locals }
+    ∃ T,
+      @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+        { globalState with structs := [] }
+        (fun a => Classical.propDecidable (globalState.memaddrs a))
+        (compileTopExactHOL (compileTopExact (panSimpDeclsHOL code)) start) = some T ∧
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := k + 1 }
+        (.call none start [] : ProgHOL width)).1 = convertResHOL res_src ∧
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := k + 1 }
+        (.call none start [] : ProgHOL width)).2.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+  classical
+  intro globalState
+  -- Pass 1: PanSimp
+  have hrel0 : PanSimp.stateRel { source with structs := stCtxt }
+      { source with structs := stCtxt } { source with structs := stCtxt }.code := by
+    refine ⟨rfl, fun _ h => h, ?_⟩
+    intro f vs p sh he
+    simp [hcode, HolFiniteMapExact.empty] at he
+  obtain ⟨s_simp, hev_simp, hrel_simp⟩ := PanSimp.stateRelImpEvaluateDeclsHOL
+    { source with structs := stCtxt } code { source with structs := stCtxt } s_decls start
+    ⟨hrel0, hdist, hev_decls⟩
+  have hsimp_agree := pan_simp_clocked_agree s_decls s_simp start k hrel_simp
+    (by rw [hev_call]; exact hne_src)
+  rcases hev_simp_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_simp with clock := k }
+      (.call none start [] : ProgHOL width) with ⟨res_simp, s_simp_post⟩
+  have hres_simp : res_simp = res_src := by
+    have h1 := hsimp_agree.1
+    rw [hev_simp_call, hev_call] at h1
+    exact h1
+  have hffi_simp : s_simp_post.ffi = s_src_post.ffi := by
+    have h2 := hsimp_agree.2
+    rw [hev_simp_call, hev_call] at h2
+    exact h2
+  rw [hres_simp] at hev_simp_call
+  -- Pass 2: PanStructs
+  let code1 := panSimpDeclsHOL code
+  have hnames1 : decsStcnamesHOLExact [] code1 = some stCtxt := by
+    rw [decsStcnamesHOLExact_panSimpDeclsHOL_eq]
+    exact hst
+  let context := getNamesExact { structs := [], locals := [], globals := [] } code1
+  have hctx := decsStcnamesToGetNames [] code1 stCtxt
+    ({ structs := [], locals := [], globals := [] } : ContextExact) ⟨hnames1, rfl⟩
+  have hctxstructs : context.structs = stCtxt.map (fun entry => (entry.1, entry.2.fields)) := by
+    simp [context, hctx]
+  have hctxlocals : context.locals = [] := by simp [context, hctx]
+  have hctxglobals : context.globals = [] := by simp [context, hctx]
+  have hinfos := decsStcnamesInfosOk [] code1 stCtxt ()
+    ⟨hnames1, by simp [structInfosOkHOLExact]⟩
+  have hmapempty : ∀ {α β γ : Type} (f : α × β → γ),
+      HolFiniteMapExact.map2 f (HolFiniteMapExact.empty : HolFiniteMapExact α β) =
+        HolFiniteMapExact.empty := by
+    intro α β γ f
+    apply HolFiniteMapExact.ext
+    rfl
+  have hfields : feveryHOL (fun entry => valueFldsOkHOLExact stCtxt entry.2) source.globals := by
+    simp [hglobals, feveryHOL, HolFiniteMapExact.empty]
+  have hwf : feveryHOL (fun entry => isWfShapeValueHOLExact stCtxt entry.2) source.globals := by
+    simp [hglobals, feveryHOL, HolFiniteMapExact.empty]
+  have hshapes : shapeMap context.globals =
+      source.globals.map2 (fun entry => shapeOfHOLExact entry.2) := by
+    rw [hctxglobals, hglobals, hmapempty]
+    rfl
+  rcases hcompile : compileDeclsExact context code1 with ⟨compiled, finalContext⟩
+  have hsim := Pancake.Proofs.PanStructs.CompileDeclsCorrectExact.compileDeclsCorrectExact
+    { source with structs := stCtxt } code1 s_simp context finalContext compiled
+    ⟨hev_simp, hctxstructs, hctxlocals, hinfos, hfields, hwf, hshapes, hcompile⟩
+  obtain ⟨hrun_decls, _, hfinal, hpostfields, hpostwf, hpoststructs, hpostlocals, hpostshapes⟩ := hsim
+  have htop_eq : compileTopExact code1 = compiled := by
+    change (compileDeclsExact context code1).1 = compiled
+    rw [hcompile]
+  have hboot : convertStateExact finalContext { source with structs := stCtxt } =
+      { source with structs := [] } := by
+    simp [convertStateExact, convertCodeExact, convertEshapesExact,
+      hlocals, hglobals, hcode, heshapes, hmapempty, hfinal]
+  have hs1 : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { source with structs := [] }
+      (fun address => Classical.propDecidable (source.memaddrs address))
+      (compileTopExact code1) = some (convertStateExact finalContext s_simp) := by
+    rw [htop_eq]
+    exact (congrArg (fun state : PanSemStateFiniteExact width σ =>
+      @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _ state
+        (fun address => Classical.propDecidable (state.memaddrs address)) compiled)
+      hboot).symm.trans hrun_decls
+  have hstruct_call := pan_structs_clocked_agree s_simp start finalContext k res_src s_simp_post
+    (by simpa [hfinal, hpoststructs] using hctxstructs)
+    (by simpa [hpostlocals] using hlocals)
+    (by simpa [hpoststructs] using hpostfields)
+    (by simpa [hpoststructs] using hpostwf)
+    (by simpa [hfinal] using hctxlocals)
+    (by simpa [hfinal] using hpostshapes)
+    (by simpa [hpoststructs] using hinfos)
+    hev_simp_call hne_src
+  -- Pass 3: PanGlobals
+  have hrel0_src : PanSimp.stateRel source source source.code := by
+    refine ⟨by cases source; rfl, fun _ h => h, ?_⟩
+    intro f vs p sh he
+    simp [hcode, HolFiniteMapExact.empty] at he
+  have hsimp_sem := PanSimp.stateRelImpSemanticsDeclsHOL source source code start
+    ⟨hrel0_src, hdist, hcode, hcode, hfail⟩
+  have hsimpnf : PanSemStateFiniteExact.semanticsDecls source start code1 ≠ .fail := by
+    rw [← hsimp_sem]; exact hfail
+  have hstruct_sem := Pancake.Proofs.PanStructs.CompileTopSemanticsDeclsExact.compileTopSemanticsDeclsExact
+    source start code1 ⟨hsimpnf, hlocals, hcode, hglobals⟩
+  have hboot_esh : { source with eshapes := source.eshapes.map2 (fun entry =>
+      compileShapeExact (getNamesExact { structs := [], locals := [], globals := [] } code1).structs
+        entry.2) } = source := by
+    have hm : source.eshapes.map2 (fun entry =>
+        compileShapeExact (getNamesExact { structs := [], locals := [], globals := [] } code1).structs
+          entry.2) = source.eshapes := by
+      rw [heshapes, hmapempty]
+    rw [hm]
+  rw [hboot_esh] at hstruct_sem
+  have hstructnf : PanSemStateFiniteExact.semanticsDecls source start (compileTopExact code1) ≠ .fail := by
+    rw [← hstruct_sem]; exact hsimpnf
+  let structCode := compileTopExact code1
+  have hdiststruct : ((functionsHOL structCode).map Prod.fst).Nodup := by
+    dsimp only [structCode, code1]
+    rw [functionNamesStructsCompileTopHOL, functionNamesCompileProgHOL]
+    exact hdist
+  have hsizelist := semanticsSizeDecsStcnamesCompileStructsHOL source start code1
+    ⟨hsimpnf, hglobals⟩
+  have hsizecompiled : ((decShapesHOL structCode).map sizeOfShapeHOL).sum = globalsSize := by
+    dsimp only [structCode, code1]
+    rw [hsizelist, decShapesCompileProgHOL, decsStcnamesHOLExact_panSimpDeclsHOL_eq]
+    exact hsize.symm
+  have halloc' := halloc
+  dsimp only [globalsAllocatableHOL] at halloc'
+  rw [← hsize] at halloc'
+  obtain ⟨_, hdisjoint, htopnot, hbound⟩ := halloc'
+  have hmemory : ∀ address, source.memaddrs address →
+      source.memory address = (wlocWlabHOL ∘ target.memory) address := by
+    intro address ha
+    simp only [Function.comp_apply, hmem address ha, wlocWlabWlabWlocHOL]
+  have hne_struct : (PanSemStateFiniteExact.evaluateHOLFiniteState
+      { convertStateExact finalContext s_simp with clock := k }
+      (.call none start [] : ProgHOL width)).1 ≠ some .error := by
+    rw [hstruct_call]
+    rcases res_src with _ | r_val
+    · intro h; cases h
+    · cases r_val <;> intro h <;> first | exact hne_src rfl | cases h
+  obtain ⟨T, hevT, hresT, hev_ioT⟩ := pan_globals_compile_top_clocked_shift
+    source globalState structCode start
+    (panBytesInWord width * BitVec.ofNat width globalsSize)
+    (Compiler.Backend.StackRemove.addresses source.topAddr globalsSize)
+    (wlocWlabHOL ∘ target.memory) source.locals
+    ⟨hdiststruct, rfl, hcode, hglobals, halign, hdim,
+      (by rw [hsizecompiled]), (by rw [hsizecompiled]),
+      (fun address hs hf => hdisjoint address ⟨hs, hf⟩), hmemory,
+      htopnot, (by simpa [hsizecompiled, panBytesInWord,
+        Compiler.Backend.StackRemove.bytesInWord, Nat.mul_comm] using hbound),
+      compileTopNoNames _, hstructnf⟩
+    (convertStateExact finalContext s_simp) k hs1 hne_struct
+  refine ⟨T, hevT, ?_, ?_⟩
+  · rw [hresT, hstruct_call]
+  · rw [hev_ioT, hstruct_call]
+    show (convertStateExact finalContext s_simp_post).ffi.ioEvents = s_src_post.ffi.ioEvents
+    have hffi_conv : (convertStateExact finalContext s_simp_post).ffi = s_simp_post.ffi := rfl
+    rw [hffi_conv, hffi_simp]
+
+open PanToCrepStateRelImpSemanticsTop
+open LoopToWordStateRelImpSemanticsSupport in
+private theorem list_lookup_isSome_iff_local {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) : (List.lookup k l).isSome = true ↔ k ∈ l.map Prod.fst := by
+  induction l with
+  | nil => simp
+  | cons e l ih =>
+    obtain ⟨a, b⟩ := e
+    by_cases h : k = a
+    · subst h; simp
+    · have : (k == a) = false := by simp [h]
+      simp [List.lookup_cons, this, ih, h]
+
+private theorem fupdateList_empty_eq_lookup_local {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) :
+    FUPDATE_LIST FEMPTY l k = List.lookup k l.reverse := by
+  have := FLOOKUP_FUPDATE_LIST_reverse_eq_lookup l.reverse k
+  simpa [FLOOKUP] using this
+
+private theorem alistToFmap_eq_lookup_local {α β : Type} [BEq α] [LawfulBEq α]
+    (l : List (α × β)) (k : α) : FLOOKUP (alistToFmap l) k = List.lookup k l := by
+  induction l with
+  | nil => rfl
+  | cons e l ih =>
+    obtain ⟨a, b⟩ := e
+    change FLOOKUP (FUPDATE (alistToFmap l) (a, b)) k = _
+    rw [FLOOKUP_update, ih, List.lookup_cons]
+    by_cases hk : k = a
+    · subst hk; simp
+    · have h1 : (a == k) = false := by simp [Ne.symm hk]
+      have h2 : (k == a) = false := by simp [hk]
+      simp [h1, h2]
+
+open PanToCrepStateRelImpSemanticsTop
+open LoopToWordStateRelImpSemanticsSupport in
+/-- Clocked `PanToCrep` + `CrepInline` + `CrepToLoop` + `LoopToWord` composition:
+given `T` resulting from `evaluateDeclsHOLFinite { globalState with structs := [] } panCode = some T`
+and a non-error entry run on `T` at clock `c`, there exists `k'` such that `target`
+(`WordSem`) runs `firstLoopName` at clock `c + k'` with matching `wordEntryClass`
+(`panEntryClass res_pan`) and identical FFI I/O events! -/
+theorem pan_to_crep_to_word_clocked_sim {width : Nat} [NeZero width] {C σ : Type}
+    (globalState T : PanSemStateFiniteExact width σ)
+    (target : WordSemStateFiniteExact width C σ)
+    (arch : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS)
+    (heapLen : BitVec width)
+    (hnolabels : noLabelsHOL target.memory (fun address => target.mdomain address = true))
+    (_hstart : start = ofString "main")
+    (hmdomain : (fun address => target.mdomain address = true) = globalState.memaddrs)
+    (hshdomain : (fun address => target.shMdomain address = true) = globalState.shMemaddrs)
+    (hbe : target.be = globalState.be)
+    (hffi : target.ffi = globalState.ffi)
+    (hcurrheap : target.store.lookup .currHeap = some (.word globalState.baseAddr))
+    (hheaplen : target.store.lookup .heapLength = some (.word heapLen))
+    (htop' : globalState.topAddr = globalState.baseAddr + (2 : BitVec width) * heapLen)
+    (hmem_glob : globalState.memory = wlocWlabHOL ∘ target.memory)
+    (hcode : globalState.code = HolFiniteMapExact.empty)
+    (hglobals : globalState.globals = HolFiniteMapExact.empty)
+    (hlocals : globalState.locals = HolFiniteMapExact.empty)
+    (heshapes : globalState.eshapes = HolFiniteMapExact.empty)
+    (htcode : target.code = sptFromAList
+      (loopToWordCompileProgHOL (compileProgHOLExact arch (compileProgDeclsHOLW panCode))))
+    (hloc0 : sptLookup 0 target.locals = some (WordLocW.loc 1 0))
+    (hdim : goodDimindex width)
+    (hdist_pan : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (hlocal_pan : ∀ entry ∈ functionsHOL panCode, localisedProgHOL entry.2.2.1 = true)
+    (hall_pan : panCode.all (fun x => isFunctionHOL x || isExnDeclHOL x) = true)
+    (hpanSize : sizeOfEidsHOL panCode < 2 ^ width)
+    (hmf : (crepToLoopMakeFuncsExactHOL (compileProgDeclsHOLW panCode)).lookup start =
+      some (firstLoopName, 0))
+    (hglobalnf : PanSemStateFiniteExact.semanticsDecls globalState start panCode ≠ .fail)
+    (hevT : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { globalState with structs := [] }
+      (fun a => Classical.propDecidable (globalState.memaddrs a)) panCode = some T)
+    (c : Nat) (res_pan : Option (PanSemResultExact width))
+    (s_pan_post : PanSemStateFiniteExact width σ)
+    (hev_pan : PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := c }
+      (.call none start [] : ProgHOL width) = (res_pan, s_pan_post))
+    (hne_pan : panEntryClass res_pan ≠ .RunError) :
+    ∃ k' t_word res_word,
+      WordSemStateFiniteExact.evaluate
+        (.call none (some firstLoopName) [0] none : WordLangProgHOL (BitVec width))
+        { target with clock := c + k' } = (res_word, t_word) ∧
+      t_word.ffi.ioEvents = s_pan_post.ffi.ioEvents ∧
+      wordEntryClass res_word = panEntryClass res_pan := by
+  classical
+  have hne_pan_err : res_pan ≠ some .error := by
+    intro h; subst h; exact hne_pan rfl
+  -- Shape of T from evaluateDeclsOnlyFunsAndExnDeclsHOLFinite
+  let s0 : PanSemStateFiniteExact width σ := { globalState with structs := [] }
+  let p0 := PanPropsEvalStateFiniteExact.ofPanSemFinite s0
+  let hdec : DecidablePred p0.memaddrs := fun a => Classical.propDecidable _
+  have hcanon : PanPropsEvalStateFiniteExact.evaluateDeclsPanPropsCanonical p0 panCode =
+      some (PanPropsEvalStateFiniteExact.ofPanSemFinite T) := by
+    unfold PanPropsEvalStateFiniteExact.evaluateDeclsPanPropsCanonical
+    have key : ∀ (st : PanSemStateFiniteExact width σ) (h1 h2 : DecidablePred st.memaddrs),
+        @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _ st h1 panCode =
+          @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _ st h2 panCode := by
+      intro st h1 h2
+      rw [Subsingleton.elim h1 h2]
+    have hE := (key p0.toPanSemFinite inferInstance hdec).trans hevT
+    rw [hE]
+    rfl
+  have hshape := PanPropsEvalStateFiniteExact.evaluateDeclsOnlyFunsAndExnDeclsHOLFinite p0 panCode
+    (PanPropsEvalStateFiniteExact.ofPanSemFinite T) hall_pan hcanon
+  have hT_eq : T = { s0 with
+      code := HolFiniteMapExact.empty.updateList (functionsHOL panCode)
+      eshapes := HolFiniteMapExact.empty.updateList (exceptionsHOL panCode) } := by
+    have h := congrArg PanPropsEvalStateFiniteExact.toPanSemFinite hshape
+    simp only [PanPropsEvalStateFiniteExact.toPanSemFinite_ofPanSemFinite] at h
+    rw [h]
+    simp [PanPropsEvalStateFiniteExact.toPanSemFinite, p0,
+      PanPropsEvalStateFiniteExact.ofPanSemFinite, s0, hcode, heshapes]
+  -- Pass 4a: PanToCrep (to_crep)
+  let crepState := crepStateHOL globalState panCode globalState.memory
+  let crepStatePre := { crepState with
+    code := HolFiniteMapExact.empty.updateList (compileToCrepExactHOLW panCode).reverse }
+  have hsr_crep : panToCrepStateRelFiniteExact T crepStatePre := by
+    rw [hT_eq]
+    simp [panToCrepStateRelFiniteExact, s0, crepStatePre, crepState, crepStateHOL,
+      hglobals, HolFiniteMapExact.empty]
+  have hscode_T : T.code = HolFiniteMapExact.empty.updateList (functionsHOL panCode).reverse := by
+    rw [hT_eq]
+    apply HolFiniteMapExact.ext
+    funext k
+    simp only [HolFiniteMapExact.lookup_updateList]
+    change FUPDATE_LIST FEMPTY _ k = FUPDATE_LIST FEMPTY _ k
+    rw [fupdateList_empty_eq_lookup_local, fupdateList_empty_eq_lookup_local, List.reverse_reverse,
+      PanGlobalsCompileTopSemanticsDecls.lookupReverseOfNodup _ _ hdist_pan]
+  have hdom_T : ∀ key, (T.eshapes.lookup key).isSome =
+      ((getEidsFromDeclsHOL panCode).lookup key).isSome := by
+    intro key
+    rw [hT_eq]
+    show ((HolFiniteMapExact.empty.updateList (exceptionsHOL panCode)).lookup key).isSome =
+      ((getEidsFromDeclsHOL panCode).lookup key).isSome
+    rw [HolFiniteMapExact.lookup_updateList, holFmapAsFiniteSupportResultWitness_getEidsFromDeclsHOL,
+      alistToFmap_eq_lookup_local]
+    change (FUPDATE_LIST FEMPTY _ key).isSome = _
+    rw [fupdateList_empty_eq_lookup_local]
+    apply Bool.eq_iff_iff.mpr
+    rw [list_lookup_isSome_iff_local, list_lookup_isSome_iff_local, List.map_reverse,
+      List.mem_reverse, getEidsEntriesHOL_eq_lengthBased]
+    simp only
+    rw [List.map_fst_zip (by simp)]
+  have hloc_T : T.locals = HolFiniteMapExact.empty := by
+    rw [hT_eq]; exact hlocals
+  obtain ⟨res_crep1, t_crep1, hrun_crep1, hne_crep1_val, hffi_crep1, hclass_crep1⟩ :=
+    pan_to_crep_clocked_agree T crepStatePre panCode start c res_pan s_pan_post
+      hsr_crep hdist_pan hscode_T rfl hloc_T hlocal_pan hpanSize hdom_T hev_pan hne_pan_err
+  -- Pass 4b: CrepInline
+  have hne_crep1 : (evalCrepSemHOLProgExact { crepStatePre with clock := c }
+      (.call none start [])).1 ≠ some .error := by
+    rw [hrun_crep1]
+    exact hne_crep1_val
+  have hinl := crep_inline_clocked_agree crepStatePre crepState
+    (compileToCrepExactHOLW panCode) start
+    ((functionsHOL (panCode.filter inlinableHOL)).map Prod.fst) c
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩ rfl
+    (firstCompileToCrepAllDistinctExact panCode hdist_pan) rfl
+    (by simp [crepState, crepStateHOL, compileProgDeclsHOLW, alistToFmapCodeExact])
+    hne_crep1
+  rcases hrun_crep : evalCrepSemHOLProgExact { crepState with clock := c }
+      (.call none start []) with ⟨res_crep, t_crep⟩
+  have hres_crep : res_crep = res_crep1 := by
+    have h1 := hinl.1
+    rw [hrun_crep, hrun_crep1] at h1
+    exact h1
+  have hffi_crep : t_crep.ffi = t_crep1.ffi := by
+    have h2 := hinl.2
+    rw [hrun_crep, hrun_crep1] at h2
+    exact h2
+  -- Pass 5: CrepToLoop
+  let crepCode := compileProgDeclsHOLW panCode
+  let loopState := loopStateHOL crepState arch crepCode target.clock target.memory
+  have hcrep_sem := stateRelImpSemanticsDeclsPanToCrep globalState crepState panCode start
+    ⟨(by simp [panToCrepStateRelFiniteExact, crepState, crepStateHOL,
+          hglobals, HolFiniteMapExact.empty]),
+      hdist_pan, hcode, rfl, hlocals, heshapes, hlocal_pan, hall_pan, hpanSize, hglobalnf⟩
+  have hcrepnf : crepSemantics crepState start ≠ .fail := by
+    rw [hcrep_sem]; exact hglobalnf
+  have hdist_crep : (crepCode.map Prod.fst).Nodup :=
+    panToCrepFirstCompileProgAllDistinctExact panCode hdist_pan
+  obtain ⟨prog_crep, hprog_crep⟩ :=
+    crepSemantics_ne_fail_imp_holAlookup crepState crepCode start rfl rfl hdist_crep hcrepnf
+  have hne_crep : res_crep ≠ some .error := by
+    rw [hres_crep]
+    intro h
+    subst h
+    rw [hrun_crep1] at hne_crep1
+    exact hne_crep1 rfl
+  obtain ⟨k', t_loop, hrun_loop, hffi_loop⟩ :=
+    crep_to_loop_clocked_sim crepState loopState crepCode start firstLoopName arch
+      prog_crep c res_crep t_crep
+      (by simp [loopState, loopStateHOL]) rfl
+      (by simp [loopState, loopStateHOL]) rfl rfl rfl
+      (by intro address ha
+          have ha' : target.mdomain address = true := (congrFun hmdomain address).symm ▸ ha
+          obtain ⟨w, hw⟩ := hnolabels address ha'
+          simp [crepState, crepStateHOL, loopState, loopStateHOL, hmem_glob,
+            wlocWlabHOL, wlabWlocExact, hw])
+      (by intro address value he
+          simp [crepState, crepStateHOL, HolFiniteMapExact.empty] at he)
+      hdist_crep rfl rfl rfl hmf hprog_crep hrun_crep hne_crep
+  -- Pass 6: LoopToWord
+  have hdm : loopState.mdomain = target.mdomain := by
+    funext address
+    have hd := congrFun hmdomain address
+    apply Bool.eq_iff_iff.mpr
+    simpa [loopState, loopStateHOL, crepState, crepStateHOL] using Iff.of_eq hd.symm
+  have hsh : loopState.shMdomain = target.shMdomain := by
+    funext address
+    have hd := congrFun hshdomain address
+    simp [loopState, loopStateHOL, crepState, crepStateHOL, ← hd]
+  have hparamsLoop := crepToLoopCompileProgDistinctParamsHOLExact crepCode arch
+    (compileProgDeclsHOLW_params_nodup panCode)
+  have hrel_word : loopToWordStateRelHOLExact loopState target := by
+    refine ⟨heapLen, rfl, hdm.symm, hsh.symm, rfl, hbe, hffi, hcurrheap, hheaplen, htop', ?_, ?_⟩
+    · intro name value hl
+      simp [loopState, loopStateHOL, HolFiniteMapExact.empty] at hl
+    · intro name params body hl
+      constructor
+      · rw [htcode]
+        exact loopToWordLookupProgSomeLookupCompileProg _ name params body hl
+      · apply of_decide_eq_true
+        apply (List.all_eq_true.mp hparamsLoop) (name, params, body)
+        apply sptAListLookup_mem name (compileProgHOLExact arch crepCode) (params, body)
+        simpa only [loopState, loopStateHOL, sptLookup_sptFromAList] using hl
+  have hne_loop : Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res_crep ≠ some .error := by
+    rcases res_crep with _ | r_val
+    · intro h; cases h
+    · cases r_val <;> intro h <;> first | exact hne_crep rfl | cases h
+  obtain ⟨t_word, res_word, hrun_word, hffi_word, hrc_word⟩ :=
+    loop_to_word_clocked_agree loopState target firstLoopName (c + k')
+      (Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res_crep) t_loop
+      hrel_word rfl hdim hloc0 hrun_loop hne_loop
+  refine ⟨k', t_word, res_word, hrun_word, ?_, ?_⟩
+  · rw [hffi_word, ← hffi_loop, hffi_crep, hffi_crep1]
+  · rw [← hclass_crep1, ← hres_crep] at hne_pan ⊢
+    rcases res_crep with _ | (_ | _ | _ | _ | _ | _) <;>
+      simp only [Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop, resultCase] at hne_pan hrc_word ⊢ <;>
+      simp_all [wordEntryClass]
+
+open LoopToWordStateRelImpSemanticsSupport in
+/-- Complete clocked `PanToWord` simulation (counterpart of `panToWordStateRelImpSemantics`):
+under the 24 hypotheses of `panToWordStateRelImpSemantics`, if `code` evaluates declarations
+to `s_decls` and `s_decls` runs `start` at clock `k` with `(res_src, s_src_post)`
+(`panEntryClass res_src ≠ .RunError`), then there exists `k'` such that `target` (`WordSem`) runs
+`firstLoopName` at clock **`(k + 1) + k'`** with `wordEntryClass res_word = panEntryClass res_src`
+and the exact same FFI I/O events `s_src_post.ffi.ioEvents`! -/
+theorem pan_to_word_clocked_sim {width : Nat} [NeZero width] {C σ : Type}
+    (source : PanSemStateFiniteExact width σ) (target : WordSemStateFiniteExact width C σ)
+    (arch : AsmArchitecture) (code : List (DeclHOL width)) (start : MlS)
+    (globalsSize : Nat) (heapLen : BitVec width)
+    (h : (∀ address, source.memaddrs address → target.memory address = wlabWlocExact (source.memory address)) ∧
+      noLabelsHOL target.memory (fun address => target.mdomain address = true) ∧
+      start = ofString "main" ∧
+      globalsSize = ((decShapesHOL code).map
+        (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] code)))).sum ∧
+      distinctParamsHOL (functionsHOL code) ∧
+      (fun address => target.mdomain address = true) =
+        (fun address => source.memaddrs address ∨ Compiler.Backend.StackRemove.addresses source.topAddr globalsSize address) ∧
+      (fun address => target.shMdomain address = true) = source.shMemaddrs ∧
+      target.be = source.be ∧ target.ffi = source.ffi ∧
+      target.store.lookup .currHeap = some (.word source.baseAddr) ∧
+      target.store.lookup .heapLength = some (.word heapLen) ∧
+      source.topAddr = source.baseAddr + (2 : BitVec width) * heapLen - panBytesInWord width * BitVec.ofNat width globalsSize ∧
+      ((functionsHOL code).map Prod.fst).Nodup ∧ panGlobalsByteAlignedHOL source.topAddr ∧
+      globalsAllocatableHOL source code ∧ source.code = HolFiniteMapExact.empty ∧
+      target.code = sptFromAList (panToWordCompileProgHOL arch code) ∧
+      source.globals = HolFiniteMapExact.empty ∧ source.locals = HolFiniteMapExact.empty ∧
+      sizeOfEidsHOL code < 2 ^ width ∧ source.eshapes = HolFiniteMapExact.empty ∧
+      sptLookup 0 target.locals = some (WordLocW.loc 1 0) ∧ goodDimindex width ∧
+      PanSemStateFiniteExact.semanticsDecls source start code ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { source with structs := stCtxt } (fun a => Classical.propDecidable (source.memaddrs a))
+      code = some s_decls)
+    (k : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError) :
+    ∃ k' t_word res_word,
+      WordSemStateFiniteExact.evaluate
+        (.call none (some firstLoopName) [0] none : WordLangProgHOL (BitVec width))
+        { target with clock := (k + 1) + k' } = (res_word, t_word) ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents ∧
+      wordEntryClass res_word = panEntryClass res_src := by
+  classical
+  have hne_src_err : res_src ≠ some .error := by
+    intro herr; subst herr; exact hne_src rfl
+  obtain ⟨hmem, hnolabels, hstart, hsize, _hparams, hmdomain, hshdomain, hbe, hffi,
+    hcurrheap, hheaplen, htop, hdist, halign, halloc, hcode, htcode, hglobals,
+    hlocals, heids, heshapes, hloc0, hdim, hfail⟩ := h
+  have hglobalsSem := Pancake.Proofs.PanToWord.InitialComposition.initialToGlobalsSemantics
+    source target code start globalsSize hfail hdist hcode hlocals hglobals heshapes
+    hsize halloc halign hdim hmem
+  let structCode := Pancake.PanStructs.CompileShapeExact.compileTopExact (panSimpDeclsHOL code)
+  let panCode := compileTopExactHOL structCode start
+  let globalState : PanSemStateFiniteExact width σ :=
+    { source with
+      topAddr := source.topAddr + panBytesInWord width * BitVec.ofNat width globalsSize
+      memaddrs := fun address => source.memaddrs address ∨
+        Compiler.Backend.StackRemove.addresses source.topAddr globalsSize address
+      memory := wlocWlabHOL ∘ target.memory
+      locals := source.locals }
+  have hglobalnf : PanSemStateFiniteExact.semanticsDecls globalState start panCode ≠ .fail := by
+    rw [← hglobalsSem]; exact hfail
+  have hstructnf : PanSemStateFiniteExact.semanticsDecls source start structCode ≠ .fail := by
+    have h1 := Pancake.Proofs.PanStructs.CompileTopSemanticsDeclsExact.compileTopSemanticsDeclsExact
+      source start (panSimpDeclsHOL code)
+    have hs := PanSimp.stateRelImpSemanticsDeclsHOL source source code start
+      ⟨(by refine ⟨?_, (fun _ h => h), ?_⟩
+           · cases source; rfl
+           · intro f vs p sh he; simp [hcode, HolFiniteMapExact.empty] at he),
+        hdist, hcode, hcode, hfail⟩
+    have he := h1 ⟨(by rw [← hs]; exact hfail), hlocals, hcode, hglobals⟩
+    have hm : source.eshapes.map2 (fun entry =>
+        Pancake.PanStructs.CompileShapeExact.compileShapeExact
+          (Pancake.PanStructs.CompileShapeExact.getNamesExact
+            { structs := [], locals := [], globals := [] } (panSimpDeclsHOL code)).structs
+          entry.2) = source.eshapes := by
+      rw [heshapes]; apply HolFiniteMapExact.ext; rfl
+    rw [hm] at he
+    rw [← he, ← hs]; exact hfail
+  have hdiststruct : ((functionsHOL structCode).map Prod.fst).Nodup := by
+    dsimp only [structCode]
+    rw [functionNamesStructsCompileTopHOL, functionNamesCompileProgHOL]; exact hdist
+  obtain ⟨mainBody, mainShape, hmain⟩ := semanticsDeclsHasMainPanToWordHOL source start structCode
+    ⟨hcode, hdiststruct, hstructnf⟩
+  have hpanSize : sizeOfEidsHOL panCode < 2 ^ width := by
+    dsimp only [panCode]
+    rw [sizeOfEidsCompileTopHOL structCode start [] mainBody mainShape hmain]
+    dsimp only [structCode]
+    rw [sizeOfEidsStructsCompileEqHOL, sizeOfEidsHOL_panSimpDeclsHOL_eq]
+    exact heids
+  have hmf : (crepToLoopMakeFuncsExactHOL (compileProgDeclsHOLW panCode)).lookup start =
+      some (firstLoopName, 0) :=
+    flookupMakeFuncsMainHOL structCode start mainBody mainShape hmain
+  have htop' : globalState.topAddr = globalState.baseAddr + (2 : BitVec width) * heapLen := by
+    change source.topAddr + panBytesInWord width * BitVec.ofNat width globalsSize = _
+    rw [htop]
+    exact BitVec.sub_add_cancel _ _
+  have hcodeWord : target.code = sptFromAList
+      (loopToWordCompileProgHOL (compileProgHOLExact arch (compileProgDeclsHOLW panCode))) := by
+    simpa [panToWordCompileProgHOL, panCode, structCode, hstart, loopToWordCompileHOL] using htcode
+  obtain ⟨T, hevT, hresT, hioT⟩ := pan_simp_structs_globals_clocked_sim
+    source target code start globalsSize hfail hdist hcode hlocals hglobals heshapes
+    hsize halloc halign hdim hmem stCtxt s_decls hst hev_decls k res_src s_src_post hev_call hne_src_err
+  rcases hev_pan : PanSemStateFiniteExact.evaluateHOLFiniteState { T with clock := k + 1 }
+      (.call none start [] : ProgHOL width) with ⟨res_pan, s_pan_post⟩
+  have hres_pan : res_pan = convertResHOL res_src := by
+    rw [hev_pan] at hresT; exact hresT
+  have hio_pan : s_pan_post.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+    rw [hev_pan] at hioT; exact hioT
+  have hclass_conv : panEntryClass (convertResHOL res_src) = panEntryClass res_src := by
+    rcases res_src with _ | (_ | _ | _ | _ | _ | _ | _) <;>
+      simp [convertResHOL, panEntryClass]
+  have hne_pan : panEntryClass res_pan ≠ .RunError := by
+    rw [hres_pan, hclass_conv]
+    exact hne_src
+  obtain ⟨k', t_word, res_word, hrun_word, hio_word, hclass_word⟩ :=
+    pan_to_crep_to_word_clocked_sim globalState T target arch panCode start heapLen
+      hnolabels hstart hmdomain hshdomain hbe hffi hcurrheap hheaplen htop' rfl
+      hcode hglobals hlocals heshapes hcodeWord hloc0 hdim
+      (allDistinctCompileTopHOL start structCode hdiststruct)
+      (compileTopLocalisedHOL structCode start)
+      (by apply List.all_eq_true.mpr
+          intro d hd
+          rcases PanGlobalsCompileDecsStructural.compile_top_only_functions_or_exnsHOL structCode start d hd with h | h <;> simp [h])
+      hpanSize hmf hglobalnf hevT (k + 1) res_pan s_pan_post hev_pan hne_pan
+  refine ⟨k', t_word, res_word, hrun_word, ?_, ?_⟩
+  · rw [hio_word, hio_pan]
+  · rw [hclass_word, hres_pan, hclass_conv]
+
+open Flapjack.Compiler.Backend Flapjack.Pancake.Proofs.PanToTarget
+open LoopToWordStateRelImpSemanticsSupport in
+/-- Clocked counterpart of `panToTargetPanToWordStage`: bridges a concrete `PanSem` run on `s`
+at clock `k_pan` to a `WordSem` run on `wst0` at `BvlToBvi.initGlobalsLocation` at clock
+`(k_pan + 1) + k'`. -/
+theorem pan_to_target_pan_to_word_stage_clocked_sim {width : Nat} [NeZero width] {C σ : Type}
+    (ac : AsmConfigExact width) (k_reg : Nat) (sst : StackSemStateFiniteExact width C σ)
+    (wcode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (worac : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (s : PanSemStateFiniteExact width σ) (isa : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS) (globalsSize : Nat)
+    (heapLen : BitVec width)
+    (hmem : ∀ a, s.memaddrs a → sst.memory a = wlabWlocExact (s.memory a))
+    (hnolab : noLabelsHOL sst.memory (fun a => sst.mdomain a = true))
+    (hmdomain : (fun a => sst.mdomain a = true) =
+      (fun a => s.memaddrs a ∨ StackRemove.addresses s.topAddr globalsSize a))
+    (hshmdomain : (fun a => sst.shMdomain a = true) = s.shMemaddrs)
+    (hbe : sst.be = s.be) (hffi : sst.ffi = s.ffi)
+    (hcurr : sst.store.lookup .currHeap = some (.word s.baseAddr))
+    (hheap : sst.store.lookup .heapLength = some (.word heapLen))
+    (hstart : start = ofString "main")
+    (hsize : globalsSize = ((decShapesHOL panCode).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] panCode)))).sum)
+    (hparams : distinctParamsHOL (functionsHOL panCode))
+    (htop : s.topAddr = s.baseAddr + (2 : BitVec width) * heapLen -
+      panBytesInWord width * BitVec.ofNat width globalsSize)
+    (hnodup : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (halign : panGlobalsByteAlignedHOL s.topAddr)
+    (halloc : globalsAllocatableHOL s panCode) (hcode : s.code = HolFiniteMapExact.empty)
+    (hglobals : s.globals = HolFiniteMapExact.empty)
+    (hlocals : s.locals = HolFiniteMapExact.empty) (heids : sizeOfEidsHOL panCode < 2 ^ width)
+    (heshapes : s.eshapes = HolFiniteMapExact.empty) (good : goodDimindex width)
+    (hfail : PanSemStateFiniteExact.semanticsDecls s start panCode ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] panCode = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      panCode = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError) :
+    let wst := WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac
+    let wst0 := { wst with code := sptFromAList (panToWordCompileProgHOL isa panCode) }
+    ∃ k' t_word res_word,
+      WordSemStateFiniteExact.evaluate
+        (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+        { wst0 with clock := (k_pan + 1) + k' } = (res_word, t_word) ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents ∧
+      wordEntryClass res_word = panEntryClass res_src := by
+  intro wst wst0
+  rw [InitGlobals_location_eq_first_name]
+  exact pan_to_word_clocked_sim s wst0 isa panCode start globalsSize heapLen
+    ⟨hmem, hnolab, hstart, hsize, hparams, hmdomain, hshmdomain, hbe, hffi,
+      by simpa [wst0, wst, WordToStack.Native.Initialization.makeInit, FDOMSUB_HOL] using hcurr,
+      by simpa [wst0, wst, WordToStack.Native.Initialization.makeInit, FDOMSUB_HOL] using hheap,
+      htop, hnodup, halign, halloc, hcode, rfl, hglobals, hlocals, heids, heshapes,
+      by simp [wst0, wst, WordToStack.Native.Initialization.makeInit, sptLookup],
+      good, hfail⟩
+    stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hne_src
+
+open Flapjack.Compiler.Backend Flapjack.Pancake.Proofs.PanToTarget
+open StackToLab.Proofs.FullMakeInitSemantics LoopToWordStateRelImpSemanticsSupport in
+/-- Clocked counterpart of `panToTargetPanToWordFromInit`. -/
+theorem pan_to_target_pan_to_word_from_init_clocked_sim {width : Nat} [NeZero width] {C σ : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × StackLang.HolProg width)} {t : LabSem.State width C σ}
+    {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × StackLang.HolProg width) × List (BitVec width)}
+    {sst x : StackSemStateFiniteExact width C σ}
+    (ac : AsmConfigExact width) (k_reg : Nat) (wcode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (worac : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (s : PanSemStateFiniteExact width σ) (isa : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS) (globalsSize heapLen : Nat)
+    (w3 w4 : BitVec width)
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code t saveRegs dataSp coracle)
+    (hfmi : StackToLab.Proofs.FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset
+      bitmaps code t saveRegs dataSp coracle = (sst, some x))
+    (h2 : t.regs t.lenReg = .word s.baseAddr) (h3 : t.regs t.ptr2Reg = .word w3)
+    (h4 : t.regs t.len2Reg = .word w4) (hlt : s.baseAddr < w3)
+    (hlo : s.baseAddr + BitVec.ofNat width StackRemove.maxStackAlloc *
+      StackRemove.bytesInWord width ≤ w3)
+    (hhi : w3 ≤ w4 - BitVec.ofNat width StackRemove.maxStackAlloc *
+      StackRemove.bytesInWord width)
+    (hheap : (-1 * s.baseAddr + w3).toNat ≤ maxHeap * (StackRemove.bytesInWord width).toNat)
+    (hheapLt : (StackRemove.bytesInWord width).toNat * maxHeap < 2 ^ width)
+    (halign : holAligned (wordShiftAmount width + 1) (w3 + -1 * s.baseAddr) = true)
+    (htmem : ∀ a, s.memaddrs a → t.memory a = wlabWlocExact (s.memory a))
+    (htword : ∀ a, a.toNat % (width / 8) = 0 → ∃ w, t.memory a = .word w)
+    (htsh : (fun a => t.sharedMemDomain a = true) = s.shMemaddrs)
+    (htbe : t.be = s.be) (htffi : t.ffi = s.ffi)
+    (hheapLen : heapLen = (w3 + -1 * s.baseAddr).toNat / (width / 8))
+    (hglobLe : globalsSize ≤ heapLen)
+    (hmemaddrs : s.memaddrs = StackRemove.addresses s.baseAddr (heapLen - globalsSize))
+    (htop : s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heapLen -
+      BitVec.ofNat width (globalsSize * width / 8))
+    (hstart : start = ofString "main")
+    (hsize : globalsSize = ((decShapesHOL panCode).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] panCode)))).sum)
+    (hparams : distinctParamsHOL (functionsHOL panCode))
+    (hnodup : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (halloc : globalsAllocatableHOL s panCode) (hcode : s.code = HolFiniteMapExact.empty)
+    (hglobals : s.globals = HolFiniteMapExact.empty)
+    (hlocals : s.locals = HolFiniteMapExact.empty) (heids : sizeOfEidsHOL panCode < 2 ^ width)
+    (heshapes : s.eshapes = HolFiniteMapExact.empty)
+    (hfail : PanSemStateFiniteExact.semanticsDecls s start panCode ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] panCode = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      panCode = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError) :
+    let wst := WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac
+    let wst0 := { wst with code := sptFromAList (panToWordCompileProgHOL isa panCode) }
+    ∃ k' t_word res_word,
+      WordSemStateFiniteExact.evaluate
+        (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+        { wst0 with clock := (k_pan + 1) + k' } = (res_word, t_word) ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents ∧
+      wordEntryClass res_word = panEntryClass res_src := by
+  classical
+  intro wst wst0
+  have good : goodDimindex width := hA.1
+  obtain ⟨t', v2, -, -, -, g2, -, -, a2, -⟩ := panToTargetInitCodeRun hA
+  rw [h2] at g2; cases g2
+  have hbase : s.baseAddr.toNat % (width / 8) = 0 :=
+    (holByteAligned_iff_mod good _).1 a2
+  obtain ⟨w2, g2', hcurr, hheapLW⟩ :=
+    panToTargetWordInitStore (ac := ac) (k := k_reg) (wcode := wcode) (worac := worac) hA hfmi
+  rw [h2] at g2'; cases g2'
+  rw [readPointers_s2 hA h2 h3 h4] at hheapLW
+  have hsnd := panToTargetHeapLimitSnd good maxHeap s.baseAddr w3 w4 a2 hlt hlo hhi hheap
+    hheapLt halign
+  rw [BitVec.add_comm (-1 * s.baseAddr), ← hheapLen] at hsnd
+  have hmd := panToTargetWordInitMdomain (ac := ac) (k := k_reg) (wcode := wcode) (worac := worac)
+    s.baseAddr w3 w4 hA hfmi h2 h3 h4 hlo hhi hheap hheapLt halign
+  rw [← hheapLen] at hmd
+  have hmdP : (fun a => wst.mdomain a = true) = StackRemove.addresses s.baseAddr heapLen := by
+    funext a; rw [hmd a, decide_eq_true_eq]
+  obtain ⟨hffi, hbe, hsh, hmem⟩ := panToTargetWordInitMemory (ac := ac) (k := k_reg)
+    (wcode := wcode) (worac := worac) hA hfmi
+  have hin : ∀ a, s.memaddrs a → wst.mdomain a = true := by
+    intro a ha
+    have : StackRemove.addresses s.baseAddr heapLen a := by
+      rw [← addressesSplitGlobals good s.baseAddr heapLen globalsSize hglobLe]
+      exact .inl (hmemaddrs ▸ ha)
+    rw [← hmdP] at this; exact this
+  have htopAl : panGlobalsByteAlignedHOL s.topAddr := by
+    apply panGlobalsByteAligned_of_mod good
+    rw [htop, good_dimindex_div_mul width globalsSize good]
+    rw [BitVec.toNat_sub, BitVec.toNat_add, BitVec.toNat_mul, bytesInWord_toNat good]
+    simp only [BitVec.toNat_ofNat]
+    rcases good with h | h <;> subst h <;> simp at hbase ⊢ <;> omega
+  refine pan_to_target_pan_to_word_stage_clocked_sim ac k_reg sst wcode worac s isa panCode start
+    globalsSize (BitVec.ofNat width (StackRemove.Proofs.InitLimits.getStackHeapLimit maxHeap
+      (s.baseAddr, w3, w4)).2 * StackRemove.bytesInWord width)
+    ?_ ?_ ?_ ?_ ?_ ?_ ?_ ?_ hstart hsize hparams ?_ hnodup htopAl halloc hcode hglobals hlocals
+    heids heshapes good hfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hne_src
+  · intro a ha
+    exact (hmem a (hin a ha)).trans (htmem a ha)
+  · intro a ha
+    have hadr : StackRemove.addresses s.baseAddr heapLen a := by
+      rw [← hmdP]; exact ha
+    obtain ⟨w, hw⟩ := htword a (addresses_mod good s.baseAddr hbase heapLen a hadr)
+    exact ⟨w, (hmem a ha).trans hw⟩
+  · show (fun a => wst.mdomain a = true) = _
+    rw [hmdP, ← addressesSplitGlobals good s.baseAddr heapLen globalsSize hglobLe, hmemaddrs,
+      htop]
+  · show (fun a => wst.shMdomain a = true) = _
+    rw [hsh]; exact htsh
+  · exact hbe.trans htbe
+  · exact hffi.trans htffi
+  · simpa [wst, WordToStack.Native.Initialization.makeInit, FDOMSUB_HOL] using hcurr
+  · simpa [wst, WordToStack.Native.Initialization.makeInit, FDOMSUB_HOL] using hheapLW
+  · rw [htop, good_dimindex_div_mul width globalsSize good]
+    have e1 : (2 : BitVec width) * (BitVec.ofNat width (StackRemove.Proofs.InitLimits.getStackHeapLimit
+        maxHeap (s.baseAddr, w3, w4)).2 * StackRemove.bytesInWord width) =
+        StackRemove.bytesInWord width * BitVec.ofNat width heapLen := by
+      rw [← hsnd, BitVec.ofNat_mul, BitVec.mul_comm (StackRemove.bytesInWord width),
+        ← BitVec.mul_assoc]
+      rfl
+    have e2 : BitVec.ofNat width (globalsSize * (width / 8)) =
+        panBytesInWord width * BitVec.ofNat width globalsSize := by
+      rw [BitVec.ofNat_mul, BitVec.mul_comm]; rfl
+    rw [e1, e2]
+
+open Classical Flapjack.Compiler.Backend Flapjack.Pancake.Proofs.PanToTarget
+open StackToLab.Proofs.FullMakeInitSemantics LoopToWordStateRelImpSemanticsSupport in
+/-- Clocked counterpart of `panToTargetPanToWordStageLab`. -/
+theorem pan_to_target_pan_to_word_stage_lab_clocked_sim {width : Nat} [NeZero width] {S Q C σ : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × StackLang.HolProg width)} {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × StackLang.HolProg width) × List (BitVec width)}
+    {sst x : StackSemStateFiniteExact width C σ}
+    (mc : MachineConfig width S Q) (ffi : HolFfiState σ) (tAsm : AsmState width)
+    (m : BitVec width → WordLocW width) (dm dm' sdm : BitVec width → Bool) (ms : S)
+    (lcode : LabSem.LabProgHOL width)
+    (comp : C → LabSem.LabProgHOL width → Option (List (BitVec 8) × C))
+    (cbpos : BitVec width) (cbspace : Nat) (lorac : Nat → C × LabSem.LabProgHOL width)
+    (bytes : List (BitVec 8))
+    (ac : AsmConfigExact width) (k_reg : Nat) (wcode : Spt (Nat × WordLangProgHOL (BitVec width)))
+    (worac : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (s : PanSemStateFiniteExact width σ) (isa : AsmArchitecture)
+    (panCode : List (DeclHOL width)) (start : MlS) (globalsSize heapLen : Nat)
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle)
+    (hfmi : StackToLab.Proofs.FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset
+      bitmaps code
+      (LabToTarget.makeInit (C := C) mc ffi tAsm m (fun a => dm a && holByteAligned a)
+        (fun a => sdm a && holByteAligned a) ms lcode comp cbpos cbspace lorac)
+      saveRegs dataSp coracle = (sst, some x))
+    (hmc : LabToTarget.mcConfOk mc)
+    (hpm : ∀ a, decide (s.memaddrs a) = true → m a = wlabWlocExact (s.memory a))
+    (hgi : goodInitState mc ms bytes cbspace tAsm m dm' sdm)
+    (hsdm : (fun a => decide (s.shMemaddrs a)) = fun a => sdm a && holByteAligned a)
+    (hbase : mc.target.getReg ms mc.lenReg = s.baseAddr)
+    (hlt : mc.target.getReg ms mc.lenReg < mc.target.getReg ms mc.ptr2Reg)
+    (hlo : mc.target.getReg ms mc.lenReg +
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ≤
+        mc.target.getReg ms mc.ptr2Reg)
+    (hhi : mc.target.getReg ms mc.ptr2Reg ≤ mc.target.getReg ms mc.len2Reg -
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc)
+    (hheap : (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg).toNat ≤
+      (StackRemove.bytesInWord width).toNat * maxHeap)
+    (hheapLt : (StackRemove.bytesInWord width).toNat * maxHeap < 2 ^ width)
+    (halign : holAligned (wordShiftAmount width + 1)
+      (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg) = true)
+    (hbe : mc.target.config.bigEndian = s.be) (hffi : s.ffi = ffi)
+    (hheapLen : heapLen = (mc.target.getReg ms mc.ptr2Reg + -1 * s.baseAddr).toNat / (width / 8))
+    (hglobLe : globalsSize ≤ heapLen)
+    (hmemaddrs : s.memaddrs =
+      StackRemove.addresses (mc.target.getReg ms mc.lenReg) (heapLen - globalsSize))
+    (htop : s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heapLen -
+      BitVec.ofNat width (globalsSize * width / 8))
+    (hstart : start = ofString "main")
+    (hsize : globalsSize = ((decShapesHOL panCode).map
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] panCode)))).sum)
+    (hparams : distinctParamsHOL (functionsHOL panCode))
+    (hnodup : ((functionsHOL panCode).map Prod.fst).Nodup)
+    (halloc : globalsAllocatableHOL s panCode) (hcode : s.code = HolFiniteMapExact.empty)
+    (hglobals : s.globals = HolFiniteMapExact.empty)
+    (hlocals : s.locals = HolFiniteMapExact.empty) (heids : sizeOfEidsHOL panCode < 2 ^ width)
+    (heshapes : s.eshapes = HolFiniteMapExact.empty)
+    (hfail : PanSemStateFiniteExact.semanticsDecls s start panCode ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] panCode = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      panCode = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hne_src : panEntryClass res_src ≠ .RunError) :
+    let wst := WordToStack.Native.Initialization.makeInit ac k_reg sst wcode worac
+    let wst0 := { wst with code := sptFromAList (panToWordCompileProgHOL isa panCode) }
+    ∃ k' t_word res_word,
+      WordSemStateFiniteExact.evaluate
+        (.call none (some BvlToBvi.initGlobalsLocation) [0] none : WordLangProgHOL (BitVec width))
+        { wst0 with clock := (k_pan + 1) + k' } = (res_word, t_word) ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents ∧
+      wordEntryClass res_word = panEntryClass res_src := by
+  have good : goodDimindex width := hmc.1
+  have hregs := hgi.1.2.2.2.1
+  have hreg : ∀ r, asmRegOkExact r mc.target.config = true →
+      tAsm.regs r = mc.target.getReg ms r := by
+    intro r hr
+    simp only [asmRegOkExact, Bool.and_eq_true, decide_eq_true_eq, Bool.not_eq_true'] at hr
+    exact (hregs r hr).symm
+  have r2 := hreg _ hmc.2.2.2.1
+  have r3 := hreg _ hmc.2.2.2.2.1
+  have r4 := hreg _ hmc.2.2.2.2.2.1
+  have hmword := hgi.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  refine pan_to_target_pan_to_word_from_init_clocked_sim ac k_reg wcode worac s isa panCode start
+    globalsSize heapLen (mc.target.getReg ms mc.ptr2Reg) (mc.target.getReg ms mc.len2Reg) hA hfmi
+    ?_ ?_ ?_ (hbase ▸ hlt) ?_ ?_ ?_ hheapLt (hbase ▸ halign) ?_ ?_ ?_ ?_ ?_ hheapLen hglobLe
+    (hbase ▸ hmemaddrs) htop hstart hsize hparams hnodup halloc hcode hglobals hlocals heids
+    heshapes hfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post hev_call hne_src
+  · simp [LabToTarget.makeInit, r2, hbase]
+  · simp [LabToTarget.makeInit, r3]
+  · simp [LabToTarget.makeInit, r4]
+  · rw [← hbase, BitVec.mul_comm]; exact hlo
+  · rw [BitVec.mul_comm]; exact hhi
+  · rw [← hbase, BitVec.add_comm, Nat.mul_comm]; exact hheap
+  · intro a ha
+    exact hpm a (decide_eq_true ha)
+  · intro a ha
+    obtain ⟨w, -, hw⟩ := hmword a
+    rw [Compiler.Backend.LabToTarget.holByteAlign_of_aligned good a ha] at hw
+    exact ⟨w, hw⟩
+  · funext a
+    have := congrFun hsdm a
+    simp only [LabToTarget.makeInit] at this ⊢
+    rw [← this, decide_eq_true_eq]
+  · exact hbe
+  · exact hffi.symm
+
+open Classical Flapjack.Compiler.Backend Flapjack.Compiler.Backend.BackendProof
+open Flapjack.Pancake.Proofs.PanToTarget LoopToWordStateRelImpSemanticsSupport in
+set_option maxHeartbeats 800000 in
+/-- Complete end-to-end clocked `PanToTarget` theorem (clocked counterpart of
+`panToTargetCompileSemantics` / `panToTargetCompileSemanticsStatement_proof`):
+under the 35 hypotheses of `panToTargetCompileSemantics` and the resource-limit guard
+`optionLt stack_max (some (readLimits mc.target.config c mc ms).1) = true`, if `pan_code`
+evaluates declarations to `s_decls` and `s_decls` runs `start` at clock `k_pan` with
+`panEntryClass res_src = .CompleteResult outcome`, then there exists a concrete target step
+count `k_target` at which `evaluateTargetHOL mc ffi k_target ms` halts with `outcome` and
+the exact same FFI I/O events `s_src_post.ffi.ioEvents`! -/
+theorem pan_to_target_compile_clocked_halt {width : Nat} [NeZero width] {S Q σ : Type}
+    (c : Backend.Config) (mc : MachineConfig width S Q) (pan_code : List (DeclHOL width))
+    (bytes : List (BitVec 8)) (bitmaps : List (BitVec width)) (c' : Backend.Config)
+    (stack_max : Option Nat) (s : PanSemStateFiniteExact width σ) (ffi : HolFfiState σ)
+    (ms : S) (globals_size heap_len : Nat) (adj_ptr2 adj_ptr4 : BitVec width)
+    (cbspace data_sp : Nat) (start : MlS)
+    (h :
+      let getReg := mc.target.getReg ms
+      compileProgMax c mc pan_code = (some (bytes, bitmaps, c'), stack_max) ∧
+      pancakeGoodCodeHOL pan_code = true ∧
+      distinctParamsHOL (functionsHOL pan_code) ∧
+      ((functionsHOL pan_code).map Prod.fst).Nodup ∧
+      s.code = HolFiniteMapExact.empty ∧
+      s.locals = HolFiniteMapExact.empty ∧
+      s.globals = HolFiniteMapExact.empty ∧
+      sizeOfEidsHOL pan_code < 2 ^ width ∧
+      s.eshapes = HolFiniteMapExact.empty ∧
+      backendConfigOk mc.target.config c ∧ LabToTarget.mcConfOk mc ∧
+      mcInitOk mc.target.config c mc ∧ mc.target.config.isa ≠ .ag32 ∧
+      (0 : BitVec width) < getReg mc.lenReg ∧
+      globals_size =
+        (let dec_shs := decShapesHOL pan_code
+         let struct_ctxt := decsStcnamesHOLExact (width := width) [] pan_code
+         (dec_shs.map (sizeOfShapeWithContextHOL (holThe struct_ctxt))).sum) ∧
+      getReg mc.lenReg < getReg mc.ptr2Reg ∧
+      getReg mc.lenReg = s.baseAddr ∧
+      globalsAllocatableHOL s pan_code ∧
+      heap_len = (getReg mc.ptr2Reg + -1 * s.baseAddr).toNat / (width / 8) ∧
+      s.topAddr = s.baseAddr + StackRemove.bytesInWord width * BitVec.ofNat width heap_len -
+        BitVec.ofNat width (globals_size * width / 8) ∧
+      globals_size ≤ heap_len ∧
+      s.memaddrs = StackRemove.addresses (getReg mc.lenReg) (heap_len - globals_size) ∧
+      holAligned (wordShiftAmount width + 1) (getReg mc.ptr2Reg + -1 * getReg mc.lenReg) = true ∧
+      adj_ptr2 = getReg mc.lenReg +
+        StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ∧
+      adj_ptr4 = getReg mc.len2Reg -
+        StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ∧
+      adj_ptr2 ≤ getReg mc.ptr2Reg ∧
+      getReg mc.ptr2Reg ≤ adj_ptr4 ∧
+      (getReg mc.ptr2Reg + -1 * getReg mc.lenReg).toNat ≤
+        (StackRemove.bytesInWord width).toNat * (2 * DataToWord.maxHeapLimit width c.dataConf - 1) ∧
+      (StackRemove.bytesInWord width).toNat * (2 * DataToWord.maxHeapLimit width c.dataConf - 1) <
+        2 ^ width ∧
+      s.ffi = ffi ∧ mc.target.config.bigEndian = s.be ∧
+      (match c.labConf.ffiNames with
+        | none => True
+        | some l => ∀ x ∈ l, ∃ s, x = HolFfiName.extCall s) ∧
+      panInstalled bytes cbspace bitmaps data_sp c'.labConf.ffiNames
+        (heapRegs c.stackConf.regNames) mc c'.labConf.shmemExtra ms
+        (wlabWlocExact ∘ s.memory) s.memaddrs s.shMemaddrs ∧
+      start = ofString "main" ∧
+      PanSemStateFiniteExact.semanticsDecls s start pan_code ≠ HolBehaviour.fail)
+    (hresLimit : optionLt stack_max (some (readLimits mc.target.config c mc ms).1) = true)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] pan_code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { s with structs := stCtxt } (fun a => Classical.propDecidable (s.memaddrs a))
+      pan_code = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL mc ffi k_target ms = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨hcomp, hgood, hparams, hnodup, hcode, hlocals, hglobals, heids, heshapes, hcfg, hmc,
+    hinit, hisa, -, hsize, hlt, hbase, halloc, hheapLen, htop, hglobLe, hmemaddrs, halign,
+    rfl, rfl, hlo, hhi, hheap, hheapLt, hffi, hbe, hffiOk, hinst, hstart, hfail⟩ := h
+  obtain ⟨col, wprog, wconf, fs, p, ltconf, hwtw, hwts, hlab, rfl, hmax⟩ :=
+    compileProgMax_some c mc pan_code bytes bitmaps _ stack_max hcomp
+  obtain ⟨t, m, bitmapPtr, bitmapsDm, sdm, hpm, hgi, hsdm, a1, a2, a3, hle, hbig, hdisj, m0, m1,
+    m2, m3, m4, hstar, hffiN, hmmio⟩ := hinst
+  have hpi :
+      let regNames := c.stackConf.regNames
+      let r1 := StackNames.findNameSpt regNames 2
+      let r2 := StackNames.findNameSpt regNames 4
+      let biw := StackRemove.bytesInWord width
+      let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+      holByteAligned (t.regs r1) = true ∧ holByteAligned (t.regs r2) = true ∧
+      holByteAligned bitmapPtr = true ∧ t.regs r1 ≤ t.regs r2 ∧
+      1024 * biw ≤ t.regs r2 - t.regs r1 ∧
+      (∀ w, ¬ (heapStackDm w = true ∧ bitmapsDm w = true)) ∧
+      m (t.regs r1) = .word bitmapPtr ∧
+      m (t.regs r1 + biw) = .word (bitmapPtr + biw * BitVec.ofNat width bitmaps.length) ∧
+      m (t.regs r1 + 2 * biw) = .word (bitmapPtr + biw * BitVec.ofNat width data_sp +
+        biw * BitVec.ofNat width bitmaps.length) ∧
+      m (t.regs r1 + 3 * biw) = .word (mc.target.getPc ms + BitVec.ofNat width bytes.length) ∧
+      m (t.regs r1 + 4 * biw) =
+        .word (mc.target.getPc ms + BitVec.ofNat width cbspace + BitVec.ofNat width bytes.length) ∧
+      SetSep.star (Misc.wordList bitmapPtr (bitmaps.map WordLocW.word))
+        (Misc.wordListExists (bitmapPtr + biw * BitVec.ofNat width bitmaps.length) data_sp)
+        (SetSep.fun2Set (m, fun a => holByteAligned a = true ∧ bitmapsDm a = true)) :=
+    ⟨a1, a2, a3, hle, hbig, hdisj, m0, m1, m2, m3, m4, hstar⟩
+  have hpm' : ∀ a, decide (s.memaddrs a) = true → m a = wlabWlocExact (s.memory a) :=
+    fun a h => hpm a (of_decide_eq_true h)
+  have hsdm' : (fun a => decide (s.shMemaddrs a)) = fun a => sdm a && holByteAligned a := by
+    funext a; rw [hsdm]; simp only [Bool.decide_and, Bool.decide_eq_true]
+  obtain ⟨_, hsemEq, x, hfmi⟩ := panToTargetLabSemantics (C := LabToTarget.Config) c mc ffi t m
+    bitmapPtr bitmapsDm sdm ms (LabToTarget.compile mc.target.config) bytes cbspace ltconf pan_code
+    col wprog bitmaps wconf fs p data_sp s start globals_size heap_len hcfg hmc hinit hisa hwtw
+    hwts hnodup hpm' hgi hsdm' hpi hbase hlt hlo hhi hheap hheapLt halign hbe hffi hheapLen
+    hglobLe hmemaddrs htop hstart hsize hparams halloc hcode hglobals hlocals heids heshapes hfail
+  have hA := panToTargetFullMakeInitAssumptions (C := LabToTarget.Config) c mc ffi t m bitmapPtr
+    bitmapsDm sdm ms (LabToTarget.compile mc.target.config) bytes cbspace ltconf pan_code col wprog
+    bitmaps wconf fs p data_sp hcfg hmc hinit hisa hwtw hwts hnodup hpi
+  have hne_src : panEntryClass res_src ≠ .RunError := by
+    rw [hclass_src]; intro herr; cases herr
+  let regNames := c.stackConf.regNames
+  let r1 := StackNames.findNameSpt regNames 2
+  let r2 := StackNames.findNameSpt regNames 4
+  let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+  let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+  let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+  let k_reg := mc.target.config.regCount - (5 + mc.target.config.avoidRegs.length)
+  let worac : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec width)) :=
+    fun _ => ((bitmaps.length, ltconf), [])
+  obtain ⟨k', t_word, res_word, hrun_w0, hio_w0, hclass_w0⟩ :=
+    pan_to_target_pan_to_word_stage_lab_clocked_sim (C := LabToTarget.Config) mc ffi t m
+      (fun w => heapStackDm w || bitmapsDm w)
+      (fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2) || bitmapsDm w) sdm ms
+      (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+      (LabToTarget.compile mc.target.config)
+      (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+      (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+        mc.target.config.addrOffset sp []))
+      bytes mc.target.config k_reg (sptFromAList wprog) worac s mc.target.config.isa pan_code start
+      globals_size heap_len hA hfmi hmc hpm' hgi hsdm' hbase hlt hlo hhi hheap hheapLt
+      halign hbe hffi hheapLen hglobLe hmemaddrs htop hstart hsize hparams hnodup halloc hcode
+      hglobals hlocals heids heshapes hfail stCtxt s_decls hst hev_decls k_pan res_src s_src_post
+      hev_call hne_src
+  have hcw : wordEntryClass res_word = .CompleteResult outcome := hclass_w0.trans hclass_src
+  obtain ⟨k_target, ms2, ffi2, htarget, hio_target⟩ :=
+    pan_to_target_backend_clocked_halt c mc ffi t m bitmapPtr bitmapsDm sdm ms bytes cbspace
+      ltconf pan_code col wprog bitmaps wconf fs p data_sp stack_max
+      hcfg hmc hinit hisa hwtw hwts hlab hmax hnodup hffiOk hgi hffiN hmmio hgood hpi
+      hlo hhi hheap hheapLt halign hresLimit (hsemEq ▸ hfail)
+      ((k_pan + 1) + k') res_word outcome t_word
+      (by
+        rcases res_word with _ | r_val
+        · cases hcw
+        · cases r_val with
+          | finalFfi e => simp [wordEntryClass] at hcw; exact hcw.symm
+          | result ret vals =>
+            by_cases hret : ret = WordLocW.loc 1 0
+            · subst hret; simp [wordEntryClass] at hcw; exact hcw.symm
+            · simp [wordEntryClass, hret] at hcw
+          | notEnoughSpace => simp [wordEntryClass] at hcw; exact hcw.symm
+          | timeOut | «break» _ | «continue» _ | exception _ _ | error =>
+            simp [wordEntryClass] at hcw)
+      hrun_w0
+  exact ⟨k_target, ms2, ffi2, htarget, hio_target.trans hio_w0⟩
+
+open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.BackendProof
+open Flapjack.Compiler.Backend.RiscVConfig Flapjack.Compiler.Encoders.RiscV.Target
+open Flapjack.Pancake.Proofs.PanToTarget Flapjack.Pancake.PanToTarget in
+/-- Clocked counterpart of `oracle_baseline_behaviour_eq`: for any validated allocation
+oracles and certified compiler depth `≤ 7480`, if `sourceDeclarations` evaluates
+declarations on `sourceInitialState input` to `s_decls` and `s_decls` runs `"main"`
+at clock `k_pan` with `panEntryClass res_src = .CompleteResult outcome`, then there exists
+`k_target` such that `evaluateTargetHOL mc (sourceFfi input) k_target ms` halts with
+`outcome` and identical FFI I/O events! -/
+theorem oracle_baseline_clocked_halt (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (mc : MachineConfig 64 RiscV.L3.riscv_state RiscVProjection)
+    (ms : RiscV.L3.riscv_state) (bytes : List (BitVec 8)) (bitmaps : List (BitVec 64))
+    (c : Backend.Config) (depth heapLen : Nat) (adj2 adj4 : BitVec 64)
+    (cbspace dataSp : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (bytes, bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input mc ms bytes bitmaps c heapLen adj2 adj4 cbspace dataSp)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL mc (sourceFfi input) k_target ms = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨hmc, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain,
+    haligned, hadj2, hadj4, hleft, hright, hmax, hendian, hinstalled, hlimits⟩ := installed
+  have hconfig : mc.target.config = riscvConfig := by rw [hmc.1]; rfl
+  have hcomp := compiled
+  rw [← hconfig, compileProgMaxAsmExecutable_eq] at hcomp
+  have hcfg := oracleBackendConfigOk oracles
+  rw [← hconfig] at hcfg
+  have hinit := oracleMachineInitOk oracles mc hmc
+  rw [← hconfig] at hinit
+  have hsem := semanticsDecls_mainFirstHOL (sourceInitialState input) (ofString "main")
+    (Guest.guestAst.map Pancake.PanLang.declToHOL) sourceHasMain
+  have nonfail' : PanSemStateFiniteExact.semanticsDecls (sourceInitialState input)
+      (ofString "main") sourceDeclarations ≠ HolBehaviour.fail := by
+    change PanSemStateFiniteExact.semanticsDecls (sourceInitialState input)
+      (ofString "main") (Guest.guestAst.map Pancake.PanLang.declToHOL) ≠ HolBehaviour.fail at nonfail
+    rwa [← hsem] at nonfail
+  have hprecise : optionLt (some depth)
+      (some (readLimits mc.target.config (oracleCompilerConfig oracles) mc ms).1) = true := by
+    change optionLt (some depth)
+      (some (readLimits mc.target.config pancakeRiscVBackendConfig mc ms).1) = true
+    rw [hlimits]
+    simpa only [optionLt, decide_eq_true_eq] using
+      (Nat.lt_of_le_of_lt depthBound oracle_stack_bound_fits)
+  exact pan_to_target_compile_clocked_halt (oracleCompilerConfig oracles) mc
+    sourceDeclarations bytes bitmaps c (some depth) (sourceInitialState input)
+    (sourceFfi input) ms globalsWords heapLen adj2 adj4 cbspace dataSp (ofString "main")
+    ⟨hcomp, sourceGoodCode, sourceDistinctParams, sourceDistinctFunctions,
+      rfl, rfl, rfl, sourceExceptionBound, rfl, hcfg, riscvMachineConfigOk mc hmc,
+      hinit, by rw [hconfig]; decide, hpositive,
+      by simpa only [sourceDeclarations, globalsWords] using sourceGlobalsSize.symm,
+      hsplit, hbase, source_globals_allocatable input,
+      hlen, htop, hglobals, hdomain, haligned, hadj2, hadj4, hleft, hright, hmax,
+      oracleHeapLimit_lt oracles, rfl, hendian, trivial, hinstalled, rfl, nonfail'⟩
+    hprecise stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
+open Flapjack.Compiler.Encoders.RiscV.Target in
+/-- Clocked endpoint halt theorem for `baselineMachineConfig` at any post-bootstrap state `ms`
+related to `installedAsm`, parameterized only by the oracle compilation equation and stack bound! -/
+theorem oracle_baseline_endpoint_clocked_halt (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (ms : RiscV.L3.riscv_state)
+    (related : targetStateRel riscvTarget installedAsm ms)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL baselineMachineConfig (sourceFfi input) k_target ms = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = s_src_post.ffi.ioEvents :=
+  oracle_baseline_clocked_halt oracles input baselineMachineConfig ms
+    InitECandidate.nativeCode InitECandidate.bitmaps c depth baselineHeapLen
+    baselineAdj2 baselineAdj4 620 0 compiled depthBound
+    (oracle_baseline_installation_transport input c ms related installed) nonfail
+    stCtxt s_decls hst hev_decls k_pan res_src s_src_post outcome hev_call hclass_src
+
+open InitECandidate.Proofs Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig in
+/-- Full end-to-end clocked halt from `baselineInitialState input` (including the 23,132-step
+bootstrap): if `sourceDeclarations` halts on `sourceInitialState input` at clock `k_pan` with
+`outcome`, then `baselineInitialState input` halts at `bootstrapSteps + k_target` with `outcome`
+and the exact same I/O events! -/
+theorem oracle_full_baseline_clocked_halt (oracles : List (Option (Spt Nat)))
+    (input : Guest.InputBlob)
+    (c : Backend.Config) (depth : Nat)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (installed : OracleBaselineInstallation input baselineMachineConfig
+      baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
+      c baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+    (nonfail : sourceBehaviour input ≠ HolBehaviour.fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory)
+    (hst : decsStcnamesHOLExact [] sourceDeclarations = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls)
+    (k_pan : Nat) (res_src : Option (PanSemResultExact 64))
+    (s_src_post : PanSemStateFiniteExact 64 Guest.HostMemory) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k_pan }
+      (.call none (ofString "main") [] : ProgHOL 64) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+        (bootstrapSteps + k_target)
+        (baselineInitialState input) = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = s_src_post.ffi.ioEvents := by
+  obtain ⟨post, shift, related⟩ := full_baseline_evaluator_exact input
+  obtain ⟨k_target, ms2, ffi2, htarget, hio⟩ :=
+    oracle_baseline_endpoint_clocked_halt oracles input c depth post related
+      compiled depthBound installed nonfail stCtxt s_decls hst hev_decls
+      k_pan res_src s_src_post outcome hev_call hclass_src
+  exact ⟨k_target, ms2, ffi2, (shift k_target).trans htarget, hio⟩
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -370,5 +1857,16 @@ theorem pan_globals_init_call_clocked_shift {width : Nat} [NeZero width] {σ : T
 #print axioms pan_structs_clocked_agree
 #print axioms pan_globals_clocked_agree
 #print axioms pan_globals_init_call_clocked_shift
+#print axioms pan_globals_compile_top_clocked_shift
+#print axioms pan_simp_structs_globals_clocked_sim
+#print axioms pan_to_crep_to_word_clocked_sim
+#print axioms pan_to_word_clocked_sim
+#print axioms pan_to_target_pan_to_word_stage_clocked_sim
+#print axioms pan_to_target_pan_to_word_from_init_clocked_sim
+#print axioms pan_to_target_pan_to_word_stage_lab_clocked_sim
+#print axioms pan_to_target_compile_clocked_halt
+#print axioms oracle_baseline_clocked_halt
+#print axioms oracle_baseline_endpoint_clocked_halt
+#print axioms oracle_full_baseline_clocked_halt
 
 end InitE
