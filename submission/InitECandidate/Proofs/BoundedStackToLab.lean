@@ -2,13 +2,16 @@ import InitECandidate.Proofs.BoundedTarget
 import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 import Flapjack.Compiler.Backend.WordToStack.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.WordToWord.Proofs.CompileSemantics
+import Flapjack.Pancake.Proofs.PanToTarget.AssemblyTopResource
 
 namespace InitE
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.LabSem Flapjack.Compiler.Backend.LabProps
+open Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Backend.StackToLab.Proofs
 open Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
+open Flapjack.Pancake.Proofs.PanToTarget
 
 /-- Clock-preserving `WordToWord` simulation: at any clock `k`, a non-error entry call
 on `s` (with `s.code = sptFromAList wprog0`) produces the exact same result and FFI state
@@ -649,6 +652,286 @@ theorem word_to_stack_compile_clocked_sim {width : Nat} [NeZero width] {C F : Ty
   exact word_to_stack_clocked_sim asmConf (asmConf.regCount - (5 + asmConf.avoidRegs.length))
     _ t start clk res s1 related safe hrun hne
 
+/-- Clocked backend chain (`WordToWord` + `WordToStack` + `FullMakeInit` + `LabToTarget`)
+under the `optionLt stackMax (some (readLimits ...).1)` resource bound:
+from a halting `WordSem` entry call on `wst0` (compiled from `panCode` by `PanToWord`) at
+clock `k_word` with `semTermOutcome res outcome`, the initial `labst` halts at some clock `k_lab`
+and the target machine halts at `k_lab + extra` with the same outcome and FFI state. -/
+theorem pan_to_target_backend_clocked_halt {width : Nat} [NeZero width] {S Q σ : Type}
+    (c : Backend.Config) (mc : MachineConfig width S Q) (ffi : HolFfiState σ)
+    (t : AsmState width) (m : BitVec width → WordLocW width)
+    (bitmapPtr : BitVec width) (bitmapsDm sdm : BitVec width → Bool) (ms : S)
+    (bytes : List (BitVec 8)) (cbspace : Nat) (ltconf : LabToTarget.Config)
+    (panCode : List (Pancake.PanLang.DeclHOL width)) (col : List (Option (Spt Nat)))
+    (wprog : List (Nat × Nat × WordLangProgHOL (BitVec width))) (bitmaps : List (BitVec width))
+    (wconf : WordToStack.Native.Config) (fs : List Nat) (p : List (Nat × StackLang.HolProg width))
+    (dataSp : Nat) (stackMax : Option Nat)
+    (hcfg : BackendProof.backendConfigOk mc.target.config c) (hmc : LabToTarget.mcConfOk mc)
+    (hinit : BackendProof.mcInitOk mc.target.config c mc) (hisa : mc.target.config.isa ≠ .ag32)
+    (hwtw : WordToWord.compile c.wordToWordConf mc.target.config
+      (panToWordCompileProgHOL mc.target.config.isa panCode) = (col, wprog))
+    (hwts : WordToStack.Native.compileNative mc.target.config false wprog =
+      (bitmaps, wconf, fs, p))
+    (hlab : LabToTarget.compile mc.target.config c.labConf
+      (StackToLab.compile c.stackConf c.dataConf (2 * DataToWord.maxHeapLimit width c.dataConf - 1)
+        (mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3))
+        mc.target.config.addrOffset p) = some (bytes, ltconf))
+    (hmax : stackMax = WordDepth.maxDepth wconf.stackFrameSize
+      (WordDepth.fullCallGraph BvlToBvi.initGlobalsLocation (sptFromAList wprog)))
+    (hnodup : ((Pancake.PanLang.functionsHOL panCode).map Prod.fst).Nodup)
+    (hffiOk : match c.labConf.ffiNames with
+      | none => True
+      | some l => ∀ x ∈ l, ∃ s, x = HolFfiName.extCall s)
+    (hgi : goodInitState mc ms bytes cbspace t m
+      (fun w => decide (t.regs (StackNames.findNameSpt c.stackConf.regNames 2) ≤ w ∧
+        w < t.regs (StackNames.findNameSpt c.stackConf.regNames 4)) || bitmapsDm w) sdm)
+    (hffiN : ltconf.ffiNames = some mc.ffiNames)
+    (hmmio : ∀ i, mmioPcsMinIndex mc.ffiNames = some i →
+      ltconf.shmemExtra.map (fun rec => (mc.target.getPc ms).toNat + rec.entryPc) =
+          (mc.ffiEntryPcs.map BitVec.toNat).drop i ∧
+        mc.mmioInfo = List.zip ((List.range ltconf.shmemExtra.length).map (fun index => index + i))
+          (ltconf.shmemExtra.map fun rec => (rec.nbytes,
+            HolAddr.addr rec.addrReg (BitVec.ofNat width rec.addrOff),
+            rec.reg, BitVec.ofNat width rec.exitPc + mc.target.getPc ms)) ∧
+        cbspace + bytes.length + LabToTarget.ffiOffset * (i + 3) < 2 ^ width)
+    (hsource : pancakeGoodCodeHOL panCode = true)
+    (hpi :
+      let regNames := c.stackConf.regNames
+      let r1 := StackNames.findNameSpt regNames 2
+      let r2 := StackNames.findNameSpt regNames 4
+      let biw := StackRemove.bytesInWord width
+      let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+      holByteAligned (t.regs r1) = true ∧ holByteAligned (t.regs r2) = true ∧
+      holByteAligned bitmapPtr = true ∧ t.regs r1 ≤ t.regs r2 ∧
+      1024 * biw ≤ t.regs r2 - t.regs r1 ∧
+      (∀ w, ¬ (heapStackDm w = true ∧ bitmapsDm w = true)) ∧
+      m (t.regs r1) = .word bitmapPtr ∧
+      m (t.regs r1 + biw) = .word (bitmapPtr + biw * BitVec.ofNat width bitmaps.length) ∧
+      m (t.regs r1 + 2 * biw) = .word (bitmapPtr + biw * BitVec.ofNat width dataSp +
+        biw * BitVec.ofNat width bitmaps.length) ∧
+      m (t.regs r1 + 3 * biw) = .word (mc.target.getPc ms + BitVec.ofNat width bytes.length) ∧
+      m (t.regs r1 + 4 * biw) =
+        .word (mc.target.getPc ms + BitVec.ofNat width cbspace + BitVec.ofNat width bytes.length) ∧
+      SetSep.star (Misc.wordList bitmapPtr (bitmaps.map WordLocW.word))
+        (Misc.wordListExists (bitmapPtr + biw * BitVec.ofNat width bitmaps.length) dataSp)
+        (SetSep.fun2Set (m, fun a => holByteAligned a = true ∧ bitmapsDm a = true)))
+    (hlo : mc.target.getReg ms mc.lenReg +
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc ≤
+        mc.target.getReg ms mc.ptr2Reg)
+    (hhi : mc.target.getReg ms mc.ptr2Reg ≤ mc.target.getReg ms mc.len2Reg -
+      StackRemove.bytesInWord width * BitVec.ofNat width StackRemove.maxStackAlloc)
+    (hheap : (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg).toNat ≤
+      (StackRemove.bytesInWord width).toNat * (2 * DataToWord.maxHeapLimit width c.dataConf - 1))
+    (hheapLt : (StackRemove.bytesInWord width).toNat *
+      (2 * DataToWord.maxHeapLimit width c.dataConf - 1) < 2 ^ width)
+    (halign : holAligned (wordShiftAmount width + 1)
+      (mc.target.getReg ms mc.ptr2Reg + -1 * mc.target.getReg ms mc.lenReg) = true)
+    (hresLimit : optionLt stackMax
+      (some (BackendProof.readLimits mc.target.config c mc ms).1) = true)
+    (hsem : WordSemStateFiniteExact.semantics
+      (let regNames := c.stackConf.regNames
+       let r1 := StackNames.findNameSpt regNames 2
+       let r2 := StackNames.findNameSpt regNames 4
+       let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+       let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+       let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+       let labst := LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+         (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+         (fun a => sdm a && holByteAligned a) ms
+         (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+         (LabToTarget.compile mc.target.config)
+         (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+         (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+           mc.target.config.addrOffset sp []))
+       let sst := (FullMakeInit.fullMakeInit c.stackConf c.dataConf maxHeap sp
+         mc.target.config.addrOffset bitmaps p labst (fun k => decide (k ∈ mc.calleeSavedRegs))
+         dataSp (fun _ => (ltconf, [], []))).1
+       WordToStack.Native.Initialization.makeInit mc.target.config
+         (mc.target.config.regCount - (5 + mc.target.config.avoidRegs.length)) sst
+         (sptFromAList wprog)
+         (fun _ => ((bitmaps.length, ltconf), ([] : List (Nat × Nat × WordLangProgHOL (BitVec width))))))
+      BvlToBvi.initGlobalsLocation ≠ .fail)
+    (k_word : Nat) (res : Option (WordSemResult width)) (outcome : HolOutcome)
+    (s_word_post : WordSemStateFiniteExact width (Nat × LabToTarget.Config) σ)
+    (hres_ok : match res with
+      | some (.finalFfi e) => outcome = .ffiOutcome e
+      | some (.result (WordLocW.loc 1 0) _) => outcome = .success
+      | some .notEnoughSpace => outcome = .resourceLimitHit
+      | _ => False)
+    (hrun_w0 : WordSemStateFiniteExact.evaluate (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+      { (let regNames := c.stackConf.regNames
+         let r1 := StackNames.findNameSpt regNames 2
+         let r2 := StackNames.findNameSpt regNames 4
+         let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+         let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+         let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+         let labst := LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+           (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+           (fun a => sdm a && holByteAligned a) ms
+           (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+           (LabToTarget.compile mc.target.config)
+           (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+           (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+             mc.target.config.addrOffset sp []))
+         let sst := (FullMakeInit.fullMakeInit c.stackConf c.dataConf maxHeap sp
+           mc.target.config.addrOffset bitmaps p labst (fun k => decide (k ∈ mc.calleeSavedRegs))
+           dataSp (fun _ => (ltconf, [], []))).1
+         let wst := WordToStack.Native.Initialization.makeInit mc.target.config
+           (mc.target.config.regCount - (5 + mc.target.config.avoidRegs.length)) sst
+           (sptFromAList wprog)
+           (fun _ => ((bitmaps.length, ltconf), ([] : List (Nat × Nat × WordLangProgHOL (BitVec width)))))
+         { wst with code := sptFromAList (panToWordCompileProgHOL mc.target.config.isa panCode) })
+        with clock := k_word } = (res, s_word_post)) :
+    ∃ k_target ms2 ffi2,
+      evaluateTargetHOL mc ffi k_target ms = (.halt outcome, ms2, ffi2) ∧
+      ffi2.ioEvents = s_word_post.ffi.ioEvents := by
+  let regNames := c.stackConf.regNames
+  let r1 := StackNames.findNameSpt regNames 2
+  let r2 := StackNames.findNameSpt regNames 4
+  let heapStackDm : BitVec width → Bool := fun w => decide (t.regs r1 ≤ w ∧ w < t.regs r2)
+  let sp := mc.target.config.regCount - (mc.target.config.avoidRegs.length + 3)
+  let maxHeap := 2 * DataToWord.maxHeapLimit width c.dataConf - 1
+  let labst := LabToTarget.makeInit (C := LabToTarget.Config) mc ffi t m
+    (fun a => (heapStackDm a || bitmapsDm a) && holByteAligned a)
+    (fun a => sdm a && holByteAligned a) ms
+    (StackToLab.compile c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset p)
+    (LabToTarget.compile mc.target.config)
+    (mc.target.getPc ms + BitVec.ofNat width bytes.length) cbspace
+    (fun _ => (ltconf, StackToLab.compileNoStubs regNames c.stackConf.jump
+      mc.target.config.addrOffset sp []))
+  let sst := (FullMakeInit.fullMakeInit c.stackConf c.dataConf maxHeap sp
+    mc.target.config.addrOffset bitmaps p labst (fun k => decide (k ∈ mc.calleeSavedRegs))
+    dataSp (fun _ => (ltconf, [], []))).1
+  let k_reg := mc.target.config.regCount - (5 + mc.target.config.avoidRegs.length)
+  let worac : Nat → (Nat × LabToTarget.Config) × List (Nat × Nat × WordLangProgHOL (BitVec width)) :=
+    fun _ => ((bitmaps.length, ltconf), [])
+  let wst := WordToStack.Native.Initialization.makeInit mc.target.config k_reg sst
+    (sptFromAList wprog) worac
+  let wst0 := { wst with code := sptFromAList (panToWordCompileProgHOL mc.target.config.isa panCode) }
+  have hA := Flapjack.Pancake.Proofs.PanToTarget.panToTargetFullMakeInitAssumptions
+    (C := LabToTarget.Config) c mc ffi t m bitmapPtr bitmapsDm sdm ms
+    (LabToTarget.compile mc.target.config) bytes cbspace ltconf panCode col wprog bitmaps wconf
+    fs p dataSp hcfg hmc hinit hisa hwtw hwts hnodup hpi
+  rcases hfm : FullMakeInit.fullMakeInit c.stackConf c.dataConf maxHeap sp
+      mc.target.config.addrOffset bitmaps p labst (fun k => decide (k ∈ mc.calleeSavedRegs))
+      dataSp (fun _ => (ltconf, [], [])) with ⟨sst', opt⟩
+  have e_sst : sst = sst' := by simp only [sst, hfm]
+  obtain ⟨hopt, -⟩ := fullMakeInitSemantics (s := sst') (opt := opt) ⟨hfm, hA⟩
+  obtain ⟨x, rfl⟩ := Option.ne_none_iff_exists'.mp hopt
+  obtain ⟨hbmS, hcodeS⟩ := Flapjack.Pancake.Proofs.PanToTarget.fullMakeInit_bitmaps_code
+    c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset bitmaps p labst _ dataSp _
+    sst' x hfm
+  have hinitS := Flapjack.Pancake.Proofs.PanToTarget.panToTargetInitStateOk mc.target.config
+    wprog bitmaps wconf fs p ltconf c.stackConf c.dataConf maxHeap sp mc.target.config.addrOffset
+    labst (fun k => decide (k ∈ mc.calleeSavedRegs)) dataSp sst' x hmc.1 hcfg.2.2.2.1 hwts hfm
+  rw [Nat.add_comm mc.target.config.avoidRegs.length 5] at hinitS
+  obtain ⟨hgc, -, -, -⟩ := Flapjack.Pancake.Proofs.PanToTarget.panToTargetWordStateFacts
+    mc.target.config k_reg (sptFromAList wprog) worac c.stackConf c.dataConf maxHeap sp
+    mc.target.config.addrOffset bitmaps p labst (fun k => decide (k ∈ mc.calleeSavedRegs))
+    dataSp _ sst' x hfm
+  obtain ⟨hraise, hstore⟩ := Flapjack.Pancake.Proofs.PanToTarget.panToTargetStubLocationsFree
+    c.wordToWordConf mc.target.config panCode col wprog hisa hwtw
+  have hconv := (BackendProof.compileToWordConventions2 c.wordToWordConf mc.target.config _ col
+    wprog hwtw (fun _ _ => Or.inr hisa)).2.2
+  have hsem' : (WordToStack.Native.Initialization.makeInit mc.target.config k_reg sst'
+      (sptFromAList wprog) worac).semantics BvlToBvi.initGlobalsLocation ≠ .fail := by
+    change wst.semantics BvlToBvi.initGlobalsLocation ≠ .fail at hsem
+    simpa only [wst, e_sst] using hsem
+  have hsafe := Flapjack.Pancake.Proofs.PanToTarget.panToTargetResourceLimitOfSemantics
+    c mc ms panCode col wprog bitmaps wconf fs p stackMax worac hwtw hnodup hwts hmax hA hfm
+    (Flapjack.Pancake.Proofs.PanToTarget.panToTargetLabRegWord mc ffi t _ _ _ ms _
+      (LabToTarget.compile mc.target.config) _ cbspace _ hgi.1 _ hmc.2.2.2.1)
+    (Flapjack.Pancake.Proofs.PanToTarget.panToTargetLabRegWord mc ffi t _ _ _ ms _
+      (LabToTarget.compile mc.target.config) _ cbspace _ hgi.1 _ hmc.2.2.2.2.1)
+    (Flapjack.Pancake.Proofs.PanToTarget.panToTargetLabRegWord mc ffi t _ _ _ ms _
+      (LabToTarget.compile mc.target.config) _ cbspace _ hgi.1 _ hmc.2.2.2.2.2.1)
+    hlo hhi hheap hheapLt halign hsem' hresLimit
+  have hne0 : res ≠ some .error := by
+    intro herr
+    rw [herr] at hres_ok
+    exact hres_ok
+  have hrun_w0' : (WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+      { wst0 with clock := k_word }).1 ≠ some .error := by
+    rw [hrun_w0]
+    exact hne0
+  have hww := word_to_word_clocked_agree c.wordToWordConf mc.target.config
+    (panToWordCompileProgHOL mc.target.config.isa panCode) col wprog wst0
+    BvlToBvi.initGlobalsLocation k_word hwtw
+    (by simpa only [wst0, wst, e_sst] using hgc)
+    (PanToWord.pan_to_word_compile_prog_no_install_code _ panCode _ rfl)
+    (PanToWord.pan_to_word_compile_prog_no_alloc_code _ panCode _ rfl)
+    (PanToWord.pan_to_word_compile_prog_no_mt_code _ panCode _ rfl)
+    (by simp [wst0, wst, WordToStack.Native.Initialization.makeInit])
+    rfl hrun_w0'
+  rcases hrun_w : WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+      { wst with clock := k_word } with ⟨res_w, s_w_post⟩
+  have hres_w : res_w = res := by
+    have h1 := hww.1
+    change (WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+      { wst with clock := k_word }).1 =
+      (WordSemStateFiniteExact.evaluate
+        (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+        { wst0 with clock := k_word }).1 at h1
+    rw [hrun_w, hrun_w0] at h1
+    exact h1
+  have hffi_w : s_w_post.ffi = s_word_post.ffi := by
+    have h2 := hww.2
+    change (WordSemStateFiniteExact.evaluate
+      (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+      { wst with clock := k_word }).2.ffi =
+      (WordSemStateFiniteExact.evaluate
+        (.call none (some BvlToBvi.initGlobalsLocation) [0] none)
+        { wst0 with clock := k_word }).2.ffi at h2
+    rw [hrun_w, hrun_w0] at h2
+    exact h2
+  rw [hres_w] at hrun_w
+  obtain ⟨ck_wts, t_stack_post, hrun_stack, hffi_wts⟩ := word_to_stack_compile_clocked_sim
+    mc.target.config wprog sst' k_reg worac BvlToBvi.initGlobalsLocation k_word res s_w_post
+    (by rw [hwts, hcodeS]) rfl hinitS hraise hstore (by rw [hwts, hbmS])
+    (fun entry he => ⟨(hconv entry he).1, (hconv entry he).2.1⟩)
+    hsafe (by simpa only [wst, e_sst] using hrun_w) hne0
+  have hclass_stack : FlattenSemantics.stackEntryClass
+      (res.map WordToStackProofs.CompCorrect.compileResult) =
+      CrepToLoopSemanticsRunRes.CompleteResult outcome := by
+    rcases res with _ | r_val
+    · cases hres_ok
+    · cases r_val with
+      | result ret_loc _ =>
+        by_cases hloc : ret_loc = WordLocW.loc 1 0
+        · subst hloc
+          simp only at hres_ok
+          subst hres_ok
+          simp [FlattenSemantics.stackEntryClass, WordToStackProofs.CompCorrect.compileResult]
+        · simp [hloc] at hres_ok
+      | notEnoughSpace =>
+        simp only at hres_ok
+        subst hres_ok
+        rcases hmc.1 with rfl | rfl <;>
+          simp [FlattenSemantics.stackEntryClass, WordToStackProofs.CompCorrect.compileResult]
+      | finalFfi e_ffi =>
+        simp only at hres_ok
+        subst hres_ok
+        simp [FlattenSemantics.stackEntryClass, WordToStackProofs.CompCorrect.compileResult]
+      | exception _ _ => cases hres_ok
+      | timeOut => cases hres_ok
+      | «break» _ => cases hres_ok
+      | «continue» _ => cases hres_ok
+      | error => cases hres_ok
+  obtain ⟨k_lab, hhalt_lab, hev_lab⟩ := full_make_init_clocked_halt hfm hA (k_word + ck_wts)
+    (res.map WordToStackProofs.CompCorrect.compileResult) t_stack_post outcome
+    hrun_stack hclass_stack
+  rcases hlab_ev : LabSem.evaluate { labst with clock := k_lab } with ⟨res_lab, next_lab⟩
+  rw [hlab_ev] at hhalt_lab hev_lab
+  obtain ⟨extra_t, ms2, htarget⟩ := pan_to_target_machine_lab_clocked_halt c mc ffi t m
+    bitmapsDm sdm ms bytes cbspace panCode col wprog bitmaps wconf fs p ltconf
+    hcfg hmc hisa hwtw hwts hlab hnodup hffiOk hgi hffiN hmmio hsource k_lab outcome next_lab
+    (hlab_ev.trans (Prod.ext hhalt_lab rfl))
+  refine ⟨k_lab + extra_t, ms2, next_lab.ffi, htarget, ?_⟩
+  rw [hev_lab, ← hffi_wts, hffi_w]
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -659,5 +942,6 @@ theorem word_to_stack_compile_clocked_sim {width : Nat} [NeZero width] {C F : Ty
 #print axioms stack_to_lab_clocked_halt
 #print axioms full_make_init_clocked_halt
 #print axioms word_to_stack_compile_clocked_sim
+#print axioms pan_to_target_backend_clocked_halt
 
 end InitE
