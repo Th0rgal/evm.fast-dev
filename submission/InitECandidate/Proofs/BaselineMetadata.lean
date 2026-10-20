@@ -1,9 +1,8 @@
 import InitECandidate.Proofs.CompilerComputation
 import InitECandidate.Proofs.CompactComputation
-import InitECandidate.Proofs.BaselineArtifact
+import InitECandidate.Proofs.CompilerConfigLiteral
 import InitECandidate.Proofs.BootstrapMemory
 import InitE.MachineInitialization
-import InitECandidate.Proofs.ArtifactFacts
 
 open scoped InitECandidate.Proofs.CompilerComputation
 
@@ -19,8 +18,8 @@ open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Misc
 
-@[irreducible] def baselineNames : List HolFfiName := baselineConfig.labConf.ffiNames.getD []
-@[irreducible] def baselineMmio : List ShmemInfoNum := baselineConfig.labConf.shmemExtra
+@[irreducible] def baselineNames : List HolFfiName := baselineLabConfig.ffiNames.getD []
+@[irreducible] def baselineMmio : List ShmemInfoNum := baselineLabConfig.shmemExtra
 
 def dispatchAddress (i : Nat) : BitVec 64 :=
   BitVec.ofNat 64 nativePc - BitVec.ofNat 64 ((1+i)*ffiOffset)
@@ -41,7 +40,7 @@ theorem baseline_finite_facts :
     (∀ i : Fin baselineEntryPcs.length, 20 ≤ i.val →
       dispatchAddress 0 ≠ baselineEntryPcs[i] ∧ dispatchAddress 1 ≠ baselineEntryPcs[i]) ∧
     baselineNames.length = baselineEntryPcs.length := by
-  unfold ffiNameBoundaryValid baselineEntryPcs baselineNames baselineMmio baselineConfig
+  unfold ffiNameBoundaryValid baselineEntryPcs baselineNames baselineMmio baselineLabConfig
   exact of_decide_eq_true (by kernel_rfl)
 
 end InitE

@@ -4,7 +4,7 @@ import InitECandidate.Proofs.BaselineMetadata
 import InitECandidate.Proofs.MachineWordMemory
 import InitECandidate.Proofs.BootstrapMemory
 import InitE.MachineInitialization
-import InitECandidate.Proofs.ArtifactFacts
+import Flapjack.Compiler.Backend.Semantics.TargetSem.InitializationContracts
 
 open scoped InitECandidate.Proofs.CompilerComputation
 
@@ -134,6 +134,14 @@ private theorem literal_append_byte (leadingBytes bytes trailingBytes : List (Bi
   simp [List.getElem?_append, show ¬ leadingBytes.length+i.val < leadingBytes.length by omega,
     Nat.add_sub_cancel_left, i.isLt]
 
+private theorem initialMemory_of_lt (a : BitVec 64) (k : Nat) (ha : a.toNat = initialPc + k)
+    (hk : k < InitECandidate.code.length) :
+    initialMemory a = InitECandidate.code[k]?.getD 0 := by
+  unfold initialMemory
+  rw [if_pos (by omega)]
+  have hsub : a.toNat - initialPc = k := by omega
+  rw [hsub]
+
 theorem baseline_native_loaded_byte (i : Fin InitECandidate.nativeCode.length) :
     installedMemory (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val) =
       InitECandidate.nativeCode[i] := by
@@ -150,12 +158,12 @@ theorem baseline_native_loaded_byte (i : Fin InitECandidate.nativeCode.length) :
   have hbitmap : ¬ (initDataRam+24 ≤ nativePc+i.val ∧ nativePc+i.val < initDataEnd) := by
     simp only [initDataRam, nativePc]; omega
   simp only [installedMemory, ha, if_neg hsource, if_neg hdata, if_neg hbitmap]
-  unfold initialMemory
-  rw [ha, if_pos (by simp only [initialPc,nativePc,baseline_literal_layout.2.2]; omega)]
-  have hoffset : nativePc+i.val-initialPc = InitECandidate.bootPrefix.length+i.val := by
-    simp only [nativePc,initialPc,baseline_literal_layout.1]; omega
-  rw [hoffset]
-  exact literal_append_byte _ _ _ i
+  rw [initialMemory_of_lt (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val)
+    (InitECandidate.bootPrefix.length + i.val)
+    (by rw [ha]; simp only [nativePc, initialPc, baseline_literal_layout.1]; omega)
+    (by simp only [baseline_literal_layout.1, baseline_literal_layout.2.2]; omega)]
+  unfold InitECandidate.code
+  exact literal_append_byte InitECandidate.bootPrefix InitECandidate.nativeCode InitECandidate.suffix i
 
 theorem baseline_native_program_byte (i : Fin InitECandidate.nativeCode.length) :
     programDomain (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val) := by

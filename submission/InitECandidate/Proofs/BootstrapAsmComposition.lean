@@ -68,6 +68,51 @@ theorem checked_trace_evaluator {σ : Type}
     · simp only [List.length_cons]
       omega
 
+/-- Exact target-evaluator step count for a bootstrap instruction list. -/
+def bootstrapTraceSteps (code : List (HolAsm 64)) : Nat :=
+  (code.map fun i => (riscvAst i).length).sum
+
+theorem bootstrapTraceSteps_append (left right : List (HolAsm 64)) :
+    bootstrapTraceSteps (left ++ right) = bootstrapTraceSteps left + bootstrapTraceSteps right := by
+  simp [bootstrapTraceSteps, List.map_append, List.sum_append]
+
+/-- Exact step-count version of `checked_trace_evaluator` when every instruction
+in `code` satisfies `BootstrapInstOk`. -/
+theorem checked_trace_evaluator_bootstrap {σ : Type}
+    (mc : MachineConfig 64 riscv_state RiscVProjection)
+    (target : mc.target = riscvTarget)
+    (identity : mc.nextInterfer = fun _ state => state)
+    (code : List (HolAsm 64)) (s : AsmState 64)
+    (hok : ∀ i ∈ code, BootstrapInstOk i)
+    (checks : Checked code s) (guards : EvaluatorGuards mc code s)
+    (ms : riscv_state) (io : HolFfiState σ)
+    (related : targetStateRel riscvTarget s ms) :
+    ∃ post,
+      (∀ clock, evaluateTargetHOL mc io (bootstrapTraceSteps code + clock) ms =
+        evaluateTargetHOL mc io clock post) ∧
+      targetStateRel riscvTarget (run code s) post := by
+  induction code generalizing s ms with
+  | nil =>
+    exact ⟨ms, fun _ => by simp [bootstrapTraceSteps], related⟩
+  | cons i rest ih =>
+    have interference : interferenceOk mc.nextInterfer (mc.target.proj s.memDomain) := by
+      intro index state
+      rw [identity]
+    obtain ⟨middle, firstRun, middleRelated⟩ :=
+      step_evaluator_bootstrap mc s ms io i (hok i (List.mem_cons_self ..))
+        target guards.1 guards.2.1 interference checks.1 related
+    have shiftEq := shiftInterfer_identity mc identity (riscvAst i).length
+    simp only [shiftEq] at firstRun
+    obtain ⟨post, restRun, postRelated⟩ :=
+      ih (after s i) (fun j hj => hok j (List.mem_cons_of_mem _ hj))
+        checks.2 guards.2.2 middle middleRelated
+    refine ⟨post, ?_, postRelated⟩
+    intro clock
+    simp only [bootstrapTraceSteps, List.map_cons, List.sum_cons]
+    rw [show (riscvAst i).length + (rest.map fun x => (riscvAst x).length).sum + clock =
+      (bootstrapTraceSteps rest + clock) + (riscvAst i).length by simp [bootstrapTraceSteps]; omega,
+      firstRun, restRun]
+
 /-- Compiler properties at the computed assembler endpoint transfer to the
 submitted bootstrap entry state. No final machine run is assumed. -/
 theorem checked_trace_behavior_property {σ : Type}
