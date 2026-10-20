@@ -2770,6 +2770,223 @@ theorem pan_to_word_halt_of_word_not_timeOut {width : Nat} [NeZero width] {C σ 
   subst hr
   exact ⟨hcw', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
 
+/-- Two non-`.timeOut` `evalCrepSemHOLProgExact` runs on the same program and state
+(at clocks `k` and `k'`) produce the exact same result and FFI state (`evalCrepSemHOLProgExact_add_clock_eq`). -/
+theorem crepEvaluateIgnoreClocks {width : Nat} [NeZero width] {σ : Type}
+    (prog : CrepProgHOL width)
+    (s : CrepSemHOLState width σ)
+    (k k' : Nat) (r1 r2 : Option (CrepResultHOLExact width))
+    (post1 post2 : CrepSemHOLState width σ)
+    (h1 : evalCrepSemHOLProgExact { s with clock := k } prog = (r1, post1))
+    (hnt1 : r1 ≠ some .timeOut)
+    (h2 : evalCrepSemHOLProgExact { s with clock := k' } prog = (r2, post2))
+    (hnt2 : r2 ≠ some .timeOut) :
+    r1 = r2 ∧ post1.ffi = post2.ffi := by
+  have ha1 := evalCrepSemHOLProgExact_add_clock_eq prog { s with clock := k } r1 post1 k' h1 hnt1
+  have ha2 := evalCrepSemHOLProgExact_add_clock_eq prog { s with clock := k' } r2 post2 k h2 hnt2
+  have heq1 : ({ { s with clock := k } with clock := k + k' } : CrepSemHOLState width σ) =
+      { s with clock := k + k' } := by cases s; rfl
+  have heq2 : ({ { s with clock := k' } with clock := k' + k } : CrepSemHOLState width σ) =
+      { s with clock := k + k' } := by
+    have hc : k' + k = k + k' := Nat.add_comm k' k
+    cases s; simp [hc]
+  simp only at ha1 ha2
+  rw [heq1] at ha1
+  rw [heq2] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hpost
+  have hffi : ({ post1 with clock := post1.clock + k' } : CrepSemHOLState width σ).ffi =
+      ({ post2 with clock := post2.clock + k } : CrepSemHOLState width σ).ffi :=
+    congrArg CrepSemHOLState.ffi hpost
+  exact ⟨hr, hffi⟩
+
+/-- Two non-`.timeOut` `LoopSemStateFiniteExact.evaluate` runs on the same program and state
+(at clocks `k` and `k'`) produce the exact same result and FFI state (`LoopSemStateFiniteExact.evaluate_add_clock_eq`). -/
+theorem loopEvaluateIgnoreClocks {width : Nat} [NeZero width] {F : Type}
+    (prog : HolLoopProg width)
+    (s : LoopSemStateFiniteExact width F)
+    (k k' : Nat) (r1 r2 : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (post1 post2 : LoopSemStateFiniteExact width F)
+    (h1 : LoopSemStateFiniteExact.evaluate prog { s with clock := k } = (r1, post1))
+    (hnt1 : r1 ≠ some .timeOut)
+    (h2 : LoopSemStateFiniteExact.evaluate prog { s with clock := k' } = (r2, post2))
+    (hnt2 : r2 ≠ some .timeOut) :
+    r1 = r2 ∧ post1.ffi = post2.ffi := by
+  have ha1 := LoopSemStateFiniteExact.evaluate_add_clock_eq prog { s with clock := k } r1 post1 k' h1 hnt1
+  have ha2 := LoopSemStateFiniteExact.evaluate_add_clock_eq prog { s with clock := k' } r2 post2 k h2 hnt2
+  have heq1 : ({ { s with clock := k } with clock := k + k' } : LoopSemStateFiniteExact width F) =
+      { s with clock := k + k' } := by cases s; rfl
+  have heq2 : ({ { s with clock := k' } with clock := k' + k } : LoopSemStateFiniteExact width F) =
+      { s with clock := k + k' } := by
+    have hc : k' + k = k + k' := Nat.add_comm k' k
+    cases s; simp [hc]
+  simp only at ha1 ha2
+  rw [heq1] at ha1
+  rw [heq2] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hpost
+  have hffi : ({ post1 with clock := post1.clock + k' } : LoopSemStateFiniteExact width F).ffi =
+      ({ post2 with clock := post2.clock + k } : LoopSemStateFiniteExact width F).ffi :=
+    congrArg LoopSemStateFiniteExact.ffi hpost
+  exact ⟨hr, hffi⟩
+
+/-- Arbitrary-clock `CrepToLoop` non-timeout run agreement: if `s` (`CrepSem`) runs `start`
+at clock `k` without `.error`, and `t` (`LoopSem`) does not time out at any clock `K_loop`,
+then `t` at clock `K_loop` produces `resultToLoop res` and identical FFI state `s1.ffi`! -/
+theorem crep_to_loop_halt_of_loop_not_timeOut {width : Nat} [NeZero width] {σ : Type}
+    (s : CrepSemHOLState width σ) (t : LoopSemStateFiniteExact width σ)
+    (crep_code : List (MlString × List Nat × CrepProgHOL width))
+    (start : MlString) (lc : Nat) (c : AsmArchitecture)
+    (prog : CrepProgHOL width) (k : Nat)
+    (res : Option (CrepResultHOLExact width)) (s1 : CrepSemHOLState width σ)
+    (K_loop : Nat)
+    (res_loop : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (t1 : LoopSemStateFiniteExact width σ)
+    (hmd : s.memaddrs = (fun address => t.mdomain address = true))
+    (hbe : s.be = t.be)
+    (hsh : s.shMemaddrs = (fun address => t.shMdomain address = true))
+    (hffi : s.ffi = t.ffi)
+    (hbase : s.baseAddr = t.baseAddr)
+    (htop : s.topAddr = t.topAddr)
+    (hmem : crepToLoopMemRelHOLExact s.memory t.memory s.memaddrs)
+    (hglob : crepToLoopGlobalsRelHOLExact s.globals t.globals)
+    (hdist : (crep_code.map Prod.fst).Nodup)
+    (hscode : s.code = alistToFmapCodeExact crep_code)
+    (htcode : t.code = sptFromAList (compileProgHOLExact c crep_code))
+    (hloc : s.locals = HolFiniteMapExact.empty)
+    (hmf : (crepToLoopMakeFuncsExactHOL crep_code).lookup start = some (lc, 0))
+    (hprog : holAlookup crep_code start = some ([], prog))
+    (hev : evalCrepSemHOLProgExact { s with clock := k } (.call none start []) = (res, s1))
+    (hne : res ≠ some .error)
+    (hnt_src : res ≠ some .timeOut)
+    (hev_t : LoopSemStateFiniteExact.evaluate
+      (.call none (some lc) [] none : HolLoopProg width)
+      { t with clock := K_loop } = (res_loop, t1))
+    (hnt : res_loop ≠ some .timeOut) :
+    res_loop = Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res ∧
+      t1.ffi = s1.ffi := by
+  obtain ⟨k', t', hrun', hffi'⟩ := crep_to_loop_clocked_sim s t crep_code start lc c prog k
+    res s1 hmd hbe hsh hffi hbase htop hmem hglob hdist hscode htcode hloc hmf hprog hev hne
+  have hnt' : Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res ≠ some .timeOut := by
+    rcases res with _ | r_val
+    · intro h; cases h
+    · cases r_val <;> intro h <;> first | exact hnt_src rfl | cases h
+  obtain ⟨hr, hffi_eq⟩ := loopEvaluateIgnoreClocks
+    (.call none (some lc) [] none) t K_loop (k + k')
+    res_loop (Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop res)
+    t1 t' hev_t hnt hrun' hnt'
+  exact ⟨hr, hffi_eq.trans hffi'.symm⟩
+
+/-- Two non-`.timeOut` `PanSemStateFiniteExact.evaluateHOLFiniteState` runs on the same program and state
+(at clocks `k` and `k'`) produce the exact same result and FFI state (`panPropsEvaluateAddClockEq`). -/
+theorem panEvaluateIgnoreClocks {width : Nat} [NeZero width] {σ : Type}
+    (prog : ProgHOL width)
+    (s : PanSemStateFiniteExact width σ)
+    (k k' : Nat) (r1 r2 : Option (PanSemResultExact width))
+    (post1 post2 : PanSemStateFiniteExact width σ)
+    (h1 : PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k } prog = (r1, post1))
+    (hnt1 : r1 ≠ some .timeOut)
+    (h2 : PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k' } prog = (r2, post2))
+    (hnt2 : r2 ≠ some .timeOut) :
+    r1 = r2 ∧ post1.ffi = post2.ffi := by
+  have ha1 := panPropsEvaluateAddClockEq prog { s with clock := k } r1 post1 k' ⟨h1, hnt1⟩
+  have ha2 := panPropsEvaluateAddClockEq prog { s with clock := k' } r2 post2 k ⟨h2, hnt2⟩
+  simp only [Nat.add_comm k' k] at ha2
+  rw [ha1] at ha2
+  injection ha2 with hr hpost
+  have hffi : ({ post1 with clock := post1.clock + k' } : PanSemStateFiniteExact width σ).ffi =
+      ({ post2 with clock := post2.clock + k } : PanSemStateFiniteExact width σ).ffi :=
+    congrArg PanSemStateFiniteExact.ffi hpost
+  exact ⟨hr, hffi⟩
+
+open Classical in
+/-- Under `crepSemantics s start = .terminate outcome events`, any clock `k`
+at which `(evalCrepSemHOLProgExact { s with clock := k } (.call none start [])).1 ≠ some .timeOut`
+completes with `crepResultOutcome res = some outcome` and `post.ffi.ioEvents = events`! -/
+theorem crep_halt_of_not_timeOut {width : Nat} [NeZero width] {σ : Type}
+    (s : CrepSemHOLState width σ) (start : MlString)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hsem : crepSemantics s start = .terminate outcome events)
+    (k : Nat) (res : Option (CrepResultHOLExact width))
+    (post : CrepSemHOLState width σ)
+    (hrun : evalCrepSemHOLProgExact { s with clock := k } (.call none start []) = (res, post))
+    (hnt : res ≠ some .timeOut) :
+    crepResultOutcome res = some outcome ∧
+    post.ffi.ioEvents = events := by
+  rw [crepSemIsWrapper] at hsem
+  unfold crepToLoopSemanticsWrapper at hsem
+  dsimp only at hsem
+  split at hsem
+  · cases hsem
+  · rename_i hnoerr
+    split at hsem
+    · rename_i b hsome
+      subst hsem
+      obtain ⟨k0, out0, ev0, hk0, heq⟩ := holOptionSome_some hsome
+      injection heq with hout0 hev0
+      subst hout0 hev0
+      simp only [Function.comp_apply, Prod.map] at hk0
+      rcases hrun0 : evalCrepSemHOLProgExact { s with clock := k0 }
+        (.call none start []) with ⟨res0, post0⟩
+      rw [hrun0] at hk0
+      simp only [Prod.mk.injEq] at hk0
+      obtain ⟨hclass0, rfl⟩ := hk0
+      have hnt0 : res0 ≠ some .timeOut := by
+        intro h; subst h; cases hclass0
+      obtain ⟨hr, hffi⟩ := crepEvaluateIgnoreClocks (.call none start [])
+        s k k0 res res0 post post0 hrun hnt hrun0 hnt0
+      subst hr
+      refine ⟨?_, congrArg HolFfiState.ioEvents hffi⟩
+      rcases res with _ | (_ | _ | _ | _ | _ | _) <;>
+        simp [crepResultOutcome] at hclass0 ⊢ <;> exact hclass0
+    · cases hsem
+
+open Classical in
+/-- Under `LoopSemStateFiniteExact.semantics s start = .terminate outcome events`, any clock `k`
+at which `(LoopSemStateFiniteExact.evaluate (.call none (some start) [] none) { s with clock := k }).1 ≠ some .timeOut`
+completes with `outcome` and `post.ffi.ioEvents = events`! -/
+theorem loop_halt_of_not_timeOut {width : Nat} [NeZero width] {F : Type}
+    (s : LoopSemStateFiniteExact width F) (start : Nat)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (hsem : LoopSemStateFiniteExact.semantics s start = .terminate outcome events)
+    (k : Nat) (res : Option (LoopSemStateFiniteExact.LoopResultExact width))
+    (post : LoopSemStateFiniteExact width F)
+    (hrun : LoopSemStateFiniteExact.evaluate (.call none (some start) [] none)
+      { s with clock := k } = (res, post))
+    (hnt : res ≠ some .timeOut) :
+    (match res with
+      | some (.finalFfi e) => outcome = .ffiOutcome e
+      | some (.result _) => outcome = .success
+      | _ => False) ∧
+    post.ffi.ioEvents = events := by
+  rw [loopSemIsWrapper] at hsem
+  unfold crepToLoopSemanticsWrapper at hsem
+  dsimp only at hsem
+  split at hsem
+  · cases hsem
+  · rename_i hnoerr
+    split at hsem
+    · rename_i b hsome
+      subst hsem
+      obtain ⟨k0, out0, ev0, hk0, heq⟩ := holOptionSome_some hsome
+      injection heq with hout0 hev0
+      subst hout0 hev0
+      simp only [Function.comp_apply, Prod.map] at hk0
+      rcases hrun0 : LoopSemStateFiniteExact.evaluate (.call none (some start) [] none)
+        { s with clock := k0 } with ⟨res0, post0⟩
+      rw [hrun0] at hk0
+      simp only [Prod.mk.injEq] at hk0
+      obtain ⟨hclass0, rfl⟩ := hk0
+      have hnt0 : res0 ≠ some .timeOut := by
+        intro h; subst h; cases hclass0
+      obtain ⟨hr, hffi⟩ := loopEvaluateIgnoreClocks (.call none (some start) [] none)
+        s k k0 res res0 post post0 hrun hnt hrun0 hnt0
+      subst hr
+      refine ⟨?_, congrArg HolFfiState.ioEvents hffi⟩
+      rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;>
+        simp at hclass0 ⊢ <;> exact hclass0.symm
+    · cases hsem
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -2806,5 +3023,11 @@ theorem pan_to_word_halt_of_word_not_timeOut {width : Nat} [NeZero width] {C σ 
 #print axioms pan_to_target_pan_to_word_stage_lab_run_agree_of_not_timeOut
 #print axioms pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
 #print axioms pan_to_word_halt_of_word_not_timeOut
+#print axioms crepEvaluateIgnoreClocks
+#print axioms loopEvaluateIgnoreClocks
+#print axioms crep_to_loop_halt_of_loop_not_timeOut
+#print axioms panEvaluateIgnoreClocks
+#print axioms crep_halt_of_not_timeOut
+#print axioms loop_halt_of_not_timeOut
 
 end InitE
