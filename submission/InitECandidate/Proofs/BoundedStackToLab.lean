@@ -547,6 +547,108 @@ theorem full_make_init_clocked_halt {width : Nat} [NeZero width] {C F : Type}
         (ck3 + (k + ck1 + ck2) + 1) outcome s_post.ffi.ioEvents hruns_s3
       exact ⟨(ck3 + (k + ck1 + ck2) + 1) + k' - 1, hhalt, hev_lab⟩
 
+private theorem sptAListLookup_eq_local {α : Type} (key : Nat) :
+    ∀ entries : List (Nat × α), sptAListLookup key entries = panPropsALookupEq key entries
+  | [] => rfl
+  | (other, value) :: entries => by
+      simp only [sptAListLookup, panPropsALookupEq, sptAListLookup_eq_local key entries]
+      by_cases h : key = other
+      · subst h; simp
+      · simp [h, Ne.symm h]
+
+private theorem mem_of_lookup_local {α : Type} {key : Nat} {value : α} :
+    ∀ {entries : List (Nat × α)}, panPropsALookupEq key entries = some value →
+      (key, value) ∈ entries
+  | [], h => by simp [panPropsALookupEq] at h
+  | (other, v) :: entries, h => by
+      simp only [panPropsALookupEq] at h
+      by_cases ho : other = key
+      · subst ho
+        simp only [decide_true, if_true, Option.some.injEq] at h
+        subst h
+        exact List.mem_cons_self
+      · simp only [ho, decide_false, Bool.false_eq_true, if_false] at h
+        exact List.mem_cons_of_mem _ (mem_of_lookup_local h)
+
+/-- Top-level `WordToStack.Native` clocked simulation under `wordLangSafeForSpace`:
+from `initStateOk` and the `compileNative` conventions, a non-error `WordSem` entry call
+on `makeInit asmConf k t (sptFromAList code) coracle` at clock `clk` yields a `StackSem`
+entry call on `t` at clock `clk + ck` with mapped result and identical FFI state. -/
+theorem word_to_stack_compile_clocked_sim {width : Nat} [NeZero width] {C F : Type}
+    (asmConf : AsmConfigExact width) (code : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (t : StackSemStateFiniteExact width C F) (k : Nat)
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (start clk : Nat)
+    (res : Option (WordSemResult width))
+    (s1 : WordSemStateFiniteExact width (Nat × C) F)
+    (codeEq : t.code = sptFromAList (WordToStack.Native.compileNative asmConf false code).2.2.2)
+    (kEq : k = asmConf.regCount - (5 + asmConf.avoidRegs.length))
+    (ok : WordToStackProofs.InitializationStateRel.initStateOk asmConf k t coracle)
+    (noRaise : panPropsALookupEq raiseStubLocation code = none)
+    (noStore : panPropsALookupEq storeConstsStubLocation code = none)
+    (bitmapsPrefix : (WordToStack.Native.compileNative asmConf false code).1 <+: t.bitmaps)
+    (conventions : ∀ entry ∈ code, flatExpConventions entry.2.2 = true ∧
+      postAllocConventionsHOL (asmConf.regCount - (5 + asmConf.avoidRegs.length))
+        entry.2.2 = true)
+    (safe : WordSemStateFiniteExact.wordLangSafeForSpace
+      (WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle) start)
+    (hrun : WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
+      { WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle with
+        clock := clk } = (res, s1))
+    (hne : res ≠ some .error) :
+    ∃ ck t1,
+      StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+        { t with clock := clk + ck }) =
+        (res.map WordToStackProofs.CompCorrect.compileResult, t1) ∧
+      s1.ffi = t1.ffi := by
+  subst kEq
+  rcases compiled : WordToStack.Native.compileWordToStackNative asmConf false
+      (asmConf.regCount - (5 + asmConf.avoidRegs.length)) code (.list [4], 1) with
+    ⟨bodies, frames, output, nextIndex⟩
+  simp only [WordToStack.Native.compileNative, Bool.false_eq_true, if_false, compiled]
+    at codeEq bitmapsPrefix
+  have keys := Flapjack.WordToStackProofs.mapFstCompileWordToStack asmConf false _ code (.list [4], 1)
+    bodies (frames, (output, nextIndex)) compiled
+  have stubsDistinct : raiseStubLocation ≠ storeConstsStubLocation := by
+    simp [raiseStubLocation, storeConstsStubLocation, wordNumStubs]
+  have related : WordToStackProofs.stateRel asmConf
+      (asmConf.regCount - (5 + asmConf.avoidRegs.length)) 0 0
+      (WordToStack.Native.Initialization.makeInit asmConf
+        (asmConf.regCount - (5 + asmConf.avoidRegs.length)) t (sptFromAList code)
+        coracle : WordSemStateFiniteExact width (Nat × C) F)
+      t [] 0 := by
+    apply WordToStackProofs.InitializationStateRel.initStateOkImpliesStateRel
+    refine ⟨?_, ?_, ?_, ?_, ok⟩
+    · rw [codeEq, sptLookup_sptFromAList, sptAListLookup_eq_local]
+      simp [panPropsALookupEq]
+    · rw [codeEq, sptLookup_sptFromAList, sptAListLookup_eq_local]
+      simp [panPropsALookupEq, stubsDistinct]
+    · intro n wordProg argumentCount lookup
+      rw [sptLookup_sptFromAList, sptAListLookup_eq_local] at lookup
+      have member := mem_of_lookup_local lookup
+      obtain ⟨flat, allocated⟩ := conventions _ member
+      obtain ⟨bs, i, bs2, i2, frame, body, compileRun, b1, b2, b3, bodyLookup⟩ :=
+        WordToStack.Native.compileWordToStackImpALookup asmConf false _ code (.list [4]) 1
+          bodies frames output nextIndex n argumentCount wordProg t.bitmaps compiled lookup
+          (by simp [appListAppend, appendAux]) (by simp [appListAppend, appendAux])
+          (by simpa [appListAppend, appendAux] using bitmapsPrefix)
+      refine ⟨allocated, flat, bs, i, bs2, i2, frame, body, compileRun, b1, b2, b3, ?_⟩
+      have notRaise : n ≠ raiseStubLocation := by
+        rintro rfl
+        rw [noRaise] at lookup
+        cases lookup
+      have notStore : n ≠ storeConstsStubLocation := by
+        rintro rfl
+        rw [noStore] at lookup
+        cases lookup
+      rw [codeEq, sptLookup_sptFromAList, sptAListLookup_eq_local]
+      simp [panPropsALookupEq, Ne.symm notRaise, Ne.symm notStore, bodyLookup]
+    · rw [codeEq, sptDomainFromAList, sptDomainFromAList]
+      funext x
+      simp only [List.map_cons, List.mem_cons, keys]
+  exact word_to_stack_clocked_sim asmConf (asmConf.regCount - (5 + asmConf.avoidRegs.length))
+    _ t start clk res s1 related safe hrun hne
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -556,5 +658,6 @@ theorem full_make_init_clocked_halt {width : Nat} [NeZero width] {C F : Type}
 #print axioms stack_names_clocked_agree
 #print axioms stack_to_lab_clocked_halt
 #print axioms full_make_init_clocked_halt
+#print axioms word_to_stack_compile_clocked_sim
 
 end InitE

@@ -3,6 +3,9 @@ import Flapjack.Pancake.LoopToWord.Proofs.StateRelImpSemantics
 import Flapjack.Pancake.CrepToLoop.Proofs.StateRelImpSemantics
 import Flapjack.Pancake.Proofs.PanToCrep.StateRelImpSemanticsTop
 import Flapjack.Pancake.Proofs.PanToWord.StateRelImpSemantics
+import Flapjack.Pancake.Proofs.PanSimp.StateRelImpSemantics
+import Flapjack.Pancake.Proofs.PanStructs.SemanticsEq
+import Flapjack.Pancake.Proofs.PanGlobals.CompileTopSemanticsDecls
 
 namespace InitE
 open Flapjack Flapjack.Pancake.PanLang
@@ -206,9 +209,166 @@ theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
   rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
     (try split at hres) <;> simp_all [panEntryClass]
 
+/-- Clock-preserving `PanSimp` simulation: at any clock `k`, a non-error entry call
+on `s` produces the exact same result and FFI state on `t` at the same clock `k` (`extra = 0`). -/
+theorem pan_simp_clocked_agree {width : Nat} [NeZero width] {σ : Type}
+    (s t : PanSemStateFiniteExact width σ) (start : MlS) (k : Nat)
+    (hrel : PanSimp.stateRel s t t.code)
+    (hne : (PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k }
+      (.call none start [] : ProgHOL width)).1 ≠ some .error) :
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { t with clock := k }
+      (.call none start [] : ProgHOL width)).1 =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k }
+        (.call none start [] : ProgHOL width)).1 ∧
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { t with clock := k }
+      (.call none start [] : ProgHOL width)).2.ffi =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k }
+        (.call none start [] : ProgHOL width)).2.ffi := by
+  obtain ⟨ht, hnone, hsome⟩ := hrel
+  rcases hs : PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := k }
+      (.call none start [] : ProgHOL width) with ⟨result, sourcePost⟩
+  have hne' : result ≠ some .error := by simpa only [hs] using hne
+  obtain ⟨hsim, _⟩ := PanSimp.codeSimAll (.call none start []) { s with clock := k }
+    result sourcePost t.code hs hne' ⟨hnone, hsome⟩
+  have htk : ({ t with clock := k } : PanSemStateFiniteExact width σ) =
+      { s with clock := k, code := t.code } := by
+    rw [ht]
+  rw [htk, hsim]
+  exact ⟨rfl, rfl⟩
+
+/-- Clock-preserving `PanStructs` simulation: at any clock `k`, a non-error entry call
+on `source` produces a `PanSem` entry call on `convertStateExact context source` at the
+same clock `k` (`extra = 0`) with mapped result `convertResHOL` and identical FFI state. -/
+theorem pan_structs_clocked_agree {width : Nat} [NeZero width] {σ : Type}
+    (source : PanSemStateFiniteExact width σ) (start : MlS)
+    (context : Pancake.PanStructs.CompileShapeExact.ContextExact) (k : Nat)
+    (res : Option (PanSemResultExact width)) (post : PanSemStateFiniteExact width σ)
+    (hstructs : context.structs = source.structs.map (fun entry => (entry.1, entry.2.fields)))
+    (hlocals : source.locals = HolFiniteMapExact.empty)
+    (hfields : feveryHOL
+      (fun entry => valueFldsOkHOLExact source.structs entry.2)
+      source.globals)
+    (hwf : feveryHOL
+      (fun entry => isWfShapeValueHOLExact source.structs entry.2)
+      source.globals)
+    (hclocals : context.locals = [])
+    (hglobals : Pancake.Proofs.PanStructs.ShapeMap.shapeMap context.globals =
+      source.globals.map2 (fun entry => shapeOfHOLExact entry.2))
+    (hinfos : Pancake.Proofs.PanStructs.StructInfosOkExact.structInfosOkHOLExact source.structs)
+    (hev : PanSemStateFiniteExact.evaluateHOLFiniteState { source with clock := k }
+      (.call none start [] : ProgHOL width) = (res, post))
+    (hne : res ≠ some .error) :
+    PanSemStateFiniteExact.evaluateHOLFiniteState
+      { Pancake.Proofs.PanStructs.ConvertState.convertStateExact context source with clock := k }
+      (.call none start [] : ProgHOL width) =
+      (convertResHOL res,
+        Pancake.Proofs.PanStructs.ConvertState.convertStateExact context post) := by
+  have hlocalfields : feveryHOL
+      (fun entry => valueFldsOkHOLExact source.structs entry.2)
+      source.locals := by
+    simp [hlocals, feveryHOL, HolFiniteMapExact.empty]
+  have hlocalwf : feveryHOL
+      (fun entry => isWfShapeValueHOLExact source.structs entry.2)
+      source.locals := by
+    simp [hlocals, feveryHOL, HolFiniteMapExact.empty]
+  have hlocalmap : Pancake.Proofs.PanStructs.ShapeMap.shapeMap context.locals =
+      source.locals.map2 (fun entry => shapeOfHOLExact entry.2) := by
+    rw [hclocals, hlocals]
+    apply HolFiniteMapExact.ext
+    rfl
+  obtain ⟨hrun, _⟩ := Pancake.Proofs.PanStructs.CompileCorrectExact.compileCorrectExact
+    (.call none start []) { source with clock := k } post context res
+    ⟨hev, hstructs, hlocalfields, hfields, hlocalwf, hwf, hinfos, hlocalmap, hglobals, hne⟩
+  have hcomp : Pancake.PanStructs.CompileShapeExact.compileProgExact context
+      (.call none start [] : ProgHOL width) = .call none start [] := by
+    simp [Pancake.PanStructs.CompileShapeExact.compileProgExact,
+      Pancake.PanStructs.CompileShapeExact.compileExpsExact]
+  rw [hcomp] at hrun
+  exact hrun
+
+/-- Clock-preserving `PanGlobals` simulation: at any clock `k`, a non-error entry call
+on `source` produces the exact same result and FFI state on `target` at the same clock `k`. -/
+theorem pan_globals_clocked_agree {width : Nat} [NeZero width] {σ : Type}
+    (context : PanGlobalsContextExact width)
+    (source target : PanSemStateFiniteExact width σ) (start : MlS) (k : Nat)
+    (hrel : panGlobalsStateRelHOLExact true context source target)
+    (hne : (PanSemStateFiniteExact.evaluateHOLFiniteState { source with clock := k }
+      (.call none start [] : ProgHOL width)).1 ≠ some .error) :
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { target with clock := k }
+      (.call none start [] : ProgHOL width)).1 =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { source with clock := k }
+        (.call none start [] : ProgHOL width)).1 ∧
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { target with clock := k }
+      (.call none start [] : ProgHOL width)).2.ffi =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { source with clock := k }
+        (.call none start [] : ProgHOL width)).2.ffi := by
+  have hclock : panGlobalsStateRelHOLExact true context
+      { source with clock := k } { target with clock := k } :=
+    ⟨hrel.1, hrel.2.1, hrel.2.2.1, hrel.2.2.2.1, hrel.2.2.2.2.1, rfl, hrel.2.2.2.2.2.2⟩
+  rcases hs : PanSemStateFiniteExact.evaluateHOLFiniteState { source with clock := k }
+      (.call none start [] : ProgHOL width) with ⟨result, sourcePost⟩
+  have hne' : result ≠ some .error := by simpa only [hs, Prod.fst] using hne
+  obtain ⟨targetPost, ht, hr⟩ := PanGlobalsCompileCorrectAssembly.compileCorrectHOL
+    (.call none start []) { source with clock := k } result context
+    { target with clock := k } sourcePost ⟨hclock, hs, hne'⟩
+  have compiledEntry : compileProgExactHOL context (.call none start [] : ProgHOL width) =
+      .call none start [] := by simp [compileProgExactHOL, compileExpExactHOLList]
+  rw [compiledEntry] at ht
+  rcases hr with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, hffi, _⟩
+  rw [ht]
+  exact ⟨rfl, hffi.symm⟩
+
+/-- Clocked `PanGlobals` initializer call shift (+1): running `start` on `s` at clock `c + 1`
+(which executes `body` at clock `0` and tail-calls `start'`) produces the exact same result
+and FFI state as running `start'` on `s'` at clock `c`. -/
+theorem pan_globals_init_call_clocked_shift {width : Nat} [NeZero width] {σ : Type}
+    (s s' : PanSemStateFiniteExact width σ) (start start' : MlS)
+    (body body' : ProgHOL width) (args' : List (MlS × ShapeHOL)) (rshape : ShapeHOL)
+    (h1 : s.code.lookup start = some ([], .seq body (.call none start' []), rshape))
+    (h2 : s.code.lookup start' = some (args', body', rshape))
+    (h3 : PanSemStateFiniteExact.evaluateHOLFiniteState
+      { s with locals := HolFiniteMapExact.empty } body = (none, s'))
+    (h4 : s'.clock = s.clock)
+    (c : Nat) :
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := c + 1 }
+      (.call none start [] : ProgHOL width)).1 =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { s' with clock := c }
+        (.call none start' [] : ProgHOL width)).1 ∧
+    (PanSemStateFiniteExact.evaluateHOLFiniteState { s with clock := c + 1 }
+      (.call none start [] : ProgHOL width)).2.ffi =
+      (PanSemStateFiniteExact.evaluateHOLFiniteState { s' with clock := c }
+        (.call none start' [] : ProgHOL width)).2.ffi := by
+  let tin : PanSemStateFiniteExact width σ := { s with locals := HolFiniteMapExact.empty }
+  have hcs : EvaluateClockSubCall.Mc tin body :=
+    EvaluateClockSubCall.mc_of_pair tin body
+      (evaluateClockSubHOLFinite body (PanPropsEvalStateFiniteExact.ofPanSemFinite tin))
+  have hzero : PanSemStateFiniteExact.evaluateHOLFiniteState { tin with clock := 0 } body =
+      (none, { s' with clock := 0 }) := by
+    have hpre : PanSemStateFiniteExact.evaluateHOLFiniteState tin body =
+        (none, { { s' with clock := 0 } with
+          clock := ({ s' with clock := 0 }).clock + s.clock }) := by
+      rw [show tin = { s with locals := HolFiniteMapExact.empty } from rfl, h3]
+      congr 1
+      simp only [Nat.zero_add]
+      rw [← h4]
+    have h := hcs none { s' with clock := 0 } s.clock hpre (by simp)
+    simpa only [tin, Nat.sub_self] using h
+  have hstep : ∀ k, PanSemStateFiniteExact.evaluateHOLFiniteState
+      { s with locals := HolFiniteMapExact.empty, clock := k } body =
+      (none, { s' with clock := k }) := by
+    intro k
+    have h := panPropsEvaluateAddClockEq body { tin with clock := 0 } none
+      { s' with clock := 0 } k ⟨hzero, by simp⟩
+    simpa only [tin, Nat.zero_add] using h
+  exact SemInitSupport.step s s' start start' body body' args' rshape h1 h2 hstep c
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
 #print axioms pan_to_crep_clocked_agree
+#print axioms pan_simp_clocked_agree
+#print axioms pan_structs_clocked_agree
+#print axioms pan_globals_clocked_agree
+#print axioms pan_globals_init_call_clocked_shift
 
 end InitE
