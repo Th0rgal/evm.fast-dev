@@ -1767,6 +1767,90 @@ theorem pan_to_target_backend_halt_agree_of_not_timeOut {width : Nat} [NeZero wi
   rw [hhaltK]
   exact ⟨rfl, hio⟩
 
+/-- Arbitrary-clock `fullMakeInit` non-timeout halt agreement (`StackRawCall` + `StackAlloc` +
+`StackRemove` + `StackNames` + `StackToLab`): if `fullMakeInit` succeeds (`= (s, opt)`) under
+`Assumptions`, `StackSem` halts on `s` at clock `k` with `.CompleteResult outcome`, and
+`LabSem.evaluate` on `t` at ANY clock `K_lab` does not time out (`≠ .timeOut`), then
+`LabSem.evaluate { t with clock := K_lab }` halts with `.halt outcome` and identical I/O events! -/
+theorem full_make_init_halt_of_lab_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    {stackConf : StackToLab.Config} {dataConf : DataToWord.Config} {maxHeap sp : Nat}
+    {offset : BitVec width × BitVec width} {bitmaps : List (BitVec width)}
+    {code : List (Nat × HolProg width)} {t : Flapjack.Compiler.Backend.LabSem.State width C F}
+    {saveRegs : Nat → Bool} {dataSp : Nat}
+    {coracle : Nat → C × List (Nat × HolProg width) × List (BitVec width)}
+    {s : StackSemStateFiniteExact width C F}
+    {opt : Option (StackSemStateFiniteExact width C F)}
+    (hfm : FullMakeInit.fullMakeInit stackConf dataConf maxHeap sp offset bitmaps code t
+      saveRegs dataSp coracle = (s, opt))
+    (hA : Assumptions stackConf dataConf maxHeap sp offset bitmaps code t saveRegs dataSp coracle)
+    (k : Nat) (res : Option (StackSemResult width)) (s_post : StackSemStateFiniteExact width C F)
+    (outcome : HolOutcome)
+    (hrun : StackSemEvaluate.evaluate
+      ((.call none (.inl BvlToBvi.initGlobalsLocation) none : HolProg width),
+        { s with clock := k }) = (res, s_post))
+    (hclass : FlattenSemantics.stackEntryClass res = .CompleteResult outcome)
+    (K_lab : Nat)
+    (hnt_lab : (LabSem.evaluate { t with clock := K_lab }).1 ≠ .timeOut) :
+    (LabSem.evaluate { t with clock := K_lab }).1 = .halt outcome ∧
+      (LabSem.evaluate { t with clock := K_lab }).2.ffi.ioEvents = s_post.ffi.ioEvents := by
+  obtain ⟨k_lab, hhalt_lab, hio_lab⟩ := full_make_init_clocked_halt hfm hA k res s_post outcome
+    hrun hclass
+  rcases heK : LabSem.evaluate { t with clock := K_lab } with ⟨resK, nextK⟩
+  rcases hek : LabSem.evaluate { t with clock := k_lab } with ⟨resk, nextk⟩
+  rw [heK] at hnt_lab
+  rw [hek] at hhalt_lab hio_lab
+  simp only at hnt_lab hhalt_lab hio_lab
+  subst hhalt_lab
+  obtain ⟨hr, hffi⟩ := labEvaluateIgnoreClocks t K_lab k_lab resK (.halt outcome) nextK nextk
+    heK hnt_lab hek (by rintro ⟨⟩)
+  exact ⟨hr, (congrArg HolFfiState.ioEvents hffi).trans hio_lab⟩
+
+/-- Arbitrary-clock `WordToStack.Native` non-timeout halt agreement under `wordLangSafeForSpace`:
+if a `WordSem` entry call on `makeInit` at clock `clk` completes (`res ≠ some .error` and
+`res ≠ some .timeOut`), and the compiled `StackSem` entry call on `t` at ANY clock `K_stack`
+does not time out (`res_t ≠ some .timeOut`), then it produces the exact mapped result
+`res.map compileResult` and identical FFI state! -/
+theorem word_to_stack_compile_halt_of_stack_not_timeOut {width : Nat} [NeZero width] {C F : Type}
+    (asmConf : AsmConfigExact width) (code : List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (t : StackSemStateFiniteExact width C F) (k : Nat)
+    (coracle : Nat → (Nat × C) × List (Nat × Nat × WordLangProgHOL (BitVec width)))
+    (start clk K_stack : Nat)
+    (res : Option (WordSemResult width))
+    (s1 : WordSemStateFiniteExact width (Nat × C) F)
+    (res_t : Option (StackSemResult width))
+    (t1 : StackSemStateFiniteExact width C F)
+    (codeEq : t.code = sptFromAList (WordToStack.Native.compileNative asmConf false code).2.2.2)
+    (kEq : k = asmConf.regCount - (5 + asmConf.avoidRegs.length))
+    (ok : WordToStackProofs.InitializationStateRel.initStateOk asmConf k t coracle)
+    (noRaise : panPropsALookupEq raiseStubLocation code = none)
+    (noStore : panPropsALookupEq storeConstsStubLocation code = none)
+    (bitmapsPrefix : (WordToStack.Native.compileNative asmConf false code).1 <+: t.bitmaps)
+    (conventions : ∀ entry ∈ code, flatExpConventions entry.2.2 = true ∧
+      postAllocConventionsHOL (asmConf.regCount - (5 + asmConf.avoidRegs.length))
+        entry.2.2 = true)
+    (safe : WordSemStateFiniteExact.wordLangSafeForSpace
+      (WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle) start)
+    (hrun : WordSemStateFiniteExact.evaluate (.call none (some start) [0] none)
+      { WordToStack.Native.Initialization.makeInit asmConf k t (sptFromAList code) coracle with
+        clock := clk } = (res, s1))
+    (hne : res ≠ some .error)
+    (hnt_w : res ≠ some .timeOut)
+    (hrun_t : StackSemEvaluate.evaluate ((.call none (.inl start) none : HolProg width),
+      { t with clock := K_stack }) = (res_t, t1))
+    (hnt : res_t ≠ some .timeOut) :
+    res_t = res.map WordToStackProofs.CompCorrect.compileResult ∧ t1.ffi = s1.ffi := by
+  obtain ⟨ck, t_post, hrun_post, hffi_post⟩ := word_to_stack_compile_clocked_sim asmConf code t k
+    coracle start clk res s1 codeEq kEq ok noRaise noStore bitmapsPrefix conventions safe hrun hne
+  have hnt_post : res.map WordToStackProofs.CompCorrect.compileResult ≠ some .timeOut := by
+    cases res with
+    | none => rintro ⟨⟩
+    | some r =>
+      cases r <;> simp [WordToStackProofs.CompCorrect.compileResult] at hnt_w ⊢
+  obtain ⟨hr, hffi⟩ := stackEvaluateIgnoreClocks (.call none (.inl start) none) t K_stack (clk + ck)
+    res_t (res.map WordToStackProofs.CompCorrect.compileResult) t1 t_post
+    hrun_t hnt hrun_post hnt_post
+  exact ⟨hr, hffi.trans hffi_post.symm⟩
+
 #print axioms word_to_word_clocked_agree
 #print axioms word_to_stack_clocked_sim
 #print axioms stack_rawcall_clocked_sim
@@ -1792,5 +1876,7 @@ theorem pan_to_target_backend_halt_agree_of_not_timeOut {width : Nat} [NeZero wi
 #print axioms full_make_init_run_agree_of_not_timeOut
 #print axioms word_to_stack_compile_run_agree_of_not_timeOut
 #print axioms pan_to_target_backend_halt_agree_of_not_timeOut
+#print axioms full_make_init_halt_of_lab_not_timeOut
+#print axioms word_to_stack_compile_halt_of_stack_not_timeOut
 
 end InitE

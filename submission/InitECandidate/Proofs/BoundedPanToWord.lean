@@ -2707,6 +2707,69 @@ theorem pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
   subst hr
   exact ⟨hcw', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
 
+open LoopToWordStateRelImpSemanticsSupport in
+/-- Arbitrary-clock `WordSem` halt agreement for `pan_to_word_clocked_sim`:
+under the 24 hypotheses of `panToWordStateRelImpSemantics`, if `code` evaluates declarations to
+`s_decls`, `s_decls` runs `start` at clock `k` with `panEntryClass res_src = .CompleteResult outcome`,
+and `target` (`WordSem`) does not time out at any clock `K_word` (`res_word ≠ some .timeOut`), then
+`target` at clock `K_word` completes with `wordEntryClass res_word = .CompleteResult outcome` and
+identical I/O events! -/
+theorem pan_to_word_halt_of_word_not_timeOut {width : Nat} [NeZero width] {C σ : Type}
+    (source : PanSemStateFiniteExact width σ) (target : WordSemStateFiniteExact width C σ)
+    (arch : AsmArchitecture) (code : List (DeclHOL width)) (start : MlS)
+    (globalsSize : Nat) (heapLen : BitVec width)
+    (h : (∀ address, source.memaddrs address → target.memory address = wlabWlocExact (source.memory address)) ∧
+      noLabelsHOL target.memory (fun address => target.mdomain address = true) ∧
+      start = ofString "main" ∧
+      globalsSize = ((decShapesHOL code).map
+        (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] code)))).sum ∧
+      distinctParamsHOL (functionsHOL code) ∧
+      (fun address => target.mdomain address = true) =
+        (fun address => source.memaddrs address ∨ Compiler.Backend.StackRemove.addresses source.topAddr globalsSize address) ∧
+      (fun address => target.shMdomain address = true) = source.shMemaddrs ∧
+      target.be = source.be ∧ target.ffi = source.ffi ∧
+      target.store.lookup .currHeap = some (.word source.baseAddr) ∧
+      target.store.lookup .heapLength = some (.word heapLen) ∧
+      source.topAddr = source.baseAddr + (2 : BitVec width) * heapLen - panBytesInWord width * BitVec.ofNat width globalsSize ∧
+      ((functionsHOL code).map Prod.fst).Nodup ∧ panGlobalsByteAlignedHOL source.topAddr ∧
+      globalsAllocatableHOL source code ∧ source.code = HolFiniteMapExact.empty ∧
+      target.code = sptFromAList (panToWordCompileProgHOL arch code) ∧
+      source.globals = HolFiniteMapExact.empty ∧ source.locals = HolFiniteMapExact.empty ∧
+      sizeOfEidsHOL code < 2 ^ width ∧ source.eshapes = HolFiniteMapExact.empty ∧
+      sptLookup 0 target.locals = some (WordLocW.loc 1 0) ∧ goodDimindex width ∧
+      PanSemStateFiniteExact.semanticsDecls source start code ≠ .fail)
+    (stCtxt : StructContextExact) (s_decls : PanSemStateFiniteExact width σ)
+    (hst : decsStcnamesHOLExact [] code = some stCtxt)
+    (hev_decls : @PanSemStateFiniteExact.evaluateDeclsHOLFinite width σ _
+      { source with structs := stCtxt } (fun a => Classical.propDecidable (source.memaddrs a))
+      code = some s_decls)
+    (k : Nat) (res_src : Option (PanSemResultExact width))
+    (s_src_post : PanSemStateFiniteExact width σ) (outcome : HolOutcome)
+    (hev_call : PanSemStateFiniteExact.evaluateHOLFiniteState { s_decls with clock := k }
+      (.call none start [] : ProgHOL width) = (res_src, s_src_post))
+    (hclass_src : panEntryClass res_src = .CompleteResult outcome)
+    (K_word : Nat) (res_word : Option (WordSemResult width))
+    (t_word : WordSemStateFiniteExact width C σ)
+    (hrun_w : WordSemStateFiniteExact.evaluate
+      (.call none (some firstLoopName) [0] none : WordLangProgHOL (BitVec width))
+      { target with clock := K_word } = (res_word, t_word))
+    (hnt_w : res_word ≠ some .timeOut) :
+    wordEntryClass res_word = .CompleteResult outcome ∧
+      t_word.ffi.ioEvents = s_src_post.ffi.ioEvents := by
+  have hne_src : panEntryClass res_src ≠ .RunError := by
+    rw [hclass_src]; intro herr; cases herr
+  obtain ⟨k', t_word', res_word', hrun_w', hio_w', hclass_w'⟩ :=
+    pan_to_word_clocked_sim source target arch code start globalsSize heapLen h stCtxt s_decls
+      hst hev_decls k res_src s_src_post hev_call hne_src
+  have hcw' : wordEntryClass res_word' = .CompleteResult outcome := hclass_w'.trans hclass_src
+  have hnt_w' : res_word' ≠ some .timeOut := by
+    intro ht; subst ht; cases hcw'
+  obtain ⟨hr, hffi_eq⟩ := wordEvaluateIgnoreClocks
+    (.call none (some firstLoopName) [0] none) target K_word ((k + 1) + k')
+    res_word res_word' t_word t_word' hrun_w hnt_w hrun_w' hnt_w'
+  subst hr
+  exact ⟨hcw', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
+
 #print axioms loop_to_word_clocked_agree
 #print axioms crep_to_loop_clocked_sim
 #print axioms crep_inline_clocked_agree
@@ -2742,5 +2805,6 @@ theorem pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
 #print axioms oracle_baseline_endpoint_halt_agree_of_not_timeOut
 #print axioms pan_to_target_pan_to_word_stage_lab_run_agree_of_not_timeOut
 #print axioms pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
+#print axioms pan_to_word_halt_of_word_not_timeOut
 
 end InitE
