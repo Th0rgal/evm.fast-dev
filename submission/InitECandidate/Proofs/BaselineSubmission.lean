@@ -8,27 +8,27 @@ set_option maxRecDepth 10000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend.LabToTarget
 private theorem entryPc_model :
-    (⟨InitECandidate.code,.infinity,nativePc,baselineNames,20,baselineMmio⟩ : Submission).machineConfig.ffiEntryPcs = baselineEntryPcs := by
+    (⟨InitECandidate.code,.infinity,nativePc,baselineNames,2,baselineMmio⟩ : Submission).machineConfig.ffiEntryPcs = baselineEntryPcs := by
   change baselineSubmission.machineConfig.ffiEntryPcs = baselineEntryPcs
   rw [baselineSubmission_machineConfig]
   exact challengeMachineConfig_entries (BitVec.ofNat 64 nativePc) programDomain
-    machineSharedDomain baselineNames 20 baselineMmio
+    machineSharedDomain baselineNames 2 baselineMmio
 private theorem program_model :
-    (⟨InitECandidate.code,.infinity,nativePc,baselineNames,20,baselineMmio⟩ : Submission).programDomain = programDomain := rfl
+    (⟨InitECandidate.code,.infinity,nativePc,baselineNames,2,baselineMmio⟩ : Submission).programDomain = programDomain := rfl
 
 private theorem baselineSubmission_code : baselineSubmission.code = InitECandidate.code := rfl
 
 theorem baselineSubmission_admitted : baselineSubmission.Admitted := by
-  have hsize : InitECandidate.code.length = 950344 := baseline_literal_layout.2.2
-  refine Submission.admitted_literal InitECandidate.code .infinity nativePc baselineNames 20 baselineMmio
+  have hsize : InitECandidate.code.length = 1028080 := baseline_literal_layout.2.2
+  refine Submission.admitted_literal InitECandidate.code .infinity nativePc baselineNames 2 baselineMmio
     ?_ ?_ (by decide) ?_ (by decide) baseline_finite_facts.1
     baseline_submission_finite.1 ?_ baseline_finite_facts.2.1 ?_ ?_ ?_ ?_ ?_ ?_ ?_
   · rw [hsize]; decide
   · rw [hsize]; decide
-  · rw [hsize]; change nativePc < initialPc + 950344; decide
-  · have h : ∀ i : Fin 22,
+  · rw [hsize]; change nativePc < initialPc + 1028080; decide
+  · have h : ∀ i : Fin 4,
         let a := BitVec.ofNat 64 nativePc - BitVec.ofNat 64 (ffiOffset * (i.val+1))
-        initialPc < a.toNat ∧ a.toNat < initialPc + 950344 := by decide
+        initialPc < a.toNat ∧ a.toNat < initialPc + 1028080 := by decide
     simpa only [baseline_literal_layout.2.2] using h
   · rw [entryPc_model]; exact baseline_submission_finite.2.1
   · intro a ha

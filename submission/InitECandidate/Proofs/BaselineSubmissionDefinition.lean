@@ -10,7 +10,7 @@ open Flapjack Flapjack.Compiler.Backend.LabToTarget
 
 def baselineSubmission : Submission :=
   { code := InitECandidate.code, K := .infinity
-    anchorPc := nativePc, names := baselineNames, first := 20, extra := baselineMmio }
+    anchorPc := nativePc, names := baselineNames, first := 2, extra := baselineMmio }
 
 theorem baselineSubmission_machineConfig : baselineSubmission.machineConfig = baselineMachineConfig := rfl
 
@@ -20,7 +20,7 @@ private theorem baselineSubmission_memory (input : Guest.InputBlob) :
     baselineSubmission.initialMemory input = (fun a =>
       if machineSharedDomain a then byteToBits ((Guest.guestHostMemory input a).getD 0)
       else initialMemory a) := by
-  have h := submission_record_memory InitECandidate.code .infinity nativePc baselineNames 20 baselineMmio input
+  have h := submission_record_memory InitECandidate.code .infinity nativePc baselineNames 2 baselineMmio input
   rw [baseline_pureMemory] at h
   have hd : submissionSharedDomain = machineSharedDomain := rfl
   unfold hostOverlay at h

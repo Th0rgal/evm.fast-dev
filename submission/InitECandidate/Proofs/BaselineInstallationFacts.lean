@@ -28,7 +28,7 @@ def programDomain (a : BitVec 64) : Prop :=
 
 noncomputable def baselineMachineConfig : MachineConfig 64 riscv_state RiscVProjection :=
   challengeMachineConfig (BitVec.ofNat 64 nativePc) programDomain machineSharedDomain
-    baselineNames 20 baselineMmio
+    baselineNames 2 baselineMmio
 
 /-- Explicit reduced integer RISC-V machine: machine privilege, identity
 translation, no pending transfer and no exception. -/
@@ -63,7 +63,7 @@ theorem machineStateOfAsm_relation (t : AsmState 64) (hpc : holAligned 2 t.pc = 
     have : i < 0 := hi
     omega
 
-theorem baseline_ffi_boundary : mmioPcsMinIndex baselineNames = some 20 :=
+theorem baseline_ffi_boundary : mmioPcsMinIndex baselineNames = some 2 :=
   ffiNameBoundaryValid_sound _ _ baseline_finite_facts.1
 
 theorem baseline_ffi_interference :
@@ -84,15 +84,15 @@ theorem baseline_machine_noInterference :
       (baselineMachineConfig.target.proj programDomain) :=
   challengeMachineConfig_noInterference _ _ _ _ _ _
 
-private theorem dispatch_not_program (i : Fin 22) : ¬ programDomain (dispatchAddress i.val) := by
+private theorem dispatch_not_program (i : Fin 4) : ¬ programDomain (dispatchAddress i.val) := by
   intro h
   exact h.2 i.val i.isLt (by simpa [dispatchAddress, ffiOffset, Nat.mul_comm, Nat.add_comm] using (rfl : dispatchAddress i.val = dispatchAddress i.val))
 
-private theorem dispatch_not_shared (i : Fin 22) :
+private theorem dispatch_not_shared (i : Fin 4) :
     ¬ machineSharedDomain (dispatchAddress i.val) := by
   have bounds : 0x80001000 ≤ (dispatchAddress i.val).toNat ∧
       (dispatchAddress i.val).toNat < 0x80002000 := by
-    have h : ∀ j : Fin 22, 0x80001000 ≤ (dispatchAddress j.val).toNat ∧
+    have h : ∀ j : Fin 4, 0x80001000 ≤ (dispatchAddress j.val).toNat ∧
         (dispatchAddress j.val).toNat < 0x80002000 := by decide
     exact h i
   simp only [machineSharedDomain, inputStart, inputEnd, inputSize, outputStart, outputEnd]
@@ -103,7 +103,7 @@ theorem baseline_start_pc : startPcOk baselineMachineConfig (BitVec.ofNat 64 nat
     dispatch_not_program ⟨1,by decide⟩,
     dispatch_not_shared ⟨0,by decide⟩,
     dispatch_not_shared ⟨1,by decide⟩, rfl, rfl, by decide,
-    20, baseline_ffi_boundary, ?_, ?_, baseline_finite_facts.2.2.2.2⟩
+    2, baseline_ffi_boundary, ?_, ?_, baseline_finite_facts.2.2.2.2⟩
   · intro index hi
     have heq : BitVec.ofNat 64 nativePc - BitVec.ofNat 64 ((3+index)*ffiOffset) =
         dispatchAddress (index+2) := by
@@ -112,9 +112,9 @@ theorem baseline_start_pc : startPcOk baselineMachineConfig (BitVec.ofNat 64 nat
     refine ⟨?_, ?_, ?_, ?_, baseline_finite_facts.2.2.1 ⟨index,hi⟩⟩
     · rw [heq]; exact dispatch_not_program ⟨index+2,by omega⟩
     · rw [heq]; exact dispatch_not_shared ⟨index+2,by omega⟩
-    · have h : ∀ j : Fin 20, dispatchAddress (j.val+2) ≠ dispatchAddress 0 := by decide
+    · have h : ∀ j : Fin 2, dispatchAddress (j.val+2) ≠ dispatchAddress 0 := by decide
       simpa [heq, baselineMachineConfig, challengeMachineConfig, dispatchAddress] using h ⟨index,hi⟩
-    · have h : ∀ j : Fin 20, dispatchAddress (j.val+2) ≠ dispatchAddress 1 := by decide
+    · have h : ∀ j : Fin 2, dispatchAddress (j.val+2) ≠ dispatchAddress 1 := by decide
       simpa [heq, baselineMachineConfig, challengeMachineConfig, dispatchAddress] using h ⟨index,hi⟩
   · intro index hi
     have hlen : index < baselineEntryPcs.length := by
@@ -123,8 +123,8 @@ theorem baseline_start_pc : startPcOk baselineMachineConfig (BitVec.ofNat 64 nat
     rw [holEl_eq_getElem index baselineEntryPcs hlen]
     exact baseline_finite_facts.2.2.2.1 ⟨index,hlen⟩ hi.2
 
-theorem baseline_literal_layout : InitECandidate.bootPrefix.length = 4496 ∧
-    InitECandidate.nativeCode.length = 904196 ∧ InitECandidate.code.length = 950344 :=
+theorem baseline_literal_layout : InitECandidate.bootPrefix.length = 4208 ∧
+    InitECandidate.nativeCode.length = 979140 ∧ InitECandidate.code.length = 1028080 :=
   ⟨LiteralFacts.bootPrefix_length, LiteralFacts.nativeCode_length, LiteralFacts.code_length⟩
 
 private theorem literal_append_byte (leadingBytes bytes trailingBytes : List (BitVec 8))
@@ -137,7 +137,7 @@ private theorem literal_append_byte (leadingBytes bytes trailingBytes : List (Bi
 theorem baseline_native_loaded_byte (i : Fin InitECandidate.nativeCode.length) :
     installedMemory (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val) =
       InitECandidate.nativeCode[i] := by
-  have hi : i.val < 904196 := by simpa only [baseline_literal_layout.2.1] using i.isLt
+  have hi : i.val < 979140 := by simpa only [baseline_literal_layout.2.1] using i.isLt
   have ha : (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val).toNat = nativePc+i.val := by
     simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
     have hn : nativePc < 2^64 := by decide
@@ -159,7 +159,7 @@ theorem baseline_native_loaded_byte (i : Fin InitECandidate.nativeCode.length) :
 
 theorem baseline_native_program_byte (i : Fin InitECandidate.nativeCode.length) :
     programDomain (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val) := by
-  have hi : i.val < 904196 := by simpa only [baseline_literal_layout.2.1] using i.isLt
+  have hi : i.val < 979140 := by simpa only [baseline_literal_layout.2.1] using i.isLt
   have ha : (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 i.val).toNat = nativePc+i.val := by
     simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
     rw [Nat.mod_eq_of_lt (by decide : nativePc < 2^64),
@@ -175,7 +175,7 @@ theorem baseline_native_program_byte (i : Fin InitECandidate.nativeCode.length) 
     · omega
   · intro j hj heq
     have hlow : (dispatchAddress j).toNat < nativePc := by
-      have hh : ∀ k : Fin 22, (dispatchAddress k.val).toNat < nativePc := by decide
+      have hh : ∀ k : Fin 4, (dispatchAddress k.val).toNat < nativePc := by decide
       exact hh ⟨j,hj⟩
     have haddr := congrArg BitVec.toNat heq
     have hd : BitVec.ofNat 64 nativePc - BitVec.ofNat 64 (16*(j+1)) = dispatchAddress j := by

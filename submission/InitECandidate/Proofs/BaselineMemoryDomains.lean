@@ -39,7 +39,7 @@ theorem baseline_shared_aligned_closed (a : BitVec 64)
   have division := Nat.div_add_mod a.toNat 8
   omega
 
-private theorem native_dispatch_below (i : Nat) (hi : i < 22) :
+private theorem native_dispatch_below (i : Nat) (hi : i < 4) :
     (BitVec.ofNat 64 nativePc - BitVec.ofNat 64 (16 * (i + 1))).toNat < nativePc := by
   have offNat : (BitVec.ofNat 64 (16 * (i + 1))).toNat = 16 * (i + 1) := by
     rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
@@ -93,7 +93,7 @@ theorem baseline_code_bytes :
   apply bytesInMem_literal
   intro i
   have bound : i.val < 904956 := by
-    have hi : i.val < 904196 := by simpa only [baseline_literal_layout.2.1] using i.isLt
+    have hi : i.val < 979140 := by simpa only [baseline_literal_layout.2.1] using i.isLt
     omega
   exact ⟨baseline_native_program_byte i, native_data_excluded i.val bound,
     baseline_native_loaded_byte i⟩

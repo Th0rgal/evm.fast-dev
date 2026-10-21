@@ -63,11 +63,11 @@ private theorem admission_entry_pcs_eq : baselineEntryPcs = admissionEntryPcs :=
   rfl
 
 private theorem admission_names_length :
-    baselineNames.length = 20 + baselineMmio.length := by
+    baselineNames.length = 2 + baselineMmio.length := by
   calc
     baselineNames.length = baselineEntryPcs.length :=
       baseline_finite_facts.2.2.2.2
-    _ = 20 + baselineMmio.length := by
+    _ = 2 + baselineMmio.length := by
       simp only [baselineEntryPcs, List.length_append, List.length_map, List.length_range]
 
 private theorem admission_entry_nodup : baselineEntryPcs.Nodup := by
@@ -76,7 +76,7 @@ private theorem admission_entry_nodup : baselineEntryPcs.Nodup := by
 
 private def admissionEntryConditions (pcs : List (BitVec 64)) : Prop :=
   ∀ i : Fin pcs.length,
-    initialPc < pcs[i].toNat ∧ pcs[i].toNat < initialPc + 950344 ∧
+    initialPc < pcs[i].toNat ∧ pcs[i].toNat < initialPc + 1028080 ∧
     holAligned 2 pcs[i] = true ∧
     pcs[i] ≠ BitVec.ofNat 64 nativePc - 16 ∧
     pcs[i] ≠ BitVec.ofNat 64 nativePc - 32
@@ -84,13 +84,13 @@ private def admissionEntryConditions (pcs : List (BitVec 64)) : Prop :=
 private def admissionMmioBounds
     (mmio : List Compiler.Backend.LabToTarget.ShmemInfoNum) : Prop :=
   ∀ i : Fin mmio.length,
-    mmio[i].entryPc < 904196 ∧ nativePc + mmio[i].exitPc < initialPc + 950344
+    mmio[i].entryPc < 979140 ∧ nativePc + mmio[i].exitPc < initialPc + 1028080
 
 
 private theorem admission_entry_conditions :
     (∀ i : Fin baselineEntryPcs.length,
       initialPc < baselineEntryPcs[i].toNat ∧
-      baselineEntryPcs[i].toNat < initialPc + 950344 ∧
+      baselineEntryPcs[i].toNat < initialPc + 1028080 ∧
       holAligned 2 baselineEntryPcs[i] = true ∧
       baselineEntryPcs[i] ≠ BitVec.ofNat 64 nativePc - 16 ∧
       baselineEntryPcs[i] ≠ BitVec.ofNat 64 nativePc - 32) := by
@@ -102,8 +102,8 @@ private theorem admission_entry_conditions :
 
 private theorem admission_mmio_bounds :
     (∀ i : Fin baselineMmio.length,
-      baselineMmio[i].entryPc < 904196 ∧
-      nativePc + baselineMmio[i].exitPc < initialPc + 950344) := by
+      baselineMmio[i].entryPc < 979140 ∧
+      nativePc + baselineMmio[i].exitPc < initialPc + 1028080) := by
   change admissionMmioBounds baselineMmio
   rw [admission_mmio_eq]
   unfold admissionMmioBounds
@@ -112,17 +112,17 @@ private theorem admission_mmio_bounds :
 
 -- Preserve the exported contract and all downstream projection selectors.
 theorem baseline_submission_finite :
-    baselineNames.length = 20 + baselineMmio.length ∧
+    baselineNames.length = 2 + baselineMmio.length ∧
     baselineEntryPcs.Nodup ∧
     (∀ i : Fin baselineEntryPcs.length,
       initialPc < baselineEntryPcs[i].toNat ∧
-      baselineEntryPcs[i].toNat < initialPc + 950344 ∧
+      baselineEntryPcs[i].toNat < initialPc + 1028080 ∧
       holAligned 2 baselineEntryPcs[i] = true ∧
       baselineEntryPcs[i] ≠ BitVec.ofNat 64 nativePc - 16 ∧
       baselineEntryPcs[i] ≠ BitVec.ofNat 64 nativePc - 32) ∧
     (∀ i : Fin baselineMmio.length,
-      baselineMmio[i].entryPc < 904196 ∧
-      nativePc + baselineMmio[i].exitPc < initialPc + 950344) := by
+      baselineMmio[i].entryPc < 979140 ∧
+      nativePc + baselineMmio[i].exitPc < initialPc + 1028080) := by
   exact ⟨admission_names_length, admission_entry_nodup,
     admission_entry_conditions, admission_mmio_bounds⟩
 
