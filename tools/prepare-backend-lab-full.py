@@ -5,12 +5,16 @@ import pathlib,time,json,subprocess,sys
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 stage=sys.argv[1];assert stage in ["Filtered","Encoded"]
 chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
+baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
 for suffix in ["Stubs"]+[f"Chunk{a}_{b}" for a,b in chunks]:
  p=work/f"{stage}{suffix}.check.json"
- while not p.exists():time.sleep(3)
- if json.loads(p.read_text())["returncode"]:raise RuntimeError(str(p))
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/{stage}{suffix}.lean"
+ while not (source.exists() and p.exists() and (suffix=="Stubs" or source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and p.stat().st_mtime_ns>=source.stat().st_mtime_ns) and json.loads(p.read_text()).get("returncode")==0):time.sleep(3)
 prev="Sections" if stage=="Filtered" else "Filtered"
-while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prev}.olean").exists():time.sleep(3)
+prior_source=root/f"submission/InitECandidate/Proofs/BackendStages/{prev}.lean"
+prior_out=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prev}.olean"
+prior_cert=work/f"{prev}.check.json"
+while not (prior_source.exists() and prior_out.exists() and prior_cert.exists() and prior_source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and prior_cert.stat().st_mtime_ns>=prior_source.stat().st_mtime_ns and json.loads(prior_cert.read_text()).get("returncode")==0):time.sleep(3)
 fun="(fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip })" if stage=="Filtered" else "(LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length)"
 priorName=lambda i: f"Sections.sections{i}" if stage=="Filtered" else f"Filtered.sections{i}"
 s=f"import InitECandidate.Proofs.BackendStages.{prev}\nimport InitECandidate.Proofs.BackendComputation\nimport InitECandidate.Proofs.BackendStages.{stage}Stubs\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{stage}Chunk{a}_{b}\n" for a,b in chunks)

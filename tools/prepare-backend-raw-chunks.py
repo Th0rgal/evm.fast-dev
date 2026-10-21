@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
 """Compose checked raw-call body equations in independent sixteen-function chunks."""
 from guest_layout import LAST_LABEL, STOP_LABEL
-import pathlib, subprocess, time, json, os
+import argparse, pathlib, subprocess, time, json, os
+parser=argparse.ArgumentParser();parser.add_argument("--start-label",type=int,default=64);args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1]
 work=root/"work/lean-perf/backend-stages"
 env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")
-for first in range(64,STOP_LABEL,16):
+for first in range(args.start_label,STOP_LABEL,16):
  last=min(first+15,LAST_LABEL)
  ns=range(first,last+1)
  name=f"RawChunk{first}_{last}"
- if (work/f"{name}.check.json").exists() and json.loads((work/f"{name}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean").exists(): continue
  for n in ns:
-  while not (work/f"Raw{n}.check.json").exists(): time.sleep(1)
-  if json.loads((work/f"Raw{n}.check.json").read_text())["returncode"]: raise RuntimeError(f"Raw{n} failed")
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/Raw{n}.lean"
+  cert=work/f"Raw{n}.check.json"
+  info=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
+  while not (source.exists() and cert.exists() and
+             source.stat().st_mtime_ns >= info.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             json.loads(cert.read_text()).get("returncode")==0):
+   time.sleep(1)
  s=f"import InitECandidate.Proofs.BackendStages.Chunk{first}_{last}\n"+"".join(f"import InitECandidate.Proofs.BackendStages.Raw{n}\n" for n in ns)
  s+="set_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend\nnamespace InitECandidate.Proofs.BackendStages."+name+"\n"
  s+="def bodies : List (Nat × StackLang.HolProg 64) := ["+", ".join(f"({n}, raw{n})" for n in ns)+"]\n"

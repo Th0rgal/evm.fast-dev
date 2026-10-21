@@ -2,18 +2,30 @@
 """Compose checked local lower-pass equations without compiler reduction."""
 from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse, pathlib, subprocess, time, json, os
-parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Alloc","Removed","Named"]);args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Alloc","Removed","Named"]);parser.add_argument("--start-label",type=int,default=64);args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")
 previous={"Alloc":"Raw","Removed":"Alloc","Named":"Removed"}[args.stage]
-for first in range(64,STOP_LABEL,16):
+for first in range(args.start_label,STOP_LABEL,16):
  last=min(first+15,LAST_LABEL);ns=range(first,last+1);name=f"{args.stage}Chunk{first}_{last}"
- if (work/f"{name}.check.json").exists() and json.loads((work/f"{name}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean").exists(): continue
  for n in ns:
-  while not (work/f"{args.stage}{n}.check.json").exists():time.sleep(1)
-  if json.loads((work/f"{args.stage}{n}.check.json").read_text())["returncode"]:raise RuntimeError(f"{args.stage}{n} failed")
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/{args.stage}{n}.lean"
+  cert=work/f"{args.stage}{n}.check.json"
+  baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
+  while not (source.exists() and cert.exists() and
+             source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             json.loads(cert.read_text()).get("returncode")==0):
+   time.sleep(1)
  prevchunk=f"{previous}Chunk{first}_{last}"
- while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prevchunk}.olean").exists():time.sleep(1)
+ prevsource=root/f"submission/InitECandidate/Proofs/BackendStages/{prevchunk}.lean"
+ prevoutput=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prevchunk}.olean"
+ prevcert=work/f"{prevchunk}.check.json"
+ while not (prevsource.exists() and prevoutput.exists() and prevcert.exists() and
+            prevsource.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
+            prevcert.stat().st_mtime_ns >= prevsource.stat().st_mtime_ns and
+            json.loads(prevcert.read_text()).get("returncode")==0):
+  time.sleep(1)
  s=f"import InitECandidate.Proofs.BackendStages.{prevchunk}\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{args.stage}{n}\n" for n in ns)
  s+="set_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target\nnamespace InitECandidate.Proofs.BackendStages."+name+"\n"
  s+="def bodies : List (Nat × StackLang.HolProg 64) := ["+", ".join(f"{args.stage}{n}" for n in ns)+"]\n"

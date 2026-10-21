@@ -6,12 +6,20 @@ parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Alloc","R
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages";stage=args.stage
 previous={"Alloc":"Raw","Removed":"Alloc","Named":"Removed"}[stage]
 chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
+baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
 for a,b in chunks:
  name=f"{stage}Chunk{a}_{b}"
- while not (work/f"{name}.check.json").exists():time.sleep(1)
- if json.loads((work/f"{name}.check.json").read_text())["returncode"]:raise RuntimeError(name)
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
+ cert=work/f"{name}.check.json"
+ while not (source.exists() and cert.exists() and source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and cert.stat().st_mtime_ns>=source.stat().st_mtime_ns and json.loads(cert.read_text()).get("returncode")==0):time.sleep(1)
 for module in [previous,stage+"Stubs"]:
- while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{module}.olean").exists():time.sleep(1)
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{module}.olean"
+ if module.endswith("Stubs"):
+  while not output.exists():time.sleep(1)
+ else:
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/{module}.lean"
+  cert=work/f"{module}.check.json"
+  while not (source.exists() and output.exists() and cert.exists() and source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and cert.stat().st_mtime_ns>=source.stat().st_mtime_ns and json.loads(cert.read_text()).get("returncode")==0):time.sleep(1)
 s=f"import InitECandidate.Proofs.BackendStages.{previous}\nimport InitECandidate.Proofs.BackendStages.{stage}Stubs\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{stage}Chunk{a}_{b}\n" for a,b in chunks)
 s+="set_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target\nnamespace InitECandidate.Proofs.BackendStages."+stage+"\n"
 op={"Alloc":"StackAlloc.progComp","Removed":"StackRemove.progComp false riscvConfig.addrOffset (riscvConfig.regCount - (riscvConfig.avoidRegs.length + 3))","Named":"StackNames.progCompEntryHOL RiscVConfig.riscvNames"}[stage]

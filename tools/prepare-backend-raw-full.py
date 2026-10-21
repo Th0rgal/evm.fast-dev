@@ -4,10 +4,12 @@ from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,subprocess,json,os
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
+baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
 for a,b in chunks:
  name=f"RawChunk{a}_{b}"
- while not (work/f"{name}.check.json").exists():time.sleep(1)
- if json.loads((work/f"{name}.check.json").read_text())["returncode"]:raise RuntimeError(name)
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
+ cert=work/f"{name}.check.json"
+ while not (source.exists() and cert.exists() and source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and cert.stat().st_mtime_ns>=source.stat().st_mtime_ns and json.loads(cert.read_text()).get("returncode")==0):time.sleep(1)
 s="import InitECandidate.Proofs.BackendStages.RawInfoFacts\nimport InitECandidate.Proofs.BackendStages.RawStubs\n"+"".join(f"import InitECandidate.Proofs.BackendStages.RawChunk{a}_{b}\n" for a,b in chunks)
 s+="set_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend\nnamespace InitECandidate.Proofs.BackendStages.Raw\n"
 op="(fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body))"

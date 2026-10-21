@@ -2,10 +2,9 @@
 """Independent exact skip-filter/initial-encoding proposals for assembly sections."""
 from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse,pathlib,subprocess,time,json,os,concurrent.futures
-parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Filtered","Encoded"]);parser.add_argument("labels",nargs="*",type=int);parser.add_argument("--all",action="store_true");parser.add_argument("--workers",type=int,default=1);args=parser.parse_args()
+parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Filtered","Encoded"]);parser.add_argument("labels",nargs="*",type=int);parser.add_argument("--all",action="store_true");parser.add_argument("--start-label",type=int,default=64);parser.add_argument("--workers",type=int,default=1);args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages";stage=args.stage
-labels=list(range(64,STOP_LABEL)) if args.all else args.labels
-labels=[n for n in labels if not ((work/f"{stage}{n}.check.json").exists() and json.loads((work/f"{stage}{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{stage}{n}.olean").exists())]
+labels=list(range(args.start_label,STOP_LABEL)) if args.all else args.labels
 previous="Section" if stage=="Filtered" else "Filtered"
 prefix=["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py")];env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")
 def check(n):
@@ -16,7 +15,15 @@ failures=[]
 for start in range(0,len(labels),16):
  batch=labels[start:start+16]
  for n in batch:
-  while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{previous}{n}.olean").exists():time.sleep(1)
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/{previous}{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{previous}{n}.olean"
+  cert=work/f"{previous}{n}.check.json"
+  baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
+  while not (source.exists() and output.exists() and cert.exists() and
+             source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             json.loads(cert.read_text()).get("returncode")==0):
+   time.sleep(1)
  s="import Tools.GenBackendStages\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{previous}{n}\n" for n in batch)+"open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target\nrun_meta do\n  let env ← Lean.getEnv\n"
  for n in batch:
   expression=f"{{ section{n} with lines := section{n}.lines.filter LabFilter.notSkip }}" if stage=="Filtered" else f"LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length Filtered{n}"

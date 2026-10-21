@@ -11,6 +11,8 @@ import os
 parser = argparse.ArgumentParser()
 parser.add_argument("labels", nargs="*", type=int)
 parser.add_argument("--all", action="store_true")
+parser.add_argument("--start-label", type=int, default=64)
+parser.add_argument("--wait-functions", action="store_true")
 parser.add_argument("--check", action="store_true")
 parser.add_argument("--batch-size", type=int, default=16)
 parser.add_argument("--workers", type=int, default=2)
@@ -18,8 +20,7 @@ args = parser.parse_args()
 os.environ["LAKE_ARTIFACT_CACHE"] = "false"
 root = pathlib.Path(__file__).resolve().parents[1]
 work = root / "work/lean-perf/backend-stages"
-labels = list(range(64,STOP_LABEL)) if args.all else args.labels
-labels = [n for n in labels if not ((work/f"Raw{n}.check.json").exists() and json.loads((work/f"Raw{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Raw{n}.olean").exists())]
+labels = list(range(args.start_label,STOP_LABEL)) if args.all else args.labels
 prefix = ["rtk","proxy","taskset","-c","8-11","timeout","180","lake","env","lean"]
 def check(n):
     started = time.monotonic()
@@ -34,6 +35,11 @@ def check(n):
 failures = []
 for start in range(0,len(labels),args.batch_size):
     batch = labels[start:start+args.batch_size]
+    if args.wait_functions:
+        for n in batch:
+            output = root / f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Function{n}.olean"
+            while not output.exists():
+                time.sleep(2)
     runner = work/f"GenerateRaw{batch[0]}_{batch[-1]}.lean"
     imports = "import Tools.GenBackendStages\nimport InitECandidate.Proofs.BackendStages.RawInfoData\n" + "".join(f"import InitECandidate.Proofs.BackendStages.Function{n}\n" for n in batch)
     calls = "".join(f"  liftM (InitE.BackendGenerator.generateRawFunction env {n} InitECandidate.Proofs.BackendStages.RawInfo.rawInfo (InitECandidate.Proofs.BackendStages.function{n} (.list [])).1)\n" for n in batch)

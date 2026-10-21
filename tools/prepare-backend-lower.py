@@ -6,13 +6,13 @@ parser=argparse.ArgumentParser()
 parser.add_argument("stage", choices=["Alloc", "Removed", "Named"])
 parser.add_argument("labels", nargs="*", type=int)
 parser.add_argument("--all", action="store_true")
+parser.add_argument("--start-label", type=int, default=64)
 parser.add_argument("--check", action="store_true")
 parser.add_argument("--workers", type=int, default=2)
 args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1]
 work=root/"work/lean-perf/backend-stages"
-labels=list(range(64,STOP_LABEL)) if args.all else args.labels
-labels=[n for n in labels if not ((work/f"{args.stage}{n}.check.json").exists() and json.loads((work/f"{args.stage}{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{args.stage}{n}.olean").exists())]
+labels=list(range(args.start_label,STOP_LABEL)) if args.all else args.labels
 prefix=["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py")]
 env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")
 def check(n):
@@ -29,7 +29,14 @@ for start in range(0,len(labels),16):
  batch=labels[start:start+16]
  previous={"Alloc":"Raw", "Removed":"Alloc", "Named":"Removed"}[args.stage]
  for n in batch:
-  while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{previous}{n}.olean").exists():
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/{previous}{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{previous}{n}.olean"
+  cert=work/f"{previous}{n}.check.json"
+  baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
+  while not (source.exists() and output.exists() and cert.exists() and
+             source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             json.loads(cert.read_text()).get("returncode")==0):
    time.sleep(1)
  imports="import Tools.GenBackendStages\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{previous}{n}\n" for n in batch)
  calls=[]
