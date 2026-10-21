@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # gen-guest-ast.sh -- regenerate the Lean view of the guest:
-#   Guest/guest.pp.pnk           the cpp-expanded guest (crypto via accelerator
-#                                @ffi calls)
-#   Guest/Ast.lean               its parse by flapjack's parser (Guest.guestAst)
+#   Guest/guest-software.pp.pnk  the cpp-expanded software guest
+#   Guest/SoftwareAst.lean       its parse (Guest.Software.guestAst)
 # This mirrors the preprocessing step of guest/build.sh (no GUEST_DEBUG).
 # Re-run after editing guest/src and commit the files; Lake does not
 # track guest/src itself. The committed AST is the challenge input.
@@ -28,11 +27,11 @@ gen() { # gen <cpp flags> <pp output> <lean output> <namespace>
   echo "wrote $lean ($(wc -l < "$lean") lines)"
 }
 
-gen "" Guest/guest.pp.pnk Guest/Ast.lean Guest
+gen "" Guest/guest-software.pp.pnk Guest/SoftwareAst.lean Guest.Software
 
 # Stamp the source hashes into Guest/Source.lean so Lake rebuilds the
 # include_str% embeddings (it tracks only the .lean file's own content).
-for f in guest.pp.pnk; do
+for f in guest-software.pp.pnk; do
   h=$(sha256sum "Guest/$f" | cut -d' ' -f1)
   # -i takes a mandatory suffix on BSD sed and an optional one on GNU sed;
   # spelling it out and deleting the backup works on both.

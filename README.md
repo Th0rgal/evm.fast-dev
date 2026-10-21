@@ -61,21 +61,21 @@ result after comparator kernel replay.
 
 ## Source program and initial submission
 
-The assignment includes `guest/src/`, the authoritative literal AST in
-[Guest/Ast.lean](Guest/Ast.lean), and its initial memory and accelerator FFI
+The assignment includes `guest/src/`, the authoritative software guest AST in
+[Guest/SoftwareAst.lean](Guest/SoftwareAst.lean), and its initial memory and FFI
 semantics. The authoritative source evaluator is the compiler theorem's
 `PanSemStateFiniteExact.semanticsDecls`, fixed by
 [InitE/SourceSemantics.lean](InitE/SourceSemantics.lean). Flapjack is a pinned Lake
-dependency from the `riscv-im` branch. The initial submission includes a proved
-bootstrap and uses compiler correctness to certify the complete submitted image
-with score infinity.
+dependency from the `riscv-im` branch. The checked-in submission was generated
+for the previous accelerated guest and needs regeneration before it can certify
+the updated challenge.
 
 The fixed challenge and source semantics live in `InitE/` and `Guest/`.
-The initial submission's compiler, bootstrap and installation certificates live
+The previous submission's compiler, bootstrap and installation certificates live
 in [`submission/InitECandidate/Proofs`](submission/InitECandidate/Proofs) and are
-verified as submission proofs. See [the proof boundary](docs/CHALLENGE.md#challenge-and-initial-submission-proof-boundary).
+checked by the submission verifier after regeneration. See [the proof boundary](docs/CHALLENGE.md#challenge-and-initial-submission-proof-boundary).
 
-The challenge takes `Guest.guestAst` directly. The Pancake text remains readable
+The challenge takes `Guest.Software.guestAst` directly. The Pancake text remains readable
 provenance; parser agreement is not required.
 
 ## Hints for a finite score
@@ -85,7 +85,7 @@ source evaluator, then prove a step-count preservation or upper-bound theorem
 for the Flapjack compiler that relates source execution cost to RISC-V steps.
 Bound the source cost for inputs satisfying the declared gas limit, including
 input decoding and other work outside gas-charged EVM execution. Combine these
-results with bounds for the bootstrap and accelerator/foreign-call execution to
+results with bounds for the bootstrap and foreign-call execution to
 obtain a literal finite `K` in the challenge's target evaluator.
 
 This is an optional proof strategy. Submissions may use any approach that proves
@@ -107,11 +107,9 @@ a solution requires proofs.
 
 ## Verification status
 
-The standard-axiom baseline and compact computation certificates have passed
-the full outside build and proof audit. The previous pin's cold isolated trusted
-audit also passed with exactly the three standard axioms. Fresh isolated
-comparator acceptance is pending. The earlier isolated acceptance used
-native-computation axioms and is recorded separately.
+The challenge definition builds with the software guest. The checked-in
+submission and its generated certificates target the previous guest and have
+not been regenerated or verified against this source update.
 
 ## Soundness and execution platform
 

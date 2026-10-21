@@ -36,9 +36,11 @@ termination within infinity is proved in
 
 ## Fixed source program and semantics
 
-The reference program is the literal **`Guest.guestAst`** in
-[`Guest/Ast.lean`](../Guest/Ast.lean). Its entry point is `main`. The Pancake
-files under `guest/src/` and preprocessed text `Guest/guest.pp.pnk` provide
+The reference program is the literal **`Guest.Software.guestAst`** in
+[`Guest/SoftwareAst.lean`](../Guest/SoftwareAst.lean), generated from
+`flamingoponderado/stateless-pancaketh` main at commit
+`b42b0af0c4d028429a49d2c4e0c9db393e19f6c4`. Its entry point is `main`. The Pancake
+files under `guest/src/` and preprocessed text `Guest/guest-software.pp.pnk` provide
 readable provenance. The AST header records its generation command and
 permanent provenance links; parser agreement is not a certificate premise.
 
@@ -46,37 +48,22 @@ permanent provenance links; parser agreement is not a certificate premise.
 using `PanSemStateFiniteExact.semanticsDecls`, the source evaluator used by
 Flapjack's compiler correctness theorem. Words are 64 bits and byte order is
 little-endian. Declaration maps and locals begin empty. Ordinary memory uses
-aligned eight-byte cells in `[sourceBase, heapEnd)`; the shared-memory domain
-contains aligned cells in the input and output arenas. The base and allocation
-ceiling are `0xa1000000` and `0x7defffd18` respectively.
+aligned eight-byte cells in the scratch region and ordinary memory above
+`@base`. The shared-memory domain contains aligned cells in the input and
+output arenas. The base is `0xa1000000`; the guest's allocation ceiling is
+`0xb0000000`. Ordinary source memory begins at zero.
 
-The first five ordinary-memory words are fixed by
-[`Guest.startupHeaders`](../Guest/Bookkeeping.lean):
-
-| Address | Initial word |
-| --- | --- |
-| `0xa1000000` | `0xa0020018` |
-| `0xa1000008` | `0xa0029040` |
-| `0xa1000010` | `0xa0029040` |
-| `0xa1000018` | `0x800ddd08` |
-| `0xa1000020` | `0x800de000` |
-
-All remaining ordinary-memory words begin at zero. These bookkeeping values
-belong to the fixed source state. The target machine starts with zero RAM;
-a submission must implement whatever startup its correctness proof needs.
-
-The fixed oracle is `InitE.sourceOracle`. It uses the shared-memory and
-accelerator specifications in [`Guest/Model.lean`](../Guest/Model.lean) and
-[`Guest/AccelFfi.lean`](../Guest/AccelFfi.lean), with terminal `halt` and `trap`
-calls. Accelerators are foreign calls rather than additional RISC-V
-instructions. Byte-access payloads retain the exact byte address.
+The fixed oracle is `InitE.sourceOracle`. It uses the shared-memory
+specification in [`Guest/Model.lean`](../Guest/Model.lean), with terminal
+`halt` and `trap` calls. Other foreign calls fail. Byte-access payloads
+retain the exact byte address.
 `Guest.runGuestStepped` is an optional executable testing model; it is not the
 source evaluator in this contract.
 
 ## Inputs and declared gas
 
 `Guest.InputBlob` is a finite list of bytes. The host exposes a **128 MiB**
-input arena at `[0x40000000, 0x48000000)`, containing eight zero metadata bytes,
+input arena at `[0x40000000, 0x80000000)`, containing eight zero metadata bytes,
 the blob length as an eight-byte little-endian word, then the blob. Remaining
 arena bytes are zero. Host accesses outside the input and output arenas fail.
 The certificate has no separate input-validity or input-length premise.

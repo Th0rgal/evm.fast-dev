@@ -18,9 +18,9 @@ open Flapjack.Basis.Pure.MlString
 open scoped InitE.MetadataComputation InitE.NameComputation in
 /-- Checking names suffices to exhibit the fixed AST's main declaration. -/
 theorem sourceHasMain :
-    ∃ fi : FunDeclHOL 64, .function fi ∈ Guest.guestAst.map declToHOL ∧
+    ∃ fi : FunDeclHOL 64, .function fi ∈ Guest.Software.guestAst.map declToHOL ∧
       fi.name = ofString "main" := by
-  have h : (Guest.guestAst.map declToHOL).any
+  have h : (Guest.Software.guestAst.map declToHOL).any
       (fun d => match d with
         | .function fi => decide (fi.name = ofString "main")
         | _ => false) = true := by decide_cbv

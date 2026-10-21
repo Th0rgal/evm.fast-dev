@@ -1,7 +1,6 @@
 /* lib/mem.pnk -- bump allocator over the Pancake heap and byte helpers.
-   Persistent objects use [HEAP_BASE, HEAP_END); frame memory and scratch use
-   [SCRATCH_BASE, SCRATCH_END). Both are above @base, whose first page is
-   reserved for the compiler startup metadata. */
+   Persistent objects use [@base, HEAP_END); frame memory and scratch use the
+   reserved [SCRATCH_BASE, SCRATCH_END) region before the Pancake heap. */
 
 var 1 heap_ptr = 0;
 var 1 journal_n = 0;   /* shared with state.pnk for trap diagnostics */
@@ -26,7 +25,7 @@ var 1 scratch_ptr = 0;
 var 1 frame_mem_ptr = 0;
 
 fun 1 mem_init() {
-  heap_ptr = HEAP_BASE;
+  heap_ptr = @base;
   scratch_ptr = SCRATCH_END;
   frame_mem_ptr = SCRATCH_BASE;
   return 0;
@@ -321,8 +320,8 @@ fun 1 st_be64(1 p, 1 v) {
 fun {1,1} input_blob() {
   var len = 0;
   !ldw len, INPUT_LEN_ADDR;
-  if len >+ INPUT_MAX_BYTES {
-    trap_with(8);              /* invalid input length, not memory exhaustion */
+  if len >+ MAX_INPUT_LEN {
+    trap_with(8);              /* length cannot fit the host input region */
   }
   var p = alloc(len + 8);
   var i = 0;

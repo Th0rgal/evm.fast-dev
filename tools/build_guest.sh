@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# build_guest.sh -- build the main guest (ZisK accelerators via the FFI stubs in
-# guest/runtime/start.S) as guest/build/guest.elf.
+# build_guest.sh -- build the software guest as guest/build/guest.elf.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"

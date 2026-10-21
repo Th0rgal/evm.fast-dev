@@ -5,10 +5,10 @@ import Flapjack.Misc.Alignment
 import Flapjack.Pancake.Semantics.PanSem.Semantics
 import Flapjack.Compiler.Backend.StackRemove
 
-/-! The challenge fixes `Guest.guestAst` and uses the exact evaluator in
+/-! The challenge fixes `Guest.Software.guestAst` and uses the exact evaluator in
 the general compiler theorem reused by
 `InitE.panToTargetCompileSemanticsOraclesRiscVSource`.
-`Guest.Model` supplies byte-level host/accelerator specifications, not its
+`Guest.Model` supplies byte-level host specifications, not its
 stepped program evaluator. -/
 namespace InitE
 open Flapjack Flapjack.Compiler.Backend
@@ -41,20 +41,18 @@ def sourceFfi (input : Guest.InputBlob) : HolFfiState Guest.HostMemory :=
 
 /-- Word-cell domain required by the compiler, excluding the globals tail. -/
 def ordinaryDomain : BitVec 64 → Prop :=
-  StackRemove.addresses (BitVec.ofNat 64 sourceBase)
-    ((stackStart - sourceBase) / 8 - globalsWords)
+  fun address =>
+    (scratchStart ≤ address.toNat ∧ address.toNat < scratchEnd) ∨
+    StackRemove.addresses (BitVec.ofNat 64 sourceBase)
+      ((stackStart - sourceBase) / 8 - globalsWords) address
 
 def sharedDomain (address : BitVec 64) : Prop :=
   holByteAligned address = true ∧
     ((inputStart ≤ address.toNat ∧ address.toNat < inputEnd) ∨
       (outputStart ≤ address.toNat ∧ address.toNat < outputEnd))
 
-/-- The first five words are fixed; all remaining ordinary words are zero.
-The value outside the domain is irrelevant to legal ordinary-memory access. -/
-def sourceMemory (address : BitVec 64) : HolWordLab 64 :=
-  let offset := (address - BitVec.ofNat 64 sourceBase).toNat
-  .word (if offset % 8 = 0 ∧ offset / 8 < Guest.startupHeaders.length then
-    Guest.startupHeaders[offset / 8]?.getD 0 else 0)
+/-- Ordinary scratch and heap cells start at zero. -/
+def sourceMemory (_address : BitVec 64) : HolWordLab 64 := .word 0
 
 def sourceInitialState (input : Guest.InputBlob) : PanSemStateFiniteExact 64 Guest.HostMemory :=
   { locals := HolFiniteMapExact.empty
@@ -74,7 +72,7 @@ def sourceInitialState (input : Guest.InputBlob) : PanSemStateFiniteExact 64 Gue
 /-- Authoritative source behavior, on the fixed literal AST. -/
 noncomputable def sourceBehaviour (input : Guest.InputBlob) : HolBehaviour :=
   PanSemStateFiniteExact.semanticsDecls (sourceInitialState input) (ofString "main")
-    (Guest.guestAst.map Pancake.PanLang.declToHOL)
+    (Guest.Software.guestAst.map Pancake.PanLang.declToHOL)
 
 theorem source_empty_maps (input : Guest.InputBlob) :
     (sourceInitialState input).locals = HolFiniteMapExact.empty ∧
