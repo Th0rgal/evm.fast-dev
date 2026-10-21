@@ -17,7 +17,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def stackBody350_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 5
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 16#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 160#64))
 
 def stackBody350_3 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -25,7 +25,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def stackBody350_4 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 24#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 168#64))
 
 def stackBody350_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -33,7 +33,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def stackBody350_6 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 3
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 32#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 176#64))
 
 def stackBody350_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -41,7 +41,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def stackBody350_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 40#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 184#64))
 
 def stackBody350_9 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -83,8 +83,8 @@ def stackBody350_20 : StackLang.HolProg 64 :=
 .seq stackBody350_0 stackBody350_19
 
 def function350 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody350_20, 0, bitmapPrefix, 1046)
-theorem function350_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized350.2.2 InitECandidate.Proofs.StackAnalysis.optimized350.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1046) = function350 bitmapPrefix := by
+(stackBody350_20, 0, bitmapPrefix, 1034)
+theorem function350_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized350.2.2 InitECandidate.Proofs.StackAnalysis.optimized350.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1034) = function350 bitmapPrefix := by
   kernel_rfl
 #print axioms function350_eq
 end InitECandidate.Proofs.BackendStages

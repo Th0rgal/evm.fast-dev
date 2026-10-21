@@ -129,7 +129,7 @@ def stackBody501_38 : StackLang.HolProg 64 :=
 .seq stackBody501_36 stackBody501_37
 
 def stackBody501_39 : StackLang.HolProg 64 :=
-.call (some (stackBody501_35, 0, 501, 2)) (Sum.inl 477) (some (stackBody501_38, 501, 3))
+.call (some (stackBody501_35, 0, 501, 2)) (Sum.inl 475) (some (stackBody501_38, 501, 3))
 
 def stackBody501_40 : StackLang.HolProg 64 :=
 .seq stackBody501_26 stackBody501_39
@@ -285,7 +285,7 @@ def stackBody501_89 : StackLang.HolProg 64 :=
 .seq stackBody501_87 stackBody501_88
 
 def stackBody501_90 : StackLang.HolProg 64 :=
-.call (some (stackBody501_86, 0, 501, 4)) (Sum.inl 477) (some (stackBody501_89, 501, 5))
+.call (some (stackBody501_86, 0, 501, 4)) (Sum.inl 475) (some (stackBody501_89, 501, 5))
 
 def stackBody501_91 : StackLang.HolProg 64 :=
 .seq stackBody501_77 stackBody501_90
@@ -306,7 +306,7 @@ def stackBody501_96 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def stackBody501_97 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 3#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 5#64)
 
 def stackBody501_98 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 4 7
@@ -525,7 +525,7 @@ def stackBody501_169 : StackLang.HolProg 64 :=
 .seq stackBody501_167 stackBody501_168
 
 def stackBody501_170 : StackLang.HolProg 64 :=
-.call (some (stackBody501_152, 0, 501, 6)) (Sum.inl 472) (some (stackBody501_169, 501, 7))
+.call (some (stackBody501_152, 0, 501, 6)) (Sum.inl 470) (some (stackBody501_169, 501, 7))
 
 def stackBody501_171 : StackLang.HolProg 64 :=
 .seq stackBody501_129 stackBody501_170
@@ -666,7 +666,7 @@ def stackBody501_214 : StackLang.HolProg 64 :=
 .seq stackBody501_212 stackBody501_213
 
 def stackBody501_215 : StackLang.HolProg 64 :=
-.call (some (stackBody501_211, 0, 501, 8)) (Sum.inl 117) (some (stackBody501_214, 501, 9))
+.call (some (stackBody501_211, 0, 501, 8)) (Sum.inl 133) (some (stackBody501_214, 501, 9))
 
 def stackBody501_216 : StackLang.HolProg 64 :=
 .seq stackBody501_202 stackBody501_215
@@ -804,7 +804,7 @@ def stackBody501_259 : StackLang.HolProg 64 :=
 .seq stackBody501_257 stackBody501_258
 
 def stackBody501_260 : StackLang.HolProg 64 :=
-.call (some (stackBody501_256, 0, 501, 10)) (Sum.inl 478) (some (stackBody501_259, 501, 11))
+.call (some (stackBody501_256, 0, 501, 10)) (Sum.inl 476) (some (stackBody501_259, 501, 11))
 
 def stackBody501_261 : StackLang.HolProg 64 :=
 .seq stackBody501_247 stackBody501_260
@@ -942,7 +942,7 @@ def stackBody501_305 : StackLang.HolProg 64 :=
 .seq stackBody501_303 stackBody501_304
 
 def stackBody501_306 : StackLang.HolProg 64 :=
-.call (some (stackBody501_302, 0, 501, 12)) (Sum.inl 492) (some (stackBody501_305, 501, 13))
+.call (some (stackBody501_302, 0, 501, 12)) (Sum.inl 490) (some (stackBody501_305, 501, 13))
 
 def stackBody501_307 : StackLang.HolProg 64 :=
 .seq stackBody501_293 stackBody501_306

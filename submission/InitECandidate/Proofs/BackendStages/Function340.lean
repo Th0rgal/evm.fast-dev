@@ -49,7 +49,7 @@ def stackBody340_9 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody340_10 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 992#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 982#64)
 
 def stackBody340_11 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -196,7 +196,7 @@ def stackBody340_57 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def stackBody340_58 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 15#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 17#64)
 
 def stackBody340_59 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -244,83 +244,206 @@ def stackBody340_73 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def stackBody340_74 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_75 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 0#64)
+
+def stackBody340_76 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_77 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)
+
+def stackBody340_78 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_79 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackFree 2
+
+def stackBody340_80 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.ret 4
+
+def stackBody340_81 : StackLang.HolProg 64 :=
+.seq stackBody340_79 stackBody340_80
+
+def stackBody340_82 : StackLang.HolProg 64 :=
+.seq stackBody340_78 stackBody340_81
+
+def stackBody340_83 : StackLang.HolProg 64 :=
+.seq stackBody340_77 stackBody340_82
+
+def stackBody340_84 : StackLang.HolProg 64 :=
+.seq stackBody340_76 stackBody340_83
+
+def stackBody340_85 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_86 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.equal) 3 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0) stackBody340_84 stackBody340_85
+
+def stackBody340_87 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_88 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_89 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_90 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 20#64)
+
+def stackBody340_91 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_92 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 17#64)
+
+def stackBody340_93 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_94 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.set (Flapjack.Compiler.Backend.StackLang.StoreName.temp 0#5) 0
+
+def stackBody340_95 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 6#64)
+
+def stackBody340_96 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_97 : StackLang.HolProg 64 :=
+.call none (Sum.inl 5) none
+
+def stackBody340_98 : StackLang.HolProg 64 :=
+.seq stackBody340_96 stackBody340_97
+
+def stackBody340_99 : StackLang.HolProg 64 :=
+.seq stackBody340_95 stackBody340_98
+
+def stackBody340_100 : StackLang.HolProg 64 :=
+.seq stackBody340_94 stackBody340_99
+
+def stackBody340_101 : StackLang.HolProg 64 :=
+.seq stackBody340_93 stackBody340_100
+
+def stackBody340_102 : StackLang.HolProg 64 :=
+.seq stackBody340_92 stackBody340_101
+
+def stackBody340_103 : StackLang.HolProg 64 :=
+.seq stackBody340_91 stackBody340_102
+
+def stackBody340_104 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def stackBody340_105 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.notEqual) 3 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0) stackBody340_103 stackBody340_104
+
+def stackBody340_106 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_107 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def stackBody340_108 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 2)))
 
-def stackBody340_75 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 2 3
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 3)))
-
-def stackBody340_76 : StackLang.HolProg 64 :=
-.seq stackBody340_74 stackBody340_75
-
-def stackBody340_77 : StackLang.HolProg 64 :=
+def stackBody340_109 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 2
 
-def stackBody340_78 : StackLang.HolProg 64 :=
+def stackBody340_110 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 4
 
-def stackBody340_79 : StackLang.HolProg 64 :=
-.seq stackBody340_77 stackBody340_78
+def stackBody340_111 : StackLang.HolProg 64 :=
+.seq stackBody340_109 stackBody340_110
 
-def stackBody340_80 : StackLang.HolProg 64 :=
-.seq stackBody340_76 stackBody340_79
+def stackBody340_112 : StackLang.HolProg 64 :=
+.seq stackBody340_108 stackBody340_111
 
-def stackBody340_81 : StackLang.HolProg 64 :=
-.seq stackBody340_73 stackBody340_80
+def stackBody340_113 : StackLang.HolProg 64 :=
+.seq stackBody340_107 stackBody340_112
 
-def stackBody340_82 : StackLang.HolProg 64 :=
-.seq stackBody340_72 stackBody340_81
+def stackBody340_114 : StackLang.HolProg 64 :=
+.seq stackBody340_106 stackBody340_113
 
-def stackBody340_83 : StackLang.HolProg 64 :=
-.seq stackBody340_71 stackBody340_82
+def stackBody340_115 : StackLang.HolProg 64 :=
+.seq stackBody340_105 stackBody340_114
 
-def stackBody340_84 : StackLang.HolProg 64 :=
-.seq stackBody340_56 stackBody340_83
+def stackBody340_116 : StackLang.HolProg 64 :=
+.seq stackBody340_90 stackBody340_115
 
-def stackBody340_85 : StackLang.HolProg 64 :=
-.seq stackBody340_55 stackBody340_84
+def stackBody340_117 : StackLang.HolProg 64 :=
+.seq stackBody340_89 stackBody340_116
 
-def stackBody340_86 : StackLang.HolProg 64 :=
-.seq stackBody340_54 stackBody340_85
+def stackBody340_118 : StackLang.HolProg 64 :=
+.seq stackBody340_88 stackBody340_117
 
-def stackBody340_87 : StackLang.HolProg 64 :=
-.seq stackBody340_53 stackBody340_86
+def stackBody340_119 : StackLang.HolProg 64 :=
+.seq stackBody340_87 stackBody340_118
 
-def stackBody340_88 : StackLang.HolProg 64 :=
-.seq stackBody340_8 stackBody340_87
+def stackBody340_120 : StackLang.HolProg 64 :=
+.seq stackBody340_86 stackBody340_119
 
-def stackBody340_89 : StackLang.HolProg 64 :=
-.seq stackBody340_7 stackBody340_88
+def stackBody340_121 : StackLang.HolProg 64 :=
+.seq stackBody340_75 stackBody340_120
 
-def stackBody340_90 : StackLang.HolProg 64 :=
-.seq stackBody340_6 stackBody340_89
+def stackBody340_122 : StackLang.HolProg 64 :=
+.seq stackBody340_74 stackBody340_121
 
-def stackBody340_91 : StackLang.HolProg 64 :=
-.seq stackBody340_5 stackBody340_90
+def stackBody340_123 : StackLang.HolProg 64 :=
+.seq stackBody340_73 stackBody340_122
 
-def stackBody340_92 : StackLang.HolProg 64 :=
-.seq stackBody340_4 stackBody340_91
+def stackBody340_124 : StackLang.HolProg 64 :=
+.seq stackBody340_72 stackBody340_123
 
-def stackBody340_93 : StackLang.HolProg 64 :=
-.seq stackBody340_3 stackBody340_92
+def stackBody340_125 : StackLang.HolProg 64 :=
+.seq stackBody340_71 stackBody340_124
 
-def stackBody340_94 : StackLang.HolProg 64 :=
-.seq stackBody340_2 stackBody340_93
+def stackBody340_126 : StackLang.HolProg 64 :=
+.seq stackBody340_56 stackBody340_125
 
-def stackBody340_95 : StackLang.HolProg 64 :=
-.seq stackBody340_1 stackBody340_94
+def stackBody340_127 : StackLang.HolProg 64 :=
+.seq stackBody340_55 stackBody340_126
 
-def stackBody340_96 : StackLang.HolProg 64 :=
-.seq stackBody340_0 stackBody340_95
+def stackBody340_128 : StackLang.HolProg 64 :=
+.seq stackBody340_54 stackBody340_127
+
+def stackBody340_129 : StackLang.HolProg 64 :=
+.seq stackBody340_53 stackBody340_128
+
+def stackBody340_130 : StackLang.HolProg 64 :=
+.seq stackBody340_8 stackBody340_129
+
+def stackBody340_131 : StackLang.HolProg 64 :=
+.seq stackBody340_7 stackBody340_130
+
+def stackBody340_132 : StackLang.HolProg 64 :=
+.seq stackBody340_6 stackBody340_131
+
+def stackBody340_133 : StackLang.HolProg 64 :=
+.seq stackBody340_5 stackBody340_132
+
+def stackBody340_134 : StackLang.HolProg 64 :=
+.seq stackBody340_4 stackBody340_133
+
+def stackBody340_135 : StackLang.HolProg 64 :=
+.seq stackBody340_3 stackBody340_134
+
+def stackBody340_136 : StackLang.HolProg 64 :=
+.seq stackBody340_2 stackBody340_135
+
+def stackBody340_137 : StackLang.HolProg 64 :=
+.seq stackBody340_1 stackBody340_136
+
+def stackBody340_138 : StackLang.HolProg 64 :=
+.seq stackBody340_0 stackBody340_137
 
 def function340 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody340_96, 2, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [2#64]), 992)
-theorem function340_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized340.2.2 InitECandidate.Proofs.StackAnalysis.optimized340.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 991) = function340 bitmapPrefix := by
+(stackBody340_138, 2, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [2#64]), 982)
+theorem function340_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized340.2.2 InitECandidate.Proofs.StackAnalysis.optimized340.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 981) = function340 bitmapPrefix := by
   kernel_rfl
 #print axioms function340_eq
 end InitECandidate.Proofs.BackendStages

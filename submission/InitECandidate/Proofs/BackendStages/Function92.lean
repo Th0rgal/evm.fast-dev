@@ -69,8 +69,8 @@ def stackBody92_18 : StackLang.HolProg 64 :=
 .seq stackBody92_0 stackBody92_17
 
 def function92 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody92_18, 0, bitmapPrefix, 40)
-theorem function92_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized92.2.2 InitECandidate.Proofs.StackAnalysis.optimized92.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 40) = function92 bitmapPrefix := by
+(stackBody92_18, 0, bitmapPrefix, 39)
+theorem function92_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized92.2.2 InitECandidate.Proofs.StackAnalysis.optimized92.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 39) = function92 bitmapPrefix := by
   kernel_rfl
 #print axioms function92_eq
 end InitECandidate.Proofs.BackendStages

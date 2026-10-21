@@ -456,8 +456,8 @@ def stackBody137_130 : StackLang.HolProg 64 :=
 .seq stackBody137_0 stackBody137_129
 
 def function137 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody137_130, 0, bitmapPrefix, 97)
-theorem function137_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized137.2.2 InitECandidate.Proofs.StackAnalysis.optimized137.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 97) = function137 bitmapPrefix := by
+(stackBody137_130, 0, bitmapPrefix, 96)
+theorem function137_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized137.2.2 InitECandidate.Proofs.StackAnalysis.optimized137.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 96) = function137 bitmapPrefix := by
   kernel_rfl
 #print axioms function137_eq
 end InitECandidate.Proofs.BackendStages

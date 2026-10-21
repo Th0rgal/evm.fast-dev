@@ -300,8 +300,8 @@ def stackBody123_83 : StackLang.HolProg 64 :=
 .seq stackBody123_0 stackBody123_82
 
 def function123 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody123_83, 0, bitmapPrefix, 70)
-theorem function123_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized123.2.2 InitECandidate.Proofs.StackAnalysis.optimized123.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 70) = function123 bitmapPrefix := by
+(stackBody123_83, 0, bitmapPrefix, 69)
+theorem function123_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized123.2.2 InitECandidate.Proofs.StackAnalysis.optimized123.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 69) = function123 bitmapPrefix := by
   kernel_rfl
 #print axioms function123_eq
 end InitECandidate.Proofs.BackendStages

@@ -19,92 +19,128 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Chunk512_527
-abbrev state512 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := bitmapPrefix
-abbrev state513 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function512 (state512 bitmapPrefix)).2.2.1
-abbrev state514 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function513 (state513 bitmapPrefix)).2.2.1
-abbrev state515 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function514 (state514 bitmapPrefix)).2.2.1
-abbrev state516 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function515 (state515 bitmapPrefix)).2.2.1
-abbrev state517 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function516 (state516 bitmapPrefix)).2.2.1
-abbrev state518 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function517 (state517 bitmapPrefix)).2.2.1
-abbrev state519 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function518 (state518 bitmapPrefix)).2.2.1
-abbrev state520 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function519 (state519 bitmapPrefix)).2.2.1
-abbrev state521 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function520 (state520 bitmapPrefix)).2.2.1
-abbrev state522 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function521 (state521 bitmapPrefix)).2.2.1
-abbrev state523 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function522 (state522 bitmapPrefix)).2.2.1
-abbrev state524 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function523 (state523 bitmapPrefix)).2.2.1
-abbrev state525 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function524 (state524 bitmapPrefix)).2.2.1
-abbrev state526 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function525 (state525 bitmapPrefix)).2.2.1
-abbrev state527 (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function526 (state526 bitmapPrefix)).2.2.1
-theorem state512_eq (bitmapPrefix : AppList (BitVec 64)) : (function512 (state512 bitmapPrefix)).2.2 = (state513 bitmapPrefix, 1651) := by rfl
-theorem state513_eq (bitmapPrefix : AppList (BitVec 64)) : (function513 (state513 bitmapPrefix)).2.2 = (state514 bitmapPrefix, 1657) := by rfl
-theorem state514_eq (bitmapPrefix : AppList (BitVec 64)) : (function514 (state514 bitmapPrefix)).2.2 = (state515 bitmapPrefix, 1663) := by rfl
-theorem state515_eq (bitmapPrefix : AppList (BitVec 64)) : (function515 (state515 bitmapPrefix)).2.2 = (state516 bitmapPrefix, 1668) := by rfl
-theorem state516_eq (bitmapPrefix : AppList (BitVec 64)) : (function516 (state516 bitmapPrefix)).2.2 = (state517 bitmapPrefix, 1673) := by rfl
-theorem state517_eq (bitmapPrefix : AppList (BitVec 64)) : (function517 (state517 bitmapPrefix)).2.2 = (state518 bitmapPrefix, 1678) := by rfl
-theorem state518_eq (bitmapPrefix : AppList (BitVec 64)) : (function518 (state518 bitmapPrefix)).2.2 = (state519 bitmapPrefix, 1683) := by rfl
-theorem state519_eq (bitmapPrefix : AppList (BitVec 64)) : (function519 (state519 bitmapPrefix)).2.2 = (state520 bitmapPrefix, 1687) := by rfl
-theorem state520_eq (bitmapPrefix : AppList (BitVec 64)) : (function520 (state520 bitmapPrefix)).2.2 = (state521 bitmapPrefix, 1694) := by rfl
-theorem state521_eq (bitmapPrefix : AppList (BitVec 64)) : (function521 (state521 bitmapPrefix)).2.2 = (state522 bitmapPrefix, 1701) := by rfl
-theorem state522_eq (bitmapPrefix : AppList (BitVec 64)) : (function522 (state522 bitmapPrefix)).2.2 = (state523 bitmapPrefix, 1708) := by rfl
-theorem state523_eq (bitmapPrefix : AppList (BitVec 64)) : (function523 (state523 bitmapPrefix)).2.2 = (state524 bitmapPrefix, 1715) := by rfl
-theorem state524_eq (bitmapPrefix : AppList (BitVec 64)) : (function524 (state524 bitmapPrefix)).2.2 = (state525 bitmapPrefix, 1720) := by rfl
-theorem state525_eq (bitmapPrefix : AppList (BitVec 64)) : (function525 (state525 bitmapPrefix)).2.2 = (state526 bitmapPrefix, 1736) := by rfl
-theorem state526_eq (bitmapPrefix : AppList (BitVec 64)) : (function526 (state526 bitmapPrefix)).2.2 = (state527 bitmapPrefix, 1737) := by rfl
-def programs : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := [
-  (512, StackAnalysis.optimized512.2.1, StackAnalysis.optimized512.2.2),
-  (513, StackAnalysis.optimized513.2.1, StackAnalysis.optimized513.2.2),
-  (514, StackAnalysis.optimized514.2.1, StackAnalysis.optimized514.2.2),
-  (515, StackAnalysis.optimized515.2.1, StackAnalysis.optimized515.2.2),
-  (516, StackAnalysis.optimized516.2.1, StackAnalysis.optimized516.2.2),
-  (517, StackAnalysis.optimized517.2.1, StackAnalysis.optimized517.2.2),
-  (518, StackAnalysis.optimized518.2.1, StackAnalysis.optimized518.2.2),
-  (519, StackAnalysis.optimized519.2.1, StackAnalysis.optimized519.2.2),
-  (520, StackAnalysis.optimized520.2.1, StackAnalysis.optimized520.2.2),
-  (521, StackAnalysis.optimized521.2.1, StackAnalysis.optimized521.2.2),
-  (522, StackAnalysis.optimized522.2.1, StackAnalysis.optimized522.2.2),
-  (523, StackAnalysis.optimized523.2.1, StackAnalysis.optimized523.2.2),
-  (524, StackAnalysis.optimized524.2.1, StackAnalysis.optimized524.2.2),
-  (525, StackAnalysis.optimized525.2.1, StackAnalysis.optimized525.2.2),
-  (526, StackAnalysis.optimized526.2.1, StackAnalysis.optimized526.2.2),
-  (527, StackAnalysis.optimized527.2.1, StackAnalysis.optimized527.2.2)]
-def bodies : List (Nat × StackLang.HolProg 64) := [(512, stackBody512_340), (513, stackBody513_340), (514, stackBody514_340), (515, stackBody515_270), (516, stackBody516_308), (517, stackBody517_308), (518, stackBody518_308), (519, stackBody519_238), (520, stackBody520_418), (521, stackBody521_410), (522, stackBody522_410), (523, stackBody523_410), (524, stackBody524_276), (525, stackBody525_964), (526, stackBody526_76), (527, stackBody527_216)]
-def frames : List Nat := [10, 10, 10, 6, 10, 10, 10, 6, 10, 10, 10, 10, 6, 11, 2, 6]
-def after (bitmapPrefix : AppList (BitVec 64)) : AppList (BitVec 64) := (function527 (state527 bitmapPrefix)).2.2.1
-def result (bitmapPrefix : AppList (BitVec 64)) : List (Nat × StackLang.HolProg 64) × List Nat × (AppList (BitVec 64) × Nat) := (bodies, frames, after bitmapPrefix, 1740)
-theorem compiled_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs (bitmapPrefix, 1645) = result bitmapPrefix := by
-  unfold programs
-  simp only [WordToStack.Native.compileWordToStackNative]
-  rw [function512_eq]
-  rw [state512_eq bitmapPrefix]
-  rw [function513_eq]
-  rw [state513_eq bitmapPrefix]
-  rw [function514_eq]
-  rw [state514_eq bitmapPrefix]
-  rw [function515_eq]
-  rw [state515_eq bitmapPrefix]
-  rw [function516_eq]
-  rw [state516_eq bitmapPrefix]
-  rw [function517_eq]
-  rw [state517_eq bitmapPrefix]
-  rw [function518_eq]
-  rw [state518_eq bitmapPrefix]
-  rw [function519_eq]
-  rw [state519_eq bitmapPrefix]
-  rw [function520_eq]
-  rw [state520_eq bitmapPrefix]
-  rw [function521_eq]
-  rw [state521_eq bitmapPrefix]
-  rw [function522_eq]
-  rw [state522_eq bitmapPrefix]
-  rw [function523_eq]
-  rw [state523_eq bitmapPrefix]
-  rw [function524_eq]
-  rw [state524_eq bitmapPrefix]
-  rw [function525_eq]
-  rw [state525_eq bitmapPrefix]
-  rw [function526_eq]
-  rw [state526_eq bitmapPrefix]
-  rw [function527_eq]
-  try rfl
+def programs528 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := []
+def bodies528 : List (Nat × StackLang.HolProg 64) := []
+def frames528 : List Nat := []
+def after528 (bitmapPrefix : AppList (BitVec 64)) := bitmapPrefix
+theorem compiled528_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs528 (bitmapPrefix, 1737) = (bodies528, frames528, after528 bitmapPrefix, 1737) := by rfl
+def step527 (bitmapPrefix : AppList (BitVec 64)) := (function527 bitmapPrefix).2.2.1
+def programs527 := (527, StackAnalysis.optimized527.2.1, StackAnalysis.optimized527.2.2) :: programs528
+def bodies527 := (527, stackBody527_168) :: bodies528
+def frames527 := 2 :: frames528
+def after527 (bitmapPrefix : AppList (BitVec 64)) := after528 (step527 bitmapPrefix)
+theorem compiled527_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs527 (bitmapPrefix, 1734) = (bodies527, frames527, after527 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 527 StackAnalysis.optimized527.2.1 StackAnalysis.optimized527.2.2 programs528 (bitmapPrefix, 1734) (step527 bitmapPrefix, 1737) (after528 (step527 bitmapPrefix), 1737) stackBody527_168 2 bodies528 frames528 (function527_eq bitmapPrefix) (compiled528_eq (step527 bitmapPrefix))
+def step526 (bitmapPrefix : AppList (BitVec 64)) := (function526 bitmapPrefix).2.2.1
+def programs526 := (526, StackAnalysis.optimized526.2.1, StackAnalysis.optimized526.2.2) :: programs527
+def bodies526 := (526, stackBody526_436) :: bodies527
+def frames526 := 10 :: frames527
+def after526 (bitmapPrefix : AppList (BitVec 64)) := after527 (step526 bitmapPrefix)
+theorem compiled526_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs526 (bitmapPrefix, 1728) = (bodies526, frames526, after526 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 526 StackAnalysis.optimized526.2.1 StackAnalysis.optimized526.2.2 programs527 (bitmapPrefix, 1728) (step526 bitmapPrefix, 1734) (after527 (step526 bitmapPrefix), 1737) stackBody526_436 10 bodies527 frames527 (function526_eq bitmapPrefix) (compiled527_eq (step526 bitmapPrefix))
+def step525 (bitmapPrefix : AppList (BitVec 64)) := (function525 bitmapPrefix).2.2.1
+def programs525 := (525, StackAnalysis.optimized525.2.1, StackAnalysis.optimized525.2.2) :: programs526
+def bodies525 := (525, stackBody525_216) :: bodies526
+def frames525 := 6 :: frames526
+def after525 (bitmapPrefix : AppList (BitVec 64)) := after526 (step525 bitmapPrefix)
+theorem compiled525_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs525 (bitmapPrefix, 1725) = (bodies525, frames525, after525 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 525 StackAnalysis.optimized525.2.1 StackAnalysis.optimized525.2.2 programs526 (bitmapPrefix, 1725) (step525 bitmapPrefix, 1728) (after526 (step525 bitmapPrefix), 1737) stackBody525_216 6 bodies526 frames526 (function525_eq bitmapPrefix) (compiled526_eq (step525 bitmapPrefix))
+def step524 (bitmapPrefix : AppList (BitVec 64)) := (function524 bitmapPrefix).2.2.1
+def programs524 := (524, StackAnalysis.optimized524.2.1, StackAnalysis.optimized524.2.2) :: programs525
+def bodies524 := (524, stackBody524_76) :: bodies525
+def frames524 := 2 :: frames525
+def after524 (bitmapPrefix : AppList (BitVec 64)) := after525 (step524 bitmapPrefix)
+theorem compiled524_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs524 (bitmapPrefix, 1724) = (bodies524, frames524, after524 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 524 StackAnalysis.optimized524.2.1 StackAnalysis.optimized524.2.2 programs525 (bitmapPrefix, 1724) (step524 bitmapPrefix, 1725) (after525 (step524 bitmapPrefix), 1737) stackBody524_76 2 bodies525 frames525 (function524_eq bitmapPrefix) (compiled525_eq (step524 bitmapPrefix))
+def step523 (bitmapPrefix : AppList (BitVec 64)) := (function523 bitmapPrefix).2.2.1
+def programs523 := (523, StackAnalysis.optimized523.2.1, StackAnalysis.optimized523.2.2) :: programs524
+def bodies523 := (523, stackBody523_964) :: bodies524
+def frames523 := 11 :: frames524
+def after523 (bitmapPrefix : AppList (BitVec 64)) := after524 (step523 bitmapPrefix)
+theorem compiled523_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs523 (bitmapPrefix, 1708) = (bodies523, frames523, after523 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 523 StackAnalysis.optimized523.2.1 StackAnalysis.optimized523.2.2 programs524 (bitmapPrefix, 1708) (step523 bitmapPrefix, 1724) (after524 (step523 bitmapPrefix), 1737) stackBody523_964 11 bodies524 frames524 (function523_eq bitmapPrefix) (compiled524_eq (step523 bitmapPrefix))
+def step522 (bitmapPrefix : AppList (BitVec 64)) := (function522 bitmapPrefix).2.2.1
+def programs522 := (522, StackAnalysis.optimized522.2.1, StackAnalysis.optimized522.2.2) :: programs523
+def bodies522 := (522, stackBody522_276) :: bodies523
+def frames522 := 6 :: frames523
+def after522 (bitmapPrefix : AppList (BitVec 64)) := after523 (step522 bitmapPrefix)
+theorem compiled522_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs522 (bitmapPrefix, 1703) = (bodies522, frames522, after522 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 522 StackAnalysis.optimized522.2.1 StackAnalysis.optimized522.2.2 programs523 (bitmapPrefix, 1703) (step522 bitmapPrefix, 1708) (after523 (step522 bitmapPrefix), 1737) stackBody522_276 6 bodies523 frames523 (function522_eq bitmapPrefix) (compiled523_eq (step522 bitmapPrefix))
+def step521 (bitmapPrefix : AppList (BitVec 64)) := (function521 bitmapPrefix).2.2.1
+def programs521 := (521, StackAnalysis.optimized521.2.1, StackAnalysis.optimized521.2.2) :: programs522
+def bodies521 := (521, stackBody521_410) :: bodies522
+def frames521 := 10 :: frames522
+def after521 (bitmapPrefix : AppList (BitVec 64)) := after522 (step521 bitmapPrefix)
+theorem compiled521_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs521 (bitmapPrefix, 1696) = (bodies521, frames521, after521 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 521 StackAnalysis.optimized521.2.1 StackAnalysis.optimized521.2.2 programs522 (bitmapPrefix, 1696) (step521 bitmapPrefix, 1703) (after522 (step521 bitmapPrefix), 1737) stackBody521_410 10 bodies522 frames522 (function521_eq bitmapPrefix) (compiled522_eq (step521 bitmapPrefix))
+def step520 (bitmapPrefix : AppList (BitVec 64)) := (function520 bitmapPrefix).2.2.1
+def programs520 := (520, StackAnalysis.optimized520.2.1, StackAnalysis.optimized520.2.2) :: programs521
+def bodies520 := (520, stackBody520_410) :: bodies521
+def frames520 := 10 :: frames521
+def after520 (bitmapPrefix : AppList (BitVec 64)) := after521 (step520 bitmapPrefix)
+theorem compiled520_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs520 (bitmapPrefix, 1689) = (bodies520, frames520, after520 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 520 StackAnalysis.optimized520.2.1 StackAnalysis.optimized520.2.2 programs521 (bitmapPrefix, 1689) (step520 bitmapPrefix, 1696) (after521 (step520 bitmapPrefix), 1737) stackBody520_410 10 bodies521 frames521 (function520_eq bitmapPrefix) (compiled521_eq (step520 bitmapPrefix))
+def step519 (bitmapPrefix : AppList (BitVec 64)) := (function519 bitmapPrefix).2.2.1
+def programs519 := (519, StackAnalysis.optimized519.2.1, StackAnalysis.optimized519.2.2) :: programs520
+def bodies519 := (519, stackBody519_410) :: bodies520
+def frames519 := 10 :: frames520
+def after519 (bitmapPrefix : AppList (BitVec 64)) := after520 (step519 bitmapPrefix)
+theorem compiled519_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs519 (bitmapPrefix, 1682) = (bodies519, frames519, after519 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 519 StackAnalysis.optimized519.2.1 StackAnalysis.optimized519.2.2 programs520 (bitmapPrefix, 1682) (step519 bitmapPrefix, 1689) (after520 (step519 bitmapPrefix), 1737) stackBody519_410 10 bodies520 frames520 (function519_eq bitmapPrefix) (compiled520_eq (step519 bitmapPrefix))
+def step518 (bitmapPrefix : AppList (BitVec 64)) := (function518 bitmapPrefix).2.2.1
+def programs518 := (518, StackAnalysis.optimized518.2.1, StackAnalysis.optimized518.2.2) :: programs519
+def bodies518 := (518, stackBody518_418) :: bodies519
+def frames518 := 10 :: frames519
+def after518 (bitmapPrefix : AppList (BitVec 64)) := after519 (step518 bitmapPrefix)
+theorem compiled518_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs518 (bitmapPrefix, 1675) = (bodies518, frames518, after518 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 518 StackAnalysis.optimized518.2.1 StackAnalysis.optimized518.2.2 programs519 (bitmapPrefix, 1675) (step518 bitmapPrefix, 1682) (after519 (step518 bitmapPrefix), 1737) stackBody518_418 10 bodies519 frames519 (function518_eq bitmapPrefix) (compiled519_eq (step518 bitmapPrefix))
+def step517 (bitmapPrefix : AppList (BitVec 64)) := (function517 bitmapPrefix).2.2.1
+def programs517 := (517, StackAnalysis.optimized517.2.1, StackAnalysis.optimized517.2.2) :: programs518
+def bodies517 := (517, stackBody517_238) :: bodies518
+def frames517 := 6 :: frames518
+def after517 (bitmapPrefix : AppList (BitVec 64)) := after518 (step517 bitmapPrefix)
+theorem compiled517_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs517 (bitmapPrefix, 1671) = (bodies517, frames517, after517 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 517 StackAnalysis.optimized517.2.1 StackAnalysis.optimized517.2.2 programs518 (bitmapPrefix, 1671) (step517 bitmapPrefix, 1675) (after518 (step517 bitmapPrefix), 1737) stackBody517_238 6 bodies518 frames518 (function517_eq bitmapPrefix) (compiled518_eq (step517 bitmapPrefix))
+def step516 (bitmapPrefix : AppList (BitVec 64)) := (function516 bitmapPrefix).2.2.1
+def programs516 := (516, StackAnalysis.optimized516.2.1, StackAnalysis.optimized516.2.2) :: programs517
+def bodies516 := (516, stackBody516_308) :: bodies517
+def frames516 := 10 :: frames517
+def after516 (bitmapPrefix : AppList (BitVec 64)) := after517 (step516 bitmapPrefix)
+theorem compiled516_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs516 (bitmapPrefix, 1666) = (bodies516, frames516, after516 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 516 StackAnalysis.optimized516.2.1 StackAnalysis.optimized516.2.2 programs517 (bitmapPrefix, 1666) (step516 bitmapPrefix, 1671) (after517 (step516 bitmapPrefix), 1737) stackBody516_308 10 bodies517 frames517 (function516_eq bitmapPrefix) (compiled517_eq (step516 bitmapPrefix))
+def step515 (bitmapPrefix : AppList (BitVec 64)) := (function515 bitmapPrefix).2.2.1
+def programs515 := (515, StackAnalysis.optimized515.2.1, StackAnalysis.optimized515.2.2) :: programs516
+def bodies515 := (515, stackBody515_308) :: bodies516
+def frames515 := 10 :: frames516
+def after515 (bitmapPrefix : AppList (BitVec 64)) := after516 (step515 bitmapPrefix)
+theorem compiled515_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs515 (bitmapPrefix, 1661) = (bodies515, frames515, after515 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 515 StackAnalysis.optimized515.2.1 StackAnalysis.optimized515.2.2 programs516 (bitmapPrefix, 1661) (step515 bitmapPrefix, 1666) (after516 (step515 bitmapPrefix), 1737) stackBody515_308 10 bodies516 frames516 (function515_eq bitmapPrefix) (compiled516_eq (step515 bitmapPrefix))
+def step514 (bitmapPrefix : AppList (BitVec 64)) := (function514 bitmapPrefix).2.2.1
+def programs514 := (514, StackAnalysis.optimized514.2.1, StackAnalysis.optimized514.2.2) :: programs515
+def bodies514 := (514, stackBody514_308) :: bodies515
+def frames514 := 10 :: frames515
+def after514 (bitmapPrefix : AppList (BitVec 64)) := after515 (step514 bitmapPrefix)
+theorem compiled514_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs514 (bitmapPrefix, 1656) = (bodies514, frames514, after514 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 514 StackAnalysis.optimized514.2.1 StackAnalysis.optimized514.2.2 programs515 (bitmapPrefix, 1656) (step514 bitmapPrefix, 1661) (after515 (step514 bitmapPrefix), 1737) stackBody514_308 10 bodies515 frames515 (function514_eq bitmapPrefix) (compiled515_eq (step514 bitmapPrefix))
+def step513 (bitmapPrefix : AppList (BitVec 64)) := (function513 bitmapPrefix).2.2.1
+def programs513 := (513, StackAnalysis.optimized513.2.1, StackAnalysis.optimized513.2.2) :: programs514
+def bodies513 := (513, stackBody513_270) :: bodies514
+def frames513 := 6 :: frames514
+def after513 (bitmapPrefix : AppList (BitVec 64)) := after514 (step513 bitmapPrefix)
+theorem compiled513_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs513 (bitmapPrefix, 1651) = (bodies513, frames513, after513 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 513 StackAnalysis.optimized513.2.1 StackAnalysis.optimized513.2.2 programs514 (bitmapPrefix, 1651) (step513 bitmapPrefix, 1656) (after514 (step513 bitmapPrefix), 1737) stackBody513_270 6 bodies514 frames514 (function513_eq bitmapPrefix) (compiled514_eq (step513 bitmapPrefix))
+def step512 (bitmapPrefix : AppList (BitVec 64)) := (function512 bitmapPrefix).2.2.1
+def programs512 := (512, StackAnalysis.optimized512.2.1, StackAnalysis.optimized512.2.2) :: programs513
+def bodies512 := (512, stackBody512_340) :: bodies513
+def frames512 := 10 :: frames513
+def after512 (bitmapPrefix : AppList (BitVec 64)) := after513 (step512 bitmapPrefix)
+theorem compiled512_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs512 (bitmapPrefix, 1645) = (bodies512, frames512, after512 bitmapPrefix, 1737) := by
+  exact InitECandidate.Proofs.BackendComputation.compileWordToStack_cons riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) 512 StackAnalysis.optimized512.2.1 StackAnalysis.optimized512.2.2 programs513 (bitmapPrefix, 1645) (step512 bitmapPrefix, 1651) (after513 (step512 bitmapPrefix), 1737) stackBody512_340 10 bodies513 frames513 (function512_eq bitmapPrefix) (compiled513_eq (step512 bitmapPrefix))
+def programs := programs512
+def bodies := bodies512
+def frames := frames512
+def after := after512
+def result (bitmapPrefix : AppList (BitVec 64)) := (bodies, frames, after bitmapPrefix, 1737)
+theorem compiled_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs (bitmapPrefix, 1645) = result bitmapPrefix := compiled512_eq bitmapPrefix
 #print axioms compiled_eq
 end InitECandidate.Proofs.BackendStages.Chunk512_527

@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.StackAnalysis.Data66
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.WordToStack.NativeTopCompile
@@ -178,8 +179,8 @@ def stackBody66_50 : StackLang.HolProg 64 :=
 .seq stackBody66_0 stackBody66_49
 
 def function66 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody66_50, 3, bitmapPrefix, 27)
-theorem function66_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized66.2.2 InitECandidate.Proofs.StackAnalysis.optimized66.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 27) = function66 bitmapPrefix := by
-  with_unfolding_all rfl
+(stackBody66_50, 3, bitmapPrefix, 26)
+theorem function66_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized66.2.2 InitECandidate.Proofs.StackAnalysis.optimized66.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 26) = function66 bitmapPrefix := by
+  kernel_rfl
 #print axioms function66_eq
 end InitECandidate.Proofs.BackendStages

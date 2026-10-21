@@ -91,8 +91,8 @@ def stackBody116_24 : StackLang.HolProg 64 :=
 .seq stackBody116_0 stackBody116_23
 
 def function116 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody116_24, 0, bitmapPrefix, 47)
-theorem function116_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized116.2.2 InitECandidate.Proofs.StackAnalysis.optimized116.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 47) = function116 bitmapPrefix := by
+(stackBody116_24, 0, bitmapPrefix, 46)
+theorem function116_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized116.2.2 InitECandidate.Proofs.StackAnalysis.optimized116.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 46) = function116 bitmapPrefix := by
   kernel_rfl
 #print axioms function116_eq
 end InitECandidate.Proofs.BackendStages

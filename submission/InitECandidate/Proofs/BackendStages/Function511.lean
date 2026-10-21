@@ -129,7 +129,7 @@ def stackBody511_38 : StackLang.HolProg 64 :=
 .seq stackBody511_36 stackBody511_37
 
 def stackBody511_39 : StackLang.HolProg 64 :=
-.call (some (stackBody511_35, 0, 511, 2)) (Sum.inl 477) (some (stackBody511_38, 511, 3))
+.call (some (stackBody511_35, 0, 511, 2)) (Sum.inl 475) (some (stackBody511_38, 511, 3))
 
 def stackBody511_40 : StackLang.HolProg 64 :=
 .seq stackBody511_26 stackBody511_39
@@ -285,7 +285,7 @@ def stackBody511_89 : StackLang.HolProg 64 :=
 .seq stackBody511_87 stackBody511_88
 
 def stackBody511_90 : StackLang.HolProg 64 :=
-.call (some (stackBody511_86, 0, 511, 4)) (Sum.inl 477) (some (stackBody511_89, 511, 5))
+.call (some (stackBody511_86, 0, 511, 4)) (Sum.inl 475) (some (stackBody511_89, 511, 5))
 
 def stackBody511_91 : StackLang.HolProg 64 :=
 .seq stackBody511_77 stackBody511_90
@@ -525,7 +525,7 @@ def stackBody511_169 : StackLang.HolProg 64 :=
 .seq stackBody511_167 stackBody511_168
 
 def stackBody511_170 : StackLang.HolProg 64 :=
-.call (some (stackBody511_152, 0, 511, 6)) (Sum.inl 472) (some (stackBody511_169, 511, 7))
+.call (some (stackBody511_152, 0, 511, 6)) (Sum.inl 470) (some (stackBody511_169, 511, 7))
 
 def stackBody511_171 : StackLang.HolProg 64 :=
 .seq stackBody511_129 stackBody511_170
@@ -666,7 +666,7 @@ def stackBody511_214 : StackLang.HolProg 64 :=
 .seq stackBody511_212 stackBody511_213
 
 def stackBody511_215 : StackLang.HolProg 64 :=
-.call (some (stackBody511_211, 0, 511, 8)) (Sum.inl 107) (some (stackBody511_214, 511, 9))
+.call (some (stackBody511_211, 0, 511, 8)) (Sum.inl 109) (some (stackBody511_214, 511, 9))
 
 def stackBody511_216 : StackLang.HolProg 64 :=
 .seq stackBody511_202 stackBody511_215
@@ -804,7 +804,7 @@ def stackBody511_259 : StackLang.HolProg 64 :=
 .seq stackBody511_257 stackBody511_258
 
 def stackBody511_260 : StackLang.HolProg 64 :=
-.call (some (stackBody511_256, 0, 511, 10)) (Sum.inl 480) (some (stackBody511_259, 511, 11))
+.call (some (stackBody511_256, 0, 511, 10)) (Sum.inl 478) (some (stackBody511_259, 511, 11))
 
 def stackBody511_261 : StackLang.HolProg 64 :=
 .seq stackBody511_247 stackBody511_260
@@ -942,7 +942,7 @@ def stackBody511_305 : StackLang.HolProg 64 :=
 .seq stackBody511_303 stackBody511_304
 
 def stackBody511_306 : StackLang.HolProg 64 :=
-.call (some (stackBody511_302, 0, 511, 12)) (Sum.inl 492) (some (stackBody511_305, 511, 13))
+.call (some (stackBody511_302, 0, 511, 12)) (Sum.inl 490) (some (stackBody511_305, 511, 13))
 
 def stackBody511_307 : StackLang.HolProg 64 :=
 .seq stackBody511_293 stackBody511_306
