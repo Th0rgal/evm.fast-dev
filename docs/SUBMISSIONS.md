@@ -111,9 +111,9 @@ axioms.
 Proof verification requires unprivileged Linux, Landlock ABI 3 or newer, a
 working systemd user bus, and systemd support for the mandatory unit properties,
 including `PrivatePIDs`. Each build/comparison unit has a 112 GiB memory cap,
-no swap and up to 16 visible logical CPUs. The verifier stages and hashes the
+no swap and up to 30 visible logical CPUs. The verifier stages and hashes the
 trusted Lean limiter sources before running them inside isolation. Both the
-trusted audit and comparator use at most 16 active Lean processes, with a
+trusted audit and comparator use at most 30 active Lean processes, with a
 16,384-task allowance for waiting launchers and Lake reader threads. Generated
 limiter binaries and locks stay under the writable `.lake/lean-limit` directory;
 Lake artifact caching is explicitly disabled. The trusted audit build and the

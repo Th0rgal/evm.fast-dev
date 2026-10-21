@@ -7,10 +7,10 @@ limit the number of compiler environments loaded into memory.
 Run the build with the project-local limiter:
 
 ```sh
-rtk proxy timeout --kill-after=5s 1200s taskset -c 0-15 python3 tools/limited-lake.py --slots 16 -- lake build InitECandidate.Proofs.WordBackend.FunctionsFacts
+rtk proxy timeout --kill-after=5s 1200s python3 tools/limited-lake.py --slots 30 -- lake build InitECandidate.Proofs.WordBackend.FunctionsFacts
 ```
 
-The default is 16 slots; `--slots` accepts 1–16. Each small C launcher acquires a
+The default is 30 slots; `--slots` accepts 1–32. Each small C launcher acquires a
 blocking `flock` before executing the unchanged real Lean compiler. The lock file
 descriptor survives `exec`, and the kernel releases it when the compiler exits.
 Arguments, environment, standard streams, real githash, and exit status are
@@ -25,9 +25,9 @@ the project. Copied trusted helpers can specify `--project-dir`. Nested launches
 reuse the underlying real compiler and lock directory, and cannot increase the
 parent's slot cap. Run metadata records trusted helper source hashes.
 
-Use at most 16 CPUs and recommend `TasksMax=16384` for large fresh builds: Lake
-still creates waiting processes and I/O threads, so 16 compiler slots do not
-mean 16 tasks. The limiter does not gate separate C compiler or `leanir` jobs.
+Use at most 30 CPUs and recommend `TasksMax=16384` for large fresh builds: Lake
+still creates waiting processes and I/O threads, so 30 compiler slots do not
+mean 30 tasks. The limiter does not gate separate C compiler or `leanir` jobs.
 
 Checks: eight simultaneous fake compilers with two slots recorded peak activity
 of exactly two and returned to zero, confirming lock inheritance through exec.

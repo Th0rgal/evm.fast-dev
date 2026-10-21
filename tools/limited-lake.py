@@ -17,7 +17,7 @@ import subprocess
 import tempfile
 
 parser=argparse.ArgumentParser(description=__doc__)
-parser.add_argument("--slots",type=int,default=16,choices=range(1,33))
+parser.add_argument("--slots",type=int,default=30,choices=range(1,33))
 parser.add_argument("--work-dir",type=Path)
 parser.add_argument("--project-dir",type=Path,help="Project root when running a copied trusted helper")
 parser.add_argument("command",nargs=argparse.REMAINDER)

@@ -5,7 +5,7 @@ cd "$(dirname "$0")/.."
 export LAKE_ARTIFACT_CACHE=false
 seconds=28800
 constrained=false
-slots=32
+slots=30
 slots_override=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -15,7 +15,7 @@ while [[ $# -gt 0 ]]; do
     *) break ;;
   esac
 done
-if $constrained && ! $slots_override; then slots=16; fi
+if $constrained && ! $slots_override; then slots=30; fi
 if [[ ! "$slots" =~ ^[1-9][0-9]*$ ]]; then
   echo "slots must be a positive integer" >&2
   exit 2

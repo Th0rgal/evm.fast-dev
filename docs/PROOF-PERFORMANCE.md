@@ -1061,8 +1061,8 @@ worker RSS was21,945,644KiB; no aggregate memory peak was collected for this
 run. Log: word-backend-limited-full-build.log.
 
 The outside build helper now uses the admission launcher by default and has
---constrained mode for an enforced112GiB cgroup, zero swap,16logical CPUs,
-16active compilers and an eight-hour timeout without private namespaces.
+--constrained mode for an enforced112GiB cgroup, zero swap,30logical CPUs,
+30active compilers and an eight-hour timeout without private namespaces.
 Its warm CompilerOracles smoke passed in1.432service seconds,2.350CPU seconds,
 271.8MiB aggregate cgroup peak. Concrete source stack closure is now being
 checked under those enforced caps. The user's final goal is completion under
