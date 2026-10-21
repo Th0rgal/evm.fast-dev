@@ -6,14 +6,20 @@ export LAKE_ARTIFACT_CACHE=false
 seconds=28800
 constrained=false
 slots=32
+slots_override=false
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quick) seconds=600; shift ;;
     --constrained) constrained=true; shift ;;
+    --slots) slots="$2"; slots_override=true; shift 2 ;;
     *) break ;;
   esac
 done
-if $constrained; then slots=16; fi
+if $constrained && ! $slots_override; then slots=16; fi
+if [[ ! "$slots" =~ ^[1-9][0-9]*$ ]]; then
+  echo "slots must be a positive integer" >&2
+  exit 2
+fi
 build_cpus=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' "$slots")
 build_command=(python3 "$PWD/tools/limited-lake.py" --work-dir "$PWD/.lake/lean-limit" --slots "$slots" -- lake build "$@")
 if $constrained; then

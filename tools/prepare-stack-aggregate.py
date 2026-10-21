@@ -1,8 +1,12 @@
 from pathlib import Path
 import re
 root=Path("submission/InitECandidate/Proofs/StackAnalysis")
-nums=sorted(int(re.search(r"\d+",p.stem)[0]) for p in root.glob("Facts*.lean"))
-assert len(nums)==826
+ast=Path("Guest/SoftwareAst.lean").read_text()
+function_count=len(re.findall(r"\bguestFn_\w+",ast[ast.index("def guestAst :"):]))+1
+last_label=64+function_count
+nums=sorted(int(re.search(r"\d+",p.stem)[0]) for p in root.glob("Facts*.lean")
+            if int(re.search(r"\d+",p.stem)[0])<last_label)
+assert nums==list(range(64,last_label))
 args={n:int(re.search(rf"slimEntry{n}_eq.*?= \({n}, (\d+),",(root/f"Facts{n}.lean").read_text())[1]) for n in nums}
 text="".join(f"import InitECandidate.Proofs.StackAnalysis.Facts{n}\n" for n in nums)
 text+="import InitECandidate.Proofs.StackAnalysis.Data\nimport InitECandidate.Proofs.StackAnalysis.Bridge\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nset_option cbv.maxSteps 1000000000\nset_option cbv.warning false\nset_option Elab.async false\nnamespace InitECandidate.Proofs.StackAnalysis\nopen Flapjack Flapjack.Compiler.Backend\n"

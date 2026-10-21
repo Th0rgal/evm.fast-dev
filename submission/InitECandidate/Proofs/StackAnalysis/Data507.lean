@@ -9,7 +9,7 @@ def optimizedBody507_0 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(44, 0)]
 
 def optimizedBody507_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(0, 2), (6, 6), (8, 8), (4, 4), (44, 44)]
+Flapjack.WordLangProgHOL.move 1 [(8, 8), (4, 4), (0, 2), (6, 6), (44, 44)]
 
 def optimizedBody507_2 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44)]
@@ -26,79 +26,77 @@ def optimizedBody507_5 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_1, 507, 2)) (some 477) ([]) (some (2, optimizedBody507_4, 507, 3))
+  Flapjack.Spt.ln)), optimizedBody507_1, 507, 2)) (some 475) ([]) (some (2, optimizedBody507_4, 507, 3))
 
 def optimizedBody507_6 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.tick
 
 def optimizedBody507_7 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(44, 44), (48, 0), (52, 6), (60, 8), (68, 4)]
+Flapjack.WordLangProgHOL.move 0 [(44, 44), (48, 8), (52, 4), (56, 0), (58, 6)]
 
 def optimizedBody507_8 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(8, 8), (0, 2), (6, 6), (4, 4), (44, 44), (48, 48), (52, 52), (60, 60), (68, 68)]
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (6, 6), (4, 4), (8, 8), (44, 44), (48, 48), (52, 52), (56, 56), (58, 58)]
 
 def optimizedBody507_9 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (48, 48), (52, 52), (60, 60), (68, 68)]
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (48, 48), (52, 52), (56, 56), (58, 58)]
 
 def optimizedBody507_10 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody507_9 optimizedBody507_3
 
 def optimizedBody507_11 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2, 4, 6, 8]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn Flapjack.Spt.ln
+    (Flapjack.Spt.bn
+      (Flapjack.Spt.bn Flapjack.Spt.ln
+        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln) Flapjack.Spt.ln))
       (Flapjack.Spt.bn
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_8, 507, 4)) (some 477) ([]) (some (2, optimizedBody507_10, 507, 5))
+  Flapjack.Spt.ln)), optimizedBody507_8, 507, 4)) (some 475) ([]) (some (2, optimizedBody507_10, 507, 5))
 
 def optimizedBody507_12 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(44, 44), (46, 8), (48, 48), (52, 52), (56, 0), (58, 6), (60, 60), (64, 4), (68, 68)]
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 5#64)
 
 def optimizedBody507_13 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1
-  [(4, 4), (8, 8), (0, 2), (6, 6), (44, 44), (46, 46), (48, 48), (52, 52), (56, 56), (58, 58), (60, 60), (64, 64),
-    (68, 68)]
+  [(2, 2), (44, 44), (46, 0), (48, 48), (50, 6), (52, 52), (54, 4), (56, 56), (58, 58), (60, 8)]
 
 def optimizedBody507_14 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1
-  [(2, 2), (44, 44), (46, 46), (48, 48), (52, 52), (56, 56), (58, 58), (60, 60), (64, 64), (68, 68)]
+Flapjack.WordLangProgHOL.move 0 [(44, 44), (46, 46), (8, 48), (48, 50), (4, 52), (50, 54), (0, 56), (6, 58), (52, 60)]
 
 def optimizedBody507_15 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody507_14 optimizedBody507_3
+Flapjack.WordLangProgHOL.move 1
+  [(2, 2), (44, 44), (46, 46), (8, 48), (48, 50), (4, 52), (50, 54), (0, 56), (6, 58), (52, 60)]
 
 def optimizedBody507_16 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2, 4, 6, 8]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln) Flapjack.Spt.ln))
-      (Flapjack.Spt.bn
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_13, 507, 6)) (some 477) ([]) (some (2, optimizedBody507_15, 507, 7))
+.seq optimizedBody507_15 optimizedBody507_3
 
 def optimizedBody507_17 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 8#64)
+.call (some (([2]), ((Flapjack.Spt.bn
+    (Flapjack.Spt.bn
+      (Flapjack.Spt.bn
+        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
+      (Flapjack.Spt.bn
+        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
+          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), optimizedBody507_14, 507, 6)) (some 470) ([2]) (some (2, optimizedBody507_16, 507, 7))
 
 def optimizedBody507_18 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1
-  [(2, 2), (44, 44), (46, 46), (48, 48), (50, 4), (52, 52), (54, 8), (56, 56), (58, 58), (60, 60), (62, 0), (64, 64),
-    (66, 6), (68, 68)]
+Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (44, 44), (46, 46), (48, 48), (50, 50), (52, 52)]
 
 def optimizedBody507_19 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0
-  [(44, 44), (16, 46), (0, 48), (20, 50), (6, 52), (24, 54), (10, 56), (14, 58), (8, 60), (18, 62), (12, 64), (22, 66),
-    (4, 68)]
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (44, 44), (4, 46), (8, 48), (6, 50), (10, 52)]
 
 def optimizedBody507_20 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1
-  [(2, 2), (44, 44), (16, 46), (0, 48), (20, 50), (6, 52), (24, 54), (10, 56), (14, 58), (8, 60), (18, 62), (12, 64),
-    (22, 66), (4, 68)]
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (4, 46), (8, 48), (6, 50), (10, 52)]
 
 def optimizedBody507_21 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody507_20 optimizedBody507_3
@@ -106,28 +104,20 @@ def optimizedBody507_21 : WordLangProgHOL (BitVec 64) :=
 def optimizedBody507_22 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2]), ((Flapjack.Spt.bn
     (Flapjack.Spt.bn
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
       (Flapjack.Spt.bn
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
+        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))))
-      (Flapjack.Spt.bn
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_19, 507, 8)) (some 472) ([2]) (some (2, optimizedBody507_21, 507, 9))
+  Flapjack.Spt.ln)), optimizedBody507_19, 507, 8)) (some 462) ([2, 4, 6, 8]) (some (2, optimizedBody507_21, 507, 9))
 
 def optimizedBody507_23 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1
-  [(2, 0), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16), (18, 18), (20, 20), (22, 22), (24, 24),
-    (44, 44)]
+Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (10, 10), (44, 44)]
 
 def optimizedBody507_24 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(4, 4), (0, 2), (6, 6), (8, 8), (44, 44)]
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (4, 4), (8, 8), (6, 6), (44, 44)]
 
 def optimizedBody507_25 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2, 4, 6, 8]), ((Flapjack.Spt.bn
@@ -135,7 +125,7 @@ def optimizedBody507_25 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_24, 507, 10)) (some 136) ([2, 4, 6, 8, 10, 12, 14, 16, 18, 20, 22, 24]) (some (2, optimizedBody507_4, 507, 11))
+  Flapjack.Spt.ln)), optimizedBody507_24, 507, 10)) (some 144) ([2, 4, 6, 8, 10]) (some (2, optimizedBody507_4, 507, 11))
 
 def optimizedBody507_26 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (44, 44)]
@@ -149,7 +139,7 @@ def optimizedBody507_28 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_27, 507, 12)) (some 478) ([2, 4, 6, 8]) (some (2, optimizedBody507_4, 507, 13))
+  Flapjack.Spt.ln)), optimizedBody507_27, 507, 12)) (some 476) ([2, 4, 6, 8]) (some (2, optimizedBody507_4, 507, 13))
 
 def optimizedBody507_29 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1#64)
@@ -169,7 +159,7 @@ def optimizedBody507_33 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody507_30, 507, 14)) (some 492) ([2]) (some (2, optimizedBody507_32, 507, 15))
+  Flapjack.Spt.ln)), optimizedBody507_30, 507, 14)) (some 490) ([2]) (some (2, optimizedBody507_32, 507, 15))
 
 def optimizedBody507_34 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
@@ -226,13 +216,13 @@ def optimizedBody507_51 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody507_18 optimizedBody507_50
 
 def optimizedBody507_52 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody507_17 optimizedBody507_51
+.seq optimizedBody507_6 optimizedBody507_51
 
 def optimizedBody507_53 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody507_6 optimizedBody507_52
+.seq optimizedBody507_17 optimizedBody507_52
 
 def optimizedBody507_54 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody507_16 optimizedBody507_53
+.seq optimizedBody507_13 optimizedBody507_53
 
 def optimizedBody507_55 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody507_12 optimizedBody507_54

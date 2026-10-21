@@ -23,7 +23,7 @@ Flapjack.WordLangProgHOL.inst
   (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 4 (Flapjack.WordLangAddr.addr 4 18446744073709551608#64))
 
 def optimizedBody68_5 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 33806089496#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 2952790016#64)
 
 def optimizedBody68_6 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(4, 4)]
@@ -110,7 +110,7 @@ Flapjack.WordLangProgHOL.inst
     (Flapjack.WordLangArith.binop Flapjack.BinOp.and 6 0 (Flapjack.WordRegImm.imm 18446744073709551608#64)))
 
 def optimizedBody68_30 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 0 33806089496#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 0 2952790016#64)
 
 def optimizedBody68_31 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(6, 6)]

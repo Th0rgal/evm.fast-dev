@@ -18,7 +18,7 @@ def optimizedBody373_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(0, 0), (2, 2), (4, 4), (6, 6), (8, 8)]
 
 def optimizedBody373_4 : WordLangProgHOL (BitVec 64) :=
-.call (none) (some 372) ([0, 2, 4, 6, 8]) (none)
+.call (none) (some 370) ([0, 2, 4, 6, 8]) (none)
 
 def optimizedBody373_5 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody373_3 optimizedBody373_4

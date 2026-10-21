@@ -6,17 +6,20 @@ import re
 import subprocess
 import time
 import json
+root = pathlib.Path(__file__).resolve().parents[1]
+ast = (root / "Guest/SoftwareAst.lean").read_text()
+function_count = len(re.findall(r"\bguestFn_\w+", ast[ast.index("def guestAst :"):])) + 1
+last_label = 63 + function_count
 parser = argparse.ArgumentParser()
 parser.add_argument("--first", type=int, default=64)
-parser.add_argument("--last", type=int, default=889)
+parser.add_argument("--last", type=int, default=last_label)
 args = parser.parse_args()
-root = pathlib.Path(__file__).resolve().parents[1]
 work = root / "work/lean-perf/backend-stages"
 next_offsets = {}
 for path in work.glob("Generate*.log"):
     next_offsets.update({int(n): int(offset) for n, offset in re.findall(r"Function (\d+): .*?next offset (\d+)", path.read_text())})
 chunks = [(n, min(n+15, args.last)) for n in range(args.first, args.last+1, 16)]
-name = "Native" if (args.first, args.last) == (64,889) else f"Native{args.first}_{args.last}"
+name = "Native" if (args.first, args.last) == (64,last_label) else f"Native{args.first}_{args.last}"
 lines = ["import InitECandidate.Proofs.BackendComputation"] + [f"import InitECandidate.Proofs.BackendStages.Chunk{a}_{b}" for a,b in chunks]
 lines += ["set_option maxRecDepth 1000000", "set_option maxHeartbeats 0", "open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target", f"namespace InitECandidate.Proofs.BackendStages.{name}"]
 final_offset = next_offsets[args.last]

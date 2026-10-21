@@ -32,7 +32,7 @@ def optimizedBody789_6 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.tick
 
 def optimizedBody789_7 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 144#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 288#64)
 
 def optimizedBody789_8 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (46, 0), (48, 48)]
@@ -71,7 +71,7 @@ Flapjack.WordLangProgHOL.opCurrHeap Flapjack.BinOp.add 0 0
 
 def optimizedBody789_17 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 0 (Flapjack.WordLangAddr.addr 0 18446744073709551104#64))
+  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 0 (Flapjack.WordLangAddr.addr 0 18446744073709551224#64))
 
 def optimizedBody789_18 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst

@@ -11,6 +11,9 @@ import json
 parser = argparse.ArgumentParser()
 parser.add_argument("labels", nargs="*", type=int)
 parser.add_argument("--all", action="store_true")
+parser.add_argument("--start-label", type=int, default=64)
+parser.add_argument("--wait-data", action="store_true")
+parser.add_argument("--seconds", type=int, default=180)
 parser.add_argument("--offset", type=int, default=1)
 parser.add_argument("--batch-size", type=int, default=16)
 parser.add_argument("--check", action="store_true")
@@ -19,8 +22,10 @@ args = parser.parse_args()
 root = pathlib.Path(__file__).resolve().parents[1]
 work = root / "work/lean-perf/backend-stages"
 work.mkdir(parents=True, exist_ok=True)
-labels = list(range(64, 890)) if args.all else args.labels
-prefix = ["rtk", "proxy", "taskset", "-c", "8-11", "timeout", "180", "lake", "env", "lean"]
+ast = (root / "Guest/SoftwareAst.lean").read_text()
+function_count = len(re.findall(r"\bguestFn_\w+", ast[ast.index("def guestAst :"):])) + 1
+labels = list(range(args.start_label, 64 + function_count)) if args.all else args.labels
+prefix = ["rtk", "proxy", "taskset", "-c", "8-11", "timeout", str(args.seconds), "lake", "env", "lean"]
 def check(label):
     source = root / f"submission/InitECandidate/Proofs/BackendStages/Function{label}.lean"
     output = root / f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Function{label}.olean"
@@ -35,6 +40,12 @@ failures = []
 offset = args.offset
 for start in range(0, len(labels), args.batch_size):
     batch = labels[start:start + args.batch_size]
+    if args.wait_data:
+        for label in batch:
+            source = root / f"submission/InitECandidate/Proofs/StackAnalysis/Data{label}.lean"
+            output = root / f".lake/build/lib/lean/InitECandidate/Proofs/StackAnalysis/Data{label}.olean"
+            while not output.exists() or output.stat().st_mtime_ns < source.stat().st_mtime_ns:
+                time.sleep(5)
     runner = work / f"Generate{batch[0]}_{batch[-1]}.lean"
     imports = "import Tools.GenBackendStages\n" + "".join(f"import InitECandidate.Proofs.StackAnalysis.Data{label}\n" for label in batch)
     calls = "".join(f"  offset ← liftM (InitE.BackendGenerator.generate env {label} InitECandidate.Proofs.StackAnalysis.optimized{label} offset)\n" for label in batch)

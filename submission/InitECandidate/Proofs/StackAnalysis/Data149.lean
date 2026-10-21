@@ -62,151 +62,105 @@ def optimizedBody149_15 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 128#64)
 
 def optimizedBody149_16 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (4, 44)]
+
+def optimizedBody149_17 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (4, 44)]
+
+def optimizedBody149_18 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody149_17 optimizedBody149_5
+
+def optimizedBody149_19 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2]), ((Flapjack.Spt.bn
     (Flapjack.Spt.bn Flapjack.Spt.ln
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody149_3, 149, 4)) (some 68) ([2]) (some (2, optimizedBody149_6, 149, 5))
+  Flapjack.Spt.ln)), optimizedBody149_16, 149, 4)) (some 68) ([2]) (some (2, optimizedBody149_18, 149, 5))
 
-def optimizedBody149_17 : WordLangProgHOL (BitVec 64) :=
+def optimizedBody149_20 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
   (Flapjack.WordLangInst.arith
     (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 2 (Flapjack.WordRegImm.imm 18446744073709551560#64)))
 
-def optimizedBody149_18 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 96#64)
-
-def optimizedBody149_19 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(0, 2), (4, 44)]
-
-def optimizedBody149_20 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (4, 44)]
-
 def optimizedBody149_21 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_20 optimizedBody149_5
-
-def optimizedBody149_22 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn Flapjack.Spt.ln
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody149_19, 149, 6)) (some 68) ([2]) (some (2, optimizedBody149_21, 149, 7))
-
-def optimizedBody149_23 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.arith
-    (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 2 (Flapjack.WordRegImm.imm 18446744073709551552#64)))
-
-def optimizedBody149_24 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
 
-def optimizedBody149_25 : WordLangProgHOL (BitVec 64) :=
+def optimizedBody149_22 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(2, 2)]
 
-def optimizedBody149_26 : WordLangProgHOL (BitVec 64) :=
+def optimizedBody149_23 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.return 4 [2]
 
+def optimizedBody149_24 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody149_22 optimizedBody149_23
+
+def optimizedBody149_25 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody149_21 optimizedBody149_24
+
+def optimizedBody149_26 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody149_14 optimizedBody149_25
+
 def optimizedBody149_27 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_25 optimizedBody149_26
+.seq optimizedBody149_13 optimizedBody149_26
 
 def optimizedBody149_28 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_24 optimizedBody149_27
+.seq optimizedBody149_20 optimizedBody149_27
 
 def optimizedBody149_29 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_14 optimizedBody149_28
+.seq optimizedBody149_11 optimizedBody149_28
 
 def optimizedBody149_30 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_13 optimizedBody149_29
+.seq optimizedBody149_10 optimizedBody149_29
 
 def optimizedBody149_31 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_23 optimizedBody149_30
+.seq optimizedBody149_9 optimizedBody149_30
 
 def optimizedBody149_32 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_11 optimizedBody149_31
+.seq optimizedBody149_8 optimizedBody149_31
 
 def optimizedBody149_33 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_10 optimizedBody149_32
+.seq optimizedBody149_19 optimizedBody149_32
 
 def optimizedBody149_34 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_9 optimizedBody149_33
+.seq optimizedBody149_4 optimizedBody149_33
 
 def optimizedBody149_35 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_8 optimizedBody149_34
+.seq optimizedBody149_15 optimizedBody149_34
 
 def optimizedBody149_36 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_22 optimizedBody149_35
+.seq optimizedBody149_14 optimizedBody149_35
 
 def optimizedBody149_37 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_4 optimizedBody149_36
+.seq optimizedBody149_13 optimizedBody149_36
 
 def optimizedBody149_38 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_18 optimizedBody149_37
+.seq optimizedBody149_12 optimizedBody149_37
 
 def optimizedBody149_39 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_14 optimizedBody149_38
+.seq optimizedBody149_11 optimizedBody149_38
 
 def optimizedBody149_40 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_13 optimizedBody149_39
+.seq optimizedBody149_10 optimizedBody149_39
 
 def optimizedBody149_41 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_17 optimizedBody149_40
+.seq optimizedBody149_9 optimizedBody149_40
 
 def optimizedBody149_42 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_11 optimizedBody149_41
+.seq optimizedBody149_8 optimizedBody149_41
 
 def optimizedBody149_43 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_10 optimizedBody149_42
+.seq optimizedBody149_7 optimizedBody149_42
 
 def optimizedBody149_44 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_9 optimizedBody149_43
+.seq optimizedBody149_2 optimizedBody149_43
 
 def optimizedBody149_45 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_8 optimizedBody149_44
+.seq optimizedBody149_1 optimizedBody149_44
 
 def optimizedBody149_46 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_16 optimizedBody149_45
-
-def optimizedBody149_47 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_4 optimizedBody149_46
-
-def optimizedBody149_48 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_15 optimizedBody149_47
-
-def optimizedBody149_49 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_14 optimizedBody149_48
-
-def optimizedBody149_50 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_13 optimizedBody149_49
-
-def optimizedBody149_51 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_12 optimizedBody149_50
-
-def optimizedBody149_52 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_11 optimizedBody149_51
-
-def optimizedBody149_53 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_10 optimizedBody149_52
-
-def optimizedBody149_54 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_9 optimizedBody149_53
-
-def optimizedBody149_55 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_8 optimizedBody149_54
-
-def optimizedBody149_56 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_7 optimizedBody149_55
-
-def optimizedBody149_57 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_2 optimizedBody149_56
-
-def optimizedBody149_58 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_1 optimizedBody149_57
-
-def optimizedBody149_59 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody149_0 optimizedBody149_58
+.seq optimizedBody149_0 optimizedBody149_45
 
 def optimized149 : Nat × Nat × WordLangProgHOL (BitVec 64) :=
-(149, 1, optimizedBody149_59)
+(149, 1, optimizedBody149_46)
 end InitECandidate.Proofs.StackAnalysis

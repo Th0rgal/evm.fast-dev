@@ -32,7 +32,7 @@ def optimizedBody581_7 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody581_3, 581, 2)) (some 472) ([2]) (some (2, optimizedBody581_6, 581, 3))
+  Flapjack.Spt.ln)), optimizedBody581_3, 581, 2)) (some 470) ([2]) (some (2, optimizedBody581_6, 581, 3))
 
 def optimizedBody581_8 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.tick
@@ -46,13 +46,13 @@ def optimizedBody581_10 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody581_9, 581, 4)) (some 574) ([]) (some (2, optimizedBody581_6, 581, 5))
+  Flapjack.Spt.ln)), optimizedBody581_9, 581, 4)) (some 572) ([]) (some (2, optimizedBody581_6, 581, 5))
 
 def optimizedBody581_11 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(0, 0)]
 
 def optimizedBody581_12 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 40#64))
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 0#64))
 
 def optimizedBody581_13 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2]), ((Flapjack.Spt.bn
@@ -60,7 +60,7 @@ def optimizedBody581_13 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody581_3, 581, 6)) (some 479) ([2]) (some (2, optimizedBody581_6, 581, 7))
+  Flapjack.Spt.ln)), optimizedBody581_3, 581, 6)) (some 477) ([2]) (some (2, optimizedBody581_6, 581, 7))
 
 def optimizedBody581_14 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1#64)
@@ -80,7 +80,7 @@ def optimizedBody581_18 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody581_15, 581, 8)) (some 492) ([2]) (some (2, optimizedBody581_17, 581, 9))
+  Flapjack.Spt.ln)), optimizedBody581_15, 581, 8)) (some 490) ([2]) (some (2, optimizedBody581_17, 581, 9))
 
 def optimizedBody581_19 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)

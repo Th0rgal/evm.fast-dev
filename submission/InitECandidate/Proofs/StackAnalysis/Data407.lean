@@ -55,7 +55,7 @@ def optimizedBody407_13 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody407_10, 407, 4)) (some 396) ([]) (some (2, optimizedBody407_12, 407, 5))
+  Flapjack.Spt.ln)), optimizedBody407_10, 407, 4)) (some 394) ([]) (some (2, optimizedBody407_12, 407, 5))
 
 def optimizedBody407_14 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(0, 0), (4, 4)]

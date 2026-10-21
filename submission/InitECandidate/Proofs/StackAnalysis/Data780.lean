@@ -9,7 +9,7 @@ def optimizedBody780_0 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(4, 4), (2, 2), (0, 0)]
 
 def optimizedBody780_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 144#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 288#64)
 
 def optimizedBody780_2 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 2), (4, 4), (6, 6), (44, 0)]
