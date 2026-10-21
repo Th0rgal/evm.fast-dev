@@ -13,7 +13,7 @@ text+="import InitECandidate.Proofs.StackAnalysis.Data\nimport InitECandidate.Pr
 text+="def frameEntries : List (Nat × Nat) := ["+", ".join(f"({n}, frame{n})" for n in nums)+"]\n"
 text+="def slimEntries : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := ["+", ".join(f"({n}, {args[n]}, slim{n})" for n in nums)+"]\n"
 text+="theorem frameEntries_eq : outputs.map frameEntry = frameEntries := by\n  simp only [outputs, List.map_cons, List.map_nil, "+", ".join(f"frameEntry{n}_eq" for n in nums)+"]\n  rfl\n"
-text+="theorem slimEntries_eq : outputs.map slimEntry = slimEntries := by\n  simp only [outputs, List.map_cons, List.map_nil, "+", ".join(f"slimEntry{n}_eq" for n in nums)+"]\n  rfl\n"
+text+="theorem slimEntries_eq : outputs.map slimEntry = slimEntries := by\n  simp only [outputs, List.map_cons, List.map_nil, "+", ".join(f"slimEntry{n}_eq" for n in nums)+"]\n  simp only [slimEntries]\n"
 text+="theorem depth_eq : StackDepthComputation.depthOfWordOutputs outputs =\n    WordDepth.Executable.fullCallGraphDepth (sptFromAList frameEntries)\n      BvlToBvi.initGlobalsLocation (sptFromAList slimEntries) := by\n  unfold StackDepthComputation.depthOfWordOutputs WordDepth.Executable.fullCallGraphDepthExecutable\n  rw [slimCode_fromList]\n  change WordDepth.Executable.fullCallGraphDepth (sptFromAList (outputs.map frameEntry))\n    BvlToBvi.initGlobalsLocation (sptFromAList (outputs.map slimEntry)) = _\n  rw [frameEntries_eq, slimEntries_eq]\n#print axioms depth_eq\nend InitECandidate.Proofs.StackAnalysis\n"
 (root/"Aggregate.lean").write_text(text)
 
