@@ -34,20 +34,20 @@ theorem suffix_getElem?_eq (i : Nat) :
 
 theorem code_getElem?_eq (i : Nat) :
     InitECandidate.code[i]? =
-      if i < 908692 then
-        if i < 4496 then InitECandidate.bootPrefix[i]?
-        else InitECandidate.nativeCode[i - 4496]?
-      else InitECandidate.suffix[i - 908692]? := by
+      if i < 983348 then
+        if i < 4208 then InitECandidate.bootPrefix[i]?
+        else InitECandidate.nativeCode[i - 4208]?
+      else InitECandidate.suffix[i - 983348]? := by
   simp only [InitECandidate.code, List.getElem?_append, List.length_append,
     LiteralFacts.bootPrefix_length, LiteralFacts.nativeCode_length]
 
 theorem initialMemory_eq (a : BitVec 64) :
     initialMemory a =
-      if initialPc ≤ a.toNat ∧ a.toNat < initialPc + 950344 then
-        (if a.toNat - initialPc < 908692 then
-          if a.toNat - initialPc < 4496 then InitECandidate.bootPrefix[a.toNat - initialPc]?
-          else InitECandidate.nativeCode[a.toNat - initialPc - 4496]?
-        else InitECandidate.suffix[a.toNat - initialPc - 908692]?).getD 0
+      if initialPc ≤ a.toNat ∧ a.toNat < initialPc + 1028080 then
+        (if a.toNat - initialPc < 983348 then
+          if a.toNat - initialPc < 4208 then InitECandidate.bootPrefix[a.toNat - initialPc]?
+          else InitECandidate.nativeCode[a.toNat - initialPc - 4208]?
+        else InitECandidate.suffix[a.toNat - initialPc - 983348]?).getD 0
       else 0 := by
   simp only [initialMemory, LiteralFacts.code_length, code_getElem?_eq]
 

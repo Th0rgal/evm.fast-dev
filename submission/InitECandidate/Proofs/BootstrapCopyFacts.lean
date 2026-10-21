@@ -15,13 +15,13 @@ noncomputable def copyState (words : Nat) : AsmState 64 :=
 theorem copyState_fields (words : Nat) :
     (copyState words).be = false ∧
     (copyState words).memDomain = InitE.bootstrapDomain ∧
-    (copyState words).regs 7 = 0xa0029048 ∧
+    (copyState words).regs 7 = 0xa0028ff0 ∧
     (copyState words).lr = 1 ∧ (copyState words).align = 2 := by
   simpa [copyState, InitE.copyEntryAsm, InitE.initialAsm, InitE.initDataEnd] using
     iterations_fields words InitE.copyEntryAsm
 
 theorem copyState_source (words : Nat) :
-    (copyState words).regs 5 = 0x800df000 + BitVec.ofNat 64 (8 * words) :=
+    (copyState words).regs 5 = 0x800f2000 + BitVec.ofNat 64 (8 * words) :=
   iterations_source words InitE.copyEntryAsm
 
 theorem copyState_destination (words : Nat) :
@@ -29,8 +29,8 @@ theorem copyState_destination (words : Nat) :
   iterations_destination words InitE.copyEntryAsm
 
 private theorem concrete_memory_domain (a : BitVec 64) (lower upper : Nat)
-    (region : (lower = 0x800df000 ∧ upper = 0x800e8048) ∨
-      (lower = 0xa0020000 ∧ upper = 0xa0029048))
+    (region : (lower = 0x800f2000 ∧ upper = 0x800faff0) ∨
+      (lower = 0xa0020000 ∧ upper = 0xa0028ff0))
     (lo : lower ≤ a.toNat) (hi : a.toNat < upper) : InitE.bootstrapDomain a := by
   constructor
   · unfold InitE.memoryDomain InitE.machineSharedDomain
@@ -42,28 +42,28 @@ private theorem concrete_memory_domain (a : BitVec 64) (lower upper : Nat)
     have ni : 16 * (i + 1) ≤ 352 := by omega
     have offNat : (BitVec.ofNat 64 (16 * (i + 1))).toNat = 16 * (i + 1) := by
       rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-    have pcNat : (BitVec.ofNat 64 InitE.nativePc).toNat = 0x80001190 := by decide
+    have pcNat : (BitVec.ofNat 64 InitE.nativePc).toNat = 0x80001070 := by decide
     rw [BitVec.toNat_sub_of_le (by
       apply BitVec.le_def.mpr
       rw [offNat, pcNat]
       omega), pcNat, offNat] at h
     rcases region with ⟨rfl, rfl⟩ | ⟨rfl, rfl⟩ <;> omega
 
-theorem concrete_domain_source (k : Nat) (hk : k < 4617) (j : Nat) (hj : j < 8) :
-    InitE.bootstrapDomain (wordAddress 0x800df000 k j) := by
-  have addr := wordAddress_toNat (0x800df000 : BitVec 64) k j (by simp; omega)
-  have base : (0x800df000 : BitVec 64).toNat = 0x800df000 := by decide
+theorem concrete_domain_source (k : Nat) (hk : k < 4606) (j : Nat) (hj : j < 8) :
+    InitE.bootstrapDomain (wordAddress 0x800f2000 k j) := by
+  have addr := wordAddress_toNat (0x800f2000 : BitVec 64) k j (by simp; omega)
+  have base : (0x800f2000 : BitVec 64).toNat = 0x800f2000 := by decide
   rw [base] at addr
-  apply concrete_memory_domain _ 0x800df000 0x800e8048 (Or.inl ⟨rfl, rfl⟩)
+  apply concrete_memory_domain _ 0x800f2000 0x800faff0 (Or.inl ⟨rfl, rfl⟩)
   · rw [addr]; omega
   · rw [addr]; omega
 
-theorem concrete_domain_destination (k : Nat) (hk : k < 4617) (j : Nat) (hj : j < 8) :
+theorem concrete_domain_destination (k : Nat) (hk : k < 4606) (j : Nat) (hj : j < 8) :
     InitE.bootstrapDomain (wordAddress 0xa0020000 k j) := by
   have addr := wordAddress_toNat (0xa0020000 : BitVec 64) k j (by simp; omega)
   have base : (0xa0020000 : BitVec 64).toNat = 0xa0020000 := by decide
   rw [base] at addr
-  apply concrete_memory_domain _ 0xa0020000 0xa0029048 (Or.inr ⟨rfl, rfl⟩)
+  apply concrete_memory_domain _ 0xa0020000 0xa0028ff0 (Or.inr ⟨rfl, rfl⟩)
   · rw [addr]; omega
   · rw [addr]; omega
 
@@ -75,9 +75,9 @@ theorem concrete_word_aligned (base : BitVec 64) (k : Nat)
     simp [BitVec.toNat_ofNat, Nat.mod_mod_of_dvd])).1]
   exact aligned
 
-theorem copyState_branch (k : Nat) (hk : k < 4617) :
+theorem copyState_branch (k : Nat) (hk : k < 4606) :
     (((copyState k).regs 6 + 8).ult ((copyState k).regs 7)) =
-      decide (k + 1 < 4617) := by
+      decide (k + 1 < 4606) := by
   rw [(copyState_fields k).2.2.1, copyState_destination]
   have sum : (0xa0020000 : BitVec 64) + BitVec.ofNat 64 (8 * k) + 8 =
       BitVec.ofNat 64 (0xa0020000 + 8 * (k + 1)) := by
@@ -85,14 +85,14 @@ theorem copyState_branch (k : Nat) (hk : k < 4617) :
   rw [sum]
   simp only [BitVec.ult, BitVec.toNat_ofNat]
   rw [Nat.mod_eq_of_lt (show 0xa0020000 + 8 * (k + 1) < 2 ^ 64 by omega)]
-  have endNat : (0xa0029048 : BitVec 64).toNat = 0xa0029048 := by decide
+  have endNat : (0xa0028ff0 : BitVec 64).toNat = 0xa0028ff0 := by decide
   rw [endNat]
   apply Bool.eq_iff_iff.mpr
   simp only [decide_eq_true_eq]
   omega
 
-theorem copyState_pc (k : Nat) (hk : k ≤ 4617) :
-    (copyState k).pc = if k < 4617 then 0x80000018 else 0x8000002c := by
+theorem copyState_pc (k : Nat) (hk : k ≤ 4606) :
+    (copyState k).pc = if k < 4606 then 0x80000018 else 0x8000002c := by
   induction k with
   | zero => rfl
   | succ k ih =>
@@ -100,10 +100,10 @@ theorem copyState_pc (k : Nat) (hk : k ≤ 4617) :
     rw [Function.iterate_succ_apply']
     change (run loopBody (copyState k)).pc = _
     rw [loopBody_pc, copyState_branch k (by omega), ih (by omega)]
-    have bound : k < 4617 := by omega
-    by_cases last : k + 1 < 4617 <;> simp [last, bound]
+    have bound : k < 4606 := by omega
+    by_cases last : k + 1 < 4606 <;> simp [last, bound]
 
-theorem copyState_success (k : Nat) (hk : k ≤ 4617) : (copyState k).failed = false := by
+theorem copyState_success (k : Nat) (hk : k ≤ 4606) : (copyState k).failed = false := by
   induction k with
   | zero => rfl
   | succ k ih =>
@@ -176,7 +176,7 @@ theorem bodyState_failed (s : AsmState 64) (stage : Nat) (hs : stage ≤ 5) :
       Flapjack.Compiler.Backend.LabToTarget.writeMemWord_eq]
   split <;> rfl
 
-theorem copyBody_success (k stage : Nat) (hk : k < 4617) (hs : stage ≤ 5) :
+theorem copyBody_success (k stage : Nat) (hk : k < 4606) (hs : stage ≤ 5) :
     (bodyState (copyState k) stage).failed = false := by
   have stored : (copyWord (copyState k)).failed = false := by
     rw [← loopBody_failed]
@@ -191,7 +191,7 @@ theorem copyBody_success (k stage : Nat) (hk : k < 4617) (hs : stage ≤ 5) :
   · exact stored
 
 /-- The complete copy loop leaves every non-destination byte unchanged. -/
-theorem copyState_frame (k : Nat) (hk : k ≤ 4617) (x : BitVec 64)
+theorem copyState_frame (k : Nat) (hk : k ≤ 4606) (x : BitVec 64)
     (outside : ∀ word < k, ∀ byte < 8,
       x ≠ wordAddress 0xa0020000 word byte) :
     (copyState k).mem x = InitE.initialMemory x := by
@@ -234,10 +234,10 @@ theorem loopBody_loaded (s : AsmState 64) (little : s.be = false) :
   split <;> rfl
 
 /-- Every loaded word still comes from the original immutable ROM bytes. -/
-theorem copyState_source_word (k : Nat) (hk : k < 4617) :
+theorem copyState_source_word (k : Nat) (hk : k < 4606) :
     sourceReadWord (resultWidth := 64) false (copyState k).mem ((copyState k).regs 5) 8 =
       sourceReadWord (resultWidth := 64) false InitE.initialMemory
-        (0x800df000 + BitVec.ofNat 64 (8 * k)) 8 := by
+        (0x800f2000 + BitVec.ofNat 64 (8 * k)) 8 := by
   rw [copyState_source]
   apply BitVec.eq_of_getLsbD_eq
   intro bit bitBound
@@ -251,9 +251,9 @@ theorem copyState_source_word (k : Nat) (hk : k < 4617) :
 
 /-- x28 at exit is the last word copied from ROM. Its value is calculated
 from the original eight bytes rather than assumed as register initialization. -/
-theorem copyState_last_register (k : Nat) (hk : k < 4617) :
+theorem copyState_last_register (k : Nat) (hk : k < 4606) :
     (copyState (k + 1)).regs 28 = sourceReadWord (resultWidth := 64) false InitE.initialMemory
-      (0x800df000 + BitVec.ofNat 64 (8 * k)) 8 := by
+      (0x800f2000 + BitVec.ofNat 64 (8 * k)) 8 := by
   unfold copyState
   rw [Function.iterate_succ_apply']
   change (run loopBody (copyState k)).regs 28 = _
@@ -262,12 +262,12 @@ theorem copyState_last_register (k : Nat) (hk : k < 4617) :
 /-- Expected memory after the ROM data copy alone. -/
 def copiedMemory (count : Nat) (a : BitVec 64) : BitVec 8 :=
   if 0xa0020000 ≤ a.toNat ∧ a.toNat < 0xa0020000 + 8 * count then
-    InitE.initialMemory (BitVec.ofNat 64 (0x800df000 + (a.toNat - 0xa0020000)))
+    InitE.initialMemory (BitVec.ofNat 64 (0x800f2000 + (a.toNat - 0xa0020000)))
   else InitE.initialMemory a
 
 /-- The copy loop establishes its complete memory formula, including every
 byte outside the destination and the original source ROM contents. -/
-theorem copyExit_memory_general (count : Nat) (countBound : count ≤ 4617) :
+theorem copyExit_memory_general (count : Nat) (countBound : count ≤ 4606) :
     (copyState count).mem = copiedMemory count := by
   funext a
   simp only [copyState]
@@ -289,19 +289,19 @@ theorem copyExit_memory_general (count : Nat) (countBound : count ≤ 4617) :
       rw [base]
       dsimp [offset] at decomposition
       omega
-    have sourceAddr : wordAddress 0x800df000 word byte =
-        BitVec.ofNat 64 (0x800df000 + offset) := by
+    have sourceAddr : wordAddress 0x800f2000 word byte =
+        BitVec.ofNat 64 (0x800f2000 + offset) := by
       apply BitVec.eq_of_toNat_eq
       rw [wordAddress_toNat _ _ _ (by simp; omega), BitVec.toNat_ofNat,
         Nat.mod_eq_of_lt (by omega)]
-      have base : (0x800df000 : BitVec 64).toNat = 0x800df000 := by decide
+      have base : (0x800f2000 : BitVec 64).toNat = 0x800f2000 := by decide
       rw [base]
       omega
     have copied := iterations_selected count InitE.copyEntryAsm rfl
       (fun k hk j hj l hl b hb => concrete_source_disjoint k (by omega) j hj l (by omega) b hb)
       (fun k hk j hj l hl b hb neq => concrete_destination_disjoint k (by omega) j hj l (by omega) b hb neq)
       word wordBound byte byteBound
-    have sourceRegister : InitE.copyEntryAsm.regs 5 = 0x800df000 := rfl
+    have sourceRegister : InitE.copyEntryAsm.regs 5 = 0x800f2000 := rfl
     have destinationRegister : InitE.copyEntryAsm.regs 6 = 0xa0020000 := rfl
     have sourceMemory : InitE.copyEntryAsm.mem = InitE.initialMemory := rfl
     rw [sourceRegister, destinationRegister, sourceMemory] at copied
@@ -317,7 +317,7 @@ theorem copyExit_memory_general (count : Nat) (countBound : count ≤ 4617) :
     rw [addr] at values
     omega
 
-theorem copyExit_memory : (copyState 4617).mem = copiedMemory 4617 :=
-  copyExit_memory_general 4617 (by decide)
+theorem copyExit_memory : (copyState 4606).mem = copiedMemory 4606 :=
+  copyExit_memory_general 4606 (by decide)
 
 end InitECandidate.Proofs.BootstrapCopy

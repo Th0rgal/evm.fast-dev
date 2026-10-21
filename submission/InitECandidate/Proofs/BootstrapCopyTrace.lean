@@ -8,7 +8,7 @@ open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapStraigh
 
 private theorem low_code_outside (x : BitVec 64) (lo : InitE.initialPc ≤ x.toNat)
     (hi : x.toNat < InitE.initialPc + 208) (word byte : Nat)
-    (hw : word < 4617) (hb : byte < 8) :
+    (hw : word < 4606) (hb : byte < 8) :
     x ≠ wordAddress 0xa0020000 word byte := by
   intro eq
   have address := wordAddress_toNat (0xa0020000 : BitVec 64) word byte (by simp; omega)
@@ -21,7 +21,7 @@ private theorem low_code_outside (x : BitVec 64) (lo : InitE.initialPc ≤ x.toN
 
 /-- Every bootstrap code byte survives previous iterations and this iteration's
 store; this derives code installation at every intermediate state. -/
-theorem copyBody_code_frame (k stage : Nat) (hk : k < 4617) (hs : stage ≤ 5)
+theorem copyBody_code_frame (k stage : Nat) (hk : k < 4606) (hs : stage ≤ 5)
     (x : BitVec 64) (lo : InitE.initialPc ≤ x.toNat)
     (hi : x.toNat < InitE.initialPc + 208) :
     (bodyState (copyState k) stage).mem x = InitE.initialMemory x := by
@@ -52,7 +52,7 @@ private theorem loop_instruction_length (stage : Nat) (hs : stage < 5) :
 
 /-- All five instruction transitions of each actual loop iteration are checked:
 code bytes, domain, alignment, source memory assertions and encoder admission. -/
-theorem copyBody_steps (k stage : Nat) (hk : k < 4617) (hs : stage < 5) :
+theorem copyBody_steps (k stage : Nat) (hk : k < 4606) (hs : stage < 5) :
     asmStep riscvConfig (bodyState (copyState k) stage) loopBody[stage]
       (bodyState (copyState k) (stage + 1)) := by
   rw [← bodyState_succ _ _ hs]
@@ -83,7 +83,7 @@ theorem copyBody_steps (k stage : Nat) (hk : k < 4617) (hs : stage < 5) :
     exact copyBody_success k (stage + 1) hk (by omega)
   · exact loop_admitted stage hs
 
-theorem copyBody_checked (k : Nat) (hk : k < 4617) : Checked loopBody (copyState k) := by
+theorem copyBody_checked (k : Nat) (hk : k < 4606) : Checked loopBody (copyState k) := by
   have h0 := copyBody_steps k 0 hk (by decide)
   have h1 := copyBody_steps k 1 hk (by decide)
   have h2 := copyBody_steps k 2 hk (by decide)
@@ -100,7 +100,7 @@ private theorem checked_append (left right : List (HolAsm 64)) (s : AsmState 64)
 
 /-- All iterations of the fixed bitmap-copy loop satisfy the actual assembler
 step checks. No concrete machine execution or installed memory is a premise. -/
-theorem copyLoop_checked_from (count start : Nat) (bound : start + count ≤ 4617) :
+theorem copyLoop_checked_from (count start : Nat) (bound : start + count ≤ 4606) :
     Checked (loopProgram count) (copyState start) := by
   induction count generalizing start with
   | zero => trivial
@@ -114,21 +114,21 @@ theorem copyLoop_checked_from (count start : Nat) (bound : start + count ≤ 461
     rw [next]
     exact ih (start + 1) (by omega)
 
-theorem copyLoop_checked : Checked (loopProgram 4617) InitE.copyEntryAsm :=
-  copyLoop_checked_from 4617 0 (by decide)
+theorem copyLoop_checked : Checked (loopProgram 4606) InitE.copyEntryAsm :=
+  copyLoop_checked_from 4606 0 (by decide)
 
 /-- The concrete4616word copy has an unconditional finite source trace to its
 calculated endpoint, ready to compose with the straight-line setup/tail. -/
 theorem copyLoop_trace :
     Relation.ReflTransGen (fun before after => ∃ i, asmStep riscvConfig before i after)
-      InitE.copyEntryAsm (copyState 4617) := by
-  simpa only [loopProgram_run, copyState] using run_trace (loopProgram 4617) InitE.copyEntryAsm copyLoop_checked
+      InitE.copyEntryAsm (copyState 4606) := by
+  simpa only [loopProgram_run, copyState] using run_trace (loopProgram 4606) InitE.copyEntryAsm copyLoop_checked
 
 /-- The actual RISC-V target reaches the computed end of the initialized-data
 copy from every related copy-entry machine state. -/
 theorem copyLoop_machine (ms : Flapjack.RiscV.L3.riscv_state)
     (related : targetStateRel riscvTarget InitE.copyEntryAsm ms) :
-    ∃ n, targetStateRel riscvTarget (copyState 4617) (riscvNext^[n] ms) :=
+    ∃ n, targetStateRel riscvTarget (copyState 4606) (riscvNext^[n] ms) :=
   trace_simulation _ _ ms related copyLoop_trace
 
 end InitECandidate.Proofs.BootstrapCopy

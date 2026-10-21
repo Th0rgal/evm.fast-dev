@@ -14,10 +14,10 @@ open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.AsmSem
 open Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Encoders.RiscV.Target
 
-def nativePc : Nat := 0x80001190
-def initDataRom : Nat := 0x800df000
+def nativePc : Nat := 0x80001070
+def initDataRom : Nat := 0x800f2000
 def initDataRam : Nat := 0xa0020000
-def initDataEnd : Nat := 0xa0029048
+def initDataEnd : Nat := 0xa0028ff0
 def initDataWords : Nat := (initDataEnd - initDataRam) / 8
 
 /-- Shared byte ranges; the source's shared domain is their aligned cells. -/
@@ -39,7 +39,7 @@ def memoryDomain (a : BitVec 64) : Prop :=
 /-- The native halt/cache/ordinary FFI slots are dispatch points, not RAM.
 MMIO entries inside native code remain ordinary address-domain members. -/
 def bootstrapDomain (a : BitVec 64) : Prop :=
-  memoryDomain a ∧ ∀ i : Nat, i < 22 →
+  memoryDomain a ∧ ∀ i : Nat, i < 4 →
     a ≠ BitVec.ofNat 64 nativePc - BitVec.ofNat 64 (16 * (i + 1))
 
 def initialAsm : AsmState 64 :=
@@ -79,7 +79,7 @@ def installedRegisters (r : Nat) : BitVec 64 :=
   else if r = 12 then BitVec.ofNat 64 stackStart
   else if r = 13 then BitVec.ofNat 64 ramEnd
   else if r = 5 then BitVec.ofNat 64 sourceBase
-  else if r = 6 then 0x800de000
+  else if r = 6 then 0x800f1000
   else if r = 7 then BitVec.ofNat 64 initDataEnd
   else if r = 28 then InitECandidate.bitmaps.getLast?.getD 0 else 0
 
@@ -89,11 +89,11 @@ def installedAsm : AsmState 64 :=
     regs := installedRegisters
     mem := installedMemory }
 
-theorem initDataWords_eq : initDataWords = 4617 := by decide
+theorem initDataWords_eq : initDataWords = 4606 := by decide
 
 theorem initial_ram_zero (a : BitVec 64) (h : ramStart ≤ a.toNat) :
     initialMemory a = 0 := by
-  have size : InitECandidate.code.length = 950344 := LiteralFacts.code_length
+  have size : InitECandidate.code.length = 1028080 := LiteralFacts.code_length
   simp only [initialMemory, size]
   apply if_neg
   simp only [initialPc, ramStart] at *

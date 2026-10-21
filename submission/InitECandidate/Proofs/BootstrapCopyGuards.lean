@@ -46,7 +46,7 @@ theorem bootstrap_ffi_disjoint (s : AsmState 64) (length : Nat)
 private theorem loop_instruction_length (stage : Nat) (hs : stage < 5) :
     (riscvEnc loopBody[stage]).length = 4 := by interval_cases stage <;> decide +revert
 
-theorem copyBody_guard_step (k stage : Nat) (hk : k < 4617) (hs : stage < 5) :
+theorem copyBody_guard_step (k stage : Nat) (hk : k < 4606) (hs : stage < 5) :
     baselineMachineConfig.progAddresses = (bodyState (copyState k) stage).memDomain ∧
     ffiEntryPcsDisjoint baselineMachineConfig (bodyState (copyState k) stage)
       (riscvEnc loopBody[stage]).length := by
@@ -66,7 +66,7 @@ theorem copyBody_guard_step (k stage : Nat) (hk : k < 4617) (hs : stage < 5) :
       rw [← BitVec.ofNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
       norm_num [initialPc]; omega
 
-theorem copyBody_guards (k : Nat) (hk : k < 4617) :
+theorem copyBody_guards (k : Nat) (hk : k < 4606) :
     EvaluatorGuards baselineMachineConfig loopBody (copyState k) := by
   have h0 := copyBody_guard_step k 0 hk (by decide)
   have h1 := copyBody_guard_step k 1 hk (by decide)
@@ -88,7 +88,7 @@ private theorem guards_append (left right : List (HolAsm 64)) (s : AsmState 64) 
   | nil => simp [EvaluatorGuards, run]
   | cons i rest ih => simp only [List.cons_append, EvaluatorGuards, run, ih, and_assoc]
 
-theorem copyLoop_guards_from (count start : Nat) (bound : start + count ≤ 4617) :
+theorem copyLoop_guards_from (count start : Nat) (bound : start + count ≤ 4606) :
     EvaluatorGuards baselineMachineConfig (loopProgram count) (copyState start) := by
   induction count generalizing start with
   | zero => trivial
@@ -103,7 +103,7 @@ theorem copyLoop_guards_from (count start : Nat) (bound : start + count ≤ 4617
     exact ih (start + 1) (by omega)
 
 theorem copyLoop_guards :
-    EvaluatorGuards baselineMachineConfig (loopProgram 4617) copyEntryAsm :=
-  copyLoop_guards_from 4617 0 (by decide)
+    EvaluatorGuards baselineMachineConfig (loopProgram 4606) copyEntryAsm :=
+  copyLoop_guards_from 4606 0 (by decide)
 
 end InitECandidate.Proofs.BootstrapCopyGuards

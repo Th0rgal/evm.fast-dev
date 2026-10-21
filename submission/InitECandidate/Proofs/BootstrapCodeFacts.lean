@@ -57,7 +57,7 @@ theorem bootstrap_code_domain (a : BitVec 64)
     have ni : 16 * (i + 1) ≤ 352 := by omega
     have offNat : (BitVec.ofNat 64 (16 * (i + 1))).toNat = 16 * (i + 1) := by
       rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
-    have pcNat : (BitVec.ofNat 64 nativePc).toNat = 0x80001190 := by decide
+    have pcNat : (BitVec.ofNat 64 nativePc).toNat = 0x80001070 := by decide
     rw [BitVec.toNat_sub_of_le (by
       apply BitVec.le_def.mpr
       rw [offNat, pcNat]

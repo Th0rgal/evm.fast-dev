@@ -25,7 +25,7 @@ def bootAdd (reg : Nat) : HolAsm 64 :=
   .inst (.arith (.binop .add reg reg (.imm 8)))
 
 /-- Each instruction is paired with its address in the submitted image. The
-five copy-body instructions execute 4617 times; the others execute once. -/
+five copy-body instructions execute 4606 times; the others execute once. -/
 def bootstrapBlocks : List (Nat × HolAsm 64) := [
   (0x80000000, bootLoc 5 0x80000000 initDataRom),
   (0x80000008, bootLoc 6 0x80000008 initDataRam),
@@ -55,9 +55,9 @@ def bootstrapBlocks : List (Nat × HolAsm 64) := [
   (0x80000084, bootStore 6 5 8),
   (0x80000088, bootLoc 6 0x80000088 initDataEnd),
   (0x80000090, bootStore 6 5 16),
-  (0x80000094, bootLoc 6 0x80000094 0x800ddd94),
+  (0x80000094, bootLoc 6 0x80000094 0x800f0134),
   (0x8000009c, bootStore 6 5 24),
-  (0x800000a0, bootLoc 6 0x800000a0 0x800de000),
+  (0x800000a0, bootLoc 6 0x800000a0 0x800f1000),
   (0x800000a8, bootStore 6 5 32),
   (0x800000ac, bootConst 11 161),
   (0x800000b0, bootShift 11 24),
@@ -81,6 +81,6 @@ theorem bootstrap_instructions_admitted :
 
 def bootstrapSteps : Nat := 6 + 5 * initDataWords + 41
 
-theorem bootstrapSteps_eq : bootstrapSteps = 23132 := by decide
+theorem bootstrapSteps_eq : bootstrapSteps = 23077 := by decide
 
 end InitE

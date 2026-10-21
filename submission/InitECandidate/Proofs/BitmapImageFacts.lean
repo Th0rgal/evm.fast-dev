@@ -24,7 +24,7 @@ set_option maxHeartbeats 0 in
 theorem bitmap_image_bytes :
     (InitECandidate.code.drop (initDataRom-initialPc+24)).take
       (8*InitECandidate.bitmaps.length) = bitmapBytes := by
-  have prefixLength : (InitECandidate.bootPrefix ++ InitECandidate.nativeCode).length = 908692 := by
+  have prefixLength : (InitECandidate.bootPrefix ++ InitECandidate.nativeCode).length = 983348 := by
     simp only [List.length_append, LiteralFacts.bootPrefix_length, LiteralFacts.nativeCode_length]
   have skipPrefix :
       (InitECandidate.bootPrefix ++ InitECandidate.nativeCode).drop
@@ -36,10 +36,10 @@ theorem bitmap_image_bytes :
   rw [bitmapBytes, BitmapComputation.range_bytes_eq]
   kernel_rfl
 
-theorem submitted_image_size : InitECandidate.code.length = 950344 :=
+theorem submitted_image_size : InitECandidate.code.length = 1028080 :=
   LiteralFacts.code_length
 
-theorem bitmap_count : InitECandidate.bitmaps.length = 4614 := by kernel_rfl
+theorem bitmap_count : InitECandidate.bitmaps.length = 4603 := by kernel_rfl
 
 theorem bitmapBytes_length : bitmapBytes.length = 8*InitECandidate.bitmaps.length := by
   simp [bitmapBytes]

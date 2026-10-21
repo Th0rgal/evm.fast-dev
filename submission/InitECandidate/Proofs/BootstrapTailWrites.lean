@@ -12,10 +12,10 @@ def tailWrites (memory : BitVec 64 → BitVec 8) : BitVec 64 → BitVec 8 :=
   let memory := wmwMem false memory (BitVec.ofNat 64 (initDataRam+8)) 8 (BitVec.ofNat 64 stackStart)
   let memory := wmwMem false memory (BitVec.ofNat 64 (initDataRam+16)) 8 (BitVec.ofNat 64 ramEnd)
   let memory := wmwMem false memory (BitVec.ofNat 64 sourceBase) 8 (0xa0020018 : BitVec 64)
-  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+8)) 8 (0xa0029048 : BitVec 64)
-  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+16)) 8 (0xa0029048 : BitVec 64)
-  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+24)) 8 (0x800ddd94 : BitVec 64)
-  wmwMem false memory (BitVec.ofNat 64 (sourceBase+32)) 8 (0x800de000 : BitVec 64)
+  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+8)) 8 (0xa0028ff0 : BitVec 64)
+  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+16)) 8 (0xa0028ff0 : BitVec 64)
+  let memory := wmwMem false memory (BitVec.ofNat 64 (sourceBase+24)) 8 (0x800f0134 : BitVec 64)
+  wmwMem false memory (BitVec.ofNat 64 (sourceBase+32)) 8 (0x800f1000 : BitVec 64)
 
 
 set_option maxRecDepth 10000 in
@@ -24,7 +24,9 @@ theorem tailWrites_headers (i : Fin 5) (j : Fin 8)
     (memory : BitVec 64 → BitVec 8) :
     tailWrites memory (BitVec.ofNat 64 (sourceBase+8*i.val+j.val)) =
       wordByte Guest.startupHeaders[i] j.val := by
-  fin_cases i <;> fin_cases j <;> rfl
+  fin_cases i <;> fin_cases j <;>
+    simp [tailWrites, Guest.startupHeaders, wordByte, wmwMem,
+      sourceBase, initDataRam, stackStart, ramEnd, ramStart, ramSize]
 
 set_option maxRecDepth 10000 in
 /-- The three ABI cells are installed by startup, rather than supplied by RAM. -/
@@ -63,7 +65,7 @@ theorem tailWrites_frame (memory : BitVec 64 → BitVec 8) (a : BitVec 64)
 
 /-- Applying the bootstrap stores to the proved ROM-copy result establishes
 exactly the compiler/source memory installation formula. -/
-theorem tailWrites_copied_memory : tailWrites (BootstrapCopy.copiedMemory 4617) = installedMemory := by
+theorem tailWrites_copied_memory : tailWrites (BootstrapCopy.copiedMemory 4606) = installedMemory := by
   funext a
   unfold installedMemory
   split_ifs with source abi bitmap
@@ -76,7 +78,7 @@ theorem tailWrites_copied_memory : tailWrites (BootstrapCopy.copiedMemory 4617) 
         dsimp [i,j,offset]; simp only [sourceBase] at source ⊢; omega)]
       dsimp [i,j,offset]
       omega
-    have value := tailWrites_headers i j (BootstrapCopy.copiedMemory 4617)
+    have value := tailWrites_headers i j (BootstrapCopy.copiedMemory 4606)
     rw [address] at value
     have index : (a.toNat-sourceBase)/8 < Guest.startupHeaders.length := by
       simpa only [i,offset,Guest.startupHeaders,List.length_cons,List.length_nil] using i.isLt
@@ -91,7 +93,7 @@ theorem tailWrites_copied_memory : tailWrites (BootstrapCopy.copiedMemory 4617) 
         dsimp [i,j,offset]; simp only [initDataRam] at abi ⊢; omega)]
       dsimp [i,j,offset]
       omega
-    have value := tailWrites_abi i j (BootstrapCopy.copiedMemory 4617)
+    have value := tailWrites_abi i j (BootstrapCopy.copiedMemory 4606)
     rw [address] at value
     have index : (a.toNat-initDataRam)/8 <
         [BitVec.ofNat 64 sourceBase, BitVec.ofNat 64 stackStart, BitVec.ofNat 64 ramEnd].length := by
@@ -107,6 +109,6 @@ theorem tailWrites_copied_memory : tailWrites (BootstrapCopy.copiedMemory 4617) 
     omega
   · rw [tailWrites_frame _ _ source abi]
     unfold BootstrapCopy.copiedMemory
-    rw [if_neg (by simp only [initDataRam,initDataEnd] at abi bitmap; omega)]
+    rw [if_neg (by simp only [sourceBase,initDataRam,initDataEnd] at abi bitmap; omega)]
 
 end InitECandidate.Proofs.BootstrapStraightLine

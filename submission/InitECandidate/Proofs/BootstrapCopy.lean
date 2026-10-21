@@ -199,7 +199,7 @@ theorem run_trace (code : List (HolAsm 64)) (s : AsmState 64)
   | cons i rest ih =>
     exact (Relation.ReflTransGen.single ⟨i, checks.1⟩).trans (ih _ checks.2)
 
-/-- The 4617-word loop has 23085 source instructions. -/
+/-- The 4606-word loop has 23085 source instructions. -/
 def loopProgram (words : Nat) : List (HolAsm 64) :=
   (List.replicate words loopBody).flatten
 
@@ -327,10 +327,10 @@ theorem wordAddress_toNat (base : BitVec 64) (word byte : Nat)
 
 /-- The concrete ROM/RAM copy footprints are disjoint. -/
 theorem concrete_source_disjoint :
-    ∀ k < 4617, ∀ j < 8, ∀ l < 4617, ∀ b < 8,
-      wordAddress 0x800df000 k j ≠ wordAddress 0xa0020000 l b := by
+    ∀ k < 4606, ∀ j < 8, ∀ l < 4606, ∀ b < 8,
+      wordAddress 0x800f2000 k j ≠ wordAddress 0xa0020000 l b := by
   intro k hk j hj l hl b hb equal
-  have src := wordAddress_toNat (0x800df000 : BitVec 64) k j (by simp; omega)
+  have src := wordAddress_toNat (0x800f2000 : BitVec 64) k j (by simp; omega)
   have dst := wordAddress_toNat (0xa0020000 : BitVec 64) l b (by simp; omega)
   have values := congrArg BitVec.toNat equal
   rw [src, dst] at values
@@ -339,7 +339,7 @@ theorem concrete_source_disjoint :
 
 /-- Every destination word of the concrete loop has a separate footprint. -/
 theorem concrete_destination_disjoint :
-    ∀ k < 4617, ∀ j < 8, ∀ l < 4617, ∀ b < 8,
+    ∀ k < 4606, ∀ j < 8, ∀ l < 4606, ∀ b < 8,
       k ≠ l → wordAddress 0xa0020000 k j ≠ wordAddress 0xa0020000 l b := by
   intro k hk j hj l hl b hb different equal
   have first := wordAddress_toNat (0xa0020000 : BitVec 64) k j (by simp; omega)
@@ -350,12 +350,12 @@ theorem concrete_destination_disjoint :
 
 /-- All 36936 ROM bytes are copied into RAM by the computed source loop. -/
 theorem concrete_copy_selected (s : AsmState 64)
-    (little : s.be = false) (source : s.regs 5 = 0x800df000)
+    (little : s.be = false) (source : s.regs 5 = 0x800f2000)
     (destination : s.regs 6 = 0xa0020000) :
-    ∀ k < 4617, ∀ j < 8,
-      ((run loopBody)^[4617] s).mem (wordAddress 0xa0020000 k j) =
-        s.mem (wordAddress 0x800df000 k j) := by
-  have h := iterations_selected 4617 s little
+    ∀ k < 4606, ∀ j < 8,
+      ((run loopBody)^[4606] s).mem (wordAddress 0xa0020000 k j) =
+        s.mem (wordAddress 0x800f2000 k j) := by
+  have h := iterations_selected 4606 s little
     (by rw [source, destination]; exact concrete_source_disjoint)
     (by rw [destination]; exact concrete_destination_disjoint)
   simpa only [source, destination] using h
