@@ -391,19 +391,19 @@ noncomputable def tailState17 (s : AsmState 64) := after (tailState16 s) (bootLo
 
 theorem tailState17_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState17 s).pc = 2147483780#64 ∧
-    (tailState17 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522568#64 else s.regs r) ∧
+    (tailState17 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522480#64 else s.regs r) ∧
     (tailState17 s).memDomain = s.memDomain ∧
     (tailState17 s).lr = s.lr ∧ (tailState17 s).align = s.align ∧
     (tailState17 s).be = s.be := by
   have prev := tailState16_control s pc
-  have obs := control_loc (tailState16 s) 6 537038796#64
+  have obs := control_loc (tailState16 s) 6 537038708#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   · exact (congrArg (fun p : BitVec 64 => p + 8#64) prev.1).trans (by decide)
   ·
-    have value := (congrArg (fun p : BitVec 64 => p + 537038796#64) prev.1).trans
-      (show 2147483772#64 + 537038796#64 = 2684522568#64 by decide)
+    have value := (congrArg (fun p : BitVec 64 => p + 537038708#64) prev.1).trans
+      (show 2147483772#64 + 537038708#64 = 2684522480#64 by decide)
     have transformed := congrArg₂
       (fun (v : BitVec 64) (registers : Nat → BitVec 64) =>
         fun x => if x = 6 then v else registers x) value prev.2.1
@@ -418,7 +418,7 @@ noncomputable def tailState18 (s : AsmState 64) := after (tailState17 s) (bootSt
 
 theorem tailState18_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState18 s).pc = 2147483784#64 ∧
-    (tailState18 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522568#64 else s.regs r) ∧
+    (tailState18 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522480#64 else s.regs r) ∧
     (tailState18 s).memDomain = s.memDomain ∧
     (tailState18 s).lr = s.lr ∧ (tailState18 s).align = s.align ∧
     (tailState18 s).be = s.be := by
@@ -433,19 +433,19 @@ noncomputable def tailState19 (s : AsmState 64) := after (tailState18 s) (bootLo
 
 theorem tailState19_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState19 s).pc = 2147483792#64 ∧
-    (tailState19 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522568#64 else s.regs r) ∧
+    (tailState19 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522480#64 else s.regs r) ∧
     (tailState19 s).memDomain = s.memDomain ∧
     (tailState19 s).lr = s.lr ∧ (tailState19 s).align = s.align ∧
     (tailState19 s).be = s.be := by
   have prev := tailState18_control s pc
-  have obs := control_loc (tailState18 s) 6 537038784#64
+  have obs := control_loc (tailState18 s) 6 537038696#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   · exact (congrArg (fun p : BitVec 64 => p + 8#64) prev.1).trans (by decide)
   ·
-    have value := (congrArg (fun p : BitVec 64 => p + 537038784#64) prev.1).trans
-      (show 2147483784#64 + 537038784#64 = 2684522568#64 by decide)
+    have value := (congrArg (fun p : BitVec 64 => p + 537038696#64) prev.1).trans
+      (show 2147483784#64 + 537038696#64 = 2684522480#64 by decide)
     have transformed := congrArg₂
       (fun (v : BitVec 64) (registers : Nat → BitVec 64) =>
         fun x => if x = 6 then v else registers x) value prev.2.1
@@ -460,7 +460,7 @@ noncomputable def tailState20 (s : AsmState 64) := after (tailState19 s) (bootSt
 
 theorem tailState20_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState20 s).pc = 2147483796#64 ∧
-    (tailState20 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522568#64 else s.regs r) ∧
+    (tailState20 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2684522480#64 else s.regs r) ∧
     (tailState20 s).memDomain = s.memDomain ∧
     (tailState20 s).lr = s.lr ∧ (tailState20 s).align = s.align ∧
     (tailState20 s).be = s.be := by
@@ -471,23 +471,23 @@ theorem tailState20_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   exact (congrArg (fun p : BitVec 64 => p + 4) prev.1).trans (by decide)
 
-noncomputable def tailState21 (s : AsmState 64) := after (tailState20 s) (bootLoc 6 0x80000094 0x800ddd94)
+noncomputable def tailState21 (s : AsmState 64) := after (tailState20 s) (bootLoc 6 0x80000094 0x800f0134)
 
 theorem tailState21_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState21 s).pc = 2147483804#64 ∧
-    (tailState21 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392340#64 else s.regs r) ∧
+    (tailState21 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148466996#64 else s.regs r) ∧
     (tailState21 s).memDomain = s.memDomain ∧
     (tailState21 s).lr = s.lr ∧ (tailState21 s).align = s.align ∧
     (tailState21 s).be = s.be := by
   have prev := tailState20_control s pc
-  have obs := control_loc (tailState20 s) 6 908544#64
+  have obs := control_loc (tailState20 s) 6 983200#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   · exact (congrArg (fun p : BitVec 64 => p + 8#64) prev.1).trans (by decide)
   ·
-    have value := (congrArg (fun p : BitVec 64 => p + 908544#64) prev.1).trans
-      (show 2147483796#64 + 908544#64 = 2148392340#64 by decide)
+    have value := (congrArg (fun p : BitVec 64 => p + 983200#64) prev.1).trans
+      (show 2147483796#64 + 983200#64 = 2148466996#64 by decide)
     have transformed := congrArg₂
       (fun (v : BitVec 64) (registers : Nat → BitVec 64) =>
         fun x => if x = 6 then v else registers x) value prev.2.1
@@ -502,7 +502,7 @@ noncomputable def tailState22 (s : AsmState 64) := after (tailState21 s) (bootSt
 
 theorem tailState22_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState22 s).pc = 2147483808#64 ∧
-    (tailState22 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392340#64 else s.regs r) ∧
+    (tailState22 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148466996#64 else s.regs r) ∧
     (tailState22 s).memDomain = s.memDomain ∧
     (tailState22 s).lr = s.lr ∧ (tailState22 s).align = s.align ∧
     (tailState22 s).be = s.be := by
@@ -513,23 +513,23 @@ theorem tailState22_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   exact (congrArg (fun p : BitVec 64 => p + 4) prev.1).trans (by decide)
 
-noncomputable def tailState23 (s : AsmState 64) := after (tailState22 s) (bootLoc 6 0x800000a0 0x800de000)
+noncomputable def tailState23 (s : AsmState 64) := after (tailState22 s) (bootLoc 6 0x800000a0 0x800f1000)
 
 theorem tailState23_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState23 s).pc = 2147483816#64 ∧
-    (tailState23 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else s.regs r) ∧
+    (tailState23 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else s.regs r) ∧
     (tailState23 s).memDomain = s.memDomain ∧
     (tailState23 s).lr = s.lr ∧ (tailState23 s).align = s.align ∧
     (tailState23 s).be = s.be := by
   have prev := tailState22_control s pc
-  have obs := control_loc (tailState22 s) 6 909152#64
+  have obs := control_loc (tailState22 s) 6 986976#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   · exact (congrArg (fun p : BitVec 64 => p + 8#64) prev.1).trans (by decide)
   ·
-    have value := (congrArg (fun p : BitVec 64 => p + 909152#64) prev.1).trans
-      (show 2147483808#64 + 909152#64 = 2148392960#64 by decide)
+    have value := (congrArg (fun p : BitVec 64 => p + 986976#64) prev.1).trans
+      (show 2147483808#64 + 986976#64 = 2148470784#64 by decide)
     have transformed := congrArg₂
       (fun (v : BitVec 64) (registers : Nat → BitVec 64) =>
         fun x => if x = 6 then v else registers x) value prev.2.1
@@ -544,7 +544,7 @@ noncomputable def tailState24 (s : AsmState 64) := after (tailState23 s) (bootSt
 
 theorem tailState24_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState24 s).pc = 2147483820#64 ∧
-    (tailState24 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else s.regs r) ∧
+    (tailState24 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else s.regs r) ∧
     (tailState24 s).memDomain = s.memDomain ∧
     (tailState24 s).lr = s.lr ∧ (tailState24 s).align = s.align ∧
     (tailState24 s).be = s.be := by
@@ -559,7 +559,7 @@ noncomputable def tailState25 (s : AsmState 64) := after (tailState24 s) (bootCo
 
 theorem tailState25_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState25 s).pc = 2147483824#64 ∧
-    (tailState25 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 161#64 else s.regs r) ∧
+    (tailState25 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 161#64 else s.regs r) ∧
     (tailState25 s).memDomain = s.memDomain ∧
     (tailState25 s).lr = s.lr ∧ (tailState25 s).align = s.align ∧
     (tailState25 s).be = s.be := by
@@ -584,7 +584,7 @@ noncomputable def tailState26 (s : AsmState 64) := after (tailState25 s) (bootSh
 
 theorem tailState26_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState26 s).pc = 2147483828#64 ∧
-    (tailState26 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 2701131776#64 else s.regs r) ∧
+    (tailState26 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 2701131776#64 else s.regs r) ∧
     (tailState26 s).memDomain = s.memDomain ∧
     (tailState26 s).lr = s.lr ∧ (tailState26 s).align = s.align ∧
     (tailState26 s).be = s.be := by
@@ -609,7 +609,7 @@ noncomputable def tailState27 (s : AsmState 64) := after (tailState26 s) (bootCo
 
 theorem tailState27_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState27 s).pc = 2147483832#64 ∧
-    (tailState27 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 2701131776#64 else if r = 12 then 2015#64 else s.regs r) ∧
+    (tailState27 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 2701131776#64 else if r = 12 then 2015#64 else s.regs r) ∧
     (tailState27 s).memDomain = s.memDomain ∧
     (tailState27 s).lr = s.lr ∧ (tailState27 s).align = s.align ∧
     (tailState27 s).be = s.be := by
@@ -634,7 +634,7 @@ noncomputable def tailState28 (s : AsmState 64) := after (tailState27 s) (bootSh
 
 theorem tailState28_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState28 s).pc = 2147483836#64 ∧
-    (tailState28 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else s.regs r) ∧
+    (tailState28 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else s.regs r) ∧
     (tailState28 s).memDomain = s.memDomain ∧
     (tailState28 s).lr = s.lr ∧ (tailState28 s).align = s.align ∧
     (tailState28 s).be = s.be := by
@@ -659,7 +659,7 @@ noncomputable def tailState29 (s : AsmState 64) := after (tailState28 s) (bootCo
 
 theorem tailState29_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState29 s).pc = 2147483840#64 ∧
-    (tailState29 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 63#64 else s.regs r) ∧
+    (tailState29 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 63#64 else s.regs r) ∧
     (tailState29 s).memDomain = s.memDomain ∧
     (tailState29 s).lr = s.lr ∧ (tailState29 s).align = s.align ∧
     (tailState29 s).be = s.be := by
@@ -684,7 +684,7 @@ noncomputable def tailState30 (s : AsmState 64) := after (tailState29 s) (bootSh
 
 theorem tailState30_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState30 s).pc = 2147483844#64 ∧
-    (tailState30 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
+    (tailState30 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
     (tailState30 s).memDomain = s.memDomain ∧
     (tailState30 s).lr = s.lr ∧ (tailState30 s).align = s.align ∧
     (tailState30 s).be = s.be := by
@@ -709,19 +709,19 @@ noncomputable def tailState31 (s : AsmState 64) := after (tailState30 s) (bootLo
 
 theorem tailState31_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
     (tailState31 s).pc = 2147483852#64 ∧
-    (tailState31 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 10 then 2147488144#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
+    (tailState31 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 10 then 2147487856#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
     (tailState31 s).memDomain = s.memDomain ∧
     (tailState31 s).lr = s.lr ∧ (tailState31 s).align = s.align ∧
     (tailState31 s).be = s.be := by
   have prev := tailState30_control s pc
-  have obs := control_loc (tailState30 s) 10 4300#64
+  have obs := control_loc (tailState30 s) 10 4012#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
   · exact (congrArg (fun p : BitVec 64 => p + 8#64) prev.1).trans (by decide)
   ·
-    have value := (congrArg (fun p : BitVec 64 => p + 4300#64) prev.1).trans
-      (show 2147483844#64 + 4300#64 = 2147488144#64 by decide)
+    have value := (congrArg (fun p : BitVec 64 => p + 4012#64) prev.1).trans
+      (show 2147483844#64 + 4012#64 = 2147487856#64 by decide)
     have transformed := congrArg₂
       (fun (v : BitVec 64) (registers : Nat → BitVec 64) =>
         fun x => if x = 10 then v else registers x) value prev.2.1
@@ -735,23 +735,23 @@ theorem tailState31_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
 noncomputable def tailState32 (s : AsmState 64) := after (tailState31 s) (.jump (BitVec.ofNat 64 nativePc - 0x800000cc))
 
 theorem tailState32_control (s : AsmState 64) (pc : s.pc = 0x8000002c) :
-    (tailState32 s).pc = 2147488144#64 ∧
-    (tailState32 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148392960#64 else if r = 10 then 2147488144#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
+    (tailState32 s).pc = 2147487856#64 ∧
+    (tailState32 s).regs = (fun r => if r = 5 then 2701131776#64 else if r = 6 then 2148470784#64 else if r = 10 then 2147487856#64 else if r = 11 then 2701131776#64 else if r = 12 then 33806090240#64 else if r = 13 then 33822867456#64 else s.regs r) ∧
     (tailState32 s).memDomain = s.memDomain ∧
     (tailState32 s).lr = s.lr ∧ (tailState32 s).align = s.align ∧
     (tailState32 s).be = s.be := by
   have prev := tailState31_control s pc
-  have obs := control_jump (tailState31 s) 4292#64
+  have obs := control_jump (tailState31 s) 4004#64
   refine ⟨obs.1.trans ?_, ?_, obs.2.2.1.trans prev.2.2.1,
     obs.2.2.2.1.trans prev.2.2.2.1, obs.2.2.2.2.1.trans prev.2.2.2.2.1,
     obs.2.2.2.2.2.trans prev.2.2.2.2.2⟩
-  · exact (congrArg (fun p : BitVec 64 => p + 4292#64) prev.1).trans (by decide)
+  · exact (congrArg (fun p : BitVec 64 => p + 4004#64) prev.1).trans (by decide)
   · exact obs.2.1.trans prev.2.1
 
 theorem tail_run_state (s : AsmState 64) : run tailCode s = tailState32 s := by rfl
 
 /-- Exact calculated assembler endpoint of the straight-line tail. -/
-noncomputable def tailEndpoint : AsmState 64 := run tailCode (copyState 4617)
+noncomputable def tailEndpoint : AsmState 64 := run tailCode (copyState 4606)
 
 theorem tail_endpoint_fields :
     tailEndpoint.pc = BitVec.ofNat 64 nativePc ∧
@@ -761,8 +761,8 @@ theorem tail_endpoint_fields :
     tailEndpoint.regs 13 = BitVec.ofNat 64 ramEnd ∧
     tailEndpoint.memDomain = bootstrapDomain ∧
     tailEndpoint.lr = 1 ∧ tailEndpoint.align = 2 ∧ tailEndpoint.be = false := by
-  have fields := copyState_fields 4617
-  have control := tailState32_control (copyState 4617) (by simpa using copyState_pc 4617 (by omega))
+  have fields := copyState_fields 4606
+  have control := tailState32_control (copyState 4606) (by simpa using copyState_pc 4606 (by omega))
   simp only [tailEndpoint, tail_run_state]
   simp [control.1, control.2.1, control.2.2.1, control.2.2.2.1, control.2.2.2.2.1,
     control.2.2.2.2.2, fields.1, fields.2.1, fields.2.2.2.1, fields.2.2.2.2,
@@ -770,11 +770,11 @@ theorem tail_endpoint_fields :
 
 /-- The bootstrap also establishes the complete expected register map. -/
 theorem tail_endpoint_registers : tailEndpoint.regs = installedRegisters := by
-  have fields := copyState_fields 4617
-  have control := tailState32_control (copyState 4617)
-    (by simpa using copyState_pc 4617 (by omega))
-  have registers := (congrArg AsmState.regs (tail_run_state (copyState 4617))).trans control.2.1
-  change (run tailCode (copyState 4617)).regs = installedRegisters
+  have fields := copyState_fields 4606
+  have control := tailState32_control (copyState 4606)
+    (by simpa using copyState_pc 4606 (by omega))
+  have registers := (congrArg AsmState.regs (tail_run_state (copyState 4606))).trans control.2.1
+  change (run tailCode (copyState 4606)).regs = installedRegisters
   rw [registers]
   funext r
   by_cases h5 : r = 5
@@ -796,7 +796,7 @@ theorem tail_endpoint_registers : tailEndpoint.regs = installedRegisters := by
   by_cases h28 : r = 28
   · subst r
     simpa [installedRegisters] using InitECandidate.Proofs.BootstrapCopy.copyExit_loaded_register
-  rw [copyState_other_register 4617 r h5 h6 h28]
+  rw [copyState_other_register 4606 r h5 h6 h28]
   simp [copyEntryAsm, initialAsm, installedRegisters, h5, h6, h7, h10, h11, h12, h13, h28]
 
 private theorem load_fpRegs {width : Nat} [NeZero width] (n r : Nat)
@@ -868,10 +868,10 @@ private theorem state_ext {width : Nat} [NeZero width] {s t : AsmState width}
 
 /-- Once local tail admission is proved, every ASM field equals the canonical
 installed state. All fields besides failure were calculated independently. -/
-theorem tail_endpoint_eq (checks : Checked tailCode (copyState 4617)) :
+theorem tail_endpoint_eq (checks : Checked tailCode (copyState 4606)) :
     tailEndpoint = installedAsm := by
-  have fp := (run_fpRegs tailCode (copyState 4617)).trans (copyState_fpRegs 4617)
-  have nonfailed := checked_endpoint_nonfailed tailCode (copyState 4617) checks (by decide)
+  have fp := (run_fpRegs tailCode (copyState 4606)).trans (copyState_fpRegs 4606)
+  have nonfailed := checked_endpoint_nonfailed tailCode (copyState 4606) checks (by decide)
   have fields := tail_endpoint_fields
   apply state_ext
   · exact tail_endpoint_registers
@@ -882,7 +882,7 @@ theorem tail_endpoint_eq (checks : Checked tailCode (copyState 4617)) :
   · exact fields.2.2.2.2.2.2.1
   · exact fields.2.2.2.2.2.2.2.1
   · exact fields.2.2.2.2.2.2.2.2
-  · change (run tailCode (copyState 4617)).failed = false
+  · change (run tailCode (copyState 4606)).failed = false
     simpa only [Bool.not_eq_true] using nonfailed
 
 end InitECandidate.Proofs.BootstrapStraightLine
