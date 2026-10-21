@@ -1,8 +1,7 @@
+import InitECandidate.Proofs.WordStages.Optimize391
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.SmallSsaKernelComputation
 import InitECandidate.Proofs.CompilerStages
-import InitECandidate.Proofs.WordStages.Optimize391
-import InitECandidate.Proofs.ClashComputation
 import InitECandidate.Proofs.WordStages.Source407
 import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
@@ -10,7 +9,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
-open scoped InitECandidate.Proofs.CompilerComputation InitECandidate.Proofs.ClashComputation
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody407_0 : WordLangProgHOL (BitVec 64) :=
@@ -63,7 +62,7 @@ def optimizedBody407_13 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody407_10, 407, 4)) (some 396) ([]) (some (2, optimizedBody407_12, 407, 5))
+  Flapjack.Spt.ln)), optimizedBody407_10, 407, 4)) (some 394) ([]) (some (2, optimizedBody407_12, 407, 5))
 
 def optimizedBody407_14 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(0, 0), (4, 4)]

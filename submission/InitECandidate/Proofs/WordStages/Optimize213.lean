@@ -1,8 +1,7 @@
+import InitECandidate.Proofs.WordStages.Optimize197
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.SmallSsaKernelComputation
 import InitECandidate.Proofs.CompilerStages
-import InitECandidate.Proofs.WordStages.Optimize197
-import InitECandidate.Proofs.ClashComputation
 import InitECandidate.Proofs.WordStages.Source213
 import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
@@ -10,7 +9,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
-open scoped InitECandidate.Proofs.CompilerComputation InitECandidate.Proofs.ClashComputation
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody213_0 : WordLangProgHOL (BitVec 64) :=
@@ -26,13 +25,13 @@ def optimizedBody213_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 12 18446744073709551615#64)
 
 def optimizedBody213_4 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 10 18446744069414583341#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 10 18446744069414583343#64)
 
 def optimizedBody213_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(0, 0), (2, 2), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16)]
 
 def optimizedBody213_6 : WordLangProgHOL (BitVec 64) :=
-.call (none) (some 212) ([0, 2, 4, 6, 8, 10, 12, 14, 16]) (none)
+.call (none) (some 210) ([0, 2, 4, 6, 8, 10, 12, 14, 16]) (none)
 
 def optimizedBody213_7 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody213_5 optimizedBody213_6

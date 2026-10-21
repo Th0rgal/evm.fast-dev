@@ -1,5 +1,4 @@
 import InitECandidate.Proofs.WordStages.Optimize74
-import InitECandidate.Proofs.ClashComputation
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.SmallSsaKernelComputation
 import InitECandidate.Proofs.CompilerStages
@@ -23,7 +22,7 @@ def optimizedBody90_2 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.shareInst Flapjack.WordMemOp.load 4 (Flapjack.WordLangExpHOL.var 2)
 
 def optimizedBody90_3 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 134217712#64)
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1073741808#64)
 
 def optimizedBody90_4 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(4, 4)]

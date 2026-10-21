@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Check supplied Word literals against individual exact Loop compiler outputs."""
 from pathlib import Path
+import re
 root = Path(__file__).resolve().parent.parent
 base = root / "submission/InitECandidate/Proofs/FrontendStages/Word"
 base.mkdir(exist_ok=True)
@@ -10,7 +11,8 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 namespace InitECandidate.Proofs.FrontendStages.Word
 """
-function_count = 810
+ast = (root / "Guest/SoftwareAst.lean").read_text()
+function_count = len(re.findall(r"\bguestFn_\w+", ast[ast.index("def guestAst :"):])) + 1
 for i in range(function_count):
     label = 64+i
     source = root / f"submission/InitECandidate/Proofs/WordStages/Source{label}.lean"

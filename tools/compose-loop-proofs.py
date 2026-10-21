@@ -1,10 +1,13 @@
 #!/usr/bin/env python3
 """Compose independently kernel-checked Crep-to-Loop function certificates."""
 from pathlib import Path
+import re
 root = Path(__file__).resolve().parent.parent
+ast = (root / "Guest/SoftwareAst.lean").read_text()
+function_count = len(re.findall(r"\bguestFn_\w+", ast[ast.index("def guestAst :"):])) + 1
 base = root / "submission/InitECandidate/Proofs/FrontendStages/Loop"
 files = sorted(base.glob("Translate*.lean"), key=lambda p: int(p.stem[9:]))
-assert len(files) == 810, "Generate all 810 Loop outputs first"
+assert len(files) == function_count, f"Generate all {function_count} Loop outputs first"
 for i, path in enumerate(files):
     assert path.stem == f"Translate{i}"
     data = base / f"Data{i}.lean"

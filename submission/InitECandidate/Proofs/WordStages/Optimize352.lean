@@ -1,9 +1,15 @@
-import InitECandidate.Proofs.SmallStages.Compact352.Exact
+import InitECandidate.Proofs.WordStages.Optimize336
+import InitECandidate.Proofs.CompactComputation
+import InitECandidate.Proofs.SmallSsaKernelComputation
+import InitECandidate.Proofs.CompilerStages
+import InitECandidate.Proofs.WordStages.Source352
+import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody352_0 : WordLangProgHOL (BitVec 64) :=
@@ -11,22 +17,22 @@ Flapjack.WordLangProgHOL.move 1 [(2, 2), (0, 0)]
 
 def optimizedBody352_1 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 10 (Flapjack.WordLangAddr.addr 2 160#64))
+  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 10 (Flapjack.WordLangAddr.addr 2 320#64))
 
 def optimizedBody352_2 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(2, 2)]
 
 def optimizedBody352_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 4 (Flapjack.WordLangAddr.addr 2 168#64))
+  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 4 (Flapjack.WordLangAddr.addr 2 328#64))
 
 def optimizedBody352_4 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 6 (Flapjack.WordLangAddr.addr 2 176#64))
+  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 6 (Flapjack.WordLangAddr.addr 2 336#64))
 
 def optimizedBody352_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 8 (Flapjack.WordLangAddr.addr 2 184#64))
+  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 8 (Flapjack.WordLangAddr.addr 2 344#64))
 
 def optimizedBody352_6 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 0 [(2, 10), (4, 4), (6, 6), (8, 8)]
@@ -78,6 +84,9 @@ theorem optimize352_eq : WordToWord.fullCompileSingleWith
   (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
   RiscVConfig.pancakeRiscVBackendConfig.wordToWordConf.regAlg
   riscvConfig (source352, oracle352) = optimized352 := by
-  exact InitECandidate.Proofs.SmallStages.Compact352.optimize352_exact
+  rw [InitECandidate.Proofs.CompilerStages.fullCompile_expanded]
+  dsimp only
+  rw [InitECandidate.Proofs.SmallSsaKernelComputation.fullSsaStructural_eq]
+  kernel_rfl
 #print axioms optimize352_eq
 end InitECandidate.Proofs.WordStages

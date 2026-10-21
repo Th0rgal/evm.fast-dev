@@ -1,408 +1,223 @@
-import InitECandidate.Proofs.SmallStages.Compact840.Exact
+import InitECandidate.Proofs.WordStages.Optimize824
+import InitECandidate.Proofs.CompactComputation
+import InitECandidate.Proofs.SmallSsaKernelComputation
+import InitECandidate.Proofs.CompilerStages
+import InitECandidate.Proofs.WordStages.Source840
+import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody840_0 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(0, 0)]
+Flapjack.WordLangProgHOL.move 1 [(6, 2), (4, 4), (0, 0)]
 
 def optimizedBody840_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.get 2 Flapjack.WordStore.heapLength
+Flapjack.WordLangProgHOL.inst
+  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 6 (Flapjack.WordRegImm.imm 9#64)))
 
 def optimizedBody840_2 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.shift Flapjack.Shift.lsl 2 2 (Flapjack.WordRegImm.imm 1#64)))
+  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.sub 2 4 (Flapjack.WordRegImm.reg 2)))
 
 def optimizedBody840_3 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.opCurrHeap Flapjack.BinOp.add 2 2
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 0), (46, 6), (48, 2)]
 
 def optimizedBody840_4 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 2 18446744073709551360#64))
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (44, 44), (8, 46), (6, 48)]
 
 def optimizedBody840_5 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 4 (Flapjack.WordLangAddr.addr 2 112#64))
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (8, 46), (6, 48)]
 
 def optimizedBody840_6 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(4, 4)]
-
-def optimizedBody840_7 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 4 96#64))
-
-def optimizedBody840_8 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(2, 2)]
-
-def optimizedBody840_9 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 6 192#64)
-
-def optimizedBody840_10 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.tick
-
-def optimizedBody840_11 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 13#64)
-
-def optimizedBody840_12 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.set (Flapjack.WordStore.temp 0#5) (Flapjack.WordLangExpHOL.var 2)
-
-def optimizedBody840_13 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 8#64)
-
-def optimizedBody840_14 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2)]
-
-def optimizedBody840_15 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.raise 2
 
+def optimizedBody840_7 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_5 optimizedBody840_6
+
+def optimizedBody840_8 : WordLangProgHOL (BitVec 64) :=
+.call (some (([2]), ((Flapjack.Spt.bn
+    (Flapjack.Spt.bn
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        Flapjack.Spt.ln)
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), optimizedBody840_4, 840, 2)) (some 180) ([2]) (some (2, optimizedBody840_7, 840, 3))
+
+def optimizedBody840_9 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.tick
+
+def optimizedBody840_10 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 0 [(8, 8), (0, 0)]
+
+def optimizedBody840_11 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.inst
+  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 0 (Flapjack.WordRegImm.reg 8)))
+
+def optimizedBody840_12 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 0 [(8, 8)]
+
+def optimizedBody840_13 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.inst
+  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 4 8 (Flapjack.WordRegImm.imm 9#64)))
+
+def optimizedBody840_14 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (4, 4), (6, 6), (44, 44), (46, 0), (48, 8), (50, 6)]
+
+def optimizedBody840_15 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 0 [(44, 44), (46, 46), (0, 48), (4, 50)]
+
 def optimizedBody840_16 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_14 optimizedBody840_15
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (46, 46), (0, 48), (4, 50)]
 
 def optimizedBody840_17 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_13 optimizedBody840_16
+.seq optimizedBody840_16 optimizedBody840_6
 
 def optimizedBody840_18 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_12 optimizedBody840_17
+.call (some (([2]), ((Flapjack.Spt.bn
+    (Flapjack.Spt.bn
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), optimizedBody840_15, 840, 4)) (some 77) ([2, 4, 6]) (some (2, optimizedBody840_17, 840, 5))
 
 def optimizedBody840_19 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_8 optimizedBody840_18
+Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (44, 44), (46, 46), (48, 4)]
 
 def optimizedBody840_20 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_11 optimizedBody840_19
+Flapjack.WordLangProgHOL.move 0 [(6, 44), (4, 46), (0, 48)]
 
 def optimizedBody840_21 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_20
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (6, 44), (4, 46), (0, 48)]
 
 def optimizedBody840_22 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.skip
+.seq optimizedBody840_21 optimizedBody840_6
 
 def optimizedBody840_23 : WordLangProgHOL (BitVec 64) :=
-.ite (Flapjack.Cmp.notEqual) 2 (Flapjack.WordRegImm.reg 6) optimizedBody840_21 optimizedBody840_22
+.call (some (([2]), ((Flapjack.Spt.bn
+    (Flapjack.Spt.bn
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        Flapjack.Spt.ln)
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), optimizedBody840_20, 840, 6)) (some 178) ([2, 4]) (some (2, optimizedBody840_22, 840, 7))
 
 def optimizedBody840_24 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 50000#64)
+Flapjack.WordLangProgHOL.move 0 [(4, 4), (0, 0)]
 
 def optimizedBody840_25 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 0), (46, 4)]
+Flapjack.WordLangProgHOL.inst
+  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 0 (Flapjack.WordRegImm.reg 4)))
 
 def optimizedBody840_26 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(44, 44), (46, 46)]
+Flapjack.WordLangProgHOL.move 0 [(2, 2)]
 
 def optimizedBody840_27 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (46, 46)]
-
-def optimizedBody840_28 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_27 optimizedBody840_15
-
-def optimizedBody840_29 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln)
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody840_26, 840, 2)) (some 472) ([2]) (some (2, optimizedBody840_28, 840, 3))
-
-def optimizedBody840_30 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 64#64)
-
-def optimizedBody840_31 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(4, 2), (44, 44), (0, 46)]
-
-def optimizedBody840_32 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (44, 44), (0, 46)]
-
-def optimizedBody840_33 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_32 optimizedBody840_15
-
-def optimizedBody840_34 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln)
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody840_31, 840, 4)) (some 68) ([2]) (some (2, optimizedBody840_33, 840, 5))
-
-def optimizedBody840_35 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(0, 0)]
-
-def optimizedBody840_36 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 88#64))
-
-def optimizedBody840_37 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (4, 4), (44, 44), (46, 4)]
-
-def optimizedBody840_38 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(0, 2), (6, 44), (4, 46)]
-
-def optimizedBody840_39 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (6, 44), (4, 46)]
-
-def optimizedBody840_40 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_39 optimizedBody840_15
-
-def optimizedBody840_41 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln)
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody840_38, 840, 6)) (some 829) ([2, 4]) (some (2, optimizedBody840_40, 840, 7))
-
-def optimizedBody840_42 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
-
-def optimizedBody840_43 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 0 13#64)
-
-def optimizedBody840_44 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.set (Flapjack.WordStore.temp 0#5) (Flapjack.WordLangExpHOL.var 0)
-
-def optimizedBody840_45 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_44 optimizedBody840_17
-
-def optimizedBody840_46 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_35 optimizedBody840_45
-
-def optimizedBody840_47 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_43 optimizedBody840_46
-
-def optimizedBody840_48 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_47
-
-def optimizedBody840_49 : WordLangProgHOL (BitVec 64) :=
-.ite (Flapjack.Cmp.notEqual) 0 (Flapjack.WordRegImm.reg 2) optimizedBody840_48 optimizedBody840_22
-
-def optimizedBody840_50 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.get 0 Flapjack.WordStore.heapLength
-
-def optimizedBody840_51 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.shift Flapjack.Shift.lsl 0 0 (Flapjack.WordRegImm.imm 1#64)))
-
-def optimizedBody840_52 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.opCurrHeap Flapjack.BinOp.add 0 0
-
-def optimizedBody840_53 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 18446744073709551360#64))
-
-def optimizedBody840_54 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 2 2 (Flapjack.WordRegImm.imm 120#64)))
-
-def optimizedBody840_55 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(2, 2), (4, 4)]
-
-def optimizedBody840_56 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.store 4 (Flapjack.WordLangAddr.addr 2 0#64))
-
-def optimizedBody840_57 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 0 (Flapjack.WordLangAddr.addr 0 18446744073709551360#64))
-
-def optimizedBody840_58 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst
-  (Flapjack.WordLangInst.arith (Flapjack.WordLangArith.binop Flapjack.BinOp.add 0 0 (Flapjack.WordRegImm.imm 128#64)))
-
-def optimizedBody840_59 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.store 2 (Flapjack.WordLangAddr.addr 0 0#64))
-
-def optimizedBody840_60 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.return 6 [2]
 
-def optimizedBody840_61 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_8 optimizedBody840_60
+def optimizedBody840_28 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_26 optimizedBody840_27
 
-def optimizedBody840_62 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_42 optimizedBody840_61
+def optimizedBody840_29 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_25 optimizedBody840_28
 
-def optimizedBody840_63 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_59 optimizedBody840_62
+def optimizedBody840_30 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_24 optimizedBody840_29
 
-def optimizedBody840_64 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_35 optimizedBody840_63
+def optimizedBody840_31 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_9 optimizedBody840_30
 
-def optimizedBody840_65 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_30 optimizedBody840_64
+def optimizedBody840_32 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_23 optimizedBody840_31
 
-def optimizedBody840_66 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_58 optimizedBody840_65
+def optimizedBody840_33 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_19 optimizedBody840_32
 
-def optimizedBody840_67 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_57 optimizedBody840_66
+def optimizedBody840_34 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_9 optimizedBody840_33
 
-def optimizedBody840_68 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_0 optimizedBody840_67
+def optimizedBody840_35 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_18 optimizedBody840_34
 
-def optimizedBody840_69 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_56 optimizedBody840_68
+def optimizedBody840_36 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_14 optimizedBody840_35
 
-def optimizedBody840_70 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_55 optimizedBody840_69
+def optimizedBody840_37 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_13 optimizedBody840_36
 
-def optimizedBody840_71 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_54 optimizedBody840_70
+def optimizedBody840_38 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_12 optimizedBody840_37
 
-def optimizedBody840_72 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_53 optimizedBody840_71
+def optimizedBody840_39 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_11 optimizedBody840_38
 
-def optimizedBody840_73 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_52 optimizedBody840_72
+def optimizedBody840_40 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_10 optimizedBody840_39
 
-def optimizedBody840_74 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_51 optimizedBody840_73
+def optimizedBody840_41 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_9 optimizedBody840_40
 
-def optimizedBody840_75 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_50 optimizedBody840_74
+def optimizedBody840_42 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_8 optimizedBody840_41
 
-def optimizedBody840_76 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_75
+def optimizedBody840_43 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_3 optimizedBody840_42
 
-def optimizedBody840_77 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_76
+def optimizedBody840_44 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_2 optimizedBody840_43
 
-def optimizedBody840_78 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_49 optimizedBody840_77
+def optimizedBody840_45 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_1 optimizedBody840_44
 
-def optimizedBody840_79 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_42 optimizedBody840_78
-
-def optimizedBody840_80 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_35 optimizedBody840_79
-
-def optimizedBody840_81 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_80
-
-def optimizedBody840_82 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_41 optimizedBody840_81
-
-def optimizedBody840_83 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_37 optimizedBody840_82
-
-def optimizedBody840_84 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_36 optimizedBody840_83
-
-def optimizedBody840_85 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_35 optimizedBody840_84
-
-def optimizedBody840_86 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_85
-
-def optimizedBody840_87 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_34 optimizedBody840_86
-
-def optimizedBody840_88 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_27 optimizedBody840_87
-
-def optimizedBody840_89 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_30 optimizedBody840_88
-
-def optimizedBody840_90 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_89
-
-def optimizedBody840_91 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_29 optimizedBody840_90
-
-def optimizedBody840_92 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_25 optimizedBody840_91
-
-def optimizedBody840_93 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_24 optimizedBody840_92
-
-def optimizedBody840_94 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_93
-
-def optimizedBody840_95 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_10 optimizedBody840_94
-
-def optimizedBody840_96 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_23 optimizedBody840_95
-
-def optimizedBody840_97 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_9 optimizedBody840_96
-
-def optimizedBody840_98 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_8 optimizedBody840_97
-
-def optimizedBody840_99 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_7 optimizedBody840_98
-
-def optimizedBody840_100 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_6 optimizedBody840_99
-
-def optimizedBody840_101 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_5 optimizedBody840_100
-
-def optimizedBody840_102 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_4 optimizedBody840_101
-
-def optimizedBody840_103 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_3 optimizedBody840_102
-
-def optimizedBody840_104 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_2 optimizedBody840_103
-
-def optimizedBody840_105 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_1 optimizedBody840_104
-
-def optimizedBody840_106 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody840_0 optimizedBody840_105
+def optimizedBody840_46 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody840_0 optimizedBody840_45
 
 def oracle840 : Option (Spt Nat) :=
 some
-  (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln 1 (Flapjack.Spt.ls 2)) 0
+  (Flapjack.Spt.bs (Flapjack.Spt.bs (Flapjack.Spt.ls 3) 1 (Flapjack.Spt.ls 2)) 0
     (Flapjack.Spt.bn
       (Flapjack.Spt.bn
         (Flapjack.Spt.bn
-          (Flapjack.Spt.bs
-            (Flapjack.Spt.bn
-              (Flapjack.Spt.bs Flapjack.Spt.ln 22 (Flapjack.Spt.bs Flapjack.Spt.ln 2 (Flapjack.Spt.ls 2)))
-              (Flapjack.Spt.bn (Flapjack.Spt.bs Flapjack.Spt.ln 2 (Flapjack.Spt.ls 1)) Flapjack.Spt.ln))
-            1
-            (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln 1 (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 0)))
-              2 (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)) 1 Flapjack.Spt.ln)))
-          (Flapjack.Spt.bs
-            (Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.ls 1) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 1)))
-              1 (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)) Flapjack.Spt.ln))
-            0
-            (Flapjack.Spt.bs
-              (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 1))
-                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)))
-              1 (Flapjack.Spt.bs (Flapjack.Spt.ls 1) 1 (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0))))))
+          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0))
+            (Flapjack.Spt.bs (Flapjack.Spt.ls 4) 1 (Flapjack.Spt.bs (Flapjack.Spt.ls 0) 3 (Flapjack.Spt.ls 22))))
+          (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0))) 0
+            (Flapjack.Spt.bs (Flapjack.Spt.bs (Flapjack.Spt.ls 2) 4 Flapjack.Spt.ln) 3
+              (Flapjack.Spt.bs (Flapjack.Spt.ls 3) 22 Flapjack.Spt.ln))))
         (Flapjack.Spt.bn
-          (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln 3 (Flapjack.Spt.bn (Flapjack.Spt.ls 3) (Flapjack.Spt.ls 1)))
-            1
-            (Flapjack.Spt.bs
-              (Flapjack.Spt.bn (Flapjack.Spt.ls 0) (Flapjack.Spt.bs Flapjack.Spt.ln 22 (Flapjack.Spt.ls 0))) 2
-              (Flapjack.Spt.bs Flapjack.Spt.ln 1 (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 1)))))
-          (Flapjack.Spt.bn
-            (Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.ls 0) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 1)))
-              1 (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)) Flapjack.Spt.ln))
-            (Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)) Flapjack.Spt.ln) 1
-              (Flapjack.Spt.bn (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 1))
-                (Flapjack.Spt.bs Flapjack.Spt.ln 23 (Flapjack.Spt.ls 0)))))))
+          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 2)))
+            (Flapjack.Spt.bs (Flapjack.Spt.bs (Flapjack.Spt.ls 1) 1 Flapjack.Spt.ln) 1
+              (Flapjack.Spt.bs (Flapjack.Spt.ls 2) 4 Flapjack.Spt.ln)))
+          (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls 2) (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 23)))
+            (Flapjack.Spt.bs (Flapjack.Spt.bs (Flapjack.Spt.ls 0) 0 Flapjack.Spt.ln) 2 Flapjack.Spt.ln))))
       (Flapjack.Spt.bn
-        (Flapjack.Spt.bn Flapjack.Spt.ln
-          (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls 22) (Flapjack.Spt.bn (Flapjack.Spt.ls 23) Flapjack.Spt.ln))
-            (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 23)) Flapjack.Spt.ln)))
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls 23) Flapjack.Spt.ln) Flapjack.Spt.ln)
-          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls 22) Flapjack.Spt.ln))
-            (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)) Flapjack.Spt.ln))))))
+        (Flapjack.Spt.bn
+          (Flapjack.Spt.bn
+            (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln 22 (Flapjack.Spt.ls 23)) 23 Flapjack.Spt.ln)
+            Flapjack.Spt.ln)
+          (Flapjack.Spt.bn Flapjack.Spt.ln
+            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 24)))))
+        (Flapjack.Spt.bn
+          (Flapjack.Spt.bn (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)) 22 Flapjack.Spt.ln)
+            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 25))))
+          (Flapjack.Spt.bn Flapjack.Spt.ln
+            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bs (Flapjack.Spt.ls 24) 24 (Flapjack.Spt.ls 23))))))))
 def optimized840 : Nat × Nat × WordLangProgHOL (BitVec 64) :=
-(840, 1, optimizedBody840_106)
+(840, 3, optimizedBody840_46)
 theorem optimize840_eq : WordToWord.fullCompileSingleWith
   RegAlloc.regAllocExecutable riscvConfig.twoRegArith
   (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
   RiscVConfig.pancakeRiscVBackendConfig.wordToWordConf.regAlg
   riscvConfig (source840, oracle840) = optimized840 := by
-  exact InitECandidate.Proofs.SmallStages.Compact840.optimize840_exact
+  rw [InitECandidate.Proofs.CompilerStages.fullCompile_expanded]
+  dsimp only
+  rw [InitECandidate.Proofs.SmallSsaKernelComputation.fullSsaStructural_eq]
+  kernel_rfl
 #print axioms optimize840_eq
 end InitECandidate.Proofs.WordStages

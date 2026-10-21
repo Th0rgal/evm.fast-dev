@@ -1,9 +1,7 @@
-import InitECandidate.Proofs.SmallStages.Compact377.Complete
+import InitECandidate.Proofs.WordStages.Optimize359
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.SmallSsaKernelComputation
 import InitECandidate.Proofs.CompilerStages
-import InitECandidate.Proofs.WordStages.Optimize359
-import InitECandidate.Proofs.ClashComputation
 import InitECandidate.Proofs.WordStages.Source375
 import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
@@ -11,7 +9,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
-open scoped InitECandidate.Proofs.CompilerComputation InitECandidate.Proofs.ClashComputation
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody375_0 : WordLangProgHOL (BitVec 64) :=
@@ -27,7 +25,7 @@ def optimizedBody375_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(0, 0), (2, 2), (4, 4), (6, 6), (8, 8)]
 
 def optimizedBody375_4 : WordLangProgHOL (BitVec 64) :=
-.call (none) (some 372) ([0, 2, 4, 6, 8]) (none)
+.call (none) (some 370) ([0, 2, 4, 6, 8]) (none)
 
 def optimizedBody375_5 : WordLangProgHOL (BitVec 64) :=
 .seq optimizedBody375_3 optimizedBody375_4
@@ -56,6 +54,9 @@ theorem optimize375_eq : WordToWord.fullCompileSingleWith
   (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
   RiscVConfig.pancakeRiscVBackendConfig.wordToWordConf.regAlg
   riscvConfig (source375, oracle375) = optimized375 := by
-  exact InitECandidate.Proofs.SmallStages.Compact377.optimize_shared 375
+  rw [InitECandidate.Proofs.CompilerStages.fullCompile_expanded]
+  dsimp only
+  rw [InitECandidate.Proofs.SmallSsaKernelComputation.fullSsaStructural_eq]
+  kernel_rfl
 #print axioms optimize375_eq
 end InitECandidate.Proofs.WordStages

@@ -1,9 +1,15 @@
-import InitECandidate.Proofs.SmallStages.Compact510.Exact
+import InitECandidate.Proofs.WordStages.Optimize494
+import InitECandidate.Proofs.CompactComputation
+import InitECandidate.Proofs.SmallSsaKernelComputation
+import InitECandidate.Proofs.CompilerStages
+import InitECandidate.Proofs.WordStages.Source510
+import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody510_0 : WordLangProgHOL (BitVec 64) :=
@@ -27,7 +33,7 @@ def optimizedBody510_5 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_1, 510, 2)) (some 477) ([]) (some (2, optimizedBody510_4, 510, 3))
+  Flapjack.Spt.ln)), optimizedBody510_1, 510, 2)) (some 475) ([]) (some (2, optimizedBody510_4, 510, 3))
 
 def optimizedBody510_6 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.tick
@@ -53,7 +59,7 @@ def optimizedBody510_11 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln) Flapjack.Spt.ln)))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_8, 510, 4)) (some 477) ([]) (some (2, optimizedBody510_10, 510, 5))
+  Flapjack.Spt.ln)), optimizedBody510_8, 510, 4)) (some 475) ([]) (some (2, optimizedBody510_10, 510, 5))
 
 def optimizedBody510_12 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 3#64)
@@ -86,7 +92,7 @@ def optimizedBody510_17 : WordLangProgHOL (BitVec 64) :=
         (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_14, 510, 6)) (some 472) ([2]) (some (2, optimizedBody510_16, 510, 7))
+  Flapjack.Spt.ln)), optimizedBody510_14, 510, 6)) (some 470) ([2]) (some (2, optimizedBody510_16, 510, 7))
 
 def optimizedBody510_18 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (10, 10), (12, 12), (14, 14), (16, 16), (44, 44)]
@@ -100,7 +106,7 @@ def optimizedBody510_20 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_19, 510, 8)) (some 106) ([2, 4, 6, 8, 10, 12, 14, 16]) (some (2, optimizedBody510_4, 510, 9))
+  Flapjack.Spt.ln)), optimizedBody510_19, 510, 8)) (some 108) ([2, 4, 6, 8, 10, 12, 14, 16]) (some (2, optimizedBody510_4, 510, 9))
 
 def optimizedBody510_21 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.move 1 [(2, 0), (44, 44)]
@@ -114,7 +120,7 @@ def optimizedBody510_23 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_22, 510, 10)) (some 480) ([2]) (some (2, optimizedBody510_4, 510, 11))
+  Flapjack.Spt.ln)), optimizedBody510_22, 510, 10)) (some 478) ([2]) (some (2, optimizedBody510_4, 510, 11))
 
 def optimizedBody510_24 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1#64)
@@ -134,7 +140,7 @@ def optimizedBody510_28 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody510_25, 510, 12)) (some 492) ([2]) (some (2, optimizedBody510_27, 510, 13))
+  Flapjack.Spt.ln)), optimizedBody510_25, 510, 12)) (some 490) ([2]) (some (2, optimizedBody510_27, 510, 13))
 
 def optimizedBody510_29 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
@@ -262,6 +268,9 @@ theorem optimize510_eq : WordToWord.fullCompileSingleWith
   (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
   RiscVConfig.pancakeRiscVBackendConfig.wordToWordConf.regAlg
   riscvConfig (source510, oracle510) = optimized510 := by
-  exact InitECandidate.Proofs.SmallStages.Compact510.optimize510_exact
+  rw [InitECandidate.Proofs.CompilerStages.fullCompile_expanded]
+  dsimp only
+  rw [InitECandidate.Proofs.SmallSsaKernelComputation.fullSsaStructural_eq]
+  kernel_rfl
 #print axioms optimize510_eq
 end InitECandidate.Proofs.WordStages

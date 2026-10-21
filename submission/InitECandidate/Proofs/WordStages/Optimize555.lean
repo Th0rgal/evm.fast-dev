@@ -1,8 +1,7 @@
+import InitECandidate.Proofs.WordStages.Optimize539
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.SmallSsaKernelComputation
 import InitECandidate.Proofs.CompilerStages
-import InitECandidate.Proofs.WordStages.Optimize539
-import InitECandidate.Proofs.ClashComputation
 import InitECandidate.Proofs.WordStages.Source555
 import InitECandidate.Proofs.CompilerComputation
 set_option Elab.async false
@@ -10,7 +9,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
-open scoped InitECandidate.Proofs.CompilerComputation InitECandidate.Proofs.ClashComputation
+open scoped InitECandidate.Proofs.CompilerComputation
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.WordStages
 def optimizedBody555_0 : WordLangProgHOL (BitVec 64) :=
@@ -40,7 +39,7 @@ def optimizedBody555_7 : WordLangProgHOL (BitVec 64) :=
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody555_3, 555, 2)) (some 472) ([2]) (some (2, optimizedBody555_6, 555, 3))
+  Flapjack.Spt.ln)), optimizedBody555_3, 555, 2)) (some 470) ([2]) (some (2, optimizedBody555_6, 555, 3))
 
 def optimizedBody555_8 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.tick
@@ -64,127 +63,139 @@ Flapjack.WordLangProgHOL.inst
   (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 0 (Flapjack.WordLangAddr.addr 0 112#64))
 
 def optimizedBody555_14 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 32#64))
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 0 (Flapjack.WordLangAddr.addr 0 8#64))
 
 def optimizedBody555_15 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(4, 4), (6, 6), (0, 2), (8, 8), (44, 44)]
+Flapjack.WordLangProgHOL.move 0 [(0, 0)]
 
 def optimizedBody555_16 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.mem Flapjack.WordMemOp.load 2 (Flapjack.WordLangAddr.addr 0 0#64))
+
+def optimizedBody555_17 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 1 [(0, 2), (4, 4), (8, 8), (6, 6), (44, 44)]
+
+def optimizedBody555_18 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2, 4, 6, 8]), ((Flapjack.Spt.bn
     (Flapjack.Spt.bn Flapjack.Spt.ln
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody555_15, 555, 4)) (some 469) ([2]) (some (2, optimizedBody555_6, 555, 5))
-
-def optimizedBody555_17 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (44, 44)]
-
-def optimizedBody555_18 : WordLangProgHOL (BitVec 64) :=
-.call (some (([2]), ((Flapjack.Spt.bn
-    (Flapjack.Spt.bn Flapjack.Spt.ln
-      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-        Flapjack.Spt.ln))
-    Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody555_3, 555, 6)) (some 478) ([2, 4, 6, 8]) (some (2, optimizedBody555_6, 555, 7))
+  Flapjack.Spt.ln)), optimizedBody555_17, 555, 4)) (some 467) ([2]) (some (2, optimizedBody555_6, 555, 5))
 
 def optimizedBody555_19 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1#64)
+Flapjack.WordLangProgHOL.move 1 [(2, 0), (4, 4), (6, 6), (8, 8), (44, 44)]
 
 def optimizedBody555_20 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(0, 44)]
-
-def optimizedBody555_21 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 1 [(2, 2), (0, 44)]
-
-def optimizedBody555_22 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_21 optimizedBody555_5
-
-def optimizedBody555_23 : WordLangProgHOL (BitVec 64) :=
 .call (some (([2]), ((Flapjack.Spt.bn
     (Flapjack.Spt.bn Flapjack.Spt.ln
       (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
         Flapjack.Spt.ln))
     Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), optimizedBody555_20, 555, 8)) (some 492) ([2]) (some (2, optimizedBody555_22, 555, 9))
+  Flapjack.Spt.ln)), optimizedBody555_3, 555, 6)) (some 476) ([2, 4, 6, 8]) (some (2, optimizedBody555_6, 555, 7))
+
+def optimizedBody555_21 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 1#64)
+
+def optimizedBody555_22 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 0 [(0, 44)]
+
+def optimizedBody555_23 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.move 1 [(2, 2), (0, 44)]
 
 def optimizedBody555_24 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
+.seq optimizedBody555_23 optimizedBody555_5
 
 def optimizedBody555_25 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.move 0 [(2, 2)]
+.call (some (([2]), ((Flapjack.Spt.bn
+    (Flapjack.Spt.bn Flapjack.Spt.ln
+      (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+        Flapjack.Spt.ln))
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), optimizedBody555_22, 555, 8)) (some 490) ([2]) (some (2, optimizedBody555_24, 555, 9))
 
 def optimizedBody555_26 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.return 0 [2]
+Flapjack.WordLangProgHOL.inst (Flapjack.WordLangInst.const 2 0#64)
 
 def optimizedBody555_27 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_25 optimizedBody555_26
+Flapjack.WordLangProgHOL.move 0 [(2, 2)]
 
 def optimizedBody555_28 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_24 optimizedBody555_27
+Flapjack.WordLangProgHOL.return 0 [2]
 
 def optimizedBody555_29 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_8 optimizedBody555_28
+.seq optimizedBody555_27 optimizedBody555_28
 
 def optimizedBody555_30 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_23 optimizedBody555_29
+.seq optimizedBody555_26 optimizedBody555_29
 
 def optimizedBody555_31 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_4 optimizedBody555_30
+.seq optimizedBody555_8 optimizedBody555_30
 
 def optimizedBody555_32 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_19 optimizedBody555_31
+.seq optimizedBody555_25 optimizedBody555_31
 
 def optimizedBody555_33 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_8 optimizedBody555_32
+.seq optimizedBody555_4 optimizedBody555_32
 
 def optimizedBody555_34 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_18 optimizedBody555_33
+.seq optimizedBody555_21 optimizedBody555_33
 
 def optimizedBody555_35 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_17 optimizedBody555_34
+.seq optimizedBody555_8 optimizedBody555_34
 
 def optimizedBody555_36 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_8 optimizedBody555_35
+.seq optimizedBody555_20 optimizedBody555_35
 
 def optimizedBody555_37 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_16 optimizedBody555_36
+.seq optimizedBody555_19 optimizedBody555_36
 
 def optimizedBody555_38 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_4 optimizedBody555_37
+.seq optimizedBody555_8 optimizedBody555_37
 
 def optimizedBody555_39 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_14 optimizedBody555_38
+.seq optimizedBody555_18 optimizedBody555_38
 
 def optimizedBody555_40 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_13 optimizedBody555_39
+.seq optimizedBody555_4 optimizedBody555_39
 
 def optimizedBody555_41 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_12 optimizedBody555_40
+.seq optimizedBody555_16 optimizedBody555_40
 
 def optimizedBody555_42 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_11 optimizedBody555_41
+.seq optimizedBody555_15 optimizedBody555_41
 
 def optimizedBody555_43 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_10 optimizedBody555_42
+.seq optimizedBody555_14 optimizedBody555_42
 
 def optimizedBody555_44 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_9 optimizedBody555_43
+.seq optimizedBody555_13 optimizedBody555_43
 
 def optimizedBody555_45 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_8 optimizedBody555_44
+.seq optimizedBody555_12 optimizedBody555_44
 
 def optimizedBody555_46 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_7 optimizedBody555_45
+.seq optimizedBody555_11 optimizedBody555_45
 
 def optimizedBody555_47 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_2 optimizedBody555_46
+.seq optimizedBody555_10 optimizedBody555_46
 
 def optimizedBody555_48 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_1 optimizedBody555_47
+.seq optimizedBody555_9 optimizedBody555_47
 
 def optimizedBody555_49 : WordLangProgHOL (BitVec 64) :=
-.seq optimizedBody555_0 optimizedBody555_48
+.seq optimizedBody555_8 optimizedBody555_48
+
+def optimizedBody555_50 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody555_7 optimizedBody555_49
+
+def optimizedBody555_51 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody555_2 optimizedBody555_50
+
+def optimizedBody555_52 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody555_1 optimizedBody555_51
+
+def optimizedBody555_53 : WordLangProgHOL (BitVec 64) :=
+.seq optimizedBody555_0 optimizedBody555_52
 
 def oracle555 : Option (Spt Nat) :=
 some
@@ -192,28 +203,28 @@ some
     (Flapjack.Spt.bn
       (Flapjack.Spt.bn
         (Flapjack.Spt.bn
-          (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 22)) 1
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)))
-          (Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.ls 4) Flapjack.Spt.ln) 0
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bs (Flapjack.Spt.ls 0) 0 (Flapjack.Spt.ls 2)))))
-        (Flapjack.Spt.bn
-          (Flapjack.Spt.bn
-            (Flapjack.Spt.bn (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 1))
-              (Flapjack.Spt.bn (Flapjack.Spt.ls 1) Flapjack.Spt.ln))
-            (Flapjack.Spt.bs Flapjack.Spt.ln 22 (Flapjack.Spt.ls 0)))
           (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 1))
-            (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22))
-              (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 3))))))
+            (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)) 22
+              (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 2))))
+          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0))
+            (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls 1) Flapjack.Spt.ln)
+              (Flapjack.Spt.bs (Flapjack.Spt.ls 1) 0 (Flapjack.Spt.ls 4)))))
+        (Flapjack.Spt.bn
+          (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 0)) 0
+            (Flapjack.Spt.bn (Flapjack.Spt.ls 22) (Flapjack.Spt.ls 0)))
+          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bs (Flapjack.Spt.ls 0) 0 (Flapjack.Spt.ls 0)))
+            (Flapjack.Spt.bs Flapjack.Spt.ln 1 (Flapjack.Spt.bs Flapjack.Spt.ln 0 (Flapjack.Spt.ls 3))))))
       (Flapjack.Spt.bn
         (Flapjack.Spt.bn
-          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)))
-            Flapjack.Spt.ln)
-          (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)))
-        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)) Flapjack.Spt.ln)
           (Flapjack.Spt.bn Flapjack.Spt.ln
-            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls 22) Flapjack.Spt.ln)))))))
+            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls 22) Flapjack.Spt.ln)))
+          (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls 22) Flapjack.Spt.ln)))
+        (Flapjack.Spt.bn
+          (Flapjack.Spt.bn Flapjack.Spt.ln
+            (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls 22)) 22 Flapjack.Spt.ln))
+          Flapjack.Spt.ln))))
 def optimized555 : Nat × Nat × WordLangProgHOL (BitVec 64) :=
-(555, 1, optimizedBody555_49)
+(555, 1, optimizedBody555_53)
 theorem optimize555_eq : WordToWord.fullCompileSingleWith
   RegAlloc.regAllocExecutable riscvConfig.twoRegArith
   (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))
