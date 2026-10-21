@@ -87,8 +87,8 @@ bootstrap, installation and correctness certificates. Those proofs now live
 under `submission/InitECandidate/Proofs/` and must pass the same comparator
 checks as other submissions. The challenge-only axiom audit still allows exactly
 `propext`, `Classical.choice` and `Quot.sound`; the move grants no new axioms.
-The verifier disables the comparator's optional nanoda run
-(`enable_nanoda=false`). Comparator declaration and axiom checks, and Lean kernel
-replay of the exported solution, still run.
+The verifier enables the comparator's nanoda run (`enable_nanoda=true`) in
+addition to declaration and axiom checks and Lean kernel replay of the exported
+solution.
 The namespace of a theorem does not determine whether it is trusted: some
 candidate-owned modules retain public theorem names beginning with `InitE`.

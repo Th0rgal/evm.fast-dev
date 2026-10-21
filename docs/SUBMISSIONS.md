@@ -83,13 +83,11 @@ it compares the certificate against an independently built trusted challenge,
 checks the submission definition's type and safety, audits axiom dependencies,
 and replays the exported solution in Lean's kernel.
 The verifier uses up to 30 available processors and has no wall-clock deadline.
-The comparator's nanoda pass is disabled.
-A hash-pinned [transport patch](../verifier/patches/README.md) copies exporter
-stdout into temporary files and parses those handles. It preserves declaration
-comparison, both theorem and definition axiom checks, primitive checks, and full
-kernel replay. The verifier requires disk space for both exports in addition
-to the staged build cache. Its private mode-0700 spool directory is outside the
-staged project, and tmpfs/ramfs are rejected.
+The comparator's nanoda pass is enabled. A hash-pinned
+[transport patch](../verifier/patches/README.md) supports the optional
+nanoda-disabled mode; nanoda-enabled verification uses the comparator's
+original buffered export path. Declaration comparison, both theorem and
+definition axiom checks, primitive checks, and full kernel replay still run.
 
 The trusted workspace contains the fixed challenge, AST, source semantics and
 source facts. It does not copy any initial-submission proofs or bytecode into
