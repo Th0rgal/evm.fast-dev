@@ -2111,8 +2111,5 @@ theorem nsl_accepts_user {α : Type} :
       (some 64) [] none) = true := by
   simp [NSL, callHdr, labOk, storeConstsStubLocation, wordNumStubs, stackNumStubs]
 
-#print axioms panToTarget_noStubJumpOrLocValue
-#print axioms panToWordToWord_NSL
-#print axioms compileProgHOL_sections_avoid_stub
 
 end InitECandidate.Solver.StackToLabAndLabToTargetNoLocValue6

@@ -188,17 +188,5 @@ theorem end_to_end_iso_reduced_finite_certificate
     k_pan k_word k_stack k_lab pan_not_timeOut word_not_timeOut
     stack_not_timeOut lab_not_timeOut target_not_timeOut_of_lab_halt
 
-#print axioms iso_front_factor_eq
-#print axioms iso_front_clock_composition
-#print axioms isoReducedCandidateK_eq
-#print axioms isoReducedPostK_eq
-#print axioms iso_budget_decomposition
-#print axioms isoReducedCandidateK_lt_refined
-#print axioms isoReducedCandidateK_lt_ceiling
-#print axioms iso_saving_exact
-#print axioms iso_score_representable
-#print axioms iso_front_factor_threshold
-#print axioms iso_budget_one_tick_tight
-#print axioms end_to_end_iso_reduced_finite_certificate
 
 end InitECandidate.Solver.SelfContainedIsoReducedK

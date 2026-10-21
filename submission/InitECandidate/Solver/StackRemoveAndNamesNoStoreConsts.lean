@@ -588,7 +588,5 @@ theorem stackAlloc_storeConsts_calls_stub (n m : Nat) :
       (.storeConsts 0 1 (some storeConstsStubLocation) : HolProg width)).1 = false := by
   rw [StackAlloc.comp]; rfl
 
-#print axioms panToStackNames_bodies_NoSt_and_NoStubCall
-#print axioms c_stackRemoveComp
 
 end InitECandidate.Solver.StackRemoveAndNamesNoStoreConsts

@@ -93,8 +93,5 @@ theorem budget_worst_cws2 : budgetAt 20 = 73531094172 ∧ budgetAt 20 < 90071992
 /-- With the MMIO decomposition (`C_ws = 1`), the front factor is unchanged. -/
 theorem budget_mmio_cws1 : budgetAt (1 * 10) = SelfContainedMasterK.refinedCandidateK := rfl
 
-#print axioms word_to_stack_ticks_decomp
-#print axioms stack_ticks_le_two_word
-#print axioms budget_worst_cws2
 
 end InitECandidate.Solver.WordToStackSemanticMmioBound

@@ -314,7 +314,5 @@ theorem panToLabSection_unconditional (arch : AsmArchitecture)
   · exact Or.inl e
   · exact Or.inr ⟨not_visits_of_StackNoSt _ h, rfl⟩
 
-#print axioms panToStackNames_bodies_StackNoSt_unconditional
-#print axioms panToLabSection_unconditional
 
 end InitECandidate.Solver.PanToStackToLabUnconditionalNoStoreConsts

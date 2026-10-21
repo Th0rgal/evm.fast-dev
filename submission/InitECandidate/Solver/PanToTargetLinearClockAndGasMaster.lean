@@ -403,8 +403,5 @@ theorem full_roadmap_farkas_gas_compiler_fastpaths_and_certificate
       hSsz.2.1, hSsz.2.2.2.2.2.2, hDiv.2.2.1, hDiv.1, hSail, hCross⟩,
     hTotEq, hCert⟩
 
-#print axioms pan_to_lab_eleven_pass_linear_clock
-#print axioms pan_to_riscv_target_full_compiler_clock_ratio
-#print axioms full_roadmap_farkas_gas_compiler_fastpaths_and_certificate
 
 end InitECandidate.Solver.PanToTargetLinearClockAndGasMaster

@@ -320,7 +320,5 @@ theorem panToStackAlloc_NoSt (arch : AsmArchitecture) (prog : List (DeclHOL widt
   · exact Or.inl h
   · exact Or.inr (s_progComp y h)
 
-#print axioms panToStackAlloc_NoSt
-#print axioms s_compNative
 
 end InitECandidate.Solver.PanToStackNoStoreConsts

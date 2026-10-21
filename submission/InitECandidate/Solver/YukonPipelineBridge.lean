@@ -1,9 +1,9 @@
 import InitECandidate.Solver.BoundedCertificate
 import InitECandidate.Solver.CompilerClockBound
 import InitECandidate.Solver.SourceTerminationBound
-import InitECandidate.Proofs.BoundedTarget
-import InitECandidate.Proofs.BoundedStackToLab
-import InitECandidate.Proofs.BoundedPanToWord
+import InitECandidate.Solver.FastBoundedTarget
+import InitECandidate.Solver.FastBoundedStackToLab
+import InitECandidate.Solver.FastBoundedPanToWord
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -35,6 +35,7 @@ namespace InitECandidate.Solver
 open Classical
 open InitE
 open InitECandidate.Proofs
+open InitECandidate.Solver.YukonSelfContainedCert (baselineHeapLen baselineAdj2 baselineAdj4 oracle_baseline_installation)
 open InitECandidate.Solver.BoundedCertificate
 open Flapjack
 open Flapjack.Basis.Pure.MlString
@@ -757,10 +758,5 @@ theorem finite_certificate_of_source_to_target_clock_chain
   exact target_not_timeOut_of_lab_halt input hgas outcome events source covered
     t m bitmapsDm sdm p ltconf hhalt_lab (hio_lab.trans hio_src)
 
-#print axioms linearPipelineTargetBudget_mono_k_pan
-#print axioms linearPipelineTargetBudget_of_stage_bounds
-#print axioms pan_to_target_pan_to_word_stage_halt_of_word_not_timeOut
-#print axioms source_to_lab_halt_of_stage_clock_chain
-#print axioms finite_certificate_of_source_to_target_clock_chain
 
 end InitECandidate.Solver

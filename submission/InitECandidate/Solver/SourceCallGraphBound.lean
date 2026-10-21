@@ -1,6 +1,6 @@
 import InitECandidate.Solver.GuestStepBound
 import InitECandidate.Solver.SourceTerminationBound
-import InitECandidate.Proofs.BoundedPanToWord
+import InitECandidate.Solver.FastBoundedPanToWord
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -355,12 +355,5 @@ theorem sourceBehaviour_not_timeOut_at_budget_complete
     sourceDeclarations outcome events hterm stCtxt s_decls hst hev_decls
     B_pan res_B s_B_post hev_B hnt_B
 
-#print axioms panSem_evaluate_decCall_not_timeOut_clock_dec
-#print axioms panSem_evaluate_call_clock_zero
-#print axioms panSem_evaluate_call_not_timeOut_clock_dec
-#print axioms loopClockBudget_step_and_mono
-#print axioms guestCallGraph_frame_and_tick_bound
-#print axioms sourceBehaviour_terminate_clock_stabilizes
-#print axioms sourceBehaviour_not_timeOut_at_budget_complete
 
 end InitECandidate.Solver

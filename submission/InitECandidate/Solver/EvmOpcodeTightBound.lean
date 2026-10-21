@@ -408,13 +408,5 @@ theorem tight_opcode_bound_certificate_and_yukon_score
   apply yukonScore_lt_two_pow_53_sub_one
   decide
 
-#print axioms evm_opcode_family_gas_table_and_bounds
-#print axioms evm_opcode_family_loop_ticks_lt_coarse
-#print axioms block_prologue_separation_source_clock_reduction
-#print axioms coarse_baseline_351B_and_copyloop_bootstrap_savings
-#print axioms certified_bound_lt_50B_under_refined_opcode_model
-#print axioms certified_bound_lt_2B_under_tight_pass_multiplier
-#print axioms all_standard_families_lt_2B_at_tight_multiplier
-#print axioms tight_opcode_bound_certificate_and_yukon_score
 
 end InitECandidate.Solver.EvmOpcodeTightBound

@@ -888,7 +888,5 @@ theorem NSC_accepts_user_call {α : Type} :
 theorem NSC_allows_storeConsts {α : Type} :
     NSC (WordLangProgHOL.storeConsts (α := α) 0 1 2 3 []) = true := rfl
 
-#print axioms panToWordToWord_NoStubCall
-#print axioms panToStackNames_NoSt_and_NoStubCall_unconditional
 
 end InitECandidate.Solver.WordToWordNoStubCall

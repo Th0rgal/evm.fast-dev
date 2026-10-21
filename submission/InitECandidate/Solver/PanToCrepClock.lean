@@ -305,12 +305,5 @@ theorem pan_to_stackNames_exact_clock {C σ : Type} (ac : AsmConfigExact width)
   rw [← hclk0] at hgrand
   exact ⟨crepRes, t1, hevalCrep, hclk0, hclk1, hresRel, hgrand⟩
 
-#print axioms panToCrepStateRel_clock_and_ffi_eq
-#print axioms panToCrep_compileExp_val_rel_exact_clock
-#print axioms panToCrep_simulation_exact_clock
-#print axioms panToCrep_while_exact_clock
-#print axioms panToCrep_call_and_decCall_exact_clock
-#print axioms pcCompileCorrectResultRel_ne_error
-#print axioms pan_to_stackNames_exact_clock
 
 end InitECandidate.Solver.PanToCrepClock

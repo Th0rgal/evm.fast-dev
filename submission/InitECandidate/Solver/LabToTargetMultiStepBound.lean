@@ -1,4 +1,4 @@
-import InitECandidate.Proofs.BoundedTarget
+import InitECandidate.Solver.FastBoundedTarget
 import InitECandidate.Solver.BoundedCertificate
 
 set_option autoImplicit false
@@ -207,13 +207,5 @@ theorem target_not_timeOut_of_lab_step_factor_budget {width : Nat} [NeZero width
   refine ⟨⟨k, hk_bound, ms3, hrun, ?_⟩, hnt_K⟩
   exact hadd_eq.trans hrun
 
-#print axioms stepExpansionFactor_eq_and_ge_two
-#print axioms multiStepTargetBound_zero
-#print axioms multiStepTargetBound_succ
-#print axioms multiStepTargetBound_mono_right
-#print axioms multiStepTargetBound_mono
-#print axioms lab_to_target_multi_step_clock_bound
-#print axioms evaluateTarget_add_clock_of_not_timeOut
-#print axioms target_not_timeOut_of_lab_step_factor_budget
 
 end InitECandidate.Solver

@@ -1,4 +1,4 @@
-import InitECandidate.Proofs.BoundedTarget
+import InitECandidate.Solver.FastBoundedTarget
 import Flapjack.Compiler.Backend.StackToLab.Proofs.FullMakeInitSemantics
 import Flapjack.Compiler.Backend.WordToStack.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.WordToWord.Proofs.CompileSemantics
@@ -387,21 +387,18 @@ theorem full_make_init_clocked_halt {width : Nat} [NeZero width] {C F : Type}
         intro i k0 q hq
         obtain ⟨hst, hal⟩ := (hgoodO i).2.1 _ hq
         exact ⟨by simp only [stackNumStubs, gcStubLocation] at hst ⊢; omega, hal⟩
+      rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+        hdb, _, _, _, hbl, _, _, _, _, _, hsb, _⟩
       have hbuf_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).bitmaps.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.buffer.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.spaceLeft <
           2 ^ width - 1 := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          hdb, _, _, _, hbl, _⟩
-        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce] at hbl hdb ⊢
-        simp only [List.length_nil, Nat.add_zero]
+        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce, List.length_nil, Nat.add_zero] at hbl hdb ⊢
         omega
       have hst_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).stack.length *
           (width / 8) < 2 ^ width := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          _, _, _, _, _, _, _, hsb, _⟩
         exact hsb
       have hnodup_rc : ((StackRawCall.compile code).map Prod.fst).Nodup := by
         rw [StackRawCall.mapFstCompile]; exact hgood.1
@@ -1417,21 +1414,18 @@ theorem full_make_init_run_agree_of_not_timeOut {width : Nat} [NeZero width] {C 
         intro i k0 q hq
         obtain ⟨hst, hal⟩ := (hgoodO i).2.1 _ hq
         exact ⟨by simp only [stackNumStubs, gcStubLocation] at hst ⊢; omega, hal⟩
+      rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+        hdb, _, _, _, hbl, _, _, _, _, _, hsb, _⟩
       have hbuf_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).bitmaps.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.buffer.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.spaceLeft <
           2 ^ width - 1 := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          hdb, _, _, _, hbl, _⟩
-        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce] at hbl hdb ⊢
-        simp only [List.length_nil, Nat.add_zero]
+        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce, List.length_nil, Nat.add_zero] at hbl hdb ⊢
         omega
       have hst_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).stack.length *
           (width / 8) < 2 ^ width := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          _, _, _, _, _, _, _, hsb, _⟩
         exact hsb
       obtain ⟨ck2, hrun_sa1, hffi_sa⟩ := stack_alloc_clocked_sim
         (s := StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1)
@@ -1851,32 +1845,5 @@ theorem word_to_stack_compile_halt_of_stack_not_timeOut {width : Nat} [NeZero wi
     hrun_t hnt hrun_post hnt_post
   exact ⟨hr, hffi.trans hffi_post.symm⟩
 
-#print axioms word_to_word_clocked_agree
-#print axioms word_to_stack_clocked_sim
-#print axioms stack_rawcall_clocked_sim
-#print axioms stack_alloc_clocked_sim
-#print axioms stack_remove_clocked_sim
-#print axioms stack_remove_init_clocked_shift
-#print axioms stack_names_clocked_agree
-#print axioms stack_to_lab_clocked_halt
-#print axioms full_make_init_clocked_halt
-#print axioms word_to_stack_compile_clocked_sim
-#print axioms pan_to_target_backend_clocked_halt
-#print axioms wordEvaluateIgnoreClocks
-#print axioms word_halt_of_not_timeOut
-#print axioms stackEvaluateIgnoreClocks
-#print axioms stack_halt_of_not_timeOut
-#print axioms stack_alloc_comp_eq_self
-#print axioms stack_alloc_progComp_eq_self
-#print axioms word_to_stack_run_agree_of_not_timeOut
-#print axioms stack_rawcall_run_agree_of_not_timeOut
-#print axioms stack_alloc_run_agree_of_not_timeOut
-#print axioms stack_remove_run_agree_of_not_timeOut
-#print axioms stack_to_lab_run_agree_of_not_timeOut
-#print axioms full_make_init_run_agree_of_not_timeOut
-#print axioms word_to_stack_compile_run_agree_of_not_timeOut
-#print axioms pan_to_target_backend_halt_agree_of_not_timeOut
-#print axioms full_make_init_halt_of_lab_not_timeOut
-#print axioms word_to_stack_compile_halt_of_stack_not_timeOut
 
 end InitE

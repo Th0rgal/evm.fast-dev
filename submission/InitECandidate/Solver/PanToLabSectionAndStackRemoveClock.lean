@@ -143,7 +143,5 @@ theorem isStubLabel_storeConsts : IsStubLabel storeConstsStubLocation = true := 
 theorem isStubLabel_tight : IsStubLabel 64 = false := by
   simp [IsStubLabel, gcStubLocation, storeConstsStubLocation, stackNumStubs, wordNumStubs]
 
-#print axioms panToLab_sections_unconditional
-#print axioms stackToLab_compile_ids
 
 end InitECandidate.Solver.PanToLabSectionAndStackRemoveClock

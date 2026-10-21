@@ -154,7 +154,4 @@ theorem reduced_baseline_compatible
     (SelfContainedEndToEndCert.matchingExecutionAt_with_score InitE.baselineSubmission
       (.finite sixPassReducedK) input outcome events steps).mp execution⟩
 
-#print axioms reduced_finite_certificate
-#print axioms reduced_baseline_compatible
-#print axioms six_pass_affine_exact
 end InitECandidate.Solver.SelfContainedSixPassMaster

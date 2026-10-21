@@ -75,7 +75,5 @@ theorem NoSC_tick_skip {α : Type} :
     NoSC (WordLangProgHOL.tick (α := α)) = true ∧ NoSC (WordLangProgHOL.skip (α := α)) = true :=
   ⟨rfl, rfl⟩
 
-#print axioms compHOL_NoSC
-#print axioms compHOL_list_NoSC
 
 end InitECandidate.Solver.PanToWordNoStoreConsts

@@ -1,5 +1,5 @@
 import InitE
-import InitECandidate.Proofs.BaselineSubmission
+import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Solver.YukonSelfContainedCert
 import InitECandidate.Solver.FiniteKMasterComposition
 import InitECandidate.Solver.EvmOpcodeTightBound
@@ -263,11 +263,5 @@ theorem solution_certificate_monotone_transfer
     rw [InitE.baselineSubmission_machineConfig, InitE.baselineSubmission_initialState]
     exact hrun
 
-#print axioms claimed_scores_values_and_hierarchy
-#print axioms yukon_score_exact_float64_and_dominance
-#print axioms solution_certificate_finite
-#print axioms solution_certificate_refined
-#print axioms solution_certificate_tight
-#print axioms solution_certificate_monotone_transfer
 
 end InitECandidate.Solver.YukonSolutionBridge

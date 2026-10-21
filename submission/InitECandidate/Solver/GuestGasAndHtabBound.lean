@@ -308,15 +308,5 @@ theorem source_terminate_at_guest_budget_lt_yukon_ceiling
   have hs := hstab (guestSourceClockBudget gasSteps d probeBudget initTicks) hle
   exact ⟨hs.2.2.1, hs.2.2.2⟩
 
-#print axioms bootstrapSteps_eq
-#print axioms applyN_count
-#print axioms applyN_count_and_cap_inv
-#print axioms guest_htab_bound_of_declared_gas_limit
-#print axioms guestSourceClockBudget_mono_and_gas_step
-#print axioms guestSourceClockBudget_le_max
-#print axioms guestTotalTargetBudget_mono_k_pan
-#print axioms guestTotalTargetBudget_lt_yukon_ceiling_of_le_max
-#print axioms guest_gas_and_htab_total_budget_lt_yukon_ceiling
-#print axioms source_terminate_at_guest_budget_lt_yukon_ceiling
 
 end InitECandidate.Solver.GuestGasAndHtabBound

@@ -161,7 +161,5 @@ theorem ids_distinguish_stub :
 theorem ids_not_trivial :
     ids [(⟨3, []⟩ : Sec width)] ≠ ids [(⟨4, []⟩ : Sec width)] := by simp [ids]
 
-#print axioms panToTarget_sections_clean
-#print axioms panToTarget_sections_length
 
 end InitECandidate.Solver.LabToTargetSectionCleanPreservation

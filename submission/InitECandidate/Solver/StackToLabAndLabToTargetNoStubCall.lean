@@ -1014,7 +1014,5 @@ theorem flatten_rawCall_stub_tight (sid next : Nat) (cs bs : List Nat) :
     ¬ AOk (StackToLab.flattenHOL false (.rawCall storeConstsStubLocation : HolProg width) sid next cs bs).1 := by
   rw [StackToLab.flattenHOL]; simp [aok_list, JumpOk, aOk, tOk]
 
-#print axioms panToTarget_noStubJump
-#print axioms panToLab_lines
 
 end InitECandidate.Solver.StackToLabAndLabToTargetNoStubCall

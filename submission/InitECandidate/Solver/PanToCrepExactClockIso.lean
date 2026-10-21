@@ -402,13 +402,5 @@ theorem pan_to_crep_to_loop_entry_sim {width : Nat} [NeZero width] {σ : Type}
   rcases res_crep with _ | (_ | _ | _ | _ | _ | _) <;>
     simp [resultToLoop] at hloop_to hcrep_nt
 
-#print axioms pan_to_crep_budget_iso
-#print axioms panToCrepStateRelFiniteExact_clock_eq
-#print axioms pcCompileCorrectResultRel_not_timeOut_iff
-#print axioms pan_to_crep_clock_iso
-#print axioms pan_to_crep_not_timeOut
-#print axioms pan_to_crep_full_entry_clock_iso
-#print axioms pan_to_crep_to_loop_clock_comp
-#print axioms pan_to_crep_to_loop_entry_sim
 
 end InitECandidate.Solver.PanToCrepExactClockIso

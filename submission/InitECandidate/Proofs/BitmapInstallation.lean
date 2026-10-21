@@ -18,14 +18,6 @@ private theorem wordByte_getByte (word : BitVec 64) (offset : Nat) (ho : offset 
     Nat.shiftRight_eq_div_pow]
   rw [Nat.mod_eq_of_lt (by omega : offset < 2^64),Nat.mod_eq_of_lt ho]
 
-private theorem initialMemory_of_lt (a : BitVec 64) (k : Nat) (ha : a.toNat = initialPc + k)
-    (hk : k < InitECandidate.code.length) :
-    initialMemory a = InitECandidate.code[k]?.getD 0 := by
-  unfold initialMemory
-  rw [if_pos (by omega)]
-  have hsub : a.toNat - initialPc = k := by omega
-  rw [hsub]
-
 theorem installed_bitmap_byte (i : Fin InitECandidate.bitmaps.length) (j : Fin 8) :
     installedMemory (BitVec.ofNat 64 (initDataRam+24+8*i.val) + BitVec.ofNat 64 j.val) =
       HolByte.getByte (BitVec.ofNat 64 j.val) InitECandidate.bitmaps[i] false := by
@@ -46,14 +38,14 @@ theorem installed_bitmap_byte (i : Fin InitECandidate.bitmaps.length) (j : Fin 8
   rw [installedMemory,ha,if_neg hs,if_neg hd,if_pos hb]
   have hrom : initDataRom+(initDataRam+24+8*i.val+j.val)-initDataRam = initDataRom+24+8*i.val+j.val := by omega
   rw [hrom]
+  unfold initialMemory
   have hrt : (BitVec.ofNat 64 (initDataRom+24+8*i.val+j.val)).toNat = initDataRom+24+8*i.val+j.val := by
     rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt (by simp only [initDataRom]; omega)]
   have hsize := submitted_image_size
-  rw [initialMemory_of_lt (BitVec.ofNat 64 (initDataRom+24+8*i.val+j.val))
-    (initDataRom - initialPc + 24 + (8*i.val+j.val))
-    (by rw [hrt]; simp only [initialPc, initDataRom]; omega)
-    (by simp only [initialPc, initDataRom, hsize]; omega)]
-  rw [bitmap_image_byte ⟨8*i.val+j.val,by have hl := bitmap_count; omega⟩]
+  rw [hrt,if_pos (by simp only [initialPc,initDataRom,hsize]; omega)]
+  have hoff : initDataRom+24+8*i.val+j.val-initialPc = initDataRom-initialPc+24+(8*i.val+j.val) := by
+    simp only [initDataRom,initialPc]; omega
+  rw [hoff,bitmap_image_byte ⟨8*i.val+j.val,by have hl := bitmap_count; omega⟩]
   have hdiv : (8*i.val+j.val)/8 = i.val := by omega
   have hmod : (8*i.val+j.val)%8 = j.val := by omega
   rw [hdiv,hmod,List.getElem?_eq_getElem i.isLt]

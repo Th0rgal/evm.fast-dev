@@ -3,14 +3,9 @@ import InitE.TargetTotality
 import Flapjack.RiscV.CorrectnessEncoding.Complete
 import Flapjack.Compiler.Backend.Semantics.TargetProps.EncoderStepState
 import InitECandidate.Proofs.CompilerComputation
-import InitECandidate.Proofs.BaselineInstallationFacts
 import InitECandidate.Proofs.OracleBaselineCorrectness
-import InitECandidate.Proofs.PanInstallation
-import InitECandidate.Proofs.InstallationTransport
-import InitECandidate.Proofs.StartupEnvironment
-import InitECandidate.Proofs.BootstrapTrace
 import InitECandidate.Proofs.BootstrapComposition
-import InitECandidate.Proofs.BaselineSubmission
+import InitECandidate.Solver.FastBaselineEnv
 
 open scoped InitECandidate.Proofs.CompilerComputation
 
@@ -1453,33 +1448,5 @@ theorem finite_certificate_of_uniform_post_bootstrap_not_timeOut
   · rw [hio]
     exact matchingResult_refl input outcome events covered
 
-#print axioms riscv_encoder_correct_bootstrap
-#print axioms step_evaluator_bootstrap
-#print axioms checked_trace_evaluator_bootstrap
-#print axioms full_evaluator_exact
-#print axioms full_baseline_evaluator_exact
-#print axioms oracle_baseline_installation
-#print axioms oracle_baseline_installed
-#print axioms oracle_baseline_installation_transport
-#print axioms oracle_baseline_endpoint_behaviour_eq
-#print axioms oracle_baseline_endpoint_terminates
-#print axioms oracle_full_baseline_correct
-#print axioms oracle_full_baseline_certificate
-#print axioms certificate_of_bounded_behaviour
-#print axioms matchingExecutionAt_of_behaviour_and_terminatesAt
-#print axioms certificate_of_exact_behaviour_and_bound
-#print axioms targetTerminatesAt_of_bootstrap_shift
-#print axioms targetTerminatesAt_mono
-#print axioms targetTerminatesAt_of_not_timeOut
-#print axioms targetTerminatesAt_iff_not_timeOut
-#print axioms targetTerminatesWithin_finite_iff_not_timeOut
-#print axioms evaluateTarget_halt_of_not_timeOut_and_halt
-#print axioms evaluateTarget_zero_timeOut_and_pos_of_not_timeOut
-#print axioms oracle_full_baseline_terminate_halt_agree_of_not_timeOut
-#print axioms oracle_baseline_endpoint_terminate_halt_agree_of_not_timeOut
-#print axioms oracle_full_baseline_bounded_certificate
-#print axioms oracle_full_baseline_certificate_of_not_timeOut
-#print axioms baselineWithFiniteK_admitted
-#print axioms finite_certificate_of_uniform_post_bootstrap_not_timeOut
 
 end InitECandidate.Solver.YukonSelfContainedCert

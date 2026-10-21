@@ -37,7 +37,7 @@ echo ""
 cd "${REPO_ROOT}"
 STAGE_LEAN_COUNT=$(find submission/InitECandidate -name 'Stage*.lean' 2>/dev/null | wc -l || echo 0)
 SOLVER_MODULES_COUNT=$(find submission/InitECandidate/Solver -name '*.lean' 2>/dev/null | wc -l || echo 0)
-ORACLE_CERT_STAGE_IMPORTS=$(grep -E '^import .*Stage' submission/InitECandidate/Proofs/OracleBaselineCertificate.lean | wc -l || true)
+ORACLE_CERT_STAGE_IMPORTS=$(grep -E '^import .*Stage' submission/InitECandidate/Solver/YukonSelfContainedCert.lean | wc -l || true)
 MASTER_STAGE_IMPORTS=$(grep -E '^import .*Stage' submission/InitECandidate/Solver/PanToTargetLinearClockAndGasMaster.lean | wc -l || true)
 
 echo "--- [1] Transitive Module Graph Audit ---"

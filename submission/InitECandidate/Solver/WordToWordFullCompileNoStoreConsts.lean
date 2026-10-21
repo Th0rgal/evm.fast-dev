@@ -122,7 +122,5 @@ theorem fullCompileSingle_needs_hyp_counterexample :
     NoSt (WordLangProgHOL.mustTerminate (α := BitVec width)
       (.storeConsts 0 2 4 6 [])) = false := rfl
 
-#print axioms loopToWord_fullCompileSingle_NoSt
-#print axioms t_fullCompile_list
 
 end InitECandidate.Solver.WordToWordFullCompileNoStoreConsts

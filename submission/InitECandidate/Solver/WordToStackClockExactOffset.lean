@@ -104,9 +104,5 @@ theorem front6_of_product (c_pc c_cl c_sl : Nat) (h : c_sl * (c_cl * c_pc) ≤ 6
     budgetAt (c_sl * (c_cl * c_pc)) ≤ 22059344444 :=
   budgetAt_6 ▸ budgetAt_mono h
 
-#print axioms word_to_stack_exact_offset
-#print axioms no_clock_increase_branch
-#print axioms budgetAt_6
-#print axioms front6_of_product
 
 end InitECandidate.Solver.WordToStackClockExactOffset

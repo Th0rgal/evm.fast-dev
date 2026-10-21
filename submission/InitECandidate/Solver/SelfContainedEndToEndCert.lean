@@ -200,19 +200,5 @@ theorem guest_amortized_saturated_witness :
 theorem guest_coarse_one_tick_tight :
     ¬ Guest.maxInputBytes + 219 * gasCap + 1 ≤ 43934217712 := by decide
 
-#print axioms end_to_end_refined_finite_certificate
-#print axioms matchingExecutionAt_with_score
-#print axioms baseline_certificate_of_refined
-#print axioms finite_and_baseline_compatible
-#print axioms refined_bound_exact
-#print axioms refined_bound_below_ceiling
-#print axioms refined_score_exactly_representable
-#print axioms refined_source_exact
-#print axioms refined_post_exact
-#print axioms refined_front_threshold
-#print axioms guest_amortized_sum
-#print axioms guest_coarse_budget_exact
-#print axioms guest_amortized_saturated_witness
-#print axioms guest_coarse_one_tick_tight
 
 end InitECandidate.Solver.SelfContainedEndToEndCert

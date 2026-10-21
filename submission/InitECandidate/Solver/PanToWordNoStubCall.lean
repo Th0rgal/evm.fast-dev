@@ -1040,7 +1040,5 @@ theorem wordNoStubCall_tight {α : Type} :
     WordNoStubCall (WordLangProgHOL.call (α := α) none (some 64) [] none) = true := by
   refine ⟨?_, ?_⟩ <;> simp [WordNoStubCall, storeConstsStubLocation, wordNumStubs, stackNumStubs]
 
-#print axioms panToWord_NoStubCall
-#print axioms panToWord_names
 
 end InitECandidate.Solver.PanToWordNoStubCall

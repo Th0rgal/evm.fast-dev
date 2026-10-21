@@ -259,7 +259,5 @@ theorem compileExp_keeps_storeConsts :
   simp [WordSimp.compileExp, WordSimp.seqAssoc, WordSimp.smartSeqHOL, WordSimp.constFp,
     WordSimp.constFpLoop, WordSimp.simpDuplicateIf, WordSimp.pushOutIf, WordSimp.pushOutIfAux, NoSt]
 
-#print axioms t_compileExp
-#print axioms t_loopToWord_simp_chain
 
 end InitECandidate.Solver.WordSimpPreservesNoStoreConsts

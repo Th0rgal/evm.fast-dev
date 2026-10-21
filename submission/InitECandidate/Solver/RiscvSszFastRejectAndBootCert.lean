@@ -25,6 +25,7 @@ open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapStraightLine
 open InitECandidate.Proofs.BootstrapAsmComposition
 open InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.YukonBaselineCompat (bootstrapTraceSteps prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps)
 open InitECandidate.Solver
 open InitECandidate.Solver.FastHalt
 open InitECandidate.Solver.SelfContainedBoundedCertificate
@@ -310,13 +311,5 @@ theorem self_contained_six_pass_and_unrolled_copyloop_master_certificate
   have hscore := six_pass_yukonScore_copyloop_reduction_exact 0 minutes (Nat.zero_le _)
   exact ⟨hcert, hinf, hred, hunr, by omega, hscore.1, hscore.2.2.2.2.2.1⟩
 
-#print axioms six_pass_unrolled_copyloop_budget_exact
-#print axioms six_pass_yukonScore_copyloop_reduction_exact
-#print axioms ssz_fast_reject_boot_prefix_decomposition_and_savings
-#print axioms ssz_header_fast_reject_iff_and_examples
-#print axioms ssz_fast_reject_six_pass_and_iso_yukonScore_comparison
-#print axioms fast_reject_matches_unaccepted_within_six_pass_unrolled_budget
-#print axioms post_bootstrap_halt_preserved_from_unrolled_to_six_pass
-#print axioms self_contained_six_pass_and_unrolled_copyloop_master_certificate
 
 end InitECandidate.Solver.RiscvSszFastRejectAndBootCert

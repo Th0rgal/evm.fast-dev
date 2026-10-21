@@ -20,6 +20,7 @@ open InitECandidate.Proofs.BootstrapSteps
 open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapAsmComposition
 open InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.YukonBaselineCompat (bootstrapTraceSteps prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps)
 open InitECandidate.Solver
 open InitECandidate.Solver.FastHalt
 open InitECandidate.Solver.SelfContainedBoundedCertificate
@@ -288,13 +289,5 @@ theorem self_contained_iso_reduced_certificate_with_copyloop_score_gain
   have hscore := iso_reduced_k_and_yukonScore_copyloop_reduction minutes
   exact ⟨hcert, hdecomp, hscore.2.2.2.2.2.2.2.1, hscore.2.2.2.2.2.2.2.2.1, hscore.2.2.2.2.2.2.2.2.2.2.2⟩
 
-#print axioms copyloop_unroll4x_and_block_savings_exact
-#print axioms copyloop_unroll4x_13800_threshold_iff
-#print axioms bootstrap_trace_and_straightline_savings_tight
-#print axioms yukonScore_step_saving_scaling_exact
-#print axioms iso_reduced_k_and_yukonScore_copyloop_reduction
-#print axioms ssz_fast_reject_and_iso_yukonScore_savings
-#print axioms fast_reject_matches_unaccepted_within_sszFastRejectSteps_and_iso_budget
-#print axioms self_contained_iso_reduced_certificate_with_copyloop_score_gain
 
 end InitECandidate.Solver.RiscvBootAndCopyLoopCert

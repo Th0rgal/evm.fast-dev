@@ -1,9 +1,6 @@
 import InitECandidate.Proofs.CompilerComputation
-import InitECandidate.Proofs.BaselineInstallationFacts
 import InitECandidate.Proofs.OracleBaselineCorrectness
-import InitECandidate.Proofs.PanInstallationCore
-import InitECandidate.Proofs.InstallationTransport
-import InitECandidate.Proofs.StartupEnvironment
+import InitECandidate.Solver.FastBaselineEnv
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitClock
 import Flapjack.Compiler.Backend.StackRemove.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitSemantics
@@ -304,14 +301,5 @@ theorem oracle_baseline_installation_transport (input : Guest.InputBlob)
   exact ⟨hmc, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain,
     haligned, hadj2, hadj4, hleft, hright, hmax, hendian, memory, hlimits⟩
 
-#print axioms stack_remove_clocked_agree
-#print axioms stack_remove_init_clocked_agree
-#print axioms stack_names_clocked_agree
-#print axioms baseline_mmio_projection
-#print axioms baseline_pan_installed_metadata
-#print axioms baseline_pan_installed
-#print axioms oracle_baseline_installation
-#print axioms oracle_baseline_installed
-#print axioms oracle_baseline_installation_transport
 
 end InitECandidate.Solver.YukonCleanVerifierCheck

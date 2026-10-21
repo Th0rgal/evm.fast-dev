@@ -463,21 +463,18 @@ theorem full_make_init_clocked_halt {width : Nat} [NeZero width] {C F : Type}
         intro i k0 q hq
         obtain ⟨hst, hal⟩ := (hgoodO i).2.1 _ hq
         exact ⟨by simp only [stackNumStubs, gcStubLocation] at hst ⊢; omega, hal⟩
+      rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
+        hdb, _, _, _, hbl, _, _, _, _, _, hsb, _⟩
       have hbuf_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).bitmaps.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.buffer.length +
           (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).dataBuffer.spaceLeft <
           2 ^ width - 1 := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          hdb, _, _, _, hbl, _⟩
-        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce] at hbl hdb ⊢
-        simp only [List.length_nil, Nat.add_zero]
+        simp only [StackAlloc.makeInit, StackRemove.Proofs.InitReduce.initReduce, List.length_nil, Nat.add_zero] at hbl hdb ⊢
         omega
       have hst_sa : (StackAlloc.makeInit dataConf (sptFromAList (StackRawCall.compile code)) coracle s1).stack.length *
           (width / 8) < 2 ^ width := by
         subst hpost
-        rcases hprop with ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _,
-          _, _, _, _, _, _, _, hsb, _⟩
         exact hsb
       have hnodup_rc : ((StackRawCall.compile code).map Prod.fst).Nodup := by
         rw [StackRawCall.mapFstCompile]; exact hgood.1
@@ -1028,10 +1025,10 @@ theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
     simp [compileProgExactHOLW, compileCallNoReturnExactHOLW, compileExpExactHOLWList]
   rw [hcomp] at hrun
   refine ⟨res1, t1, hrun, ?_, hsr1.2.2.2.2.2.2.2.1.symm, ?_⟩
-  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
-      (try split at hres) <;> simp_all
-  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
-      (try split at hres) <;> simp_all [panEntryClass]
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> dsimp only at hres <;>
+      (try split at hres) <;> first | exact False.elim hres | exact hne rfl | (rcases hres with ⟨rfl, _⟩ | rfl; rintro ⟨⟩)
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> dsimp only [panEntryClass] at hres ⊢ <;>
+      (try split at hres) <;> first | exact False.elim hres | exact hne rfl | (rcases hres with ⟨rfl, _⟩ | rfl; rfl)
 
 theorem pan_simp_clocked_agree {width : Nat} [NeZero width] {σ : Type}
     (s t : PanSemStateFiniteExact width σ) (start : MlS) (k : Nat)
@@ -1244,7 +1241,7 @@ theorem pan_globals_compile_top_clocked_shift {width : Nat} [NeZero width] {σ :
       apply List.filter_eq_nil_iff.mpr
       intro d hd
       rcases hkinds d hd with h | h | h <;> cases d <;>
-        simp_all [isNameHOL, isFunctionHOL, isDeclHOL, isExnDeclHOL]
+        first | exact Bool.noConfusion h | exact Bool.noConfusion
     simp [resortDeclsHOL, hnames]
   have hs1orig := hs1
   have hres := Flapjack.resortDeclsEvaluate { s with structs := [] } code hkindsB
@@ -1666,13 +1663,13 @@ open LoopToWordStateRelImpSemanticsSupport in
 private theorem list_lookup_isSome_iff_local {α β : Type} [BEq α] [LawfulBEq α]
     (l : List (α × β)) (k : α) : (List.lookup k l).isSome = true ↔ k ∈ l.map Prod.fst := by
   induction l with
-  | nil => simp
+  | nil => simp only [List.lookup, Option.isSome, List.map_nil, List.not_mem_nil, reduceCtorEq]
   | cons e l ih =>
     obtain ⟨a, b⟩ := e
     by_cases h : k = a
-    · subst h; simp
-    · have : (k == a) = false := by simp [h]
-      simp [List.lookup_cons, this, ih, h]
+    · subst h; simp only [List.lookup_cons, beq_self_eq_true, Option.isSome_some, List.map_cons, List.mem_cons, true_or]
+    · have hbeq : (k == a) = false := beq_false_of_ne h
+      simp only [List.lookup_cons, hbeq, ih, List.map_cons, List.mem_cons, h, false_or]
 
 private theorem fupdateList_empty_eq_lookup_local {α β : Type} [BEq α] [LawfulBEq α]
     (l : List (α × β)) (k : α) :
@@ -1896,8 +1893,12 @@ theorem pan_to_crep_to_word_clocked_sim {width : Nat} [NeZero width] {C σ : Typ
   · rw [hffi_word, ← hffi_loop, hffi_crep, hffi_crep1]
   · rw [← hclass_crep1, ← hres_crep] at hne_pan ⊢
     rcases res_crep with _ | (_ | _ | _ | _ | _ | _) <;>
-      simp only [Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop, resultCase] at hne_pan hrc_word ⊢ <;>
-      simp_all [wordEntryClass]
+      dsimp only [Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop, resultCase] at hne_pan hrc_word ⊢ <;>
+      first | exact False.elim hrc_word | exact False.elim (hne_pan rfl) |
+        (rcases hrc_word with ⟨rfl, _⟩; rfl) |
+        (rcases hrc_word with ⟨_, rfl, _⟩; rfl) |
+        (rcases hrc_word with ⟨_, _, rfl, _⟩; rfl) |
+        (subst hrc_word; rfl)
 
 open LoopToWordStateRelImpSemanticsSupport in
 
@@ -2189,13 +2190,5 @@ theorem pan_to_word_halt_of_word_not_timeOut {width : Nat} [NeZero width] {C σ 
   exact ⟨hcw', (congrArg HolFfiState.ioEvents hffi_eq).trans hio_w'⟩
 end PanAgreement
 
-#print axioms pan_to_word_halt_of_word_not_timeOut
-#print axioms word_to_word_clocked_agree
-#print axioms semanticsDecls_terminate_extract
-#print axioms semanticsDecls_terminate_at_clock
-#print axioms word_to_stack_compile_halt_of_stack_not_timeOut
-#print axioms stack_to_lab_clocked_halt
-#print axioms lab_filter_align_clocked_halt
-#print axioms full_make_init_halt_of_lab_not_timeOut
 
 end InitECandidate.Solver.SelfContainedStageBounds

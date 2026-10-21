@@ -191,14 +191,5 @@ theorem stack_names_init_budget_non_vacuous_and_tight (k_entry k_body : Nat) :
   simp only [C_sn, D_sn]
   omega
 
-#print axioms stack_names_stateRel_clock_iso
-#print axioms stack_names_makeInit_clock_iso
-#print axioms stack_names_eval_post_clock_iso
-#print axioms stack_names_not_timeOut
-#print axioms stack_names_entry_not_timeOut_and_clock_iso
-#print axioms init_code_neutral
-#print axioms init_code_post_clock_and_consumed_ticks
-#print axioms stack_names_compose_init_code_neutral
-#print axioms stack_names_init_budget_non_vacuous_and_tight
 
 end InitECandidate.Solver.StackNamesExactClockIso

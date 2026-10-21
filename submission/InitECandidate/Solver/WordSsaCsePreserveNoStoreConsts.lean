@@ -209,7 +209,5 @@ theorem storeConstsAllowance_chain_zero {width : Nat} [NeZero width] (c : AsmCon
 theorem storeConstsAllowance_tight {α : Type} :
     storeConstsAllowance (WordLangProgHOL.storeConsts (α := α) 0 2 4 6 []) = 1 := rfl
 
-#print axioms t_ssa_cse_mid_tail_chain
-#print axioms storeConstsAllowance_chain_zero
 
 end InitECandidate.Solver.WordSsaCsePreserveNoStoreConsts

@@ -1,5 +1,5 @@
 import InitE.Challenge
-import InitECandidate.Proofs.OracleBaselineCertificate
+import InitECandidate.Solver.YukonSelfContainedCert
 import Flapjack.Compiler.Backend.LabToTarget.MachineSemantics
 import Flapjack.Compiler.Backend.LabToTarget.SemanticsCompileFinal
 import Flapjack.Compiler.Backend.LabFilter.Proofs.Semantics
@@ -7,6 +7,7 @@ import Flapjack.Pancake.Proofs.PanToTarget.AssemblyMachineToLab
 
 namespace InitE
 open InitECandidate.Proofs
+open InitECandidate.Solver.YukonSelfContainedCert
 open Flapjack Flapjack.Misc Flapjack.Compiler.Backend Flapjack.Compiler.Backend.BackendProof
 open Flapjack.Compiler.Backend.LabSem Flapjack.Compiler.Backend.LabProps
 open Flapjack.Compiler.Backend.LabProps.LabelSets
@@ -1317,29 +1318,5 @@ theorem lab_to_target_step_clock_bound {width : Nat} [NeZero width] {S Q F : Typ
   rw [show s1.clock + (k' + l - 1) = (s1'.clock + k') + l by omega, hl _, ← hffi]
   exact hk
 
-#print axioms certificate_of_exact_behaviour_and_bound
-#print axioms targetTerminatesAt_mono
-#print axioms targetTerminatesAt_of_not_timeOut
-#print axioms targetTerminatesAt_iff_not_timeOut
-#print axioms targetTerminatesWithin_finite_iff_not_timeOut
-#print axioms labEvaluateIgnoreClocks
-#print axioms lab_halt_of_not_timeOut
-#print axioms lab_filter_align_clocked_halt
-#print axioms lab_to_target_clocked_halt
-#print axioms lab_to_target_make_init_clocked_halt
-#print axioms lab_to_target_compile_clocked_halt
-#print axioms pan_to_target_machine_lab_clocked_halt
-#print axioms oracle_full_baseline_bounded_certificate
-#print axioms oracle_full_baseline_certificate_of_not_timeOut
-#print axioms evaluateTarget_halt_of_not_timeOut_and_halt
-#print axioms lab_to_target_run_agree_of_not_timeOut
-#print axioms lab_filter_align_run_agree_of_not_timeOut
-#print axioms lab_to_target_make_init_run_agree_of_not_timeOut
-#print axioms lab_to_target_compile_run_agree_of_not_timeOut
-#print axioms pan_to_target_machine_lab_run_agree_of_not_timeOut
-#print axioms asmFetchAux_some_lt_asmCodeLength
-#print axioms allSkips_count_le_asmCodeLength
-#print axioms asmFetchAuxEq_bounded
-#print axioms lab_to_target_step_clock_bound
 
 end InitE

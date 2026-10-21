@@ -108,9 +108,5 @@ theorem self_contained_master_certificate
       oracles c depth refinedPostK hlab compiled depthBound not_timeOut,
     refinedCandidateK_lt_400B, yukonScore_refined_lt⟩
 
-#print axioms refinedCandidateK_eq
-#print axioms front_factor_threshold
-#print axioms yukonScore_refined_lt
-#print axioms self_contained_master_certificate
 
 end InitECandidate.Solver.SelfContainedMasterK

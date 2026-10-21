@@ -1,5 +1,5 @@
 import InitECandidate.Proofs.BootstrapSteps
-import InitECandidate.Proofs.BootstrapTrace
+import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Solver.FastHalt
 import InitECandidate.Solver.BoundedCertificate
 
@@ -41,7 +41,9 @@ open InitE
 open InitECandidate.Proofs.BootstrapSteps
 open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapAsmComposition
+open InitECandidate.Solver.YukonSelfContainedCert (bootstrapTraceSteps)
 open InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.YukonSelfContainedCert (prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps full_baseline_evaluator_exact)
 open InitECandidate.Solver.FastHalt
 open InitECandidate.Solver.BoundedCertificate
 open Flapjack
@@ -312,13 +314,5 @@ theorem post_bootstrap_halt_at_rv_sim_budget
   rw [hadd]
   exact hnt_res
 
-#print axioms bootstrap_copyloop_baseline_identities
-#print axioms unrolled_copyloop_exact_savings
-#print axioms unrolled_copyloop_concrete_benchmarks
-#print axioms optimizedBootstrapSteps_le_and_lt
-#print axioms ssz_fast_reject_step_savings
-#print axioms fast_reject_matches_unaccepted_within_sszFastRejectSteps
-#print axioms rv_sim_empirical_step_profiles
-#print axioms post_bootstrap_halt_at_rv_sim_budget
 
 end InitECandidate.Solver

@@ -1,4 +1,4 @@
-import InitECandidate.Proofs.BoundedPanToWord
+import InitECandidate.Solver.FastBoundedPanToWord
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitClock
 
 set_option autoImplicit false
@@ -10,6 +10,7 @@ namespace InitECandidate.Solver.BoundedCertificate
 open Classical
 open InitE
 open InitECandidate.Proofs
+open InitECandidate.Solver.YukonSelfContainedCert (baselineHeapLen baselineAdj2 baselineAdj4 oracle_baseline_installation)
 open Flapjack
 open Flapjack.Basis.Pure.MlString
 open Flapjack.Pancake.PanLang
@@ -261,13 +262,5 @@ theorem finite_certificate_of_uniform_post_bootstrap_not_timeOut
   · rw [hio]
     exact matchingResult_refl input outcome events covered
 
-#print axioms evaluateTarget_zero_timeOut_and_pos_of_not_timeOut
-#print axioms oracle_full_baseline_terminate_halt_agree_of_not_timeOut
-#print axioms oracle_baseline_endpoint_terminate_halt_agree_of_not_timeOut
-#print axioms stack_remove_store_list_clock_neutral
-#print axioms stack_remove_init_code_clock_preserve
-#print axioms crep_eval_exp_clock_irrel
-#print axioms baselineWithFiniteK_admitted
-#print axioms finite_certificate_of_uniform_post_bootstrap_not_timeOut
 
 end InitECandidate.Solver.BoundedCertificate

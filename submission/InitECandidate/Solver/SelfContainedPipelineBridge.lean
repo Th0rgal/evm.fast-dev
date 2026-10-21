@@ -781,14 +781,5 @@ theorem finite_certificate_of_source_to_target_clock_chain
   exact target_not_timeOut_of_lab_halt input hgas outcome events source covered
     t m bitmapsDm sdm p ltconf hhalt_lab (hio_lab.trans hio_src)
 
-#print axioms linearPipelineTargetBudget_affine
-#print axioms linearPipelineTargetBudget_zero_source
-#print axioms linearPipelineTargetBudget_succ
-#print axioms target_halt_agree_at_linearPipelineTargetBudget
-#print axioms linearPipelineTargetBudget_mono_k_pan
-#print axioms linearPipelineTargetBudget_of_stage_bounds
-#print axioms pan_to_target_pan_to_word_stage_halt_of_word_not_timeOut
-#print axioms source_to_lab_halt_of_stage_clock_chain
-#print axioms finite_certificate_of_source_to_target_clock_chain
 
 end InitECandidate.Solver.SelfContainedPipelineBridge

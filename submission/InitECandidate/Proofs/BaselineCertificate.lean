@@ -1,7 +1,6 @@
 import InitECandidate.Proofs.CompilerComputation
 import InitECandidate.Proofs.BaselineInstallationFacts
 import InitECandidate.Proofs.BaselineCorrectness
-import InitECandidate.Proofs.OracleBaselineCertificate
 import InitE.TargetTotality
 import InitECandidate.Proofs.InstallationTransport
 
@@ -20,6 +19,15 @@ open Flapjack.Pancake.Proofs.PanToTarget
 
 set_option maxRecDepth 100000
 
+/-- Heap-shaped domain size, including the globals reserved at its upper end. -/
+def baselineHeapLen : Nat := (stackStart - sourceBase) / 8
+
+def baselineAdj2 : BitVec 64 := BitVec.ofNat 64 sourceBase +
+  (8 : BitVec 64) * BitVec.ofNat 64 StackRemove.maxStackAlloc
+
+def baselineAdj4 : BitVec 64 := BitVec.ofNat 64 ramEnd -
+  (8 : BitVec 64) * BitVec.ofNat 64 StackRemove.maxStackAlloc
+
 /-- Remaining numeric and register premises are fixed baseline facts, rather
 than requirements on inputs or assumptions supplied by a participant. -/
 theorem baseline_installation (input : Guest.InputBlob)
@@ -31,12 +39,47 @@ theorem baseline_installation (input : Guest.InputBlob)
     BaselineInstallation input baselineOutput baselineMachineConfig baselineInstalledState
       InitECandidate.nativeCode InitECandidate.bitmaps baselineConfig baselineHeapLen
       baselineAdj2 baselineAdj4 620 0 := by
-  obtain ⟨hmc, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain,
-    haligned, hadj2, hadj4, hleft, hright, hmax, hendian, hmemory, hlimits⟩ :=
-    oracle_baseline_installation input baselineConfig memory
-  exact ⟨hmc, baseline_artifact_complete, hpositive, hsplit, hbase, hlen, htop,
-    hglobals, hdomain, haligned, hadj2, hadj4, hleft, hright, hmax, hendian,
-    hmemory, hlimits⟩
+  refine ⟨baseline_machine_isRiscv, baseline_artifact_complete,
+    ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, memory, ?_⟩
+  · change (0 : BitVec 64) < BitVec.ofNat 64 sourceBase
+    decide_cbv
+  · change BitVec.ofNat 64 sourceBase < BitVec.ofNat 64 stackStart
+    decide_cbv
+  · rfl
+  · change baselineHeapLen = (BitVec.ofNat 64 stackStart +
+      -1 * BitVec.ofNat 64 sourceBase).toNat / (64 / 8)
+    decide_cbv
+  · change BitVec.ofNat 64 heapEnd = BitVec.ofNat 64 sourceBase +
+      (wordSemBytesInWord : BitVec 64) * BitVec.ofNat 64 baselineHeapLen -
+        BitVec.ofNat 64 (globalsWords * 64 / 8)
+    decide_cbv
+  · decide_cbv
+  · rfl
+  · change holAligned (wordShiftAmount 64 + 1)
+      (BitVec.ofNat 64 stackStart + -1 * BitVec.ofNat 64 sourceBase) = true
+    decide_cbv
+  · rfl
+  · rfl
+  · change baselineAdj2 ≤ BitVec.ofNat 64 stackStart
+    decide_cbv
+  · change BitVec.ofNat 64 stackStart ≤ baselineAdj4
+    decide_cbv
+  · change (BitVec.ofNat 64 stackStart + -1 * BitVec.ofNat 64 sourceBase).toNat ≤
+      (wordSemBytesInWord : BitVec 64).toNat *
+        (2 * DataToWord.maxHeapLimit 64 pancakeRiscVBackendConfig.dataConf - 1)
+    decide_cbv
+  · rfl
+  · have names :
+        (StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 2,
+         StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 3,
+         StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 4) =
+          (11,12,13) := by decide_cbv
+    have n2 := congrArg Prod.fst names
+    have n3 := congrArg (fun p => p.2.1) names
+    have n4 := congrArg (fun p => p.2.2) names
+    dsimp only at n2 n3 n4
+    simp only [readLimits, n2, n3, n4]
+    rfl
 
 /-- Compiler-derived behavior equality at the actual native entry. -/
 theorem baseline_native_behaviour_eq (input : Guest.InputBlob)
@@ -62,16 +105,36 @@ theorem baseline_installation_transport (input : Guest.InputBlob)
     BaselineInstallation input baselineOutput baselineMachineConfig ms
       InitECandidate.nativeCode InitECandidate.bitmaps baselineConfig baselineHeapLen
       baselineAdj2 baselineAdj4 620 0 := by
+  have agreement := baseline_endpoint_agreement ms related
+  have r11 := agreement.regs 11 (by decide)
+  have r12 := agreement.regs 12 (by decide)
+  have r13 := agreement.regs 13 (by decide)
+  have names :
+      (StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 2,
+       StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 3,
+       StackNames.findNameSpt pancakeRiscVBackendConfig.stackConf.regNames 4) =
+        (11,12,13) := by decide_cbv
+  have n2 := congrArg Prod.fst names
+  have n3 := congrArg (fun p => p.2.1) names
+  have n4 := congrArg (fun p => p.2.2) names
+  dsimp only at n2 n3 n4
+  have limits : readLimits baselineMachineConfig.target.config pancakeRiscVBackendConfig
+      baselineMachineConfig ms = readLimits baselineMachineConfig.target.config
+        pancakeRiscVBackendConfig baselineMachineConfig baselineInstalledState := by
+    simp only [readLimits, n2, n3, n4, r11, r12, r13]
+  have rlen : baselineMachineConfig.target.getReg ms baselineMachineConfig.lenReg =
+      baselineMachineConfig.target.getReg baselineInstalledState baselineMachineConfig.lenReg := r11
+  have rptr : baselineMachineConfig.target.getReg ms baselineMachineConfig.ptr2Reg =
+      baselineMachineConfig.target.getReg baselineInstalledState baselineMachineConfig.ptr2Reg := r12
+  have rlen2 : baselineMachineConfig.target.getReg ms baselineMachineConfig.len2Reg =
+      baselineMachineConfig.target.getReg baselineInstalledState baselineMachineConfig.len2Reg := r13
   rcases installed with ⟨hmc, hart, hpositive, hsplit, hbase, hlen, htop, hglobals,
     hdomain, haligned, hadj2, hadj4, hleft, hright, hmax, hendian, hmemory, hlimits⟩
-  obtain ⟨hmc', hpositive', hsplit', hbase', hlen', htop', hglobals', hdomain',
-    haligned', hadj2', hadj4', hleft', hright', hmax', hendian', hmemory', hlimits'⟩ :=
-    oracle_baseline_installation_transport input baselineConfig ms related
-      ⟨hmc, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain, haligned,
-       hadj2, hadj4, hleft, hright, hmax, hendian, hmemory, hlimits⟩
-  exact ⟨hmc', hart, hpositive', hsplit', hbase', hlen', htop', hglobals',
-    hdomain', haligned', hadj2', hadj4', hleft', hright', hmax', hendian',
-    hmemory', hlimits'⟩
+  have memory := panInstalled_transport agreement hmemory
+  unfold BaselineInstallation
+  simp only [rlen, rptr, rlen2, limits]
+  exact ⟨hmc, hart, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain,
+    haligned, hadj2, hadj4, hleft, hright, hmax, hendian, memory, hlimits⟩
 
 /-- Compiler correctness at whichever concrete machine startup reaches. -/
 theorem baseline_endpoint_behaviour_eq (input : Guest.InputBlob)

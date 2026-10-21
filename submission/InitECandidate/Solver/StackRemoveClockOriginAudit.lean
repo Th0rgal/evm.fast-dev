@@ -95,8 +95,5 @@ theorem runAllowance_le (xs : List (Bool × Nat)) (A : Nat) (h : ∀ p ∈ xs, p
 theorem runAllowance_tight (A : Nat) : runAllowance [(true, A)] = 1 * A := by
   simp [runAllowance, caseAllowance]
 
-#print axioms guest_stackRemove_jump_false
-#print axioms stackRemove_entry_jump_false
-#print axioms runAllowance_le
 
 end InitECandidate.Solver.StackRemoveClockOriginAudit

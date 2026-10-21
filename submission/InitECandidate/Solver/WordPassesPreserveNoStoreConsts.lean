@@ -188,8 +188,5 @@ theorem loopToWord_NoSt {width : Nat} [NeZero width] (ctx : Spt Nat) (p : HolLoo
 theorem NoSt_counterexample {α : Type} :
     NoSt (WordLangProgHOL.loop (α := α) .ln (.storeConsts 0 2 4 6 []) .ln) = false := rfl
 
-#print axioms t_seqAssocRight
-#print axioms t_tail_chain
-#print axioms loopToWord_NoSt
 
 end InitECandidate.Solver.WordPassesPreserveNoStoreConsts

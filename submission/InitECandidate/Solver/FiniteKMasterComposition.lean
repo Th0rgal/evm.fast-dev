@@ -101,10 +101,5 @@ theorem master_finite_certificate
   exact finite_certificate_of_uniform_post_bootstrap_not_timeOut
     oracles c depth candidatePostK hlab compiled depthBound not_timeOut
 
-#print axioms candidateFiniteK_eq
-#print axioms candidateFiniteK_le_900719925474
-#print axioms yukonScore_candidate_lt
-#print axioms guest_budget_le_candidate
-#print axioms master_finite_certificate
 
 end InitECandidate.Solver.FiniteKMasterComposition

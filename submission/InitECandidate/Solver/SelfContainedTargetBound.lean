@@ -1,7 +1,6 @@
 import InitECandidate.Solver.YukonBaselineCompat
 import InitECandidate.Solver.YukonCleanVerifierCheck
-import InitECandidate.Proofs.StartupEnvironment
-import InitECandidate.Proofs.BaselineInstallationFacts
+import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Proofs.BootstrapProgram
 import InitECandidate.Proofs.OracleBaselineCorrectness
 import Flapjack.Compiler.Backend.LabToTarget.EvaluateIgnoreClocks

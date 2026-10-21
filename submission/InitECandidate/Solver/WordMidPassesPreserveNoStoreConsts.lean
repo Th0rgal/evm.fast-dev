@@ -148,7 +148,5 @@ theorem instSelect_keeps_storeConsts {width : Nat} [NeZero width] (c : AsmConfig
       (WordLangProgHOL.storeConsts (α := BitVec width) 0 2 4 6 [])) = false := by
   rw [WordInst.instSelect.eq_def]; rfl
 
-#print axioms t_mid_tail_chain
-#print axioms t_ise
 
 end InitECandidate.Solver.WordMidPassesPreserveNoStoreConsts

@@ -1,4 +1,4 @@
-import InitECandidate.Proofs.BoundedStackToLab
+import InitECandidate.Solver.FastBoundedStackToLab
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyTop
 import Flapjack.Pancake.LoopToWord.Proofs.StateRelImpSemantics
 import Flapjack.Pancake.CrepToLoop.Proofs.StateRelImpSemantics
@@ -13,6 +13,7 @@ open Flapjack Flapjack.Pancake.PanLang
 open Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.Asm
 open Flapjack.LoopToWord.CompileCorrect
+open InitECandidate.Solver.YukonSelfContainedCert
 
 /-- Clock-preserving `LoopToWord` simulation: at any clock `k`, a non-error entry call
 on `s` (with `sptIsEmpty s.locals`) produces a `WordSem` entry call on `t` at the **same**
@@ -36,7 +37,7 @@ theorem loop_to_word_clocked_agree {width : Nat} [NeZero width] {C F : Type}
       t1.ffi = s1.ffi ∧
       resultCase (makeCtxtHOL 2 [] .ln) (WordLocW.loc 1 0) { t with clock := k } res s1 res1 t1 := by
   have hloc : s.locals = .ln := by
-    cases h : s.locals <;> simp_all [sptIsEmpty]
+    cases h : s.locals <;> first | rfl | (rw [h] at hemp; cases hemp)
   have hlocals : LoopToWord.localsRelHOL (makeCtxtHOL 2 [] .ln)
       ({ s with clock := k } : LoopSemStateFiniteExact width F).locals
       ({ t with clock := k } : WordSemStateFiniteExact width C F).locals := by
@@ -209,10 +210,10 @@ theorem pan_to_crep_clocked_agree {width : Nat} [NeZero width] {σ : Type}
     simp [compileProgExactHOLW, compileCallNoReturnExactHOLW, compileExpExactHOLWList]
   rw [hcomp] at hrun
   refine ⟨res1, t1, hrun, ?_, hsr1.2.2.2.2.2.2.2.1.symm, ?_⟩
-  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
-      (try split at hres) <;> simp_all
-  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> simp only at hres <;>
-      (try split at hres) <;> simp_all [panEntryClass]
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> dsimp only at hres <;>
+      (try split at hres) <;> first | exact False.elim hres | exact hne rfl | (rcases hres with ⟨rfl, _⟩ | rfl; rintro ⟨⟩)
+  · rcases res with _ | (_ | _ | _ | _ | _ | _ | _) <;> dsimp only [panEntryClass] at hres ⊢ <;>
+      (try split at hres) <;> first | exact False.elim hres | exact hne rfl | (rcases hres with ⟨rfl, _⟩ | rfl; rfl)
 
 /-- Clock-preserving `PanSimp` simulation: at any clock `k`, a non-error entry call
 on `s` produces the exact same result and FFI state on `t` at the same clock `k` (`extra = 0`). -/
@@ -439,7 +440,7 @@ theorem pan_globals_compile_top_clocked_shift {width : Nat} [NeZero width] {σ :
       apply List.filter_eq_nil_iff.mpr
       intro d hd
       rcases hkinds d hd with h | h | h <;> cases d <;>
-        simp_all [isNameHOL, isFunctionHOL, isDeclHOL, isExnDeclHOL]
+        first | exact Bool.noConfusion h | exact Bool.noConfusion
     simp [resortDeclsHOL, hnames]
   have hs1orig := hs1
   have hres := Flapjack.resortDeclsEvaluate { s with structs := [] } code hkindsB
@@ -640,24 +641,24 @@ theorem pan_globals_compile_top_clocked_shift {width : Nat} [NeZero width] {σ :
   have hname : fpermName start nm start = nm := by simp [fpermName]
   rw [hname, hC2] at hfperm_k
   let fpermCode := HolFiniteMapExact.empty.updateList (functionsHOL (fpermDecsHOL start nm code))
-  have hempty_obs := Flapjack.panGlobals_call_emptyLocals_observation
+  have hemp_obs := Flapjack.panGlobals_call_emptyLocals_observation
     { s1 with code := fpermCode, clock := k } nm
-  have hempty_eq : ({ emptyLocalsHOLFinite { s1 with code := fpermCode } with clock := k } :
+  have hemp_eq : ({ emptyLocalsHOLFinite { s1 with code := fpermCode } with clock := k } :
       PanSemStateFiniteExact width σ) =
       emptyLocalsHOLFinite { s1 with code := fpermCode, clock := k } := rfl
   have hne_empty : (PanSemStateFiniteExact.evaluateHOLFiniteState
       { emptyLocalsHOLFinite { s1 with code := fpermCode } with clock := k }
       (.call none nm [] : ProgHOL width)).1 ≠ some .error := by
-    rw [hempty_eq, ← (Prod.mk.inj hempty_obs).1, show fpermCode = _ from rfl, hfperm_k]
+    rw [hemp_eq, ← (Prod.mk.inj hemp_obs).1, show fpermCode = _ from rfl, hfperm_k]
     exact hne
   have hglob_k := pan_globals_clocked_agree ctx
     (emptyLocalsHOLFinite { s1 with code := fpermCode }) t' nm k hrelT hne_empty
   refine ⟨T, ?_, ?_, ?_⟩
   · rw [hT]
     exact hevT
-  · rw [hshift.1, hglob_k.1, hempty_eq, ← (Prod.mk.inj hempty_obs).1, show fpermCode = _ from rfl,
+  · rw [hshift.1, hglob_k.1, hemp_eq, ← (Prod.mk.inj hemp_obs).1, show fpermCode = _ from rfl,
       hfperm_k]
-  · rw [hshift.2, hglob_k.2, hempty_eq, ← (Prod.mk.inj hempty_obs).2, show fpermCode = _ from rfl,
+  · rw [hshift.2, hglob_k.2, hemp_eq, ← (Prod.mk.inj hemp_obs).2, show fpermCode = _ from rfl,
       hfperm_k]
 
 open Pancake.PanStructs.CompileShapeExact
@@ -865,13 +866,13 @@ open LoopToWordStateRelImpSemanticsSupport in
 private theorem list_lookup_isSome_iff_local {α β : Type} [BEq α] [LawfulBEq α]
     (l : List (α × β)) (k : α) : (List.lookup k l).isSome = true ↔ k ∈ l.map Prod.fst := by
   induction l with
-  | nil => simp
+  | nil => simp only [List.lookup, Option.isSome, List.map_nil, List.not_mem_nil, reduceCtorEq]
   | cons e l ih =>
     obtain ⟨a, b⟩ := e
     by_cases h : k = a
-    · subst h; simp
-    · have : (k == a) = false := by simp [h]
-      simp [List.lookup_cons, this, ih, h]
+    · subst h; simp only [List.lookup_cons, beq_self_eq_true, Option.isSome_some, List.map_cons, List.mem_cons, true_or]
+    · have hbeq : (k == a) = false := beq_false_of_ne h
+      simp only [List.lookup_cons, hbeq, ih, List.map_cons, List.mem_cons, h, false_or]
 
 private theorem fupdateList_empty_eq_lookup_local {α β : Type} [BEq α] [LawfulBEq α]
     (l : List (α × β)) (k : α) :
@@ -1099,8 +1100,12 @@ theorem pan_to_crep_to_word_clocked_sim {width : Nat} [NeZero width] {C σ : Typ
   · rw [hffi_word, ← hffi_loop, hffi_crep, hffi_crep1]
   · rw [← hclass_crep1, ← hres_crep] at hne_pan ⊢
     rcases res_crep with _ | (_ | _ | _ | _ | _ | _) <;>
-      simp only [Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop, resultCase] at hne_pan hrc_word ⊢ <;>
-      simp_all [wordEntryClass]
+      dsimp only [Pancake.CrepToLoop.Proofs.NCompileCorrect.resultToLoop, resultCase] at hne_pan hrc_word ⊢ <;>
+      first | exact False.elim hrc_word | exact False.elim (hne_pan rfl) |
+        (rcases hrc_word with ⟨rfl, _⟩; rfl) |
+        (rcases hrc_word with ⟨_, rfl, _⟩; rfl) |
+        (rcases hrc_word with ⟨_, _, rfl, _⟩; rfl) |
+        (subst hrc_word; rfl)
 
 open LoopToWordStateRelImpSemanticsSupport in
 /-- Complete clocked `PanToWord` simulation (counterpart of `panToWordStateRelImpSemantics`):
@@ -3420,56 +3425,5 @@ theorem crepToLoop_comp_exps_preserves_eval_clock_bound {width : Nat} [NeZero wi
     omega
   exact ⟨ck, st, hck, heval, hles, hsr, hmr, hgr, hcr, hlr⟩
 
-#print axioms loop_to_word_clocked_agree
-#print axioms crep_to_loop_clocked_sim
-#print axioms crep_inline_clocked_agree
-#print axioms pan_to_crep_clocked_agree
-#print axioms pan_simp_clocked_agree
-#print axioms pan_structs_clocked_agree
-#print axioms pan_globals_clocked_agree
-#print axioms pan_globals_init_call_clocked_shift
-#print axioms pan_globals_compile_top_clocked_shift
-#print axioms pan_simp_structs_globals_clocked_sim
-#print axioms pan_to_crep_to_word_clocked_sim
-#print axioms pan_to_word_clocked_sim
-#print axioms pan_to_target_pan_to_word_stage_clocked_sim
-#print axioms pan_to_target_pan_to_word_from_init_clocked_sim
-#print axioms pan_to_target_pan_to_word_stage_lab_clocked_sim
-#print axioms pan_to_target_compile_clocked_halt
-#print axioms oracle_baseline_clocked_halt
-#print axioms oracle_baseline_endpoint_clocked_halt
-#print axioms oracle_full_baseline_clocked_halt
-#print axioms semanticsDecls_terminate_extract
-#print axioms semanticsDecls_terminate_at_clock
-#print axioms oracle_full_baseline_clocked_halt_at
-#print axioms oracle_full_baseline_terminate_clocked_halt
-#print axioms oracle_baseline_endpoint_terminate_clocked_halt
-#print axioms oracle_full_baseline_matchingExecutionAt_of_clocked_halt
-#print axioms oracle_full_baseline_certificate_infinity_of_clocked_halt
-#print axioms oracle_full_baseline_certificate_of_clocked_halt_and_not_timeOut
-#print axioms crep_to_loop_run_agree_of_not_timeOut
-#print axioms pan_to_word_run_agree_of_not_timeOut
-#print axioms pan_to_target_compile_halt_agree_of_not_timeOut
-#print axioms oracle_baseline_halt_agree_of_not_timeOut
-#print axioms oracle_full_baseline_halt_agree_of_not_timeOut
-#print axioms oracle_baseline_endpoint_halt_agree_of_not_timeOut
-#print axioms pan_to_target_pan_to_word_stage_lab_run_agree_of_not_timeOut
-#print axioms pan_to_target_pan_to_word_stage_lab_halt_of_word_not_timeOut
-#print axioms pan_to_word_halt_of_word_not_timeOut
-#print axioms crepEvaluateIgnoreClocks
-#print axioms loopEvaluateIgnoreClocks
-#print axioms crep_to_loop_halt_of_loop_not_timeOut
-#print axioms panEvaluateIgnoreClocks
-#print axioms crep_halt_of_not_timeOut
-#print axioms loop_halt_of_not_timeOut
-#print axioms crepExpCmpCount_le_sizeOf
-#print axioms crepExpsCmpCount_le_sizeOf
-#print axioms compileExpHOLExact_iteCount
-#print axioms compileExpsHOLExact_iteCount
-#print axioms compileExpHOLExact_expOnly
-#print axioms compileExpsHOLExact_expOnly
-#print axioms loop_evaluate_clock_bound_of_expOnly
-#print axioms crepToLoop_comp_exp_preserves_eval_clock_bound
-#print axioms crepToLoop_comp_exps_preserves_eval_clock_bound
 
 end InitE

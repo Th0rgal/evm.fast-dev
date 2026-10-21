@@ -46,6 +46,7 @@ open InitECandidate.Proofs
 open InitECandidate.Proofs.BootstrapSteps
 open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.YukonBaselineCompat (bootstrapTraceSteps prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps)
 open InitECandidate.Solver
 open InitECandidate.Solver.RiscvBootAndCopyLoopCert
 open InitECandidate.Solver.RiscvSszFastRejectAndBootCert
@@ -711,12 +712,5 @@ theorem cross_prover_pass_invariant_convergence_and_composition
     ⟨⟨hlen, hcomp⟩, ⟨hlen, hcomp⟩, ⟨hlen, hcomp⟩⟩,
     ⟨⟨hlen, hstack⟩, ⟨hlen, hstack⟩, ⟨hlen, hstack⟩⟩⟩
 
-#print axioms add256_evm_asm_refines_flapjack_and_reduces_cycles
-#print axioms sub256_evm_asm_refines_flapjack_and_reduces_cycles
-#print axioms copyLoop8x_evm_asm_refines_flapjack_and_reduces_bootstrap
-#print axioms sszFastReject_evm_asm_refines_flapjack_and_reduces_cycles
-#print axioms div_fast_hint_verification_sound_unique_and_28_cycles
-#print axioms sail_l3_step_equiv
-#print axioms cross_prover_pass_invariant_convergence_and_composition
 
 end InitECandidate.Solver.RiscvFastPathsAndSailBridge

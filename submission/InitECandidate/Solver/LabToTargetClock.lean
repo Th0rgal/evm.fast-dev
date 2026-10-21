@@ -1,9 +1,9 @@
 import Flapjack.Compiler.Backend.LabToTarget.CompileCorrect.Assembly
 import Flapjack.RiscV.CorrectnessEncoding.Complete
 import Flapjack.RiscV.CorrectnessEncoding.Length
-import InitECandidate.Proofs.BootstrapTrace
-import InitECandidate.Proofs.OracleBaselineCertificate
-import InitECandidate.Proofs.BoundedTarget
+import InitECandidate.Solver.FastBaselineEnv
+import InitECandidate.Solver.YukonSelfContainedCert
+import InitECandidate.Solver.FastBoundedTarget
 import InitECandidate.Solver.BoundedCertificate
 import InitECandidate.Solver.LabToTargetMultiStepBound
 import InitECandidate.Solver.LoopToWordToStackNamesAndLabToTargetClockMaster
@@ -50,7 +50,6 @@ namespace InitECandidate.Solver.LabToTargetClock
 open InitE
 open InitECandidate.Proofs
 open InitECandidate.Solver
-open InitECandidate.Solver.BoundedCertificate
 open Flapjack
 open Flapjack.Compiler.Backend
 open Flapjack.Compiler.Backend.LabLang
@@ -62,6 +61,7 @@ open Flapjack.Compiler.Encoders.AsmProps
 open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Pancake.Proofs.PanToTarget
 open Flapjack.RiscV.TargetProof
+open InitECandidate.Solver.YukonSelfContainedCert
 
 variable {width : Nat} [NeZero width]
 
@@ -326,13 +326,5 @@ theorem certificate_of_post_bootstrap_lab_clock_bound
   exact (evaluateTarget_add_clock_of_not_timeOut baselineMachineConfig (sourceFfi input)
     post targetLabClock (maxEncSteps * labClock - targetLabClock) hnt_small).2
 
-#print axioms riscvTotalStepsOfLabClock_eq
-#print axioms bootstrap_clock_shift_and_stateRel
-#print axioms riscv_encoded_lab_inst_steps_le_four
-#print axioms riscvEnc_byte_length_and_step_bound
-#print axioms labToTarget_simulation_clock
-#print axioms labToTarget_bounded_step_simulation
-#print axioms matchingExecutionAt_of_post_bootstrap_halt
-#print axioms certificate_of_post_bootstrap_lab_clock_bound
 
 end InitECandidate.Solver.LabToTargetClock

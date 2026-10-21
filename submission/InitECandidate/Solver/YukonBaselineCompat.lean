@@ -1,5 +1,4 @@
-import InitECandidate.Proofs.BootstrapTrace
-import InitECandidate.Proofs.PanInstallation
+import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Proofs.CompilerOracles
 
 /-! Yukon compatibility copies: all new exact-clock proofs live in Solver.
@@ -833,30 +832,4 @@ theorem full_evaluator_exact {σ : Type} (io : HolFfiState σ) (ms : riscv_state
   exact ⟨post, shift, by rwa [full_endpoint] at relation⟩
 
 
-#print axioms baseline_finite_facts
-#print axioms baseline_config_literal_compat
-#print axioms baseline_config_lab_compat
-#print axioms baseline_pan_installed
-#print axioms bytes_from_domain
-#print axioms reg_nonzero
-#print axioms reg_read
-#print axioms low_eq
-#print axioms high_eq
-#print axioms loc_split
-#print axioms loc_guard
-#print axioms riscv_encoder_correct_bootstrap
-#print axioms step_evaluator_bootstrap
-#print axioms bootstrapTraceSteps_append
-#print axioms checked_trace_evaluator_bootstrap
-#print axioms prefix_inst_ok
-#print axioms loopBody_inst_ok
-#print axioms loopProgram_inst_ok
-#print axioms tail_inst_ok
-#print axioms full_inst_ok
-#print axioms prefix_steps
-#print axioms loopBody_steps
-#print axioms tail_steps
-#print axioms loopProgram_steps
-#print axioms full_steps
-#print axioms full_evaluator_exact
 end InitECandidate.Solver.YukonBaselineCompat

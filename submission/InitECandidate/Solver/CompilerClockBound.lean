@@ -114,6 +114,7 @@ namespace InitECandidate.Solver
 open Classical
 open InitE
 open InitECandidate.Proofs
+open InitECandidate.Solver.YukonSelfContainedCert (baselineHeapLen baselineAdj2 baselineAdj4 oracle_baseline_installation)
 open InitECandidate.Solver.BoundedCertificate
 open Flapjack
 open Flapjack.Basis.Pure.MlString
@@ -860,13 +861,5 @@ theorem finite_certificate_of_split_post_bootstrap_budget
   finite_certificate_of_uniform_post_bootstrap_not_timeOut
     oracles c depth (K_init + K_body) hlab compiled depthBound not_timeOut
 
-#print axioms crep_evaluate_leaf_clock_eq
-#print axioms crep_evaluate_tick_characterization
-#print axioms loop_eval_exp_clock_irrel
-#print axioms loop_evaluate_leaf_clock_eq
-#print axioms loop_evaluate_tick_characterization
-#print axioms pan_globals_compile_top_clock_shift_and_not_timeOut_agree
-#print axioms post_bootstrap_split_budget_terminate_halt_agree
-#print axioms finite_certificate_of_split_post_bootstrap_budget
 
 end InitECandidate.Solver

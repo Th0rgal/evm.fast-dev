@@ -638,13 +638,5 @@ theorem self_contained_basic_block_end_to_end_master_certificate
   exact ⟨rfl, hcompat, refined_bound_exact, refinedCandidateK_lt_400B,
     refined_bound_below_ceiling, refined_score_exactly_representable⟩
 
-#print axioms basicBlockTotalTargetTicks_eq_and_mono
-#print axioms basicBlockStepFactor_lt_coarse_stepExpansionFactor
-#print axioms lab_to_target_basic_block_multi_step_bound
-#print axioms backend_basic_block_clock_chain_and_run
-#print axioms basicBlockPipelineTargetBudget_eq_refinedCandidateK_and_halt_agree
-#print axioms basic_block_bmax_8_refined_budget_lt_400B
-#print axioms basic_block_bmax_8_unrefined_and_tight_sub_400B
-#print axioms self_contained_basic_block_end_to_end_master_certificate
 
 end InitECandidate.Solver.SelfContainedBasicBlockBridge

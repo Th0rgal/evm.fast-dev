@@ -13,7 +13,4 @@ def baselineCompilerConfig : Flapjack.Compiler.Backend.Backend.Config :=
 def baselineConfigLiteralWithOracles : Flapjack.Compiler.Backend.Backend.Config :=
   { baselineConfigLiteral with wordToWordConf := baselineCompilerConfig.wordToWordConf }
 
-/-- Certified literal metadata, so installation facts do not recompile the guest. -/
-def baselineConfig : Flapjack.Compiler.Backend.Backend.Config := baselineConfigLiteralWithOracles
-
 end InitE

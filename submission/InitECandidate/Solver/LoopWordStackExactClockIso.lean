@@ -153,10 +153,5 @@ theorem iso_front_budget_lt_400B (c_pc c_cl c_sl : Nat) (h : c_sl * (c_cl * c_pc
         SelfContainedMasterK.pipeOffset)) < 400000000000 :=
   (SelfContainedMasterK.front_factor_threshold _).2 h
 
-#print axioms loop_to_word_clock_iso
-#print axioms loop_to_word_not_timeOut
-#print axioms word_to_stack_clock_affine
-#print axioms front_factor_after_iso
-#print axioms iso_front_budget_lt_400B
 
 end InitECandidate.Solver.LoopWordStackExactClockIso
