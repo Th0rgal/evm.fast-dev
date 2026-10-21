@@ -1,5 +1,4 @@
 import InitECandidate.Proofs.FrontendCodecComputation
-import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.StructKernelComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data30
 import InitECandidate.Proofs.StructComputation

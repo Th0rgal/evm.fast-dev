@@ -23,7 +23,7 @@ def loopBody4_3 : HolLoopProg 64 :=
 
 def loopBody4_4 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 3
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.const 33806089496#64, Flapjack.HolLoopExp.var 1])
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.const 2952790016#64, Flapjack.HolLoopExp.var 1])
 
 def loopBody4_5 : HolLoopProg 64 :=
 .mark loopBody4_4
@@ -141,7 +141,7 @@ def loopBody4_41 : HolLoopProg 64 :=
 .mark loopBody4_40
 
 def loopBody4_42 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.const 33806089496#64)
+Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.const 2952790016#64)
 
 def loopBody4_43 : HolLoopProg 64 :=
 .mark loopBody4_42

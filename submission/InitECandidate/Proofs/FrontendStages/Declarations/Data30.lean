@@ -18,7 +18,7 @@ def body30_2 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def body30_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 134217712#64) (Flapjack.Exp.var Flapjack.VarKind.local "len")) body30_1 body30_2
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 1073741808#64) (Flapjack.Exp.var Flapjack.VarKind.local "len")) body30_1 body30_2
 
 def body30_4 : Prog (BitVec 64) :=
 Flapjack.Prog.shMemLoad Flapjack.OpSize.opW Flapjack.VarKind.local "w"

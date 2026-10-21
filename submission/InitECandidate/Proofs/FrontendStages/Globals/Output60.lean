@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data60
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate44
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -70,6 +73,7 @@ def globalBody60_12 : Prog (BitVec 64) :=
 def globalBody60_13 : Prog (BitVec 64) :=
 .dec ("a0") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.and [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 4294967295#64]) globalBody60_12
 
-def globalData60 : Decl (BitVec 64) := .function { name := "mul64x64", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody60_13, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData60 : Decl (BitVec 64) :=
+.function { name := "mul64x64", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody60_13, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput60 := Pancake.PanLang.declToHOL globalData60
 end InitECandidate.Proofs.FrontendStages.Declarations

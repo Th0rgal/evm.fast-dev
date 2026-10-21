@@ -8,7 +8,7 @@ from pathlib import Path
 import re
 
 root = Path(__file__).resolve().parent.parent
-ast = (root / "Guest/Ast.lean").read_text()
+ast = (root / "Guest/SoftwareAst.lean").read_text()
 names = re.findall(r"\bguest(?:Global|Exn|Fn)_\w+", ast[ast.index("def guestAst :"):])
 names = [names[-1], *names[:-1]]
 base = root / "submission/InitECandidate/Proofs/FrontendStages/Declarations"
@@ -19,11 +19,11 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 """
 for i, name in enumerate(names):
-    imports = f"import Guest.Ast\nimport InitECandidate.Proofs.FrontendStages.Declarations.Simplify{i}\n"
+    imports = f"import Guest.SoftwareAst\nimport InitECandidate.Proofs.FrontendStages.Declarations.Simplify{i}\n"
     if i >= 16:
         imports += f"import InitECandidate.Proofs.FrontendStages.Declarations.Agreement{i-16}\n"
     (base / f"Agreement{i}.lean").write_text(imports + header +
-        f"theorem original{i}_eq : original{i} = Flapjack.Pancake.PanLang.declToHOL Guest.{name} := by\n"
+        f"theorem original{i}_eq : original{i} = Flapjack.Pancake.PanLang.declToHOL Guest.Software.{name} := by\n"
         "  with_unfolding_all rfl\n" +
         f"#print axioms original{i}_eq\nend InitECandidate.Proofs.FrontendStages.Declarations\n")
 imports = "".join(f"import InitECandidate.Proofs.FrontendStages.Declarations.Agreement{i}\n"

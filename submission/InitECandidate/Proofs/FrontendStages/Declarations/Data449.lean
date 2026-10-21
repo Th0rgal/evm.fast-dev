@@ -9,51 +9,59 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body449_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64])
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64]),
+      Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add
+          [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 192#64])])
 
 def body449_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 72#64])
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 48#64]))
 
 def body449_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 23#64)) body449_0 body449_1
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 192#64])
+  (Flapjack.Exp.const 0#64)
 
 def body449_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 1#64)
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body449_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.op Flapjack.BinOp.and
-  [Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.loadByte (Flapjack.Exp.var Flapjack.VarKind.local "code"))
-        (Flapjack.Exp.const 239#64)),
-    Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal
-        (Flapjack.Exp.loadByte
-          (Flapjack.Exp.op Flapjack.BinOp.add
-            [Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.const 1#64]))
-        (Flapjack.Exp.const 1#64)),
-    Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal
-        (Flapjack.Exp.loadByte
-          (Flapjack.Exp.op Flapjack.BinOp.add
-            [Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.const 2#64]))
-        (Flapjack.Exp.const 0#64))]) body449_3 body449_1
+.seq body449_2 body449_3
 
 def body449_5 : Prog (BitVec 64) :=
-.seq body449_4 body449_0
+.seq body449_1 body449_4
 
 def body449_6 : Prog (BitVec 64) :=
-.seq body449_2 body449_5
+.seq body449_0 body449_5
 
 def body449_7 : Prog (BitVec 64) :=
-.seq body449_2 body449_4
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64])) body449_6
 
 def body449_8 : Prog (BitVec 64) :=
-.seq body449_7 body449_0
+.seq body449_0 body449_1
+
+def body449_9 : Prog (BitVec 64) :=
+.seq body449_8 body449_2
+
+def body449_10 : Prog (BitVec 64) :=
+.seq body449_9 body449_3
+
+def body449_11 : Prog (BitVec 64) :=
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64])) body449_10
 
 def originalData449 : Decl (BitVec 64) :=
-.function { name := "is_valid_delegation", inline := false, exported := false, params := [("code", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body449_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "refill_frame_state_gas", inline := false, exported := false, params := [], body := body449_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData449 : Decl (BitVec 64) :=
-.function { name := "is_valid_delegation", inline := false, exported := false, params := [("code", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body449_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "refill_frame_state_gas", inline := false, exported := false, params := [], body := body449_11, returnShape := (Flapjack.Shape.one) }
 def original449 := Pancake.PanLang.declToHOL originalData449
 def simplified449 := Pancake.PanLang.declToHOL simplifiedData449
 end InitECandidate.Proofs.FrontendStages.Declarations

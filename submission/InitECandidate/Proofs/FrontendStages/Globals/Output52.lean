@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data52
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate35
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -24,6 +27,7 @@ Flapjack.Prog.return
         [Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "a"),
           Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.const 0#64, Flapjack.Exp.const 1#64]]])
 
-def globalData52 : Decl (BitVec 64) := .function { name := "u256_not", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody52_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData52 : Decl (BitVec 64) :=
+.function { name := "u256_not", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody52_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput52 := Pancake.PanLang.declToHOL globalData52
 end InitECandidate.Proofs.FrontendStages.Declarations

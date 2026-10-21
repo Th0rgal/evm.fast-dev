@@ -33,7 +33,7 @@ def loopBody149_7 : HolLoopProg 64 :=
 .mark loopBody149_6
 
 def loopBody149_8 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 8 (Flapjack.HolLoopExp.const 18446744069414583341#64)
+Flapjack.HolLoopProg.assign 8 (Flapjack.HolLoopExp.const 18446744069414583343#64)
 
 def loopBody149_9 : HolLoopProg 64 :=
 .mark loopBody149_8
@@ -57,7 +57,7 @@ def loopBody149_15 : HolLoopProg 64 :=
 .mark loopBody149_14
 
 def loopBody149_16 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.call none (some 212) [4, 5, 6, 7, 8, 9, 10, 11] none
+Flapjack.HolLoopProg.call none (some 210) [4, 5, 6, 7, 8, 9, 10, 11] none
 
 def loopBody149_17 : HolLoopProg 64 :=
 .mark loopBody149_16

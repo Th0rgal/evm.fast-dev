@@ -9,71 +9,18 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body163_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.rStruct
-    [Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "x"))
-        (Flapjack.Exp.const 1#64)])
-
-def body163_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
-
-def body163_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal
-  (Flapjack.Exp.op Flapjack.BinOp.and
-    [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "x"), Flapjack.Exp.const 1#64])
-  (Flapjack.Exp.const 0#64)) body163_0 body163_1
-
-def body163_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.rStruct
-    [Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 63#64)],
-      Flapjack.Exp.op Flapjack.BinOp.or
-        [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 1#64),
-          Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.rField 4 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-            (Flapjack.Exp.const 63#64)]])
-
-def body163_4 : Prog (BitVec 64) :=
-.decCall ("s") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_add_carry") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "m"]) body163_3
-
-def body163_5 : Prog (BitVec 64) :=
-.seq body163_2 body163_4
+Flapjack.Prog.call none "u256_mulmod"
+  [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "b",
+    Flapjack.Exp.rStruct
+      [Flapjack.Exp.const 13822214165235122497#64, Flapjack.Exp.const 13451932020343611451#64,
+        Flapjack.Exp.const 18446744073709551614#64, Flapjack.Exp.const 18446744073709551615#64]]
 
 def originalData163 : Decl (BitVec 64) :=
-.function { name := "mod_half", inline := false, exported := false, params := [("x", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("m", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body163_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fn_mul", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
+  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body163_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData163 : Decl (BitVec 64) :=
-.function { name := "mod_half", inline := false, exported := false, params := [("x", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("m", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body163_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fn_mul", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
+  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body163_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original163 := Pancake.PanLang.declToHOL originalData163
 def simplified163 := Pancake.PanLang.declToHOL simplifiedData163
 end InitECandidate.Proofs.FrontendStages.Declarations

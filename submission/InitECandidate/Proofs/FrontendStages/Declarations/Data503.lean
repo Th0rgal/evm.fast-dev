@@ -9,11 +9,12 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body503_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def body503_1 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "stack_push_word"
-  [Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.const 256#64, Flapjack.Exp.var Flapjack.VarKind.local "bl"]]
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64])]
 
 def body503_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -28,33 +29,21 @@ def body503_5 : Prog (BitVec 64) :=
 .seq body503_1 body503_4
 
 def body503_6 : Prog (BitVec 64) :=
-.decCall ("bl") (Flapjack.Shape.one) ("u256_bit_length") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) body503_5
+.seq body503_0 body503_5
 
 def body503_7 : Prog (BitVec 64) :=
-.seq body503_0 body503_6
+.seq body503_0 body503_1
 
 def body503_8 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body503_7
+.seq body503_7 body503_2
 
 def body503_9 : Prog (BitVec 64) :=
-.seq body503_1 body503_2
-
-def body503_10 : Prog (BitVec 64) :=
-.seq body503_9 body503_3
-
-def body503_11 : Prog (BitVec 64) :=
-.decCall ("bl") (Flapjack.Shape.one) ("u256_bit_length") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) body503_10
-
-def body503_12 : Prog (BitVec 64) :=
-.seq body503_0 body503_11
-
-def body503_13 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body503_12
+.seq body503_8 body503_3
 
 def originalData503 : Decl (BitVec 64) :=
-.function { name := "op_clz", inline := false, exported := false, params := [], body := body503_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_gas", inline := false, exported := false, params := [], body := body503_6, returnShape := (Flapjack.Shape.one) }
 def simplifiedData503 : Decl (BitVec 64) :=
-.function { name := "op_clz", inline := false, exported := false, params := [], body := body503_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_gas", inline := false, exported := false, params := [], body := body503_9, returnShape := (Flapjack.Shape.one) }
 def original503 := Pancake.PanLang.declToHOL originalData503
 def simplified503 := Pancake.PanLang.declToHOL simplifiedData503
 end InitECandidate.Proofs.FrontendStages.Declarations

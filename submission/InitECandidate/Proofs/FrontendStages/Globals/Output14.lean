@@ -1,5 +1,7 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data14
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -53,6 +55,7 @@ def globalBody14_10 : Prog (BitVec 64) :=
 .dec ("p") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
   (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 24#64])) globalBody14_9
 
-def globalData14 : Decl (BitVec 64) := .function { name := "scratch_alloc", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := globalBody14_10, returnShape := (Flapjack.Shape.one) }
+def globalData14 : Decl (BitVec 64) :=
+.function { name := "scratch_alloc", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := globalBody14_10, returnShape := (Flapjack.Shape.one) }
 def globalOutput14 := Pancake.PanLang.declToHOL globalData14
 end InitECandidate.Proofs.FrontendStages.Declarations

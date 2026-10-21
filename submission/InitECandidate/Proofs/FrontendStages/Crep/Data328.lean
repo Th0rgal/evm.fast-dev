@@ -9,12 +9,26 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody328_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return
+Flapjack.CrepProg.call (some ([1], none)) "htab_set"
   [Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 16#64])]
+      (Flapjack.CrepExp.op Flapjack.BinOp.add
+        [Flapjack.CrepExp.load
+            (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 176#64]),
+          Flapjack.CrepExp.const 72#64]),
+    Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 1#64]
 
-def data328 : CrepProg (BitVec 64) := crepBody328_0
+def crepBody328_1 : CrepProg (BitVec 64) :=
+.dec 1 (Flapjack.CrepExp.const 0#64) crepBody328_0
+
+def crepBody328_2 : CrepProg (BitVec 64) :=
+Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
+
+def crepBody328_3 : CrepProg (BitVec 64) :=
+.seq crepBody328_1 crepBody328_2
+
+def data328 : CrepProg (BitVec 64) := crepBody328_3
 def output328 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [115#8, 116#8, 97#8, 116#8, 101#8, 95#8, 115#8, 110#8, 97#8, 112#8, 115#8, 104#8, 111#8, 116#8], [], crepProgToHOL data328)
+  [114#8, 101#8, 99#8, 111#8, 114#8, 100#8, 95#8, 112#8, 114#8, 101#8, 95#8, 115#8, 116#8, 97#8, 116#8, 101#8, 95#8,
+    114#8, 101#8, 97#8, 100#8], [0], crepProgToHOL data328)
 end InitECandidate.Proofs.FrontendStages.Crep

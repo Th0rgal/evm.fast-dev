@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify419
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement403
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original419_eq : original419 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_add_balance_change := by
+theorem original419_eq : original419 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_idx_start_account := by
   with_unfolding_all rfl
 #print axioms original419_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

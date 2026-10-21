@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data80
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate64
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -17,6 +20,7 @@ Flapjack.Prog.return
 def globalBody80_1 : Prog (BitVec 64) :=
 .decCall ("n") (Flapjack.Shape.one) ("u256_bit_length") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) globalBody80_0
 
-def globalData80 : Decl (BitVec 64) := .function { name := "u256_byte_length", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody80_1, returnShape := (Flapjack.Shape.one) }
+def globalData80 : Decl (BitVec 64) :=
+.function { name := "u256_byte_length", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody80_1, returnShape := (Flapjack.Shape.one) }
 def globalOutput80 := Pancake.PanLang.declToHOL globalData80
 end InitECandidate.Proofs.FrontendStages.Declarations

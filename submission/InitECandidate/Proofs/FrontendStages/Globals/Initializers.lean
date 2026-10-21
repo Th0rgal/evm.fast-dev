@@ -25,20 +25,10 @@ theorem renameGlobals_eq : fpermDecsHOL globalStart globalNewStart globalDeclara
 
 theorem compileExceptions_eq (context : PanGlobalsContextExact 64) :
     compileDecsExactHOL context exceptionDeclarations = ([], [], exceptionDeclarations, context) := by
-  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105,
-    simplifiedData105, simplified188, simplifiedData188, simplified223, simplifiedData223,
-    simplified224, simplifiedData224, simplified243, simplifiedData243,
-    simplified298, simplifiedData298, simplified350, simplifiedData350,
-    simplified438, simplifiedData438, simplified883, simplifiedData883,
-    declToHOL, compileDecsExactHOL]
+  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified217, simplifiedData217, simplified218, simplifiedData218, simplified237, simplifiedData237, simplified292, simplifiedData292, simplified344, simplifiedData344, simplified432, simplifiedData432, simplified841, simplifiedData841, declToHOL, compileDecsExactHOL]
 
 theorem renameExceptions_eq : fpermDecsHOL globalStart globalNewStart exceptionDeclarations = exceptionDeclarations := by
-  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105,
-    simplifiedData105, simplified188, simplifiedData188, simplified223, simplifiedData223,
-    simplified224, simplifiedData224, simplified243, simplifiedData243,
-    simplified298, simplifiedData298, simplified350, simplifiedData350,
-    simplified438, simplifiedData438, simplified883, simplifiedData883,
-    declToHOL, fpermDecsHOL]
+  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified217, simplifiedData217, simplified218, simplifiedData218, simplified237, simplifiedData237, simplified292, simplifiedData292, simplified344, simplifiedData344, simplified432, simplifiedData432, simplified841, simplifiedData841, declToHOL, fpermDecsHOL]
 
 #print axioms compileGlobals_eq
 #print axioms renameGlobals_eq

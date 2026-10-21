@@ -1,5 +1,7 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data0
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -129,7 +131,7 @@ Flapjack.Prog.storeByte
   (Flapjack.Exp.op Flapjack.BinOp.add
     [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.var Flapjack.VarKind.local "n"])
   (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 744#64]))
+    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 536#64]))
 
 def globalBody0_31 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "output_write"
@@ -192,6 +194,7 @@ def globalBody0_47 : Prog (BitVec 64) :=
 def globalBody0_48 : Prog (BitVec 64) :=
 .seq globalBody0_26 globalBody0_47
 
-def globalData0 : Decl (BitVec 64) := .function { name := "main'", inline := false, exported := false, params := [], body := globalBody0_48, returnShape := (Flapjack.Shape.one) }
+def globalData0 : Decl (BitVec 64) :=
+.function { name := "main'", inline := false, exported := false, params := [], body := globalBody0_48, returnShape := (Flapjack.Shape.one) }
 def globalOutput0 := Pancake.PanLang.declToHOL globalData0
 end InitECandidate.Proofs.FrontendStages.Declarations

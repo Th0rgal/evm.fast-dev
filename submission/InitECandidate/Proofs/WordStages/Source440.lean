@@ -2,166 +2,405 @@ import InitECandidate.Proofs.WordStages.Source424
 import Flapjack.Pancake.WordLang
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
+open Flapjack
 namespace InitECandidate.Proofs.WordStages
+def sourceBody440_0 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.skip
+
+def sourceBody440_1 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 20 (Flapjack.WordLangExpHOL.var 2)
+
+def sourceBody440_2 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.raise 20
+
+def sourceBody440_3 : WordLangProgHOL (BitVec 64) :=
+.call (some (([10]), ((Flapjack.Spt.bs (Flapjack.Spt.bs (Flapjack.Spt.ls PUnit.unit) PUnit.unit (Flapjack.Spt.ls PUnit.unit)) PUnit.unit
+    Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), sourceBody440_0, 440, 2)) (some 435) ([20]) (some (20, sourceBody440_2, 440, 3))
+
+def sourceBody440_4 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.tick
+
+def sourceBody440_5 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_3 sourceBody440_4
+
+def sourceBody440_6 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_5 sourceBody440_0
+
+def sourceBody440_7 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_1 sourceBody440_6
+
+def sourceBody440_8 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 20
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+      [Flapjack.WordLangExpHOL.var 10, Flapjack.WordLangExpHOL.const 24#64]))
+
+def sourceBody440_9 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 16
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+      [Flapjack.WordLangExpHOL.var 20, Flapjack.WordLangExpHOL.const 8#64]))
+
+def sourceBody440_10 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 24
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+      [Flapjack.WordLangExpHOL.var 20, Flapjack.WordLangExpHOL.const 0#64]))
+
+def sourceBody440_11 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 0#64)
+
+def sourceBody440_12 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 8)
+
+def sourceBody440_13 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 22 (Flapjack.WordLangExpHOL.var 16)
+
+def sourceBody440_14 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.const 1#64)
+
+def sourceBody440_15 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.const 0#64)
+
+def sourceBody440_16 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.less) 14 (Flapjack.WordRegImm.reg 22) sourceBody440_14 sourceBody440_15
+
+def sourceBody440_17 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_16 sourceBody440_4
+
+def sourceBody440_18 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.var 14)
+
+def sourceBody440_19 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+      [Flapjack.WordLangExpHOL.var 24,
+        Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl (Flapjack.WordLangExpHOL.var 8)
+          (Flapjack.WordLangExpHOL.const 4#64)]))
+
+def sourceBody440_20 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 22 (Flapjack.WordLangExpHOL.var 4)
+
+def sourceBody440_21 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.equal) 14 (Flapjack.WordRegImm.reg 22) sourceBody440_14 sourceBody440_15
+
+def sourceBody440_22 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_21 sourceBody440_4
+
+def sourceBody440_23 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+      [Flapjack.WordLangExpHOL.var 24,
+        Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl (Flapjack.WordLangExpHOL.var 8)
+          (Flapjack.WordLangExpHOL.const 4#64),
+        Flapjack.WordLangExpHOL.const 8#64]))
+
+def sourceBody440_24 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 22 (Flapjack.WordLangExpHOL.var 6)
+
+def sourceBody440_25 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.lower) 14 (Flapjack.WordRegImm.reg 22) sourceBody440_14 sourceBody440_15
+
+def sourceBody440_26 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_25 sourceBody440_4
+
+def sourceBody440_27 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 18
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
+    [Flapjack.WordLangExpHOL.var 24,
+      Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl (Flapjack.WordLangExpHOL.var 8)
+        (Flapjack.WordLangExpHOL.const 4#64),
+      Flapjack.WordLangExpHOL.const 8#64])
+
+def sourceBody440_28 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 6)
+
+def sourceBody440_29 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 22 (Flapjack.WordLangExpHOL.var 14)
+
+def sourceBody440_30 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 18) 22
+
+def sourceBody440_31 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_30 sourceBody440_0
+
+def sourceBody440_32 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_29 sourceBody440_31
+
+def sourceBody440_33 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_32 sourceBody440_0
+
+def sourceBody440_34 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_28 sourceBody440_33
+
+def sourceBody440_35 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_34
+
+def sourceBody440_36 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_27 sourceBody440_35
+
+def sourceBody440_37 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_36
+
+def sourceBody440_38 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.notEqual) 12 (Flapjack.WordRegImm.imm 0#64) sourceBody440_37 sourceBody440_0
+
+def sourceBody440_39 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_38 sourceBody440_4
+
+def sourceBody440_40 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_39 sourceBody440_0
+
+def sourceBody440_41 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_18 sourceBody440_40
+
+def sourceBody440_42 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_26 sourceBody440_41
+
+def sourceBody440_43 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_24 sourceBody440_42
+
+def sourceBody440_44 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_23 sourceBody440_43
+
+def sourceBody440_45 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 18 (Flapjack.WordLangExpHOL.const 0#64)
+
+def sourceBody440_46 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.return 0 [18]
+
+def sourceBody440_47 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_46 sourceBody440_0
+
+def sourceBody440_48 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_45 sourceBody440_47
+
+def sourceBody440_49 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_44 sourceBody440_48
+
+def sourceBody440_50 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.notEqual) 12 (Flapjack.WordRegImm.imm 0#64) sourceBody440_49 sourceBody440_0
+
+def sourceBody440_51 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_50 sourceBody440_4
+
+def sourceBody440_52 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_51 sourceBody440_0
+
+def sourceBody440_53 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_18 sourceBody440_52
+
+def sourceBody440_54 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_22 sourceBody440_53
+
+def sourceBody440_55 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_20 sourceBody440_54
+
+def sourceBody440_56 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_19 sourceBody440_55
+
+def sourceBody440_57 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 18
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 1#64])
+
+def sourceBody440_58 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 18)
+
+def sourceBody440_59 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_58 sourceBody440_0
+
+def sourceBody440_60 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_59 sourceBody440_0
+
+def sourceBody440_61 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_57 sourceBody440_60
+
+def sourceBody440_62 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_61
+
+def sourceBody440_63 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_56 sourceBody440_62
+
+def sourceBody440_64 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.continue 0
+
+def sourceBody440_65 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_63 sourceBody440_64
+
+def sourceBody440_66 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.break 0
+
+def sourceBody440_67 : WordLangProgHOL (BitVec 64) :=
+.ite (Flapjack.Cmp.notEqual) 12 (Flapjack.WordRegImm.imm 0#64) sourceBody440_65 sourceBody440_66
+
+def sourceBody440_68 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_67 sourceBody440_4
+
+def sourceBody440_69 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_68 sourceBody440_0
+
+def sourceBody440_70 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_18 sourceBody440_69
+
+def sourceBody440_71 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_17 sourceBody440_70
+
+def sourceBody440_72 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_13 sourceBody440_71
+
+def sourceBody440_73 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_12 sourceBody440_72
+
+def sourceBody440_74 : WordLangProgHOL (BitVec 64) :=
+.loop (Flapjack.Spt.bs
+  (Flapjack.Spt.bs (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit)) PUnit.unit
+    (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) PUnit.unit
+      (Flapjack.Spt.bs (Flapjack.Spt.ls PUnit.unit) PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
+  PUnit.unit Flapjack.Spt.ln) sourceBody440_73 (Flapjack.Spt.bs
+  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
+    (Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) PUnit.unit Flapjack.Spt.ln))
+  PUnit.unit Flapjack.Spt.ln)
+
+def sourceBody440_75 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_74 sourceBody440_4
+
+def sourceBody440_76 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_4 sourceBody440_75
+
+def sourceBody440_77 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 20)
+
+def sourceBody440_78 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 22 (Flapjack.WordLangExpHOL.const 16#64)
+
+def sourceBody440_79 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.raise 14
+
+def sourceBody440_80 : WordLangProgHOL (BitVec 64) :=
+.call (some (([18]), ((Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit)) PUnit.unit Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), sourceBody440_0, 440, 4)) (some 433) ([14, 22]) (some (14, sourceBody440_79, 440, 5))
+
+def sourceBody440_81 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_80 sourceBody440_4
+
+def sourceBody440_82 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_81 sourceBody440_0
+
+def sourceBody440_83 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_78 sourceBody440_82
+
+def sourceBody440_84 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_77 sourceBody440_83
+
+def sourceBody440_85 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 18)
+
+def sourceBody440_86 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.var 22)
+
+def sourceBody440_87 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 14) 12
+
+def sourceBody440_88 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_87 sourceBody440_0
+
+def sourceBody440_89 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_86 sourceBody440_88
+
+def sourceBody440_90 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_89 sourceBody440_0
+
+def sourceBody440_91 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_20 sourceBody440_90
+
+def sourceBody440_92 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_91
+
+def sourceBody440_93 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_85 sourceBody440_92
+
+def sourceBody440_94 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_93
+
+def sourceBody440_95 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 14
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 18, Flapjack.WordLangExpHOL.const 8#64])
+
+def sourceBody440_96 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_24 sourceBody440_90
+
+def sourceBody440_97 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_96
+
+def sourceBody440_98 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_95 sourceBody440_97
+
+def sourceBody440_99 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_98
+
+def sourceBody440_100 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_94 sourceBody440_99
+
+def sourceBody440_101 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.return 0 [14]
+
+def sourceBody440_102 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_101 sourceBody440_0
+
+def sourceBody440_103 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_15 sourceBody440_102
+
+def sourceBody440_104 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_100 sourceBody440_103
+
+def sourceBody440_105 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_84 sourceBody440_104
+
+def sourceBody440_106 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_105
+
+def sourceBody440_107 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_106
+
+def sourceBody440_108 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_76 sourceBody440_107
+
+def sourceBody440_109 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_11 sourceBody440_108
+
+def sourceBody440_110 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_109
+
+def sourceBody440_111 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_10 sourceBody440_110
+
+def sourceBody440_112 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_111
+
+def sourceBody440_113 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_9 sourceBody440_112
+
+def sourceBody440_114 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_113
+
+def sourceBody440_115 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_8 sourceBody440_114
+
+def sourceBody440_116 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_115
+
+def sourceBody440_117 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_7 sourceBody440_116
+
+def sourceBody440_118 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_117
+
+def sourceBody440_119 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody440_0 sourceBody440_118
+
 def source440 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-(440, 1,
-  Flapjack.WordLangProgHOL.seq
-    (Flapjack.WordLangProgHOL.seq
-      (Flapjack.WordLangProgHOL.seq
-        (Flapjack.WordLangProgHOL.seq
-          (Flapjack.WordLangProgHOL.seq
-            (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-              (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                (Flapjack.WordLangProgHOL.seq
-                  (Flapjack.WordLangProgHOL.seq
-                    (Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 20#64))
-                    (Flapjack.WordLangProgHOL.seq
-                      (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.const 64#64))
-                      (Flapjack.WordLangProgHOL.seq
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.call
-                            (some
-                              ([4], (Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln), Flapjack.WordLangProgHOL.skip, 440,
-                                2))
-                            (some 182) [8, 2] (some (8, Flapjack.WordLangProgHOL.raise 8, 440, 3)))
-                          Flapjack.WordLangProgHOL.tick)
-                        Flapjack.WordLangProgHOL.skip)))
-                  (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                    (Flapjack.WordLangProgHOL.seq
-                      (Flapjack.WordLangProgHOL.assign 8
-                        (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-                          [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-                              [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-                                Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-                                  (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength)
-                                  (Flapjack.WordLangExpHOL.const 1#64)],
-                            Flapjack.WordLangExpHOL.const 216#64]))
-                      (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 4))
-                          (Flapjack.WordLangProgHOL.seq
-                            (Flapjack.WordLangProgHOL.seq
-                              (Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.var 2))
-                              (Flapjack.WordLangProgHOL.seq
-                                (Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 8) 6)
-                                Flapjack.WordLangProgHOL.skip))
-                            Flapjack.WordLangProgHOL.skip))))))))
-            (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-              (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                (Flapjack.WordLangProgHOL.seq
-                  (Flapjack.WordLangProgHOL.seq
-                    (Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 28#64))
-                    (Flapjack.WordLangProgHOL.seq
-                      (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.const 64#64))
-                      (Flapjack.WordLangProgHOL.seq
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.call
-                            (some
-                              ([4], (Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln), Flapjack.WordLangProgHOL.skip, 440,
-                                4))
-                            (some 182) [8, 2] (some (8, Flapjack.WordLangProgHOL.raise 8, 440, 5)))
-                          Flapjack.WordLangProgHOL.tick)
-                        Flapjack.WordLangProgHOL.skip)))
-                  (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                    (Flapjack.WordLangProgHOL.seq
-                      (Flapjack.WordLangProgHOL.assign 8
-                        (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-                          [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-                              [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-                                Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-                                  (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength)
-                                  (Flapjack.WordLangExpHOL.const 1#64)],
-                            Flapjack.WordLangExpHOL.const 232#64]))
-                      (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 4))
-                          (Flapjack.WordLangProgHOL.seq
-                            (Flapjack.WordLangProgHOL.seq
-                              (Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.var 2))
-                              (Flapjack.WordLangProgHOL.seq
-                                (Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 8) 6)
-                                Flapjack.WordLangProgHOL.skip))
-                            Flapjack.WordLangProgHOL.skip)))))))))
-          (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-            (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-              (Flapjack.WordLangProgHOL.seq
-                (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 60#64))
-                  (Flapjack.WordLangProgHOL.seq
-                    (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.const 64#64))
-                    (Flapjack.WordLangProgHOL.seq
-                      (Flapjack.WordLangProgHOL.seq
-                        (Flapjack.WordLangProgHOL.call
-                          (some
-                            ([4], (Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln), Flapjack.WordLangProgHOL.skip, 440, 6))
-                          (some 182) [8, 2] (some (8, Flapjack.WordLangProgHOL.raise 8, 440, 7)))
-                        Flapjack.WordLangProgHOL.tick)
-                      Flapjack.WordLangProgHOL.skip)))
-                (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                  (Flapjack.WordLangProgHOL.seq
-                    (Flapjack.WordLangProgHOL.assign 8
-                      (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-                        [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-                            [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-                              Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-                                (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength)
-                                (Flapjack.WordLangExpHOL.const 1#64)],
-                          Flapjack.WordLangExpHOL.const 240#64]))
-                    (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                      (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 4))
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.seq
-                            (Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.var 2))
-                            (Flapjack.WordLangProgHOL.seq
-                              (Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 8) 6)
-                              Flapjack.WordLangProgHOL.skip))
-                          Flapjack.WordLangProgHOL.skip)))))))))
-        (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-          (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-            (Flapjack.WordLangProgHOL.seq
-              (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 64#64))
-                (Flapjack.WordLangProgHOL.seq
-                  (Flapjack.WordLangProgHOL.seq
-                    (Flapjack.WordLangProgHOL.call
-                      (some ([4], (Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln), Flapjack.WordLangProgHOL.skip, 440, 8))
-                      (some 68) [8] (some (8, Flapjack.WordLangProgHOL.raise 8, 440, 9)))
-                    Flapjack.WordLangProgHOL.tick)
-                  Flapjack.WordLangProgHOL.skip))
-              (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                (Flapjack.WordLangProgHOL.seq
-                  (Flapjack.WordLangProgHOL.assign 8
-                    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-                      [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-                          [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-                            Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-                              (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength)
-                              (Flapjack.WordLangExpHOL.const 1#64)],
-                        Flapjack.WordLangExpHOL.const 248#64]))
-                  (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-                    (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 4))
-                      (Flapjack.WordLangProgHOL.seq
-                        (Flapjack.WordLangProgHOL.seq
-                          (Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.var 2))
-                          (Flapjack.WordLangProgHOL.seq
-                            (Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 8) 6)
-                            Flapjack.WordLangProgHOL.skip))
-                        Flapjack.WordLangProgHOL.skip)))))))))
-      (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-        (Flapjack.WordLangProgHOL.seq
-          (Flapjack.WordLangProgHOL.assign 4
-            (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-              [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-                  [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-                    Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-                      (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength)
-                      (Flapjack.WordLangExpHOL.const 1#64)],
-                Flapjack.WordLangExpHOL.const 224#64]))
-          (Flapjack.WordLangProgHOL.seq Flapjack.WordLangProgHOL.skip
-            (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 0#64))
-              (Flapjack.WordLangProgHOL.seq
-                (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 8))
-                  (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.store (Flapjack.WordLangExpHOL.var 4) 2)
-                    Flapjack.WordLangProgHOL.skip))
-                Flapjack.WordLangProgHOL.skip))))))
-    (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.assign 4 (Flapjack.WordLangExpHOL.const 0#64))
-      (Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.return 0 [4]) Flapjack.WordLangProgHOL.skip)))
+  (440, 4, sourceBody440_119)
 end InitECandidate.Proofs.WordStages

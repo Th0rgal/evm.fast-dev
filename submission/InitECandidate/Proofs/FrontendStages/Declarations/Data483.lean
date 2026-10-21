@@ -9,10 +9,10 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body483_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 3#64]
 
 def body483_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (none, none)) "stack_push_bool" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def body483_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -27,7 +27,7 @@ def body483_5 : Prog (BitVec 64) :=
 .seq body483_1 body483_4
 
 def body483_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body483_5
+.decCall ("r") (Flapjack.Shape.one) ("u256_lt") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body483_5
 
 def body483_7 : Prog (BitVec 64) :=
 .seq body483_0 body483_6
@@ -45,7 +45,7 @@ def body483_11 : Prog (BitVec 64) :=
 .seq body483_10 body483_3
 
 def body483_12 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body483_11
+.decCall ("r") (Flapjack.Shape.one) ("u256_lt") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body483_11
 
 def body483_13 : Prog (BitVec 64) :=
 .seq body483_0 body483_12
@@ -57,9 +57,9 @@ def body483_15 : Prog (BitVec 64) :=
 .decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body483_14
 
 def originalData483 : Decl (BitVec 64) :=
-.function { name := "op_mod", inline := false, exported := false, params := [], body := body483_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_lt", inline := false, exported := false, params := [], body := body483_9, returnShape := (Flapjack.Shape.one) }
 def simplifiedData483 : Decl (BitVec 64) :=
-.function { name := "op_mod", inline := false, exported := false, params := [], body := body483_15, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_lt", inline := false, exported := false, params := [], body := body483_15, returnShape := (Flapjack.Shape.one) }
 def original483 := Pancake.PanLang.declToHOL originalData483
 def simplified483 := Pancake.PanLang.declToHOL simplifiedData483
 end InitECandidate.Proofs.FrontendStages.Declarations

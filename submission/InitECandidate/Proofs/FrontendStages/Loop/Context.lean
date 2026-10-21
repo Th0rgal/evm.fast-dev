@@ -295,18 +295,26 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode
       [104#8, 116#8, 97#8, 98#8, 95#8, 110#8, 101#8, 119#8, 95#8, 115#8, 99#8, 114#8, 97#8, 116#8, 99#8, 104#8],
     [0, 1], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 104#8, 97#8, 115#8, 104#8], [0, 1],
-    PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
-      [104#8, 116#8, 97#8, 98#8, 95#8, 102#8, 105#8, 110#8, 100#8, 95#8, 115#8, 108#8, 111#8, 116#8],
+      [104#8, 116#8, 97#8, 98#8, 95#8, 102#8, 105#8, 114#8, 115#8, 116#8, 95#8, 100#8, 105#8, 102#8, 102#8],
+    [0, 1, 2], PUnit.unit),
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+      [104#8, 116#8, 97#8, 98#8, 95#8, 102#8, 105#8, 110#8, 100#8, 95#8, 108#8, 101#8, 97#8, 102#8],
     [0, 1], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 103#8, 101#8, 116#8], [0, 1],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 104#8, 97#8, 115#8], [0, 1],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
-      [104#8, 116#8, 97#8, 98#8, 95#8, 105#8, 110#8, 115#8, 101#8, 114#8, 116#8, 95#8, 114#8, 97#8, 119#8],
+      [104#8, 116#8, 97#8, 98#8, 95#8, 110#8, 101#8, 119#8, 95#8, 110#8, 111#8, 100#8, 101#8],
+    [0], PUnit.unit),
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+      [104#8, 116#8, 97#8, 98#8, 95#8, 110#8, 101#8, 119#8, 95#8, 108#8, 101#8, 97#8, 102#8],
     [0, 1, 2], PUnit.unit),
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+      [104#8, 116#8, 97#8, 98#8, 95#8, 110#8, 101#8, 119#8, 95#8, 105#8, 110#8, 116#8, 101#8, 114#8, 110#8, 97#8,
+        108#8],
+    [0, 1], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 103#8, 114#8, 111#8, 119#8], [0],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 115#8, 101#8, 116#8], [0, 1, 2],
@@ -319,8 +327,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 99#8, 111#8, 117#8, 110#8, 116#8],
     [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 99#8, 97#8, 112#8], [0], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 115#8, 108#8, 111#8, 116#8], [0, 1],
-    PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 105#8, 116#8, 101#8, 109#8], [0, 1],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 107#8, 101#8, 121#8, 115#8], [0],
@@ -331,24 +337,8 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
       [104#8, 116#8, 97#8, 98#8, 95#8, 99#8, 111#8, 112#8, 121#8, 95#8, 115#8, 99#8, 114#8, 97#8, 116#8, 99#8, 104#8],
     [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 105#8, 110#8, 105#8, 116#8, 95#8, 98#8,
-        108#8, 111#8, 99#8, 107#8],
-    [0, 1, 2, 3, 4], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
       [115#8, 101#8, 99#8, 112#8, 50#8, 53#8, 54#8, 107#8, 49#8, 95#8, 105#8, 110#8, 105#8, 116#8],
     [], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 109#8, 111#8, 100#8, 109#8, 117#8, 108#8,
-        95#8, 97#8, 116#8],
-    [0, 1, 2, 3, 4, 5, 6, 7, 8], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 109#8, 111#8, 100#8, 109#8, 117#8, 108#8,
-        95#8, 112#8],
-    [0, 1, 2, 3, 4, 5, 6, 7], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 109#8, 111#8, 100#8, 109#8, 117#8, 108#8,
-        95#8, 110#8],
-    [0, 1, 2, 3, 4, 5, 6, 7], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 97#8, 100#8, 100#8], [0, 1, 2, 3, 4, 5, 6, 7],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 115#8, 117#8, 98#8], [0, 1, 2, 3, 4, 5, 6, 7],
@@ -359,10 +349,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 109#8, 117#8, 108#8], [0, 1, 2, 3, 4, 5, 6, 7],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 115#8, 113#8, 114#8], [0, 1, 2, 3], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 112#8, 95#8, 112#8, 111#8, 119#8,
-        52#8],
-    [0, 1, 2, 3, 4, 5, 6, 7], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 112#8, 111#8, 119#8], [0, 1, 2, 3, 4, 5, 6, 7],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
@@ -381,10 +367,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 110#8, 95#8, 97#8, 100#8, 100#8], [0, 1, 2, 3, 4, 5, 6, 7],
     PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 110#8, 95#8, 112#8, 111#8, 119#8,
-        52#8],
-    [0, 1, 2, 3, 4, 5, 6, 7], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 110#8, 95#8, 112#8, 111#8, 119#8], [0, 1, 2, 3, 4, 5, 6, 7],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
@@ -399,10 +381,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
     [0, 1, 2, 3, 4, 5, 6, 7, 8], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode
       [101#8, 99#8, 95#8, 105#8, 115#8, 95#8, 105#8, 110#8, 102#8, 105#8, 110#8, 105#8, 116#8, 121#8],
-    [0], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [115#8, 101#8, 99#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 110#8, 111#8, 114#8, 109#8, 97#8, 108#8,
-        105#8, 122#8, 101#8],
     [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [101#8, 99#8, 95#8, 100#8, 111#8, 117#8, 98#8, 108#8, 101#8], [0],
     PUnit.unit),
@@ -1555,6 +1533,8 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode
       [98#8, 108#8, 97#8, 107#8, 101#8, 50#8, 95#8, 105#8, 110#8, 105#8, 116#8],
     [], PUnit.unit),
+  (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 108#8, 97#8, 107#8, 101#8, 50#8, 95#8, 103#8],
+    [0, 1, 2, 3, 4, 5], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 108#8, 97#8, 107#8, 101#8, 50#8, 98#8, 95#8, 102#8],
     [0, 1, 2, 3, 4, 5], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 110#8, 95#8, 102#8, 114#8, 111#8, 109#8, 95#8, 98#8, 101#8],
@@ -1617,29 +1597,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode
       [112#8, 114#8, 101#8, 95#8, 112#8, 50#8, 53#8, 54#8, 118#8, 101#8, 114#8, 105#8, 102#8, 121#8],
     [], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 105#8, 110#8, 105#8, 116#8],
-    [], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 109#8, 111#8, 100#8, 109#8, 117#8,
-        108#8],
-    [0, 1, 2, 3, 4, 5, 6, 7], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 112#8, 50#8, 95#8, 97#8, 100#8,
-        100#8],
-    [0, 1, 2], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 112#8, 50#8, 95#8, 115#8,
-        117#8, 98#8],
-    [0, 1, 2], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 112#8, 50#8, 95#8, 109#8,
-        117#8, 108#8],
-    [0, 1, 2], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 102#8, 105#8, 108#8, 108#8, 95#8,
-        103#8, 97#8, 109#8, 109#8, 97#8],
-    [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 105#8, 110#8, 105#8, 116#8], [],
     PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 113#8, 95#8, 97#8, 100#8, 100#8], [0, 1, 2, 3, 4, 5, 6, 7],
@@ -1688,14 +1645,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
     [0, 1], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [101#8, 99#8, 112#8, 95#8, 105#8, 115#8, 95#8, 105#8, 110#8, 102#8],
     [0, 1], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 103#8, 49#8, 95#8, 100#8, 111#8,
-        117#8, 98#8, 108#8, 101#8],
-    [0, 1, 2, 3, 4, 5, 6, 7, 8], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 110#8, 50#8, 53#8, 52#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 103#8, 49#8, 95#8, 97#8, 100#8,
-        100#8],
-    [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [101#8, 99#8, 112#8, 95#8, 100#8, 111#8, 117#8, 98#8, 108#8, 101#8],
     [0, 1, 2], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [101#8, 99#8, 112#8, 95#8, 97#8, 100#8, 100#8], [0, 1, 2, 3],
@@ -1782,9 +1731,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
     [0, 1, 2, 3, 4, 5], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 108#8, 115#8, 95#8, 102#8, 112#8, 95#8, 100#8, 98#8, 108#8],
     [0, 1, 2, 3, 4, 5], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [102#8, 112#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 105#8, 110#8, 105#8, 116#8],
-    [], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 108#8, 115#8, 95#8, 102#8, 112#8, 95#8, 109#8, 117#8, 108#8],
     [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [98#8, 108#8, 115#8, 95#8, 102#8, 112#8, 95#8, 115#8, 113#8, 114#8],
@@ -1838,9 +1784,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
       [102#8, 112#8, 50#8, 95#8, 105#8, 115#8, 95#8, 122#8, 101#8, 114#8, 111#8],
     [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 50#8, 95#8, 101#8, 113#8], [0, 1], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [102#8, 112#8, 50#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 105#8, 110#8, 105#8, 116#8],
-    [], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 50#8, 95#8, 97#8, 100#8, 100#8], [0, 1, 2], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 50#8, 95#8, 115#8, 117#8, 98#8], [0, 1, 2], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 50#8, 95#8, 110#8, 101#8, 103#8], [0, 1], PUnit.unit),
@@ -1901,9 +1844,6 @@ def signatures : List (Flapjack.Basis.Pure.MlString.MlString × List Nat × Unit
   (Flapjack.Basis.Pure.MlString.MlString.implode
       [102#8, 112#8, 49#8, 50#8, 95#8, 102#8, 105#8, 110#8, 97#8, 108#8, 95#8, 101#8, 120#8, 112#8],
     [0, 1], PUnit.unit),
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-      [98#8, 108#8, 115#8, 95#8, 103#8, 49#8, 95#8, 97#8, 99#8, 99#8, 101#8, 108#8, 95#8, 105#8, 110#8, 105#8, 116#8],
-    [], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [103#8, 49#8, 95#8, 115#8, 101#8, 116#8, 95#8, 105#8, 110#8, 102#8],
     [0], PUnit.unit),
   (Flapjack.Basis.Pure.MlString.MlString.implode [103#8, 49#8, 95#8, 105#8, 115#8, 95#8, 105#8, 110#8, 102#8], [0],

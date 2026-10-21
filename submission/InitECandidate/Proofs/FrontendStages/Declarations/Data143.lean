@@ -9,21 +9,14 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body143_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "htab_slot"
-  [Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.var Flapjack.VarKind.local "i"]
-
-def body143_1 : Prog (BitVec 64) :=
-.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.const 56#64]),
-      Flapjack.Exp.panOp Flapjack.PanOp.mul
-        [Flapjack.Exp.var Flapjack.VarKind.local "ordinal", Flapjack.Exp.const 8#64]])) body143_0
+Flapjack.Prog.return
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.const 16#64]))
 
 def originalData143 : Decl (BitVec 64) :=
-.function { name := "htab_item", inline := false, exported := false, params := [("t", Flapjack.Shape.one), ("ordinal", Flapjack.Shape.one)], body := body143_1, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "htab_cap", inline := false, exported := false, params := [("t", Flapjack.Shape.one)], body := body143_0, returnShape := (Flapjack.Shape.one) }
 def simplifiedData143 : Decl (BitVec 64) :=
-.function { name := "htab_item", inline := false, exported := false, params := [("t", Flapjack.Shape.one), ("ordinal", Flapjack.Shape.one)], body := body143_1, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "htab_cap", inline := false, exported := false, params := [("t", Flapjack.Shape.one)], body := body143_0, returnShape := (Flapjack.Shape.one) }
 def original143 := Pancake.PanLang.declToHOL originalData143
 def simplified143 := Pancake.PanLang.declToHOL simplifiedData143
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data817
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate800
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -9,59 +12,74 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody817_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_sqr"
-  [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "y"]
+Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 10#64)
 
 def globalBody817_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_sqr"
-  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "x"]
+Flapjack.Prog.skip
 
 def globalBody817_2 : Prog (BitVec 64) :=
-.seq globalBody817_0 globalBody817_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 128#64)) globalBody817_0 globalBody817_1
 
 def globalBody817_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_mul"
-  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "rr",
-    Flapjack.Exp.var Flapjack.VarKind.local "x"]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 23800#64]
 
 def globalBody817_4 : Prog (BitVec 64) :=
 .seq globalBody817_2 globalBody817_3
 
 def globalBody817_5 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_add"
-  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "rr",
-    Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 512#64]),
-        Flapjack.Exp.const 288#64]]
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "err") (Flapjack.Exp.const 0#64)) globalBody817_0 globalBody817_1
 
 def globalBody817_6 : Prog (BitVec 64) :=
-.seq globalBody817_4 globalBody817_5
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 120#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "out")
 
 def globalBody817_7 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "heap_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
+.seq globalBody817_5 globalBody817_6
 
 def globalBody817_8 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "e")
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 128#64])
+  (Flapjack.Exp.const 256#64)
 
 def globalBody817_9 : Prog (BitVec 64) :=
 .seq globalBody817_7 globalBody817_8
 
 def globalBody817_10 : Prog (BitVec 64) :=
-.decCall ("e") (Flapjack.Shape.one) ("fp2_eq") ([Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "rr"]) globalBody817_9
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody817_11 : Prog (BitVec 64) :=
-.seq globalBody817_6 globalBody817_10
+.seq globalBody817_9 globalBody817_10
 
 def globalBody817_12 : Prog (BitVec 64) :=
-.decCall ("rr") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 96#64]) globalBody817_11
+.decCall ("err") (Flapjack.Shape.one) ("bls_map_fp2_to_g2_exec") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 88#64]),
+  Flapjack.Exp.var Flapjack.VarKind.local "out"]) globalBody817_11
 
 def globalBody817_13 : Prog (BitVec 64) :=
-.decCall ("l") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 96#64]) globalBody817_12
+.decCall ("out") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 256#64]) globalBody817_12
 
 def globalBody817_14 : Prog (BitVec 64) :=
-.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) globalBody817_13
+.seq globalBody817_4 globalBody817_13
 
-def globalData817 : Decl (BitVec 64) := .function { name := "g2_on_curve", inline := false, exported := false, params := [("x", Flapjack.Shape.one), ("y", Flapjack.Shape.one)], body := globalBody817_14, returnShape := (Flapjack.Shape.one) }
+def globalBody817_15 : Prog (BitVec 64) :=
+.dec ("n") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 96#64])) globalBody817_14
+
+def globalBody817_16 : Prog (BitVec 64) :=
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 112#64])) globalBody817_15
+
+def globalData817 : Decl (BitVec 64) :=
+.function { name := "pre_bls_map_fp2_to_g2", inline := false, exported := false, params := [], body := globalBody817_16, returnShape := (Flapjack.Shape.one) }
 def globalOutput817 := Pancake.PanLang.declToHOL globalData817
 end InitECandidate.Proofs.FrontendStages.Declarations

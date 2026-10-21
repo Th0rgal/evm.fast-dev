@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data32
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate16
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -24,6 +27,7 @@ Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "b")
 def globalBody32_4 : Prog (BitVec 64) :=
 .seq globalBody32_2 globalBody32_3
 
-def globalData32 : Decl (BitVec 64) := .function { name := "min", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody32_4, returnShape := (Flapjack.Shape.one) }
+def globalData32 : Decl (BitVec 64) :=
+.function { name := "min", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody32_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput32 := Pancake.PanLang.declToHOL globalData32
 end InitECandidate.Proofs.FrontendStages.Declarations

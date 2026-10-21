@@ -18,7 +18,7 @@ Flapjack.CrepProg.skip
 
 def crepBody4_3 : CrepProg (BitVec 64) :=
 .ite (Flapjack.CrepExp.cmp Flapjack.Cmp.lower
-  (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.const 33806089496#64, Flapjack.CrepExp.var 1])
+  (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.const 2952790016#64, Flapjack.CrepExp.var 1])
   (Flapjack.CrepExp.var 0)) crepBody4_1 crepBody4_2
 
 def crepBody4_4 : CrepProg (BitVec 64) :=
@@ -28,7 +28,7 @@ def crepBody4_5 : CrepProg (BitVec 64) :=
 .dec 3 (Flapjack.CrepExp.const 0#64) crepBody4_4
 
 def crepBody4_6 : CrepProg (BitVec 64) :=
-.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.lower (Flapjack.CrepExp.const 33806089496#64) (Flapjack.CrepExp.var 2)) crepBody4_5 crepBody4_2
+.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.lower (Flapjack.CrepExp.const 2952790016#64) (Flapjack.CrepExp.var 2)) crepBody4_5 crepBody4_2
 
 def crepBody4_7 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.store (Flapjack.CrepExp.var 3) (Flapjack.CrepExp.var 4)

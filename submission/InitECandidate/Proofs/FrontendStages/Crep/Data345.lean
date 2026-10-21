@@ -12,7 +12,7 @@ def crepBody345_0 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([1], none)) "get_account_optional" [Flapjack.CrepExp.var 0]
 
 def crepBody345_1 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([1], none)) "acct_empty" []
+Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
 
 def crepBody345_2 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.skip
@@ -21,7 +21,7 @@ def crepBody345_3 : CrepProg (BitVec 64) :=
 .ite (Flapjack.CrepExp.cmp Flapjack.Cmp.equal (Flapjack.CrepExp.var 1) (Flapjack.CrepExp.const 1#64)) crepBody345_1 crepBody345_2
 
 def crepBody345_4 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return [Flapjack.CrepExp.var 1]
+Flapjack.CrepProg.return [Flapjack.CrepExp.const 1#64]
 
 def crepBody345_5 : CrepProg (BitVec 64) :=
 .seq crepBody345_3 crepBody345_4
@@ -34,5 +34,6 @@ def crepBody345_7 : CrepProg (BitVec 64) :=
 
 def data345 : CrepProg (BitVec 64) := crepBody345_7
 def output345 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [103#8, 101#8, 116#8, 95#8, 97#8, 99#8, 99#8, 111#8, 117#8, 110#8, 116#8], [0], crepProgToHOL data345)
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+  [97#8, 99#8, 99#8, 111#8, 117#8, 110#8, 116#8, 95#8, 101#8, 120#8, 105#8, 115#8, 116#8, 115#8], [0], crepProgToHOL data345)
 end InitECandidate.Proofs.FrontendStages.Crep

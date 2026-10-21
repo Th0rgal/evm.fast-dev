@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data36
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate20
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -14,6 +17,7 @@ Flapjack.Prog.return (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.l
 def globalBody36_1 : Prog (BitVec 64) :=
 .decCall ("qr") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("udivmod") ([Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "b"]) globalBody36_0
 
-def globalData36 : Decl (BitVec 64) := .function { name := "umod", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody36_1, returnShape := (Flapjack.Shape.one) }
+def globalData36 : Decl (BitVec 64) :=
+.function { name := "umod", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody36_1, returnShape := (Flapjack.Shape.one) }
 def globalOutput36 := Pancake.PanLang.declToHOL globalData36
 end InitECandidate.Proofs.FrontendStages.Declarations

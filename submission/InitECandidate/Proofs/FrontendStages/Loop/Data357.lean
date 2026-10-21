@@ -15,36 +15,36 @@ def loopBody357_1 : HolLoopProg 64 :=
 .mark loopBody357_0
 
 def loopBody357_2 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 3
+Flapjack.HolLoopProg.assign 2
   (Flapjack.HolLoopExp.load
     (Flapjack.HolLoopExp.op Flapjack.BinOp.add
       [Flapjack.HolLoopExp.load
           (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 184#64]),
-        Flapjack.HolLoopExp.const 16#64]))
+        Flapjack.HolLoopExp.const 56#64]))
 
 def loopBody357_3 : HolLoopProg 64 :=
 .mark loopBody357_2
 
 def loopBody357_4 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.var 0)
+Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.var 0)
 
 def loopBody357_5 : HolLoopProg 64 :=
 .mark loopBody357_4
 
 def loopBody357_6 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 5 (Flapjack.HolLoopExp.var 1)
+Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.const 1#64)
 
 def loopBody357_7 : HolLoopProg 64 :=
 .mark loopBody357_6
 
 def loopBody357_8 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.raise 3
+Flapjack.HolLoopProg.raise 2
 
 def loopBody357_9 : HolLoopProg 64 :=
 .mark loopBody357_8
 
 def loopBody357_10 : HolLoopProg 64 :=
-.call (some ([2], Flapjack.Spt.ln)) (some 390) ([3, 4, 5]) (some (3, loopBody357_9, loopBody357_1, (Flapjack.Spt.ln)))
+.call (some ([1], Flapjack.Spt.ln)) (some 192) ([2, 3, 4]) (some (2, loopBody357_9, loopBody357_1, (Flapjack.Spt.ln)))
 
 def loopBody357_11 : HolLoopProg 64 :=
 .mark loopBody357_10
@@ -86,13 +86,13 @@ def loopBody357_23 : HolLoopProg 64 :=
 .mark loopBody357_22
 
 def loopBody357_24 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 1 (Flapjack.HolLoopExp.const 0#64)
 
 def loopBody357_25 : HolLoopProg 64 :=
 .mark loopBody357_24
 
 def loopBody357_26 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.return [2]
+Flapjack.HolLoopProg.return [1]
 
 def loopBody357_27 : HolLoopProg 64 :=
 .mark loopBody357_26
@@ -116,5 +116,5 @@ def loopBody357_33 : HolLoopProg 64 :=
 .mark loopBody357_32
 
 def output357 : Nat × List Nat × HolLoopProg 64 :=
-  (421, [0, 1], loopBody357_33)
+  (421, [0], loopBody357_33)
 end InitECandidate.Proofs.FrontendStages.Loop

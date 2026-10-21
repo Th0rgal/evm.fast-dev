@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data405
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate384
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -10,50 +13,39 @@ namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody405_0 : Prog (BitVec 64) :=
 Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-      Flapjack.Exp.const 56#64])
-  (Flapjack.Exp.const 1#64)
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 0#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "p")
 
 def globalBody405_1 : Prog (BitVec 64) :=
 Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-      Flapjack.Exp.const 64#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "offset")
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 8#64])
+  (Flapjack.Exp.const 0#64)
 
 def globalBody405_2 : Prog (BitVec 64) :=
 .seq globalBody405_0 globalBody405_1
 
 def globalBody405_3 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 16#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "cap")
 
 def globalBody405_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-        Flapjack.Exp.const 64#64]))
-  (Flapjack.Exp.var Flapjack.VarKind.local "offset")) globalBody405_1 globalBody405_3
+.seq globalBody405_2 globalBody405_3
 
 def globalBody405_5 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-        Flapjack.Exp.const 56#64]))
-  (Flapjack.Exp.const 0#64)) globalBody405_2 globalBody405_4
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "l")
 
 def globalBody405_6 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.seq globalBody405_4 globalBody405_5
 
 def globalBody405_7 : Prog (BitVec 64) :=
-.seq globalBody405_5 globalBody405_6
+.decCall ("p") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.panOp Flapjack.PanOp.mul
+    [Flapjack.Exp.var Flapjack.VarKind.local "esz", Flapjack.Exp.var Flapjack.VarKind.local "cap"]]) globalBody405_6
 
-def globalData405 : Decl (BitVec 64) := .function { name := "track_ancestor_access", inline := false, exported := false, params := [("offset", Flapjack.Shape.one)], body := globalBody405_7, returnShape := (Flapjack.Shape.one) }
+def globalBody405_8 : Prog (BitVec 64) :=
+.decCall ("l") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 24#64]) globalBody405_7
+
+def globalData405 : Decl (BitVec 64) :=
+.function { name := "lst_new", inline := false, exported := false, params := [("esz", Flapjack.Shape.one), ("cap", Flapjack.Shape.one)], body := globalBody405_8, returnShape := (Flapjack.Shape.one) }
 def globalOutput405 := Pancake.PanLang.declToHOL globalData405
 end InitECandidate.Proofs.FrontendStages.Declarations

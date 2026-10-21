@@ -1,5 +1,7 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data11
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -55,6 +57,7 @@ def globalBody11_10 : Prog (BitVec 64) :=
 .dec ("p") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
   (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 32#64])) globalBody11_9
 
-def globalData11 : Decl (BitVec 64) := .function { name := "frame_mem_alloc", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := globalBody11_10, returnShape := (Flapjack.Shape.one) }
+def globalData11 : Decl (BitVec 64) :=
+.function { name := "frame_mem_alloc", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := globalBody11_10, returnShape := (Flapjack.Shape.one) }
 def globalOutput11 := Pancake.PanLang.declToHOL globalData11
 end InitECandidate.Proofs.FrontendStages.Declarations

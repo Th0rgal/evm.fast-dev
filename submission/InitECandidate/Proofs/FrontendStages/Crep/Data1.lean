@@ -231,7 +231,7 @@ Flapjack.CrepProg.call (some ([9], none)) "serialize_result"
 def crepBody1_71 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.storeByte (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 9])
   (Flapjack.CrepExp.load
-    (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 744#64]))
+    (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 536#64]))
 
 def crepBody1_72 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([10], none)) "output_write"

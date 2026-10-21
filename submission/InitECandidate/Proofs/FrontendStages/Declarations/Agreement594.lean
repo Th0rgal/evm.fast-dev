@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify594
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement578
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original594_eq : original594 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_incorporate_child_on_error := by
+theorem original594_eq : original594 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_compute_create2_contract_address := by
   with_unfolding_all rfl
 #print axioms original594_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

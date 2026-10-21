@@ -16,15 +16,17 @@ Flapjack.CrepProg.call (some ([3], none)) "alloc"
   [Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul [Flapjack.CrepExp.const 4#64, Flapjack.CrepExp.const 32#64]]
 
 def crepBody195_2 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([4], none)) "htr_u64_at" [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 3]
+Flapjack.CrepProg.call (some ([4], none)) "htr_bytes_vector"
+  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 48#64, Flapjack.CrepExp.var 3]
 
 def crepBody195_3 : CrepProg (BitVec 64) :=
 .dec 4 (Flapjack.CrepExp.const 0#64) crepBody195_2
 
 def crepBody195_4 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([4], none)) "htr_u64_at"
-  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64],
-    Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.const 32#64]]
+Flapjack.CrepProg.call (some ([4], none)) "memcpy"
+  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.const 32#64],
+    Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 48#64],
+    Flapjack.CrepExp.const 32#64]
 
 def crepBody195_5 : CrepProg (BitVec 64) :=
 .dec 4 (Flapjack.CrepExp.const 0#64) crepBody195_4
@@ -33,9 +35,8 @@ def crepBody195_6 : CrepProg (BitVec 64) :=
 .seq crepBody195_3 crepBody195_5
 
 def crepBody195_7 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([4], none)) "htr_bytes_vector"
-  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64],
-    Flapjack.CrepExp.const 20#64,
+Flapjack.CrepProg.call (some ([4], none)) "htr_u64_at"
+  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 80#64],
     Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.const 64#64]]
 
 def crepBody195_8 : CrepProg (BitVec 64) :=
@@ -45,8 +46,9 @@ def crepBody195_9 : CrepProg (BitVec 64) :=
 .seq crepBody195_6 crepBody195_8
 
 def crepBody195_10 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([4], none)) "htr_u64_at"
-  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 36#64],
+Flapjack.CrepProg.call (some ([4], none)) "htr_bytes_vector"
+  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 88#64],
+    Flapjack.CrepExp.const 96#64,
     Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.const 96#64]]
 
 def crepBody195_11 : CrepProg (BitVec 64) :=
@@ -94,6 +96,5 @@ def crepBody195_24 : CrepProg (BitVec 64) :=
 
 def data195 : CrepProg (BitVec 64) := crepBody195_24
 def output195 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-  [104#8, 116#8, 114#8, 95#8, 119#8, 105#8, 116#8, 104#8, 100#8, 114#8, 97#8, 119#8, 97#8, 108#8], [0, 1], crepProgToHOL data195)
+  (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 114#8, 95#8, 98#8, 100#8, 101#8, 112#8], [0, 1], crepProgToHOL data195)
 end InitECandidate.Proofs.FrontendStages.Crep

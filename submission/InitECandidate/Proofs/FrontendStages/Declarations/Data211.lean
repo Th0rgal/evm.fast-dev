@@ -9,23 +9,24 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body211_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_u64_at"
-  [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.var Flapjack.VarKind.local "ch"]
+Flapjack.Prog.call (some (none, none)) "htr_bytes_vector"
+  [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 48#64, Flapjack.Exp.var Flapjack.VarKind.local "ch"]
 
 def body211_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_u64_at"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.const 8#64],
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 32#64]]
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 32#64],
+    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 48#64],
+    Flapjack.Exp.const 32#64]
 
 def body211_2 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_bytes_vector"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.const 16#64],
-    Flapjack.Exp.const 20#64,
+Flapjack.Prog.call (some (none, none)) "htr_u64_at"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 80#64],
     Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 64#64]]
 
 def body211_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_u64_at"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.const 36#64],
+Flapjack.Prog.call (some (none, none)) "htr_bytes_vector"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 88#64],
+    Flapjack.Exp.const 96#64,
     Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 96#64]]
 
 def body211_4 : Prog (BitVec 64) :=
@@ -88,9 +89,9 @@ def body211_22 : Prog (BitVec 64) :=
 .decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) body211_21
 
 def originalData211 : Decl (BitVec 64) :=
-.function { name := "htr_withdrawal", inline := false, exported := false, params := [("w", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body211_14, returnShape := (Flapjack.Shape.one) }
+.function { name := "htr_bdep", inline := false, exported := false, params := [("e", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body211_14, returnShape := (Flapjack.Shape.one) }
 def simplifiedData211 : Decl (BitVec 64) :=
-.function { name := "htr_withdrawal", inline := false, exported := false, params := [("w", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body211_22, returnShape := (Flapjack.Shape.one) }
+.function { name := "htr_bdep", inline := false, exported := false, params := [("e", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body211_22, returnShape := (Flapjack.Shape.one) }
 def original211 := Pancake.PanLang.declToHOL originalData211
 def simplified211 := Pancake.PanLang.declToHOL simplifiedData211
 end InitECandidate.Proofs.FrontendStages.Declarations

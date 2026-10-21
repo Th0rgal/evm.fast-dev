@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data266
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate250
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -9,30 +12,13 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody266_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call
-  (some
-    (some (Flapjack.VarKind.local, "nd"),
-      some
-        ("MptErr", "e",
-          Flapjack.Prog.seq
-            (Flapjack.Prog.call (some (none, none)) "scratch_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"])
-            (Flapjack.Prog.raise "MptErr" (Flapjack.Exp.var Flapjack.VarKind.local "e")))))
-  "_decode_witness_node_body"
-  [Flapjack.Exp.var Flapjack.VarKind.local "db", Flapjack.Exp.var Flapjack.VarKind.local "p",
-    Flapjack.Exp.var Flapjack.VarKind.local "n"]
+Flapjack.Prog.call none "mpt_new"
+  [Flapjack.Exp.var Flapjack.VarKind.local "root", Flapjack.Exp.var Flapjack.VarKind.local "secured"]
 
 def globalBody266_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "nd")
+.decCall ("root") (Flapjack.Shape.one) ("decode_witness_to_mpt") ([Flapjack.Exp.var Flapjack.VarKind.local "db", Flapjack.Exp.var Flapjack.VarKind.local "root_hash"]) globalBody266_0
 
-def globalBody266_2 : Prog (BitVec 64) :=
-.seq globalBody266_0 globalBody266_1
-
-def globalBody266_3 : Prog (BitVec 64) :=
-.dec ("nd") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody266_2
-
-def globalBody266_4 : Prog (BitVec 64) :=
-.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody266_3
-
-def globalData266 : Decl (BitVec 64) := .function { name := "_decode_witness_node_mpt", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("mark", Flapjack.Shape.one)], body := globalBody266_4, returnShape := (Flapjack.Shape.one) }
+def globalData266 : Decl (BitVec 64) :=
+.function { name := "mpt_from_witness", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("root_hash", Flapjack.Shape.one), ("secured", Flapjack.Shape.one)], body := globalBody266_1, returnShape := (Flapjack.Shape.one) }
 def globalOutput266 := Pancake.PanLang.declToHOL globalData266
 end InitECandidate.Proofs.FrontendStages.Declarations

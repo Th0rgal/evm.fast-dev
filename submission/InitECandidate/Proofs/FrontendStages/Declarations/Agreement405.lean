@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify405
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement389
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original405_eq : original405 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_track_ancestor_access := by
+theorem original405_eq : original405 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_lst_new := by
   with_unfolding_all rfl
 #print axioms original405_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data30
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate14
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -18,7 +21,7 @@ def globalBody30_2 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody30_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 134217712#64) (Flapjack.Exp.var Flapjack.VarKind.local "len")) globalBody30_1 globalBody30_2
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 1073741808#64) (Flapjack.Exp.var Flapjack.VarKind.local "len")) globalBody30_1 globalBody30_2
 
 def globalBody30_4 : Prog (BitVec 64) :=
 .seq globalBody30_0 globalBody30_3

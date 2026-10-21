@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data108
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate86
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -193,6 +196,7 @@ def globalBody108_43 : Prog (BitVec 64) :=
 def globalBody108_44 : Prog (BitVec 64) :=
 .seq globalBody108_2 globalBody108_43
 
-def globalData108 : Decl (BitVec 64) := .function { name := "rlp_item", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one)], body := globalBody108_44, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData108 : Decl (BitVec 64) :=
+.function { name := "rlp_item", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one)], body := globalBody108_44, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput108 := Pancake.PanLang.declToHOL globalData108
 end InitECandidate.Proofs.FrontendStages.Declarations

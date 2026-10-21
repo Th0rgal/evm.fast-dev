@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data554
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate538
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -12,10 +15,9 @@ def globalBody554_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def globalBody554_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push"
-  [Flapjack.Exp.load
-      (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 48#64])]
+Flapjack.Prog.call (some (none, none)) "stack_push_word"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 40#64])]
 
 def globalBody554_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -35,6 +37,7 @@ def globalBody554_6 : Prog (BitVec 64) :=
 def globalBody554_7 : Prog (BitVec 64) :=
 .seq globalBody554_0 globalBody554_6
 
-def globalData554 : Decl (BitVec 64) := .function { name := "op_basefee", inline := false, exported := false, params := [], body := globalBody554_7, returnShape := (Flapjack.Shape.one) }
+def globalData554 : Decl (BitVec 64) :=
+.function { name := "op_number", inline := false, exported := false, params := [], body := globalBody554_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput554 := Pancake.PanLang.declToHOL globalData554
 end InitECandidate.Proofs.FrontendStages.Declarations

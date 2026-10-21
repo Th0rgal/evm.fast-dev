@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify537
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement521
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original537_eq : original537 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_op_caller := by
+theorem original537_eq : original537 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_op_codesize := by
   with_unfolding_all rfl
 #print axioms original537_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

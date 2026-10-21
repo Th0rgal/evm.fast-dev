@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data518
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate502
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -18,51 +21,43 @@ def globalBody518_2 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody518_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notLower (Flapjack.Exp.var Flapjack.VarKind.local "item")
-  (Flapjack.Exp.var Flapjack.VarKind.local "sp")) globalBody518_1 globalBody518_2
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+        Flapjack.Exp.const 16#64]))
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "n", Flapjack.Exp.const 1#64])) globalBody518_1 globalBody518_2
 
 def globalBody518_4 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "v"]
+Flapjack.Prog.call (some (none, none)) "stack_swap_positions"
+  [Flapjack.Exp.const 0#64, Flapjack.Exp.var Flapjack.VarKind.local "n"]
 
 def globalBody518_5 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
+.seq globalBody518_3 globalBody518_4
 
 def globalBody518_6 : Prog (BitVec 64) :=
-.seq globalBody518_4 globalBody518_5
+Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 2#64]
 
 def globalBody518_7 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.seq globalBody518_5 globalBody518_6
 
 def globalBody518_8 : Prog (BitVec 64) :=
-.seq globalBody518_6 globalBody518_7
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody518_9 : Prog (BitVec 64) :=
-.dec ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) (Flapjack.Exp.load (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add
-          [Flapjack.Exp.load Flapjack.Shape.one
-              (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-            Flapjack.Exp.const 8#64]),
-      Flapjack.Exp.panOp Flapjack.PanOp.mul
-        [Flapjack.Exp.op Flapjack.BinOp.sub
-            [Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.var Flapjack.VarKind.local "sp", Flapjack.Exp.const 1#64],
-              Flapjack.Exp.var Flapjack.VarKind.local "item"],
-          Flapjack.Exp.const 32#64]])) globalBody518_8
+.seq globalBody518_7 globalBody518_8
 
 def globalBody518_10 : Prog (BitVec 64) :=
-.seq globalBody518_3 globalBody518_9
+.decCall ("n") (Flapjack.Shape.one) ("decode_single") ([Flapjack.Exp.var Flapjack.VarKind.local "imm"]) globalBody518_9
 
 def globalBody518_11 : Prog (BitVec 64) :=
-.dec ("sp") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-      Flapjack.Exp.const 16#64])) globalBody518_10
+.decCall ("imm") (Flapjack.Shape.one) ("code_imm") ([]) globalBody518_10
 
 def globalBody518_12 : Prog (BitVec 64) :=
 .seq globalBody518_0 globalBody518_11
 
-def globalData518 : Decl (BitVec 64) := .function { name := "op_dup", inline := false, exported := false, params := [("item", Flapjack.Shape.one)], body := globalBody518_12, returnShape := (Flapjack.Shape.one) }
+def globalData518 : Decl (BitVec 64) :=
+.function { name := "op_swapn", inline := false, exported := false, params := [], body := globalBody518_12, returnShape := (Flapjack.Shape.one) }
 def globalOutput518 := Pancake.PanLang.declToHOL globalData518
 end InitECandidate.Proofs.FrontendStages.Declarations

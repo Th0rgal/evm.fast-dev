@@ -9,7 +9,7 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body510_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 1#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def body510_1 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -24,15 +24,21 @@ def body510_4 : Prog (BitVec 64) :=
 .seq body510_0 body510_3
 
 def body510_5 : Prog (BitVec 64) :=
-.seq body510_0 body510_1
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body510_4
 
 def body510_6 : Prog (BitVec 64) :=
-.seq body510_5 body510_2
+.seq body510_0 body510_1
+
+def body510_7 : Prog (BitVec 64) :=
+.seq body510_6 body510_2
+
+def body510_8 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body510_7
 
 def originalData510 : Decl (BitVec 64) :=
-.function { name := "op_jumpdest", inline := false, exported := false, params := [], body := body510_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_pop", inline := false, exported := false, params := [], body := body510_5, returnShape := (Flapjack.Shape.one) }
 def simplifiedData510 : Decl (BitVec 64) :=
-.function { name := "op_jumpdest", inline := false, exported := false, params := [], body := body510_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_pop", inline := false, exported := false, params := [], body := body510_8, returnShape := (Flapjack.Shape.one) }
 def original510 := Pancake.PanLang.declToHOL originalData510
 def simplified510 := Pancake.PanLang.declToHOL simplifiedData510
 end InitECandidate.Proofs.FrontendStages.Declarations

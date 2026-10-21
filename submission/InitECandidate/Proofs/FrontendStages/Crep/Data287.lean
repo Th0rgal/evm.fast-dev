@@ -11,9 +11,10 @@ namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody287_0 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.return
   [Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 152#64])]
+      (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 264#64])]
 
 def data287 : CrepProg (BitVec 64) := crepBody287_0
 def output287 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [116#8, 120#8, 95#8, 116#8, 111#8], [0], crepProgToHOL data287)
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+  [116#8, 120#8, 95#8, 98#8, 108#8, 111#8, 98#8, 95#8, 99#8, 111#8, 117#8, 110#8, 116#8], [0], crepProgToHOL data287)
 end InitECandidate.Proofs.FrontendStages.Crep

@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data543
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate527
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -17,7 +20,7 @@ Flapjack.Prog.call (some (none, none)) "stack_push_word"
       (Flapjack.Exp.op Flapjack.BinOp.add
         [Flapjack.Exp.load Flapjack.Shape.one
             (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-          Flapjack.Exp.const 56#64])]
+          Flapjack.Exp.const 152#64])]
 
 def globalBody543_2 : Prog (BitVec 64) :=
 .seq globalBody543_0 globalBody543_1
@@ -34,6 +37,7 @@ Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 def globalBody543_6 : Prog (BitVec 64) :=
 .seq globalBody543_4 globalBody543_5
 
-def globalData543 : Decl (BitVec 64) := .function { name := "op_codesize", inline := false, exported := false, params := [], body := globalBody543_6, returnShape := (Flapjack.Shape.one) }
+def globalData543 : Decl (BitVec 64) :=
+.function { name := "op_returndatasize", inline := false, exported := false, params := [], body := globalBody543_6, returnShape := (Flapjack.Shape.one) }
 def globalOutput543 := Pancake.PanLang.declToHOL globalData543
 end InitECandidate.Proofs.FrontendStages.Declarations

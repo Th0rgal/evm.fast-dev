@@ -1,5 +1,7 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data4
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -44,6 +46,7 @@ Flapjack.Prog.raise "TrapErr" (Flapjack.Exp.var Flapjack.VarKind.local "code")
 def globalBody4_8 : Prog (BitVec 64) :=
 .seq globalBody4_6 globalBody4_7
 
-def globalData4 : Decl (BitVec 64) := .function { name := "trap_with", inline := false, exported := false, params := [("code", Flapjack.Shape.one)], body := globalBody4_8, returnShape := (Flapjack.Shape.one) }
+def globalData4 : Decl (BitVec 64) :=
+.function { name := "trap_with", inline := false, exported := false, params := [("code", Flapjack.Shape.one)], body := globalBody4_8, returnShape := (Flapjack.Shape.one) }
 def globalOutput4 := Pancake.PanLang.declToHOL globalData4
 end InitECandidate.Proofs.FrontendStages.Declarations

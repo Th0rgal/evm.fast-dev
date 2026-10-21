@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data104
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate83
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -150,6 +153,7 @@ def globalBody104_30 : Prog (BitVec 64) :=
 .dec ("stp") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
   (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 72#64])) globalBody104_29
 
-def globalData104 : Decl (BitVec 64) := .function { name := "keccak256", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := globalBody104_30, returnShape := (Flapjack.Shape.one) }
+def globalData104 : Decl (BitVec 64) :=
+.function { name := "keccak256", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := globalBody104_30, returnShape := (Flapjack.Shape.one) }
 def globalOutput104 := Pancake.PanLang.declToHOL globalData104
 end InitECandidate.Proofs.FrontendStages.Declarations

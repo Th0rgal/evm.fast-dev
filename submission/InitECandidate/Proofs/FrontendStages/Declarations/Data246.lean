@@ -8,11 +8,109 @@ set_option cbv.warning false
 open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
+def body246_0 : Prog (BitVec 64) :=
+Flapjack.Prog.call (some (none, none)) "mpt_fail" [Flapjack.Exp.const 5#64]
+
+def body246_1 : Prog (BitVec 64) :=
+Flapjack.Prog.skip
+
+def body246_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 0#64)) body246_0 body246_1
+
+def body246_3 : Prog (BitVec 64) :=
+Flapjack.Prog.storeByte (Flapjack.Exp.var Flapjack.VarKind.local "out")
+  (Flapjack.Exp.op Flapjack.BinOp.and [Flapjack.Exp.var Flapjack.VarKind.local "c0", Flapjack.Exp.const 15#64])
+
+def body246_4 : Prog (BitVec 64) :=
+Flapjack.Prog.assign Flapjack.VarKind.local "k" (Flapjack.Exp.const 1#64)
+
+def body246_5 : Prog (BitVec 64) :=
+.seq body246_3 body246_4
+
+def body246_6 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "odd") (Flapjack.Exp.const 0#64)) body246_5 body246_1
+
+def body246_7 : Prog (BitVec 64) :=
+Flapjack.Prog.call (some (none, none)) "key_to_nibbles"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.const 1#64],
+    Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.var Flapjack.VarKind.local "n", Flapjack.Exp.const 1#64],
+    Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.var Flapjack.VarKind.local "k"]]
+
+def body246_8 : Prog (BitVec 64) :=
+Flapjack.Prog.return
+  (Flapjack.Exp.rStruct
+    [Flapjack.Exp.var Flapjack.VarKind.local "out",
+      Flapjack.Exp.op Flapjack.BinOp.add
+        [Flapjack.Exp.var Flapjack.VarKind.local "k",
+          Flapjack.Exp.panOp Flapjack.PanOp.mul
+            [Flapjack.Exp.const 2#64,
+              Flapjack.Exp.op Flapjack.BinOp.sub
+                [Flapjack.Exp.var Flapjack.VarKind.local "n", Flapjack.Exp.const 1#64]]],
+      Flapjack.Exp.var Flapjack.VarKind.local "is_leaf"])
+
+def body246_9 : Prog (BitVec 64) :=
+.seq body246_7 body246_8
+
+def body246_10 : Prog (BitVec 64) :=
+.seq body246_6 body246_9
+
+def body246_11 : Prog (BitVec 64) :=
+.dec ("k") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body246_10
+
+def body246_12 : Prog (BitVec 64) :=
+.decCall ("out") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.const 2#64, Flapjack.Exp.var Flapjack.VarKind.local "n"]]) body246_11
+
+def body246_13 : Prog (BitVec 64) :=
+.dec ("odd") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.and [Flapjack.Exp.var Flapjack.VarKind.local "first", Flapjack.Exp.const 1#64]) body246_12
+
+def body246_14 : Prog (BitVec 64) :=
+.dec ("is_leaf") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.and
+  [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "first") (Flapjack.Exp.const 1#64),
+    Flapjack.Exp.const 1#64]) body246_13
+
+def body246_15 : Prog (BitVec 64) :=
+.dec ("first") (Flapjack.Shape.one) (Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "c0") (Flapjack.Exp.const 4#64)) body246_14
+
+def body246_16 : Prog (BitVec 64) :=
+.dec ("c0") (Flapjack.Shape.one) (Flapjack.Exp.loadByte (Flapjack.Exp.var Flapjack.VarKind.local "p")) body246_15
+
+def body246_17 : Prog (BitVec 64) :=
+.seq body246_2 body246_16
+
+def body246_18 : Prog (BitVec 64) :=
+.seq body246_6 body246_7
+
+def body246_19 : Prog (BitVec 64) :=
+.seq body246_18 body246_8
+
+def body246_20 : Prog (BitVec 64) :=
+.dec ("k") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body246_19
+
+def body246_21 : Prog (BitVec 64) :=
+.decCall ("out") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.const 2#64, Flapjack.Exp.var Flapjack.VarKind.local "n"]]) body246_20
+
+def body246_22 : Prog (BitVec 64) :=
+.dec ("odd") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.and [Flapjack.Exp.var Flapjack.VarKind.local "first", Flapjack.Exp.const 1#64]) body246_21
+
+def body246_23 : Prog (BitVec 64) :=
+.dec ("is_leaf") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.and
+  [Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "first") (Flapjack.Exp.const 1#64),
+    Flapjack.Exp.const 1#64]) body246_22
+
+def body246_24 : Prog (BitVec 64) :=
+.dec ("first") (Flapjack.Shape.one) (Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "c0") (Flapjack.Exp.const 4#64)) body246_23
+
+def body246_25 : Prog (BitVec 64) :=
+.dec ("c0") (Flapjack.Shape.one) (Flapjack.Exp.loadByte (Flapjack.Exp.var Flapjack.VarKind.local "p")) body246_24
+
+def body246_26 : Prog (BitVec 64) :=
+.seq body246_2 body246_25
 
 def originalData246 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "mpt_nib_scratch" (Flapjack.Exp.const 0#64)
+.function { name := "compact_to_nibbles", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body246_17, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData246 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "mpt_nib_scratch" (Flapjack.Exp.const 0#64)
+.function { name := "compact_to_nibbles", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body246_26, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original246 := Pancake.PanLang.declToHOL originalData246
 def simplified246 := Pancake.PanLang.declToHOL simplifiedData246
 end InitECandidate.Proofs.FrontendStages.Declarations

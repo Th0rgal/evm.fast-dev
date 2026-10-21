@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data118
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate101
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -43,6 +46,7 @@ Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 def globalBody118_7 : Prog (BitVec 64) :=
 .seq globalBody118_5 globalBody118_6
 
-def globalData118 : Decl (BitVec 64) := .function { name := "rlp_check_uint_bytes", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("maxbytes", Flapjack.Shape.one)], body := globalBody118_7, returnShape := (Flapjack.Shape.one) }
+def globalData118 : Decl (BitVec 64) :=
+.function { name := "rlp_check_uint_bytes", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("maxbytes", Flapjack.Shape.one)], body := globalBody118_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput118 := Pancake.PanLang.declToHOL globalData118
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data744
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate728
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -9,19 +12,16 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody744_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "r")
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 576#64]
 
 def globalBody744_1 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb
-  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-    Flapjack.Shape.one]) ("bls_fp_inv_raw") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) globalBody744_0
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def globalBody744_2 : Prog (BitVec 64) :=
+.seq globalBody744_0 globalBody744_1
 
 def globalData744 : Decl (BitVec 64) :=
-.function { name := "bls_fp_inv", inline := false, exported := false, params := [("a",
-    Flapjack.Shape.comb
-      [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-        Flapjack.Shape.one])], body := globalBody744_1, returnShape := (Flapjack.Shape.comb
-  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-    Flapjack.Shape.one]) }
+.function { name := "fp12_copy", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := globalBody744_2, returnShape := (Flapjack.Shape.one) }
 def globalOutput744 := Pancake.PanLang.declToHOL globalData744
 end InitECandidate.Proofs.FrontendStages.Declarations

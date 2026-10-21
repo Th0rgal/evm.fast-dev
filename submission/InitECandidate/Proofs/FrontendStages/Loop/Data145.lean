@@ -9,55 +9,55 @@ set_option cbv.warning false
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Loop
 def loopBody145_0 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 8 (Flapjack.HolLoopExp.var 0)
+Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.var 0)
 
 def loopBody145_1 : HolLoopProg 64 :=
 .mark loopBody145_0
 
 def loopBody145_2 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 9 (Flapjack.HolLoopExp.var 1)
+Flapjack.HolLoopProg.assign 5 (Flapjack.HolLoopExp.var 1)
 
 def loopBody145_3 : HolLoopProg 64 :=
 .mark loopBody145_2
 
 def loopBody145_4 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 10 (Flapjack.HolLoopExp.var 2)
+Flapjack.HolLoopProg.assign 6 (Flapjack.HolLoopExp.var 2)
 
 def loopBody145_5 : HolLoopProg 64 :=
 .mark loopBody145_4
 
 def loopBody145_6 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 11 (Flapjack.HolLoopExp.var 3)
+Flapjack.HolLoopProg.assign 7 (Flapjack.HolLoopExp.var 3)
 
 def loopBody145_7 : HolLoopProg 64 :=
 .mark loopBody145_6
 
 def loopBody145_8 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 12 (Flapjack.HolLoopExp.var 4)
+Flapjack.HolLoopProg.assign 8 (Flapjack.HolLoopExp.const 18446744069414583341#64)
 
 def loopBody145_9 : HolLoopProg 64 :=
 .mark loopBody145_8
 
 def loopBody145_10 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 13 (Flapjack.HolLoopExp.var 5)
+Flapjack.HolLoopProg.assign 9 (Flapjack.HolLoopExp.const 18446744073709551615#64)
 
 def loopBody145_11 : HolLoopProg 64 :=
 .mark loopBody145_10
 
 def loopBody145_12 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 14 (Flapjack.HolLoopExp.var 6)
+Flapjack.HolLoopProg.assign 10 (Flapjack.HolLoopExp.const 18446744073709551615#64)
 
 def loopBody145_13 : HolLoopProg 64 :=
 .mark loopBody145_12
 
 def loopBody145_14 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 15 (Flapjack.HolLoopExp.var 7)
+Flapjack.HolLoopProg.assign 11 (Flapjack.HolLoopExp.const 18446744073709551615#64)
 
 def loopBody145_15 : HolLoopProg 64 :=
 .mark loopBody145_14
 
 def loopBody145_16 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.call none (some 203) [8, 9, 10, 11, 12, 13, 14, 15] none
+Flapjack.HolLoopProg.call none (some 208) [4, 5, 6, 7, 8, 9, 10, 11] none
 
 def loopBody145_17 : HolLoopProg 64 :=
 .mark loopBody145_16
@@ -123,5 +123,5 @@ def loopBody145_37 : HolLoopProg 64 :=
 .mark loopBody145_36
 
 def output145 : Nat × List Nat × HolLoopProg 64 :=
-  (209, [0, 1, 2, 3, 4, 5, 6, 7], loopBody145_37)
+  (209, [0, 1, 2, 3], loopBody145_37)
 end InitECandidate.Proofs.FrontendStages.Loop

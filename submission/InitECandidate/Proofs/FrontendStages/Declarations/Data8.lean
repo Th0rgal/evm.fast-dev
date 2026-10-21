@@ -15,11 +15,11 @@ Flapjack.Prog.skip
 
 def body8_2 : Prog (BitVec 64) :=
 .ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
-  (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.const 33806089496#64, Flapjack.Exp.var Flapjack.VarKind.local "p"])
+  (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.const 2952790016#64, Flapjack.Exp.var Flapjack.VarKind.local "p"])
   (Flapjack.Exp.var Flapjack.VarKind.local "n")) body8_0 body8_1
 
 def body8_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 33806089496#64) (Flapjack.Exp.var Flapjack.VarKind.local "q")) body8_0 body8_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 2952790016#64) (Flapjack.Exp.var Flapjack.VarKind.local "q")) body8_0 body8_1
 
 def body8_4 : Prog (BitVec 64) :=
 Flapjack.Prog.assign Flapjack.VarKind.global "heap_ptr" (Flapjack.Exp.var Flapjack.VarKind.local "q")

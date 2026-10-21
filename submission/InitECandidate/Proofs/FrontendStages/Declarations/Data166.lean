@@ -9,16 +9,16 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body166_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "secp_accel_fp_pow4"
+Flapjack.Prog.call none "fn_pow"
   [Flapjack.Exp.var Flapjack.VarKind.local "a",
     Flapjack.Exp.rStruct
-      [Flapjack.Exp.const 18446744072635809548#64, Flapjack.Exp.const 18446744073709551615#64,
-        Flapjack.Exp.const 18446744073709551615#64, Flapjack.Exp.const 4611686018427387903#64]]
+      [Flapjack.Exp.const 13822214165235122495#64, Flapjack.Exp.const 13451932020343611451#64,
+        Flapjack.Exp.const 18446744073709551614#64, Flapjack.Exp.const 18446744073709551615#64]]
 
 def originalData166 : Decl (BitVec 64) :=
-.function { name := "fp_sqrt", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body166_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fn_inv_fermat", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body166_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData166 : Decl (BitVec 64) :=
-.function { name := "fp_sqrt", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body166_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fn_inv_fermat", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body166_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original166 := Pancake.PanLang.declToHOL originalData166
 def simplified166 := Pancake.PanLang.declToHOL simplifiedData166
 end InitECandidate.Proofs.FrontendStages.Declarations

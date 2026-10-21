@@ -9,57 +9,36 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body151_0 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "base", Flapjack.Exp.const 0#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "a")
+Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "d"), none)) "u256_add"
+  [Flapjack.Exp.var Flapjack.VarKind.local "d",
+    Flapjack.Exp.rStruct
+      [Flapjack.Exp.const 18446744069414583343#64, Flapjack.Exp.const 18446744073709551615#64,
+        Flapjack.Exp.const 18446744073709551615#64, Flapjack.Exp.const 18446744073709551615#64]]
 
 def body151_1 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "base", Flapjack.Exp.const 32#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "b")
+Flapjack.Prog.skip
 
 def body151_2 : Prog (BitVec 64) :=
-Flapjack.Prog.extCall "arith256mod" (Flapjack.Exp.var Flapjack.VarKind.local "base") (Flapjack.Exp.const 0#64)
-  (Flapjack.Exp.var Flapjack.VarKind.local "base") (Flapjack.Exp.const 160#64)
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "lt") (Flapjack.Exp.const 1#64)) body151_0 body151_1
 
 def body151_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load
-    (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "base", Flapjack.Exp.const 128#64]))
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "d")
 
 def body151_4 : Prog (BitVec 64) :=
 .seq body151_2 body151_3
 
 def body151_5 : Prog (BitVec 64) :=
-.seq body151_1 body151_4
+.decCall ("d") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_sub") ([Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "b"]) body151_4
 
 def body151_6 : Prog (BitVec 64) :=
-.seq body151_0 body151_5
-
-def body151_7 : Prog (BitVec 64) :=
-.dec ("base") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add
-  [Flapjack.Exp.var Flapjack.VarKind.global "secp_accel_scratch", Flapjack.Exp.const 0#64]) body151_6
-
-def body151_8 : Prog (BitVec 64) :=
-.seq body151_0 body151_1
-
-def body151_9 : Prog (BitVec 64) :=
-.seq body151_8 body151_2
-
-def body151_10 : Prog (BitVec 64) :=
-.seq body151_9 body151_3
-
-def body151_11 : Prog (BitVec 64) :=
-.dec ("base") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add
-  [Flapjack.Exp.var Flapjack.VarKind.global "secp_accel_scratch", Flapjack.Exp.const 0#64]) body151_10
+.decCall ("lt") (Flapjack.Shape.one) ("u256_lt") ([Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "b"]) body151_5
 
 def originalData151 : Decl (BitVec 64) :=
-.function { name := "secp_accel_modmul_p", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body151_7, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fp_sub", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
+  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body151_6, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData151 : Decl (BitVec 64) :=
-.function { name := "secp_accel_modmul_p", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body151_11, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fp_sub", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
+  ("b", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body151_6, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original151 := Pancake.PanLang.declToHOL originalData151
 def simplified151 := Pancake.PanLang.declToHOL simplifiedData151
 end InitECandidate.Proofs.FrontendStages.Declarations

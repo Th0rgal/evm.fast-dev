@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify596
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement580
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original596_eq : original596 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_rollback_child_access := by
+theorem original596_eq : original596 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_op_create := by
   with_unfolding_all rfl
 #print axioms original596_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

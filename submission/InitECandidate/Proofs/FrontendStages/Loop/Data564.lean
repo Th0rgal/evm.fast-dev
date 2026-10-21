@@ -11,7 +11,7 @@ namespace InitECandidate.Proofs.FrontendStages.Loop
 def loopBody564_0 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 2
   (Flapjack.HolLoopExp.load
-    (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]))
+    (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]))
 
 def loopBody564_1 : HolLoopProg 64 :=
 .mark loopBody564_0
@@ -113,7 +113,7 @@ def loopBody564_33 : HolLoopProg 64 :=
 .mark loopBody564_32
 
 def loopBody564_34 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 160#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 80#64)
 
 def loopBody564_35 : HolLoopProg 64 :=
 .mark loopBody564_34
@@ -144,7 +144,7 @@ def loopBody564_43 : HolLoopProg 64 :=
 
 def loopBody564_44 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64])
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64])
 
 def loopBody564_45 : HolLoopProg 64 :=
 .mark loopBody564_44
@@ -234,7 +234,7 @@ def loopBody564_73 : HolLoopProg 64 :=
 .mark loopBody564_72
 
 def loopBody564_74 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 128#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 64#64)
 
 def loopBody564_75 : HolLoopProg 64 :=
 .mark loopBody564_74
@@ -247,7 +247,7 @@ def loopBody564_77 : HolLoopProg 64 :=
 
 def loopBody564_78 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 328#64])
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64])
 
 def loopBody564_79 : HolLoopProg 64 :=
 .mark loopBody564_78
@@ -289,7 +289,7 @@ def loopBody564_91 : HolLoopProg 64 :=
 .mark loopBody564_90
 
 def loopBody564_92 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 40#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 128#64)
 
 def loopBody564_93 : HolLoopProg 64 :=
 .mark loopBody564_92
@@ -302,7 +302,7 @@ def loopBody564_95 : HolLoopProg 64 :=
 
 def loopBody564_96 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 336#64])
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 368#64])
 
 def loopBody564_97 : HolLoopProg 64 :=
 .mark loopBody564_96
@@ -344,96 +344,99 @@ def loopBody564_109 : HolLoopProg 64 :=
 .mark loopBody564_108
 
 def loopBody564_110 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 344#64])
+Flapjack.HolLoopProg.assign 1
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
+    [Flapjack.HolLoopExp.load
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 0#64])
 
 def loopBody564_111 : HolLoopProg 64 :=
 .mark loopBody564_110
 
 def loopBody564_112 : HolLoopProg 64 :=
-.seq loopBody564_111 loopBody564_61
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 18364758544493064720#64)
 
 def loopBody564_113 : HolLoopProg 64 :=
 .mark loopBody564_112
 
 def loopBody564_114 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_113
+Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.var 2)
 
 def loopBody564_115 : HolLoopProg 64 :=
 .mark loopBody564_114
 
 def loopBody564_116 : HolLoopProg 64 :=
-.seq loopBody564_77 loopBody564_115
+Flapjack.HolLoopProg.store (Flapjack.HolLoopExp.var 1) 3
 
 def loopBody564_117 : HolLoopProg 64 :=
 .mark loopBody564_116
 
 def loopBody564_118 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_117
+.seq loopBody564_117 loopBody564_17
 
 def loopBody564_119 : HolLoopProg 64 :=
 .mark loopBody564_118
 
 def loopBody564_120 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_119
+.seq loopBody564_115 loopBody564_119
 
 def loopBody564_121 : HolLoopProg 64 :=
 .mark loopBody564_120
 
 def loopBody564_122 : HolLoopProg 64 :=
-.seq loopBody564_109 loopBody564_121
+.seq loopBody564_121 loopBody564_17
 
 def loopBody564_123 : HolLoopProg 64 :=
 .mark loopBody564_122
 
 def loopBody564_124 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-    [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 0#64])
+.seq loopBody564_113 loopBody564_123
 
 def loopBody564_125 : HolLoopProg 64 :=
 .mark loopBody564_124
 
 def loopBody564_126 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 18364758544493064720#64)
+.seq loopBody564_17 loopBody564_125
 
 def loopBody564_127 : HolLoopProg 64 :=
 .mark loopBody564_126
 
 def loopBody564_128 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.var 2)
+.seq loopBody564_111 loopBody564_127
 
 def loopBody564_129 : HolLoopProg 64 :=
 .mark loopBody564_128
 
 def loopBody564_130 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.store (Flapjack.HolLoopExp.var 1) 3
+.seq loopBody564_17 loopBody564_129
 
 def loopBody564_131 : HolLoopProg 64 :=
 .mark loopBody564_130
 
 def loopBody564_132 : HolLoopProg 64 :=
-.seq loopBody564_131 loopBody564_17
+.seq loopBody564_109 loopBody564_131
 
 def loopBody564_133 : HolLoopProg 64 :=
 .mark loopBody564_132
 
 def loopBody564_134 : HolLoopProg 64 :=
-.seq loopBody564_129 loopBody564_133
+Flapjack.HolLoopProg.assign 1
+  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
+    [Flapjack.HolLoopExp.load
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 8#64])
 
 def loopBody564_135 : HolLoopProg 64 :=
 .mark loopBody564_134
 
 def loopBody564_136 : HolLoopProg 64 :=
-.seq loopBody564_135 loopBody564_17
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 3853709921291437230#64)
 
 def loopBody564_137 : HolLoopProg 64 :=
 .mark loopBody564_136
 
 def loopBody564_138 : HolLoopProg 64 :=
-.seq loopBody564_127 loopBody564_137
+.seq loopBody564_137 loopBody564_123
 
 def loopBody564_139 : HolLoopProg 64 :=
 .mark loopBody564_138
@@ -445,7 +448,7 @@ def loopBody564_141 : HolLoopProg 64 :=
 .mark loopBody564_140
 
 def loopBody564_142 : HolLoopProg 64 :=
-.seq loopBody564_125 loopBody564_141
+.seq loopBody564_135 loopBody564_141
 
 def loopBody564_143 : HolLoopProg 64 :=
 .mark loopBody564_142
@@ -457,7 +460,7 @@ def loopBody564_145 : HolLoopProg 64 :=
 .mark loopBody564_144
 
 def loopBody564_146 : HolLoopProg 64 :=
-.seq loopBody564_123 loopBody564_145
+.seq loopBody564_133 loopBody564_145
 
 def loopBody564_147 : HolLoopProg 64 :=
 .mark loopBody564_146
@@ -466,20 +469,20 @@ def loopBody564_148 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 8#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 16#64])
 
 def loopBody564_149 : HolLoopProg 64 :=
 .mark loopBody564_148
 
 def loopBody564_150 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 10079716825146989895#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 5266788149650328715#64)
 
 def loopBody564_151 : HolLoopProg 64 :=
 .mark loopBody564_150
 
 def loopBody564_152 : HolLoopProg 64 :=
-.seq loopBody564_151 loopBody564_137
+.seq loopBody564_151 loopBody564_123
 
 def loopBody564_153 : HolLoopProg 64 :=
 .mark loopBody564_152
@@ -512,20 +515,20 @@ def loopBody564_162 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 16#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 24#64])
 
 def loopBody564_163 : HolLoopProg 64 :=
 .mark loopBody564_162
 
 def loopBody564_164 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 14248650839231647395#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 10305543691612001175#64)
 
 def loopBody564_165 : HolLoopProg 64 :=
 .mark loopBody564_164
 
 def loopBody564_166 : HolLoopProg 64 :=
-.seq loopBody564_165 loopBody564_137
+.seq loopBody564_165 loopBody564_123
 
 def loopBody564_167 : HolLoopProg 64 :=
 .mark loopBody564_166
@@ -558,20 +561,20 @@ def loopBody564_176 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 24#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 32#64])
 
 def loopBody564_177 : HolLoopProg 64 :=
 .mark loopBody564_176
 
 def loopBody564_178 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 2764919063900629905#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 15242093322790139145#64)
 
 def loopBody564_179 : HolLoopProg 64 :=
 .mark loopBody564_178
 
 def loopBody564_180 : HolLoopProg 64 :=
-.seq loopBody564_179 loopBody564_137
+.seq loopBody564_179 loopBody564_123
 
 def loopBody564_181 : HolLoopProg 64 :=
 .mark loopBody564_180
@@ -604,20 +607,20 @@ def loopBody564_190 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 32#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 40#64])
 
 def loopBody564_191 : HolLoopProg 64 :=
 .mark loopBody564_190
 
 def loopBody564_192 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 16099105460569216260#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 10515720223929181890#64)
 
 def loopBody564_193 : HolLoopProg 64 :=
 .mark loopBody564_192
 
 def loopBody564_194 : HolLoopProg 64 :=
-.seq loopBody564_193 loopBody564_137
+.seq loopBody564_193 loopBody564_123
 
 def loopBody564_195 : HolLoopProg 64 :=
 .mark loopBody564_194
@@ -650,20 +653,20 @@ def loopBody564_204 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 40#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 48#64])
 
 def loopBody564_205 : HolLoopProg 64 :=
 .mark loopBody564_204
 
 def loopBody564_206 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 14096706008221550565#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 13270197634454188380#64)
 
 def loopBody564_207 : HolLoopProg 64 :=
 .mark loopBody564_206
 
 def loopBody564_208 : HolLoopProg 64 :=
-.seq loopBody564_207 loopBody564_137
+.seq loopBody564_207 loopBody564_123
 
 def loopBody564_209 : HolLoopProg 64 :=
 .mark loopBody564_208
@@ -696,20 +699,20 @@ def loopBody564_218 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 48#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 56#64])
 
 def loopBody564_219 : HolLoopProg 64 :=
 .mark loopBody564_218
 
 def loopBody564_220 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 2419779895833949110#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 11702690517083809725#64)
 
 def loopBody564_221 : HolLoopProg 64 :=
 .mark loopBody564_220
 
 def loopBody564_222 : HolLoopProg 64 :=
-.seq loopBody564_221 loopBody564_137
+.seq loopBody564_221 loopBody564_123
 
 def loopBody564_223 : HolLoopProg 64 :=
 .mark loopBody564_222
@@ -742,20 +745,20 @@ def loopBody564_232 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 56#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 64#64])
 
 def loopBody564_233 : HolLoopProg 64 :=
 .mark loopBody564_232
 
 def loopBody564_234 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 15279073663851639135#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 6503616966983130870#64)
 
 def loopBody564_235 : HolLoopProg 64 :=
 .mark loopBody564_234
 
 def loopBody564_236 : HolLoopProg 64 :=
-.seq loopBody564_235 loopBody564_137
+.seq loopBody564_235 loopBody564_123
 
 def loopBody564_237 : HolLoopProg 64 :=
 .mark loopBody564_236
@@ -788,20 +791,20 @@ def loopBody564_246 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 64#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 352#64]),
+      Flapjack.HolLoopExp.const 72#64])
 
 def loopBody564_247 : HolLoopProg 64 :=
 .mark loopBody564_246
 
 def loopBody564_248 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 16895767220870911080#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 991893350865389610#64)
 
 def loopBody564_249 : HolLoopProg 64 :=
 .mark loopBody564_248
 
 def loopBody564_250 : HolLoopProg 64 :=
-.seq loopBody564_249 loopBody564_137
+.seq loopBody564_249 loopBody564_123
 
 def loopBody564_251 : HolLoopProg 64 :=
 .mark loopBody564_250
@@ -834,20 +837,20 @@ def loopBody564_260 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 72#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 0#64])
 
 def loopBody564_261 : HolLoopProg 64 :=
 .mark loopBody564_260
 
 def loopBody564_262 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 13344426445381913340#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 7640891576956012808#64)
 
 def loopBody564_263 : HolLoopProg 64 :=
 .mark loopBody564_262
 
 def loopBody564_264 : HolLoopProg 64 :=
-.seq loopBody564_263 loopBody564_137
+.seq loopBody564_263 loopBody564_123
 
 def loopBody564_265 : HolLoopProg 64 :=
 .mark loopBody564_264
@@ -880,20 +883,20 @@ def loopBody564_274 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 80#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 8#64])
 
 def loopBody564_275 : HolLoopProg 64 :=
 .mark loopBody564_274
 
 def loopBody564_276 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 9905384649541406699#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 13503953896175478587#64)
 
 def loopBody564_277 : HolLoopProg 64 :=
 .mark loopBody564_276
 
 def loopBody564_278 : HolLoopProg 64 :=
-.seq loopBody564_277 loopBody564_137
+.seq loopBody564_277 loopBody564_123
 
 def loopBody564_279 : HolLoopProg 64 :=
 .mark loopBody564_278
@@ -926,20 +929,20 @@ def loopBody564_288 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 88#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 16#64])
 
 def loopBody564_289 : HolLoopProg 64 :=
 .mark loopBody564_288
 
 def loopBody564_290 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 14806603881112131687#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 4354685564936845355#64)
 
 def loopBody564_291 : HolLoopProg 64 :=
 .mark loopBody564_290
 
 def loopBody564_292 : HolLoopProg 64 :=
-.seq loopBody564_291 loopBody564_137
+.seq loopBody564_291 loopBody564_123
 
 def loopBody564_293 : HolLoopProg 64 :=
 .mark loopBody564_292
@@ -972,20 +975,20 @@ def loopBody564_302 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 96#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 24#64])
 
 def loopBody564_303 : HolLoopProg 64 :=
 .mark loopBody564_302
 
 def loopBody564_304 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 6324581712619534043#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 11912009170470909681#64)
 
 def loopBody564_305 : HolLoopProg 64 :=
 .mark loopBody564_304
 
 def loopBody564_306 : HolLoopProg 64 :=
-.seq loopBody564_305 loopBody564_137
+.seq loopBody564_305 loopBody564_123
 
 def loopBody564_307 : HolLoopProg 64 :=
 .mark loopBody564_306
@@ -1018,20 +1021,20 @@ def loopBody564_316 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 104#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 32#64])
 
 def loopBody564_317 : HolLoopProg 64 :=
 .mark loopBody564_316
 
 def loopBody564_318 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 14224731476766686923#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 5840696475078001361#64)
 
 def loopBody564_319 : HolLoopProg 64 :=
 .mark loopBody564_318
 
 def loopBody564_320 : HolLoopProg 64 :=
-.seq loopBody564_319 loopBody564_137
+.seq loopBody564_319 loopBody564_123
 
 def loopBody564_321 : HolLoopProg 64 :=
 .mark loopBody564_320
@@ -1064,20 +1067,20 @@ def loopBody564_330 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 112#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 40#64])
 
 def loopBody564_331 : HolLoopProg 64 :=
 .mark loopBody564_330
 
 def loopBody564_332 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 7317203453406000633#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 11170449401992604703#64)
 
 def loopBody564_333 : HolLoopProg 64 :=
 .mark loopBody564_332
 
 def loopBody564_334 : HolLoopProg 64 :=
-.seq loopBody564_333 loopBody564_137
+.seq loopBody564_333 loopBody564_123
 
 def loopBody564_335 : HolLoopProg 64 :=
 .mark loopBody564_334
@@ -1110,20 +1113,20 @@ def loopBody564_344 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 120#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 48#64])
 
 def loopBody564_345 : HolLoopProg 64 :=
 .mark loopBody564_344
 
 def loopBody564_346 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 7849414023404435864#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 2270897969802886507#64)
 
 def loopBody564_347 : HolLoopProg 64 :=
 .mark loopBody564_346
 
 def loopBody564_348 : HolLoopProg 64 :=
-.seq loopBody564_347 loopBody564_137
+.seq loopBody564_347 loopBody564_123
 
 def loopBody564_349 : HolLoopProg 64 :=
 .mark loopBody564_348
@@ -1156,20 +1159,20 @@ def loopBody564_358 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.op Flapjack.BinOp.add
     [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 128#64])
+        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 360#64]),
+      Flapjack.HolLoopExp.const 56#64])
 
 def loopBody564_359 : HolLoopProg 64 :=
 .mark loopBody564_358
 
 def loopBody564_360 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 13688264971095146457#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 6620516959819538809#64)
 
 def loopBody564_361 : HolLoopProg 64 :=
 .mark loopBody564_360
 
 def loopBody564_362 : HolLoopProg 64 :=
-.seq loopBody564_361 loopBody564_137
+.seq loopBody564_361 loopBody564_123
 
 def loopBody564_363 : HolLoopProg 64 :=
 .mark loopBody564_362
@@ -1199,149 +1202,11 @@ def loopBody564_371 : HolLoopProg 64 :=
 .mark loopBody564_370
 
 def loopBody564_372 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-    [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 136#64])
+.seq loopBody564_371 loopBody564_21
 
 def loopBody564_373 : HolLoopProg 64 :=
 .mark loopBody564_372
 
-def loopBody564_374 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 6331469388073975673#64)
-
-def loopBody564_375 : HolLoopProg 64 :=
-.mark loopBody564_374
-
-def loopBody564_376 : HolLoopProg 64 :=
-.seq loopBody564_375 loopBody564_137
-
-def loopBody564_377 : HolLoopProg 64 :=
-.mark loopBody564_376
-
-def loopBody564_378 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_377
-
-def loopBody564_379 : HolLoopProg 64 :=
-.mark loopBody564_378
-
-def loopBody564_380 : HolLoopProg 64 :=
-.seq loopBody564_373 loopBody564_379
-
-def loopBody564_381 : HolLoopProg 64 :=
-.mark loopBody564_380
-
-def loopBody564_382 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_381
-
-def loopBody564_383 : HolLoopProg 64 :=
-.mark loopBody564_382
-
-def loopBody564_384 : HolLoopProg 64 :=
-.seq loopBody564_371 loopBody564_383
-
-def loopBody564_385 : HolLoopProg 64 :=
-.mark loopBody564_384
-
-def loopBody564_386 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-    [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 144#64])
-
-def loopBody564_387 : HolLoopProg 64 :=
-.mark loopBody564_386
-
-def loopBody564_388 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 10330303817214507103#64)
-
-def loopBody564_389 : HolLoopProg 64 :=
-.mark loopBody564_388
-
-def loopBody564_390 : HolLoopProg 64 :=
-.seq loopBody564_389 loopBody564_137
-
-def loopBody564_391 : HolLoopProg 64 :=
-.mark loopBody564_390
-
-def loopBody564_392 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_391
-
-def loopBody564_393 : HolLoopProg 64 :=
-.mark loopBody564_392
-
-def loopBody564_394 : HolLoopProg 64 :=
-.seq loopBody564_387 loopBody564_393
-
-def loopBody564_395 : HolLoopProg 64 :=
-.mark loopBody564_394
-
-def loopBody564_396 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_395
-
-def loopBody564_397 : HolLoopProg 64 :=
-.mark loopBody564_396
-
-def loopBody564_398 : HolLoopProg 64 :=
-.seq loopBody564_385 loopBody564_397
-
-def loopBody564_399 : HolLoopProg 64 :=
-.mark loopBody564_398
-
-def loopBody564_400 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-    [Flapjack.HolLoopExp.load
-        (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 320#64]),
-      Flapjack.HolLoopExp.const 152#64])
-
-def loopBody564_401 : HolLoopProg 64 :=
-.mark loopBody564_400
-
-def loopBody564_402 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 13537634492463488088#64)
-
-def loopBody564_403 : HolLoopProg 64 :=
-.mark loopBody564_402
-
-def loopBody564_404 : HolLoopProg 64 :=
-.seq loopBody564_403 loopBody564_137
-
-def loopBody564_405 : HolLoopProg 64 :=
-.mark loopBody564_404
-
-def loopBody564_406 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_405
-
-def loopBody564_407 : HolLoopProg 64 :=
-.mark loopBody564_406
-
-def loopBody564_408 : HolLoopProg 64 :=
-.seq loopBody564_401 loopBody564_407
-
-def loopBody564_409 : HolLoopProg 64 :=
-.mark loopBody564_408
-
-def loopBody564_410 : HolLoopProg 64 :=
-.seq loopBody564_17 loopBody564_409
-
-def loopBody564_411 : HolLoopProg 64 :=
-.mark loopBody564_410
-
-def loopBody564_412 : HolLoopProg 64 :=
-.seq loopBody564_399 loopBody564_411
-
-def loopBody564_413 : HolLoopProg 64 :=
-.mark loopBody564_412
-
-def loopBody564_414 : HolLoopProg 64 :=
-.seq loopBody564_413 loopBody564_21
-
-def loopBody564_415 : HolLoopProg 64 :=
-.mark loopBody564_414
-
 def output564 : Nat × List Nat × HolLoopProg 64 :=
-  (628, [], loopBody564_415)
+  (628, [], loopBody564_373)
 end InitECandidate.Proofs.FrontendStages.Loop

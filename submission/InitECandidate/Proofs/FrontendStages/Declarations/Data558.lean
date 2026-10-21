@@ -12,7 +12,9 @@ def body558_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def body558_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "v"]
+Flapjack.Prog.call (some (none, none)) "stack_push_word"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 112#64])]
 
 def body558_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -27,35 +29,27 @@ def body558_5 : Prog (BitVec 64) :=
 .seq body558_1 body558_4
 
 def body558_6 : Prog (BitVec 64) :=
-.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("address_to_u256") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 32#64])]) body558_5
+.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body558_5
 
 def body558_7 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body558_6
+.seq body558_0 body558_6
 
 def body558_8 : Prog (BitVec 64) :=
-.seq body558_0 body558_7
-
-def body558_9 : Prog (BitVec 64) :=
 .seq body558_1 body558_2
 
+def body558_9 : Prog (BitVec 64) :=
+.seq body558_8 body558_3
+
 def body558_10 : Prog (BitVec 64) :=
-.seq body558_9 body558_3
+.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body558_9
 
 def body558_11 : Prog (BitVec 64) :=
-.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("address_to_u256") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 32#64])]) body558_10
-
-def body558_12 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body558_11
-
-def body558_13 : Prog (BitVec 64) :=
-.seq body558_0 body558_12
+.seq body558_0 body558_10
 
 def originalData558 : Decl (BitVec 64) :=
-.function { name := "op_coinbase", inline := false, exported := false, params := [], body := body558_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_slotnum", inline := false, exported := false, params := [], body := body558_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData558 : Decl (BitVec 64) :=
-.function { name := "op_coinbase", inline := false, exported := false, params := [], body := body558_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_slotnum", inline := false, exported := false, params := [], body := body558_11, returnShape := (Flapjack.Shape.one) }
 def original558 := Pancake.PanLang.declToHOL originalData558
 def simplified558 := Pancake.PanLang.declToHOL simplifiedData558
 end InitECandidate.Proofs.FrontendStages.Declarations

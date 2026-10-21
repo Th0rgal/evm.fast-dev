@@ -9,13 +9,12 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody149_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call none "fp_pow"
+Flapjack.CrepProg.call none "modinv_bin"
   [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 1, Flapjack.CrepExp.var 2, Flapjack.CrepExp.var 3,
-    Flapjack.CrepExp.const 18446744069414583341#64, Flapjack.CrepExp.const 18446744073709551615#64,
+    Flapjack.CrepExp.const 18446744069414583343#64, Flapjack.CrepExp.const 18446744073709551615#64,
     Flapjack.CrepExp.const 18446744073709551615#64, Flapjack.CrepExp.const 18446744073709551615#64]
 
 def data149 : CrepProg (BitVec 64) := crepBody149_0
 def output149 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode
-  [102#8, 112#8, 95#8, 105#8, 110#8, 118#8, 95#8, 102#8, 101#8, 114#8, 109#8, 97#8, 116#8], [0, 1, 2, 3], crepProgToHOL data149)
+  (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 95#8, 105#8, 110#8, 118#8], [0, 1, 2, 3], crepProgToHOL data149)
 end InitECandidate.Proofs.FrontendStages.Crep

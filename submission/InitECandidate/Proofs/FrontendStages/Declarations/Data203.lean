@@ -9,18 +9,47 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body203_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "SszErr" (Flapjack.Exp.var Flapjack.VarKind.local "code")
+Flapjack.Prog.call (some (none, none)) "ssz_fail" [Flapjack.Exp.const 70#64]
 
 def body203_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.skip
 
 def body203_2 : Prog (BitVec 64) :=
-.seq body203_0 body203_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "maxb")
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "r"),
+        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 16#64],
+        Flapjack.Exp.const 8#64]))) body203_0 body203_1
+
+def body203_3 : Prog (BitVec 64) :=
+Flapjack.Prog.assign Flapjack.VarKind.local "i"
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
+
+def body203_4 : Prog (BitVec 64) :=
+.seq body203_2 body203_3
+
+def body203_5 : Prog (BitVec 64) :=
+.while (Flapjack.Exp.cmp Flapjack.Cmp.less (Flapjack.Exp.var Flapjack.VarKind.local "i")
+  (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "r"))) body203_4
+
+def body203_6 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "r")
+
+def body203_7 : Prog (BitVec 64) :=
+.seq body203_5 body203_6
+
+def body203_8 : Prog (BitVec 64) :=
+.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body203_7
+
+def body203_9 : Prog (BitVec 64) :=
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("ssz_split_var_list") ([Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.var Flapjack.VarKind.local "len",
+  Flapjack.Exp.var Flapjack.VarKind.local "lim"]) body203_8
 
 def originalData203 : Decl (BitVec 64) :=
-.function { name := "ssz_fail", inline := false, exported := false, params := [("code", Flapjack.Shape.one)], body := body203_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "decode_bytes_list", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one), ("lim", Flapjack.Shape.one), ("maxb", Flapjack.Shape.one)], body := body203_9, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData203 : Decl (BitVec 64) :=
-.function { name := "ssz_fail", inline := false, exported := false, params := [("code", Flapjack.Shape.one)], body := body203_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "decode_bytes_list", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one), ("lim", Flapjack.Shape.one), ("maxb", Flapjack.Shape.one)], body := body203_9, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original203 := Pancake.PanLang.declToHOL originalData203
 def simplified203 := Pancake.PanLang.declToHOL simplifiedData203
 end InitECandidate.Proofs.FrontendStages.Declarations

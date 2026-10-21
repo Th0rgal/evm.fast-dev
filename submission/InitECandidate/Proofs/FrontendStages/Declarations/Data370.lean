@@ -9,7 +9,7 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body370_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.global "empty_trie_root")
+Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "a"), none)) "acct_empty" []
 
 def body370_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
@@ -18,20 +18,18 @@ def body370_2 : Prog (BitVec 64) :=
 .ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "a") (Flapjack.Exp.const 1#64)) body370_0 body370_1
 
 def body370_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 40#64]))
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
 
 def body370_4 : Prog (BitVec 64) :=
 .seq body370_2 body370_3
 
 def body370_5 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("ws_get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body370_4
+.decCall ("a") (Flapjack.Shape.one) ("get_pre_state_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body370_4
 
 def originalData370 : Decl (BitVec 64) :=
-.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body370_5, returnShape := (Flapjack.Shape.one) }
+.function { name := "get_pre_state_account", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body370_5, returnShape := (Flapjack.Shape.one) }
 def simplifiedData370 : Decl (BitVec 64) :=
-.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body370_5, returnShape := (Flapjack.Shape.one) }
+.function { name := "get_pre_state_account", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body370_5, returnShape := (Flapjack.Shape.one) }
 def original370 := Pancake.PanLang.declToHOL originalData370
 def simplified370 := Pancake.PanLang.declToHOL simplifiedData370
 end InitECandidate.Proofs.FrontendStages.Declarations

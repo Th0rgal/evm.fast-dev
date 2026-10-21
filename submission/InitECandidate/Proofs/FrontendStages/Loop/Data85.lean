@@ -185,90 +185,35 @@ def loopBody85_57 : HolLoopProg 64 :=
 .mark loopBody85_56
 
 def loopBody85_58 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 96#64)
+Flapjack.HolLoopProg.assign 1 (Flapjack.HolLoopExp.const 0#64)
 
 def loopBody85_59 : HolLoopProg 64 :=
 .mark loopBody85_58
 
 def loopBody85_60 : HolLoopProg 64 :=
-.seq loopBody85_59 loopBody85_9
+Flapjack.HolLoopProg.return [1]
 
 def loopBody85_61 : HolLoopProg 64 :=
 .mark loopBody85_60
 
 def loopBody85_62 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 64#64])
+.seq loopBody85_61 loopBody85_1
 
 def loopBody85_63 : HolLoopProg 64 :=
 .mark loopBody85_62
 
 def loopBody85_64 : HolLoopProg 64 :=
-.seq loopBody85_63 loopBody85_29
+.seq loopBody85_59 loopBody85_63
 
 def loopBody85_65 : HolLoopProg 64 :=
 .mark loopBody85_64
 
 def loopBody85_66 : HolLoopProg 64 :=
-.seq loopBody85_1 loopBody85_65
+.seq loopBody85_57 loopBody85_65
 
 def loopBody85_67 : HolLoopProg 64 :=
 .mark loopBody85_66
 
-def loopBody85_68 : HolLoopProg 64 :=
-.seq loopBody85_61 loopBody85_67
-
-def loopBody85_69 : HolLoopProg 64 :=
-.mark loopBody85_68
-
-def loopBody85_70 : HolLoopProg 64 :=
-.seq loopBody85_1 loopBody85_69
-
-def loopBody85_71 : HolLoopProg 64 :=
-.mark loopBody85_70
-
-def loopBody85_72 : HolLoopProg 64 :=
-.seq loopBody85_1 loopBody85_71
-
-def loopBody85_73 : HolLoopProg 64 :=
-.mark loopBody85_72
-
-def loopBody85_74 : HolLoopProg 64 :=
-.seq loopBody85_57 loopBody85_73
-
-def loopBody85_75 : HolLoopProg 64 :=
-.mark loopBody85_74
-
-def loopBody85_76 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1 (Flapjack.HolLoopExp.const 0#64)
-
-def loopBody85_77 : HolLoopProg 64 :=
-.mark loopBody85_76
-
-def loopBody85_78 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.return [1]
-
-def loopBody85_79 : HolLoopProg 64 :=
-.mark loopBody85_78
-
-def loopBody85_80 : HolLoopProg 64 :=
-.seq loopBody85_79 loopBody85_1
-
-def loopBody85_81 : HolLoopProg 64 :=
-.mark loopBody85_80
-
-def loopBody85_82 : HolLoopProg 64 :=
-.seq loopBody85_77 loopBody85_81
-
-def loopBody85_83 : HolLoopProg 64 :=
-.mark loopBody85_82
-
-def loopBody85_84 : HolLoopProg 64 :=
-.seq loopBody85_75 loopBody85_83
-
-def loopBody85_85 : HolLoopProg 64 :=
-.mark loopBody85_84
-
 def output85 : Nat × List Nat × HolLoopProg 64 :=
-  (149, [], loopBody85_85)
+  (149, [], loopBody85_67)
 end InitECandidate.Proofs.FrontendStages.Loop

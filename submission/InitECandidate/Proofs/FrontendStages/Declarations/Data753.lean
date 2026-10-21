@@ -9,18 +9,32 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body753_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memzero" [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 96#64]
+Flapjack.Prog.call (some (none, none)) "fp12_pow_absx"
+  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "a"]
 
 def body753_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call (some (none, none)) "fp12_conj"
+  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def body753_2 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body753_3 : Prog (BitVec 64) :=
+.seq body753_1 body753_2
+
+def body753_4 : Prog (BitVec 64) :=
+.seq body753_0 body753_3
+
+def body753_5 : Prog (BitVec 64) :=
 .seq body753_0 body753_1
 
+def body753_6 : Prog (BitVec 64) :=
+.seq body753_5 body753_2
+
 def originalData753 : Decl (BitVec 64) :=
-.function { name := "fp2_set_zero", inline := false, exported := false, params := [("r", Flapjack.Shape.one)], body := body753_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "fp12_exp_x", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_4, returnShape := (Flapjack.Shape.one) }
 def simplifiedData753 : Decl (BitVec 64) :=
-.function { name := "fp2_set_zero", inline := false, exported := false, params := [("r", Flapjack.Shape.one)], body := body753_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "fp12_exp_x", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_6, returnShape := (Flapjack.Shape.one) }
 def original753 := Pancake.PanLang.declToHOL originalData753
 def simplified753 := Pancake.PanLang.declToHOL simplifiedData753
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data449
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate428
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -9,41 +12,60 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody449_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 64#64])
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add
+          [Flapjack.Exp.load Flapjack.Shape.one
+              (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+            Flapjack.Exp.const 64#64]),
+      Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add
+          [Flapjack.Exp.load Flapjack.Shape.one
+              (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+            Flapjack.Exp.const 192#64])])
 
 def globalBody449_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 72#64])
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 48#64]))
 
 def globalBody449_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 23#64)) globalBody449_0 globalBody449_1
+.seq globalBody449_0 globalBody449_1
 
 def globalBody449_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 1#64)
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 192#64])
+  (Flapjack.Exp.const 0#64)
 
 def globalBody449_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.op Flapjack.BinOp.and
-  [Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.loadByte (Flapjack.Exp.var Flapjack.VarKind.local "code"))
-        (Flapjack.Exp.const 239#64)),
-    Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal
-        (Flapjack.Exp.loadByte
-          (Flapjack.Exp.op Flapjack.BinOp.add
-            [Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.const 1#64]))
-        (Flapjack.Exp.const 1#64)),
-    Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.const 0#64)
-      (Flapjack.Exp.cmp Flapjack.Cmp.equal
-        (Flapjack.Exp.loadByte
-          (Flapjack.Exp.op Flapjack.BinOp.add
-            [Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.const 2#64]))
-        (Flapjack.Exp.const 0#64))]) globalBody449_3 globalBody449_1
+.seq globalBody449_2 globalBody449_3
 
 def globalBody449_5 : Prog (BitVec 64) :=
-.seq globalBody449_2 globalBody449_4
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody449_6 : Prog (BitVec 64) :=
-.seq globalBody449_5 globalBody449_0
+.seq globalBody449_4 globalBody449_5
 
-def globalData449 : Decl (BitVec 64) := .function { name := "is_valid_delegation", inline := false, exported := false, params := [("code", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := globalBody449_6, returnShape := (Flapjack.Shape.one) }
+def globalBody449_7 : Prog (BitVec 64) :=
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 112#64])) globalBody449_6
+
+def globalData449 : Decl (BitVec 64) :=
+.function { name := "refill_frame_state_gas", inline := false, exported := false, params := [], body := globalBody449_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput449 := Pancake.PanLang.declToHOL globalData449
 end InitECandidate.Proofs.FrontendStages.Declarations

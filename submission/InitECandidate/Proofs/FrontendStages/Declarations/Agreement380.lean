@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify380
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement364
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original380_eq : original380 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_stor_lookup := by
+theorem original380_eq : original380 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_account_deployable := by
   with_unfolding_all rfl
 #print axioms original380_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

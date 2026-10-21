@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import InitECandidate.Proofs.FrontendStages.Declarations.Simplify429
 import InitECandidate.Proofs.FrontendStages.Declarations.Agreement413
 set_option Elab.async false
@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original429_eq : original429 = Flapjack.Pancake.PanLang.declToHOL Guest.guestFn_remove_storage_write := by
+theorem original429_eq : original429 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_bal_encode_account := by
   with_unfolding_all rfl
 #print axioms original429_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

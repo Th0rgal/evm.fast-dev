@@ -9,32 +9,11 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody131_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return [Flapjack.CrepExp.var 2, Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 4]
-
-def crepBody131_1 : CrepProg (BitVec 64) :=
-.dec 4 (Flapjack.CrepExp.load
-  (Flapjack.CrepExp.op Flapjack.BinOp.add
-    [Flapjack.CrepExp.load
-        (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64]),
-      Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul [Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 8#64]])) crepBody131_0
-
-def crepBody131_2 : CrepProg (BitVec 64) :=
-.dec 3 (Flapjack.CrepExp.op Flapjack.BinOp.add
+Flapjack.CrepProg.return
   [Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64]),
-    Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul
-      [Flapjack.CrepExp.var 1,
-        Flapjack.CrepExp.load
-          (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64])]]) crepBody131_1
+      (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64])]
 
-def crepBody131_3 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.loadByte
-  (Flapjack.CrepExp.op Flapjack.BinOp.add
-    [Flapjack.CrepExp.load
-        (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 48#64]),
-      Flapjack.CrepExp.var 1])) crepBody131_2
-
-def data131 : CrepProg (BitVec 64) := crepBody131_3
+def data131 : CrepProg (BitVec 64) := crepBody131_0
 def output131 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 115#8, 108#8, 111#8, 116#8], [0, 1], crepProgToHOL data131)
+  (Flapjack.Basis.Pure.MlString.MlString.implode [104#8, 116#8, 97#8, 98#8, 95#8, 99#8, 111#8, 117#8, 110#8, 116#8], [0], crepProgToHOL data131)
 end InitECandidate.Proofs.FrontendStages.Crep

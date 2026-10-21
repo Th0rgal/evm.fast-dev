@@ -21,7 +21,7 @@ def crepBody26_3 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.skip
 
 def crepBody26_4 : CrepProg (BitVec 64) :=
-.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.lower (Flapjack.CrepExp.const 134217712#64) (Flapjack.CrepExp.var 1)) crepBody26_2 crepBody26_3
+.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.lower (Flapjack.CrepExp.const 1073741808#64) (Flapjack.CrepExp.var 1)) crepBody26_2 crepBody26_3
 
 def crepBody26_5 : CrepProg (BitVec 64) :=
 .seq crepBody26_0 crepBody26_4

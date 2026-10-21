@@ -9,21 +9,18 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body798_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "bls_fp_is_zero" [Flapjack.Exp.var Flapjack.VarKind.local "z"]
+Flapjack.Prog.call (some (none, none)) "bls_consts_init" []
 
 def body798_1 : Prog (BitVec 64) :=
-.dec ("z") (Flapjack.Shape.comb
-  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-    Flapjack.Shape.one]) (Flapjack.Exp.load
-  (Flapjack.Shape.comb
-    [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-      Flapjack.Shape.one])
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.const 96#64])) body798_0
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body798_2 : Prog (BitVec 64) :=
+.seq body798_0 body798_1
 
 def originalData798 : Decl (BitVec 64) :=
-.function { name := "g1_is_inf", inline := false, exported := false, params := [("p", Flapjack.Shape.one)], body := body798_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "bls_lib_init", inline := false, exported := false, params := [], body := body798_2, returnShape := (Flapjack.Shape.one) }
 def simplifiedData798 : Decl (BitVec 64) :=
-.function { name := "g1_is_inf", inline := false, exported := false, params := [("p", Flapjack.Shape.one)], body := body798_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "bls_lib_init", inline := false, exported := false, params := [], body := body798_2, returnShape := (Flapjack.Shape.one) }
 def original798 := Pancake.PanLang.declToHOL originalData798
 def simplified798 := Pancake.PanLang.declToHOL simplifiedData798
 end InitECandidate.Proofs.FrontendStages.Declarations

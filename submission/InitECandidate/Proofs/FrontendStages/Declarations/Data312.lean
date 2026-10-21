@@ -9,15 +9,27 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body312_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load
-    (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 16#64]))
+Flapjack.Prog.return (Flapjack.Exp.const 1#64)
+
+def body312_1 : Prog (BitVec 64) :=
+Flapjack.Prog.skip
+
+def body312_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 0#64]))
+  (Flapjack.Exp.const 0#64)) body312_0 body312_1
+
+def body312_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body312_4 : Prog (BitVec 64) :=
+.seq body312_2 body312_3
 
 def originalData312 : Decl (BitVec 64) :=
-.function { name := "tx_nonce", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body312_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "tx_has_access_list", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body312_4, returnShape := (Flapjack.Shape.one) }
 def simplifiedData312 : Decl (BitVec 64) :=
-.function { name := "tx_nonce", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body312_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "tx_has_access_list", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body312_4, returnShape := (Flapjack.Shape.one) }
 def original312 := Pancake.PanLang.declToHOL originalData312
 def simplified312 := Pancake.PanLang.declToHOL simplifiedData312
 end InitECandidate.Proofs.FrontendStages.Declarations

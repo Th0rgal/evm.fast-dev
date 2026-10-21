@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data34
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate18
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -86,6 +89,7 @@ def globalBody34_19 : Prog (BitVec 64) :=
 def globalBody34_20 : Prog (BitVec 64) :=
 .seq globalBody34_5 globalBody34_19
 
-def globalData34 : Decl (BitVec 64) := .function { name := "udivmod", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody34_20, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData34 : Decl (BitVec 64) :=
+.function { name := "udivmod", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody34_20, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput34 := Pancake.PanLang.declToHOL globalData34
 end InitECandidate.Proofs.FrontendStages.Declarations

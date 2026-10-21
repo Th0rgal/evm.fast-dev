@@ -1036,683 +1036,215 @@ def sourceBody64_209 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody64_0 sourceBody64_208
 
 def sourceBody64_210 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 544#64])
+.seq sourceBody64_209 sourceBody64_0
 
 def sourceBody64_211 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_210 sourceBody64_9
+.seq sourceBody64_206 sourceBody64_210
 
 def sourceBody64_212 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_211
+.seq sourceBody64_203 sourceBody64_211
 
 def sourceBody64_213 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 552#64])
+.seq sourceBody64_200 sourceBody64_212
 
 def sourceBody64_214 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_213 sourceBody64_9
+.seq sourceBody64_197 sourceBody64_213
 
 def sourceBody64_215 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_214
+.seq sourceBody64_194 sourceBody64_214
 
 def sourceBody64_216 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 560#64])
+.seq sourceBody64_191 sourceBody64_215
 
 def sourceBody64_217 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_216 sourceBody64_9
+.seq sourceBody64_188 sourceBody64_216
 
 def sourceBody64_218 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_217
+.seq sourceBody64_185 sourceBody64_217
 
 def sourceBody64_219 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 568#64])
+.seq sourceBody64_182 sourceBody64_218
 
 def sourceBody64_220 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_219 sourceBody64_9
+.seq sourceBody64_179 sourceBody64_219
 
 def sourceBody64_221 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_220
+.seq sourceBody64_176 sourceBody64_220
 
 def sourceBody64_222 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 576#64])
+.seq sourceBody64_173 sourceBody64_221
 
 def sourceBody64_223 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_222 sourceBody64_9
+.seq sourceBody64_170 sourceBody64_222
 
 def sourceBody64_224 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_223
+.seq sourceBody64_167 sourceBody64_223
 
 def sourceBody64_225 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 584#64])
+.seq sourceBody64_164 sourceBody64_224
 
 def sourceBody64_226 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_225 sourceBody64_9
+.seq sourceBody64_161 sourceBody64_225
 
 def sourceBody64_227 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_226
+.seq sourceBody64_158 sourceBody64_226
 
 def sourceBody64_228 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 592#64])
+.seq sourceBody64_155 sourceBody64_227
 
 def sourceBody64_229 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_228 sourceBody64_9
+.seq sourceBody64_152 sourceBody64_228
 
 def sourceBody64_230 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_229
+.seq sourceBody64_149 sourceBody64_229
 
 def sourceBody64_231 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 600#64])
+.seq sourceBody64_146 sourceBody64_230
 
 def sourceBody64_232 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_231 sourceBody64_9
+.seq sourceBody64_143 sourceBody64_231
 
 def sourceBody64_233 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_232
+.seq sourceBody64_140 sourceBody64_232
 
 def sourceBody64_234 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 608#64])
+.seq sourceBody64_137 sourceBody64_233
 
 def sourceBody64_235 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_234 sourceBody64_9
+.seq sourceBody64_134 sourceBody64_234
 
 def sourceBody64_236 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_235
+.seq sourceBody64_131 sourceBody64_235
 
 def sourceBody64_237 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 616#64])
+.seq sourceBody64_128 sourceBody64_236
 
 def sourceBody64_238 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_237 sourceBody64_9
+.seq sourceBody64_125 sourceBody64_237
 
 def sourceBody64_239 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_238
+.seq sourceBody64_122 sourceBody64_238
 
 def sourceBody64_240 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 624#64])
+.seq sourceBody64_119 sourceBody64_239
 
 def sourceBody64_241 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_240 sourceBody64_9
+.seq sourceBody64_116 sourceBody64_240
 
 def sourceBody64_242 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_241
+.seq sourceBody64_113 sourceBody64_241
 
 def sourceBody64_243 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 632#64])
+.seq sourceBody64_110 sourceBody64_242
 
 def sourceBody64_244 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_243 sourceBody64_9
+.seq sourceBody64_107 sourceBody64_243
 
 def sourceBody64_245 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_244
+.seq sourceBody64_104 sourceBody64_244
 
 def sourceBody64_246 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 640#64])
+.seq sourceBody64_101 sourceBody64_245
 
 def sourceBody64_247 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_246 sourceBody64_9
+.seq sourceBody64_98 sourceBody64_246
 
 def sourceBody64_248 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_247
+.seq sourceBody64_95 sourceBody64_247
 
 def sourceBody64_249 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 648#64])
+.seq sourceBody64_92 sourceBody64_248
 
 def sourceBody64_250 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_249 sourceBody64_9
+.seq sourceBody64_89 sourceBody64_249
 
 def sourceBody64_251 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_250
+.seq sourceBody64_86 sourceBody64_250
 
 def sourceBody64_252 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 656#64])
+.seq sourceBody64_83 sourceBody64_251
 
 def sourceBody64_253 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_252 sourceBody64_9
+.seq sourceBody64_80 sourceBody64_252
 
 def sourceBody64_254 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_253
+.seq sourceBody64_77 sourceBody64_253
 
 def sourceBody64_255 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 664#64])
+.seq sourceBody64_74 sourceBody64_254
 
 def sourceBody64_256 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_255 sourceBody64_9
+.seq sourceBody64_71 sourceBody64_255
 
 def sourceBody64_257 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_256
+.seq sourceBody64_68 sourceBody64_256
 
 def sourceBody64_258 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 672#64])
+.seq sourceBody64_65 sourceBody64_257
 
 def sourceBody64_259 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_258 sourceBody64_9
+.seq sourceBody64_62 sourceBody64_258
 
 def sourceBody64_260 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_259
+.seq sourceBody64_59 sourceBody64_259
 
 def sourceBody64_261 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 680#64])
+.seq sourceBody64_56 sourceBody64_260
 
 def sourceBody64_262 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_261 sourceBody64_9
+.seq sourceBody64_53 sourceBody64_261
 
 def sourceBody64_263 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_262
+.seq sourceBody64_50 sourceBody64_262
 
 def sourceBody64_264 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 688#64])
+.seq sourceBody64_47 sourceBody64_263
 
 def sourceBody64_265 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_264 sourceBody64_9
+.seq sourceBody64_44 sourceBody64_264
 
 def sourceBody64_266 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_265
+.seq sourceBody64_41 sourceBody64_265
 
 def sourceBody64_267 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 696#64])
+.seq sourceBody64_38 sourceBody64_266
 
 def sourceBody64_268 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_267 sourceBody64_9
+.seq sourceBody64_35 sourceBody64_267
 
 def sourceBody64_269 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_268
+.seq sourceBody64_32 sourceBody64_268
 
 def sourceBody64_270 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 704#64])
+.seq sourceBody64_29 sourceBody64_269
 
 def sourceBody64_271 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_270 sourceBody64_9
+.seq sourceBody64_26 sourceBody64_270
 
 def sourceBody64_272 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_271
+.seq sourceBody64_23 sourceBody64_271
 
 def sourceBody64_273 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 712#64])
+.seq sourceBody64_20 sourceBody64_272
 
 def sourceBody64_274 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_273 sourceBody64_9
+.seq sourceBody64_17 sourceBody64_273
 
 def sourceBody64_275 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_274
+.seq sourceBody64_14 sourceBody64_274
 
 def sourceBody64_276 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 720#64])
+.seq sourceBody64_11 sourceBody64_275
 
 def sourceBody64_277 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_276 sourceBody64_9
-
-def sourceBody64_278 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_277
-
-def sourceBody64_279 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 728#64])
-
-def sourceBody64_280 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_279 sourceBody64_9
-
-def sourceBody64_281 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_280
-
-def sourceBody64_282 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 736#64])
-
-def sourceBody64_283 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_282 sourceBody64_9
-
-def sourceBody64_284 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_283
-
-def sourceBody64_285 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.sub
-    [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-        [Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.currHeap,
-          Flapjack.WordLangExpHOL.shift Flapjack.Shift.lsl
-            (Flapjack.WordLangExpHOL.lookup Flapjack.WordStore.heapLength) (Flapjack.WordLangExpHOL.const 1#64)],
-      Flapjack.WordLangExpHOL.const 744#64])
-
-def sourceBody64_286 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_285 sourceBody64_9
-
-def sourceBody64_287 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_0 sourceBody64_286
-
-def sourceBody64_288 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_287 sourceBody64_0
-
-def sourceBody64_289 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_284 sourceBody64_288
-
-def sourceBody64_290 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_281 sourceBody64_289
-
-def sourceBody64_291 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_278 sourceBody64_290
-
-def sourceBody64_292 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_275 sourceBody64_291
-
-def sourceBody64_293 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_272 sourceBody64_292
-
-def sourceBody64_294 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_269 sourceBody64_293
-
-def sourceBody64_295 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_266 sourceBody64_294
-
-def sourceBody64_296 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_263 sourceBody64_295
-
-def sourceBody64_297 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_260 sourceBody64_296
-
-def sourceBody64_298 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_257 sourceBody64_297
-
-def sourceBody64_299 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_254 sourceBody64_298
-
-def sourceBody64_300 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_251 sourceBody64_299
-
-def sourceBody64_301 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_248 sourceBody64_300
-
-def sourceBody64_302 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_245 sourceBody64_301
-
-def sourceBody64_303 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_242 sourceBody64_302
-
-def sourceBody64_304 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_239 sourceBody64_303
-
-def sourceBody64_305 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_236 sourceBody64_304
-
-def sourceBody64_306 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_233 sourceBody64_305
-
-def sourceBody64_307 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_230 sourceBody64_306
-
-def sourceBody64_308 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_227 sourceBody64_307
-
-def sourceBody64_309 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_224 sourceBody64_308
-
-def sourceBody64_310 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_221 sourceBody64_309
-
-def sourceBody64_311 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_218 sourceBody64_310
-
-def sourceBody64_312 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_215 sourceBody64_311
-
-def sourceBody64_313 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_212 sourceBody64_312
-
-def sourceBody64_314 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_209 sourceBody64_313
-
-def sourceBody64_315 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_206 sourceBody64_314
-
-def sourceBody64_316 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_203 sourceBody64_315
-
-def sourceBody64_317 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_200 sourceBody64_316
-
-def sourceBody64_318 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_197 sourceBody64_317
-
-def sourceBody64_319 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_194 sourceBody64_318
-
-def sourceBody64_320 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_191 sourceBody64_319
-
-def sourceBody64_321 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_188 sourceBody64_320
-
-def sourceBody64_322 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_185 sourceBody64_321
-
-def sourceBody64_323 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_182 sourceBody64_322
-
-def sourceBody64_324 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_179 sourceBody64_323
-
-def sourceBody64_325 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_176 sourceBody64_324
-
-def sourceBody64_326 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_173 sourceBody64_325
-
-def sourceBody64_327 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_170 sourceBody64_326
-
-def sourceBody64_328 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_167 sourceBody64_327
-
-def sourceBody64_329 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_164 sourceBody64_328
-
-def sourceBody64_330 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_161 sourceBody64_329
-
-def sourceBody64_331 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_158 sourceBody64_330
-
-def sourceBody64_332 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_155 sourceBody64_331
-
-def sourceBody64_333 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_152 sourceBody64_332
-
-def sourceBody64_334 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_149 sourceBody64_333
-
-def sourceBody64_335 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_146 sourceBody64_334
-
-def sourceBody64_336 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_143 sourceBody64_335
-
-def sourceBody64_337 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_140 sourceBody64_336
-
-def sourceBody64_338 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_137 sourceBody64_337
-
-def sourceBody64_339 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_134 sourceBody64_338
-
-def sourceBody64_340 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_131 sourceBody64_339
-
-def sourceBody64_341 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_128 sourceBody64_340
-
-def sourceBody64_342 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_125 sourceBody64_341
-
-def sourceBody64_343 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_122 sourceBody64_342
-
-def sourceBody64_344 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_119 sourceBody64_343
-
-def sourceBody64_345 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_116 sourceBody64_344
-
-def sourceBody64_346 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_113 sourceBody64_345
-
-def sourceBody64_347 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_110 sourceBody64_346
-
-def sourceBody64_348 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_107 sourceBody64_347
-
-def sourceBody64_349 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_104 sourceBody64_348
-
-def sourceBody64_350 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_101 sourceBody64_349
-
-def sourceBody64_351 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_98 sourceBody64_350
-
-def sourceBody64_352 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_95 sourceBody64_351
-
-def sourceBody64_353 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_92 sourceBody64_352
-
-def sourceBody64_354 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_89 sourceBody64_353
-
-def sourceBody64_355 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_86 sourceBody64_354
-
-def sourceBody64_356 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_83 sourceBody64_355
-
-def sourceBody64_357 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_80 sourceBody64_356
-
-def sourceBody64_358 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_77 sourceBody64_357
-
-def sourceBody64_359 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_74 sourceBody64_358
-
-def sourceBody64_360 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_71 sourceBody64_359
-
-def sourceBody64_361 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_68 sourceBody64_360
-
-def sourceBody64_362 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_65 sourceBody64_361
-
-def sourceBody64_363 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_62 sourceBody64_362
-
-def sourceBody64_364 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_59 sourceBody64_363
-
-def sourceBody64_365 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_56 sourceBody64_364
-
-def sourceBody64_366 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_53 sourceBody64_365
-
-def sourceBody64_367 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_50 sourceBody64_366
-
-def sourceBody64_368 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_47 sourceBody64_367
-
-def sourceBody64_369 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_44 sourceBody64_368
-
-def sourceBody64_370 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_41 sourceBody64_369
-
-def sourceBody64_371 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_38 sourceBody64_370
-
-def sourceBody64_372 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_35 sourceBody64_371
-
-def sourceBody64_373 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_32 sourceBody64_372
-
-def sourceBody64_374 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_29 sourceBody64_373
-
-def sourceBody64_375 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_26 sourceBody64_374
-
-def sourceBody64_376 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_23 sourceBody64_375
-
-def sourceBody64_377 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_20 sourceBody64_376
-
-def sourceBody64_378 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_17 sourceBody64_377
-
-def sourceBody64_379 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_14 sourceBody64_378
-
-def sourceBody64_380 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_11 sourceBody64_379
-
-def sourceBody64_381 : WordLangProgHOL (BitVec 64) :=
 .call (none) (some 65) ([0]) (none)
 
-def sourceBody64_382 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_381 sourceBody64_0
+def sourceBody64_278 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody64_277 sourceBody64_0
 
-def sourceBody64_383 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody64_380 sourceBody64_382
+def sourceBody64_279 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody64_276 sourceBody64_278
 
-def source64 : Nat × Nat × WordLangProgHOL (BitVec 64) :=
-  (64, 1, sourceBody64_383)
+def source64 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
+(64, 1, sourceBody64_279)
 end InitECandidate.Proofs.WordStages

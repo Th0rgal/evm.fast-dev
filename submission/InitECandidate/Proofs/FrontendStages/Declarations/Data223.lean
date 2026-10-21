@@ -8,11 +8,40 @@ set_option cbv.warning false
 open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
+def body223_0 : Prog (BitVec 64) :=
+Flapjack.Prog.raise "HdrErr" (Flapjack.Exp.const 8#64)
+
+def body223_1 : Prog (BitVec 64) :=
+Flapjack.Prog.skip
+
+def body223_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "it"))
+  (Flapjack.Exp.const 0#64)) body223_0 body223_1
+
+def body223_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return
+  (Flapjack.Exp.rStruct
+    [Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "it"),
+      Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "it")])
+
+def body223_4 : Prog (BitVec 64) :=
+.seq body223_2 body223_3
+
+def body223_5 : Prog (BitVec 64) :=
+.decCall ("it") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("rlp_item") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.var Flapjack.VarKind.local "arr",
+        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 16#64]]),
+  Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.var Flapjack.VarKind.local "arr",
+        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 16#64],
+        Flapjack.Exp.const 8#64])]) body223_4
 
 def originalData223 : Decl (BitVec 64) :=
-Flapjack.Decl.exnDecl "HdrErr" Flapjack.Shape.one
+.function { name := "hdr_raw_field", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one)], body := body223_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def simplifiedData223 : Decl (BitVec 64) :=
-Flapjack.Decl.exnDecl "HdrErr" Flapjack.Shape.one
+.function { name := "hdr_raw_field", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one)], body := body223_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def original223 := Pancake.PanLang.declToHOL originalData223
 def simplified223 := Pancake.PanLang.declToHOL simplifiedData223
 end InitECandidate.Proofs.FrontendStages.Declarations

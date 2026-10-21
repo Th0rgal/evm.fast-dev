@@ -9,10 +9,10 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body488_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 3#64]
 
 def body488_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (none, none)) "stack_push_bool" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def body488_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -27,45 +27,33 @@ def body488_5 : Prog (BitVec 64) :=
 .seq body488_1 body488_4
 
 def body488_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_signextend") ([Flapjack.Exp.var Flapjack.VarKind.local "bw", Flapjack.Exp.var Flapjack.VarKind.local "x"]) body488_5
+.decCall ("r") (Flapjack.Shape.one) ("u256_is_zero") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) body488_5
 
 def body488_7 : Prog (BitVec 64) :=
-.decCall ("bw") (Flapjack.Shape.one) ("sat_word") ([Flapjack.Exp.var Flapjack.VarKind.local "b"]) body488_6
+.seq body488_0 body488_6
 
 def body488_8 : Prog (BitVec 64) :=
-.seq body488_0 body488_7
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_7
 
 def body488_9 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_8
-
-def body488_10 : Prog (BitVec 64) :=
-.decCall ("b") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_9
-
-def body488_11 : Prog (BitVec 64) :=
 .seq body488_1 body488_2
 
+def body488_10 : Prog (BitVec 64) :=
+.seq body488_9 body488_3
+
+def body488_11 : Prog (BitVec 64) :=
+.decCall ("r") (Flapjack.Shape.one) ("u256_is_zero") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) body488_10
+
 def body488_12 : Prog (BitVec 64) :=
-.seq body488_11 body488_3
+.seq body488_0 body488_11
 
 def body488_13 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_signextend") ([Flapjack.Exp.var Flapjack.VarKind.local "bw", Flapjack.Exp.var Flapjack.VarKind.local "x"]) body488_12
-
-def body488_14 : Prog (BitVec 64) :=
-.decCall ("bw") (Flapjack.Shape.one) ("sat_word") ([Flapjack.Exp.var Flapjack.VarKind.local "b"]) body488_13
-
-def body488_15 : Prog (BitVec 64) :=
-.seq body488_0 body488_14
-
-def body488_16 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_15
-
-def body488_17 : Prog (BitVec 64) :=
-.decCall ("b") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_16
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body488_12
 
 def originalData488 : Decl (BitVec 64) :=
-.function { name := "op_signextend", inline := false, exported := false, params := [], body := body488_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_iszero", inline := false, exported := false, params := [], body := body488_8, returnShape := (Flapjack.Shape.one) }
 def simplifiedData488 : Decl (BitVec 64) :=
-.function { name := "op_signextend", inline := false, exported := false, params := [], body := body488_17, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_iszero", inline := false, exported := false, params := [], body := body488_13, returnShape := (Flapjack.Shape.one) }
 def original488 := Pancake.PanLang.declToHOL originalData488
 def simplified488 := Pancake.PanLang.declToHOL simplifiedData488
 end InitECandidate.Proofs.FrontendStages.Declarations

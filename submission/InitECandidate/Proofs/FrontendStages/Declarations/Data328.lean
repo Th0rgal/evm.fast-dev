@@ -9,46 +9,48 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body328_0 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "total"
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "total", Flapjack.Exp.var Flapjack.VarKind.local "h",
-      Flapjack.Exp.var Flapjack.VarKind.local "pl"])
+Flapjack.Prog.call (some (none, none)) "keccak256"
+  [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "e"),
+    Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "e"), Flapjack.Exp.var Flapjack.VarKind.local "out"]
 
 def body328_1 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "i"
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
+Flapjack.Prog.call (some (none, none)) "heap_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
 
 def body328_2 : Prog (BitVec 64) :=
-.seq body328_0 body328_1
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body328_3 : Prog (BitVec 64) :=
-.decCall ("h") (Flapjack.Shape.one) ("rlp_list_header_len") ([Flapjack.Exp.var Flapjack.VarKind.local "pl"]) body328_2
+.seq body328_1 body328_2
 
 def body328_4 : Prog (BitVec 64) :=
-.decCall ("pl") (Flapjack.Shape.one) ("auth_payload_len") ([Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "recs",
-      Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 120#64]]]) body328_3
+.seq body328_0 body328_3
 
 def body328_5 : Prog (BitVec 64) :=
-.while (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "i")
-  (Flapjack.Exp.var Flapjack.VarKind.local "n")) body328_4
+.decCall ("e") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("tx_encode_generic") ([Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.var Flapjack.VarKind.local "mode",
+  Flapjack.Exp.var Flapjack.VarKind.local "chain_id"]) body328_4
 
 def body328_6 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "total")
+.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) body328_5
 
 def body328_7 : Prog (BitVec 64) :=
-.seq body328_5 body328_6
+.seq body328_0 body328_1
 
 def body328_8 : Prog (BitVec 64) :=
-.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body328_7
+.seq body328_7 body328_2
 
 def body328_9 : Prog (BitVec 64) :=
-.dec ("total") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body328_8
+.decCall ("e") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("tx_encode_generic") ([Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.var Flapjack.VarKind.local "mode",
+  Flapjack.Exp.var Flapjack.VarKind.local "chain_id"]) body328_8
+
+def body328_10 : Prog (BitVec 64) :=
+.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) body328_9
 
 def originalData328 : Decl (BitVec 64) :=
-.function { name := "auth_list_payload_len", inline := false, exported := false, params := [("recs", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body328_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_signing_hash_mode", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("mode", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one),
+  ("out", Flapjack.Shape.one)], body := body328_6, returnShape := (Flapjack.Shape.one) }
 def simplifiedData328 : Decl (BitVec 64) :=
-.function { name := "auth_list_payload_len", inline := false, exported := false, params := [("recs", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body328_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_signing_hash_mode", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("mode", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one),
+  ("out", Flapjack.Shape.one)], body := body328_10, returnShape := (Flapjack.Shape.one) }
 def original328 := Pancake.PanLang.declToHOL originalData328
 def simplified328 := Pancake.PanLang.declToHOL simplifiedData328
 end InitECandidate.Proofs.FrontendStages.Declarations

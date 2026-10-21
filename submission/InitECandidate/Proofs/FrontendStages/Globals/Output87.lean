@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data87
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate71
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -155,6 +158,7 @@ def globalBody87_36 : Prog (BitVec 64) :=
 def globalBody87_37 : Prog (BitVec 64) :=
 .seq globalBody87_13 globalBody87_36
 
-def globalData87 : Decl (BitVec 64) := .function { name := "u256_from_be", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := globalBody87_37, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData87 : Decl (BitVec 64) :=
+.function { name := "u256_from_be", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := globalBody87_37, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput87 := Pancake.PanLang.declToHOL globalData87
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -1,4 +1,6 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.CrepKernelComputation
+import InitECandidate.Proofs.FrontendCodecComputation
 import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
 import InitECandidate.Proofs.FrontendStages.MainData
 import InitECandidate.Proofs.FrontendStages.Crep.Data0
@@ -6,6 +8,8 @@ set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
+set_option cbv.maxSteps 1000000000
+set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 theorem translate0_eq :

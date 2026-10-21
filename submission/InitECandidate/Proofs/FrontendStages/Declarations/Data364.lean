@@ -9,66 +9,29 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body364_0 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 0#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "nonce")
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.global "empty_trie_root")
 
 def body364_1 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 8#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "balance")
+Flapjack.Prog.skip
 
 def body364_2 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 40#64])
-  (Flapjack.Exp.var Flapjack.VarKind.global "empty_trie_root")
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "a") (Flapjack.Exp.const 1#64)) body364_0 body364_1
 
 def body364_3 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 48#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "code_hash")
+Flapjack.Prog.return
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 40#64]))
 
 def body364_4 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
+.seq body364_2 body364_3
 
 def body364_5 : Prog (BitVec 64) :=
-.seq body364_3 body364_4
-
-def body364_6 : Prog (BitVec 64) :=
-.seq body364_2 body364_5
-
-def body364_7 : Prog (BitVec 64) :=
-.seq body364_1 body364_6
-
-def body364_8 : Prog (BitVec 64) :=
-.seq body364_0 body364_7
-
-def body364_9 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 56#64]) body364_8
-
-def body364_10 : Prog (BitVec 64) :=
-.seq body364_0 body364_1
-
-def body364_11 : Prog (BitVec 64) :=
-.seq body364_10 body364_2
-
-def body364_12 : Prog (BitVec 64) :=
-.seq body364_11 body364_3
-
-def body364_13 : Prog (BitVec 64) :=
-.seq body364_12 body364_4
-
-def body364_14 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 56#64]) body364_13
+.decCall ("a") (Flapjack.Shape.one) ("ws_get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body364_4
 
 def originalData364 : Decl (BitVec 64) :=
-.function { name := "acct_new", inline := false, exported := false, params := [("nonce", Flapjack.Shape.one),
-  ("balance", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("code_hash", Flapjack.Shape.one)], body := body364_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body364_5, returnShape := (Flapjack.Shape.one) }
 def simplifiedData364 : Decl (BitVec 64) :=
-.function { name := "acct_new", inline := false, exported := false, params := [("nonce", Flapjack.Shape.one),
-  ("balance", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("code_hash", Flapjack.Shape.one)], body := body364_14, returnShape := (Flapjack.Shape.one) }
+.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body364_5, returnShape := (Flapjack.Shape.one) }
 def original364 := Pancake.PanLang.declToHOL originalData364
 def simplified364 := Pancake.PanLang.declToHOL simplifiedData364
 end InitECandidate.Proofs.FrontendStages.Declarations

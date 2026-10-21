@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data775
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate759
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -9,28 +12,60 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody775_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_one" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (none, none)) "fp2_sqr"
+  [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "y"]
 
 def globalBody775_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_zero"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 96#64]]
+Flapjack.Prog.call (some (none, none)) "fp2_sqr"
+  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "x"]
 
 def globalBody775_2 : Prog (BitVec 64) :=
 .seq globalBody775_0 globalBody775_1
 
 def globalBody775_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_zero"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 192#64]]
+Flapjack.Prog.call (some (none, none)) "fp2_mul"
+  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "rr",
+    Flapjack.Exp.var Flapjack.VarKind.local "x"]
 
 def globalBody775_4 : Prog (BitVec 64) :=
 .seq globalBody775_2 globalBody775_3
 
 def globalBody775_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call (some (none, none)) "fp2_add"
+  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "rr",
+    Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 392#64]),
+        Flapjack.Exp.const 288#64]]
 
 def globalBody775_6 : Prog (BitVec 64) :=
 .seq globalBody775_4 globalBody775_5
 
-def globalData775 : Decl (BitVec 64) := .function { name := "fp6_set_one", inline := false, exported := false, params := [("r", Flapjack.Shape.one)], body := globalBody775_6, returnShape := (Flapjack.Shape.one) }
+def globalBody775_7 : Prog (BitVec 64) :=
+Flapjack.Prog.call (some (none, none)) "heap_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
+
+def globalBody775_8 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "e")
+
+def globalBody775_9 : Prog (BitVec 64) :=
+.seq globalBody775_7 globalBody775_8
+
+def globalBody775_10 : Prog (BitVec 64) :=
+.decCall ("e") (Flapjack.Shape.one) ("fp2_eq") ([Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "rr"]) globalBody775_9
+
+def globalBody775_11 : Prog (BitVec 64) :=
+.seq globalBody775_6 globalBody775_10
+
+def globalBody775_12 : Prog (BitVec 64) :=
+.decCall ("rr") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 96#64]) globalBody775_11
+
+def globalBody775_13 : Prog (BitVec 64) :=
+.decCall ("l") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 96#64]) globalBody775_12
+
+def globalBody775_14 : Prog (BitVec 64) :=
+.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) globalBody775_13
+
+def globalData775 : Decl (BitVec 64) :=
+.function { name := "g2_on_curve", inline := false, exported := false, params := [("x", Flapjack.Shape.one), ("y", Flapjack.Shape.one)], body := globalBody775_14, returnShape := (Flapjack.Shape.one) }
 def globalOutput775 := Pancake.PanLang.declToHOL globalData775
 end InitECandidate.Proofs.FrontendStages.Declarations

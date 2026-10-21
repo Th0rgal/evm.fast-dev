@@ -14,7 +14,7 @@ Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 def body543_1 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "stack_push_word"
   [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 56#64])]
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 152#64])]
 
 def body543_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -41,9 +41,9 @@ def body543_9 : Prog (BitVec 64) :=
 .seq body543_8 body543_3
 
 def originalData543 : Decl (BitVec 64) :=
-.function { name := "op_codesize", inline := false, exported := false, params := [], body := body543_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_returndatasize", inline := false, exported := false, params := [], body := body543_6, returnShape := (Flapjack.Shape.one) }
 def simplifiedData543 : Decl (BitVec 64) :=
-.function { name := "op_codesize", inline := false, exported := false, params := [], body := body543_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_returndatasize", inline := false, exported := false, params := [], body := body543_9, returnShape := (Flapjack.Shape.one) }
 def original543 := Pancake.PanLang.declToHOL originalData543
 def simplified543 := Pancake.PanLang.declToHOL simplifiedData543
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -9,13 +9,13 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body477_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "warm_address" [Flapjack.Exp.var Flapjack.VarKind.local "addr"]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
 
 def body477_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def body477_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "c") (Flapjack.Exp.const 3000#64)) body477_0 body477_1
+Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
 
 def body477_3 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
@@ -23,10 +23,43 @@ Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 def body477_4 : Prog (BitVec 64) :=
 .seq body477_2 body477_3
 
+def body477_5 : Prog (BitVec 64) :=
+.seq body477_1 body477_4
+
+def body477_6 : Prog (BitVec 64) :=
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body477_5
+
+def body477_7 : Prog (BitVec 64) :=
+.seq body477_0 body477_6
+
+def body477_8 : Prog (BitVec 64) :=
+.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body477_7
+
+def body477_9 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body477_8
+
+def body477_10 : Prog (BitVec 64) :=
+.seq body477_1 body477_2
+
+def body477_11 : Prog (BitVec 64) :=
+.seq body477_10 body477_3
+
+def body477_12 : Prog (BitVec 64) :=
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) body477_11
+
+def body477_13 : Prog (BitVec 64) :=
+.seq body477_0 body477_12
+
+def body477_14 : Prog (BitVec 64) :=
+.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body477_13
+
+def body477_15 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) body477_14
+
 def originalData477 : Decl (BitVec 64) :=
-.function { name := "warm_after_charge", inline := false, exported := false, params := [("addr", Flapjack.Shape.one), ("c", Flapjack.Shape.one)], body := body477_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_mod", inline := false, exported := false, params := [], body := body477_9, returnShape := (Flapjack.Shape.one) }
 def simplifiedData477 : Decl (BitVec 64) :=
-.function { name := "warm_after_charge", inline := false, exported := false, params := [("addr", Flapjack.Shape.one), ("c", Flapjack.Shape.one)], body := body477_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_mod", inline := false, exported := false, params := [], body := body477_15, returnShape := (Flapjack.Shape.one) }
 def original477 := Pancake.PanLang.declToHOL originalData477
 def simplified477 := Pancake.PanLang.declToHOL simplifiedData477
 end InitECandidate.Proofs.FrontendStages.Declarations

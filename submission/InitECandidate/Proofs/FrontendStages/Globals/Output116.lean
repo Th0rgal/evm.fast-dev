@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data116
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate96
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -70,6 +73,7 @@ def globalBody116_13 : Prog (BitVec 64) :=
 def globalBody116_14 : Prog (BitVec 64) :=
 .decCall ("count") (Flapjack.Shape.one) ("rlp_list_count") ([Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.var Flapjack.VarKind.local "len"]) globalBody116_13
 
-def globalData116 : Decl (BitVec 64) := .function { name := "rlp_list_to_slices", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one)], body := globalBody116_14, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData116 : Decl (BitVec 64) :=
+.function { name := "rlp_list_to_slices", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("len", Flapjack.Shape.one)], body := globalBody116_14, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput116 := Pancake.PanLang.declToHOL globalData116
 end InitECandidate.Proofs.FrontendStages.Declarations

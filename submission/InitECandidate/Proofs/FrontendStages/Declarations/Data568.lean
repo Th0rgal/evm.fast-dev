@@ -8,11 +8,29 @@ set_option cbv.warning false
 open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
+def body568_0 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body568_1 : Prog (BitVec 64) :=
+Flapjack.Prog.skip
+
+def body568_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "v") (Flapjack.Exp.const 0#64)) body568_0 body568_1
+
+def body568_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.const 3#64])
+
+def body568_4 : Prog (BitVec 64) :=
+.seq body568_2 body568_3
+
+def body568_5 : Prog (BitVec 64) :=
+.decCall ("v") (Flapjack.Shape.one) ("is_valid_delegation") ([Flapjack.Exp.var Flapjack.VarKind.local "code", Flapjack.Exp.var Flapjack.VarKind.local "n"]) body568_4
 
 def originalData568 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "null_address" (Flapjack.Exp.const 0#64)
+.function { name := "get_delegated_code_address", inline := false, exported := false, params := [("code", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body568_5, returnShape := (Flapjack.Shape.one) }
 def simplifiedData568 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "null_address" (Flapjack.Exp.const 0#64)
+.function { name := "get_delegated_code_address", inline := false, exported := false, params := [("code", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := body568_5, returnShape := (Flapjack.Shape.one) }
 def original568 := Pancake.PanLang.declToHOL originalData568
 def simplified568 := Pancake.PanLang.declToHOL simplifiedData568
 end InitECandidate.Proofs.FrontendStages.Declarations

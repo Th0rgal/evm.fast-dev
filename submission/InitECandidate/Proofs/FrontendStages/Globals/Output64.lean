@@ -1,5 +1,8 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data64
-import InitECandidate.Proofs.FrontendStages.Globals.Context
+import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
+import InitECandidate.Proofs.FrontendStages.Globals.Translate48
+set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -67,6 +70,7 @@ def globalBody64_13 : Prog (BitVec 64) :=
 def globalBody64_14 : Prog (BitVec 64) :=
 .dec ("q") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody64_13
 
-def globalData64 : Decl (BitVec 64) := .function { name := "div64by32", inline := false, exported := false, params := [("hi", Flapjack.Shape.one), ("lo", Flapjack.Shape.one), ("d", Flapjack.Shape.one)], body := globalBody64_14, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+def globalData64 : Decl (BitVec 64) :=
+.function { name := "div64by32", inline := false, exported := false, params := [("hi", Flapjack.Shape.one), ("lo", Flapjack.Shape.one), ("d", Flapjack.Shape.one)], body := globalBody64_14, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput64 := Pancake.PanLang.declToHOL globalData64
 end InitECandidate.Proofs.FrontendStages.Declarations

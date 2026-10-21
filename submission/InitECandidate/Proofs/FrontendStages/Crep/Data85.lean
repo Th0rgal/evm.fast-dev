@@ -48,27 +48,12 @@ def crepBody85_12 : CrepProg (BitVec 64) :=
 .seq crepBody85_7 crepBody85_11
 
 def crepBody85_13 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([1], none)) "alloc" [Flapjack.CrepExp.const 96#64]
-
-def crepBody85_14 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 64#64]) crepBody85_4
-
-def crepBody85_15 : CrepProg (BitVec 64) :=
-.seq crepBody85_13 crepBody85_14
-
-def crepBody85_16 : CrepProg (BitVec 64) :=
-.dec 1 (Flapjack.CrepExp.const 0#64) crepBody85_15
-
-def crepBody85_17 : CrepProg (BitVec 64) :=
-.seq crepBody85_12 crepBody85_16
-
-def crepBody85_18 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
 
-def crepBody85_19 : CrepProg (BitVec 64) :=
-.seq crepBody85_17 crepBody85_18
+def crepBody85_14 : CrepProg (BitVec 64) :=
+.seq crepBody85_12 crepBody85_13
 
-def data85 : CrepProg (BitVec 64) := crepBody85_19
+def data85 : CrepProg (BitVec 64) := crepBody85_14
 def output85 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode [115#8, 104#8, 97#8, 50#8, 53#8, 54#8, 95#8, 105#8, 110#8, 105#8, 116#8], [], crepProgToHOL data85)
 end InitECandidate.Proofs.FrontendStages.Crep

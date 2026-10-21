@@ -9,38 +9,14 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body330_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.const 64#64,
-      Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.const 17#64, Flapjack.Exp.const 33#64],
-      Flapjack.Exp.const 30#64,
-      Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 200#64]),
-      Flapjack.Exp.var Flapjack.VarKind.local "al", Flapjack.Exp.var Flapjack.VarKind.local "au",
-      Flapjack.Exp.var Flapjack.VarKind.local "bh"])
-
-def body330_1 : Prog (BitVec 64) :=
-.dec ("bh") (Flapjack.Shape.one) (Flapjack.Exp.panOp Flapjack.PanOp.mul
-  [Flapjack.Exp.const 33#64,
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 264#64])]) body330_0
-
-def body330_2 : Prog (BitVec 64) :=
-.decCall ("au") (Flapjack.Shape.one) ("auth_list_payload_len") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 272#64]),
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 280#64])]) body330_1
-
-def body330_3 : Prog (BitVec 64) :=
-.decCall ("al") (Flapjack.Shape.one) ("access_list_payload_len") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 208#64]),
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 216#64])]) body330_2
+Flapjack.Prog.call none "tx_signing_hash_mode"
+  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 2#64,
+    Flapjack.Exp.var Flapjack.VarKind.local "chain_id", Flapjack.Exp.var Flapjack.VarKind.local "out"]
 
 def originalData330 : Decl (BitVec 64) :=
-.function { name := "tx_encode_bound", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body330_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "signing_hash_155", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body330_0, returnShape := (Flapjack.Shape.one) }
 def simplifiedData330 : Decl (BitVec 64) :=
-.function { name := "tx_encode_bound", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body330_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "signing_hash_155", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body330_0, returnShape := (Flapjack.Shape.one) }
 def original330 := Pancake.PanLang.declToHOL originalData330
 def simplified330 := Pancake.PanLang.declToHOL simplifiedData330
 end InitECandidate.Proofs.FrontendStages.Declarations

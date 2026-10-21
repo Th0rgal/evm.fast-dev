@@ -8,7 +8,7 @@ files = sorted(base.glob("Translate*.lean"), key=lambda p: int(p.stem[9:]))
 inputs = []
 for i, path in enumerate(files):
     assert path.stem == f"Translate{i}"
-    source = re.search(r"      (InitE\.FrontendStages\.[\w.]+) = some output", path.read_text()).group(1)
+    source = re.search(r"      (InitECandidate\.Proofs\.FrontendStages\.[\w.]+) = some output", path.read_text()).group(1)
     inputs.append(source)
     data = base / f"Data{i}.lean"
     text = data.read_text()

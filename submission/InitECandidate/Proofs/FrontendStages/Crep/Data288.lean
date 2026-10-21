@@ -10,22 +10,14 @@ open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody288_0 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.return
-  [Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 160#64]),
-    Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add
-        [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 160#64],
-          Flapjack.CrepExp.const 8#64]),
-    Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add
-        [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 160#64],
-          Flapjack.CrepExp.const 16#64]),
-    Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add
-        [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 160#64],
-          Flapjack.CrepExp.const 24#64])]
+  [Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul
+      [Flapjack.CrepExp.const 131072#64,
+        Flapjack.CrepExp.load
+          (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 264#64])]]
 
 def data288 : CrepProg (BitVec 64) := crepBody288_0
 def output288 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [116#8, 120#8, 95#8, 118#8, 97#8, 108#8, 117#8, 101#8], [0], crepProgToHOL data288)
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+  [99#8, 97#8, 108#8, 99#8, 117#8, 108#8, 97#8, 116#8, 101#8, 95#8, 116#8, 111#8, 116#8, 97#8, 108#8, 95#8, 98#8, 108#8,
+    111#8, 98#8, 95#8, 103#8, 97#8, 115#8], [0], crepProgToHOL data288)
 end InitECandidate.Proofs.FrontendStages.Crep

@@ -9,16 +9,16 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody357_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([2], none)) "jset"
+Flapjack.CrepProg.call (some ([1], none)) "htab_set"
   [Flapjack.CrepExp.load
       (Flapjack.CrepExp.op Flapjack.BinOp.add
         [Flapjack.CrepExp.load
             (Flapjack.CrepExp.op Flapjack.BinOp.sub [Flapjack.CrepExp.topAddr, Flapjack.CrepExp.const 184#64]),
-          Flapjack.CrepExp.const 16#64]),
-    Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 1]
+          Flapjack.CrepExp.const 56#64]),
+    Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 1#64]
 
 def crepBody357_1 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.const 0#64) crepBody357_0
+.dec 1 (Flapjack.CrepExp.const 0#64) crepBody357_0
 
 def crepBody357_2 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
@@ -28,5 +28,7 @@ def crepBody357_3 : CrepProg (BitVec 64) :=
 
 def data357 : CrepProg (BitVec 64) := crepBody357_3
 def output357 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [115#8, 101#8, 116#8, 95#8, 97#8, 99#8, 99#8, 111#8, 117#8, 110#8, 116#8], [0, 1], crepProgToHOL data357)
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+  [109#8, 97#8, 114#8, 107#8, 95#8, 97#8, 99#8, 99#8, 111#8, 117#8, 110#8, 116#8, 95#8, 99#8, 114#8, 101#8, 97#8, 116#8,
+    101#8, 100#8], [0], crepProgToHOL data357)
 end InitECandidate.Proofs.FrontendStages.Crep

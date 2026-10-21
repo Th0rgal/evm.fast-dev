@@ -9,22 +9,17 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body468_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memzero"
-  [Flapjack.Exp.var Flapjack.VarKind.local "m", Flapjack.Exp.const 176#64]
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "h")
 
 def body468_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "m")
-
-def body468_2 : Prog (BitVec 64) :=
-.seq body468_0 body468_1
-
-def body468_3 : Prog (BitVec 64) :=
-.decCall ("m") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 176#64]) body468_2
+.decCall ("h") (Flapjack.Shape.one) ("htab_has") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 168#64]),
+  Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body468_0
 
 def originalData468 : Decl (BitVec 64) :=
-.function { name := "msg_new", inline := false, exported := false, params := [], body := body468_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "is_warm_address", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body468_1, returnShape := (Flapjack.Shape.one) }
 def simplifiedData468 : Decl (BitVec 64) :=
-.function { name := "msg_new", inline := false, exported := false, params := [], body := body468_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "is_warm_address", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body468_1, returnShape := (Flapjack.Shape.one) }
 def original468 := Pancake.PanLang.declToHOL originalData468
 def simplified468 := Pancake.PanLang.declToHOL simplifiedData468
 end InitECandidate.Proofs.FrontendStages.Declarations
