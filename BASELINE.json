@@ -4,10 +4,11 @@
     "branch": "riscv-im",
     "revision": "034bb5a1ed0b757082768d5406206bd2f8e31b7c"
   },
-  "source_sha256": "d3cec76f0fd072e943f9be62e201b842317a2aa2adcb51bbd0f5cd9dd74d6016",
-  "elf_sha256": "930915c737fe769e0c967faea8cbfa1755ad1f949f544c726cf1ab8acc920b4f",
-  "native_code_bytes": 904056,
-  "claimed_score": "infinity",
+  "source_sha256": "2cc9024d6979d623c503521b219123bc5f63cd69504bea97b93b3aad62e5360c",
+  "elf_sha256": "933d2a7cb79b59f3cd0c47670a1c97d2baebb1aceb3d5b638a2730e2acc15ab4",
+  "native_code_bytes": 979140,
+  "claimed_score": "pending_current_software_guest_verification",
+  "historical_results_scope": "EEST and outside verification records below concern the previous accelerated guest and do not certify this software guest revision.",
   "eest": {
     "tag": "tests-zkevm@v21.0.1",
     "records": 33614,
@@ -32,14 +33,14 @@
       "scope": "Rechecked retained corpus results and regenerated literals; did not rerun Spike."
     }
   },
-  "bitmap_words": 4613,
-  "native_image_bytes": 940960,
+  "bitmap_words": 4603,
+  "native_image_bytes": 983348,
   "bookkeeping_words": [
     "0xa0020018",
-    "0xa0029040",
-    "0xa0029040",
-    "0x800ddd08",
-    "0x800de000"
+    "0xa0028ff0",
+    "0xa0028ff0",
+    "0x800f0134",
+    "0x800f1000"
   ],
   "source_evaluator": "Flapjack.PanSemStateFiniteExact.semanticsDecls",
   "source_model": "InitE.sourceBehaviour",
@@ -47,9 +48,9 @@
     "complete fresh isolated verification of the compact certificates with only the three standard axioms",
     "record full isolated acceptance and measured results in the new compact-certificate PR"
   ],
-  "submitted_image_bytes": 950336,
+  "submitted_image_bytes": 1028080,
   "bootstrap_bytes": 208,
-  "bootstrap_instruction_steps": 23127,
+  "bootstrap_instruction_steps": 23077,
   "initial_ram": "zero",
   "initial_integer_registers": "zero",
   "certificate": "InitE.Challenge.certificate",
@@ -61,12 +62,11 @@
   },
   "source_contract": {
     "kind": "literal_ast",
-    "declarations": "Guest.guestAst",
-    "file": "Guest/Ast.lean",
-    "sha256": "9e936dce0c7d51f1a9b064cacc63a2207a0e44f515b2c9fbba97f15850d2e702",
-    "text_provenance": "Guest/guest.pp.pnk",
-    "parser_agreement": "not required; historical proof linked in AST header",
-    "historical_proof_commit": "ae624df7e982496fb15169277f80fe85cf73323f"
+    "declarations": "Guest.Software.guestAst",
+    "file": "Guest/SoftwareAst.lean",
+    "sha256": "583518b4e9e07ade266736ef16f1e2311b865ba62bb92ccc651c49f6929528e1",
+    "text_provenance": "Guest/guest-software.pp.pnk",
+    "parser_agreement": "pending current baseline audit"
   },
   "standard_axiom_attempt": {
     "status": "trusted_build_failed_oom",
