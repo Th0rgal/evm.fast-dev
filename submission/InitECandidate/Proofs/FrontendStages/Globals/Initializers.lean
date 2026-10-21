@@ -25,10 +25,10 @@ theorem renameGlobals_eq : fpermDecsHOL globalStart globalNewStart globalDeclara
 
 theorem compileExceptions_eq (context : PanGlobalsContextExact 64) :
     compileDecsExactHOL context exceptionDeclarations = ([], [], exceptionDeclarations, context) := by
-  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified217, simplifiedData217, simplified218, simplifiedData218, simplified237, simplifiedData237, simplified292, simplifiedData292, simplified344, simplifiedData344, simplified432, simplifiedData432, simplified841, simplifiedData841, declToHOL, compileDecsExactHOL]
+  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified221, simplifiedData221, simplified222, simplifiedData222, simplified241, simplifiedData241, simplified296, simplifiedData296, simplified348, simplifiedData348, simplified436, simplifiedData436, simplified845, simplifiedData845, declToHOL, compileDecsExactHOL]
 
 theorem renameExceptions_eq : fpermDecsHOL globalStart globalNewStart exceptionDeclarations = exceptionDeclarations := by
-  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified217, simplifiedData217, simplified218, simplifiedData218, simplified237, simplifiedData237, simplified292, simplifiedData292, simplified344, simplifiedData344, simplified432, simplifiedData432, simplified841, simplifiedData841, declToHOL, fpermDecsHOL]
+  simp only [exceptionDeclarations, simplified3, simplifiedData3, simplified105, simplifiedData105, simplified182, simplifiedData182, simplified221, simplifiedData221, simplified222, simplifiedData222, simplified241, simplifiedData241, simplified296, simplifiedData296, simplified348, simplifiedData348, simplified436, simplifiedData436, simplified845, simplifiedData845, declToHOL, fpermDecsHOL]
 
 #print axioms compileGlobals_eq
 #print axioms renameGlobals_eq

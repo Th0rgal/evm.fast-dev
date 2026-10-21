@@ -12,13 +12,18 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody469_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htab_set"
-  [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-          Flapjack.Exp.const 168#64]),
-    Flapjack.Exp.var Flapjack.VarKind.local "addr", Flapjack.Exp.const 1#64]
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+      Flapjack.Exp.const 0#64])
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add
+          [Flapjack.Exp.load Flapjack.Shape.one
+              (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+            Flapjack.Exp.const 0#64]),
+      Flapjack.Exp.var Flapjack.VarKind.local "n"])
 
 def globalBody469_1 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
@@ -27,6 +32,6 @@ def globalBody469_2 : Prog (BitVec 64) :=
 .seq globalBody469_0 globalBody469_1
 
 def globalData469 : Decl (BitVec 64) :=
-.function { name := "warm_address", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody469_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "pc_add", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := globalBody469_2, returnShape := (Flapjack.Shape.one) }
 def globalOutput469 := Pancake.PanLang.declToHOL globalData469
 end InitECandidate.Proofs.FrontendStages.Declarations

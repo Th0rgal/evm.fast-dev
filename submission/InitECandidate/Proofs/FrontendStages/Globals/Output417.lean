@@ -12,39 +12,27 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody417_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "w"))
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 8#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "post_balance")
 
 def globalBody417_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody417_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "w"))
-  (Flapjack.Exp.const 0#64)) globalBody417_0 globalBody417_1
+.seq globalBody417_0 globalBody417_1
 
 def globalBody417_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "record_pre_state_read" [Flapjack.Exp.var Flapjack.VarKind.local "addr"]
+.decCall ("e") (Flapjack.Shape.one) ("lst_upsert_idx") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ad", Flapjack.Exp.const 16#64]),
+  Flapjack.Exp.const 40#64, Flapjack.Exp.var Flapjack.VarKind.local "idx"]) globalBody417_2
 
 def globalBody417_4 : Prog (BitVec 64) :=
-.seq globalBody417_2 globalBody417_3
-
-def globalBody417_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
-
-def globalBody417_6 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("ws_get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody417_5
-
-def globalBody417_7 : Prog (BitVec 64) :=
-.seq globalBody417_4 globalBody417_6
-
-def globalBody417_8 : Prog (BitVec 64) :=
-.decCall ("w") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("htab_get") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-        Flapjack.Exp.const 16#64]),
-  Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody417_7
+.decCall ("ad") (Flapjack.Shape.one) ("bal_ensure_account") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody417_3
 
 def globalData417 : Decl (BitVec 64) :=
-.function { name := "get_pre_tx_account", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody417_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "add_balance_change", inline := false, exported := false, params := [("addr", Flapjack.Shape.one), ("idx", Flapjack.Shape.one),
+  ("post_balance",
+    Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody417_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput417 := Pancake.PanLang.declToHOL globalData417
 end InitECandidate.Proofs.FrontendStages.Declarations

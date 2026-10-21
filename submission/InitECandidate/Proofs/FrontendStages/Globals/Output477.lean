@@ -30,7 +30,7 @@ def globalBody477_5 : Prog (BitVec 64) :=
 .seq globalBody477_3 globalBody477_4
 
 def globalBody477_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody477_5
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_mul") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody477_5
 
 def globalBody477_7 : Prog (BitVec 64) :=
 .seq globalBody477_0 globalBody477_6
@@ -42,6 +42,6 @@ def globalBody477_9 : Prog (BitVec 64) :=
 .decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody477_8
 
 def globalData477 : Decl (BitVec 64) :=
-.function { name := "op_mod", inline := false, exported := false, params := [], body := globalBody477_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_mul", inline := false, exported := false, params := [], body := globalBody477_9, returnShape := (Flapjack.Shape.one) }
 def globalOutput477 := Pancake.PanLang.declToHOL globalData477
 end InitECandidate.Proofs.FrontendStages.Declarations

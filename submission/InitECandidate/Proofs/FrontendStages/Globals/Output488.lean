@@ -30,15 +30,18 @@ def globalBody488_5 : Prog (BitVec 64) :=
 .seq globalBody488_3 globalBody488_4
 
 def globalBody488_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.one) ("u256_is_zero") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) globalBody488_5
+.decCall ("r") (Flapjack.Shape.one) ("u256_gt") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody488_5
 
 def globalBody488_7 : Prog (BitVec 64) :=
 .seq globalBody488_0 globalBody488_6
 
 def globalBody488_8 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody488_7
+.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody488_7
+
+def globalBody488_9 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody488_8
 
 def globalData488 : Decl (BitVec 64) :=
-.function { name := "op_iszero", inline := false, exported := false, params := [], body := globalBody488_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_gt", inline := false, exported := false, params := [], body := globalBody488_9, returnShape := (Flapjack.Shape.one) }
 def globalOutput488 := Pancake.PanLang.declToHOL globalData488
 end InitECandidate.Proofs.FrontendStages.Declarations

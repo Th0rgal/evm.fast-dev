@@ -8,14 +8,14 @@ def sourceBody348_0 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 6
   (Flapjack.WordLangExpHOL.load
     (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 320#64]))
+      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64]))
 
 def sourceBody348_1 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 10
   (Flapjack.WordLangExpHOL.load
     (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
       [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 320#64],
+          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64],
         Flapjack.WordLangExpHOL.const 8#64]))
 
 def sourceBody348_2 : WordLangProgHOL (BitVec 64) :=
@@ -23,7 +23,7 @@ Flapjack.WordLangProgHOL.assign 4
   (Flapjack.WordLangExpHOL.load
     (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
       [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 320#64],
+          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64],
         Flapjack.WordLangExpHOL.const 16#64]))
 
 def sourceBody348_3 : WordLangProgHOL (BitVec 64) :=
@@ -31,7 +31,7 @@ Flapjack.WordLangProgHOL.assign 8
   (Flapjack.WordLangExpHOL.load
     (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
       [Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 320#64],
+          [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64],
         Flapjack.WordLangExpHOL.const 24#64]))
 
 def sourceBody348_4 : WordLangProgHOL (BitVec 64) :=

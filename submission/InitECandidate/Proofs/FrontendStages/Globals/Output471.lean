@@ -12,13 +12,22 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody471_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "warm_address" [Flapjack.Exp.var Flapjack.VarKind.local "addr"]
+Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 8#64)
 
 def globalBody471_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody471_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "c") (Flapjack.Exp.const 3000#64)) globalBody471_0 globalBody471_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.load Flapjack.Shape.one
+                (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+              Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 144#64]))
+  (Flapjack.Exp.const 0#64)) globalBody471_0 globalBody471_1
 
 def globalBody471_3 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
@@ -27,6 +36,6 @@ def globalBody471_4 : Prog (BitVec 64) :=
 .seq globalBody471_2 globalBody471_3
 
 def globalData471 : Decl (BitVec 64) :=
-.function { name := "warm_after_charge", inline := false, exported := false, params := [("addr", Flapjack.Shape.one), ("c", Flapjack.Shape.one)], body := globalBody471_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "require_not_static", inline := false, exported := false, params := [], body := globalBody471_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput471 := Pancake.PanLang.declToHOL globalData471
 end InitECandidate.Proofs.FrontendStages.Declarations

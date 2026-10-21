@@ -12,19 +12,30 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody462_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memzero"
-  [Flapjack.Exp.var Flapjack.VarKind.local "m", Flapjack.Exp.const 176#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.var Flapjack.VarKind.local "total"]
 
 def globalBody462_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "m")
+Flapjack.Prog.call (some (none, none)) "extend_memory"
+  [Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "x")]
 
 def globalBody462_2 : Prog (BitVec 64) :=
 .seq globalBody462_0 globalBody462_1
 
 def globalBody462_3 : Prog (BitVec 64) :=
-.decCall ("m") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 176#64]) globalBody462_2
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def globalBody462_4 : Prog (BitVec 64) :=
+.seq globalBody462_2 globalBody462_3
+
+def globalBody462_5 : Prog (BitVec 64) :=
+.decCall ("total") (Flapjack.Shape.one) ("add_sat") ([Flapjack.Exp.var Flapjack.VarKind.local "base", Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "x")]) globalBody462_4
+
+def globalBody462_6 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("extend_memory_cost1") ([Flapjack.Exp.var Flapjack.VarKind.local "start", Flapjack.Exp.var Flapjack.VarKind.local "size"]) globalBody462_5
 
 def globalData462 : Decl (BitVec 64) :=
-.function { name := "msg_new", inline := false, exported := false, params := [], body := globalBody462_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "charge_with_memory", inline := false, exported := false, params := [("base", Flapjack.Shape.one),
+  ("start", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
+  ("size", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody462_6, returnShape := (Flapjack.Shape.one) }
 def globalOutput462 := Pancake.PanLang.declToHOL globalData462
 end InitECandidate.Proofs.FrontendStages.Declarations

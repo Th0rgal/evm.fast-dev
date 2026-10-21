@@ -82,7 +82,7 @@ def loopBody808_23 : HolLoopProg 64 :=
 .mark loopBody808_22
 
 def loopBody808_24 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.const 7#64)
+Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.const 3#64)
 
 def loopBody808_25 : HolLoopProg 64 :=
 .mark loopBody808_24
@@ -154,7 +154,7 @@ def loopBody808_47 : HolLoopProg 64 :=
 .mark loopBody808_46
 
 def loopBody808_48 : HolLoopProg 64 :=
-.ite (Flapjack.Cmp.notEqual) 3 (Flapjack.RegImm.imm 8#64) loopBody808_5 loopBody808_47 (Flapjack.Spt.ln)
+.ite (Flapjack.Cmp.notEqual) 3 (Flapjack.RegImm.imm 1#64) loopBody808_5 loopBody808_47 (Flapjack.Spt.ln)
 
 def loopBody808_49 : HolLoopProg 64 :=
 .mark loopBody808_48

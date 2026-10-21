@@ -11,7 +11,7 @@ namespace InitECandidate.Proofs.FrontendStages.Loop
 def loopBody284_0 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 1
   (Flapjack.HolLoopExp.load
-    (Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 320#64]))
+    (Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 16#64]))
 
 def loopBody284_1 : HolLoopProg 64 :=
 .mark loopBody284_0
@@ -20,7 +20,7 @@ def loopBody284_2 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 2
   (Flapjack.HolLoopExp.load
     (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 320#64],
+      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 16#64],
         Flapjack.HolLoopExp.const 8#64]))
 
 def loopBody284_3 : HolLoopProg 64 :=
@@ -30,7 +30,7 @@ def loopBody284_4 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 3
   (Flapjack.HolLoopExp.load
     (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 320#64],
+      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 16#64],
         Flapjack.HolLoopExp.const 16#64]))
 
 def loopBody284_5 : HolLoopProg 64 :=
@@ -40,7 +40,7 @@ def loopBody284_6 : HolLoopProg 64 :=
 Flapjack.HolLoopProg.assign 4
   (Flapjack.HolLoopExp.load
     (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 320#64],
+      [Flapjack.HolLoopExp.op Flapjack.BinOp.add [Flapjack.HolLoopExp.var 0, Flapjack.HolLoopExp.const 16#64],
         Flapjack.HolLoopExp.const 24#64]))
 
 def loopBody284_7 : HolLoopProg 64 :=

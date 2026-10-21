@@ -5,84 +5,76 @@ set_option maxHeartbeats 0
 open Flapjack
 namespace InitECandidate.Proofs.WordStages
 def sourceBody855_0 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.skip
+Flapjack.WordLangProgHOL.assign 10
+  (Flapjack.WordLangExpHOL.load
+    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 0#64]))
 
 def sourceBody855_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 200#64)
+Flapjack.WordLangProgHOL.assign 4 (Flapjack.WordLangExpHOL.const 3#64)
 
 def sourceBody855_2 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.raise 8
+Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.const 1#64)
 
 def sourceBody855_3 : WordLangProgHOL (BitVec 64) :=
-.call (some (([4]), ((Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln)), sourceBody855_0, 855, 2)) (some 68) ([8]) (some (8, sourceBody855_2, 855, 3))
+Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.const 0#64)
 
 def sourceBody855_4 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.tick
+.ite (Flapjack.Cmp.equal) 10 (Flapjack.WordRegImm.reg 4) sourceBody855_2 sourceBody855_3
 
 def sourceBody855_5 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_3 sourceBody855_4
+Flapjack.WordLangProgHOL.tick
 
 def sourceBody855_6 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_5 sourceBody855_0
+.seq sourceBody855_4 sourceBody855_5
 
 def sourceBody855_7 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_1 sourceBody855_6
+Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 10)
 
 def sourceBody855_8 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 2 (Flapjack.WordLangExpHOL.var 4)
+Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 1#64)
 
 def sourceBody855_9 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 200#64)
+Flapjack.WordLangProgHOL.return 0 [6]
 
 def sourceBody855_10 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.raise 2
+Flapjack.WordLangProgHOL.skip
 
 def sourceBody855_11 : WordLangProgHOL (BitVec 64) :=
-.call (some (([8]), ((Flapjack.Spt.bs (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody855_0, 855, 4)) (some 78) ([2, 6]) (some (2, sourceBody855_10, 855, 5))
+.seq sourceBody855_9 sourceBody855_10
 
 def sourceBody855_12 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_11 sourceBody855_4
+.seq sourceBody855_8 sourceBody855_11
 
 def sourceBody855_13 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_12 sourceBody855_0
+.ite (Flapjack.Cmp.notEqual) 8 (Flapjack.WordRegImm.imm 0#64) sourceBody855_12 sourceBody855_10
 
 def sourceBody855_14 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_9 sourceBody855_13
+.seq sourceBody855_13 sourceBody855_5
 
 def sourceBody855_15 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_8 sourceBody855_14
+.seq sourceBody855_14 sourceBody855_10
 
 def sourceBody855_16 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_0 sourceBody855_15
+.seq sourceBody855_7 sourceBody855_15
 
 def sourceBody855_17 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_0 sourceBody855_16
+.seq sourceBody855_6 sourceBody855_16
 
 def sourceBody855_18 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 4)
+.seq sourceBody855_1 sourceBody855_17
 
 def sourceBody855_19 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.return 0 [8]
+.seq sourceBody855_0 sourceBody855_18
 
 def sourceBody855_20 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_19 sourceBody855_0
+Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 0#64)
 
 def sourceBody855_21 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_18 sourceBody855_20
+.seq sourceBody855_20 sourceBody855_11
 
 def sourceBody855_22 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_17 sourceBody855_21
-
-def sourceBody855_23 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_7 sourceBody855_22
-
-def sourceBody855_24 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_0 sourceBody855_23
-
-def sourceBody855_25 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody855_0 sourceBody855_24
+.seq sourceBody855_19 sourceBody855_21
 
 def source855 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-  (855, 1, sourceBody855_25)
+  (855, 2, sourceBody855_22)
 end InitECandidate.Proofs.WordStages

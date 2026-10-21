@@ -12,36 +12,24 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody474_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 3#64]
+Flapjack.Prog.return (Flapjack.Exp.const 100#64)
 
 def globalBody474_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.skip
 
 def globalBody474_2 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "w") (Flapjack.Exp.const 0#64)) globalBody474_0 globalBody474_1
 
 def globalBody474_3 : Prog (BitVec 64) :=
-.seq globalBody474_1 globalBody474_2
+Flapjack.Prog.return (Flapjack.Exp.const 3000#64)
 
 def globalBody474_4 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.seq globalBody474_2 globalBody474_3
 
 def globalBody474_5 : Prog (BitVec 64) :=
-.seq globalBody474_3 globalBody474_4
-
-def globalBody474_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_sub") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody474_5
-
-def globalBody474_7 : Prog (BitVec 64) :=
-.seq globalBody474_0 globalBody474_6
-
-def globalBody474_8 : Prog (BitVec 64) :=
-.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody474_7
-
-def globalBody474_9 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody474_8
+.decCall ("w") (Flapjack.Shape.one) ("is_warm_address") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody474_4
 
 def globalData474 : Decl (BitVec 64) :=
-.function { name := "op_sub", inline := false, exported := false, params := [], body := globalBody474_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "access_gas_cost", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody474_5, returnShape := (Flapjack.Shape.one) }
 def globalOutput474 := Pancake.PanLang.declToHOL globalData474
 end InitECandidate.Proofs.FrontendStages.Declarations

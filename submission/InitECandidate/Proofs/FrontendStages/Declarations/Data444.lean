@@ -9,27 +9,16 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body444_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 4#64)
+Flapjack.Prog.return
+  (Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "c") (Flapjack.Exp.const 5#64))
 
 def body444_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
-
-def body444_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64]))
-  (Flapjack.Exp.var Flapjack.VarKind.local "amount")) body444_0 body444_1
-
-def body444_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
-
-def body444_4 : Prog (BitVec 64) :=
-.seq body444_2 body444_3
+.decCall ("c") (Flapjack.Shape.one) ("ceil32") ([Flapjack.Exp.var Flapjack.VarKind.local "n"]) body444_0
 
 def originalData444 : Decl (BitVec 64) :=
-.function { name := "check_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body444_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "words_of", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := body444_1, returnShape := (Flapjack.Shape.one) }
 def simplifiedData444 : Decl (BitVec 64) :=
-.function { name := "check_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body444_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "words_of", inline := false, exported := false, params := [("n", Flapjack.Shape.one)], body := body444_1, returnShape := (Flapjack.Shape.one) }
 def original444 := Pancake.PanLang.declToHOL originalData444
 def simplified444 := Pancake.PanLang.declToHOL simplifiedData444
 end InitECandidate.Proofs.FrontendStages.Declarations

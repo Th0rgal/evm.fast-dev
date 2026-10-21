@@ -12,19 +12,24 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody866_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memzero"
-  [Flapjack.Exp.var Flapjack.VarKind.local "te", Flapjack.Exp.const 200#64]
+Flapjack.Prog.return (Flapjack.Exp.const 1#64)
 
 def globalBody866_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "te")
+Flapjack.Prog.skip
 
 def globalBody866_2 : Prog (BitVec 64) :=
-.seq globalBody866_0 globalBody866_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 0#64]))
+  (Flapjack.Exp.const 3#64)) globalBody866_0 globalBody866_1
 
 def globalBody866_3 : Prog (BitVec 64) :=
-.decCall ("te") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 200#64]) globalBody866_2
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def globalBody866_4 : Prog (BitVec 64) :=
+.seq globalBody866_2 globalBody866_3
 
 def globalData866 : Decl (BitVec 64) :=
-.function { name := "te_new", inline := false, exported := false, params := [], body := globalBody866_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_is_blob", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := globalBody866_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput866 := Pancake.PanLang.declToHOL globalData866
 end InitECandidate.Proofs.FrontendStages.Declarations

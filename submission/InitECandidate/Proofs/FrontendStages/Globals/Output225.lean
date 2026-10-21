@@ -12,29 +12,30 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody225_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "heap_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
+Flapjack.Prog.raise "HdrErr" (Flapjack.Exp.const 5#64)
 
 def globalBody225_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "w")
+Flapjack.Prog.skip
 
 def globalBody225_2 : Prog (BitVec 64) :=
-.seq globalBody225_0 globalBody225_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 32#64)
+  (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f"))) globalBody225_0 globalBody225_1
 
 def globalBody225_3 : Prog (BitVec 64) :=
-.decCall ("w") (Flapjack.Shape.one) ("rlp_encode_bytes") ([Flapjack.Exp.var Flapjack.VarKind.local "dst", Flapjack.Exp.var Flapjack.VarKind.local "tmp",
-  Flapjack.Exp.var Flapjack.VarKind.local "n"]) globalBody225_2
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "v")
 
 def globalBody225_4 : Prog (BitVec 64) :=
-.decCall ("n") (Flapjack.Shape.one) ("u256_to_be_min") ([Flapjack.Exp.var Flapjack.VarKind.local "v", Flapjack.Exp.var Flapjack.VarKind.local "tmp"]) globalBody225_3
+.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_from_be") ([Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "f"),
+  Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f")]) globalBody225_3
 
 def globalBody225_5 : Prog (BitVec 64) :=
-.decCall ("tmp") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 32#64]) globalBody225_4
+.seq globalBody225_2 globalBody225_4
 
 def globalBody225_6 : Prog (BitVec 64) :=
-.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) globalBody225_5
+.decCall ("f") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("hdr_uint_field") ([Flapjack.Exp.var Flapjack.VarKind.local "arr", Flapjack.Exp.var Flapjack.VarKind.local "i",
+  Flapjack.Exp.var Flapjack.VarKind.local "maxb"]) globalBody225_5
 
 def globalData225 : Decl (BitVec 64) :=
-.function { name := "rlp_put_u256", inline := false, exported := false, params := [("dst", Flapjack.Shape.one),
-  ("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody225_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "hdr_u256_field", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one), ("maxb", Flapjack.Shape.one)], body := globalBody225_6, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput225 := Pancake.PanLang.declToHOL globalData225
 end InitECandidate.Proofs.FrontendStages.Declarations

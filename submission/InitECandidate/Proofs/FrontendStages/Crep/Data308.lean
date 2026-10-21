@@ -10,10 +10,10 @@ open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody308_0 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call none "tx_signing_hash_mode"
-  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 1#64, Flapjack.CrepExp.const 0#64, Flapjack.CrepExp.var 1]
+  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 2#64, Flapjack.CrepExp.var 1, Flapjack.CrepExp.var 2]
 
 def data308 : CrepProg (BitVec 64) := crepBody308_0
 def output308 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [115#8, 105#8, 103#8, 110#8, 105#8, 110#8, 103#8, 95#8, 104#8, 97#8, 115#8, 104#8, 95#8, 55#8, 55#8, 48#8, 50#8], [0, 1], crepProgToHOL data308)
+  [115#8, 105#8, 103#8, 110#8, 105#8, 110#8, 103#8, 95#8, 104#8, 97#8, 115#8, 104#8, 95#8, 49#8, 53#8, 53#8], [0, 1, 2], crepProgToHOL data308)
 end InitECandidate.Proofs.FrontendStages.Crep

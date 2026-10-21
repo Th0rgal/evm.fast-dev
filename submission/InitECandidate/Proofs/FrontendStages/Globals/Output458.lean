@@ -12,30 +12,33 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody458_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.var Flapjack.VarKind.local "total"]
+Flapjack.Prog.return (Flapjack.Exp.const 18446744073709551615#64)
 
 def globalBody458_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "extend_memory"
-  [Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "x")]
+Flapjack.Prog.skip
 
 def globalBody458_2 : Prog (BitVec 64) :=
-.seq globalBody458_0 globalBody458_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "sq"))
+  (Flapjack.Exp.const 0#64)) globalBody458_0 globalBody458_1
 
 def globalBody458_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
 
 def globalBody458_4 : Prog (BitVec 64) :=
-.seq globalBody458_2 globalBody458_3
+.decCall ("a") (Flapjack.Shape.one) ("add_sat") ([Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.const 3#64],
+  Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "sq"))
+    (Flapjack.Exp.const 9#64)]) globalBody458_3
 
 def globalBody458_5 : Prog (BitVec 64) :=
-.decCall ("total") (Flapjack.Shape.one) ("add_sat") ([Flapjack.Exp.var Flapjack.VarKind.local "base", Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "x")]) globalBody458_4
+.seq globalBody458_2 globalBody458_4
 
 def globalBody458_6 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("extend_memory_cost1") ([Flapjack.Exp.var Flapjack.VarKind.local "start", Flapjack.Exp.var Flapjack.VarKind.local "size"]) globalBody458_5
+.decCall ("sq") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("mul64x64") ([Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.var Flapjack.VarKind.local "w"]) globalBody458_5
+
+def globalBody458_7 : Prog (BitVec 64) :=
+.decCall ("w") (Flapjack.Shape.one) ("words_of") ([Flapjack.Exp.var Flapjack.VarKind.local "size"]) globalBody458_6
 
 def globalData458 : Decl (BitVec 64) :=
-.function { name := "charge_with_memory", inline := false, exported := false, params := [("base", Flapjack.Shape.one),
-  ("start", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]),
-  ("size", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody458_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "memory_gas_cost", inline := false, exported := false, params := [("size", Flapjack.Shape.one)], body := globalBody458_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput458 := Pancake.PanLang.declToHOL globalData458
 end InitECandidate.Proofs.FrontendStages.Declarations

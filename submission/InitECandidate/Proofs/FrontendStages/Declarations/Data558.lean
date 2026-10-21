@@ -14,7 +14,7 @@ Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 def body558_1 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "stack_push_word"
   [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 112#64])]
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 40#64])]
 
 def body558_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -47,9 +47,9 @@ def body558_11 : Prog (BitVec 64) :=
 .seq body558_0 body558_10
 
 def originalData558 : Decl (BitVec 64) :=
-.function { name := "op_slotnum", inline := false, exported := false, params := [], body := body558_7, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_number", inline := false, exported := false, params := [], body := body558_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData558 : Decl (BitVec 64) :=
-.function { name := "op_slotnum", inline := false, exported := false, params := [], body := body558_11, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_number", inline := false, exported := false, params := [], body := body558_11, returnShape := (Flapjack.Shape.one) }
 def original558 := Pancake.PanLang.declToHOL originalData558
 def simplified558 := Pancake.PanLang.declToHOL simplifiedData558
 end InitECandidate.Proofs.FrontendStages.Declarations

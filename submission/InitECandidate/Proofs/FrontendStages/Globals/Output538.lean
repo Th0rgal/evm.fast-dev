@@ -12,26 +12,35 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody538_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "copy_from_buffer"
-  [Flapjack.Exp.const 3#64,
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-          Flapjack.Exp.const 48#64]),
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-          Flapjack.Exp.const 56#64])]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def globalBody538_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call (some (none, none)) "stack_push_word"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add
+        [Flapjack.Exp.load Flapjack.Shape.one
+            (Flapjack.Exp.op Flapjack.BinOp.add
+              [Flapjack.Exp.load Flapjack.Shape.one
+                  (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+                Flapjack.Exp.const 112#64]),
+          Flapjack.Exp.const 96#64])]
 
 def globalBody538_2 : Prog (BitVec 64) :=
 .seq globalBody538_0 globalBody538_1
 
+def globalBody538_3 : Prog (BitVec 64) :=
+Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
+
+def globalBody538_4 : Prog (BitVec 64) :=
+.seq globalBody538_2 globalBody538_3
+
+def globalBody538_5 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def globalBody538_6 : Prog (BitVec 64) :=
+.seq globalBody538_4 globalBody538_5
+
 def globalData538 : Decl (BitVec 64) :=
-.function { name := "op_codecopy", inline := false, exported := false, params := [], body := globalBody538_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_calldatasize", inline := false, exported := false, params := [], body := globalBody538_6, returnShape := (Flapjack.Shape.one) }
 def globalOutput538 := Pancake.PanLang.declToHOL globalData538
 end InitECandidate.Proofs.FrontendStages.Declarations

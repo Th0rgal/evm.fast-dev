@@ -18,29 +18,18 @@ def globalBody316_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody316_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 0#64)) globalBody316_0 globalBody316_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 0#64]))
+  (Flapjack.Exp.const 0#64)) globalBody316_0 globalBody316_1
 
 def globalBody316_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "v"))
-  (Flapjack.Exp.const 128#64)) globalBody316_0 globalBody316_1
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody316_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 1#64)) globalBody316_3 globalBody316_1
-
-def globalBody316_5 : Prog (BitVec 64) :=
-.seq globalBody316_2 globalBody316_4
-
-def globalBody316_6 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 1#64, Flapjack.Exp.var Flapjack.VarKind.local "n"])
-
-def globalBody316_7 : Prog (BitVec 64) :=
-.seq globalBody316_5 globalBody316_6
-
-def globalBody316_8 : Prog (BitVec 64) :=
-.decCall ("n") (Flapjack.Shape.one) ("u256_byte_length") ([Flapjack.Exp.var Flapjack.VarKind.local "v"]) globalBody316_7
+.seq globalBody316_2 globalBody316_3
 
 def globalData316 : Decl (BitVec 64) :=
-.function { name := "tx_u256_encoded_len", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody316_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_has_access_list", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := globalBody316_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput316 := Pancake.PanLang.declToHOL globalData316
 end InitECandidate.Proofs.FrontendStages.Declarations

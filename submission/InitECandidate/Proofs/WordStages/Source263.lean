@@ -46,88 +46,79 @@ def sourceBody263_11 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_6 sourceBody263_10
 
 def sourceBody263_12 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 10
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 0#64]))
+Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.var 2)
 
 def sourceBody263_13 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 18 (Flapjack.WordLangExpHOL.var 8)
+Flapjack.WordLangProgHOL.assign 18 (Flapjack.WordLangExpHOL.const 48#64)
 
 def sourceBody263_14 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.raise 10
+Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.var 8)
 
 def sourceBody263_15 : WordLangProgHOL (BitVec 64) :=
-.call (some (([14]), ((Flapjack.Spt.bs
-    (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
-      (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
-        (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
-    PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody263_0, 263, 6)) (some 255) ([10, 18]) (some (10, sourceBody263_14, 263, 7))
+Flapjack.WordLangProgHOL.raise 10
 
 def sourceBody263_16 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_15 sourceBody263_3
-
-def sourceBody263_17 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_16 sourceBody263_0
-
-def sourceBody263_18 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_13 sourceBody263_17
-
-def sourceBody263_19 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_12 sourceBody263_18
-
-def sourceBody263_20 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_0 sourceBody263_19
-
-def sourceBody263_21 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_0 sourceBody263_20
-
-def sourceBody263_22 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 10
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 8#64]))
-
-def sourceBody263_23 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 18
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64]))
-
-def sourceBody263_24 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 6
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 16#64]))
-
-def sourceBody263_25 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 12
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 32#64])
-
-def sourceBody263_26 : WordLangProgHOL (BitVec 64) :=
 .call (some (([14]), ((Flapjack.Spt.bs
     (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
       (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
         (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
     PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody263_0, 263, 8)) (some 238) ([10, 18, 6, 12]) (some (10, sourceBody263_14, 263, 9))
+  Flapjack.Spt.ln)), sourceBody263_0, 263, 6)) (some 242) ([10, 18, 6]) (some (10, sourceBody263_15, 263, 7))
+
+def sourceBody263_17 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_16 sourceBody263_3
+
+def sourceBody263_18 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_17 sourceBody263_0
+
+def sourceBody263_19 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_14 sourceBody263_18
+
+def sourceBody263_20 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_13 sourceBody263_19
+
+def sourceBody263_21 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_12 sourceBody263_20
+
+def sourceBody263_22 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_0 sourceBody263_21
+
+def sourceBody263_23 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_0 sourceBody263_22
+
+def sourceBody263_24 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 10
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 32#64])
+
+def sourceBody263_25 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 18
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 48#64])
+
+def sourceBody263_26 : WordLangProgHOL (BitVec 64) :=
+Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 32#64)
 
 def sourceBody263_27 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_26 sourceBody263_3
+.call (some (([14]), ((Flapjack.Spt.bs
+    (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
+      (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
+        (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
+    PUnit.unit Flapjack.Spt.ln,
+  Flapjack.Spt.ln)), sourceBody263_0, 263, 8)) (some 77) ([10, 18, 6]) (some (10, sourceBody263_15, 263, 9))
 
 def sourceBody263_28 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_27 sourceBody263_0
+.seq sourceBody263_27 sourceBody263_3
 
 def sourceBody263_29 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_25 sourceBody263_28
+.seq sourceBody263_28 sourceBody263_0
 
 def sourceBody263_30 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_24 sourceBody263_29
+.seq sourceBody263_26 sourceBody263_29
 
 def sourceBody263_31 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_23 sourceBody263_30
+.seq sourceBody263_25 sourceBody263_30
 
 def sourceBody263_32 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_22 sourceBody263_31
+.seq sourceBody263_24 sourceBody263_31
 
 def sourceBody263_33 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_0 sourceBody263_32
@@ -136,82 +127,78 @@ def sourceBody263_34 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_0 sourceBody263_33
 
 def sourceBody263_35 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_21 sourceBody263_34
+.seq sourceBody263_23 sourceBody263_34
 
 def sourceBody263_36 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 10
-  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 64#64])
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 80#64])
 
 def sourceBody263_37 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 18
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 24#64]))
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 64#64])
 
 def sourceBody263_38 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 32#64)
-
-def sourceBody263_39 : WordLangProgHOL (BitVec 64) :=
 .call (some (([14]), ((Flapjack.Spt.bs
     (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
       (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
         (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
     PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody263_0, 263, 10)) (some 77) ([10, 18, 6]) (some (10, sourceBody263_14, 263, 11))
+  Flapjack.Spt.ln)), sourceBody263_0, 263, 10)) (some 244) ([10, 18]) (some (10, sourceBody263_15, 263, 11))
+
+def sourceBody263_39 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_38 sourceBody263_3
 
 def sourceBody263_40 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_39 sourceBody263_3
+.seq sourceBody263_39 sourceBody263_0
 
 def sourceBody263_41 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_40 sourceBody263_0
+.seq sourceBody263_37 sourceBody263_40
 
 def sourceBody263_42 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_38 sourceBody263_41
+.seq sourceBody263_36 sourceBody263_41
 
 def sourceBody263_43 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_37 sourceBody263_42
+.seq sourceBody263_0 sourceBody263_42
 
 def sourceBody263_44 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_36 sourceBody263_43
+.seq sourceBody263_0 sourceBody263_43
 
 def sourceBody263_45 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_0 sourceBody263_44
+.seq sourceBody263_35 sourceBody263_44
 
 def sourceBody263_46 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_0 sourceBody263_45
+Flapjack.WordLangProgHOL.assign 10
+  (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 88#64])
 
 def sourceBody263_47 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_35 sourceBody263_46
+Flapjack.WordLangProgHOL.assign 18 (Flapjack.WordLangExpHOL.const 96#64)
 
 def sourceBody263_48 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 10
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 32#64]))
-
-def sourceBody263_49 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 18
+Flapjack.WordLangProgHOL.assign 6
   (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add [Flapjack.WordLangExpHOL.var 8, Flapjack.WordLangExpHOL.const 96#64])
 
-def sourceBody263_50 : WordLangProgHOL (BitVec 64) :=
+def sourceBody263_49 : WordLangProgHOL (BitVec 64) :=
 .call (some (([14]), ((Flapjack.Spt.bs
     (Flapjack.Spt.bn Flapjack.Spt.ln
       (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit
         (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit))))
     PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody263_0, 263, 12)) (some 262) ([10, 18]) (some (10, sourceBody263_14, 263, 13))
+  Flapjack.Spt.ln)), sourceBody263_0, 263, 12)) (some 242) ([10, 18, 6]) (some (10, sourceBody263_15, 263, 13))
+
+def sourceBody263_50 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody263_49 sourceBody263_3
 
 def sourceBody263_51 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_50 sourceBody263_3
+.seq sourceBody263_50 sourceBody263_0
 
 def sourceBody263_52 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_51 sourceBody263_0
+.seq sourceBody263_48 sourceBody263_51
 
 def sourceBody263_53 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_49 sourceBody263_52
+.seq sourceBody263_47 sourceBody263_52
 
 def sourceBody263_54 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_48 sourceBody263_53
+.seq sourceBody263_46 sourceBody263_53
 
 def sourceBody263_55 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_0 sourceBody263_54
@@ -220,7 +207,7 @@ def sourceBody263_56 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_0 sourceBody263_55
 
 def sourceBody263_57 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody263_47 sourceBody263_56
+.seq sourceBody263_45 sourceBody263_56
 
 def sourceBody263_58 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.var 8)
@@ -239,7 +226,7 @@ def sourceBody263_62 : WordLangProgHOL (BitVec 64) :=
     (Flapjack.Spt.bn Flapjack.Spt.ln
       (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
     PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody263_0, 263, 14)) (some 235) ([10, 18, 6, 12]) (some (10, sourceBody263_14, 263, 15))
+  Flapjack.Spt.ln)), sourceBody263_0, 263, 14)) (some 235) ([10, 18, 6, 12]) (some (10, sourceBody263_15, 263, 15))
 
 def sourceBody263_63 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_62 sourceBody263_3
@@ -272,7 +259,7 @@ def sourceBody263_72 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.var 16)
 
 def sourceBody263_73 : WordLangProgHOL (BitVec 64) :=
-.call (some (([14]), ((Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln)), sourceBody263_0, 263, 16)) (some 70) ([10]) (some (10, sourceBody263_14, 263, 17))
+.call (some (([14]), ((Flapjack.Spt.ls PUnit.unit, Flapjack.Spt.ln)), sourceBody263_0, 263, 16)) (some 70) ([10]) (some (10, sourceBody263_15, 263, 17))
 
 def sourceBody263_74 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody263_73 sourceBody263_3

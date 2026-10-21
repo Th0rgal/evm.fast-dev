@@ -31,7 +31,7 @@ def crepBody806_6 : CrepProg (BitVec 64) :=
 .seq crepBody806_5 crepBody806_1
 
 def crepBody806_7 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.const 5#64) crepBody806_6
+.dec 2 (Flapjack.CrepExp.const 1#64) crepBody806_6
 
 def crepBody806_8 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.raise 9#64
@@ -46,7 +46,7 @@ def crepBody806_11 : CrepProg (BitVec 64) :=
 .seq crepBody806_2 crepBody806_10
 
 def crepBody806_12 : CrepProg (BitVec 64) :=
-.call (some (([2]), some ((7#64), crepBody806_11))) ("attempt_l4") ([Flapjack.CrepExp.var 0])
+.call (some (([2]), some ((4#64), crepBody806_11))) ("run_attempt") ([Flapjack.CrepExp.var 0])
 
 def crepBody806_13 : CrepProg (BitVec 64) :=
 .dec 2 (Flapjack.CrepExp.const 0#64) crepBody806_12
@@ -62,5 +62,5 @@ def crepBody806_16 : CrepProg (BitVec 64) :=
 
 def data806 : CrepProg (BitVec 64) := crepBody806_16
 def output806 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [97#8, 116#8, 116#8, 101#8, 109#8, 112#8, 116#8, 95#8, 108#8, 53#8], [0], crepProgToHOL data806)
+  (Flapjack.Basis.Pure.MlString.MlString.implode [97#8, 116#8, 116#8, 101#8, 109#8, 112#8, 116#8, 95#8, 108#8, 49#8], [0], crepProgToHOL data806)
 end InitECandidate.Proofs.FrontendStages.Crep

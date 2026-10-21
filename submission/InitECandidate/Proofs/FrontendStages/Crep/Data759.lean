@@ -27,10 +27,10 @@ def crepBody759_5 : CrepProg (BitVec 64) :=
 .seq crepBody759_3 crepBody759_4
 
 def crepBody759_6 : CrepProg (BitVec 64) :=
-.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.notEqual (Flapjack.CrepExp.var 2) (Flapjack.CrepExp.const 128#64)) crepBody759_5 crepBody759_1
+.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.notEqual (Flapjack.CrepExp.var 2) (Flapjack.CrepExp.const 512#64)) crepBody759_5 crepBody759_1
 
 def crepBody759_7 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([3], none)) "charge_gas" [Flapjack.CrepExp.const 23800#64]
+Flapjack.CrepProg.call (some ([3], none)) "charge_gas" [Flapjack.CrepExp.const 600#64]
 
 def crepBody759_8 : CrepProg (BitVec 64) :=
 .dec 3 (Flapjack.CrepExp.const 0#64) crepBody759_7
@@ -42,7 +42,7 @@ def crepBody759_10 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([3], none)) "alloc" [Flapjack.CrepExp.const 256#64]
 
 def crepBody759_11 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([4], none)) "bls_map_fp2_to_g2_exec"
+Flapjack.CrepProg.call (some ([4], none)) "bls_g2_add_exec"
   [Flapjack.CrepExp.load
       (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 88#64]),
     Flapjack.CrepExp.var 3]
@@ -126,6 +126,5 @@ def crepBody759_33 : CrepProg (BitVec 64) :=
 def data759 : CrepProg (BitVec 64) := crepBody759_33
 def output759 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [112#8, 114#8, 101#8, 95#8, 98#8, 108#8, 115#8, 95#8, 109#8, 97#8, 112#8, 95#8, 102#8, 112#8, 50#8, 95#8, 116#8,
-    111#8, 95#8, 103#8, 50#8], [], crepProgToHOL data759)
+  [112#8, 114#8, 101#8, 95#8, 98#8, 108#8, 115#8, 95#8, 103#8, 50#8, 95#8, 97#8, 100#8, 100#8], [], crepProgToHOL data759)
 end InitECandidate.Proofs.FrontendStages.Crep

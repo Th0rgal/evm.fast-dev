@@ -30,7 +30,7 @@ def globalBody487_5 : Prog (BitVec 64) :=
 .seq globalBody487_3 globalBody487_4
 
 def globalBody487_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.one) ("u256_eq") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody487_5
+.decCall ("r") (Flapjack.Shape.one) ("u256_lt") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody487_5
 
 def globalBody487_7 : Prog (BitVec 64) :=
 .seq globalBody487_0 globalBody487_6
@@ -42,6 +42,6 @@ def globalBody487_9 : Prog (BitVec 64) :=
 .decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody487_8
 
 def globalData487 : Decl (BitVec 64) :=
-.function { name := "op_eq", inline := false, exported := false, params := [], body := globalBody487_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_lt", inline := false, exported := false, params := [], body := globalBody487_9, returnShape := (Flapjack.Shape.one) }
 def globalOutput487 := Pancake.PanLang.declToHOL globalData487
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -10,13 +10,13 @@ open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body334_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call none "tx_signing_hash_mode"
-  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 1#64, Flapjack.Exp.const 0#64,
-    Flapjack.Exp.var Flapjack.VarKind.local "out"]
+  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 2#64,
+    Flapjack.Exp.var Flapjack.VarKind.local "chain_id", Flapjack.Exp.var Flapjack.VarKind.local "out"]
 
 def originalData334 : Decl (BitVec 64) :=
-.function { name := "signing_hash_7702", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body334_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "signing_hash_155", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body334_0, returnShape := (Flapjack.Shape.one) }
 def simplifiedData334 : Decl (BitVec 64) :=
-.function { name := "signing_hash_7702", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body334_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "signing_hash_155", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body334_0, returnShape := (Flapjack.Shape.one) }
 def original334 := Pancake.PanLang.declToHOL originalData334
 def simplified334 := Pancake.PanLang.declToHOL simplifiedData334
 end InitECandidate.Proofs.FrontendStages.Declarations

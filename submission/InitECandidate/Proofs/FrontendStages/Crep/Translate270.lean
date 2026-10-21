@@ -1,7 +1,7 @@
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.CrepKernelComputation
 import InitECandidate.Proofs.FrontendCodecComputation
-import InitECandidate.Proofs.FrontendStages.Globals.Output296
+import InitECandidate.Proofs.FrontendStages.Globals.Output295
 import InitECandidate.Proofs.FrontendStages.Crep.Data270
 set_option autoImplicit false
 set_option Elab.async false
@@ -13,9 +13,9 @@ open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 theorem translate270_eq :
     InitECandidate.Proofs.CrepComputation.compileDeclaration functionMap exceptionMap
-      InitECandidate.Proofs.FrontendStages.Declarations.globalOutput296 = some output270 := by
+      InitECandidate.Proofs.FrontendStages.Declarations.globalOutput295 = some output270 := by
   rw [InitECandidate.Proofs.CrepKernelComputation.compileDeclaration_eq]
-  dsimp only [InitECandidate.Proofs.FrontendStages.Declarations.globalOutput296, output270]
+  dsimp only [InitECandidate.Proofs.FrontendStages.Declarations.globalOutput295, output270]
   rw [InitECandidate.Proofs.FrontendCodecComputation.declToHOL_function_eq]
   rw [InitECandidate.Proofs.CrepKernelComputation.crepProgToHOL_function_eq]
   dsimp only [functionMap, functionSkeleton, exceptionMap, exceptionSkeleton]

@@ -9,48 +9,36 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body770_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_copy"
-  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "p"]
+Flapjack.Prog.call (some (none, none)) "g1_mul"
+  [Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.var Flapjack.VarKind.local "p",
+    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "bls_c", Flapjack.Exp.const 1344#64],
+    Flapjack.Exp.const 4#64]
 
 def body770_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_copy"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 192#64],
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.const 192#64]]
+Flapjack.Prog.call (some (none, none)) "heap_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
 
 def body770_2 : Prog (BitVec 64) :=
-.seq body770_0 body770_1
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "inf")
 
 def body770_3 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+.seq body770_1 body770_2
 
 def body770_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "r")
-  (Flapjack.Exp.var Flapjack.VarKind.local "p")) body770_2 body770_3
+.decCall ("inf") (Flapjack.Shape.one) ("g1_is_inf") ([Flapjack.Exp.var Flapjack.VarKind.local "t"]) body770_3
 
 def body770_5 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_neg"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 96#64],
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.const 96#64]]
+.seq body770_0 body770_4
 
 def body770_6 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.decCall ("t") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 144#64]) body770_5
 
 def body770_7 : Prog (BitVec 64) :=
-.seq body770_5 body770_6
-
-def body770_8 : Prog (BitVec 64) :=
-.seq body770_4 body770_7
-
-def body770_9 : Prog (BitVec 64) :=
-.seq body770_4 body770_5
-
-def body770_10 : Prog (BitVec 64) :=
-.seq body770_9 body770_6
+.decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) body770_6
 
 def originalData770 : Decl (BitVec 64) :=
-.function { name := "g2_neg", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("p", Flapjack.Shape.one)], body := body770_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "g1_subgroup_check", inline := false, exported := false, params := [("p", Flapjack.Shape.one)], body := body770_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData770 : Decl (BitVec 64) :=
-.function { name := "g2_neg", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("p", Flapjack.Shape.one)], body := body770_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "g1_subgroup_check", inline := false, exported := false, params := [("p", Flapjack.Shape.one)], body := body770_7, returnShape := (Flapjack.Shape.one) }
 def original770 := Pancake.PanLang.declToHOL originalData770
 def simplified770 := Pancake.PanLang.declToHOL simplifiedData770
 end InitECandidate.Proofs.FrontendStages.Declarations

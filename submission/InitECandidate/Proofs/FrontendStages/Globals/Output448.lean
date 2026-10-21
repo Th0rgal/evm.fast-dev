@@ -12,23 +12,27 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody448_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.op Flapjack.BinOp.sub
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.add
-              [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 48#64]),
-          Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.add
-              [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 72#64])],
-      Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 192#64])])
+Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 4#64)
 
 def globalBody448_1 : Prog (BitVec 64) :=
-.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 112#64])) globalBody448_0
+Flapjack.Prog.skip
+
+def globalBody448_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+        Flapjack.Exp.const 64#64]))
+  (Flapjack.Exp.var Flapjack.VarKind.local "amount")) globalBody448_0 globalBody448_1
+
+def globalBody448_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def globalBody448_4 : Prog (BitVec 64) :=
+.seq globalBody448_2 globalBody448_3
 
 def globalData448 : Decl (BitVec 64) :=
-.function { name := "frame_state_gas_used", inline := false, exported := false, params := [("e", Flapjack.Shape.one)], body := globalBody448_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "check_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := globalBody448_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput448 := Pancake.PanLang.declToHOL globalData448
 end InitECandidate.Proofs.FrontendStages.Declarations

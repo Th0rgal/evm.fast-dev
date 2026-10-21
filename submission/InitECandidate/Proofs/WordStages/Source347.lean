@@ -8,29 +8,20 @@ def sourceBody347_0 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 4
   (Flapjack.WordLangExpHOL.load
     (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 192#64]))
+      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 144#64]))
 
 def sourceBody347_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 6
-  (Flapjack.WordLangExpHOL.load
-    (Flapjack.WordLangExpHOL.op Flapjack.BinOp.add
-      [Flapjack.WordLangExpHOL.var 2, Flapjack.WordLangExpHOL.const 200#64]))
+Flapjack.WordLangProgHOL.return 0 [4]
 
 def sourceBody347_2 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.return 0 [4, 6]
-
-def sourceBody347_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.skip
 
+def sourceBody347_3 : WordLangProgHOL (BitVec 64) :=
+.seq sourceBody347_1 sourceBody347_2
+
 def sourceBody347_4 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody347_2 sourceBody347_3
-
-def sourceBody347_5 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody347_1 sourceBody347_4
-
-def sourceBody347_6 : WordLangProgHOL (BitVec 64) :=
-.seq sourceBody347_0 sourceBody347_5
+.seq sourceBody347_0 sourceBody347_3
 
 def source347 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-  (347, 2, sourceBody347_6)
+  (347, 2, sourceBody347_4)
 end InitECandidate.Proofs.WordStages

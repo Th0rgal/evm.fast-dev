@@ -9,57 +9,70 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body220_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "HdrErr" (Flapjack.Exp.const 4#64)
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.var Flapjack.VarKind.local "root",
+    Flapjack.Exp.const 32#64]
 
 def body220_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.storeByte
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.const 32#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "succ")
 
 def body220_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 8#64)
-  (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f"))) body220_0 body220_1
+Flapjack.Prog.call (some (none, none)) "st_le64"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.const 33#64],
+    Flapjack.Exp.var Flapjack.VarKind.local "chain_id"]
 
 def body220_3 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "v"
-  (Flapjack.Exp.op Flapjack.BinOp.or
-    [Flapjack.Exp.shift Flapjack.Shift.lsl (Flapjack.Exp.var Flapjack.VarKind.local "v") (Flapjack.Exp.const 8#64),
-      Flapjack.Exp.loadByte
-        (Flapjack.Exp.op Flapjack.BinOp.add
-          [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "f"),
-            Flapjack.Exp.var Flapjack.VarKind.local "j"])])
+Flapjack.Prog.storeByte
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.const 41#64])
+  (Flapjack.Exp.op Flapjack.BinOp.and [Flapjack.Exp.var Flapjack.VarKind.local "schema_id", Flapjack.Exp.const 255#64])
 
 def body220_4 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "j"
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "j", Flapjack.Exp.const 1#64])
+Flapjack.Prog.storeByte
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "out", Flapjack.Exp.const 42#64])
+  (Flapjack.Exp.shift Flapjack.Shift.lsr (Flapjack.Exp.var Flapjack.VarKind.local "schema_id")
+    (Flapjack.Exp.const 8#64))
 
 def body220_5 : Prog (BitVec 64) :=
-.seq body220_3 body220_4
+Flapjack.Prog.return (Flapjack.Exp.const 43#64)
 
 def body220_6 : Prog (BitVec 64) :=
-.while (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "j")
-  (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f"))) body220_5
+.seq body220_4 body220_5
 
 def body220_7 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "v")
+.seq body220_3 body220_6
 
 def body220_8 : Prog (BitVec 64) :=
-.seq body220_6 body220_7
+.seq body220_2 body220_7
 
 def body220_9 : Prog (BitVec 64) :=
-.dec ("j") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body220_8
+.seq body220_1 body220_8
 
 def body220_10 : Prog (BitVec 64) :=
-.dec ("v") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body220_9
+.seq body220_0 body220_9
 
 def body220_11 : Prog (BitVec 64) :=
-.seq body220_2 body220_10
+.seq body220_0 body220_1
 
 def body220_12 : Prog (BitVec 64) :=
-.decCall ("f") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("hdr_uint_field") ([Flapjack.Exp.var Flapjack.VarKind.local "arr", Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 0#64]) body220_11
+.seq body220_11 body220_2
+
+def body220_13 : Prog (BitVec 64) :=
+.seq body220_12 body220_3
+
+def body220_14 : Prog (BitVec 64) :=
+.seq body220_13 body220_4
+
+def body220_15 : Prog (BitVec 64) :=
+.seq body220_14 body220_5
 
 def originalData220 : Decl (BitVec 64) :=
-.function { name := "hdr_word_field", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one)], body := body220_12, returnShape := (Flapjack.Shape.one) }
+.function { name := "serialize_result", inline := false, exported := false, params := [("out", Flapjack.Shape.one), ("root", Flapjack.Shape.one), ("succ", Flapjack.Shape.one),
+  ("chain_id", Flapjack.Shape.one), ("schema_id", Flapjack.Shape.one)], body := body220_10, returnShape := (Flapjack.Shape.one) }
 def simplifiedData220 : Decl (BitVec 64) :=
-.function { name := "hdr_word_field", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one)], body := body220_12, returnShape := (Flapjack.Shape.one) }
+.function { name := "serialize_result", inline := false, exported := false, params := [("out", Flapjack.Shape.one), ("root", Flapjack.Shape.one), ("succ", Flapjack.Shape.one),
+  ("chain_id", Flapjack.Shape.one), ("schema_id", Flapjack.Shape.one)], body := body220_15, returnShape := (Flapjack.Shape.one) }
 def original220 := Pancake.PanLang.declToHOL originalData220
 def simplified220 := Pancake.PanLang.declToHOL simplifiedData220
 end InitECandidate.Proofs.FrontendStages.Declarations

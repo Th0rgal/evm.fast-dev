@@ -9,73 +9,55 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody204_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([3, 4, 5, 6], none)) "rlp_item"
-  [Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add
-        [Flapjack.CrepExp.var 0,
-          Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul [Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 16#64]]),
-    Flapjack.CrepExp.load
-      (Flapjack.CrepExp.op Flapjack.BinOp.add
-        [Flapjack.CrepExp.var 0,
-          Flapjack.CrepExp.crepOp Flapjack.CrepOp.mul [Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 16#64],
-          Flapjack.CrepExp.const 8#64])]
+Flapjack.CrepProg.call (some ([5], none)) "memcpy"
+  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 32#64]
 
 def crepBody204_1 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.storeGlob (0#5) (Flapjack.CrepExp.var 7)
+.dec 5 (Flapjack.CrepExp.const 0#64) crepBody204_0
 
 def crepBody204_2 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.skip
+Flapjack.CrepProg.storeByte
+  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64])
+  (Flapjack.CrepExp.var 2)
 
 def crepBody204_3 : CrepProg (BitVec 64) :=
 .seq crepBody204_1 crepBody204_2
 
 def crepBody204_4 : CrepProg (BitVec 64) :=
-.dec 7 (Flapjack.CrepExp.const 6#64) crepBody204_3
+Flapjack.CrepProg.call (some ([5], none)) "st_le64"
+  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 33#64],
+    Flapjack.CrepExp.var 3]
 
 def crepBody204_5 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.raise 3#64
+.dec 5 (Flapjack.CrepExp.const 0#64) crepBody204_4
 
 def crepBody204_6 : CrepProg (BitVec 64) :=
-.seq crepBody204_4 crepBody204_5
+.seq crepBody204_3 crepBody204_5
 
 def crepBody204_7 : CrepProg (BitVec 64) :=
-.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.notEqual (Flapjack.CrepExp.var 3) (Flapjack.CrepExp.const 0#64)) crepBody204_6 crepBody204_2
+Flapjack.CrepProg.storeByte
+  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 41#64])
+  (Flapjack.CrepExp.op Flapjack.BinOp.and [Flapjack.CrepExp.var 4, Flapjack.CrepExp.const 255#64])
 
 def crepBody204_8 : CrepProg (BitVec 64) :=
-.dec 7 (Flapjack.CrepExp.const 7#64) crepBody204_3
+.seq crepBody204_6 crepBody204_7
 
 def crepBody204_9 : CrepProg (BitVec 64) :=
-.seq crepBody204_8 crepBody204_5
+Flapjack.CrepProg.storeByte
+  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 42#64])
+  (Flapjack.CrepExp.shift Flapjack.Shift.lsr (Flapjack.CrepExp.var 4) (Flapjack.CrepExp.const 8#64))
 
 def crepBody204_10 : CrepProg (BitVec 64) :=
-.ite (Flapjack.CrepExp.cmp Flapjack.Cmp.notEqual (Flapjack.CrepExp.var 5) (Flapjack.CrepExp.var 2)) crepBody204_9 crepBody204_2
+.seq crepBody204_8 crepBody204_9
 
 def crepBody204_11 : CrepProg (BitVec 64) :=
-.seq crepBody204_7 crepBody204_10
+Flapjack.CrepProg.return [Flapjack.CrepExp.const 43#64]
 
 def crepBody204_12 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return [Flapjack.CrepExp.var 4]
+.seq crepBody204_10 crepBody204_11
 
-def crepBody204_13 : CrepProg (BitVec 64) :=
-.seq crepBody204_11 crepBody204_12
-
-def crepBody204_14 : CrepProg (BitVec 64) :=
-.seq crepBody204_0 crepBody204_13
-
-def crepBody204_15 : CrepProg (BitVec 64) :=
-.dec 6 (Flapjack.CrepExp.const 0#64) crepBody204_14
-
-def crepBody204_16 : CrepProg (BitVec 64) :=
-.dec 5 (Flapjack.CrepExp.const 0#64) crepBody204_15
-
-def crepBody204_17 : CrepProg (BitVec 64) :=
-.dec 4 (Flapjack.CrepExp.const 0#64) crepBody204_16
-
-def crepBody204_18 : CrepProg (BitVec 64) :=
-.dec 3 (Flapjack.CrepExp.const 0#64) crepBody204_17
-
-def data204 : CrepProg (BitVec 64) := crepBody204_18
+def data204 : CrepProg (BitVec 64) := crepBody204_12
 def output204 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [104#8, 100#8, 114#8, 95#8, 98#8, 121#8, 116#8, 101#8, 115#8, 95#8, 102#8, 105#8, 101#8, 108#8, 100#8], [0, 1, 2], crepProgToHOL data204)
+  [115#8, 101#8, 114#8, 105#8, 97#8, 108#8, 105#8, 122#8, 101#8, 95#8, 114#8, 101#8, 115#8, 117#8, 108#8, 116#8], [0, 1, 2, 3, 4], crepProgToHOL data204)
 end InitECandidate.Proofs.FrontendStages.Crep

@@ -12,10 +12,10 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody486_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 3#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
 
 def globalBody486_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push_bool" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def globalBody486_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -30,18 +30,21 @@ def globalBody486_5 : Prog (BitVec 64) :=
 .seq globalBody486_3 globalBody486_4
 
 def globalBody486_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.one) ("u256_sgt") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody486_5
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_signextend") ([Flapjack.Exp.var Flapjack.VarKind.local "bw", Flapjack.Exp.var Flapjack.VarKind.local "x"]) globalBody486_5
 
 def globalBody486_7 : Prog (BitVec 64) :=
-.seq globalBody486_0 globalBody486_6
+.decCall ("bw") (Flapjack.Shape.one) ("sat_word") ([Flapjack.Exp.var Flapjack.VarKind.local "b"]) globalBody486_6
 
 def globalBody486_8 : Prog (BitVec 64) :=
-.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody486_7
+.seq globalBody486_0 globalBody486_7
 
 def globalBody486_9 : Prog (BitVec 64) :=
 .decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody486_8
 
+def globalBody486_10 : Prog (BitVec 64) :=
+.decCall ("b") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody486_9
+
 def globalData486 : Decl (BitVec 64) :=
-.function { name := "op_sgt", inline := false, exported := false, params := [], body := globalBody486_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_signextend", inline := false, exported := false, params := [], body := globalBody486_10, returnShape := (Flapjack.Shape.one) }
 def globalOutput486 := Pancake.PanLang.declToHOL globalData486
 end InitECandidate.Proofs.FrontendStages.Declarations

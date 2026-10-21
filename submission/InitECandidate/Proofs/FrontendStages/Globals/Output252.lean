@@ -12,44 +12,44 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody252_0 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 0#64])
-  (Flapjack.Exp.const 0#64)
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "i")
 
 def globalBody252_1 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 8#64])
-  (Flapjack.Exp.const 0#64)
+Flapjack.Prog.skip
 
 def globalBody252_2 : Prog (BitVec 64) :=
-.seq globalBody252_0 globalBody252_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.loadByte
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "i"]))
+  (Flapjack.Exp.loadByte
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.var Flapjack.VarKind.local "b", Flapjack.Exp.var Flapjack.VarKind.local "i"]))) globalBody252_0 globalBody252_1
 
 def globalBody252_3 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 16#64])
-  (Flapjack.Exp.const 0#64)
+Flapjack.Prog.assign Flapjack.VarKind.local "i"
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
 
 def globalBody252_4 : Prog (BitVec 64) :=
 .seq globalBody252_2 globalBody252_3
 
 def globalBody252_5 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 24#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "hash")
+.while (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "i")
+  (Flapjack.Exp.var Flapjack.VarKind.local "n")) globalBody252_4
 
 def globalBody252_6 : Prog (BitVec 64) :=
-.seq globalBody252_4 globalBody252_5
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "n")
 
 def globalBody252_7 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "nd")
+.seq globalBody252_5 globalBody252_6
 
 def globalBody252_8 : Prog (BitVec 64) :=
-.seq globalBody252_6 globalBody252_7
+.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody252_7
 
 def globalBody252_9 : Prog (BitVec 64) :=
-.decCall ("nd") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 32#64]) globalBody252_8
+.decCall ("n") (Flapjack.Shape.one) ("min") ([Flapjack.Exp.var Flapjack.VarKind.local "al", Flapjack.Exp.var Flapjack.VarKind.local "bl"]) globalBody252_8
 
 def globalData252 : Decl (BitVec 64) :=
-.function { name := "node_new_hashed", inline := false, exported := false, params := [("hash", Flapjack.Shape.one)], body := globalBody252_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "common_prefix_length", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("al", Flapjack.Shape.one), ("b", Flapjack.Shape.one), ("bl", Flapjack.Shape.one)], body := globalBody252_9, returnShape := (Flapjack.Shape.one) }
 def globalOutput252 := Pancake.PanLang.declToHOL globalData252
 end InitECandidate.Proofs.FrontendStages.Declarations

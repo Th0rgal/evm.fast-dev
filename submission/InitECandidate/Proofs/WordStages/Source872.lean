@@ -43,7 +43,7 @@ def sourceBody872_11 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody872_0 sourceBody872_10
 
 def sourceBody872_12 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 4 (Flapjack.WordLangExpHOL.const 7#64)
+Flapjack.WordLangProgHOL.assign 4 (Flapjack.WordLangExpHOL.const 3#64)
 
 def sourceBody872_13 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.set (Flapjack.WordStore.temp 0#5) (Flapjack.WordLangExpHOL.var 4)
@@ -79,7 +79,7 @@ def sourceBody872_23 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody872_3 sourceBody872_22
 
 def sourceBody872_24 : WordLangProgHOL (BitVec 64) :=
-.ite (Flapjack.Cmp.notEqual) 4 (Flapjack.WordRegImm.imm 8#64) sourceBody872_2 sourceBody872_23
+.ite (Flapjack.Cmp.notEqual) 4 (Flapjack.WordRegImm.imm 1#64) sourceBody872_2 sourceBody872_23
 
 def sourceBody872_25 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody872_24 sourceBody872_3

@@ -9,11 +9,12 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody304_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call none "tx_signing_hash_mode"
-  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 2#64, Flapjack.CrepExp.var 1, Flapjack.CrepExp.var 2]
+Flapjack.CrepProg.call none "tx_encode_generic"
+  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 0#64, Flapjack.CrepExp.const 0#64]
 
 def data304 : CrepProg (BitVec 64) := crepBody304_0
 def output304 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [115#8, 105#8, 103#8, 110#8, 105#8, 110#8, 103#8, 95#8, 104#8, 97#8, 115#8, 104#8, 95#8, 49#8, 53#8, 53#8], [0, 1, 2], crepProgToHOL data304)
+  [101#8, 110#8, 99#8, 111#8, 100#8, 101#8, 95#8, 116#8, 114#8, 97#8, 110#8, 115#8, 97#8, 99#8, 116#8, 105#8, 111#8,
+    110#8], [0], crepProgToHOL data304)
 end InitECandidate.Proofs.FrontendStages.Crep

@@ -12,22 +12,31 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody264_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "key_to_nibbles"
-  [Flapjack.Exp.var Flapjack.VarKind.local "key_hash32", Flapjack.Exp.const 32#64,
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 144#64])]
+Flapjack.Prog.call
+  (some
+    (some (Flapjack.VarKind.local, "nd"),
+      some
+        ("MptErr", "e",
+          Flapjack.Prog.seq
+            (Flapjack.Prog.call (some (none, none)) "scratch_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"])
+            (Flapjack.Prog.raise "MptErr" (Flapjack.Exp.var Flapjack.VarKind.local "e")))))
+  "_decode_witness_node_body"
+  [Flapjack.Exp.var Flapjack.VarKind.local "db", Flapjack.Exp.var Flapjack.VarKind.local "p",
+    Flapjack.Exp.var Flapjack.VarKind.local "n"]
 
 def globalBody264_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "trie_walk"
-  [Flapjack.Exp.var Flapjack.VarKind.local "root",
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 144#64]),
-    Flapjack.Exp.const 64#64]
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "nd")
 
 def globalBody264_2 : Prog (BitVec 64) :=
 .seq globalBody264_0 globalBody264_1
 
+def globalBody264_3 : Prog (BitVec 64) :=
+.dec ("nd") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody264_2
+
+def globalBody264_4 : Prog (BitVec 64) :=
+.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody264_3
+
 def globalData264 : Decl (BitVec 64) :=
-.function { name := "trie_lookup", inline := false, exported := false, params := [("root", Flapjack.Shape.one), ("key_hash32", Flapjack.Shape.one)], body := globalBody264_2, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "_decode_witness_node_mpt", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("mark", Flapjack.Shape.one)], body := globalBody264_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput264 := Pancake.PanLang.declToHOL globalData264
 end InitECandidate.Proofs.FrontendStages.Declarations

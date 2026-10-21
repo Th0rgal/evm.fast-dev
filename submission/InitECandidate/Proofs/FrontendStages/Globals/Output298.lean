@@ -12,50 +12,28 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody298_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "TxErr" (Flapjack.Exp.const 17#64)
+Flapjack.Prog.raise "TxErr" (Flapjack.Exp.const 13#64)
 
 def globalBody298_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody298_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "it"))
-  (Flapjack.Exp.const 0#64)) globalBody298_0 globalBody298_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 32#64)
+  (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f"))) globalBody298_0 globalBody298_1
 
 def globalBody298_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call none "u256_from_be"
+  [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "f"),
+    Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "f")]
 
 def globalBody298_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "it"))
-  (Flapjack.Exp.const 0#64)) globalBody298_3 globalBody298_1
+.seq globalBody298_2 globalBody298_3
 
 def globalBody298_5 : Prog (BitVec 64) :=
-.seq globalBody298_2 globalBody298_4
-
-def globalBody298_6 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "it"))
-  (Flapjack.Exp.const 20#64)) globalBody298_0 globalBody298_1
-
-def globalBody298_7 : Prog (BitVec 64) :=
-.seq globalBody298_5 globalBody298_6
-
-def globalBody298_8 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "it"))
-
-def globalBody298_9 : Prog (BitVec 64) :=
-.seq globalBody298_7 globalBody298_8
-
-def globalBody298_10 : Prog (BitVec 64) :=
-.decCall ("it") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("rlp_item") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.var Flapjack.VarKind.local "arr",
-        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 16#64]]),
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.var Flapjack.VarKind.local "arr",
-        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 16#64],
-        Flapjack.Exp.const 8#64])]) globalBody298_9
+.decCall ("f") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("tx_scalar_item") ([Flapjack.Exp.var Flapjack.VarKind.local "arr", Flapjack.Exp.var Flapjack.VarKind.local "i",
+  Flapjack.Exp.var Flapjack.VarKind.local "maxb"]) globalBody298_4
 
 def globalData298 : Decl (BitVec 64) :=
-.function { name := "tx_to_item", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one)], body := globalBody298_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_scalar_u256", inline := false, exported := false, params := [("arr", Flapjack.Shape.one), ("i", Flapjack.Shape.one), ("maxb", Flapjack.Shape.one)], body := globalBody298_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput298 := Pancake.PanLang.declToHOL globalData298
 end InitECandidate.Proofs.FrontendStages.Declarations

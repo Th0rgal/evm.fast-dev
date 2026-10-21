@@ -23,22 +23,22 @@ def sourceBody713_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 18 (Flapjack.WordLangExpHOL.var 12)
 
 def sourceBody713_6 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 30 (Flapjack.WordLangExpHOL.const 1#64)
+Flapjack.WordLangProgHOL.assign 30 (Flapjack.WordLangExpHOL.var 2)
 
 def sourceBody713_7 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 24 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 24 (Flapjack.WordLangExpHOL.var 4)
 
 def sourceBody713_8 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 36 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 36 (Flapjack.WordLangExpHOL.var 6)
 
 def sourceBody713_9 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 8)
 
 def sourceBody713_10 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 26 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 26 (Flapjack.WordLangExpHOL.var 10)
 
 def sourceBody713_11 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 20 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 20 (Flapjack.WordLangExpHOL.var 12)
 
 def sourceBody713_12 : WordLangProgHOL (BitVec 64) :=
 .call (none) (some 710) ([0, 34, 16, 28, 22, 32, 18, 30, 24, 36, 14, 26, 20]) (none)

@@ -2,7 +2,7 @@ import InitECandidate.Proofs.FrontendStages.Globals.Output367
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data367
 import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
-import InitECandidate.Proofs.FrontendStages.Globals.Translate351
+import InitECandidate.Proofs.FrontendStages.Globals.Translate344
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000

@@ -12,14 +12,7 @@ def body532_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def body532_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push"
-  [Flapjack.Exp.load
-      (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
-      (Flapjack.Exp.op Flapjack.BinOp.add
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.add
-              [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
-          Flapjack.Exp.const 56#64])]
+Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "v"]
 
 def body532_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -34,21 +27,37 @@ def body532_5 : Prog (BitVec 64) :=
 .seq body532_1 body532_4
 
 def body532_6 : Prog (BitVec 64) :=
-.seq body532_0 body532_5
+.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("address_to_u256") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 32#64])]) body532_5
 
 def body532_7 : Prog (BitVec 64) :=
-.seq body532_0 body532_1
+.seq body532_0 body532_6
 
 def body532_8 : Prog (BitVec 64) :=
-.seq body532_7 body532_2
+.seq body532_1 body532_2
 
 def body532_9 : Prog (BitVec 64) :=
 .seq body532_8 body532_3
 
+def body532_10 : Prog (BitVec 64) :=
+.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("address_to_u256") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 32#64])]) body532_9
+
+def body532_11 : Prog (BitVec 64) :=
+.seq body532_0 body532_10
+
 def originalData532 : Decl (BitVec 64) :=
-.function { name := "op_callvalue", inline := false, exported := false, params := [], body := body532_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_address", inline := false, exported := false, params := [], body := body532_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData532 : Decl (BitVec 64) :=
-.function { name := "op_callvalue", inline := false, exported := false, params := [], body := body532_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_address", inline := false, exported := false, params := [], body := body532_11, returnShape := (Flapjack.Shape.one) }
 def original532 := Pancake.PanLang.declToHOL originalData532
 def simplified532 := Pancake.PanLang.declToHOL simplifiedData532
 end InitECandidate.Proofs.FrontendStages.Declarations

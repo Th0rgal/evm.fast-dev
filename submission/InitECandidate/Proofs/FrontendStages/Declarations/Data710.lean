@@ -10,29 +10,23 @@ open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body710_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call none "bls_fp_mul"
-  [Flapjack.Exp.var Flapjack.VarKind.local "r",
+  [Flapjack.Exp.var Flapjack.VarKind.local "a",
     Flapjack.Exp.rStruct
-      [Flapjack.Exp.const 17098105564519244256#64, Flapjack.Exp.const 3557706395579559416#64,
-        Flapjack.Exp.const 11120290361046346205#64, Flapjack.Exp.const 3801124253586036577#64,
-        Flapjack.Exp.const 2671430854784468776#64, Flapjack.Exp.const 767358375875140941#64]]
-
-def body710_1 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb
-  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-    Flapjack.Shape.one]) ("bls_fp_inv_raw") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) body710_0
+      [Flapjack.Exp.const 1#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64,
+        Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64]]
 
 def originalData710 : Decl (BitVec 64) :=
-.function { name := "bls_fp_inv", inline := false, exported := false, params := [("a",
+.function { name := "bls_fp_from_mont", inline := false, exported := false, params := [("a",
     Flapjack.Shape.comb
       [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-        Flapjack.Shape.one])], body := body710_1, returnShape := (Flapjack.Shape.comb
+        Flapjack.Shape.one])], body := body710_0, returnShape := (Flapjack.Shape.comb
   [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
     Flapjack.Shape.one]) }
 def simplifiedData710 : Decl (BitVec 64) :=
-.function { name := "bls_fp_inv", inline := false, exported := false, params := [("a",
+.function { name := "bls_fp_from_mont", inline := false, exported := false, params := [("a",
     Flapjack.Shape.comb
       [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-        Flapjack.Shape.one])], body := body710_1, returnShape := (Flapjack.Shape.comb
+        Flapjack.Shape.one])], body := body710_0, returnShape := (Flapjack.Shape.comb
   [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
     Flapjack.Shape.one]) }
 def original710 := Pancake.PanLang.declToHOL originalData710

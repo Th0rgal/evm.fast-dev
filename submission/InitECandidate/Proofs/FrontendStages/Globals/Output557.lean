@@ -15,7 +15,9 @@ def globalBody557_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def globalBody557_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "v"]
+Flapjack.Prog.call (some (none, none)) "stack_push_word"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 80#64])]
 
 def globalBody557_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -30,17 +32,12 @@ def globalBody557_5 : Prog (BitVec 64) :=
 .seq globalBody557_3 globalBody557_4
 
 def globalBody557_6 : Prog (BitVec 64) :=
-.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_from_be") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 88#64]),
-  Flapjack.Exp.const 32#64]) globalBody557_5
+.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) globalBody557_5
 
 def globalBody557_7 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) globalBody557_6
-
-def globalBody557_8 : Prog (BitVec 64) :=
-.seq globalBody557_0 globalBody557_7
+.seq globalBody557_0 globalBody557_6
 
 def globalData557 : Decl (BitVec 64) :=
-.function { name := "op_prevrandao", inline := false, exported := false, params := [], body := globalBody557_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_timestamp", inline := false, exported := false, params := [], body := globalBody557_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput557 := Pancake.PanLang.declToHOL globalData557
 end InitECandidate.Proofs.FrontendStages.Declarations

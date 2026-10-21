@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original340_eq : original340 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_recover_sender_with_chain_id := by
+theorem original340_eq : original340 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_signature_recovery_parameters := by
   with_unfolding_all rfl
 #print axioms original340_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

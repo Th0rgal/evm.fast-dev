@@ -10,9 +10,9 @@ open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 
 def originalData850 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "history_storage_address" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "block_hashes" (Flapjack.Exp.const 0#64)
 def simplifiedData850 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "history_storage_address" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "block_hashes" (Flapjack.Exp.const 0#64)
 def original850 := Pancake.PanLang.declToHOL originalData850
 def simplified850 := Pancake.PanLang.declToHOL simplifiedData850
 end InitECandidate.Proofs.FrontendStages.Declarations

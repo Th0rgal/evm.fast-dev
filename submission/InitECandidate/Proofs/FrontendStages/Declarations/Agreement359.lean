@@ -6,7 +6,7 @@ set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
-theorem original359_eq : original359 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_acct_empty := by
+theorem original359_eq : original359 = Flapjack.Pancake.PanLang.declToHOL Guest.Software.guestFn_state_snapshot := by
   with_unfolding_all rfl
 #print axioms original359_eq
 end InitECandidate.Proofs.FrontendStages.Declarations

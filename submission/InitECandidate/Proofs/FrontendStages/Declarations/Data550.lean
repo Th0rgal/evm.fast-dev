@@ -9,10 +9,13 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body550_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
 
 def body550_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "price"]
+Flapjack.Prog.call (some (none, none)) "stack_push"
+  [Flapjack.Exp.load
+      (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 8#64])]
 
 def body550_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -27,35 +30,37 @@ def body550_5 : Prog (BitVec 64) :=
 .seq body550_1 body550_4
 
 def body550_6 : Prog (BitVec 64) :=
-.decCall ("price") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("calculate_blob_gas_price") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 96#64])]) body550_5
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 32#64])]) body550_5
 
 def body550_7 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body550_6
+.seq body550_0 body550_6
 
 def body550_8 : Prog (BitVec 64) :=
-.seq body550_0 body550_7
-
-def body550_9 : Prog (BitVec 64) :=
 .seq body550_1 body550_2
 
+def body550_9 : Prog (BitVec 64) :=
+.seq body550_8 body550_3
+
 def body550_10 : Prog (BitVec 64) :=
-.seq body550_9 body550_3
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 32#64])]) body550_9
 
 def body550_11 : Prog (BitVec 64) :=
-.decCall ("price") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("calculate_blob_gas_price") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 96#64])]) body550_10
-
-def body550_12 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) body550_11
-
-def body550_13 : Prog (BitVec 64) :=
-.seq body550_0 body550_12
+.seq body550_0 body550_10
 
 def originalData550 : Decl (BitVec 64) :=
-.function { name := "op_blobbasefee", inline := false, exported := false, params := [], body := body550_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_selfbalance", inline := false, exported := false, params := [], body := body550_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData550 : Decl (BitVec 64) :=
-.function { name := "op_blobbasefee", inline := false, exported := false, params := [], body := body550_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_selfbalance", inline := false, exported := false, params := [], body := body550_11, returnShape := (Flapjack.Shape.one) }
 def original550 := Pancake.PanLang.declToHOL originalData550
 def simplified550 := Pancake.PanLang.declToHOL simplifiedData550
 end InitECandidate.Proofs.FrontendStages.Declarations

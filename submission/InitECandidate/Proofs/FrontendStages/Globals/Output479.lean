@@ -12,7 +12,7 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody479_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 8#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
 
 def globalBody479_1 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
@@ -30,22 +30,18 @@ def globalBody479_5 : Prog (BitVec 64) :=
 .seq globalBody479_3 globalBody479_4
 
 def globalBody479_6 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_addmod") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y",
-  Flapjack.Exp.var Flapjack.VarKind.local "z"]) globalBody479_5
+.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_div") ([Flapjack.Exp.var Flapjack.VarKind.local "x", Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody479_5
 
 def globalBody479_7 : Prog (BitVec 64) :=
 .seq globalBody479_0 globalBody479_6
 
 def globalBody479_8 : Prog (BitVec 64) :=
-.decCall ("z") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody479_7
+.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody479_7
 
 def globalBody479_9 : Prog (BitVec 64) :=
-.decCall ("y") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody479_8
-
-def globalBody479_10 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody479_9
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody479_8
 
 def globalData479 : Decl (BitVec 64) :=
-.function { name := "op_addmod", inline := false, exported := false, params := [], body := globalBody479_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_div", inline := false, exported := false, params := [], body := globalBody479_9, returnShape := (Flapjack.Shape.one) }
 def globalOutput479 := Pancake.PanLang.declToHOL globalData479
 end InitECandidate.Proofs.FrontendStages.Declarations

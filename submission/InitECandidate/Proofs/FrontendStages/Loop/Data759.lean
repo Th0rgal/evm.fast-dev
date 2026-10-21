@@ -40,7 +40,7 @@ def loopBody759_7 : HolLoopProg 64 :=
 .mark loopBody759_6
 
 def loopBody759_8 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 5 (Flapjack.HolLoopExp.const 128#64)
+Flapjack.HolLoopProg.assign 5 (Flapjack.HolLoopExp.const 512#64)
 
 def loopBody759_9 : HolLoopProg 64 :=
 .mark loopBody759_8
@@ -166,7 +166,7 @@ def loopBody759_49 : HolLoopProg 64 :=
 .mark loopBody759_48
 
 def loopBody759_50 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.const 23800#64)
+Flapjack.HolLoopProg.assign 4 (Flapjack.HolLoopExp.const 600#64)
 
 def loopBody759_51 : HolLoopProg 64 :=
 .mark loopBody759_50
@@ -178,7 +178,7 @@ def loopBody759_53 : HolLoopProg 64 :=
 .mark loopBody759_52
 
 def loopBody759_54 : HolLoopProg 64 :=
-.call (some ([3], Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))) (some 466) ([4]) (some (4, loopBody759_53, loopBody759_1, (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
+.call (some ([3], Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))) (some 470) ([4]) (some (4, loopBody759_53, loopBody759_1, (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
 
 def loopBody759_55 : HolLoopProg 64 :=
 .mark loopBody759_54

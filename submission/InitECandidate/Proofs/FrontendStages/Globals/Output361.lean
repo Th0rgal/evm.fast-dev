@@ -12,21 +12,31 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody361_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htab_set"
+Flapjack.Prog.call (some (none, none)) "memcpy"
   [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
-          Flapjack.Exp.const 72#64]),
-    Flapjack.Exp.var Flapjack.VarKind.local "addr", Flapjack.Exp.const 1#64]
+      (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 192#64]),
+    Flapjack.Exp.var Flapjack.VarKind.local "addr", Flapjack.Exp.const 20#64]
 
 def globalBody361_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 192#64]),
+        Flapjack.Exp.const 20#64],
+    Flapjack.Exp.var Flapjack.VarKind.local "key", Flapjack.Exp.const 32#64]
 
 def globalBody361_2 : Prog (BitVec 64) :=
 .seq globalBody361_0 globalBody361_1
 
+def globalBody361_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 192#64]))
+
+def globalBody361_4 : Prog (BitVec 64) :=
+.seq globalBody361_2 globalBody361_3
+
 def globalData361 : Decl (BitVec 64) :=
-.function { name := "record_pre_state_read", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody361_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "sk_make", inline := false, exported := false, params := [("addr", Flapjack.Shape.one), ("key", Flapjack.Shape.one)], body := globalBody361_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput361 := Pancake.PanLang.declToHOL globalData361
 end InitECandidate.Proofs.FrontendStages.Declarations

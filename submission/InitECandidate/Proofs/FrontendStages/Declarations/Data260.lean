@@ -9,34 +9,45 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body260_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call
-  (some
-    (some (Flapjack.VarKind.local, "nd"),
-      some
-        ("MptErr", "e",
-          Flapjack.Prog.seq
-            (Flapjack.Prog.call (some (none, none)) "scratch_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"])
-            (Flapjack.Prog.raise "MptErr" (Flapjack.Exp.var Flapjack.VarKind.local "e")))))
-  "_decode_witness_node_body"
-  [Flapjack.Exp.var Flapjack.VarKind.local "db", Flapjack.Exp.var Flapjack.VarKind.local "p",
-    Flapjack.Exp.var Flapjack.VarKind.local "n"]
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 8#64])
+  (Flapjack.Exp.const 0#64)
 
 def body260_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "nd")
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 16#64])
+  (Flapjack.Exp.const 0#64)
 
 def body260_2 : Prog (BitVec 64) :=
-.seq body260_0 body260_1
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "nd", Flapjack.Exp.const 24#64])
+  (Flapjack.Exp.const 0#64)
 
 def body260_3 : Prog (BitVec 64) :=
-.dec ("nd") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body260_2
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body260_4 : Prog (BitVec 64) :=
-.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body260_3
+.seq body260_2 body260_3
+
+def body260_5 : Prog (BitVec 64) :=
+.seq body260_1 body260_4
+
+def body260_6 : Prog (BitVec 64) :=
+.seq body260_0 body260_5
+
+def body260_7 : Prog (BitVec 64) :=
+.seq body260_0 body260_1
+
+def body260_8 : Prog (BitVec 64) :=
+.seq body260_7 body260_2
+
+def body260_9 : Prog (BitVec 64) :=
+.seq body260_8 body260_3
 
 def originalData260 : Decl (BitVec 64) :=
-.function { name := "_decode_witness_node_mpt", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("mark", Flapjack.Shape.one)], body := body260_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "node_invalidate", inline := false, exported := false, params := [("nd", Flapjack.Shape.one)], body := body260_6, returnShape := (Flapjack.Shape.one) }
 def simplifiedData260 : Decl (BitVec 64) :=
-.function { name := "_decode_witness_node_mpt", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one), ("mark", Flapjack.Shape.one)], body := body260_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "node_invalidate", inline := false, exported := false, params := [("nd", Flapjack.Shape.one)], body := body260_9, returnShape := (Flapjack.Shape.one) }
 def original260 := Pancake.PanLang.declToHOL originalData260
 def simplified260 := Pancake.PanLang.declToHOL simplifiedData260
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -5,19 +5,19 @@ set_option maxHeartbeats 0
 open Flapjack
 namespace InitECandidate.Proofs.WordStages
 def sourceBody372_0 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.var 2)
+Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 2)
 
 def sourceBody372_1 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 6 (Flapjack.WordLangExpHOL.const 1#64)
+Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.const 2#64)
 
 def sourceBody372_2 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.const 0#64)
+Flapjack.WordLangProgHOL.assign 10 (Flapjack.WordLangExpHOL.var 4)
 
 def sourceBody372_3 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 4)
+Flapjack.WordLangProgHOL.assign 14 (Flapjack.WordLangExpHOL.var 6)
 
 def sourceBody372_4 : WordLangProgHOL (BitVec 64) :=
-.call (none) (some 366) ([0, 12, 6, 10, 8]) (none)
+.call (none) (some 370) ([0, 8, 12, 10, 14]) (none)
 
 def sourceBody372_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.skip
@@ -38,5 +38,5 @@ def sourceBody372_10 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody372_0 sourceBody372_9
 
 def source372 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-  (372, 3, sourceBody372_10)
+  (372, 4, sourceBody372_10)
 end InitECandidate.Proofs.WordStages

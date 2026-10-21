@@ -12,13 +12,11 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody749_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp6_copy"
-  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "a"]
+Flapjack.Prog.call (some (none, none)) "fp6_set_one" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def globalBody749_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp6_neg"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 288#64],
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 288#64]]
+Flapjack.Prog.call (some (none, none)) "fp6_set_zero"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 288#64]]
 
 def globalBody749_2 : Prog (BitVec 64) :=
 .seq globalBody749_0 globalBody749_1
@@ -30,6 +28,6 @@ def globalBody749_4 : Prog (BitVec 64) :=
 .seq globalBody749_2 globalBody749_3
 
 def globalData749 : Decl (BitVec 64) :=
-.function { name := "fp12_conj", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := globalBody749_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "fp12_set_one", inline := false, exported := false, params := [("r", Flapjack.Shape.one)], body := globalBody749_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput749 := Pancake.PanLang.declToHOL globalData749
 end InitECandidate.Proofs.FrontendStages.Declarations

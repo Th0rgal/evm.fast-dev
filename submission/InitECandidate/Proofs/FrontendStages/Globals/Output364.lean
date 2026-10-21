@@ -12,28 +12,19 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody364_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 128#64]))
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.var Flapjack.VarKind.local "b", Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 56#64]
 
 def globalBody364_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "b")
 
 def globalBody364_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "a") (Flapjack.Exp.const 1#64)) globalBody364_0 globalBody364_1
+.seq globalBody364_0 globalBody364_1
 
 def globalBody364_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 40#64]))
-
-def globalBody364_4 : Prog (BitVec 64) :=
-.seq globalBody364_2 globalBody364_3
-
-def globalBody364_5 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("ws_get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody364_4
+.decCall ("b") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 56#64]) globalBody364_2
 
 def globalData364 : Decl (BitVec 64) :=
-.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody364_5, returnShape := (Flapjack.Shape.one) }
+.function { name := "acct_copy", inline := false, exported := false, params := [("a", Flapjack.Shape.one)], body := globalBody364_3, returnShape := (Flapjack.Shape.one) }
 def globalOutput364 := Pancake.PanLang.declToHOL globalData364
 end InitECandidate.Proofs.FrontendStages.Declarations

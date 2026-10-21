@@ -9,65 +9,59 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body410_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "p",
-      Flapjack.Exp.panOp Flapjack.PanOp.mul
-        [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.var Flapjack.VarKind.local "esz"]])
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 0#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "p")
 
 def body410_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 8#64])
+  (Flapjack.Exp.const 0#64)
 
 def body410_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.var Flapjack.VarKind.local "p",
-        Flapjack.Exp.panOp Flapjack.PanOp.mul
-          [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.var Flapjack.VarKind.local "esz"]]))
-  (Flapjack.Exp.var Flapjack.VarKind.local "idx")) body410_0 body410_1
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 16#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "cap")
 
 def body410_3 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "i"
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "l")
 
 def body410_4 : Prog (BitVec 64) :=
 .seq body410_2 body410_3
 
 def body410_5 : Prog (BitVec 64) :=
-.while (Flapjack.Exp.cmp Flapjack.Cmp.less (Flapjack.Exp.var Flapjack.VarKind.local "i")
-  (Flapjack.Exp.var Flapjack.VarKind.local "n")) body410_4
+.seq body410_1 body410_4
 
 def body410_6 : Prog (BitVec 64) :=
-Flapjack.Prog.store (Flapjack.Exp.var Flapjack.VarKind.local "e") (Flapjack.Exp.var Flapjack.VarKind.local "idx")
+.seq body410_0 body410_5
 
 def body410_7 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "e")
+.decCall ("p") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.panOp Flapjack.PanOp.mul
+    [Flapjack.Exp.var Flapjack.VarKind.local "esz", Flapjack.Exp.var Flapjack.VarKind.local "cap"]]) body410_6
 
 def body410_8 : Prog (BitVec 64) :=
-.seq body410_6 body410_7
+.decCall ("l") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.const 24#64]) body410_7
 
 def body410_9 : Prog (BitVec 64) :=
-.decCall ("e") (Flapjack.Shape.one) ("lst_push") ([Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "esz"]) body410_8
+.seq body410_0 body410_1
 
 def body410_10 : Prog (BitVec 64) :=
-.seq body410_5 body410_9
+.seq body410_9 body410_2
 
 def body410_11 : Prog (BitVec 64) :=
-.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body410_10
+.seq body410_10 body410_3
 
 def body410_12 : Prog (BitVec 64) :=
-.dec ("p") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 0#64])) body410_11
+.decCall ("p") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.panOp Flapjack.PanOp.mul
+    [Flapjack.Exp.var Flapjack.VarKind.local "esz", Flapjack.Exp.var Flapjack.VarKind.local "cap"]]) body410_11
 
 def body410_13 : Prog (BitVec 64) :=
-.dec ("n") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.const 8#64])) body410_12
+.decCall ("l") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.const 24#64]) body410_12
 
 def originalData410 : Decl (BitVec 64) :=
-.function { name := "lst_upsert_idx", inline := false, exported := false, params := [("l", Flapjack.Shape.one), ("esz", Flapjack.Shape.one), ("idx", Flapjack.Shape.one)], body := body410_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "lst_new_scratch", inline := false, exported := false, params := [("esz", Flapjack.Shape.one), ("cap", Flapjack.Shape.one)], body := body410_8, returnShape := (Flapjack.Shape.one) }
 def simplifiedData410 : Decl (BitVec 64) :=
-.function { name := "lst_upsert_idx", inline := false, exported := false, params := [("l", Flapjack.Shape.one), ("esz", Flapjack.Shape.one), ("idx", Flapjack.Shape.one)], body := body410_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "lst_new_scratch", inline := false, exported := false, params := [("esz", Flapjack.Shape.one), ("cap", Flapjack.Shape.one)], body := body410_13, returnShape := (Flapjack.Shape.one) }
 def original410 := Pancake.PanLang.declToHOL originalData410
 def simplified410 := Pancake.PanLang.declToHOL simplifiedData410
 end InitECandidate.Proofs.FrontendStages.Declarations

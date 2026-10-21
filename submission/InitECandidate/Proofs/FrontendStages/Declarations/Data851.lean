@@ -10,9 +10,9 @@ open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 
 def originalData851 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "withdrawal_request_address" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "block_hashes_n" (Flapjack.Exp.const 0#64)
 def simplifiedData851 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "withdrawal_request_address" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "block_hashes_n" (Flapjack.Exp.const 0#64)
 def original851 := Pancake.PanLang.declToHOL originalData851
 def simplified851 := Pancake.PanLang.declToHOL simplifiedData851
 end InitECandidate.Proofs.FrontendStages.Declarations

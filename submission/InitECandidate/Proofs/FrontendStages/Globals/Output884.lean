@@ -16,25 +16,24 @@ Flapjack.Prog.call
   (some
     (none,
       some
-        ("Fail", "e",
-          Flapjack.Prog.seq (Flapjack.Prog.assign Flapjack.VarKind.local "ok" (Flapjack.Exp.const 0#64))
-            (Flapjack.Prog.store (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 536#64])
-              (Flapjack.Exp.var Flapjack.VarKind.local "e")))))
-  "attempt_l7" [Flapjack.Exp.var Flapjack.VarKind.local "si"]
+        ("MptErr", "e",
+          Flapjack.Prog.seq
+            (Flapjack.Prog.shMemStore Flapjack.OpSize.op8
+              (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 2688614400#64, Flapjack.Exp.const 70#64])
+              (Flapjack.Exp.var Flapjack.VarKind.local "e"))
+            (Flapjack.Prog.raise "Fail" (Flapjack.Exp.const 4#64)))))
+  "attempt_l3" [Flapjack.Exp.var Flapjack.VarKind.local "si"]
 
 def globalBody884_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "ok")
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody884_2 : Prog (BitVec 64) :=
 .seq globalBody884_0 globalBody884_1
 
 def globalBody884_3 : Prog (BitVec 64) :=
-.dec ("ok") (Flapjack.Shape.one) (Flapjack.Exp.const 1#64) globalBody884_2
-
-def globalBody884_4 : Prog (BitVec 64) :=
-.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody884_3
+.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody884_2
 
 def globalData884 : Decl (BitVec 64) :=
-.function { name := "verify_stateless_new_payload", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := globalBody884_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "attempt_l4", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := globalBody884_3, returnShape := (Flapjack.Shape.one) }
 def globalOutput884 := Pancake.PanLang.declToHOL globalData884
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -118,9 +118,7 @@ Flapjack.Prog.call
                 (Flapjack.Prog.extCall "halt" Flapjack.Exp.baseAddr (Flapjack.Exp.const 0#64) Flapjack.Exp.baseAddr
                   (Flapjack.Exp.const 0#64)))
               (Flapjack.Prog.return (Flapjack.Exp.const 1#64))))))
-  "decode_stateless_input"
-  [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "inp"),
-    Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "inp")]
+  "decode_host_input" []
 
 def globalBody0_29 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "htr_new_payload_request"
@@ -189,12 +187,9 @@ def globalBody0_46 : Prog (BitVec 64) :=
 .decCall ("out") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 256#64]) globalBody0_45
 
 def globalBody0_47 : Prog (BitVec 64) :=
-.decCall ("inp") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("input_blob") ([]) globalBody0_46
-
-def globalBody0_48 : Prog (BitVec 64) :=
-.seq globalBody0_26 globalBody0_47
+.seq globalBody0_26 globalBody0_46
 
 def globalData0 : Decl (BitVec 64) :=
-.function { name := "main'", inline := false, exported := false, params := [], body := globalBody0_48, returnShape := (Flapjack.Shape.one) }
+.function { name := "main'", inline := false, exported := false, params := [], body := globalBody0_47, returnShape := (Flapjack.Shape.one) }
 def globalOutput0 := Pancake.PanLang.declToHOL globalData0
 end InitECandidate.Proofs.FrontendStages.Declarations

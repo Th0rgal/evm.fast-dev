@@ -9,19 +9,259 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody661_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([2], none)) "memcpy"
-  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 96#64]
+Flapjack.CrepProg.return
+  [Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64]))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 40#64, Flapjack.CrepExp.const 4#64,
+                  Flapjack.CrepExp.const 3#64])]],
+    Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64]))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 32#64, Flapjack.CrepExp.const 4#64,
+                  Flapjack.CrepExp.const 3#64])]],
+    Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64]))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 24#64, Flapjack.CrepExp.const 4#64,
+                  Flapjack.CrepExp.const 3#64])]],
+    Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64]))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 16#64, Flapjack.CrepExp.const 4#64,
+                  Flapjack.CrepExp.const 3#64])]],
+    Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64]))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add
+                    [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 4#64,
+                    Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 8#64, Flapjack.CrepExp.const 4#64,
+                  Flapjack.CrepExp.const 3#64])]],
+    Flapjack.CrepExp.op Flapjack.BinOp.or
+      [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+          (Flapjack.CrepExp.op Flapjack.BinOp.or
+            [Flapjack.CrepExp.shift Flapjack.Shift.lsl (Flapjack.CrepExp.loadByte (Flapjack.CrepExp.var 0))
+                (Flapjack.CrepExp.const 24#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 1#64]))
+                (Flapjack.CrepExp.const 16#64),
+              Flapjack.CrepExp.shift Flapjack.Shift.lsl
+                (Flapjack.CrepExp.loadByte
+                  (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 2#64]))
+                (Flapjack.CrepExp.const 8#64),
+              Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 3#64])])
+          (Flapjack.CrepExp.const 32#64),
+        Flapjack.CrepExp.op Flapjack.BinOp.or
+          [Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 4#64]))
+              (Flapjack.CrepExp.const 24#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 4#64, Flapjack.CrepExp.const 1#64]))
+              (Flapjack.CrepExp.const 16#64),
+            Flapjack.CrepExp.shift Flapjack.Shift.lsl
+              (Flapjack.CrepExp.loadByte
+                (Flapjack.CrepExp.op Flapjack.BinOp.add
+                  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 4#64, Flapjack.CrepExp.const 2#64]))
+              (Flapjack.CrepExp.const 8#64),
+            Flapjack.CrepExp.loadByte
+              (Flapjack.CrepExp.op Flapjack.BinOp.add
+                [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 4#64, Flapjack.CrepExp.const 3#64])]]]
 
-def crepBody661_1 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.const 0#64) crepBody661_0
-
-def crepBody661_2 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
-
-def crepBody661_3 : CrepProg (BitVec 64) :=
-.seq crepBody661_1 crepBody661_2
-
-def data661 : CrepProg (BitVec 64) := crepBody661_3
+def data661 : CrepProg (BitVec 64) := crepBody661_0
 def output661 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [102#8, 112#8, 50#8, 95#8, 99#8, 111#8, 112#8, 121#8], [0, 1], crepProgToHOL data661)
+  (Flapjack.Basis.Pure.MlString.MlString.implode
+  [98#8, 108#8, 115#8, 95#8, 102#8, 112#8, 95#8, 102#8, 114#8, 111#8, 109#8, 95#8, 98#8, 101#8, 52#8, 56#8], [0], crepProgToHOL data661)
 end InitECandidate.Proofs.FrontendStages.Crep

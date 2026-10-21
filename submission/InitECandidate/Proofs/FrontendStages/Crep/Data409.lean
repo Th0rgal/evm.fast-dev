@@ -9,20 +9,22 @@ set_option cbv.warning false
 open Flapjack Flapjack.Pancake.PanLang
 namespace InitECandidate.Proofs.FrontendStages.Crep
 def crepBody409_0 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([1], none)) "stack_push"
-  [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 0#64, Flapjack.CrepExp.const 0#64, Flapjack.CrepExp.const 0#64]
+Flapjack.CrepProg.return
+  [Flapjack.CrepExp.op Flapjack.BinOp.add
+      [Flapjack.CrepExp.op Flapjack.BinOp.sub
+          [Flapjack.CrepExp.load
+              (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 1, Flapjack.CrepExp.const 48#64]),
+            Flapjack.CrepExp.load
+              (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 72#64])],
+        Flapjack.CrepExp.load
+          (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 192#64])]]
 
 def crepBody409_1 : CrepProg (BitVec 64) :=
-.dec 1 (Flapjack.CrepExp.const 0#64) crepBody409_0
+.dec 1 (Flapjack.CrepExp.load (Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 112#64])) crepBody409_0
 
-def crepBody409_2 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
-
-def crepBody409_3 : CrepProg (BitVec 64) :=
-.seq crepBody409_1 crepBody409_2
-
-def data409 : CrepProg (BitVec 64) := crepBody409_3
+def data409 : CrepProg (BitVec 64) := crepBody409_1
 def output409 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [115#8, 116#8, 97#8, 99#8, 107#8, 95#8, 112#8, 117#8, 115#8, 104#8, 95#8, 119#8, 111#8, 114#8, 100#8], [0], crepProgToHOL data409)
+  [102#8, 114#8, 97#8, 109#8, 101#8, 95#8, 115#8, 116#8, 97#8, 116#8, 101#8, 95#8, 103#8, 97#8, 115#8, 95#8, 117#8,
+    115#8, 101#8, 100#8], [0], crepProgToHOL data409)
 end InitECandidate.Proofs.FrontendStages.Crep

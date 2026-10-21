@@ -15,7 +15,7 @@ def loopBody465_1 : HolLoopProg 64 :=
 .mark loopBody465_0
 
 def loopBody465_2 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 2#64)
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 1#64)
 
 def loopBody465_3 : HolLoopProg 64 :=
 .mark loopBody465_2
@@ -27,7 +27,7 @@ def loopBody465_5 : HolLoopProg 64 :=
 .mark loopBody465_4
 
 def loopBody465_6 : HolLoopProg 64 :=
-.call (some ([1], Flapjack.Spt.ln)) (some 466) ([2]) (some (2, loopBody465_5, loopBody465_1, (Flapjack.Spt.ln)))
+.call (some ([1], Flapjack.Spt.ln)) (some 470) ([2]) (some (2, loopBody465_5, loopBody465_1, (Flapjack.Spt.ln)))
 
 def loopBody465_7 : HolLoopProg 64 :=
 .mark loopBody465_6
@@ -57,30 +57,25 @@ def loopBody465_15 : HolLoopProg 64 :=
 .mark loopBody465_14
 
 def loopBody465_16 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2
-  (Flapjack.HolLoopExp.load
-    (Flapjack.HolLoopExp.op Flapjack.BinOp.add
-      [Flapjack.HolLoopExp.load
-          (Flapjack.HolLoopExp.op Flapjack.BinOp.sub [Flapjack.HolLoopExp.topAddr, Flapjack.HolLoopExp.const 256#64]),
-        Flapjack.HolLoopExp.const 32#64]))
+.call (some ([1], Flapjack.Spt.ln)) (some 490) ([2]) (some (2, loopBody465_5, loopBody465_1, (Flapjack.Spt.ln)))
 
 def loopBody465_17 : HolLoopProg 64 :=
 .mark loopBody465_16
 
 def loopBody465_18 : HolLoopProg 64 :=
-.call (some ([1], Flapjack.Spt.ln)) (some 473) ([2]) (some (2, loopBody465_5, loopBody465_1, (Flapjack.Spt.ln)))
+.seq loopBody465_17 loopBody465_1
 
 def loopBody465_19 : HolLoopProg 64 :=
 .mark loopBody465_18
 
 def loopBody465_20 : HolLoopProg 64 :=
-.seq loopBody465_19 loopBody465_1
+.seq loopBody465_3 loopBody465_19
 
 def loopBody465_21 : HolLoopProg 64 :=
 .mark loopBody465_20
 
 def loopBody465_22 : HolLoopProg 64 :=
-.seq loopBody465_17 loopBody465_21
+.seq loopBody465_1 loopBody465_21
 
 def loopBody465_23 : HolLoopProg 64 :=
 .mark loopBody465_22
@@ -92,89 +87,41 @@ def loopBody465_25 : HolLoopProg 64 :=
 .mark loopBody465_24
 
 def loopBody465_26 : HolLoopProg 64 :=
-.seq loopBody465_1 loopBody465_25
+.seq loopBody465_15 loopBody465_25
 
 def loopBody465_27 : HolLoopProg 64 :=
 .mark loopBody465_26
 
 def loopBody465_28 : HolLoopProg 64 :=
-.seq loopBody465_15 loopBody465_27
+Flapjack.HolLoopProg.assign 1 (Flapjack.HolLoopExp.const 0#64)
 
 def loopBody465_29 : HolLoopProg 64 :=
 .mark loopBody465_28
 
 def loopBody465_30 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 1#64)
+Flapjack.HolLoopProg.return [1]
 
 def loopBody465_31 : HolLoopProg 64 :=
 .mark loopBody465_30
 
 def loopBody465_32 : HolLoopProg 64 :=
-.call (some ([1], Flapjack.Spt.ln)) (some 486) ([2]) (some (2, loopBody465_5, loopBody465_1, (Flapjack.Spt.ln)))
+.seq loopBody465_31 loopBody465_1
 
 def loopBody465_33 : HolLoopProg 64 :=
 .mark loopBody465_32
 
 def loopBody465_34 : HolLoopProg 64 :=
-.seq loopBody465_33 loopBody465_1
+.seq loopBody465_29 loopBody465_33
 
 def loopBody465_35 : HolLoopProg 64 :=
 .mark loopBody465_34
 
 def loopBody465_36 : HolLoopProg 64 :=
-.seq loopBody465_31 loopBody465_35
+.seq loopBody465_27 loopBody465_35
 
 def loopBody465_37 : HolLoopProg 64 :=
 .mark loopBody465_36
 
-def loopBody465_38 : HolLoopProg 64 :=
-.seq loopBody465_1 loopBody465_37
-
-def loopBody465_39 : HolLoopProg 64 :=
-.mark loopBody465_38
-
-def loopBody465_40 : HolLoopProg 64 :=
-.seq loopBody465_1 loopBody465_39
-
-def loopBody465_41 : HolLoopProg 64 :=
-.mark loopBody465_40
-
-def loopBody465_42 : HolLoopProg 64 :=
-.seq loopBody465_29 loopBody465_41
-
-def loopBody465_43 : HolLoopProg 64 :=
-.mark loopBody465_42
-
-def loopBody465_44 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 1 (Flapjack.HolLoopExp.const 0#64)
-
-def loopBody465_45 : HolLoopProg 64 :=
-.mark loopBody465_44
-
-def loopBody465_46 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.return [1]
-
-def loopBody465_47 : HolLoopProg 64 :=
-.mark loopBody465_46
-
-def loopBody465_48 : HolLoopProg 64 :=
-.seq loopBody465_47 loopBody465_1
-
-def loopBody465_49 : HolLoopProg 64 :=
-.mark loopBody465_48
-
-def loopBody465_50 : HolLoopProg 64 :=
-.seq loopBody465_45 loopBody465_49
-
-def loopBody465_51 : HolLoopProg 64 :=
-.mark loopBody465_50
-
-def loopBody465_52 : HolLoopProg 64 :=
-.seq loopBody465_43 loopBody465_51
-
-def loopBody465_53 : HolLoopProg 64 :=
-.mark loopBody465_52
-
 def output465 : Nat × List Nat × HolLoopProg 64 :=
-  (529, [], loopBody465_53)
+  (529, [], loopBody465_37)
 end InitECandidate.Proofs.FrontendStages.Loop

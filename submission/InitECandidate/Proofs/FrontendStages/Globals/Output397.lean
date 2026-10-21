@@ -12,45 +12,41 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody397_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htab_set"
-  [Flapjack.Exp.var Flapjack.VarKind.local "dst", Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "s"),
-    Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "s")]
+Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "a"), none)) "acct_copy"
+  [Flapjack.Exp.var Flapjack.VarKind.local "a"]
 
 def globalBody397_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.store
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 8#64])
+  (Flapjack.Exp.var Flapjack.VarKind.local "nb")
 
 def globalBody397_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "s"))
-  (Flapjack.Exp.const 0#64)) globalBody397_0 globalBody397_1
+Flapjack.Prog.call (some (none, none)) "modify_state_commit"
+  [Flapjack.Exp.var Flapjack.VarKind.local "addr", Flapjack.Exp.var Flapjack.VarKind.local "a"]
 
 def globalBody397_3 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "i"
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
+.seq globalBody397_1 globalBody397_2
 
 def globalBody397_4 : Prog (BitVec 64) :=
-.seq globalBody397_2 globalBody397_3
-
-def globalBody397_5 : Prog (BitVec 64) :=
-.decCall ("s") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("htab_item") ([Flapjack.Exp.var Flapjack.VarKind.local "src", Flapjack.Exp.var Flapjack.VarKind.local "i"]) globalBody397_4
-
-def globalBody397_6 : Prog (BitVec 64) :=
-.while (Flapjack.Exp.cmp Flapjack.Cmp.less (Flapjack.Exp.var Flapjack.VarKind.local "i")
-  (Flapjack.Exp.var Flapjack.VarKind.local "cap")) globalBody397_5
-
-def globalBody397_7 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
+def globalBody397_5 : Prog (BitVec 64) :=
+.seq globalBody397_3 globalBody397_4
+
+def globalBody397_6 : Prog (BitVec 64) :=
+.decCall ("nb") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_add") ([Flapjack.Exp.load
+    (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 8#64]),
+  Flapjack.Exp.var Flapjack.VarKind.local "amount"]) globalBody397_5
+
+def globalBody397_7 : Prog (BitVec 64) :=
+.seq globalBody397_0 globalBody397_6
+
 def globalBody397_8 : Prog (BitVec 64) :=
-.seq globalBody397_6 globalBody397_7
-
-def globalBody397_9 : Prog (BitVec 64) :=
-.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody397_8
-
-def globalBody397_10 : Prog (BitVec 64) :=
-.dec ("cap") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "src", Flapjack.Exp.const 24#64])) globalBody397_9
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody397_7
 
 def globalData397 : Decl (BitVec 64) :=
-.function { name := "htab_union_into", inline := false, exported := false, params := [("dst", Flapjack.Shape.one), ("src", Flapjack.Shape.one)], body := globalBody397_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "create_ether", inline := false, exported := false, params := [("addr", Flapjack.Shape.one),
+  ("amount", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody397_8, returnShape := (Flapjack.Shape.one) }
 def globalOutput397 := Pancake.PanLang.declToHOL globalData397
 end InitECandidate.Proofs.FrontendStages.Declarations

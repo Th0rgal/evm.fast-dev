@@ -9,29 +9,22 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body364_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.global "empty_trie_root")
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.var Flapjack.VarKind.local "b", Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 56#64]
 
 def body364_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "b")
 
 def body364_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "a") (Flapjack.Exp.const 1#64)) body364_0 body364_1
+.seq body364_0 body364_1
 
 def body364_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 40#64]))
-
-def body364_4 : Prog (BitVec 64) :=
-.seq body364_2 body364_3
-
-def body364_5 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("ws_get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body364_4
+.decCall ("b") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 56#64]) body364_2
 
 def originalData364 : Decl (BitVec 64) :=
-.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body364_5, returnShape := (Flapjack.Shape.one) }
+.function { name := "acct_copy", inline := false, exported := false, params := [("a", Flapjack.Shape.one)], body := body364_3, returnShape := (Flapjack.Shape.one) }
 def simplifiedData364 : Decl (BitVec 64) :=
-.function { name := "ws_storage_root_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body364_5, returnShape := (Flapjack.Shape.one) }
+.function { name := "acct_copy", inline := false, exported := false, params := [("a", Flapjack.Shape.one)], body := body364_3, returnShape := (Flapjack.Shape.one) }
 def original364 := Pancake.PanLang.declToHOL originalData364
 def simplified364 := Pancake.PanLang.declToHOL simplifiedData364
 end InitECandidate.Proofs.FrontendStages.Declarations

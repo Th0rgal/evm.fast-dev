@@ -12,14 +12,19 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody466_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-        Flapjack.Exp.const 112#64]))
+Flapjack.Prog.call (some (none, none)) "memzero"
+  [Flapjack.Exp.var Flapjack.VarKind.local "m", Flapjack.Exp.const 176#64]
+
+def globalBody466_1 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "m")
+
+def globalBody466_2 : Prog (BitVec 64) :=
+.seq globalBody466_0 globalBody466_1
+
+def globalBody466_3 : Prog (BitVec 64) :=
+.decCall ("m") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 176#64]) globalBody466_2
 
 def globalData466 : Decl (BitVec 64) :=
-.function { name := "cur_msg", inline := false, exported := false, params := [], body := globalBody466_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "msg_new", inline := false, exported := false, params := [], body := globalBody466_3, returnShape := (Flapjack.Shape.one) }
 def globalOutput466 := Pancake.PanLang.declToHOL globalData466
 end InitECandidate.Proofs.FrontendStages.Declarations

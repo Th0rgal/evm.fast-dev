@@ -12,11 +12,10 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody330_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "tx_signing_hash_mode"
-  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 2#64,
-    Flapjack.Exp.var Flapjack.VarKind.local "chain_id", Flapjack.Exp.var Flapjack.VarKind.local "out"]
+Flapjack.Prog.call none "tx_encode_generic"
+  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64]
 
 def globalData330 : Decl (BitVec 64) :=
-.function { name := "signing_hash_155", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("chain_id", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := globalBody330_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "encode_transaction", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := globalBody330_0, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput330 := Pancake.PanLang.declToHOL globalData330
 end InitECandidate.Proofs.FrontendStages.Declarations

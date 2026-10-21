@@ -12,18 +12,23 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody452_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push"
-  [Flapjack.Exp.rStruct
-      [Flapjack.Exp.var Flapjack.VarKind.local "w", Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64,
-        Flapjack.Exp.const 0#64]]
+Flapjack.Prog.return
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.op Flapjack.BinOp.sub
+        [Flapjack.Exp.load Flapjack.Shape.one
+            (Flapjack.Exp.op Flapjack.BinOp.add
+              [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 48#64]),
+          Flapjack.Exp.load Flapjack.Shape.one
+            (Flapjack.Exp.op Flapjack.BinOp.add
+              [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 72#64])],
+      Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 192#64])])
 
 def globalBody452_1 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
-
-def globalBody452_2 : Prog (BitVec 64) :=
-.seq globalBody452_0 globalBody452_1
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 112#64])) globalBody452_0
 
 def globalData452 : Decl (BitVec 64) :=
-.function { name := "stack_push_word", inline := false, exported := false, params := [("w", Flapjack.Shape.one)], body := globalBody452_2, returnShape := (Flapjack.Shape.one) }
+.function { name := "frame_state_gas_used", inline := false, exported := false, params := [("e", Flapjack.Shape.one)], body := globalBody452_1, returnShape := (Flapjack.Shape.one) }
 def globalOutput452 := Pancake.PanLang.declToHOL globalData452
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -9,31 +9,22 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body467_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 8#64)
+Flapjack.Prog.call (some (none, none)) "memzero"
+  [Flapjack.Exp.var Flapjack.VarKind.local "m", Flapjack.Exp.const 176#64]
 
 def body467_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "m")
 
 def body467_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.add
-            [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64]),
-        Flapjack.Exp.const 144#64]))
-  (Flapjack.Exp.const 0#64)) body467_0 body467_1
+.seq body467_0 body467_1
 
 def body467_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
-
-def body467_4 : Prog (BitVec 64) :=
-.seq body467_2 body467_3
+.decCall ("m") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.const 176#64]) body467_2
 
 def originalData467 : Decl (BitVec 64) :=
-.function { name := "require_not_static", inline := false, exported := false, params := [], body := body467_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "msg_new_scratch", inline := false, exported := false, params := [], body := body467_3, returnShape := (Flapjack.Shape.one) }
 def simplifiedData467 : Decl (BitVec 64) :=
-.function { name := "require_not_static", inline := false, exported := false, params := [], body := body467_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "msg_new_scratch", inline := false, exported := false, params := [], body := body467_3, returnShape := (Flapjack.Shape.one) }
 def original467 := Pancake.PanLang.declToHOL originalData467
 def simplified467 := Pancake.PanLang.declToHOL simplifiedData467
 end InitECandidate.Proofs.FrontendStages.Declarations

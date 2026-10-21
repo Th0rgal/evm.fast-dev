@@ -9,26 +9,27 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body448_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.op Flapjack.BinOp.sub
-        [Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.add
-              [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 48#64]),
-          Flapjack.Exp.load Flapjack.Shape.one
-            (Flapjack.Exp.op Flapjack.BinOp.add
-              [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 72#64])],
-      Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 192#64])])
+Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 4#64)
 
 def body448_1 : Prog (BitVec 64) :=
-.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 112#64])) body448_0
+Flapjack.Prog.skip
+
+def body448_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64]))
+  (Flapjack.Exp.var Flapjack.VarKind.local "amount")) body448_0 body448_1
+
+def body448_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body448_4 : Prog (BitVec 64) :=
+.seq body448_2 body448_3
 
 def originalData448 : Decl (BitVec 64) :=
-.function { name := "frame_state_gas_used", inline := false, exported := false, params := [("e", Flapjack.Shape.one)], body := body448_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "check_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body448_4, returnShape := (Flapjack.Shape.one) }
 def simplifiedData448 : Decl (BitVec 64) :=
-.function { name := "frame_state_gas_used", inline := false, exported := false, params := [("e", Flapjack.Shape.one)], body := body448_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "check_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body448_4, returnShape := (Flapjack.Shape.one) }
 def original448 := Pancake.PanLang.declToHOL originalData448
 def simplified448 := Pancake.PanLang.declToHOL simplifiedData448
 end InitECandidate.Proofs.FrontendStages.Declarations

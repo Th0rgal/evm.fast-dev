@@ -9,116 +9,16 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body270_0 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 48#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "vptr")
+Flapjack.Prog.call none "mpt_new"
+  [Flapjack.Exp.var Flapjack.VarKind.local "root", Flapjack.Exp.var Flapjack.VarKind.local "secured"]
 
 def body270_1 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 56#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "vlen")
-
-def body270_2 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "node")
-
-def body270_3 : Prog (BitVec 64) :=
-.seq body270_1 body270_2
-
-def body270_4 : Prog (BitVec 64) :=
-.seq body270_0 body270_3
-
-def body270_5 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
-
-def body270_6 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "eq") (Flapjack.Exp.const 0#64)) body270_4 body270_5
-
-def body270_7 : Prog (BitVec 64) :=
-.decCall ("eq") (Flapjack.Shape.one) ("memeq") ([Flapjack.Exp.var Flapjack.VarKind.local "ek", Flapjack.Exp.var Flapjack.VarKind.local "rk",
-  Flapjack.Exp.var Flapjack.VarKind.local "el"]) body270_6
-
-def body270_8 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "el")
-  (Flapjack.Exp.var Flapjack.VarKind.local "rl")) body270_7 body270_5
-
-def body270_9 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "node_new_ext"
-  [Flapjack.Exp.var Flapjack.VarKind.local "ek", Flapjack.Exp.var Flapjack.VarKind.local "pl",
-    Flapjack.Exp.var Flapjack.VarKind.local "br"]
-
-def body270_10 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 0#64) (Flapjack.Exp.var Flapjack.VarKind.local "pl")) body270_9 body270_5
-
-def body270_11 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "br")
-
-def body270_12 : Prog (BitVec 64) :=
-.seq body270_10 body270_11
-
-def body270_13 : Prog (BitVec 64) :=
-.decCall ("br") (Flapjack.Shape.one) ("_create_branch_from_two_leaves") ([Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "ek", Flapjack.Exp.var Flapjack.VarKind.local "pl"],
-  Flapjack.Exp.op Flapjack.BinOp.sub
-    [Flapjack.Exp.var Flapjack.VarKind.local "el", Flapjack.Exp.var Flapjack.VarKind.local "pl"],
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 48#64]),
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 56#64]),
-  Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "rk", Flapjack.Exp.var Flapjack.VarKind.local "pl"],
-  Flapjack.Exp.op Flapjack.BinOp.sub
-    [Flapjack.Exp.var Flapjack.VarKind.local "rl", Flapjack.Exp.var Flapjack.VarKind.local "pl"],
-  Flapjack.Exp.var Flapjack.VarKind.local "vptr", Flapjack.Exp.var Flapjack.VarKind.local "vlen"]) body270_12
-
-def body270_14 : Prog (BitVec 64) :=
-.decCall ("pl") (Flapjack.Shape.one) ("common_prefix_length") ([Flapjack.Exp.var Flapjack.VarKind.local "ek", Flapjack.Exp.var Flapjack.VarKind.local "el",
-  Flapjack.Exp.var Flapjack.VarKind.local "rk", Flapjack.Exp.var Flapjack.VarKind.local "rl"]) body270_13
-
-def body270_15 : Prog (BitVec 64) :=
-.seq body270_8 body270_14
-
-def body270_16 : Prog (BitVec 64) :=
-.dec ("el") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 40#64])) body270_15
-
-def body270_17 : Prog (BitVec 64) :=
-.dec ("ek") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 32#64])) body270_16
-
-def body270_18 : Prog (BitVec 64) :=
-.seq body270_0 body270_1
-
-def body270_19 : Prog (BitVec 64) :=
-.seq body270_18 body270_2
-
-def body270_20 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "eq") (Flapjack.Exp.const 0#64)) body270_19 body270_5
-
-def body270_21 : Prog (BitVec 64) :=
-.decCall ("eq") (Flapjack.Shape.one) ("memeq") ([Flapjack.Exp.var Flapjack.VarKind.local "ek", Flapjack.Exp.var Flapjack.VarKind.local "rk",
-  Flapjack.Exp.var Flapjack.VarKind.local "el"]) body270_20
-
-def body270_22 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "el")
-  (Flapjack.Exp.var Flapjack.VarKind.local "rl")) body270_21 body270_5
-
-def body270_23 : Prog (BitVec 64) :=
-.seq body270_22 body270_14
-
-def body270_24 : Prog (BitVec 64) :=
-.dec ("el") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 40#64])) body270_23
-
-def body270_25 : Prog (BitVec 64) :=
-.dec ("ek") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 32#64])) body270_24
+.decCall ("root") (Flapjack.Shape.one) ("decode_witness_to_mpt") ([Flapjack.Exp.var Flapjack.VarKind.local "db", Flapjack.Exp.var Flapjack.VarKind.local "root_hash"]) body270_0
 
 def originalData270 : Decl (BitVec 64) :=
-.function { name := "_insert_into_leaf", inline := false, exported := false, params := [("node", Flapjack.Shape.one), ("rk", Flapjack.Shape.one), ("rl", Flapjack.Shape.one), ("vptr", Flapjack.Shape.one),
-  ("vlen", Flapjack.Shape.one)], body := body270_17, returnShape := (Flapjack.Shape.one) }
+.function { name := "mpt_from_witness", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("root_hash", Flapjack.Shape.one), ("secured", Flapjack.Shape.one)], body := body270_1, returnShape := (Flapjack.Shape.one) }
 def simplifiedData270 : Decl (BitVec 64) :=
-.function { name := "_insert_into_leaf", inline := false, exported := false, params := [("node", Flapjack.Shape.one), ("rk", Flapjack.Shape.one), ("rl", Flapjack.Shape.one), ("vptr", Flapjack.Shape.one),
-  ("vlen", Flapjack.Shape.one)], body := body270_25, returnShape := (Flapjack.Shape.one) }
+.function { name := "mpt_from_witness", inline := false, exported := false, params := [("db", Flapjack.Shape.one), ("root_hash", Flapjack.Shape.one), ("secured", Flapjack.Shape.one)], body := body270_1, returnShape := (Flapjack.Shape.one) }
 def original270 := Pancake.PanLang.declToHOL originalData270
 def simplified270 := Pancake.PanLang.declToHOL simplifiedData270
 end InitECandidate.Proofs.FrontendStages.Declarations

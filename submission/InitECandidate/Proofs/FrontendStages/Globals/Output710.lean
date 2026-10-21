@@ -1,7 +1,7 @@
 import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.FrontendStages.Declarations.Data710
 import InitECandidate.Proofs.FrontendStages.Globals.KernelContext
-import InitECandidate.Proofs.FrontendStages.Globals.Translate694
+import InitECandidate.Proofs.FrontendStages.Globals.Translate693
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
@@ -13,22 +13,16 @@ namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody710_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call none "bls_fp_mul"
-  [Flapjack.Exp.var Flapjack.VarKind.local "r",
+  [Flapjack.Exp.var Flapjack.VarKind.local "a",
     Flapjack.Exp.rStruct
-      [Flapjack.Exp.const 17098105564519244256#64, Flapjack.Exp.const 3557706395579559416#64,
-        Flapjack.Exp.const 11120290361046346205#64, Flapjack.Exp.const 3801124253586036577#64,
-        Flapjack.Exp.const 2671430854784468776#64, Flapjack.Exp.const 767358375875140941#64]]
-
-def globalBody710_1 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb
-  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-    Flapjack.Shape.one]) ("bls_fp_inv_raw") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) globalBody710_0
+      [Flapjack.Exp.const 1#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64,
+        Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64]]
 
 def globalData710 : Decl (BitVec 64) :=
-.function { name := "bls_fp_inv", inline := false, exported := false, params := [("a",
+.function { name := "bls_fp_from_mont", inline := false, exported := false, params := [("a",
     Flapjack.Shape.comb
       [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
-        Flapjack.Shape.one])], body := globalBody710_1, returnShape := (Flapjack.Shape.comb
+        Flapjack.Shape.one])], body := globalBody710_0, returnShape := (Flapjack.Shape.comb
   [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
     Flapjack.Shape.one]) }
 def globalOutput710 := Pancake.PanLang.declToHOL globalData710

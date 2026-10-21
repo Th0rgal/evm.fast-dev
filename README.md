@@ -107,9 +107,10 @@ a solution requires proofs.
 
 ## Verification status
 
-The challenge definition builds with the software guest. The checked-in
-submission and its generated certificates target the previous guest and have
-not been regenerated or verified against this source update.
+The challenge definition builds with the current software guest. The initial
+submission's guest image and frontend certificates have been regenerated for
+this source update. Backend certificate regeneration and the full submission
+audit are in progress; the initial submission is not yet verified end to end.
 
 ## Soundness and execution platform
 

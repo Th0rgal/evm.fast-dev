@@ -9,62 +9,50 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body445_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 4#64)
+Flapjack.Prog.call (some (none, none)) "st_be32"
+  [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "v")]
 
 def body445_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.call (some (none, none)) "st_be64"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 4#64],
+    Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "v")]
 
 def body445_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "gl")
-  (Flapjack.Exp.var Flapjack.VarKind.local "amount")) body445_0 body445_1
+Flapjack.Prog.call (some (none, none)) "st_be64"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 12#64],
+    Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "v")]
 
 def body445_3 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64])
-  (Flapjack.Exp.op Flapjack.BinOp.sub
-    [Flapjack.Exp.var Flapjack.VarKind.local "gl", Flapjack.Exp.var Flapjack.VarKind.local "amount"])
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
 
 def body445_4 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 184#64])
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 184#64]),
-      Flapjack.Exp.var Flapjack.VarKind.local "amount"])
-
-def body445_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
-
-def body445_6 : Prog (BitVec 64) :=
-.seq body445_4 body445_5
-
-def body445_7 : Prog (BitVec 64) :=
-.seq body445_3 body445_6
-
-def body445_8 : Prog (BitVec 64) :=
-.seq body445_2 body445_7
-
-def body445_9 : Prog (BitVec 64) :=
-.dec ("gl") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64])) body445_8
-
-def body445_10 : Prog (BitVec 64) :=
 .seq body445_2 body445_3
 
+def body445_5 : Prog (BitVec 64) :=
+.seq body445_1 body445_4
+
+def body445_6 : Prog (BitVec 64) :=
+.seq body445_0 body445_5
+
+def body445_7 : Prog (BitVec 64) :=
+.dec ("a") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 240#64]) body445_6
+
+def body445_8 : Prog (BitVec 64) :=
+.seq body445_0 body445_1
+
+def body445_9 : Prog (BitVec 64) :=
+.seq body445_8 body445_2
+
+def body445_10 : Prog (BitVec 64) :=
+.seq body445_9 body445_3
+
 def body445_11 : Prog (BitVec 64) :=
-.seq body445_10 body445_4
-
-def body445_12 : Prog (BitVec 64) :=
-.seq body445_11 body445_5
-
-def body445_13 : Prog (BitVec 64) :=
-.dec ("gl") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 64#64])) body445_12
+.dec ("a") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 240#64]) body445_10
 
 def originalData445 : Decl (BitVec 64) :=
-.function { name := "charge_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body445_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "to_address_masked", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body445_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData445 : Decl (BitVec 64) :=
-.function { name := "charge_gas", inline := false, exported := false, params := [("amount", Flapjack.Shape.one)], body := body445_13, returnShape := (Flapjack.Shape.one) }
+.function { name := "to_address_masked", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body445_11, returnShape := (Flapjack.Shape.one) }
 def original445 := Pancake.PanLang.declToHOL originalData445
 def simplified445 := Pancake.PanLang.declToHOL simplifiedData445
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -17,7 +17,7 @@ def sourceBody371_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.var 4)
 
 def sourceBody371_4 : WordLangProgHOL (BitVec 64) :=
-.call (none) (some 366) ([0, 12, 6, 10, 8]) (none)
+.call (none) (some 370) ([0, 12, 6, 10, 8]) (none)
 
 def sourceBody371_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.skip

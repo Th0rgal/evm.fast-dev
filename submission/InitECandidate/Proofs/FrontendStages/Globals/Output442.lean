@@ -12,12 +12,26 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody442_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "v")
+Flapjack.Prog.return (Flapjack.Exp.const 18446744073709551615#64)
 
 def globalBody442_1 : Prog (BitVec 64) :=
-.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_from_be") ([Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 20#64]) globalBody442_0
+Flapjack.Prog.skip
+
+def globalBody442_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "s")
+  (Flapjack.Exp.var Flapjack.VarKind.local "a")) globalBody442_0 globalBody442_1
+
+def globalBody442_3 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "s")
+
+def globalBody442_4 : Prog (BitVec 64) :=
+.seq globalBody442_2 globalBody442_3
+
+def globalBody442_5 : Prog (BitVec 64) :=
+.dec ("s") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add
+  [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.var Flapjack.VarKind.local "b"]) globalBody442_4
 
 def globalData442 : Decl (BitVec 64) :=
-.function { name := "address_to_u256", inline := false, exported := false, params := [("a", Flapjack.Shape.one)], body := globalBody442_1, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "add_sat", inline := false, exported := false, params := [("a", Flapjack.Shape.one), ("b", Flapjack.Shape.one)], body := globalBody442_5, returnShape := (Flapjack.Shape.one) }
 def globalOutput442 := Pancake.PanLang.declToHOL globalData442
 end InitECandidate.Proofs.FrontendStages.Declarations

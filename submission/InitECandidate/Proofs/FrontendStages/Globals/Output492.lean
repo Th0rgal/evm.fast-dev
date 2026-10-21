@@ -15,40 +15,30 @@ def globalBody492_0 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 3#64]
 
 def globalBody492_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push"
-  [Flapjack.Exp.rStruct
-      [Flapjack.Exp.op Flapjack.BinOp.xor
-          [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "x"),
-            Flapjack.Exp.const 18446744073709551615#64],
-        Flapjack.Exp.op Flapjack.BinOp.xor
-          [Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "x"),
-            Flapjack.Exp.const 18446744073709551615#64],
-        Flapjack.Exp.op Flapjack.BinOp.xor
-          [Flapjack.Exp.rField 2 (Flapjack.Exp.var Flapjack.VarKind.local "x"),
-            Flapjack.Exp.const 18446744073709551615#64],
-        Flapjack.Exp.op Flapjack.BinOp.xor
-          [Flapjack.Exp.rField 3 (Flapjack.Exp.var Flapjack.VarKind.local "x"),
-            Flapjack.Exp.const 18446744073709551615#64]]]
+Flapjack.Prog.call (some (none, none)) "stack_push_bool" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
 
 def globalBody492_2 : Prog (BitVec 64) :=
-.seq globalBody492_0 globalBody492_1
-
-def globalBody492_3 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
 
-def globalBody492_4 : Prog (BitVec 64) :=
-.seq globalBody492_2 globalBody492_3
+def globalBody492_3 : Prog (BitVec 64) :=
+.seq globalBody492_1 globalBody492_2
 
-def globalBody492_5 : Prog (BitVec 64) :=
+def globalBody492_4 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
+def globalBody492_5 : Prog (BitVec 64) :=
+.seq globalBody492_3 globalBody492_4
+
 def globalBody492_6 : Prog (BitVec 64) :=
-.seq globalBody492_4 globalBody492_5
+.decCall ("r") (Flapjack.Shape.one) ("u256_is_zero") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) globalBody492_5
 
 def globalBody492_7 : Prog (BitVec 64) :=
-.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody492_6
+.seq globalBody492_0 globalBody492_6
+
+def globalBody492_8 : Prog (BitVec 64) :=
+.decCall ("x") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody492_7
 
 def globalData492 : Decl (BitVec 64) :=
-.function { name := "op_not", inline := false, exported := false, params := [], body := globalBody492_7, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_iszero", inline := false, exported := false, params := [], body := globalBody492_8, returnShape := (Flapjack.Shape.one) }
 def globalOutput492 := Pancake.PanLang.declToHOL globalData492
 end InitECandidate.Proofs.FrontendStages.Declarations

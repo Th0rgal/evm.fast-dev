@@ -9,102 +9,64 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body575_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memzero"
-  [Flapjack.Exp.var Flapjack.VarKind.local "rec", Flapjack.Exp.const 104#64]
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body575_1 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "rec", Flapjack.Exp.const 0#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "parent")
+Flapjack.Prog.skip
 
 def body575_2 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "rec", Flapjack.Exp.const 8#64])
-  (Flapjack.Exp.var Flapjack.VarKind.global "cur_cont")
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "v") (Flapjack.Exp.const 0#64)) body575_0 body575_1
 
 def body575_3 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "rec", Flapjack.Exp.const 16#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "kind")
+.decCall ("v") (Flapjack.Shape.one) ("is_valid_delegation") ([Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "code"),
+  Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "code")]) body575_2
 
 def body575_4 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "rec", Flapjack.Exp.const 40#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "msg")
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "code"))
+  (Flapjack.Exp.const 0#64)) body575_3 body575_1
 
 def body575_5 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.global "ev" (Flapjack.Exp.var Flapjack.VarKind.local "child")
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 0#64]))
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "auth", Flapjack.Exp.const 40#64]))) body575_0 body575_1
 
 def body575_6 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.global "cur_cont" (Flapjack.Exp.var Flapjack.VarKind.local "rec")
+Flapjack.Prog.return (Flapjack.Exp.const 1#64)
 
 def body575_7 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "child")
+.seq body575_5 body575_6
 
 def body575_8 : Prog (BitVec 64) :=
-.seq body575_6 body575_7
+.seq body575_4 body575_7
 
 def body575_9 : Prog (BitVec 64) :=
-.seq body575_5 body575_8
+.decCall ("code") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("get_code") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 48#64]),
+  Flapjack.Exp.var Flapjack.VarKind.local "authority"]) body575_8
 
 def body575_10 : Prog (BitVec 64) :=
-.seq body575_4 body575_9
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.var Flapjack.VarKind.local "authority"]) body575_9
 
 def body575_11 : Prog (BitVec 64) :=
-.seq body575_3 body575_10
+.seq body575_4 body575_5
 
 def body575_12 : Prog (BitVec 64) :=
-.seq body575_2 body575_11
+.seq body575_11 body575_6
 
 def body575_13 : Prog (BitVec 64) :=
-.seq body575_1 body575_12
+.decCall ("code") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("get_code") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 48#64]),
+  Flapjack.Exp.var Flapjack.VarKind.local "authority"]) body575_12
 
 def body575_14 : Prog (BitVec 64) :=
-.seq body575_0 body575_13
-
-def body575_15 : Prog (BitVec 64) :=
-.decCall ("rec") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.const 104#64]) body575_14
-
-def body575_16 : Prog (BitVec 64) :=
-.decCall ("child") (Flapjack.Shape.one) ("frame_new") ([Flapjack.Exp.var Flapjack.VarKind.local "msg"]) body575_15
-
-def body575_17 : Prog (BitVec 64) :=
-.dec ("parent") (Flapjack.Shape.one) (Flapjack.Exp.var Flapjack.VarKind.global "ev") body575_16
-
-def body575_18 : Prog (BitVec 64) :=
-.seq body575_0 body575_1
-
-def body575_19 : Prog (BitVec 64) :=
-.seq body575_18 body575_2
-
-def body575_20 : Prog (BitVec 64) :=
-.seq body575_19 body575_3
-
-def body575_21 : Prog (BitVec 64) :=
-.seq body575_20 body575_4
-
-def body575_22 : Prog (BitVec 64) :=
-.seq body575_21 body575_5
-
-def body575_23 : Prog (BitVec 64) :=
-.seq body575_22 body575_6
-
-def body575_24 : Prog (BitVec 64) :=
-.seq body575_23 body575_7
-
-def body575_25 : Prog (BitVec 64) :=
-.decCall ("rec") (Flapjack.Shape.one) ("scratch_alloc") ([Flapjack.Exp.const 104#64]) body575_24
-
-def body575_26 : Prog (BitVec 64) :=
-.decCall ("child") (Flapjack.Shape.one) ("frame_new") ([Flapjack.Exp.var Flapjack.VarKind.local "msg"]) body575_25
-
-def body575_27 : Prog (BitVec 64) :=
-.dec ("parent") (Flapjack.Shape.one) (Flapjack.Exp.var Flapjack.VarKind.global "ev") body575_26
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.var Flapjack.VarKind.local "authority"]) body575_13
 
 def originalData575 : Decl (BitVec 64) :=
-.function { name := "frame_open", inline := false, exported := false, params := [("msg", Flapjack.Shape.one), ("kind", Flapjack.Shape.one)], body := body575_17, returnShape := (Flapjack.Shape.one) }
+.function { name := "validate_authorization_checks", inline := false, exported := false, params := [("auth", Flapjack.Shape.one), ("authority", Flapjack.Shape.one)], body := body575_10, returnShape := (Flapjack.Shape.one) }
 def simplifiedData575 : Decl (BitVec 64) :=
-.function { name := "frame_open", inline := false, exported := false, params := [("msg", Flapjack.Shape.one), ("kind", Flapjack.Shape.one)], body := body575_27, returnShape := (Flapjack.Shape.one) }
+.function { name := "validate_authorization_checks", inline := false, exported := false, params := [("auth", Flapjack.Shape.one), ("authority", Flapjack.Shape.one)], body := body575_14, returnShape := (Flapjack.Shape.one) }
 def original575 := Pancake.PanLang.declToHOL originalData575
 def simplified575 := Pancake.PanLang.declToHOL simplifiedData575
 end InitECandidate.Proofs.FrontendStages.Declarations

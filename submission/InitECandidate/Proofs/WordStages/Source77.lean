@@ -629,5 +629,5 @@ def sourceBody77_181 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody77_0 sourceBody77_180
 
 def source77 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-(77, 4, sourceBody77_181)
+  (77, 4, sourceBody77_181)
 end InitECandidate.Proofs.WordStages

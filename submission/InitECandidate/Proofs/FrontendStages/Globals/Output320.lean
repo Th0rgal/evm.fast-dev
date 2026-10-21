@@ -12,52 +12,35 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody320_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "w"), none)) "rlp_encode_bytes"
-  [Flapjack.Exp.var Flapjack.VarKind.local "p",
-    Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.var Flapjack.VarKind.local "buf",
-        Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 32#64]],
-    Flapjack.Exp.const 32#64]
+Flapjack.Prog.return (Flapjack.Exp.const 1#64)
 
 def globalBody320_1 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "p"
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.var Flapjack.VarKind.local "w"])
+Flapjack.Prog.skip
 
 def globalBody320_2 : Prog (BitVec 64) :=
-.seq globalBody320_0 globalBody320_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 0#64)) globalBody320_0 globalBody320_1
 
 def globalBody320_3 : Prog (BitVec 64) :=
-Flapjack.Prog.assign Flapjack.VarKind.local "i"
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "i", Flapjack.Exp.const 1#64])
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "v"))
+  (Flapjack.Exp.const 128#64)) globalBody320_0 globalBody320_1
 
 def globalBody320_4 : Prog (BitVec 64) :=
-.seq globalBody320_2 globalBody320_3
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 1#64)) globalBody320_3 globalBody320_1
 
 def globalBody320_5 : Prog (BitVec 64) :=
-.while (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.var Flapjack.VarKind.local "i")
-  (Flapjack.Exp.var Flapjack.VarKind.local "n")) globalBody320_4
+.seq globalBody320_2 globalBody320_4
 
 def globalBody320_6 : Prog (BitVec 64) :=
 Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.sub
-    [Flapjack.Exp.var Flapjack.VarKind.local "p", Flapjack.Exp.var Flapjack.VarKind.local "dst"])
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 1#64, Flapjack.Exp.var Flapjack.VarKind.local "n"])
 
 def globalBody320_7 : Prog (BitVec 64) :=
 .seq globalBody320_5 globalBody320_6
 
 def globalBody320_8 : Prog (BitVec 64) :=
-.dec ("i") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody320_7
-
-def globalBody320_9 : Prog (BitVec 64) :=
-.dec ("p") (Flapjack.Shape.one) (Flapjack.Exp.op Flapjack.BinOp.add
-  [Flapjack.Exp.var Flapjack.VarKind.local "dst", Flapjack.Exp.var Flapjack.VarKind.local "w"]) globalBody320_8
-
-def globalBody320_10 : Prog (BitVec 64) :=
-.decCall ("w") (Flapjack.Shape.one) ("rlp_encode_list_header") ([Flapjack.Exp.var Flapjack.VarKind.local "dst",
-  Flapjack.Exp.panOp Flapjack.PanOp.mul [Flapjack.Exp.const 33#64, Flapjack.Exp.var Flapjack.VarKind.local "n"]]) globalBody320_9
+.decCall ("n") (Flapjack.Shape.one) ("u256_byte_length") ([Flapjack.Exp.var Flapjack.VarKind.local "v"]) globalBody320_7
 
 def globalData320 : Decl (BitVec 64) :=
-.function { name := "tx_put_blob_hashes", inline := false, exported := false, params := [("dst", Flapjack.Shape.one), ("buf", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := globalBody320_10, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_u256_encoded_len", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody320_8, returnShape := (Flapjack.Shape.one) }
 def globalOutput320 := Pancake.PanLang.declToHOL globalData320
 end InitECandidate.Proofs.FrontendStages.Declarations

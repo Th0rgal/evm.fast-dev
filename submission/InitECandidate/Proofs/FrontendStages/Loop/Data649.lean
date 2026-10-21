@@ -45,37 +45,37 @@ def loopBody649_11 : HolLoopProg 64 :=
 .mark loopBody649_10
 
 def loopBody649_12 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 12 (Flapjack.HolLoopExp.const 1#64)
+Flapjack.HolLoopProg.assign 12 (Flapjack.HolLoopExp.var 0)
 
 def loopBody649_13 : HolLoopProg 64 :=
 .mark loopBody649_12
 
 def loopBody649_14 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 13 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 13 (Flapjack.HolLoopExp.var 1)
 
 def loopBody649_15 : HolLoopProg 64 :=
 .mark loopBody649_14
 
 def loopBody649_16 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 14 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 14 (Flapjack.HolLoopExp.var 2)
 
 def loopBody649_17 : HolLoopProg 64 :=
 .mark loopBody649_16
 
 def loopBody649_18 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 15 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 15 (Flapjack.HolLoopExp.var 3)
 
 def loopBody649_19 : HolLoopProg 64 :=
 .mark loopBody649_18
 
 def loopBody649_20 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 16 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 16 (Flapjack.HolLoopExp.var 4)
 
 def loopBody649_21 : HolLoopProg 64 :=
 .mark loopBody649_20
 
 def loopBody649_22 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 17 (Flapjack.HolLoopExp.const 0#64)
+Flapjack.HolLoopProg.assign 17 (Flapjack.HolLoopExp.var 5)
 
 def loopBody649_23 : HolLoopProg 64 :=
 .mark loopBody649_22

@@ -9,12 +9,13 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body753_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp12_pow_absx"
+Flapjack.Prog.call (some (none, none)) "fp6_copy"
   [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "a"]
 
 def body753_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp12_conj"
-  [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (none, none)) "fp6_neg"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 288#64],
+    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 288#64]]
 
 def body753_2 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
@@ -32,9 +33,9 @@ def body753_6 : Prog (BitVec 64) :=
 .seq body753_5 body753_2
 
 def originalData753 : Decl (BitVec 64) :=
-.function { name := "fp12_exp_x", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_4, returnShape := (Flapjack.Shape.one) }
+.function { name := "fp12_conj", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_4, returnShape := (Flapjack.Shape.one) }
 def simplifiedData753 : Decl (BitVec 64) :=
-.function { name := "fp12_exp_x", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "fp12_conj", inline := false, exported := false, params := [("r", Flapjack.Shape.one), ("a", Flapjack.Shape.one)], body := body753_6, returnShape := (Flapjack.Shape.one) }
 def original753 := Pancake.PanLang.declToHOL originalData753
 def simplified753 := Pancake.PanLang.declToHOL simplifiedData753
 end InitECandidate.Proofs.FrontendStages.Declarations

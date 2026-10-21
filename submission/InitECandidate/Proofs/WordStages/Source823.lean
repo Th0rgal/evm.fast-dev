@@ -31,7 +31,7 @@ def sourceBody823_3 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.var 14)
 
 def sourceBody823_4 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 128#64)
+Flapjack.WordLangProgHOL.assign 8 (Flapjack.WordLangExpHOL.const 512#64)
 
 def sourceBody823_5 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.const 1#64)
@@ -103,14 +103,14 @@ def sourceBody823_27 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody823_3 sourceBody823_26
 
 def sourceBody823_28 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.const 23800#64)
+Flapjack.WordLangProgHOL.assign 12 (Flapjack.WordLangExpHOL.const 600#64)
 
 def sourceBody823_29 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.raise 12
 
 def sourceBody823_30 : WordLangProgHOL (BitVec 64) :=
 .call (some (([4]), ((Flapjack.Spt.bs (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln) PUnit.unit Flapjack.Spt.ln,
-  Flapjack.Spt.ln)), sourceBody823_0, 823, 2)) (some 466) ([12]) (some (12, sourceBody823_29, 823, 3))
+  Flapjack.Spt.ln)), sourceBody823_0, 823, 2)) (some 470) ([12]) (some (12, sourceBody823_29, 823, 3))
 
 def sourceBody823_31 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody823_30 sourceBody823_8

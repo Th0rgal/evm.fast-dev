@@ -21,18 +21,15 @@ def globalBody382_2 : Prog (BitVec 64) :=
 .ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "a") (Flapjack.Exp.const 1#64)) globalBody382_0 globalBody382_1
 
 def globalBody382_3 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "e")
+Flapjack.Prog.return (Flapjack.Exp.const 1#64)
 
 def globalBody382_4 : Prog (BitVec 64) :=
-.decCall ("e") (Flapjack.Shape.one) ("acct_is_empty") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) globalBody382_3
+.seq globalBody382_2 globalBody382_3
 
 def globalBody382_5 : Prog (BitVec 64) :=
-.seq globalBody382_2 globalBody382_4
-
-def globalBody382_6 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody382_5
+.decCall ("a") (Flapjack.Shape.one) ("get_account_optional") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) globalBody382_4
 
 def globalData382 : Decl (BitVec 64) :=
-.function { name := "account_exists_and_is_empty", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody382_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "account_exists", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody382_5, returnShape := (Flapjack.Shape.one) }
 def globalOutput382 := Pancake.PanLang.declToHOL globalData382
 end InitECandidate.Proofs.FrontendStages.Declarations

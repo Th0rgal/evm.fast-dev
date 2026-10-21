@@ -10,9 +10,9 @@ open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 
 def originalData860 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "wd_rlp_slices" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "deposit_event_signature_hash" (Flapjack.Exp.const 0#64)
 def simplifiedData860 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "wd_rlp_slices" (Flapjack.Exp.const 0#64)
+Flapjack.Decl.decl Flapjack.Shape.one "deposit_event_signature_hash" (Flapjack.Exp.const 0#64)
 def original860 := Pancake.PanLang.declToHOL originalData860
 def simplified860 := Pancake.PanLang.declToHOL simplifiedData860
 end InitECandidate.Proofs.FrontendStages.Declarations

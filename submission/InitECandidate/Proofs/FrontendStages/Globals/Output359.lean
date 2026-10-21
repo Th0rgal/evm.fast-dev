@@ -12,16 +12,11 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody359_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
-
-def globalBody359_1 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("acct_new") ([Flapjack.Exp.const 0#64,
-  Flapjack.Exp.rStruct
-    [Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64],
-  Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 136#64])]) globalBody359_0
+Flapjack.Prog.return
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 16#64]))
 
 def globalData359 : Decl (BitVec 64) :=
-.function { name := "acct_empty", inline := false, exported := false, params := [], body := globalBody359_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "state_snapshot", inline := false, exported := false, params := [], body := globalBody359_0, returnShape := (Flapjack.Shape.one) }
 def globalOutput359 := Pancake.PanLang.declToHOL globalData359
 end InitECandidate.Proofs.FrontendStages.Declarations

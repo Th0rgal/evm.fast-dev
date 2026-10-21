@@ -12,47 +12,25 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody287_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "cached")
+Flapjack.Prog.assign Flapjack.VarKind.local "fb" (Flapjack.Exp.loadByte (Flapjack.Exp.var Flapjack.VarKind.local "p"))
 
 def globalBody287_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody287_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "cached") (Flapjack.Exp.const 0#64)) globalBody287_0 globalBody287_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 0#64) (Flapjack.Exp.var Flapjack.VarKind.local "n")) globalBody287_0 globalBody287_1
 
 def globalBody287_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "keccak256"
-  [Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "r"),
-    Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "r"), Flapjack.Exp.var Flapjack.VarKind.local "h"]
+Flapjack.Prog.call none "rlp_bytes_encoded_len"
+  [Flapjack.Exp.var Flapjack.VarKind.local "fb", Flapjack.Exp.var Flapjack.VarKind.local "n"]
 
 def globalBody287_4 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 24#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "h")
+.seq globalBody287_2 globalBody287_3
 
 def globalBody287_5 : Prog (BitVec 64) :=
-.seq globalBody287_3 globalBody287_4
-
-def globalBody287_6 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "h")
-
-def globalBody287_7 : Prog (BitVec 64) :=
-.seq globalBody287_5 globalBody287_6
-
-def globalBody287_8 : Prog (BitVec 64) :=
-.decCall ("h") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 32#64]) globalBody287_7
-
-def globalBody287_9 : Prog (BitVec 64) :=
-.decCall ("r") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("node_rlp") ([Flapjack.Exp.var Flapjack.VarKind.local "node"]) globalBody287_8
-
-def globalBody287_10 : Prog (BitVec 64) :=
-.seq globalBody287_2 globalBody287_9
-
-def globalBody287_11 : Prog (BitVec 64) :=
-.dec ("cached") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 24#64])) globalBody287_10
+.dec ("fb") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody287_4
 
 def globalData287 : Decl (BitVec 64) :=
-.function { name := "node_hash", inline := false, exported := false, params := [("node", Flapjack.Shape.one)], body := globalBody287_11, returnShape := (Flapjack.Shape.one) }
+.function { name := "rlp_value_encoded_len", inline := false, exported := false, params := [("p", Flapjack.Shape.one), ("n", Flapjack.Shape.one)], body := globalBody287_5, returnShape := (Flapjack.Shape.one) }
 def globalOutput287 := Pancake.PanLang.declToHOL globalData287
 end InitECandidate.Proofs.FrontendStages.Declarations

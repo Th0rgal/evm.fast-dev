@@ -12,74 +12,28 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody813_0 : Prog (BitVec 64) :=
-Flapjack.Prog.raise "EvmErr" (Flapjack.Exp.const 10#64)
+Flapjack.Prog.return (Flapjack.Exp.const 519#64)
 
 def globalBody813_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def globalBody813_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 512#64)) globalBody813_0 globalBody813_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.const 128#64) (Flapjack.Exp.var Flapjack.VarKind.local "k")) globalBody813_0 globalBody813_1
 
 def globalBody813_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 600#64]
+Flapjack.Prog.return
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 400#64]),
+        Flapjack.Exp.panOp Flapjack.PanOp.mul
+          [Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.var Flapjack.VarKind.local "k", Flapjack.Exp.const 1#64],
+            Flapjack.Exp.const 8#64]]))
 
 def globalBody813_4 : Prog (BitVec 64) :=
 .seq globalBody813_2 globalBody813_3
 
-def globalBody813_5 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "err") (Flapjack.Exp.const 0#64)) globalBody813_0 globalBody813_1
-
-def globalBody813_6 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-      Flapjack.Exp.const 120#64])
-  (Flapjack.Exp.var Flapjack.VarKind.local "out")
-
-def globalBody813_7 : Prog (BitVec 64) :=
-.seq globalBody813_5 globalBody813_6
-
-def globalBody813_8 : Prog (BitVec 64) :=
-Flapjack.Prog.store
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-      Flapjack.Exp.const 128#64])
-  (Flapjack.Exp.const 256#64)
-
-def globalBody813_9 : Prog (BitVec 64) :=
-.seq globalBody813_7 globalBody813_8
-
-def globalBody813_10 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
-
-def globalBody813_11 : Prog (BitVec 64) :=
-.seq globalBody813_9 globalBody813_10
-
-def globalBody813_12 : Prog (BitVec 64) :=
-.decCall ("err") (Flapjack.Shape.one) ("bls_g2_add_exec") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 88#64]),
-  Flapjack.Exp.var Flapjack.VarKind.local "out"]) globalBody813_11
-
-def globalBody813_13 : Prog (BitVec 64) :=
-.decCall ("out") (Flapjack.Shape.one) ("alloc") ([Flapjack.Exp.const 256#64]) globalBody813_12
-
-def globalBody813_14 : Prog (BitVec 64) :=
-.seq globalBody813_4 globalBody813_13
-
-def globalBody813_15 : Prog (BitVec 64) :=
-.dec ("n") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 96#64])) globalBody813_14
-
-def globalBody813_16 : Prog (BitVec 64) :=
-.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-      Flapjack.Exp.const 112#64])) globalBody813_15
-
 def globalData813 : Decl (BitVec 64) :=
-.function { name := "pre_bls_g2_add", inline := false, exported := false, params := [], body := globalBody813_16, returnShape := (Flapjack.Shape.one) }
+.function { name := "bls_g1_msm_discount", inline := false, exported := false, params := [("k", Flapjack.Shape.one)], body := globalBody813_4, returnShape := (Flapjack.Shape.one) }
 def globalOutput813 := Pancake.PanLang.declToHOL globalData813
 end InitECandidate.Proofs.FrontendStages.Declarations

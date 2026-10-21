@@ -27,7 +27,7 @@ def loopBody349_5 : HolLoopProg 64 :=
 .mark loopBody349_4
 
 def loopBody349_6 : HolLoopProg 64 :=
-.call (some ([1], Flapjack.Spt.ln)) (some 402) ([2]) (some (2, loopBody349_5, loopBody349_1, (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
+.call (some ([1], Flapjack.Spt.ln)) (some 406) ([2]) (some (2, loopBody349_5, loopBody349_1, (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
 
 def loopBody349_7 : HolLoopProg 64 :=
 .mark loopBody349_6
@@ -69,7 +69,7 @@ def loopBody349_19 : HolLoopProg 64 :=
 .mark loopBody349_18
 
 def loopBody349_20 : HolLoopProg 64 :=
-.ite (Flapjack.Cmp.equal) 3 (Flapjack.RegImm.reg 4) loopBody349_17 loopBody349_19 (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit)))
+.ite (Flapjack.Cmp.equal) 3 (Flapjack.RegImm.reg 4) loopBody349_17 loopBody349_19 (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
 
 def loopBody349_21 : HolLoopProg 64 :=
 .mark loopBody349_20
@@ -105,7 +105,7 @@ def loopBody349_31 : HolLoopProg 64 :=
 .mark loopBody349_30
 
 def loopBody349_32 : HolLoopProg 64 :=
-.ite (Flapjack.Cmp.notEqual) 5 (Flapjack.RegImm.imm 0#64) loopBody349_31 loopBody349_1 (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+.ite (Flapjack.Cmp.notEqual) 5 (Flapjack.RegImm.imm 0#64) loopBody349_31 loopBody349_1 (Flapjack.Spt.ln)
 
 def loopBody349_33 : HolLoopProg 64 :=
 .mark loopBody349_32
@@ -141,95 +141,41 @@ def loopBody349_43 : HolLoopProg 64 :=
 .mark loopBody349_42
 
 def loopBody349_44 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.raise 3
+Flapjack.HolLoopProg.assign 2 (Flapjack.HolLoopExp.const 1#64)
 
 def loopBody349_45 : HolLoopProg 64 :=
 .mark loopBody349_44
 
 def loopBody349_46 : HolLoopProg 64 :=
-.call (some ([2], Flapjack.Spt.ln)) (some 412) ([3]) (some (3, loopBody349_45, loopBody349_1, (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
+.seq loopBody349_45 loopBody349_29
 
 def loopBody349_47 : HolLoopProg 64 :=
 .mark loopBody349_46
 
 def loopBody349_48 : HolLoopProg 64 :=
-.seq loopBody349_47 loopBody349_1
+.seq loopBody349_43 loopBody349_47
 
 def loopBody349_49 : HolLoopProg 64 :=
 .mark loopBody349_48
 
 def loopBody349_50 : HolLoopProg 64 :=
-.seq loopBody349_13 loopBody349_49
+.seq loopBody349_11 loopBody349_49
 
 def loopBody349_51 : HolLoopProg 64 :=
 .mark loopBody349_50
 
 def loopBody349_52 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.assign 3 (Flapjack.HolLoopExp.var 2)
+.seq loopBody349_1 loopBody349_51
 
 def loopBody349_53 : HolLoopProg 64 :=
 .mark loopBody349_52
 
 def loopBody349_54 : HolLoopProg 64 :=
-Flapjack.HolLoopProg.return [3]
+.seq loopBody349_1 loopBody349_53
 
 def loopBody349_55 : HolLoopProg 64 :=
 .mark loopBody349_54
 
-def loopBody349_56 : HolLoopProg 64 :=
-.seq loopBody349_55 loopBody349_1
-
-def loopBody349_57 : HolLoopProg 64 :=
-.mark loopBody349_56
-
-def loopBody349_58 : HolLoopProg 64 :=
-.seq loopBody349_53 loopBody349_57
-
-def loopBody349_59 : HolLoopProg 64 :=
-.mark loopBody349_58
-
-def loopBody349_60 : HolLoopProg 64 :=
-.seq loopBody349_51 loopBody349_59
-
-def loopBody349_61 : HolLoopProg 64 :=
-.mark loopBody349_60
-
-def loopBody349_62 : HolLoopProg 64 :=
-.seq loopBody349_1 loopBody349_61
-
-def loopBody349_63 : HolLoopProg 64 :=
-.mark loopBody349_62
-
-def loopBody349_64 : HolLoopProg 64 :=
-.seq loopBody349_1 loopBody349_63
-
-def loopBody349_65 : HolLoopProg 64 :=
-.mark loopBody349_64
-
-def loopBody349_66 : HolLoopProg 64 :=
-.seq loopBody349_43 loopBody349_65
-
-def loopBody349_67 : HolLoopProg 64 :=
-.mark loopBody349_66
-
-def loopBody349_68 : HolLoopProg 64 :=
-.seq loopBody349_11 loopBody349_67
-
-def loopBody349_69 : HolLoopProg 64 :=
-.mark loopBody349_68
-
-def loopBody349_70 : HolLoopProg 64 :=
-.seq loopBody349_1 loopBody349_69
-
-def loopBody349_71 : HolLoopProg 64 :=
-.mark loopBody349_70
-
-def loopBody349_72 : HolLoopProg 64 :=
-.seq loopBody349_1 loopBody349_71
-
-def loopBody349_73 : HolLoopProg 64 :=
-.mark loopBody349_72
-
 def output349 : Nat × List Nat × HolLoopProg 64 :=
-  (413, [0], loopBody349_73)
+  (413, [0], loopBody349_55)
 end InitECandidate.Proofs.FrontendStages.Loop

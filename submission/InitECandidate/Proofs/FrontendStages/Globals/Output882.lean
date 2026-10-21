@@ -16,13 +16,13 @@ Flapjack.Prog.call
   (some
     (none,
       some
-        ("TxErr", "e",
+        ("HdrErr", "e",
           Flapjack.Prog.seq
             (Flapjack.Prog.shMemStore Flapjack.OpSize.op8
               (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 2688614400#64, Flapjack.Exp.const 70#64])
               (Flapjack.Exp.var Flapjack.VarKind.local "e"))
-            (Flapjack.Prog.raise "Fail" (Flapjack.Exp.const 6#64)))))
-  "attempt_l5" [Flapjack.Exp.var Flapjack.VarKind.local "si"]
+            (Flapjack.Prog.raise "Fail" (Flapjack.Exp.const 2#64)))))
+  "attempt_l1" [Flapjack.Exp.var Flapjack.VarKind.local "si"]
 
 def globalBody882_1 : Prog (BitVec 64) :=
 Flapjack.Prog.return (Flapjack.Exp.const 0#64)
@@ -34,6 +34,6 @@ def globalBody882_3 : Prog (BitVec 64) :=
 .dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) globalBody882_2
 
 def globalData882 : Decl (BitVec 64) :=
-.function { name := "attempt_l6", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := globalBody882_3, returnShape := (Flapjack.Shape.one) }
+.function { name := "attempt_l2", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := globalBody882_3, returnShape := (Flapjack.Shape.one) }
 def globalOutput882 := Pancake.PanLang.declToHOL globalData882
 end InitECandidate.Proofs.FrontendStages.Declarations

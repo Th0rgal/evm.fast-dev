@@ -9,18 +9,12 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body359_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "a")
-
-def body359_1 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("acct_new") ([Flapjack.Exp.const 0#64,
-  Flapjack.Exp.rStruct
-    [Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64],
-  Flapjack.Exp.var Flapjack.VarKind.global "empty_code_hash"]) body359_0
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.global "journal_n")
 
 def originalData359 : Decl (BitVec 64) :=
-.function { name := "acct_empty", inline := false, exported := false, params := [], body := body359_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "state_snapshot", inline := false, exported := false, params := [], body := body359_0, returnShape := (Flapjack.Shape.one) }
 def simplifiedData359 : Decl (BitVec 64) :=
-.function { name := "acct_empty", inline := false, exported := false, params := [], body := body359_1, returnShape := (Flapjack.Shape.one) }
+.function { name := "state_snapshot", inline := false, exported := false, params := [], body := body359_0, returnShape := (Flapjack.Shape.one) }
 def original359 := Pancake.PanLang.declToHOL originalData359
 def simplified359 := Pancake.PanLang.declToHOL simplifiedData359
 end InitECandidate.Proofs.FrontendStages.Declarations

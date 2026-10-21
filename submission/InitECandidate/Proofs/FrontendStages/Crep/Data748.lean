@@ -12,18 +12,18 @@ def crepBody748_0 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([2], none)) "heap_mark" []
 
 def crepBody748_1 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([3], none)) "alloc" [Flapjack.CrepExp.const 96#64]
+Flapjack.CrepProg.call (some ([3], none)) "alloc" [Flapjack.CrepExp.const 288#64]
 
 def crepBody748_2 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([4], none)) "alloc" [Flapjack.CrepExp.const 288#64]
 
 def crepBody748_3 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([5], none)) "bls_fp_decode64" [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 3]
+Flapjack.CrepProg.call (some ([5], none)) "g2_decode" [Flapjack.CrepExp.var 0, Flapjack.CrepExp.var 3]
 
 def crepBody748_4 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([5], none)) "bls_fp_decode64"
-  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 64#64],
-    Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 3, Flapjack.CrepExp.const 48#64]]
+Flapjack.CrepProg.call (some ([5], none)) "g2_decode"
+  [Flapjack.CrepExp.op Flapjack.BinOp.add [Flapjack.CrepExp.var 0, Flapjack.CrepExp.const 256#64],
+    Flapjack.CrepExp.var 4]
 
 def crepBody748_5 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.skip
@@ -50,7 +50,8 @@ def crepBody748_12 : CrepProg (BitVec 64) :=
 .seq crepBody748_6 crepBody748_11
 
 def crepBody748_13 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([6], none)) "map_fp2_to_g2" [Flapjack.CrepExp.var 4, Flapjack.CrepExp.var 3]
+Flapjack.CrepProg.call (some ([6], none)) "g2_add"
+  [Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 4]
 
 def crepBody748_14 : CrepProg (BitVec 64) :=
 .dec 6 (Flapjack.CrepExp.const 0#64) crepBody748_13
@@ -59,7 +60,7 @@ def crepBody748_15 : CrepProg (BitVec 64) :=
 .seq crepBody748_12 crepBody748_14
 
 def crepBody748_16 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([6], none)) "g2_encode" [Flapjack.CrepExp.var 4, Flapjack.CrepExp.var 1]
+Flapjack.CrepProg.call (some ([6], none)) "g2_encode" [Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 1]
 
 def crepBody748_17 : CrepProg (BitVec 64) :=
 .dec 6 (Flapjack.CrepExp.const 0#64) crepBody748_16
@@ -103,6 +104,5 @@ def crepBody748_29 : CrepProg (BitVec 64) :=
 def data748 : CrepProg (BitVec 64) := crepBody748_29
 def output748 : MlS × List Nat × CrepProgHOL 64 :=
   (Flapjack.Basis.Pure.MlString.MlString.implode
-  [98#8, 108#8, 115#8, 95#8, 109#8, 97#8, 112#8, 95#8, 102#8, 112#8, 50#8, 95#8, 116#8, 111#8, 95#8, 103#8, 50#8, 95#8,
-    101#8, 120#8, 101#8, 99#8], [0, 1], crepProgToHOL data748)
+  [98#8, 108#8, 115#8, 95#8, 103#8, 50#8, 95#8, 97#8, 100#8, 100#8, 95#8, 101#8, 120#8, 101#8, 99#8], [0, 1], crepProgToHOL data748)
 end InitECandidate.Proofs.FrontendStages.Crep

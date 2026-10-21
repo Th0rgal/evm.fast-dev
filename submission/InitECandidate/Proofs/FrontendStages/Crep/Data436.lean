@@ -15,106 +15,87 @@ def crepBody436_1 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.call (some ([5, 6, 7, 8], none)) "stack_pop" []
 
 def crepBody436_2 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([9, 10, 11, 12], none)) "stack_pop" []
+Flapjack.CrepProg.call (some ([9], none)) "charge_gas" [Flapjack.CrepExp.const 5#64]
 
 def crepBody436_3 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([13], none)) "charge_gas" [Flapjack.CrepExp.const 8#64]
+.dec 9 (Flapjack.CrepExp.const 0#64) crepBody436_2
 
 def crepBody436_4 : CrepProg (BitVec 64) :=
-.dec 13 (Flapjack.CrepExp.const 0#64) crepBody436_3
+Flapjack.CrepProg.call (some ([9, 10, 11, 12], none)) "u256_div"
+  [Flapjack.CrepExp.var 1, Flapjack.CrepExp.var 2, Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 4,
+    Flapjack.CrepExp.var 5, Flapjack.CrepExp.var 6, Flapjack.CrepExp.var 7, Flapjack.CrepExp.var 8]
 
 def crepBody436_5 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([13, 14, 15, 16], none)) "u256_addmod"
-  [Flapjack.CrepExp.var 1, Flapjack.CrepExp.var 2, Flapjack.CrepExp.var 3, Flapjack.CrepExp.var 4,
-    Flapjack.CrepExp.var 5, Flapjack.CrepExp.var 6, Flapjack.CrepExp.var 7, Flapjack.CrepExp.var 8,
-    Flapjack.CrepExp.var 9, Flapjack.CrepExp.var 10, Flapjack.CrepExp.var 11, Flapjack.CrepExp.var 12]
+Flapjack.CrepProg.call (some ([13], none)) "stack_push"
+  [Flapjack.CrepExp.var 9, Flapjack.CrepExp.var 10, Flapjack.CrepExp.var 11, Flapjack.CrepExp.var 12]
 
 def crepBody436_6 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([17], none)) "stack_push"
-  [Flapjack.CrepExp.var 13, Flapjack.CrepExp.var 14, Flapjack.CrepExp.var 15, Flapjack.CrepExp.var 16]
+.dec 13 (Flapjack.CrepExp.const 0#64) crepBody436_5
 
 def crepBody436_7 : CrepProg (BitVec 64) :=
-.dec 17 (Flapjack.CrepExp.const 0#64) crepBody436_6
+Flapjack.CrepProg.call (some ([13], none)) "pc_add" [Flapjack.CrepExp.const 1#64]
 
 def crepBody436_8 : CrepProg (BitVec 64) :=
-Flapjack.CrepProg.call (some ([17], none)) "pc_add" [Flapjack.CrepExp.const 1#64]
+.dec 13 (Flapjack.CrepExp.const 0#64) crepBody436_7
 
 def crepBody436_9 : CrepProg (BitVec 64) :=
-.dec 17 (Flapjack.CrepExp.const 0#64) crepBody436_8
+.seq crepBody436_6 crepBody436_8
 
 def crepBody436_10 : CrepProg (BitVec 64) :=
-.seq crepBody436_7 crepBody436_9
-
-def crepBody436_11 : CrepProg (BitVec 64) :=
 Flapjack.CrepProg.return [Flapjack.CrepExp.const 0#64]
 
+def crepBody436_11 : CrepProg (BitVec 64) :=
+.seq crepBody436_9 crepBody436_10
+
 def crepBody436_12 : CrepProg (BitVec 64) :=
-.seq crepBody436_10 crepBody436_11
+.seq crepBody436_4 crepBody436_11
 
 def crepBody436_13 : CrepProg (BitVec 64) :=
-.seq crepBody436_5 crepBody436_12
+.dec 12 (Flapjack.CrepExp.const 0#64) crepBody436_12
 
 def crepBody436_14 : CrepProg (BitVec 64) :=
-.dec 16 (Flapjack.CrepExp.const 0#64) crepBody436_13
+.dec 11 (Flapjack.CrepExp.const 0#64) crepBody436_13
 
 def crepBody436_15 : CrepProg (BitVec 64) :=
-.dec 15 (Flapjack.CrepExp.const 0#64) crepBody436_14
+.dec 10 (Flapjack.CrepExp.const 0#64) crepBody436_14
 
 def crepBody436_16 : CrepProg (BitVec 64) :=
-.dec 14 (Flapjack.CrepExp.const 0#64) crepBody436_15
+.dec 9 (Flapjack.CrepExp.const 0#64) crepBody436_15
 
 def crepBody436_17 : CrepProg (BitVec 64) :=
-.dec 13 (Flapjack.CrepExp.const 0#64) crepBody436_16
+.seq crepBody436_3 crepBody436_16
 
 def crepBody436_18 : CrepProg (BitVec 64) :=
-.seq crepBody436_4 crepBody436_17
+.seq crepBody436_1 crepBody436_17
 
 def crepBody436_19 : CrepProg (BitVec 64) :=
-.seq crepBody436_2 crepBody436_18
+.dec 8 (Flapjack.CrepExp.const 0#64) crepBody436_18
 
 def crepBody436_20 : CrepProg (BitVec 64) :=
-.dec 12 (Flapjack.CrepExp.const 0#64) crepBody436_19
+.dec 7 (Flapjack.CrepExp.const 0#64) crepBody436_19
 
 def crepBody436_21 : CrepProg (BitVec 64) :=
-.dec 11 (Flapjack.CrepExp.const 0#64) crepBody436_20
+.dec 6 (Flapjack.CrepExp.const 0#64) crepBody436_20
 
 def crepBody436_22 : CrepProg (BitVec 64) :=
-.dec 10 (Flapjack.CrepExp.const 0#64) crepBody436_21
+.dec 5 (Flapjack.CrepExp.const 0#64) crepBody436_21
 
 def crepBody436_23 : CrepProg (BitVec 64) :=
-.dec 9 (Flapjack.CrepExp.const 0#64) crepBody436_22
+.seq crepBody436_0 crepBody436_22
 
 def crepBody436_24 : CrepProg (BitVec 64) :=
-.seq crepBody436_1 crepBody436_23
+.dec 4 (Flapjack.CrepExp.const 0#64) crepBody436_23
 
 def crepBody436_25 : CrepProg (BitVec 64) :=
-.dec 8 (Flapjack.CrepExp.const 0#64) crepBody436_24
+.dec 3 (Flapjack.CrepExp.const 0#64) crepBody436_24
 
 def crepBody436_26 : CrepProg (BitVec 64) :=
-.dec 7 (Flapjack.CrepExp.const 0#64) crepBody436_25
+.dec 2 (Flapjack.CrepExp.const 0#64) crepBody436_25
 
 def crepBody436_27 : CrepProg (BitVec 64) :=
-.dec 6 (Flapjack.CrepExp.const 0#64) crepBody436_26
+.dec 1 (Flapjack.CrepExp.const 0#64) crepBody436_26
 
-def crepBody436_28 : CrepProg (BitVec 64) :=
-.dec 5 (Flapjack.CrepExp.const 0#64) crepBody436_27
-
-def crepBody436_29 : CrepProg (BitVec 64) :=
-.seq crepBody436_0 crepBody436_28
-
-def crepBody436_30 : CrepProg (BitVec 64) :=
-.dec 4 (Flapjack.CrepExp.const 0#64) crepBody436_29
-
-def crepBody436_31 : CrepProg (BitVec 64) :=
-.dec 3 (Flapjack.CrepExp.const 0#64) crepBody436_30
-
-def crepBody436_32 : CrepProg (BitVec 64) :=
-.dec 2 (Flapjack.CrepExp.const 0#64) crepBody436_31
-
-def crepBody436_33 : CrepProg (BitVec 64) :=
-.dec 1 (Flapjack.CrepExp.const 0#64) crepBody436_32
-
-def data436 : CrepProg (BitVec 64) := crepBody436_33
+def data436 : CrepProg (BitVec 64) := crepBody436_27
 def output436 : MlS × List Nat × CrepProgHOL 64 :=
-  (Flapjack.Basis.Pure.MlString.MlString.implode [111#8, 112#8, 95#8, 97#8, 100#8, 100#8, 109#8, 111#8, 100#8], [], crepProgToHOL data436)
+  (Flapjack.Basis.Pure.MlString.MlString.implode [111#8, 112#8, 95#8, 100#8, 105#8, 118#8], [], crepProgToHOL data436)
 end InitECandidate.Proofs.FrontendStages.Crep

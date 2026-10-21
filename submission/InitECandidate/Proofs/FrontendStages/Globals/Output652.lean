@@ -12,19 +12,30 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody652_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "fq_mul"
-  [Flapjack.Exp.var Flapjack.VarKind.local "i",
-    Flapjack.Exp.rStruct
-      [Flapjack.Exp.const 12812017116984455391#64, Flapjack.Exp.const 7129779742913871286#64,
-        Flapjack.Exp.const 17257524443456604923#64, Flapjack.Exp.const 2377177743836652868#64]]
+Flapjack.Prog.return
+  (Flapjack.Exp.rStruct
+    [Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64])
 
 def globalBody652_1 : Prog (BitVec 64) :=
-.decCall ("i") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("modinv_bin") ([Flapjack.Exp.var Flapjack.VarKind.local "a",
-  Flapjack.Exp.rStruct
-    [Flapjack.Exp.const 4332616871279656263#64, Flapjack.Exp.const 10917124144477883021#64,
-      Flapjack.Exp.const 13281191951274694749#64, Flapjack.Exp.const 3486998266802970665#64]]) globalBody652_0
+Flapjack.Prog.skip
+
+def globalBody652_2 : Prog (BitVec 64) :=
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "z") (Flapjack.Exp.const 1#64)) globalBody652_0 globalBody652_1
+
+def globalBody652_3 : Prog (BitVec 64) :=
+Flapjack.Prog.call none "u256_sub"
+  [Flapjack.Exp.rStruct
+      [Flapjack.Exp.const 4332616871279656263#64, Flapjack.Exp.const 10917124144477883021#64,
+        Flapjack.Exp.const 13281191951274694749#64, Flapjack.Exp.const 3486998266802970665#64],
+    Flapjack.Exp.var Flapjack.VarKind.local "a"]
+
+def globalBody652_4 : Prog (BitVec 64) :=
+.seq globalBody652_2 globalBody652_3
+
+def globalBody652_5 : Prog (BitVec 64) :=
+.decCall ("z") (Flapjack.Shape.one) ("u256_is_zero") ([Flapjack.Exp.var Flapjack.VarKind.local "a"]) globalBody652_4
 
 def globalData652 : Decl (BitVec 64) :=
-.function { name := "fq_inv", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody652_1, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "fq_neg", inline := false, exported := false, params := [("a", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := globalBody652_5, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) }
 def globalOutput652 := Pancake.PanLang.declToHOL globalData652
 end InitECandidate.Proofs.FrontendStages.Declarations

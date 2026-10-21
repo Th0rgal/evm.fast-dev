@@ -9,51 +9,58 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body280_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+Flapjack.Prog.call
+  (some
+    (some (Flapjack.VarKind.local, "res"),
+      some
+        ("MptErr", "e",
+          Flapjack.Prog.seq
+            (Flapjack.Prog.call (some (none, none)) "scratch_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"])
+            (Flapjack.Prog.raise "MptErr" (Flapjack.Exp.var Flapjack.VarKind.local "e")))))
+  "_mpt_delete_node_body"
+  [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.var Flapjack.VarKind.local "key",
+    Flapjack.Exp.var Flapjack.VarKind.local "klen", Flapjack.Exp.var Flapjack.VarKind.local "level"]
 
 def body280_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.call (some (none, none)) "scratch_release" [Flapjack.Exp.var Flapjack.VarKind.local "mark"]
 
 def body280_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "child") (Flapjack.Exp.const 0#64)) body280_0 body280_1
+Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "res")
 
 def body280_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "child", Flapjack.Exp.const 0#64]))
-  (Flapjack.Exp.const 0#64)) body280_0 body280_1
+.seq body280_1 body280_2
 
 def body280_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
-  (Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "child", Flapjack.Exp.const 8#64]))
-  (Flapjack.Exp.const 0#64)) body280_0 body280_1
+.seq body280_0 body280_3
 
 def body280_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 1#64)
+.dec ("res") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body280_4
 
 def body280_6 : Prog (BitVec 64) :=
-.seq body280_4 body280_5
+.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body280_5
 
 def body280_7 : Prog (BitVec 64) :=
-.seq body280_3 body280_6
+.decCall ("mark") (Flapjack.Shape.one) ("scratch_mark") ([]) body280_6
 
 def body280_8 : Prog (BitVec 64) :=
-.seq body280_2 body280_7
+.seq body280_0 body280_1
 
 def body280_9 : Prog (BitVec 64) :=
-.seq body280_2 body280_3
+.seq body280_8 body280_2
 
 def body280_10 : Prog (BitVec 64) :=
-.seq body280_9 body280_4
+.dec ("res") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body280_9
 
 def body280_11 : Prog (BitVec 64) :=
-.seq body280_10 body280_5
+.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body280_10
+
+def body280_12 : Prog (BitVec 64) :=
+.decCall ("mark") (Flapjack.Shape.one) ("scratch_mark") ([]) body280_11
 
 def originalData280 : Decl (BitVec 64) :=
-.function { name := "_node_needs_rlp", inline := false, exported := false, params := [("child", Flapjack.Shape.one)], body := body280_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "_mpt_delete_node", inline := false, exported := false, params := [("node", Flapjack.Shape.one), ("key", Flapjack.Shape.one), ("klen", Flapjack.Shape.one), ("level", Flapjack.Shape.one)], body := body280_7, returnShape := (Flapjack.Shape.one) }
 def simplifiedData280 : Decl (BitVec 64) :=
-.function { name := "_node_needs_rlp", inline := false, exported := false, params := [("child", Flapjack.Shape.one)], body := body280_11, returnShape := (Flapjack.Shape.one) }
+.function { name := "_mpt_delete_node", inline := false, exported := false, params := [("node", Flapjack.Shape.one), ("key", Flapjack.Shape.one), ("klen", Flapjack.Shape.one), ("level", Flapjack.Shape.one)], body := body280_12, returnShape := (Flapjack.Shape.one) }
 def original280 := Pancake.PanLang.declToHOL originalData280
 def simplified280 := Pancake.PanLang.declToHOL simplifiedData280
 end InitECandidate.Proofs.FrontendStages.Declarations

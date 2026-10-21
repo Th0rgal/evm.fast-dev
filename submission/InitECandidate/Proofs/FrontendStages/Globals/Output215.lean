@@ -12,38 +12,30 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody215_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_payload"
-  [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 0#64]),
-    Flapjack.Exp.var Flapjack.VarKind.local "ch"]
+Flapjack.Prog.call (some (none, none)) "htr_bytes_vector"
+  [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 48#64, Flapjack.Exp.var Flapjack.VarKind.local "ch"]
 
 def globalBody215_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_plist_chunks"
-  [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 8#64]),
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 16#64]),
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 16#64]),
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 32#64]]
+Flapjack.Prog.call (some (none, none)) "memcpy"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 32#64],
+    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 48#64],
+    Flapjack.Exp.const 32#64]
 
 def globalBody215_2 : Prog (BitVec 64) :=
 .seq globalBody215_0 globalBody215_1
 
 def globalBody215_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "memcpy"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 64#64],
-    Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 24#64]),
-    Flapjack.Exp.const 32#64]
+Flapjack.Prog.call (some (none, none)) "htr_u64_at"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 80#64],
+    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 64#64]]
 
 def globalBody215_4 : Prog (BitVec 64) :=
 .seq globalBody215_2 globalBody215_3
 
 def globalBody215_5 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htr_requests"
-  [Flapjack.Exp.load Flapjack.Shape.one
-      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "si", Flapjack.Exp.const 32#64]),
+Flapjack.Prog.call (some (none, none)) "htr_bytes_vector"
+  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "e", Flapjack.Exp.const 88#64],
+    Flapjack.Exp.const 96#64,
     Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "ch", Flapjack.Exp.const 96#64]]
 
 def globalBody215_6 : Prog (BitVec 64) :=
@@ -76,6 +68,6 @@ def globalBody215_14 : Prog (BitVec 64) :=
 .decCall ("mark") (Flapjack.Shape.one) ("heap_mark") ([]) globalBody215_13
 
 def globalData215 : Decl (BitVec 64) :=
-.function { name := "htr_new_payload_request", inline := false, exported := false, params := [("si", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := globalBody215_14, returnShape := (Flapjack.Shape.one) }
+.function { name := "htr_bdep", inline := false, exported := false, params := [("e", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := globalBody215_14, returnShape := (Flapjack.Shape.one) }
 def globalOutput215 := Pancake.PanLang.declToHOL globalData215
 end InitECandidate.Proofs.FrontendStages.Declarations

@@ -12,46 +12,32 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody507_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_with_memory"
-  [Flapjack.Exp.const 3#64, Flapjack.Exp.var Flapjack.VarKind.local "start",
-    Flapjack.Exp.rStruct
-      [Flapjack.Exp.const 32#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64, Flapjack.Exp.const 0#64]]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
 
 def globalBody507_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "v"]
+Flapjack.Prog.call (some (none, none)) "stack_push_word"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add
+        [Flapjack.Exp.load Flapjack.Shape.one
+            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+          Flapjack.Exp.const 64#64])]
 
 def globalBody507_2 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
+.seq globalBody507_0 globalBody507_1
 
 def globalBody507_3 : Prog (BitVec 64) :=
-.seq globalBody507_1 globalBody507_2
+Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
 
 def globalBody507_4 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.seq globalBody507_2 globalBody507_3
 
 def globalBody507_5 : Prog (BitVec 64) :=
-.seq globalBody507_3 globalBody507_4
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody507_6 : Prog (BitVec 64) :=
-.decCall ("v") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("u256_from_be") ([Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.add
-          [Flapjack.Exp.load Flapjack.Shape.one
-              (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
-            Flapjack.Exp.const 24#64]),
-      Flapjack.Exp.var Flapjack.VarKind.local "s"],
-  Flapjack.Exp.const 32#64]) globalBody507_5
-
-def globalBody507_7 : Prog (BitVec 64) :=
-.decCall ("s") (Flapjack.Shape.one) ("sat_word") ([Flapjack.Exp.var Flapjack.VarKind.local "start"]) globalBody507_6
-
-def globalBody507_8 : Prog (BitVec 64) :=
-.seq globalBody507_0 globalBody507_7
-
-def globalBody507_9 : Prog (BitVec 64) :=
-.decCall ("start") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("stack_pop") ([]) globalBody507_8
+.seq globalBody507_4 globalBody507_5
 
 def globalData507 : Decl (BitVec 64) :=
-.function { name := "op_mload", inline := false, exported := false, params := [], body := globalBody507_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_gas", inline := false, exported := false, params := [], body := globalBody507_6, returnShape := (Flapjack.Shape.one) }
 def globalOutput507 := Pancake.PanLang.declToHOL globalData507
 end InitECandidate.Proofs.FrontendStages.Declarations

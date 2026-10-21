@@ -9,20 +9,27 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body540_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "c")
+Flapjack.Prog.call (some (none, none)) "copy_from_buffer"
+  [Flapjack.Exp.const 3#64,
+    Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 88#64]),
+    Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 96#64])]
 
 def body540_1 : Prog (BitVec 64) :=
-.decCall ("c") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("get_code") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 48#64]),
-  Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body540_0
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body540_2 : Prog (BitVec 64) :=
-.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.var Flapjack.VarKind.local "addr"]) body540_1
+.seq body540_0 body540_1
+
+def body540_3 : Prog (BitVec 64) :=
+.dec ("msg") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
+  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64])) body540_2
 
 def originalData540 : Decl (BitVec 64) :=
-.function { name := "ext_code_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body540_2, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "op_calldatacopy", inline := false, exported := false, params := [], body := body540_3, returnShape := (Flapjack.Shape.one) }
 def simplifiedData540 : Decl (BitVec 64) :=
-.function { name := "ext_code_of", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := body540_2, returnShape := (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) }
+.function { name := "op_calldatacopy", inline := false, exported := false, params := [], body := body540_3, returnShape := (Flapjack.Shape.one) }
 def original540 := Pancake.PanLang.declToHOL originalData540
 def simplified540 := Pancake.PanLang.declToHOL simplifiedData540
 end InitECandidate.Proofs.FrontendStages.Declarations

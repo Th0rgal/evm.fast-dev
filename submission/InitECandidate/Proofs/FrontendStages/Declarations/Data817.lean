@@ -15,10 +15,10 @@ def body817_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def body817_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 128#64)) body817_0 body817_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 512#64)) body817_0 body817_1
 
 def body817_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 23800#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 600#64]
 
 def body817_4 : Prog (BitVec 64) :=
 .ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.var Flapjack.VarKind.local "err") (Flapjack.Exp.const 0#64)) body817_0 body817_1
@@ -46,7 +46,7 @@ def body817_10 : Prog (BitVec 64) :=
 .seq body817_4 body817_9
 
 def body817_11 : Prog (BitVec 64) :=
-.decCall ("err") (Flapjack.Shape.one) ("bls_map_fp2_to_g2_exec") ([Flapjack.Exp.load Flapjack.Shape.one
+.decCall ("err") (Flapjack.Shape.one) ("bls_g2_add_exec") ([Flapjack.Exp.load Flapjack.Shape.one
     (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 88#64]),
   Flapjack.Exp.var Flapjack.VarKind.local "out"]) body817_10
 
@@ -80,7 +80,7 @@ def body817_20 : Prog (BitVec 64) :=
 .seq body817_19 body817_7
 
 def body817_21 : Prog (BitVec 64) :=
-.decCall ("err") (Flapjack.Shape.one) ("bls_map_fp2_to_g2_exec") ([Flapjack.Exp.load Flapjack.Shape.one
+.decCall ("err") (Flapjack.Shape.one) ("bls_g2_add_exec") ([Flapjack.Exp.load Flapjack.Shape.one
     (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "msg", Flapjack.Exp.const 88#64]),
   Flapjack.Exp.var Flapjack.VarKind.local "out"]) body817_20
 
@@ -99,9 +99,9 @@ def body817_25 : Prog (BitVec 64) :=
   (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.global "ev", Flapjack.Exp.const 112#64])) body817_24
 
 def originalData817 : Decl (BitVec 64) :=
-.function { name := "pre_bls_map_fp2_to_g2", inline := false, exported := false, params := [], body := body817_16, returnShape := (Flapjack.Shape.one) }
+.function { name := "pre_bls_g2_add", inline := false, exported := false, params := [], body := body817_16, returnShape := (Flapjack.Shape.one) }
 def simplifiedData817 : Decl (BitVec 64) :=
-.function { name := "pre_bls_map_fp2_to_g2", inline := false, exported := false, params := [], body := body817_25, returnShape := (Flapjack.Shape.one) }
+.function { name := "pre_bls_g2_add", inline := false, exported := false, params := [], body := body817_25, returnShape := (Flapjack.Shape.one) }
 def original817 := Pancake.PanLang.declToHOL originalData817
 def simplified817 := Pancake.PanLang.declToHOL simplifiedData817
 end InitECandidate.Proofs.FrontendStages.Declarations

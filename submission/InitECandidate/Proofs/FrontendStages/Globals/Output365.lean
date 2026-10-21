@@ -12,50 +12,21 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody365_0 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.sub
-    [Flapjack.Exp.rField 1 (Flapjack.Exp.var Flapjack.VarKind.local "m"), Flapjack.Exp.const 1#64])
+Flapjack.Prog.call (some (none, none)) "htab_set"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add
+        [Flapjack.Exp.load Flapjack.Shape.one
+            (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 176#64]),
+          Flapjack.Exp.const 72#64]),
+    Flapjack.Exp.var Flapjack.VarKind.local "addr", Flapjack.Exp.const 1#64]
 
 def globalBody365_1 : Prog (BitVec 64) :=
-Flapjack.Prog.skip
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def globalBody365_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "m"))
-  (Flapjack.Exp.const 0#64)) globalBody365_0 globalBody365_1
-
-def globalBody365_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "htab_set"
-  [Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.var Flapjack.VarKind.local "root",
-    Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "node", Flapjack.Exp.const 1#64]]
-
-def globalBody365_4 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.var Flapjack.VarKind.local "node")
-
-def globalBody365_5 : Prog (BitVec 64) :=
-.seq globalBody365_3 globalBody365_4
-
-def globalBody365_6 : Prog (BitVec 64) :=
-.decCall ("node") (Flapjack.Shape.one) ("decode_witness_to_mpt") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add
-      [Flapjack.Exp.load Flapjack.Shape.one
-          (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 168#64]),
-        Flapjack.Exp.const 0#64]),
-  Flapjack.Exp.var Flapjack.VarKind.local "root"]) globalBody365_5
-
-def globalBody365_7 : Prog (BitVec 64) :=
-.seq globalBody365_2 globalBody365_6
-
-def globalBody365_8 : Prog (BitVec 64) :=
-.decCall ("m") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one]) ("htab_get") ([Flapjack.Exp.var Flapjack.VarKind.local "t", Flapjack.Exp.var Flapjack.VarKind.local "root"]) globalBody365_7
-
-def globalBody365_9 : Prog (BitVec 64) :=
-.dec ("t") (Flapjack.Shape.one) (Flapjack.Exp.load Flapjack.Shape.one
-  (Flapjack.Exp.op Flapjack.BinOp.add
-    [Flapjack.Exp.load Flapjack.Shape.one
-        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 168#64]),
-      Flapjack.Exp.const 32#64])) globalBody365_8
+.seq globalBody365_0 globalBody365_1
 
 def globalData365 : Decl (BitVec 64) :=
-.function { name := "ws_storage_trie", inline := false, exported := false, params := [("root", Flapjack.Shape.one)], body := globalBody365_9, returnShape := (Flapjack.Shape.one) }
+.function { name := "record_pre_state_read", inline := false, exported := false, params := [("addr", Flapjack.Shape.one)], body := globalBody365_2, returnShape := (Flapjack.Shape.one) }
 def globalOutput365 := Pancake.PanLang.declToHOL globalData365
 end InitECandidate.Proofs.FrontendStages.Declarations

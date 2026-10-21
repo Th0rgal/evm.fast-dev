@@ -15,41 +15,21 @@ def body316_1 : Prog (BitVec 64) :=
 Flapjack.Prog.skip
 
 def body316_2 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 0#64)) body316_0 body316_1
+.ite (Flapjack.Exp.cmp Flapjack.Cmp.notEqual
+  (Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 0#64]))
+  (Flapjack.Exp.const 0#64)) body316_0 body316_1
 
 def body316_3 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.lower (Flapjack.Exp.rField 0 (Flapjack.Exp.var Flapjack.VarKind.local "v"))
-  (Flapjack.Exp.const 128#64)) body316_0 body316_1
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
 
 def body316_4 : Prog (BitVec 64) :=
-.ite (Flapjack.Exp.cmp Flapjack.Cmp.equal (Flapjack.Exp.var Flapjack.VarKind.local "n") (Flapjack.Exp.const 1#64)) body316_3 body316_1
-
-def body316_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return
-  (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 1#64, Flapjack.Exp.var Flapjack.VarKind.local "n"])
-
-def body316_6 : Prog (BitVec 64) :=
-.seq body316_4 body316_5
-
-def body316_7 : Prog (BitVec 64) :=
-.seq body316_2 body316_6
-
-def body316_8 : Prog (BitVec 64) :=
-.decCall ("n") (Flapjack.Shape.one) ("u256_byte_length") ([Flapjack.Exp.var Flapjack.VarKind.local "v"]) body316_7
-
-def body316_9 : Prog (BitVec 64) :=
-.seq body316_2 body316_4
-
-def body316_10 : Prog (BitVec 64) :=
-.seq body316_9 body316_5
-
-def body316_11 : Prog (BitVec 64) :=
-.decCall ("n") (Flapjack.Shape.one) ("u256_byte_length") ([Flapjack.Exp.var Flapjack.VarKind.local "v"]) body316_10
+.seq body316_2 body316_3
 
 def originalData316 : Decl (BitVec 64) :=
-.function { name := "tx_u256_encoded_len", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body316_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_has_access_list", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body316_4, returnShape := (Flapjack.Shape.one) }
 def simplifiedData316 : Decl (BitVec 64) :=
-.function { name := "tx_u256_encoded_len", inline := false, exported := false, params := [("v", Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])], body := body316_11, returnShape := (Flapjack.Shape.one) }
+.function { name := "tx_has_access_list", inline := false, exported := false, params := [("tx", Flapjack.Shape.one)], body := body316_4, returnShape := (Flapjack.Shape.one) }
 def original316 := Pancake.PanLang.declToHOL originalData316
 def simplified316 := Pancake.PanLang.declToHOL simplifiedData316
 end InitECandidate.Proofs.FrontendStages.Declarations

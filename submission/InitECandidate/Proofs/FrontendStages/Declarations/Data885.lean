@@ -8,11 +8,32 @@ set_option cbv.warning false
 open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
+def body885_0 : Prog (BitVec 64) :=
+Flapjack.Prog.call
+  (some
+    (none,
+      some
+        ("StateErr", "e",
+          Flapjack.Prog.seq
+            (Flapjack.Prog.shMemStore Flapjack.OpSize.op8
+              (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.const 2688614400#64, Flapjack.Exp.const 70#64])
+              (Flapjack.Exp.var Flapjack.VarKind.local "e"))
+            (Flapjack.Prog.raise "Fail" (Flapjack.Exp.const 5#64)))))
+  "attempt_l4" [Flapjack.Exp.var Flapjack.VarKind.local "si"]
+
+def body885_1 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body885_2 : Prog (BitVec 64) :=
+.seq body885_0 body885_1
+
+def body885_3 : Prog (BitVec 64) :=
+.dec ("e") (Flapjack.Shape.one) (Flapjack.Exp.const 0#64) body885_2
 
 def originalData885 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "fail_code" (Flapjack.Exp.const 0#64)
+.function { name := "attempt_l5", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := body885_3, returnShape := (Flapjack.Shape.one) }
 def simplifiedData885 : Decl (BitVec 64) :=
-Flapjack.Decl.decl Flapjack.Shape.one "fail_code" (Flapjack.Exp.const 0#64)
+.function { name := "attempt_l5", inline := false, exported := false, params := [("si", Flapjack.Shape.one)], body := body885_3, returnShape := (Flapjack.Shape.one) }
 def original885 := Pancake.PanLang.declToHOL originalData885
 def simplified885 := Pancake.PanLang.declToHOL simplifiedData885
 end InitECandidate.Proofs.FrontendStages.Declarations

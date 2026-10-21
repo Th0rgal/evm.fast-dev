@@ -12,29 +12,53 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody767_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_one" [Flapjack.Exp.var Flapjack.VarKind.local "r"]
+Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "rr"), none)) "bls_fp_mul"
+  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "x"]
 
 def globalBody767_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_one"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 96#64]]
+Flapjack.Prog.call (some (some (Flapjack.VarKind.local, "rr"), none)) "bls_fp_add"
+  [Flapjack.Exp.var Flapjack.VarKind.local "rr", Flapjack.Exp.var Flapjack.VarKind.local "b"]
 
 def globalBody767_2 : Prog (BitVec 64) :=
-.seq globalBody767_0 globalBody767_1
+Flapjack.Prog.call none "bls_fp_eq"
+  [Flapjack.Exp.var Flapjack.VarKind.local "l", Flapjack.Exp.var Flapjack.VarKind.local "rr"]
 
 def globalBody767_3 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "fp2_set_zero"
-  [Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "r", Flapjack.Exp.const 192#64]]
+.seq globalBody767_1 globalBody767_2
 
 def globalBody767_4 : Prog (BitVec 64) :=
-.seq globalBody767_2 globalBody767_3
+.dec ("b") (Flapjack.Shape.comb
+  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+    Flapjack.Shape.one]) (Flapjack.Exp.load
+  (Flapjack.Shape.comb
+    [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+      Flapjack.Shape.one])
+  (Flapjack.Exp.op Flapjack.BinOp.add
+    [Flapjack.Exp.load Flapjack.Shape.one
+        (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 392#64]),
+      Flapjack.Exp.const 240#64])) globalBody767_3
 
 def globalBody767_5 : Prog (BitVec 64) :=
-Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+.seq globalBody767_0 globalBody767_4
 
 def globalBody767_6 : Prog (BitVec 64) :=
-.seq globalBody767_4 globalBody767_5
+.decCall ("rr") (Flapjack.Shape.comb
+  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+    Flapjack.Shape.one]) ("bls_fp_sqr") ([Flapjack.Exp.var Flapjack.VarKind.local "x"]) globalBody767_5
+
+def globalBody767_7 : Prog (BitVec 64) :=
+.decCall ("l") (Flapjack.Shape.comb
+  [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+    Flapjack.Shape.one]) ("bls_fp_sqr") ([Flapjack.Exp.var Flapjack.VarKind.local "y"]) globalBody767_6
 
 def globalData767 : Decl (BitVec 64) :=
-.function { name := "g2_set_inf", inline := false, exported := false, params := [("r", Flapjack.Shape.one)], body := globalBody767_6, returnShape := (Flapjack.Shape.one) }
+.function { name := "g1_on_curve", inline := false, exported := false, params := [("x",
+    Flapjack.Shape.comb
+      [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+        Flapjack.Shape.one]),
+  ("y",
+    Flapjack.Shape.comb
+      [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one,
+        Flapjack.Shape.one])], body := globalBody767_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput767 := Pancake.PanLang.declToHOL globalData767
 end InitECandidate.Proofs.FrontendStages.Declarations

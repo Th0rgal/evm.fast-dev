@@ -12,10 +12,13 @@ open scoped InitECandidate.Proofs.FrontendComputation
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 open Flapjack
 def globalBody550_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 2#64]
+Flapjack.Prog.call (some (none, none)) "charge_gas" [Flapjack.Exp.const 5#64]
 
 def globalBody550_1 : Prog (BitVec 64) :=
-Flapjack.Prog.call (some (none, none)) "stack_push" [Flapjack.Exp.var Flapjack.VarKind.local "price"]
+Flapjack.Prog.call (some (none, none)) "stack_push"
+  [Flapjack.Exp.load
+      (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one])
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "a", Flapjack.Exp.const 8#64])]
 
 def globalBody550_2 : Prog (BitVec 64) :=
 Flapjack.Prog.call (some (none, none)) "pc_add" [Flapjack.Exp.const 1#64]
@@ -30,16 +33,19 @@ def globalBody550_5 : Prog (BitVec 64) :=
 .seq globalBody550_3 globalBody550_4
 
 def globalBody550_6 : Prog (BitVec 64) :=
-.decCall ("price") (Flapjack.Shape.comb [Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one, Flapjack.Shape.one]) ("calculate_blob_gas_price") ([Flapjack.Exp.load Flapjack.Shape.one
-    (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "benv", Flapjack.Exp.const 96#64])]) globalBody550_5
+.decCall ("a") (Flapjack.Shape.one) ("get_account") ([Flapjack.Exp.load Flapjack.Shape.one
+    (Flapjack.Exp.op Flapjack.BinOp.add
+      [Flapjack.Exp.load Flapjack.Shape.one
+          (Flapjack.Exp.op Flapjack.BinOp.add
+            [Flapjack.Exp.load Flapjack.Shape.one
+                (Flapjack.Exp.op Flapjack.BinOp.sub [Flapjack.Exp.topAddr, Flapjack.Exp.const 256#64]),
+              Flapjack.Exp.const 112#64]),
+        Flapjack.Exp.const 32#64])]) globalBody550_5
 
 def globalBody550_7 : Prog (BitVec 64) :=
-.decCall ("benv") (Flapjack.Shape.one) ("block_env") ([]) globalBody550_6
-
-def globalBody550_8 : Prog (BitVec 64) :=
-.seq globalBody550_0 globalBody550_7
+.seq globalBody550_0 globalBody550_6
 
 def globalData550 : Decl (BitVec 64) :=
-.function { name := "op_blobbasefee", inline := false, exported := false, params := [], body := globalBody550_8, returnShape := (Flapjack.Shape.one) }
+.function { name := "op_selfbalance", inline := false, exported := false, params := [], body := globalBody550_7, returnShape := (Flapjack.Shape.one) }
 def globalOutput550 := Pancake.PanLang.declToHOL globalData550
 end InitECandidate.Proofs.FrontendStages.Declarations

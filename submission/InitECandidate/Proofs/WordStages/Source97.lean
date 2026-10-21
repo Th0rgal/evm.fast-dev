@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.WordStages.Source81
 import Flapjack.Pancake.WordLang
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
@@ -115,5 +116,5 @@ def sourceBody97_35 : WordLangProgHOL (BitVec 64) :=
 .seq sourceBody97_0 sourceBody97_34
 
 def source97 : Nat × Nat × Flapjack.WordLangProgHOL (BitVec 64) :=
-(97, 2, sourceBody97_35)
+  (97, 2, sourceBody97_35)
 end InitECandidate.Proofs.WordStages

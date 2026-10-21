@@ -9,14 +9,23 @@ open scoped InitECandidate.Proofs.FrontendComputation
 open Flapjack
 namespace InitECandidate.Proofs.FrontendStages.Declarations
 def body331_0 : Prog (BitVec 64) :=
-Flapjack.Prog.call none "tx_signing_hash_mode"
-  [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 1#64, Flapjack.Exp.const 0#64,
+Flapjack.Prog.call (some (none, none)) "keccak256"
+  [Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 384#64]),
+    Flapjack.Exp.load Flapjack.Shape.one
+      (Flapjack.Exp.op Flapjack.BinOp.add [Flapjack.Exp.var Flapjack.VarKind.local "tx", Flapjack.Exp.const 392#64]),
     Flapjack.Exp.var Flapjack.VarKind.local "out"]
 
+def body331_1 : Prog (BitVec 64) :=
+Flapjack.Prog.return (Flapjack.Exp.const 0#64)
+
+def body331_2 : Prog (BitVec 64) :=
+.seq body331_0 body331_1
+
 def originalData331 : Decl (BitVec 64) :=
-.function { name := "signing_hash_2930", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body331_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "get_transaction_hash", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body331_2, returnShape := (Flapjack.Shape.one) }
 def simplifiedData331 : Decl (BitVec 64) :=
-.function { name := "signing_hash_2930", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body331_0, returnShape := (Flapjack.Shape.one) }
+.function { name := "get_transaction_hash", inline := false, exported := false, params := [("tx", Flapjack.Shape.one), ("out", Flapjack.Shape.one)], body := body331_2, returnShape := (Flapjack.Shape.one) }
 def original331 := Pancake.PanLang.declToHOL originalData331
 def simplified331 := Pancake.PanLang.declToHOL simplifiedData331
 end InitECandidate.Proofs.FrontendStages.Declarations
