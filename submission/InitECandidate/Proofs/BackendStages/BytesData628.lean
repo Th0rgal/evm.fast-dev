@@ -1,4 +1,4 @@
-import Flapjack.Compiler.Backend.LabToTarget.Compile
+import Init.Data.BitVec
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
