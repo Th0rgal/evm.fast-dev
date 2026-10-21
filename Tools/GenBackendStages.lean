@@ -55,6 +55,7 @@ deriving instance ToExpr for StackLang.StoreName
 deriving instance ToExpr for Sum
 deriving instance ToExpr for StackLang.Prog
 deriving instance ToExpr for AppList
+deriving instance ToExpr for Spt
 
 /-- Name recursive Stack subterms before pretty-printing to avoid quadratic indentation. -/
 partial def stackProgData (env : Environment) (state : IO.Ref PancakeDataState)
