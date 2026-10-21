@@ -1,5 +1,6 @@
 import InitECandidate.Solver.StackToLabAndLabToTargetNoStubCall
 import Flapjack.Pancake.CrepToLoop.Proofs.LocValueFree
+import Flapjack.Pancake.PanToTarget
 
 set_option autoImplicit false
 set_option maxHeartbeats 1600000
@@ -2058,6 +2059,43 @@ theorem flatten_locValue_stub_tight (sid next : Nat) (cs bs : List Nat) :
       sid next cs bs).1 := by
   rw [StackToLab.flattenHOL]; simp [aok_list, JumpOk, aOk, tOk]
 
+/-! ## Instance on the full `PanToTarget.compileProgHOL` pipeline -/
+
+/-- The section list that `Pancake.PanToTarget.compileProgHOL` hands to `removeLabels`
+(through `Backend.fromWord → fromStack → fromLab → LabToTarget.compile → compileLab`):
+whenever label removal succeeds, every non-stub section has no `jump` / `jumpCmp` / `call` /
+`locValue` line into section `storeConstsStubLocation`. Holds for every Pancake program and
+every backend configuration. -/
+theorem compileProgHOL_sections_avoid_stub (asmConf : AsmConfigExact width)
+    (config : Flapjack.Compiler.Backend.Backend.Config) (program : List (Pancake.PanLang.DeclHOL width))
+    (ic pos : Nat) (labs : Spt (Spt Nat)) (ffis : List HolFfiName)
+    (L' : List (Sec width)) (labs' : Spt (Spt Nat))
+    (h : removeLabels ic asmConf pos labs ffis (filterSkip
+        (StackToLab.compile config.stackConf config.dataConf
+          (2 * DataToWord.maxHeapLimit width config.dataConf - 1)
+          (asmConf.regCount - (asmConf.avoidRegs.length + 3)) asmConf.addrOffset
+          (compileNative asmConf config.stackConf.perfCalls
+            (WordToWord.compile config.wordToWordConf asmConf
+              (panToWordCompileProgHOL asmConf.isa
+                (Pancake.PanToTarget.mainFirstHOL program))).2).2.2.2)) = some (L', labs')) :
+    ∀ s' ∈ L', PanToLabSectionAndStackRemoveClock.IsStubLabel s'.sectionId = true ∨
+      ∀ x ∈ s'.lines, JumpOk x = true :=
+  panToTarget_noStubJumpOrLocValue asmConf.isa _ config.wordToWordConf asmConf
+    config.stackConf.perfCalls config.stackConf config.dataConf _ _ asmConf.addrOffset
+    ic pos labs ffis L' labs' h
+
+/-- `compileProgHOL` really is `fromWord` applied to exactly that WordToWord output. -/
+theorem compileProgHOL_unfold (asmConf : AsmConfigExact width)
+    (config : Flapjack.Compiler.Backend.Backend.Config) (program : List (Pancake.PanLang.DeclHOL width)) :
+    ∃ cfg names, Pancake.PanToTarget.compileProgHOL asmConf config program =
+      Flapjack.Compiler.Backend.Backend.fromWord asmConf cfg names
+        (WordToWord.compile config.wordToWordConf asmConf
+          (panToWordCompileProgHOL asmConf.isa (Pancake.PanToTarget.mainFirstHOL program))).2 ∧
+      cfg.stackConf = config.stackConf ∧ cfg.dataConf = config.dataConf := by
+  unfold Pancake.PanToTarget.compileProgHOL
+  exact ⟨_, _, rfl, rfl, rfl⟩
+
+
 end stack
 
 theorem nsl_rejects_locValue_stub {α : Type} :
@@ -2075,5 +2113,6 @@ theorem nsl_accepts_user {α : Type} :
 
 #print axioms panToTarget_noStubJumpOrLocValue
 #print axioms panToWordToWord_NSL
+#print axioms compileProgHOL_sections_avoid_stub
 
 end InitECandidate.Solver.StackToLabAndLabToTargetNoLocValue6
