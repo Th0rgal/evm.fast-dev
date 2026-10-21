@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame341 : Nat := 3
+def frame341 : Nat := 2
 def slim341 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.call
   (Option.some
@@ -20,10 +20,7 @@ Flapjack.WordLangProgHOL.call
             {
               fst :=
                 Flapjack.Spt.bn
-                  (Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln)
+                  (Flapjack.Spt.bn Flapjack.Spt.ln
                     (Flapjack.Spt.bn
                       (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
                       Flapjack.Spt.ln))
@@ -38,7 +35,7 @@ theorem frameEntry341_eq : frameEntry optimized341 = (341, frame341) := by
   unfold frameEntry
   rw [frame341_eq]
   rfl
-theorem slimEntry341_eq : slimEntry optimized341 = (341, 4, slim341) := by
+theorem slimEntry341_eq : slimEntry optimized341 = (341, 3, slim341) := by
   unfold slimEntry
   rw [slim341_eq]
   rfl

@@ -27,7 +27,7 @@ Flapjack.WordLangProgHOL.call
                   Flapjack.Spt.ln,
               snd := Flapjack.Spt.ln },
           snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 876, snd := 2 } } } })
-  (Option.some 95) List.nil
+  (Option.some 875) List.nil
   (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 876, snd := 3 } } })
 theorem frame876_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized876.2.1 optimized876.2.2 = frame876 := by cbv
 theorem slim876_eq : WordDepth.Executable.slim optimized876.2.2 = slim876 := by cbv

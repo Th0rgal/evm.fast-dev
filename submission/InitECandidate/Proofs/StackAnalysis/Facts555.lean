@@ -28,7 +28,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 2 } } } })
-    (Option.some 472) List.nil
+    (Option.some 470) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.seq
     (Flapjack.WordLangProgHOL.call
@@ -48,7 +48,7 @@ Flapjack.WordLangProgHOL.seq
                       Flapjack.Spt.ln,
                   snd := Flapjack.Spt.ln },
               snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 4 } } } })
-      (Option.some 469) List.nil
+      (Option.some 467) List.nil
       (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 5 } } }))
     (Flapjack.WordLangProgHOL.seq
       (Flapjack.WordLangProgHOL.call
@@ -68,7 +68,7 @@ Flapjack.WordLangProgHOL.seq
                         Flapjack.Spt.ln,
                     snd := Flapjack.Spt.ln },
                 snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 6 } } } })
-        (Option.some 478) List.nil
+        (Option.some 476) List.nil
         (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 7 } } }))
       (Flapjack.WordLangProgHOL.call
         (Option.some
@@ -87,7 +87,7 @@ Flapjack.WordLangProgHOL.seq
                         Flapjack.Spt.ln,
                     snd := Flapjack.Spt.ln },
                 snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 8 } } } })
-        (Option.some 492) List.nil
+        (Option.some 490) List.nil
         (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 555, snd := 9 } } }))))
 theorem frame555_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized555.2.1 optimized555.2.2 = frame555 := by cbv
 theorem slim555_eq : WordDepth.Executable.slim optimized555.2.2 = slim555 := by cbv

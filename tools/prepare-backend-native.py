@@ -15,9 +15,11 @@ parser.add_argument("--first", type=int, default=64)
 parser.add_argument("--last", type=int, default=last_label)
 args = parser.parse_args()
 work = root / "work/lean-perf/backend-stages"
-next_offsets = {}
-for path in work.glob("Generate*.log"):
-    next_offsets.update({int(n): int(offset) for n, offset in re.findall(r"Function (\d+): .*?next offset (\d+)", path.read_text())})
+def next_offset(n):
+    source = (root / f"submission/InitECandidate/Proofs/BackendStages/Function{n}.lean").read_text()
+    body = source.split(f"def function{n} (bitmapPrefix", 1)[1].split(f"theorem function{n}_eq", 1)[0]
+    return int(re.search(r",\s*(\d+)\)\s*$", body).group(1))
+next_offsets = {n: next_offset(n) for n in range(max(64, args.first - 1), args.last + 1)}
 chunks = [(n, min(n+15, args.last)) for n in range(args.first, args.last+1, 16)]
 name = "Native" if (args.first, args.last) == (64,last_label) else f"Native{args.first}_{args.last}"
 lines = ["import InitECandidate.Proofs.BackendComputation"] + [f"import InitECandidate.Proofs.BackendStages.Chunk{a}_{b}" for a,b in chunks]

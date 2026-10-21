@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Assemble final target stages using bounded per-section certificates."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,json,time,re,subprocess
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-groups=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,890))),f"{a}_{min(a+15,889)}") for a in range(64,890,16)]
+groups=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 for ids,suffix in groups:
  p=work/f"FinalChunk{suffix}.check.json"
  while not p.exists():time.sleep(5)

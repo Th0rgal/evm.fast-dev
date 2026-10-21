@@ -9,59 +9,9 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame185 : Nat := 11
+def frame185 : Nat := 0
 def slim185 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.seq
-  (Flapjack.WordLangProgHOL.call
-    (Option.some
-      { fst := List.cons 2 List.nil,
-        snd :=
-          {
-            fst :=
-              {
-                fst :=
-                  Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
-                    Flapjack.Spt.ln,
-                snd := Flapjack.Spt.ln },
-            snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 185, snd := 2 } } } })
-    (Option.some 184) List.nil
-    (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 185, snd := 3 } } }))
-  (Flapjack.WordLangProgHOL.call
-    (Option.some
-      { fst := List.cons 2 List.nil,
-        snd :=
-          {
-            fst :=
-              {
-                fst :=
-                  Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
-                    Flapjack.Spt.ln,
-                snd := Flapjack.Spt.ln },
-            snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 185, snd := 4 } } } })
-    (Option.some 79) List.nil
-    (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 185, snd := 5 } } }))
+Flapjack.WordLangProgHOL.skip
 theorem frame185_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized185.2.1 optimized185.2.2 = frame185 := by cbv
 theorem slim185_eq : WordDepth.Executable.slim optimized185.2.2 = slim185 := by cbv
 theorem frameEntry185_eq : frameEntry optimized185 = (185, frame185) := by

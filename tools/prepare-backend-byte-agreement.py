@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Close full native byte equality by symbolic checked fragment regrouping."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-ids=[0,1,2,4,5,6]+list(range(64,890));groups=["Stubs"]+[f"{a}_{min(a+15,889)}" for a in range(64,890,16)]
+ids=[0,1,2,4,5,6]+list(range(64,STOP_LABEL));groups=["Stubs"]+[f"{a}_{min(a+15,LAST_LABEL)}" for a in range(64,STOP_LABEL,16)]
 for name in [f"ByteSectionAgreement{n}" for n in ids]+[f"ByteCandidate{i:03d}" for i in range(221)]:
  dep=work/f"{name}.check.json"
  while not dep.exists():time.sleep(5)

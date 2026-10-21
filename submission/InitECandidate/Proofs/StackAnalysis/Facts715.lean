@@ -11,14 +11,14 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
 def frame715 : Nat := 0
 def slim715 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.skip
+Flapjack.WordLangProgHOL.call Option.none (Option.some 714) List.nil Option.none
 theorem frame715_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized715.2.1 optimized715.2.2 = frame715 := by cbv
 theorem slim715_eq : WordDepth.Executable.slim optimized715.2.2 = slim715 := by cbv
 theorem frameEntry715_eq : frameEntry optimized715 = (715, frame715) := by
   unfold frameEntry
   rw [frame715_eq]
   rfl
-theorem slimEntry715_eq : slimEntry optimized715 = (715, 13, slim715) := by
+theorem slimEntry715_eq : slimEntry optimized715 = (715, 7, slim715) := by
   unfold slimEntry
   rw [slim715_eq]
   rfl

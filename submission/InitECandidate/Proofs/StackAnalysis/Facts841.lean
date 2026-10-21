@@ -9,29 +9,9 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame841 : Nat := 3
+def frame841 : Nat := 0
 def slim841 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.call
-  (Option.some
-    { fst := List.cons 2 List.nil,
-      snd :=
-        {
-          fst :=
-            {
-              fst :=
-                Flapjack.Spt.bn
-                  (Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln)
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln))
-                  Flapjack.Spt.ln,
-              snd := Flapjack.Spt.ln },
-          snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 841, snd := 2 } } } })
-  (Option.some 80) List.nil
-  (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 841, snd := 3 } } })
+Flapjack.WordLangProgHOL.skip
 theorem frame841_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized841.2.1 optimized841.2.2 = frame841 := by cbv
 theorem slim841_eq : WordDepth.Executable.slim optimized841.2.2 = slim841 := by cbv
 theorem frameEntry841_eq : frameEntry optimized841 = (841, frame841) := by

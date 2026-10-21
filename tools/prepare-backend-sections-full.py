@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compose the complete exact StackToLab result from checked stage equations."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,subprocess,json,os
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-chunks=[(a,min(a+15,889)) for a in range(64,890,16)]
+chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
 for a,b in chunks:
  name=f"SectionChunk{a}_{b}"
  while not (work/f"{name}.check.json").exists():time.sleep(1)

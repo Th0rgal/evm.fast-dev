@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compose all independent section filtering or initial encodings."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess,sys
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 stage=sys.argv[1];assert stage in ["Filtered","Encoded"]
-chunks=[(a,min(a+15,889)) for a in range(64,890,16)]
+chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
 for suffix in ["Stubs"]+[f"Chunk{a}_{b}" for a,b in chunks]:
  p=work/f"{stage}{suffix}.check.json"
  while not p.exists():time.sleep(3)

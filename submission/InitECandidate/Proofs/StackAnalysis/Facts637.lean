@@ -18,7 +18,7 @@ theorem frameEntry637_eq : frameEntry optimized637 = (637, frame637) := by
   unfold frameEntry
   rw [frame637_eq]
   rfl
-theorem slimEntry637_eq : slimEntry optimized637 = (637, 5, slim637) := by
+theorem slimEntry637_eq : slimEntry optimized637 = (637, 6, slim637) := by
   unfold slimEntry
   rw [slim637_eq]
   rfl

@@ -27,13 +27,14 @@ Flapjack.WordLangProgHOL.seq
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                       (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 364, snd := 2 } } } })
-    (Option.some 178) List.nil
+    (Option.some 363) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 364, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
@@ -58,7 +59,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 364, snd := 4 } } } })
-    (Option.some 176) List.nil
+    (Option.some 180) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 364, snd := 5 } } }))
 theorem frame364_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized364.2.1 optimized364.2.2 = frame364 := by cbv
 theorem slim364_eq : WordDepth.Executable.slim optimized364.2.2 = slim364 := by cbv
@@ -66,7 +67,7 @@ theorem frameEntry364_eq : frameEntry optimized364 = (364, frame364) := by
   unfold frameEntry
   rw [frame364_eq]
   rfl
-theorem slimEntry364_eq : slimEntry optimized364 = (364, 4, slim364) := by
+theorem slimEntry364_eq : slimEntry optimized364 = (364, 3, slim364) := by
   unfold slimEntry
   rw [slim364_eq]
   rfl

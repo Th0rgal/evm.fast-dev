@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compose checked section-local filtering/encoding without whole literal reduction."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,subprocess,json,sys
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 stage=sys.argv[1];assert stage in ["Filtered","Encoded"]
-chunks=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,890))),f"Chunk{a}_{min(a+15,889)}") for a in range(64,890,16)]
+chunks=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"Chunk{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 for ids,suffix in chunks:
  name=stage+suffix;cert=work/f"{name}.check.json"
  if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:continue

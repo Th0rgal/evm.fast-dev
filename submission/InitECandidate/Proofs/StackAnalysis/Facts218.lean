@@ -11,7 +11,7 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
 def frame218 : Nat := 0
 def slim218 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.call Option.none (Option.some 211) List.nil Option.none
+Flapjack.WordLangProgHOL.call Option.none (Option.some 217) List.nil Option.none
 theorem frame218_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized218.2.1 optimized218.2.2 = frame218 := by cbv
 theorem slim218_eq : WordDepth.Executable.slim optimized218.2.2 = slim218 := by cbv
 theorem frameEntry218_eq : frameEntry optimized218 = (218, frame218) := by

@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame418 : Nat := 3
+def frame418 : Nat := 2
 def slim418 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.seq
   (Flapjack.WordLangProgHOL.call
@@ -21,17 +21,14 @@ Flapjack.WordLangProgHOL.seq
               {
                 fst :=
                   Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                        Flapjack.Spt.ln)
+                    (Flapjack.Spt.bn Flapjack.Spt.ln
                       (Flapjack.Spt.bn
                         (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
                         Flapjack.Spt.ln))
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 418, snd := 2 } } } })
-    (Option.some 79) List.nil
+    (Option.some 406) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 418, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
@@ -49,7 +46,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 418, snd := 4 } } } })
-    (Option.some 102) List.nil
+    (Option.some 416) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 418, snd := 5 } } }))
 theorem frame418_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized418.2.1 optimized418.2.2 = frame418 := by cbv
 theorem slim418_eq : WordDepth.Executable.slim optimized418.2.2 = slim418 := by cbv

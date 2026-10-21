@@ -27,7 +27,7 @@ Flapjack.WordLangProgHOL.call
                   Flapjack.Spt.ln,
               snd := Flapjack.Spt.ln },
           snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 496, snd := 2 } } } })
-  (Option.some 190) List.nil
+  (Option.some 494) List.nil
   (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 496, snd := 3 } } })
 theorem frame496_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized496.2.1 optimized496.2.2 = frame496 := by cbv
 theorem slim496_eq : WordDepth.Executable.slim optimized496.2.2 = slim496 := by cbv
@@ -35,7 +35,7 @@ theorem frameEntry496_eq : frameEntry optimized496 = (496, frame496) := by
   unfold frameEntry
   rw [frame496_eq]
   rfl
-theorem slimEntry496_eq : slimEntry optimized496 = (496, 2, slim496) := by
+theorem slimEntry496_eq : slimEntry optimized496 = (496, 3, slim496) := by
   unfold slimEntry
   rw [slim496_eq]
   rfl

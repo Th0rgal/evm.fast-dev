@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate and certify final alignment/re-encoding/padding independently per section."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,json,subprocess,time,concurrent.futures,sys
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 def run(name,source,out=None):
@@ -33,5 +34,5 @@ def process(n):
  for stage in stages:
   if checked(stage):continue
   name=f"{stage}{n}";run(name,root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean",root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean")
-ids=[0,1,2,4,5,6]+list(range(64,890))
+ids=[0,1,2,4,5,6]+list(range(64,STOP_LABEL))
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:list(pool.map(process,ids))

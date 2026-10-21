@@ -18,7 +18,7 @@ theorem frameEntry288_eq : frameEntry optimized288 = (288, frame288) := by
   unfold frameEntry
   rw [frame288_eq]
   rfl
-theorem slimEntry288_eq : slimEntry optimized288 = (288, 2, slim288) := by
+theorem slimEntry288_eq : slimEntry optimized288 = (288, 4, slim288) := by
   unfold slimEntry
   rw [slim288_eq]
   rfl

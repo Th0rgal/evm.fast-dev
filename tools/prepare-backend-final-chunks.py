@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compose independently checked final target section equations."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess,re
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-chunks=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,890))),f"{a}_{min(a+15,889)}") for a in range(64,890,16)]
+chunks=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 for ids,suffix in chunks:
  name="FinalChunk"+suffix;cert=work/f"{name}.check.json"
  if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:continue

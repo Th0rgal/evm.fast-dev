@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Generate/check per-function lower Stack passes, independently of aggregate proofs."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse, concurrent.futures, pathlib, subprocess, json, time, os
 parser=argparse.ArgumentParser()
 parser.add_argument("stage", choices=["Alloc", "Removed", "Named"])
@@ -10,7 +11,7 @@ parser.add_argument("--workers", type=int, default=2)
 args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1]
 work=root/"work/lean-perf/backend-stages"
-labels=list(range(64,890)) if args.all else args.labels
+labels=list(range(64,STOP_LABEL)) if args.all else args.labels
 labels=[n for n in labels if not ((work/f"{args.stage}{n}.check.json").exists() and json.loads((work/f"{args.stage}{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{args.stage}{n}.olean").exists())]
 prefix=["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py")]
 env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")

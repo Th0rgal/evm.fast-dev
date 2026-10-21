@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Compose exact zero-target key collection and prove the final label lookup check."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-groups=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,890))),f"{a}_{min(a+15,889)}") for a in range(64,890,16)]
+groups=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 header="set_option autoImplicit false\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend\n"
 insert="(fun key acc => sptInsert key () acc)"
 def check(name,source):

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Compose exact per-function Lab sections in bounded chunks."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,subprocess,time,json,os
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-for first in range(64,890,16):
- last=min(first+15,889);ns=range(first,last+1);name=f"SectionChunk{first}_{last}"
+for first in range(64,STOP_LABEL,16):
+ last=min(first+15,LAST_LABEL);ns=range(first,last+1);name=f"SectionChunk{first}_{last}"
  if (work/f"{name}.check.json").exists() and json.loads((work/f"{name}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean").exists(): continue
  for n in ns:
   while not (work/f"Section{n}.check.json").exists():time.sleep(1)

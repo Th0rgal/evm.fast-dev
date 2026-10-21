@@ -18,7 +18,7 @@ theorem frameEntry290_eq : frameEntry optimized290 = (290, frame290) := by
   unfold frameEntry
   rw [frame290_eq]
   rfl
-theorem slimEntry290_eq : slimEntry optimized290 = (290, 4, slim290) := by
+theorem slimEntry290_eq : slimEntry optimized290 = (290, 5, slim290) := by
   unfold slimEntry
   rw [slim290_eq]
   rfl

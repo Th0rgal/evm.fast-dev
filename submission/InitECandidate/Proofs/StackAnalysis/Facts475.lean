@@ -18,7 +18,7 @@ theorem frameEntry475_eq : frameEntry optimized475 = (475, frame475) := by
   unfold frameEntry
   rw [frame475_eq]
   rfl
-theorem slimEntry475_eq : slimEntry optimized475 = (475, 2, slim475) := by
+theorem slimEntry475_eq : slimEntry optimized475 = (475, 1, slim475) := by
   unfold slimEntry
   rw [slim475_eq]
   rfl

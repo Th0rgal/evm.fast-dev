@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame156 : Nat := 2
+def frame156 : Nat := 18
 def slim156 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.skip
 theorem frame156_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized156.2.1 optimized156.2.2 = frame156 := by cbv

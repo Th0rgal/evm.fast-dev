@@ -23,19 +23,17 @@ Flapjack.WordLangProgHOL.seq
                   Flapjack.Spt.bn
                     (Flapjack.Spt.bn
                       (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                       (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 362, snd := 2 } } } })
-    (Option.some 180) List.nil
+    (Option.some 178) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 362, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
@@ -60,7 +58,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 362, snd := 4 } } } })
-    (Option.some 180) List.nil
+    (Option.some 176) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 362, snd := 5 } } }))
 theorem frame362_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized362.2.1 optimized362.2.2 = frame362 := by cbv
 theorem slim362_eq : WordDepth.Executable.slim optimized362.2.2 = slim362 := by cbv
@@ -68,7 +66,7 @@ theorem frameEntry362_eq : frameEntry optimized362 = (362, frame362) := by
   unfold frameEntry
   rw [frame362_eq]
   rfl
-theorem slimEntry362_eq : slimEntry optimized362 = (362, 3, slim362) := by
+theorem slimEntry362_eq : slimEntry optimized362 = (362, 4, slim362) := by
   unfold slimEntry
   rw [slim362_eq]
   rfl

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Propose/check independent raw-call body literals using certified whole-stack metadata."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse
 import concurrent.futures
 import pathlib
@@ -17,7 +18,7 @@ args = parser.parse_args()
 os.environ["LAKE_ARTIFACT_CACHE"] = "false"
 root = pathlib.Path(__file__).resolve().parents[1]
 work = root / "work/lean-perf/backend-stages"
-labels = list(range(64,890)) if args.all else args.labels
+labels = list(range(64,STOP_LABEL)) if args.all else args.labels
 labels = [n for n in labels if not ((work/f"Raw{n}.check.json").exists() and json.loads((work/f"Raw{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Raw{n}.olean").exists())]
 prefix = ["rtk","proxy","taskset","-c","8-11","timeout","180","lake","env","lean"]
 def check(n):

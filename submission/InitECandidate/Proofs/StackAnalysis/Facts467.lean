@@ -13,7 +13,7 @@ def frame467 : Nat := 2
 def slim467 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.call
   (Option.some
-    { fst := List.cons 2 List.nil,
+    { fst := List.cons 2 (List.cons 4 (List.cons 6 (List.cons 8 List.nil))),
       snd :=
         {
           fst :=
@@ -27,7 +27,7 @@ Flapjack.WordLangProgHOL.call
                   Flapjack.Spt.ln,
               snd := Flapjack.Spt.ln },
           snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 467, snd := 2 } } } })
-  (Option.some 466) List.nil
+  (Option.some 146) List.nil
   (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 467, snd := 3 } } })
 theorem frame467_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized467.2.1 optimized467.2.2 = frame467 := by cbv
 theorem slim467_eq : WordDepth.Executable.slim optimized467.2.2 = slim467 := by cbv

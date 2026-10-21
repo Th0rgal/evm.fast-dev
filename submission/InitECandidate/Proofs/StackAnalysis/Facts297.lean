@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame297 : Nat := 3
+def frame297 : Nat := 5
 def slim297 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.call
   (Option.some
@@ -23,10 +23,10 @@ Flapjack.WordLangProgHOL.call
                   (Flapjack.Spt.bn
                     (Flapjack.Spt.bn
                       (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln)
+                      (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                     (Flapjack.Spt.bn
                       (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln))
+                      (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                   Flapjack.Spt.ln,
               snd := Flapjack.Spt.ln },
           snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 297, snd := 2 } } } })
@@ -38,7 +38,7 @@ theorem frameEntry297_eq : frameEntry optimized297 = (297, frame297) := by
   unfold frameEntry
   rw [frame297_eq]
   rfl
-theorem slimEntry297_eq : slimEntry optimized297 = (297, 2, slim297) := by
+theorem slimEntry297_eq : slimEntry optimized297 = (297, 4, slim297) := by
   unfold slimEntry
   rw [slim297_eq]
   rfl

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Certify local label tables after final alignment for target aggregate composition."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,subprocess,json,time,re,concurrent.futures
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 def process(n):
@@ -17,4 +18,4 @@ def process(n):
   (work/f"{label}.check.log").write_text(r.stdout+r.stderr);(work/f"{label}.check.json").write_text(json.dumps(dict(returncode=r.returncode,seconds=time.monotonic()-start)));print(label,r.returncode,flush=True);r.check_returncode()
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
- list(pool.map(process,[0,1,2,4,5,6]+list(range(64,890))))
+ list(pool.map(process,[0,1,2,4,5,6]+list(range(64,STOP_LABEL))))

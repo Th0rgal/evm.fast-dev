@@ -9,33 +9,16 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame766 : Nat := 2
+def frame766 : Nat := 0
 def slim766 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.call
-  (Option.some
-    { fst := List.cons 2 List.nil,
-      snd :=
-        {
-          fst :=
-            {
-              fst :=
-                Flapjack.Spt.bn
-                  (Flapjack.Spt.bn Flapjack.Spt.ln
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln))
-                  Flapjack.Spt.ln,
-              snd := Flapjack.Spt.ln },
-          snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 766, snd := 2 } } } })
-  (Option.some 77) List.nil
-  (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 766, snd := 3 } } })
+Flapjack.WordLangProgHOL.skip
 theorem frame766_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized766.2.1 optimized766.2.2 = frame766 := by cbv
 theorem slim766_eq : WordDepth.Executable.slim optimized766.2.2 = slim766 := by cbv
 theorem frameEntry766_eq : frameEntry optimized766 = (766, frame766) := by
   unfold frameEntry
   rw [frame766_eq]
   rfl
-theorem slimEntry766_eq : slimEntry optimized766 = (766, 3, slim766) := by
+theorem slimEntry766_eq : slimEntry optimized766 = (766, 2, slim766) := by
   unfold slimEntry
   rw [slim766_eq]
   rfl

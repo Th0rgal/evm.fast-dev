@@ -46,7 +46,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 407, snd := 4 } } } })
-    (Option.some 396) List.nil
+    (Option.some 394) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 407, snd := 5 } } }))
 theorem frame407_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized407.2.1 optimized407.2.2 = frame407 := by cbv
 theorem slim407_eq : WordDepth.Executable.slim optimized407.2.2 = slim407 := by cbv

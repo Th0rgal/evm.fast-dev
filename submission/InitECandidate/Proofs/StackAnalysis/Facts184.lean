@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame184 : Nat := 4
+def frame184 : Nat := 0
 def slim184 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.skip
 theorem frame184_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized184.2.1 optimized184.2.2 = frame184 := by cbv
@@ -18,7 +18,7 @@ theorem frameEntry184_eq : frameEntry optimized184 = (184, frame184) := by
   unfold frameEntry
   rw [frame184_eq]
   rfl
-theorem slimEntry184_eq : slimEntry optimized184 = (184, 3, slim184) := by
+theorem slimEntry184_eq : slimEntry optimized184 = (184, 4, slim184) := by
   unfold slimEntry
   rw [slim184_eq]
   rfl

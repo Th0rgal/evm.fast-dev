@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Compose complete lower Stack stages from exact chunks and inserted stubs."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse,pathlib,time,subprocess,json,os
 parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Alloc","Removed","Named"]);args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages";stage=args.stage
 previous={"Alloc":"Raw","Removed":"Alloc","Named":"Removed"}[stage]
-chunks=[(a,min(a+15,889)) for a in range(64,890,16)]
+chunks=[(a,min(a+15,LAST_LABEL)) for a in range(64,STOP_LABEL,16)]
 for a,b in chunks:
  name=f"{stage}Chunk{a}_{b}"
  while not (work/f"{name}.check.json").exists():time.sleep(1)

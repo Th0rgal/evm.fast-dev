@@ -42,9 +42,11 @@ for start in range(0, len(labels), args.batch_size):
     batch = labels[start:start + args.batch_size]
     if args.wait_data:
         for label in batch:
-            source = root / f"submission/InitECandidate/Proofs/StackAnalysis/Data{label}.lean"
             output = root / f".lake/build/lib/lean/InitECandidate/Proofs/StackAnalysis/Data{label}.olean"
-            while not output.exists() or output.stat().st_mtime_ns < source.stat().st_mtime_ns:
+            # Lake may replay a content-identical cached object with an older
+            # timestamp than its regenerated source. The aggregate Data build
+            # is completed before this generator is resumed.
+            while not output.exists():
                 time.sleep(5)
     runner = work / f"Generate{batch[0]}_{batch[-1]}.lean"
     imports = "import Tools.GenBackendStages\n" + "".join(f"import InitECandidate.Proofs.StackAnalysis.Data{label}\n" for label in batch)

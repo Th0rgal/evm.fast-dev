@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Extract independently checked section bytes into thin candidate-match literals."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess,concurrent.futures
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 def run(name,source,out=None):
@@ -24,4 +25,4 @@ def process(n):
  run(f"Bytes{n}",source,root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Bytes{n}.olean")
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
- list(pool.map(process,[0,1,2,4,5,6]+list(range(64,890))))
+ list(pool.map(process,[0,1,2,4,5,6]+list(range(64,STOP_LABEL))))

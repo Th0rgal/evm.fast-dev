@@ -9,25 +9,28 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame282 : Nat := 2
+def frame282 : Nat := 4
 def slim282 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.call
   (Option.some
-    { fst := List.cons 2 (List.cons 4 (List.cons 6 (List.cons 8 List.nil))),
+    { fst := List.cons 2 List.nil,
       snd :=
         {
           fst :=
             {
               fst :=
                 Flapjack.Spt.bn
-                  (Flapjack.Spt.bn Flapjack.Spt.ln
+                  (Flapjack.Spt.bn
                     (Flapjack.Spt.bn
                       (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                      Flapjack.Spt.ln))
+                      Flapjack.Spt.ln)
+                    (Flapjack.Spt.bn
+                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                      (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                   Flapjack.Spt.ln,
               snd := Flapjack.Spt.ln },
           snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 282, snd := 2 } } } })
-  (Option.some 281) List.nil
+  (Option.some 95) List.nil
   (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 282, snd := 3 } } })
 theorem frame282_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized282.2.1 optimized282.2.2 = frame282 := by cbv
 theorem slim282_eq : WordDepth.Executable.slim optimized282.2.2 = slim282 := by cbv
@@ -35,7 +38,7 @@ theorem frameEntry282_eq : frameEntry optimized282 = (282, frame282) := by
   unfold frameEntry
   rw [frame282_eq]
   rfl
-theorem slimEntry282_eq : slimEntry optimized282 = (282, 2, slim282) := by
+theorem slimEntry282_eq : slimEntry optimized282 = (282, 3, slim282) := by
   unfold slimEntry
   rw [slim282_eq]
   rfl

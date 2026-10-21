@@ -9,34 +9,9 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame445 : Nat := 7
+def frame445 : Nat := 5
 def slim445 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.seq
-  (Flapjack.WordLangProgHOL.call
-    (Option.some
-      { fst := List.cons 2 List.nil,
-        snd :=
-          {
-            fst :=
-              {
-                fst :=
-                  Flapjack.Spt.bn
-                    (Flapjack.Spt.bn
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn Flapjack.Spt.ln
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                        (Flapjack.Spt.bn Flapjack.Spt.ln
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
-                    Flapjack.Spt.ln,
-                snd := Flapjack.Spt.ln },
-            snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 2 } } } })
-    (Option.some 441) List.nil
-    (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
       { fst := List.cons 2 List.nil,
@@ -52,14 +27,35 @@ Flapjack.WordLangProgHOL.seq
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                       (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                        (Flapjack.Spt.bn Flapjack.Spt.ln
+                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
+                    Flapjack.Spt.ln,
+                snd := Flapjack.Spt.ln },
+            snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 2 } } } })
+    (Option.some 439) List.nil
+    (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 3 } } }))
+  (Flapjack.WordLangProgHOL.call
+    (Option.some
+      { fst := List.cons 2 List.nil,
+        snd :=
+          {
+            fst :=
+              {
+                fst :=
+                  Flapjack.Spt.bn
+                    (Flapjack.Spt.bn
+                      (Flapjack.Spt.bn
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                        Flapjack.Spt.ln)
+                      (Flapjack.Spt.bn
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
                         (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 4 } } } })
-    (Option.some 442) List.nil
+    (Option.some 440) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 445, snd := 5 } } }))
 theorem frame445_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized445.2.1 optimized445.2.2 = frame445 := by cbv
 theorem slim445_eq : WordDepth.Executable.slim optimized445.2.2 = slim445 := by cbv
@@ -67,7 +63,7 @@ theorem frameEntry445_eq : frameEntry optimized445 = (445, frame445) := by
   unfold frameEntry
   rw [frame445_eq]
   rfl
-theorem slimEntry445_eq : slimEntry optimized445 = (445, 7, slim445) := by
+theorem slimEntry445_eq : slimEntry optimized445 = (445, 5, slim445) := by
   unfold slimEntry
   rw [slim445_eq]
   rfl

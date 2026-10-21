@@ -31,7 +31,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 309, snd := 2 } } } })
-    (Option.some 290) List.nil
+    (Option.some 305) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 309, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call Option.none (Option.some 308) List.nil Option.none)
 theorem frame309_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized309.2.1 optimized309.2.2 = frame309 := by cbv
@@ -40,7 +40,7 @@ theorem frameEntry309_eq : frameEntry optimized309 = (309, frame309) := by
   unfold frameEntry
   rw [frame309_eq]
   rfl
-theorem slimEntry309_eq : slimEntry optimized309 = (309, 3, slim309) := by
+theorem slimEntry309_eq : slimEntry optimized309 = (309, 4, slim309) := by
   unfold slimEntry
   rw [slim309_eq]
   rfl

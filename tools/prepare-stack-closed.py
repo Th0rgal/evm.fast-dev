@@ -1,13 +1,37 @@
 from pathlib import Path
-nums=range(64,890)
-text="".join(f"import InitECandidate.Proofs.StackAnalysis.RankFacts{g}\n" for g in range(26))+"import InitECandidate.Proofs.StackAnalysis.Aggregate\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nset_option cbv.maxSteps 1000000000\nset_option cbv.warning false\nset_option Elab.async false\nnamespace InitECandidate.Proofs.StackAnalysis\nopen Flapjack Flapjack.Compiler.Backend\n"
+import json
+
+calls = json.loads(Path("work/lean-perf/stack-analysis/calls.json").read_text())
+nums = [identifier for identifier, _, _ in calls]
+group_count = (len(nums) + 31) // 32
+frames = {identifier: frame for identifier, frame, _ in calls}
+edges = {identifier: set() for identifier in nums}
+def scan(program, found):
+ if not isinstance(program, list): return
+ if program[0] == "seq":
+  scan(program[1], found)
+  scan(program[2], found)
+ else:
+  found.add(program[1])
+  if program[2] is not None: scan(program[2], found)
+  if program[3] is not None: scan(program[3], found)
+for identifier, _, program in calls: scan(program, edges[identifier])
+ranks = {}
+def rank(identifier):
+ if identifier not in ranks:
+  ranks[identifier] = max([rank(target) + 1 for target in edges[identifier]] + [0])
+ return ranks[identifier]
+entry_rank = rank(64)
+# RankedBound.fullCallGraphDepth_bounded uses 187 per rank level.
+depth_bound = (entry_rank + 1) * 187
+text="".join(f"import InitECandidate.Proofs.StackAnalysis.RankFacts{g}\n" for g in range(group_count))+"import InitECandidate.Proofs.StackAnalysis.Aggregate\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nset_option cbv.maxSteps 1000000000\nset_option cbv.warning false\nset_option Elab.async false\nnamespace InitECandidate.Proofs.StackAnalysis\nopen Flapjack Flapjack.Compiler.Backend\n"
 text+="theorem frameMap_eq : sptFromAList frameEntries = certificateFrames := by cbv\n"
 text+="theorem domains_eq :\n  sptMap (fun (_ : Nat × WordLangProgHOL (BitVec 64)) => PUnit.unit) (sptFromAList slimEntries) =\n  sptMap (fun (_ : Nat) => PUnit.unit) certificateFrames := by\n  rw [sptMap_sptFromAList]\n  cbv\n"
 text+="theorem frames_small : allSmall certificateFrames = true := by cbv\n"
-text+="theorem rank_entry : callRank 64 = 39 := by cbv\n"
+text+=f"theorem rank_entry : callRank 64 = {entry_rank} := by cbv\n"
 text+="theorem allRanked : slimEntries.all (fun (i,_,p) => ranked callRank present i p) = true := by\n  simp only [slimEntries, List.all_cons, List.all_nil, "+", ".join(f"ranked{n}" for n in nums)+", Bool.true_and]\n"
-text+="""
-theorem depth_bounded : bounded (StackDepthComputation.depthOfWordOutputs outputs) 7480 := by
+text+=f"""
+theorem depth_bounded : bounded (StackDepthComputation.depthOfWordOutputs outputs) {depth_bound} := by
   rw [depth_eq, frameMap_eq]
   have same : (fun k => (sptLookup k (sptFromAList slimEntries)).isSome) = present := by
     funext k

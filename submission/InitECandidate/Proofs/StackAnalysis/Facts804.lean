@@ -9,7 +9,7 @@ set_option cbv.warning false
 set_option Elab.async false
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
-def frame804 : Nat := 18
+def frame804 : Nat := 5
 def slim804 : WordLangProgHOL (BitVec 64) :=
 Flapjack.WordLangProgHOL.seq
   (Flapjack.WordLangProgHOL.call
@@ -22,22 +22,12 @@ Flapjack.WordLangProgHOL.seq
                 fst :=
                   Flapjack.Spt.bn
                     (Flapjack.Spt.bn
+                      (Flapjack.Spt.bn Flapjack.Spt.ln
+                        (Flapjack.Spt.bn Flapjack.Spt.ln
+                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                       (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                        (Flapjack.Spt.bn
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))))
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                        (Flapjack.Spt.bn
-                          (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                            (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
+                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                        (Flapjack.Spt.bn Flapjack.Spt.ln
                           (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
@@ -56,23 +46,15 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.bn
                       (Flapjack.Spt.bn
                         (Flapjack.Spt.bn
-                          (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                          (Flapjack.Spt.bn
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))))
+                          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                            Flapjack.Spt.ln)
+                          (Flapjack.Spt.bn Flapjack.Spt.ln
+                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                         (Flapjack.Spt.bn
-                          (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                          (Flapjack.Spt.bn
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                              (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
+                          (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                            Flapjack.Spt.ln)
+                          (Flapjack.Spt.bn Flapjack.Spt.ln
+                            (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                       Flapjack.Spt.ln,
                   snd := Flapjack.Spt.ln },
               snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 4 } } } })
@@ -90,29 +72,19 @@ Flapjack.WordLangProgHOL.seq
                       Flapjack.Spt.bn
                         (Flapjack.Spt.bn
                           (Flapjack.Spt.bn
-                            (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                            (Flapjack.Spt.bn
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))))
+                            (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                              Flapjack.Spt.ln)
+                            (Flapjack.Spt.bn Flapjack.Spt.ln
+                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                           (Flapjack.Spt.bn
-                            (Flapjack.Spt.bn
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit)))
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                            (Flapjack.Spt.bn
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
+                            (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                              Flapjack.Spt.ln)
+                            (Flapjack.Spt.bn Flapjack.Spt.ln
+                              (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                         Flapjack.Spt.ln,
                     snd := Flapjack.Spt.ln },
                 snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 6 } } } })
-        (Option.some 78) List.nil
+        (Option.some 801) List.nil
         (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 7 } } }))
       (Flapjack.WordLangProgHOL.seq
         (Flapjack.WordLangProgHOL.call
@@ -126,30 +98,19 @@ Flapjack.WordLangProgHOL.seq
                         Flapjack.Spt.bn
                           (Flapjack.Spt.bn
                             (Flapjack.Spt.bn
-                              (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                              (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))))
+                              (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                                Flapjack.Spt.ln)
+                              (Flapjack.Spt.bn Flapjack.Spt.ln
+                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
                             (Flapjack.Spt.bn
-                              (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bs Flapjack.Spt.ln PUnit.unit (Flapjack.Spt.ls PUnit.unit)))
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))
-                              (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)))
-                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
+                              (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                                Flapjack.Spt.ln)
+                              (Flapjack.Spt.bn Flapjack.Spt.ln
+                                (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
                           Flapjack.Spt.ln,
                       snd := Flapjack.Spt.ln },
                   snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 8 } } } })
-          (Option.some 739) List.nil
+          (Option.some 803) List.nil
           (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 9 } } }))
         (Flapjack.WordLangProgHOL.seq
           (Flapjack.WordLangProgHOL.call
@@ -163,104 +124,46 @@ Flapjack.WordLangProgHOL.seq
                           Flapjack.Spt.bn
                             (Flapjack.Spt.bn
                               (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                                (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
+                                (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                                  Flapjack.Spt.ln)
+                                Flapjack.Spt.ln)
                               (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) (Flapjack.Spt.ls PUnit.unit))
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))
-                                (Flapjack.Spt.bn (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)
-                                  (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit)
-                                    (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))))))
+                                (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                                  Flapjack.Spt.ln)
+                                Flapjack.Spt.ln))
                             Flapjack.Spt.ln,
                         snd := Flapjack.Spt.ln },
                     snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 10 } } } })
-            (Option.some 753) List.nil
+            (Option.some 784) List.nil
             (Option.some
               { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 11 } } }))
-          (Flapjack.WordLangProgHOL.seq
-            (Flapjack.WordLangProgHOL.call
-              (Option.some
-                { fst := List.cons 2 List.nil,
-                  snd :=
-                    {
-                      fst :=
-                        {
-                          fst :=
-                            Flapjack.Spt.bn
+          (Flapjack.WordLangProgHOL.call
+            (Option.some
+              { fst := List.cons 2 List.nil,
+                snd :=
+                  {
+                    fst :=
+                      {
+                        fst :=
+                          Flapjack.Spt.bn
+                            (Flapjack.Spt.bn Flapjack.Spt.ln
                               (Flapjack.Spt.bn
-                                (Flapjack.Spt.bn
-                                  (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                                    Flapjack.Spt.ln)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln
-                                    (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln)))
-                                (Flapjack.Spt.bn
-                                  (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                                    Flapjack.Spt.ln)
-                                  (Flapjack.Spt.bn Flapjack.Spt.ln
-                                    (Flapjack.Spt.bn (Flapjack.Spt.ls PUnit.unit) Flapjack.Spt.ln))))
-                              Flapjack.Spt.ln,
-                          snd := Flapjack.Spt.ln },
-                      snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 12 } } } })
-              (Option.some 753) List.nil
-              (Option.some
-                { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 13 } } }))
-            (Flapjack.WordLangProgHOL.seq
-              (Flapjack.WordLangProgHOL.call
-                (Option.some
-                  { fst := List.cons 2 List.nil,
-                    snd :=
-                      {
-                        fst :=
-                          {
-                            fst :=
-                              Flapjack.Spt.bn
-                                (Flapjack.Spt.bn
-                                  (Flapjack.Spt.bn
-                                    (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                                      Flapjack.Spt.ln)
-                                    Flapjack.Spt.ln)
-                                  (Flapjack.Spt.bn
-                                    (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                                      Flapjack.Spt.ln)
-                                    Flapjack.Spt.ln))
-                                Flapjack.Spt.ln,
-                            snd := Flapjack.Spt.ln },
-                        snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 14 } } } })
-                (Option.some 769) List.nil
-                (Option.some
-                  { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 15 } } }))
-              (Flapjack.WordLangProgHOL.call
-                (Option.some
-                  { fst := List.cons 2 List.nil,
-                    snd :=
-                      {
-                        fst :=
-                          {
-                            fst :=
-                              Flapjack.Spt.bn
-                                (Flapjack.Spt.bn Flapjack.Spt.ln
-                                  (Flapjack.Spt.bn
-                                    (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
-                                      Flapjack.Spt.ln)
-                                    Flapjack.Spt.ln))
-                                Flapjack.Spt.ln,
-                            snd := Flapjack.Spt.ln },
-                        snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 16 } } } })
-                (Option.some 70) List.nil
-                (Option.some
-                  { fst := 2,
-                    snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 17 } } }))))))))
+                                (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit))
+                                  Flapjack.Spt.ln)
+                                Flapjack.Spt.ln))
+                            Flapjack.Spt.ln,
+                        snd := Flapjack.Spt.ln },
+                    snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 12 } } } })
+            (Option.some 70) List.nil
+            (Option.some
+              { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 804, snd := 13 } } }))))))
 theorem frame804_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized804.2.1 optimized804.2.2 = frame804 := by cbv
 theorem slim804_eq : WordDepth.Executable.slim optimized804.2.2 = slim804 := by cbv
 theorem frameEntry804_eq : frameEntry optimized804 = (804, frame804) := by
   unfold frameEntry
   rw [frame804_eq]
   rfl
-theorem slimEntry804_eq : slimEntry optimized804 = (804, 15, slim804) := by
+theorem slimEntry804_eq : slimEntry optimized804 = (804, 3, slim804) := by
   unfold slimEntry
   rw [slim804_eq]
   rfl

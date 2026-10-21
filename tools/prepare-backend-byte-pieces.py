@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Split exact native byte agreement at section and submitted 4KiB boundaries."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,re,subprocess,concurrent.futures
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
-ids=[0,1,2,4,5,6]+list(range(64,890));position=0;groups={};manifest=[]
+ids=[0,1,2,4,5,6]+list(range(64,STOP_LABEL));position=0;groups={};manifest=[]
 header="set_option autoImplicit false\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nnamespace InitECandidate.Proofs.BackendStages.BytePieces\n"
 def check(name,source):
  cert=work/f"{name}.check.json"
@@ -49,5 +50,5 @@ for n in ids:
 for f in futures.values():f.result()
 pool.shutdown()
 if position%4096:candidate(position//4096)
-assert position==904056,position
+assert position==979000,position
 print(f"All section/candidate byte agreements complete: {position} bytes",flush=True)

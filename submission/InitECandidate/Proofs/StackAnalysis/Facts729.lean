@@ -11,34 +11,31 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.StackAnalysis
 def frame729 : Nat := 2
 def slim729 : WordLangProgHOL (BitVec 64) :=
-Flapjack.WordLangProgHOL.seq (Flapjack.WordLangProgHOL.call Option.none (Option.some 728) List.nil Option.none)
-  (Flapjack.WordLangProgHOL.call
-    (Option.some
-      {
-        fst :=
-          List.cons 2 (List.cons 4 (List.cons 6 (List.cons 8 (List.cons 10 (List.cons 12 (List.cons 14 List.nil)))))),
-        snd :=
-          {
-            fst :=
-              {
-                fst :=
-                  Flapjack.Spt.bn
-                    (Flapjack.Spt.bn Flapjack.Spt.ln
-                      (Flapjack.Spt.bn
-                        (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
-                        Flapjack.Spt.ln))
-                    Flapjack.Spt.ln,
-                snd := Flapjack.Spt.ln },
-            snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 729, snd := 2 } } } })
-    (Option.some 717) List.nil
-    (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 729, snd := 3 } } }))
+Flapjack.WordLangProgHOL.call
+  (Option.some
+    { fst := List.cons 2 List.nil,
+      snd :=
+        {
+          fst :=
+            {
+              fst :=
+                Flapjack.Spt.bn
+                  (Flapjack.Spt.bn Flapjack.Spt.ln
+                    (Flapjack.Spt.bn
+                      (Flapjack.Spt.bn (Flapjack.Spt.bn Flapjack.Spt.ln (Flapjack.Spt.ls PUnit.unit)) Flapjack.Spt.ln)
+                      Flapjack.Spt.ln))
+                  Flapjack.Spt.ln,
+              snd := Flapjack.Spt.ln },
+          snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 729, snd := 2 } } } })
+  (Option.some 77) List.nil
+  (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 729, snd := 3 } } })
 theorem frame729_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized729.2.1 optimized729.2.2 = frame729 := by cbv
 theorem slim729_eq : WordDepth.Executable.slim optimized729.2.2 = slim729 := by cbv
 theorem frameEntry729_eq : frameEntry optimized729 = (729, frame729) := by
   unfold frameEntry
   rw [frame729_eq]
   rfl
-theorem slimEntry729_eq : slimEntry optimized729 = (729, 7, slim729) := by
+theorem slimEntry729_eq : slimEntry optimized729 = (729, 3, slim729) := by
   unfold slimEntry
   rw [slim729_eq]
   rfl

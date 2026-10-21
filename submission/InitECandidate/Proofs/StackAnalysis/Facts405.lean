@@ -28,7 +28,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 405, snd := 2 } } } })
-    (Option.some 401) List.nil
+    (Option.some 404) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 405, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
@@ -46,7 +46,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 405, snd := 4 } } } })
-    (Option.some 79) List.nil
+    (Option.some 394) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 405, snd := 5 } } }))
 theorem frame405_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized405.2.1 optimized405.2.2 = frame405 := by cbv
 theorem slim405_eq : WordDepth.Executable.slim optimized405.2.2 = slim405 := by cbv

@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Certify zero-label target collection as thin section-local key lists."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import pathlib,time,json,subprocess,concurrent.futures
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 def run(name,source,out=None):
@@ -24,4 +25,4 @@ def process(n):
  run(f"ZeroTargets{n}",source,root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/ZeroTargets{n}.olean")
 
 with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
- list(pool.map(process,[0,1,2,4,5,6]+list(range(64,890))))
+ list(pool.map(process,[0,1,2,4,5,6]+list(range(64,STOP_LABEL))))

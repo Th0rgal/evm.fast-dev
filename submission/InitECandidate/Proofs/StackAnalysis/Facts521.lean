@@ -28,7 +28,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 2 } } } })
-    (Option.some 477) List.nil
+    (Option.some 475) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.seq
     (Flapjack.WordLangProgHOL.call
@@ -52,7 +52,7 @@ Flapjack.WordLangProgHOL.seq
                       Flapjack.Spt.ln,
                   snd := Flapjack.Spt.ln },
               snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 4 } } } })
-      (Option.some 477) List.nil
+      (Option.some 475) List.nil
       (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 5 } } }))
     (Flapjack.WordLangProgHOL.seq
       (Flapjack.WordLangProgHOL.call
@@ -78,7 +78,7 @@ Flapjack.WordLangProgHOL.seq
                         Flapjack.Spt.ln,
                     snd := Flapjack.Spt.ln },
                 snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 6 } } } })
-        (Option.some 472) List.nil
+        (Option.some 470) List.nil
         (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 7 } } }))
       (Flapjack.WordLangProgHOL.seq
         (Flapjack.WordLangProgHOL.call
@@ -104,7 +104,7 @@ Flapjack.WordLangProgHOL.seq
                           Flapjack.Spt.ln,
                       snd := Flapjack.Spt.ln },
                   snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 8 } } } })
-          (Option.some 464) List.nil
+          (Option.some 462) List.nil
           (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 9 } } }))
         (Flapjack.WordLangProgHOL.seq
           (Flapjack.WordLangProgHOL.call
@@ -124,7 +124,7 @@ Flapjack.WordLangProgHOL.seq
                             Flapjack.Spt.ln,
                         snd := Flapjack.Spt.ln },
                     snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 10 } } } })
-            (Option.some 141) List.nil
+            (Option.some 143) List.nil
             (Option.some
               { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 11 } } }))
           (Flapjack.WordLangProgHOL.seq
@@ -145,7 +145,7 @@ Flapjack.WordLangProgHOL.seq
                               Flapjack.Spt.ln,
                           snd := Flapjack.Spt.ln },
                       snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 12 } } } })
-              (Option.some 478) List.nil
+              (Option.some 476) List.nil
               (Option.some
                 { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 13 } } }))
             (Flapjack.WordLangProgHOL.call
@@ -165,7 +165,7 @@ Flapjack.WordLangProgHOL.seq
                               Flapjack.Spt.ln,
                           snd := Flapjack.Spt.ln },
                       snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 14 } } } })
-              (Option.some 492) List.nil
+              (Option.some 490) List.nil
               (Option.some
                 { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 521, snd := 15 } } })))))))
 theorem frame521_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized521.2.1 optimized521.2.2 = frame521 := by cbv

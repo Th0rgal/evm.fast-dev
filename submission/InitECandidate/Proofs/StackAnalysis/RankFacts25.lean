@@ -12,18 +12,6 @@ import InitECandidate.Proofs.StackAnalysis.Facts874
 import InitECandidate.Proofs.StackAnalysis.Facts875
 import InitECandidate.Proofs.StackAnalysis.Facts876
 import InitECandidate.Proofs.StackAnalysis.Facts877
-import InitECandidate.Proofs.StackAnalysis.Facts878
-import InitECandidate.Proofs.StackAnalysis.Facts879
-import InitECandidate.Proofs.StackAnalysis.Facts880
-import InitECandidate.Proofs.StackAnalysis.Facts881
-import InitECandidate.Proofs.StackAnalysis.Facts882
-import InitECandidate.Proofs.StackAnalysis.Facts883
-import InitECandidate.Proofs.StackAnalysis.Facts884
-import InitECandidate.Proofs.StackAnalysis.Facts885
-import InitECandidate.Proofs.StackAnalysis.Facts886
-import InitECandidate.Proofs.StackAnalysis.Facts887
-import InitECandidate.Proofs.StackAnalysis.Facts888
-import InitECandidate.Proofs.StackAnalysis.Facts889
 import InitECandidate.Proofs.StackAnalysis.RankData
 import Lean
 set_option maxRecDepth 1000000
@@ -46,17 +34,5 @@ theorem ranked874 : ranked callRank present 874 slim874 = true := by cbv
 theorem ranked875 : ranked callRank present 875 slim875 = true := by cbv
 theorem ranked876 : ranked callRank present 876 slim876 = true := by cbv
 theorem ranked877 : ranked callRank present 877 slim877 = true := by cbv
-theorem ranked878 : ranked callRank present 878 slim878 = true := by cbv
-theorem ranked879 : ranked callRank present 879 slim879 = true := by cbv
-theorem ranked880 : ranked callRank present 880 slim880 = true := by cbv
-theorem ranked881 : ranked callRank present 881 slim881 = true := by cbv
-theorem ranked882 : ranked callRank present 882 slim882 = true := by cbv
-theorem ranked883 : ranked callRank present 883 slim883 = true := by cbv
-theorem ranked884 : ranked callRank present 884 slim884 = true := by cbv
-theorem ranked885 : ranked callRank present 885 slim885 = true := by cbv
-theorem ranked886 : ranked callRank present 886 slim886 = true := by cbv
-theorem ranked887 : ranked callRank present 887 slim887 = true := by cbv
-theorem ranked888 : ranked callRank present 888 slim888 = true := by cbv
-theorem ranked889 : ranked callRank present 889 slim889 = true := by cbv
-#print axioms ranked889
+#print axioms ranked877
 end InitECandidate.Proofs.StackAnalysis

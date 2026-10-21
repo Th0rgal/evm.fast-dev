@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Independent exact skip-filter/initial-encoding proposals for assembly sections."""
+from guest_layout import LAST_LABEL, STOP_LABEL
 import argparse,pathlib,subprocess,time,json,os,concurrent.futures
 parser=argparse.ArgumentParser();parser.add_argument("stage",choices=["Filtered","Encoded"]);parser.add_argument("labels",nargs="*",type=int);parser.add_argument("--all",action="store_true");parser.add_argument("--workers",type=int,default=1);args=parser.parse_args()
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages";stage=args.stage
-labels=list(range(64,890)) if args.all else args.labels
+labels=list(range(64,STOP_LABEL)) if args.all else args.labels
 labels=[n for n in labels if not ((work/f"{stage}{n}.check.json").exists() and json.loads((work/f"{stage}{n}.check.json").read_text())["returncode"] == 0 and (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{stage}{n}.olean").exists())]
 previous="Section" if stage=="Filtered" else "Filtered"
 prefix=["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py")];env=dict(os.environ,LAKE_ARTIFACT_CACHE="false")

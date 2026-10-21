@@ -32,7 +32,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 244, snd := 2 } } } })
-    (Option.some 243) List.nil
+    (Option.some 78) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 244, snd := 3 } } }))
   (Flapjack.WordLangProgHOL.call
     (Option.some
@@ -50,7 +50,7 @@ Flapjack.WordLangProgHOL.seq
                     Flapjack.Spt.ln,
                 snd := Flapjack.Spt.ln },
             snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 244, snd := 4 } } } })
-    (Option.some 242) List.nil
+    (Option.some 77) List.nil
     (Option.some { fst := 2, snd := { fst := Flapjack.WordLangProgHOL.skip, snd := { fst := 244, snd := 5 } } }))
 theorem frame244_eq : InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) optimized244.2.1 optimized244.2.2 = frame244 := by cbv
 theorem slim244_eq : WordDepth.Executable.slim optimized244.2.2 = slim244 := by cbv
@@ -58,7 +58,7 @@ theorem frameEntry244_eq : frameEntry optimized244 = (244, frame244) := by
   unfold frameEntry
   rw [frame244_eq]
   rfl
-theorem slimEntry244_eq : slimEntry optimized244 = (244, 5, slim244) := by
+theorem slimEntry244_eq : slimEntry optimized244 = (244, 3, slim244) := by
   unfold slimEntry
   rw [slim244_eq]
   rfl
