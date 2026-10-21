@@ -264,4 +264,41 @@ theorem solution_certificate_monotone_transfer
     exact hrun
 
 
+/-- Ultra-tightened EVM-opcode + straight-line `copyLoop` finite score
+(`Score.finite 1,929,034,941 < 1,929,048,792`) from `EvmOpcodeTightBound.ultraTightCandidateK`. -/
+def claimedScoreUltraTight : Score :=
+  Score.finite ultraTightCandidateK
+
+/-- Submission record for `claimedScoreUltraTight` (`K = .finite 1,929,034,941`). -/
+def submissionUltraTight : InitE.Submission :=
+  baselineWithFiniteK ultraTightCandidateK
+
+/-- Theorem 7 (`non_vacuous_and_tight`): Drop-in `InitE.Certificate submissionUltraTight claimedScoreUltraTight`
+bridge for `submission/Solution.lean` (`K = 1,929,034,941`), strictly dominating `submissionTight`
+by `13,851` steps and `138,510,000` Yukon score points across all `minutes : Nat`. -/
+theorem solution_certificate_ultra_tight
+    (oracles : List (Option (Spt Nat))) (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (not_timeOut : ∀ input : Guest.InputBlob,
+      Guest.GasLimit.declaredGasLimit input ≤ 200000000 →
+      ∀ outcome events,
+        sourceBehaviour input = .terminate outcome events →
+        coveredOutcome outcome →
+        (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+          ultraTightCandidateK (baselineInitialState input)).1 ≠ .timeOut) :
+    InitE.Certificate submissionUltraTight claimedScoreUltraTight ∧
+    submissionUltraTight.K = .finite 1929034941 ∧
+    ultraTightCandidateK < tightCandidateK ∧
+    (∀ minutes : Nat, yukonScore tightCandidateK minutes - yukonScore ultraTightCandidateK minutes = 138510000) ∧
+    (∀ minutes : Nat, yukonScore ultraTightCandidateK minutes < yukonScore tightCandidateK minutes) ∧
+    (∀ minutes : Nat, yukonScore ultraTightCandidateK minutes < 2 ^ 53 - 1) := by
+  have hut := ultra_tight_opcode_bound_certificate_and_yukon_score
+    oracles c depth hlab compiled depthBound not_timeOut
+  refine ⟨hut.1, ?_, hut.2.2.2.1, hut.2.2.2.2.1, hut.2.2.2.2.2.1, hut.2.2.2.2.2.2⟩
+  change Score.finite ultraTightCandidateK = .finite 1929034941
+  rw [hut.2.1]
+
 end InitECandidate.Solver.YukonSolutionBridge

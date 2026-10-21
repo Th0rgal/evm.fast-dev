@@ -351,6 +351,12 @@ theorem full_roadmap_farkas_gas_compiler_fastpaths_and_certificate
       uncachedGuest200MBound = 110593745629 ∧
       collidingHtabProbeSteps dos2ColdNoopKeyCount = 9026045030 ∧
       cachedGuest200MBound - patchedGuest200MBound = 711679601 ∧
+      checkFarkasCertificate patchedGuestSystem200M costFastPathObj fastPathPatchedFarkasCert200M = true ∧
+      checkFarkasCertificate fastPathHashedExtSystem200M costFastPathObj fastPathHashedExtFarkasCert200M = true ∧
+      fastPathPatched200MBound = 6209730520 ∧
+      fastPathHashedExt200MBound = 3867899091 ∧
+      patchedGuest200MBound - fastPathHashedExt200MBound = 2707683297 ∧
+      232 * fastPathHashedExt200MBound < yukon ∧
       validateHeadersSteps headers ≤ 10880000) ∧
     -- (C) Verified evm-asm Fast Paths, div.fast Hint Soundness & Sail / Cross-Prover Equivalence
     (add256_evm_asm.cycles = 12 ∧
@@ -398,7 +404,7 @@ theorem full_roadmap_farkas_gas_compiler_fastpaths_and_certificate
     @pan_to_riscv_target_full_compiler_clock_ratio,
     ⟨hFarkas.2.2.2.1, hFarkas.2.2.2.2.1, hFarkas.2.2.2.2.2.1, hFarkas.2.2.2.2.2.2.1,
       hDos1.2.2.2.2.1, hDos1.2.2.2.2.2.2.2.1, hDos2.2.2.2.2.2.2.2.1,
-      hDos3.2.2.2.2.2.2.2.1, hHdr.2.2.1⟩,
+      hDos3.2.2.2.2.2.2.2.1, by decide, by decide, by decide, by decide, by decide, by decide, hHdr.2.2.1⟩,
     ⟨hAdd.2.1, hSub.2.1, hCopy.2.1, hCopy.2.2.2.2.2.1, hCopy.2.2.2.2.2.2.2.1,
       hSsz.2.1, hSsz.2.2.2.2.2.2, hDiv.2.2.1, hDiv.1, hSail, hCross⟩,
     hTotEq, hCert⟩

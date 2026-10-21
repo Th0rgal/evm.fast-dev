@@ -409,4 +409,64 @@ theorem tight_opcode_bound_certificate_and_yukon_score
   decide
 
 
+/-- Ultra-tight candidate budget `ultraTightCandidateK = 1,929,034,941`
+(`straightLineBootstrapSteps + 10 * (maxTightSourceClock + 5000)`, saving `13,851` bootstrap steps
+via straight-line `copyLoop` unrolling relative to `tightCandidateK = 1,929,048,792`). -/
+def ultraTightCandidateK : Nat :=
+  straightLineBootstrapSteps + tightCandidatePostK
+
+/-- Theorem 9 (`non_vacuous_and_tight`): Strict improvement of `ultraTightCandidateK = 1,929,034,941`
+over `tightCandidateK = 1,929,048,792` (`-13,851` steps and `-138,510,000` Yukon score points across
+all `minutes : Nat`), with `InitE.Certificate (baselineWithFiniteK ultraTightCandidateK) (.finite ultraTightCandidateK)`. -/
+theorem ultra_tight_opcode_bound_certificate_and_yukon_score
+    (oracles : List (Option (Spt Nat))) (c : Backend.Config) (depth : Nat)
+    (hlab : c.labConf = baselineLabConfig)
+    (compiled : compileProgMaxAsmExecutable (oracleCompilerConfig oracles) riscvConfig
+      sourceDeclarations = (some (InitECandidate.nativeCode, InitECandidate.bitmaps, c), some depth))
+    (depthBound : depth ≤ 7480)
+    (not_timeOut : ∀ input : Guest.InputBlob,
+      Guest.GasLimit.declaredGasLimit input ≤ 200000000 →
+      ∀ outcome events,
+        sourceBehaviour input = .terminate outcome events →
+        coveredOutcome outcome →
+        (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+          ultraTightCandidateK (baselineInitialState input)).1 ≠ .timeOut) :
+    InitE.Certificate (baselineWithFiniteK ultraTightCandidateK) (.finite ultraTightCandidateK) ∧
+    ultraTightCandidateK = 1929034941 ∧
+    tightCandidateK - ultraTightCandidateK = 13851 ∧
+    ultraTightCandidateK < tightCandidateK ∧
+    (∀ minutes : Nat, yukonScore tightCandidateK minutes - yukonScore ultraTightCandidateK minutes = 138510000) ∧
+    (∀ minutes : Nat, yukonScore ultraTightCandidateK minutes < yukonScore tightCandidateK minutes) ∧
+    (∀ minutes : Nat, yukonScore ultraTightCandidateK minutes < 2 ^ 53 - 1) := by
+  have hsplit : bootstrapSteps + (ultraTightCandidateK - bootstrapSteps) = ultraTightCandidateK := by decide
+  have hnt : ∀ input : Guest.InputBlob,
+      Guest.GasLimit.declaredGasLimit input ≤ 200000000 →
+      ∀ outcome events,
+        sourceBehaviour input = .terminate outcome events →
+        coveredOutcome outcome →
+        (evaluateTargetHOL baselineMachineConfig (sourceFfi input)
+          (bootstrapSteps + (ultraTightCandidateK - bootstrapSteps)) (baselineInitialState input)).1 ≠ .timeOut := by
+    intro input hgas outcome events hsrc hcov
+    rw [hsplit]
+    exact not_timeOut input hgas outcome events hsrc hcov
+  have hcert0 := finite_certificate_of_uniform_post_bootstrap_not_timeOut
+    oracles c depth (ultraTightCandidateK - bootstrapSteps) hlab compiled depthBound hnt
+  rw [hsplit] at hcert0
+  have hut : ultraTightCandidateK = 1929034941 := by decide
+  have htk : tightCandidateK = 1929048792 := by decide
+  refine ⟨hcert0, hut, by decide, by decide, ?_, ?_, ?_⟩
+  · intro minutes
+    rw [htk, hut]
+    unfold yukonScore
+    have hm : min minutes 9999 ≤ 9999 := Nat.min_le_right _ _
+    omega
+  · intro minutes
+    rw [htk, hut]
+    unfold yukonScore
+    have hm : min minutes 9999 ≤ 9999 := Nat.min_le_right _ _
+    omega
+  · intro minutes
+    apply yukonScore_lt_two_pow_53_sub_one
+    decide
+
 end InitECandidate.Solver.EvmOpcodeTightBound

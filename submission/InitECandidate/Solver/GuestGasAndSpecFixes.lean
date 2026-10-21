@@ -629,4 +629,146 @@ theorem patched_guest_bound_attained_and_tight :
     22 * 6100805 ≤ inputBytes ∧
     10880000 ≤ blockFixed := by decide
 
+/-! ## Section 4: Fast-Path Guest (`evm-asm` + `div.fast` + Hashed Extension Witness) Tightened Farkas Bounds -/
+
+/-- Variable cost under `evm-asm` (`add256_evm_asm` / `sub256_evm_asm` = 12 cycles for 3 gas = 4 cycles/gas)
+and `div.fast` (28 cycles for 5-gas `DIV`/`MOD`), reducing pure opcode gas coefficient `P` from `18` to `4`. -/
+def costFastPath (A K L B E n2 d r md ms P T : Nat) : Nat :=
+  3473 * A + 5274 * K + 3124 * L + 633 * B + 439 * E + 127 * n2 + 405 * d + 405 * r +
+    43 * md + 79 * ms + 4 * P + 42382 * T
+
+/-- Total Pancake steps for a block under `costFastPath`. -/
+def totalStepsFastPath (A K L B E n2 d r md ms P T : Nat) : Nat :=
+  blockFixed + inputBytes + costFastPath A K L B E n2 d r md ms P T
+
+/-- Objective vector of `costFastPath` for `dotNat`. -/
+def costFastPathObj : List Nat :=
+  [3473, 5274, 3124, 633, 439, 127, 405, 405, 43, 79, 4, 42382]
+
+/-- Tightened dual Farkas certificate on the exact `patchedGuestSystem200M` constraint system
+for `costFastPathObj` (eliminating the `8,651` branch-column slack in `patchedGuestFarkasCert200M`
+by setting `y_3 = 4309 × 2105 = 9,070,445` instead of `12960 × 2105`):
+`multipliers = [748867, 0, 20243785, 9070445, 86305, 852525]`, `scale = 46,310 = 22 × 2,105`,
+`bound = 264,197,354,922,800`. -/
+def fastPathPatchedFarkasCert200M : FarkasCertificate :=
+  ⟨[748867, 0, 20243785, 9070445, 86305, 852525], 46310, 264197354922800⟩
+
+/-- Global Pancake step bound (`6,209,730,520`) on `patchedGuestSystem200M` under `costFastPath`,
+saving `365,851,868` steps relative to `patchedGuest200MBound = 6,575,582,388`. -/
+def fastPathPatched200MBound : Nat :=
+  blockFixed + inputBytes + (264197354922800 + 46309) / 46310
+
+/-- Constraint system `fastPathHashedExtSystem200M` incorporating Fix 2 (`child_len == 32` for
+non-inline MPT extension/account-leaf nodes, giving `32 * n2` witness byte weight with at most
+`K` storage leaves `< 32` bytes absorbed into `64 * K` on the RHS of `hw_ext`):
+`32 n2 + 22 d + 54 r + 4 md + 5 ms ≤ 32 A + 64 K + 134,217,712`. -/
+def fastPathHashedExtSystem200M : List NatLinearInequality :=
+  [ ⟨[2400, 2105, 1900, 0, 0, 0, 0, 0, 0, 0, 1, 12000], [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 200000000⟩
+  , ⟨[0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0], [82, 63, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0⟩
+  , ⟨[0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0], [66, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 0⟩
+  , ⟨[0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0], 0⟩
+  , ⟨[0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0], [2, 2, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0], 0⟩
+  , ⟨[0, 0, 0, 0, 0, 32, 22, 54, 4, 5, 0, 0], [32, 64, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], inputBytes⟩
+  ]
+
+/-- Dual Farkas certificate for `fastPathHashedExtSystem200M`:
+`multipliers = [12920, 0, 21858, 2022732, 1396112, 61683]`, `scale = 3,230`,
+`bound = 10,862,951,129,296`. -/
+def fastPathHashedExtFarkasCert200M : FarkasCertificate :=
+  ⟨[12920, 0, 21858, 2022732, 1396112, 61683], 3230, 10862951129296⟩
+
+/-- Global Pancake step bound (`3,867,899,091 < 3.87B`) under `fastPathHashedExtSystem200M`,
+saving `2,707,683,297` steps (`-41.2%`) relative to `patchedGuest200MBound = 6,575,582,388`
+and sitting `232×` below the Yukon ceiling `900,719,925,474`. -/
+def fastPathHashedExt200MBound : Nat :=
+  blockFixed + inputBytes + (10862951129296 + 3229) / 3230
+
+private theorem dotNat_costFastPathObj (A K L B E n2 d r md ms P T : Nat) :
+    dotNat costFastPathObj [A, K, L, B, E, n2, d, r, md, ms, P, T] =
+      costFastPath A K L B E n2 d r md ms P T := by
+  simp only [costFastPathObj, costFastPath, dotNat, Nat.add_zero]
+  ac_rfl
+
+private theorem fastPathHashedExtSystem200M_holds (A K L B E n2 d r md ms P T declaredGasLimit : Nat)
+    (hGasLimit : declaredGasLimit ≤ 200000000)
+    (hg : 12000 * T + 2400 * A + 2105 * K + 1900 * L + P ≤ declaredGasLimit)
+    (h1 : B + E ≤ 82 * A + 63 * K)
+    (h2 : B + E ≤ 66 * A + 64 * K)
+    (hb : B ≤ r + K + A)
+    (he : E ≤ n2 + 2 * (K + A))
+    (hw_ext : 32 * n2 + 22 * d + 54 * r + 4 * md + 5 * ms ≤ inputBytes + 32 * A + 64 * K) :
+    SystemHolds fastPathHashedExtSystem200M [A, K, L, B, E, n2, d, r, md, ms, P, T] := by
+  simp only [fastPathHashedExtSystem200M, SystemHolds, NatLinearInequality.Holds, dotNat,
+    Nat.zero_mul, Nat.one_mul, Nat.zero_add, Nat.add_zero]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, trivial⟩
+  · have hg1 : 2400 * A + (2105 * K + (1900 * L + (P + 12000 * T))) =
+        12000 * T + 2400 * A + 2105 * K + 1900 * L + P := by ac_rfl
+    rw [hg1]
+    exact Nat.le_trans hg hGasLimit
+  · exact h1
+  · exact h2
+  · have hb1 : A + (K + r) = r + K + A := by ac_rfl
+    rw [hb1]
+    exact hb
+  · have he1 : 2 * A + (2 * K + n2) = n2 + 2 * (K + A) := by
+      simp only [Nat.mul_add]; ac_rfl
+    rw [he1]
+    exact he
+  · have hwL : 32 * n2 + (22 * d + (54 * r + (4 * md + 5 * ms))) =
+        32 * n2 + 22 * d + 54 * r + 4 * md + 5 * ms := by ac_rfl
+    have hwR : 32 * A + 64 * K + inputBytes = inputBytes + 32 * A + 64 * K := by ac_rfl
+    rw [hwL, hwR]
+    exact hw_ext
+
+/-- **Theorem (Fast-Path `evm-asm` + `div.fast` + Hashed Extension Witness Farkas Bound `≤ 3,867,899,091`)**:
+1. On the exact `patchedGuestSystem200M` constraints, `fastPathPatchedFarkasCert200M` certifies
+   `totalStepsFastPath A K L B E n2 d r md ms P T ≤ 6,209,730,520` (`365,851,868` steps below `6,575,582,388`).
+2. Under `fastPathHashedExtSystem200M` (Fix 2 `32 * n2` extension/account-leaf witness weight),
+   `fastPathHashedExtFarkasCert200M` certifies (with zero `omega` calls) that
+   `3230 * costFastPath A K L B E n2 d r md ms P T ≤ 10,862,951,129,296` and
+   `totalStepsFastPath A K L B E n2 d r md ms P T ≤ 3,867,899,091` (`< 3.87B` Pancake steps,
+   saving `2,707,683,297` steps relative to `6,575,582,388` and `232×` below Yukon `900,719,925,474`),
+   and is attained within `1,078` steps at `(K = 41553, B = 2576286, E = 83106, d = 69, r = 2534733, md = 1, P = 112530935)`. -/
+theorem fast_path_guest_farkas_certified_200m_bounds
+    (cfg : PatchedGuestConfig)
+    (A K L B E n2 d r md ms P T declaredGasLimit : Nat)
+    (hPatched : cfg.isFullyPatched = true)
+    (hGasLimit : declaredGasLimit ≤ 200000000)
+    (hg : 12000 * T + 2400 * A + 2105 * K + 1900 * L + P ≤ declaredGasLimit)
+    (h1 : B + E ≤ 82 * A + 63 * K)
+    (h2 : B + E ≤ 66 * A + 64 * K)
+    (hb : B ≤ r + K + A)
+    (he : E ≤ n2 + 2 * (K + A))
+    (hw_ext : 32 * n2 + 22 * d + 54 * r + 4 * md + 5 * ms ≤ inputBytes + 32 * A + 64 * K) :
+    checkFarkasCertificate patchedGuestSystem200M costFastPathObj fastPathPatchedFarkasCert200M = true ∧
+    checkFarkasCertificate fastPathHashedExtSystem200M costFastPathObj fastPathHashedExtFarkasCert200M = true ∧
+    3230 * costFastPath A K L B E n2 d r md ms P T ≤ 10862951129296 ∧
+    totalStepsFastPath A K L B E n2 d r md ms P T ≤ 3867899091 ∧
+    fastPathPatched200MBound = 6209730520 ∧
+    fastPathHashedExt200MBound = 3867899091 ∧
+    patchedGuest200MBound - fastPathPatched200MBound = 365851868 ∧
+    patchedGuest200MBound - fastPathHashedExt200MBound = 2707683297 ∧
+    232 * fastPathHashedExt200MBound < yukon ∧
+    yukon < 233 * fastPathHashedExt200MBound ∧
+    totalStepsFastPath 0 41553 0 2576286 83106 0 69 2534733 1 0 112530935 0 = 3867898013 ∧
+    fastPathHashedExt200MBound - totalStepsFastPath 0 41553 0 2576286 83106 0 69 2534733 1 0 112530935 0 = 1078 := by
+  have _ := hPatched
+  have hCert1 : checkFarkasCertificate patchedGuestSystem200M costFastPathObj fastPathPatchedFarkasCert200M = true := by
+    decide
+  have hCert2 : checkFarkasCertificate fastPathHashedExtSystem200M costFastPathObj fastPathHashedExtFarkasCert200M = true := by
+    decide
+  have hSys2 := fastPathHashedExtSystem200M_holds A K L B E n2 d r md ms P T declaredGasLimit hGasLimit hg h1 h2 hb he hw_ext
+  have hSound2 := (farkas_certificate_sound fastPathHashedExtSystem200M costFastPathObj fastPathHashedExtFarkasCert200M
+    [A, K, L, B, E, n2, d, r, md, ms, P, T] hCert2 hSys2).1
+  rw [dotNat_costFastPathObj] at hSound2
+  change 3230 * costFastPath A K L B E n2 d r md ms P T ≤ 10862951129296 at hSound2
+  have hCost2 : costFastPath A K L B E n2 d r md ms P T ≤ 3363142765 := by
+    have hDiv := Nat.div_le_div_right hSound2 (c := 3230)
+    rw [Nat.mul_div_right _ (by decide : 0 < 3230)] at hDiv
+    exact Nat.le_trans hDiv (by decide : 10862951129296 / 3230 ≤ 3363142765)
+  have hTotal2 : totalStepsFastPath A K L B E n2 d r md ms P T ≤ 3867899091 := by
+    unfold totalStepsFastPath blockFixed inputBytes
+    exact Nat.le_trans (Nat.add_le_add_left hCost2 (370538614 + 134217712)) (by decide)
+  exact ⟨hCert1, hCert2, hSound2, hTotal2, by decide, by decide, by decide, by decide, by decide, by decide, by decide, by decide⟩
+
 end InitECandidate.Solver.GuestGasAndSpecFixes
