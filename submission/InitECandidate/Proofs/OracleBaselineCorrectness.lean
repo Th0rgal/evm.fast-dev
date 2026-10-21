@@ -66,7 +66,7 @@ theorem oracle_baseline_behaviour_eq (oracles : List (Option (Spt Nat)))
   obtain ⟨hmc, hpositive, hsplit, hbase, hlen, htop, hglobals, hdomain,
     haligned, hadj2, hadj4, hleft, hright, hmax, hendian, hinstalled, hlimits⟩ := installed
   have correct := panToTargetCompileSemanticsOraclesRiscVSource oracles mc
-    (Guest.guestAst.map Pancake.PanLang.declToHOL) bytes bitmaps c (some depth)
+    (Guest.Software.guestAst.map Pancake.PanLang.declToHOL) bytes bitmaps c (some depth)
     (sourceInitialState input) ms globalsWords heapLen adj2 adj4
     (sourceFfi input) cbspace dataSp (ofString "main") hmc sourceHasMain
     ⟨compiled, sourceGoodCode, sourceDistinctParams, sourceDistinctFunctions,

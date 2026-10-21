@@ -1,4 +1,4 @@
-import Guest.Ast
+import Guest.SoftwareAst
 import Flapjack.RiscV.NativeSource
 
 /-! Propose literal compiler metadata. Native execution generates the candidate;
@@ -59,7 +59,7 @@ end InitE
 end GenCompilerConfig
 
 def main (args : List String) : IO Unit := do
-  let some (_, _, config) := Flapjack.RiscV.NativeSource.compileDeclarations Guest.guestAst
+  let some (_, _, config) := Flapjack.RiscV.NativeSource.compileDeclarations Guest.Software.guestAst
     | throw (IO.userError "guest compilation failed")
   IO.FS.writeFile (args.headD "submission/InitECandidate/Proofs/CompilerConfigLiteral.lean")
     (GenCompilerConfig.output config)
