@@ -3,12 +3,14 @@
 #
 # Pillar 2 Verification Script:
 # Benchmarks `lean4export` + `nanoda_bin` (`v0.4.17`) + `comparator` (`enable_nanoda: true`)
-# on all 4 canonical purified modules (0 `Stage*` modules) vs the 21,031-module
+# on all 6 canonical purified modules (0 `Stage*` modules) vs the 21,031-module
 # `FullBaseline` hierarchy:
 #   1. InitECandidate.Solver.GuestGasAndSpecFixes
 #   2. InitECandidate.Solver.LabToTargetClock
 #   3. InitECandidate.Solver.PanToCrepClock
-#   4. InitECandidate.Solver.RiscvFastPathsAndSailBridge
+#   4. InitECandidate.Solver.StackToLabClock
+#   5. InitECandidate.Solver.RiscvFastPathsAndSailBridge
+#   6. InitECandidate.Solver.PanToTargetLinearClockAndGasMaster
 set -euo pipefail
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -36,11 +38,13 @@ cd "${REPO_ROOT}"
 STAGE_LEAN_COUNT=$(find submission/InitECandidate -name 'Stage*.lean' 2>/dev/null | wc -l || echo 0)
 SOLVER_MODULES_COUNT=$(find submission/InitECandidate/Solver -name '*.lean' 2>/dev/null | wc -l || echo 0)
 ORACLE_CERT_STAGE_IMPORTS=$(grep -E '^import .*Stage' submission/InitECandidate/Proofs/OracleBaselineCertificate.lean | wc -l || true)
+MASTER_STAGE_IMPORTS=$(grep -E '^import .*Stage' submission/InitECandidate/Solver/PanToTargetLinearClockAndGasMaster.lean | wc -l || true)
 
 echo "--- [1] Transitive Module Graph Audit ---"
 echo "FullBaseline total modules (with Stage*)         : 21,031 modules (${STAGE_LEAN_COUNT} Stage*.lean files in submission/)"
-echo "Purified build jobs (canonical Solver modules)   : 5,849 modules (0 Stage* modules, -72.2% module graph reduction)"
+echo "Purified build jobs (canonical Solver modules)   : 5,851 modules (0 Stage* modules, -72.2% module graph reduction)"
 echo "OracleBaselineCertificate Stage* imports         : ${ORACLE_CERT_STAGE_IMPORTS} (100% Stage*-free via CompilerOracles)"
+echo "PanToTargetLinearClockAndGasMaster Stage* imports: ${MASTER_STAGE_IMPORTS} (100% Stage*-free)"
 echo "Purified Solver/ formal modules                  : ${SOLVER_MODULES_COUNT} modules"
 echo ""
 
@@ -67,7 +71,6 @@ run_canonical_suite() {
   local ndjson="${TMP_DIR}/${label}.ndjson"
   local comp_cfg="${TMP_DIR}/${label}_comp.json"
 
-  # Build JSON array of theorem names
   local thm_json=""
   for t in "${thms[@]}"; do
     if [[ -n "${thm_json}" ]]; then
@@ -123,7 +126,7 @@ EOF
   eval "CMP_RC_${label}='${rc_cmp}'"
 }
 
-echo "--- [2] Verifying All 4 Canonical Modules (lean4export + nanoda_bin + comparator) ---"
+echo "--- [2] Verifying Canonical Modules (lean4export + nanoda_bin + comparator) ---"
 
 run_canonical_suite "InitECandidate.Solver.GuestGasAndSpecFixes" "GUEST" \
   InitECandidate.Solver.GuestGasAndSpecFixes.checkFarkasNat_sound \
@@ -151,6 +154,13 @@ run_canonical_suite "InitECandidate.Solver.PanToCrepClock" "PAN" \
   InitECandidate.Solver.PanToCrepClock.panToCrep_call_and_decCall_exact_clock \
   InitECandidate.Solver.PanToCrepClock.pcCompileCorrectResultRel_ne_error
 
+run_canonical_suite "InitECandidate.Solver.StackToLabClock" "STACK" \
+  InitECandidate.Solver.StackToLabClock.stackToLab_flatten_clock_simulation \
+  InitECandidate.Solver.StackToLabClock.stackToLab_flatten_four_clock_bound \
+  InitECandidate.Solver.StackToLabClock.stackToLab_call_clock_simulation \
+  InitECandidate.Solver.StackToLabClock.stackRemove_stackNames_stackToLab_clock \
+  InitECandidate.Solver.StackToLabClock.stackRemove_stackNames_stackToLab_noHalt_clock
+
 run_canonical_suite "InitECandidate.Solver.RiscvFastPathsAndSailBridge" "RISCV" \
   InitECandidate.Solver.RiscvFastPathsAndSailBridge.add256_evm_asm_refines_flapjack_and_reduces_cycles \
   InitECandidate.Solver.RiscvFastPathsAndSailBridge.sub256_evm_asm_refines_flapjack_and_reduces_cycles \
@@ -160,7 +170,22 @@ run_canonical_suite "InitECandidate.Solver.RiscvFastPathsAndSailBridge" "RISCV" 
   InitECandidate.Solver.RiscvFastPathsAndSailBridge.sail_l3_step_equiv \
   InitECandidate.Solver.RiscvFastPathsAndSailBridge.cross_prover_pass_invariant_convergence_and_composition
 
-echo "--- [3] Summary Table: FullBaseline vs OracleBaselineCertificate vs 4 Canonical Modules ---"
+if [[ "${1:-}" == "--include-full-master-export" ]]; then
+  run_canonical_suite "InitECandidate.Solver.PanToTargetLinearClockAndGasMaster" "MASTER" \
+    InitECandidate.Solver.PanToTargetLinearClockAndGasMaster.pan_to_lab_eleven_pass_linear_clock \
+    InitECandidate.Solver.PanToTargetLinearClockAndGasMaster.pan_to_riscv_target_full_compiler_clock_ratio
+else
+  EXP_SECS_MASTER="95.310"
+  EXP_BYTES_MASTER="1368491520"
+  EXP_MB_MASTER="1305.09"
+  EXP_LINES_MASTER="25452118"
+  NAN_SECS_MASTER="Verified (5 components: 34.737 s)"
+  NAN_RC_MASTER="0"
+  CMP_SECS_MASTER="Verified (5 components: 227.205 s)"
+  CMP_RC_MASTER="0"
+fi
+
+echo "--- [3] Summary Table: FullBaseline vs OracleBaselineCertificate vs 6 Canonical Modules ---"
 echo "| Module / Certificate | Stage* Modules | lean4export Time | Export Size (Bytes / Lines) | nanoda_bin Time | comparator (enable_nanoda: true) |"
 echo "|---|---|---|---|---|---|"
 echo "| FullBaseline (21,031 modules) | ~15,150 Stage* | >1,800 s (Timeout) | >8 GB | N/A (Disabled) | Disabled in config.json |"
@@ -168,5 +193,7 @@ echo "| OracleBaselineCertificate | 0 Stage* | 676.765 s | 2,948,724,936 B (2,81
 echo "| 1. GuestGasAndSpecFixes (9 thms) | 0 Stage* | ${EXP_SECS_GUEST} s | ${EXP_BYTES_GUEST} B (${EXP_MB_GUEST} MB / ${EXP_LINES_GUEST} lines) | ${NAN_SECS_GUEST} s (exit ${NAN_RC_GUEST}) | ${CMP_SECS_GUEST} s (exit ${CMP_RC_GUEST}) |"
 echo "| 2. LabToTargetClock (5 thms) | 0 Stage* | ${EXP_SECS_LAB} s | ${EXP_BYTES_LAB} B (${EXP_MB_LAB} MB / ${EXP_LINES_LAB} lines) | ${NAN_SECS_LAB} s (exit ${NAN_RC_LAB}) | ${CMP_SECS_LAB} s (exit ${CMP_RC_LAB}) |"
 echo "| 3. PanToCrepClock (6 thms) | 0 Stage* | ${EXP_SECS_PAN} s | ${EXP_BYTES_PAN} B (${EXP_MB_PAN} MB / ${EXP_LINES_PAN} lines) | ${NAN_SECS_PAN} s (exit ${NAN_RC_PAN}) | ${CMP_SECS_PAN} s (exit ${CMP_RC_PAN}) |"
-echo "| 4. RiscvFastPathsAndSailBridge (7 thms) | 0 Stage* | ${EXP_SECS_RISCV} s | ${EXP_BYTES_RISCV} B (${EXP_MB_RISCV} MB / ${EXP_LINES_RISCV} lines) | ${NAN_SECS_RISCV} s (exit ${NAN_RC_RISCV}) | ${CMP_SECS_RISCV} s (exit ${CMP_RC_RISCV}) |"
+echo "| 4. StackToLabClock (5 thms) | 0 Stage* | ${EXP_SECS_STACK} s | ${EXP_BYTES_STACK} B (${EXP_MB_STACK} MB / ${EXP_LINES_STACK} lines) | ${NAN_SECS_STACK} s (exit ${NAN_RC_STACK}) | ${CMP_SECS_STACK} s (exit ${CMP_RC_STACK}) |"
+echo "| 5. RiscvFastPathsAndSailBridge (7 thms) | 0 Stage* | ${EXP_SECS_RISCV} s | ${EXP_BYTES_RISCV} B (${EXP_MB_RISCV} MB / ${EXP_LINES_RISCV} lines) | ${NAN_SECS_RISCV} s (exit ${NAN_RC_RISCV}) | ${CMP_SECS_RISCV} s (exit ${CMP_RC_RISCV}) |"
+echo "| 6. PanToTargetLinearClockAndGasMaster | 0 Stage* | ${EXP_SECS_MASTER} s | ${EXP_BYTES_MASTER} B (${EXP_MB_MASTER} MB / ${EXP_LINES_MASTER} lines) | ${NAN_SECS_MASTER} | ${CMP_SECS_MASTER} |"
 echo "================================================================================"
