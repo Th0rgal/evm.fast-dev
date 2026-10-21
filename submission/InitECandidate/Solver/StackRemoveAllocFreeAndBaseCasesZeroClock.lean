@@ -3020,3 +3020,12 @@ theorem compCorrectInstallZ {width : Nat} [NeZero width] {C F : Type}
   next => exact False.elim (notError (Prod.mk.inj sourceRun).1.symm)
 end InitECandidate.Solver.StackRemoveAllocFreeAndBaseCasesZeroClock.Install
 
+
+namespace InitECandidate.Solver.StackRemoveAllocFreeAndBaseCasesZeroClock
+export StackAllocSimulation (evaluateStackAllocZ)
+export StackFreeSimulation (evaluateStackFreeZ)
+export Atoms (compCorrectSkipZ)
+export Control (compCorrectTickZ)
+export Instructions (compCorrectInstZ)
+export StackMemory (compCorrectStackLoadZ compCorrectStackStoreZ)
+end InitECandidate.Solver.StackRemoveAllocFreeAndBaseCasesZeroClock
