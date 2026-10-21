@@ -30,22 +30,36 @@ _start:
     slli t1, t1, 24 # 0xa1000000          # Pancake heap start (@base)
     sd   t1, 0(t0)
     la   t0, cml_stack
-    ori  t1, zero, 176
-    slli t1, t1, 24 # 0xb0000000          # Pancake heap end / stack start
+    ori  t1, zero, 2015
+    slli t1, t1, 24 # 0x7df000000        # globals end / machine stack start
     sd   t1, 0(t0)
     la   t0, cml_stackend
-    ori  t1, zero, 191
-    slli t1, t1, 24 # 0xbf000000         # Pancake stack end
+    ori  t1, zero, 63
+    slli t1, t1, 29 # 0x7e0000000        # aligned RAM end / machine stack end
     sd   t1, 0(t0)
+    # Initial heap-page headers required by panInstalled. These addresses
+    # are reserved from the guest allocators.
+    ori  t0, zero, 161
+    slli t0, t0, 24
+    la   t1, cake_bitmaps
+    sd   t1, 0(t0)
+    la   t1, cake_bitmaps_buffer_begin
+    sd   t1, 8(t0)
+    la   t1, cake_bitmaps_buffer_end
+    sd   t1, 16(t0)
+    la   t1, cake_codebuffer_begin
+    sd   t1, 24(t0)
+    la   t1, cake_codebuffer_end
+    sd   t1, 32(t0)
     # Enter the verified native artifact directly. The renderer wrapper uses
     # registers/instruction sequences outside its abstract encoder admission.
     # Every instruction on this startup path uses the admitted integer subset.
     ori  a1, zero, 161
     slli a1, a1, 24
-    ori  a2, zero, 176
+    ori  a2, zero, 2015
     slli a2, a2, 24
-    ori  a3, zero, 191
-    slli a3, a3, 24
+    ori  a3, zero, 63
+    slli a3, a3, 29
     la   a0, cake_main
     j    cake_main
 

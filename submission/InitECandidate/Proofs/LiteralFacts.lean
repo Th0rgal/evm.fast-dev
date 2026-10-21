@@ -225,9 +225,30 @@ private theorem bytes216_length : InitECandidate.bytes216.length = 4096 := by rf
 private theorem bytes217_length : InitECandidate.bytes217.length = 4096 := by rfl
 private theorem bytes218_length : InitECandidate.bytes218.length = 4096 := by rfl
 private theorem bytes219_length : InitECandidate.bytes219.length = 4096 := by rfl
-private theorem bytes220_length : InitECandidate.bytes220.length = 3076 := by rfl
+private theorem bytes220_length : InitECandidate.bytes220.length = 4096 := by rfl
+private theorem bytes221_length : InitECandidate.bytes221.length = 4096 := by rfl
+private theorem bytes222_length : InitECandidate.bytes222.length = 4096 := by rfl
+private theorem bytes223_length : InitECandidate.bytes223.length = 4096 := by rfl
+private theorem bytes224_length : InitECandidate.bytes224.length = 4096 := by rfl
+private theorem bytes225_length : InitECandidate.bytes225.length = 4096 := by rfl
+private theorem bytes226_length : InitECandidate.bytes226.length = 4096 := by rfl
+private theorem bytes227_length : InitECandidate.bytes227.length = 4096 := by rfl
+private theorem bytes228_length : InitECandidate.bytes228.length = 4096 := by rfl
+private theorem bytes229_length : InitECandidate.bytes229.length = 4096 := by rfl
+private theorem bytes230_length : InitECandidate.bytes230.length = 4096 := by rfl
+private theorem bytes231_length : InitECandidate.bytes231.length = 4096 := by rfl
+private theorem bytes232_length : InitECandidate.bytes232.length = 4096 := by rfl
+private theorem bytes233_length : InitECandidate.bytes233.length = 4096 := by rfl
+private theorem bytes234_length : InitECandidate.bytes234.length = 4096 := by rfl
+private theorem bytes235_length : InitECandidate.bytes235.length = 4096 := by rfl
+private theorem bytes236_length : InitECandidate.bytes236.length = 4096 := by rfl
+private theorem bytes237_length : InitECandidate.bytes237.length = 4096 := by rfl
+private theorem bytes238_length : InitECandidate.bytes238.length = 4096 := by rfl
+private theorem bytes239_length : InitECandidate.bytes239.length = 196 := by rfl
+
 private theorem prefix000_length : InitECandidate.prefix000.length = 4096 := by rfl
-private theorem prefix001_length : InitECandidate.prefix001.length = 400 := by rfl
+private theorem prefix001_length : InitECandidate.prefix001.length = 112 := by rfl
+
 private theorem suffix000_length : InitECandidate.suffix000.length = 4096 := by rfl
 private theorem suffix001_length : InitECandidate.suffix001.length = 4096 := by rfl
 private theorem suffix002_length : InitECandidate.suffix002.length = 4096 := by rfl
@@ -238,27 +259,46 @@ private theorem suffix006_length : InitECandidate.suffix006.length = 4096 := by 
 private theorem suffix007_length : InitECandidate.suffix007.length = 4096 := by rfl
 private theorem suffix008_length : InitECandidate.suffix008.length = 4096 := by rfl
 private theorem suffix009_length : InitECandidate.suffix009.length = 4096 := by rfl
-private theorem suffix010_length : InitECandidate.suffix010.length = 692 := by rfl
+private theorem suffix010_length : InitECandidate.suffix010.length = 3772 := by rfl
 
-theorem nativeCode_length : InitECandidate.nativeCode.length = 904196 := by
+theorem nativeCode_length : InitECandidate.nativeCode.length = 979140 := by
   simp only [InitECandidate.nativeCode, List.length_flatten, List.map_cons, List.map_nil,
     List.sum_cons, List.sum_nil,
-    bytes000_length, bytes001_length, bytes002_length, bytes003_length, bytes004_length, bytes005_length, bytes006_length, bytes007_length, bytes008_length, bytes009_length, bytes010_length, bytes011_length, bytes012_length, bytes013_length, bytes014_length, bytes015_length, bytes016_length, bytes017_length, bytes018_length, bytes019_length, bytes020_length, bytes021_length, bytes022_length, bytes023_length, bytes024_length, bytes025_length, bytes026_length, bytes027_length, bytes028_length, bytes029_length, bytes030_length, bytes031_length, bytes032_length, bytes033_length, bytes034_length, bytes035_length, bytes036_length, bytes037_length, bytes038_length, bytes039_length, bytes040_length, bytes041_length, bytes042_length, bytes043_length, bytes044_length, bytes045_length, bytes046_length, bytes047_length, bytes048_length, bytes049_length, bytes050_length, bytes051_length, bytes052_length, bytes053_length, bytes054_length, bytes055_length, bytes056_length, bytes057_length, bytes058_length, bytes059_length, bytes060_length, bytes061_length, bytes062_length, bytes063_length, bytes064_length, bytes065_length, bytes066_length, bytes067_length, bytes068_length, bytes069_length, bytes070_length, bytes071_length, bytes072_length, bytes073_length, bytes074_length, bytes075_length, bytes076_length, bytes077_length, bytes078_length, bytes079_length, bytes080_length, bytes081_length, bytes082_length, bytes083_length, bytes084_length, bytes085_length, bytes086_length, bytes087_length, bytes088_length, bytes089_length, bytes090_length, bytes091_length, bytes092_length, bytes093_length, bytes094_length, bytes095_length, bytes096_length, bytes097_length, bytes098_length, bytes099_length, bytes100_length, bytes101_length, bytes102_length, bytes103_length, bytes104_length, bytes105_length, bytes106_length, bytes107_length, bytes108_length, bytes109_length, bytes110_length, bytes111_length, bytes112_length, bytes113_length, bytes114_length, bytes115_length, bytes116_length, bytes117_length, bytes118_length, bytes119_length, bytes120_length, bytes121_length, bytes122_length, bytes123_length, bytes124_length, bytes125_length, bytes126_length, bytes127_length, bytes128_length, bytes129_length, bytes130_length, bytes131_length, bytes132_length, bytes133_length, bytes134_length, bytes135_length, bytes136_length, bytes137_length, bytes138_length, bytes139_length, bytes140_length, bytes141_length, bytes142_length, bytes143_length, bytes144_length, bytes145_length, bytes146_length, bytes147_length, bytes148_length, bytes149_length, bytes150_length, bytes151_length, bytes152_length, bytes153_length, bytes154_length, bytes155_length, bytes156_length, bytes157_length, bytes158_length, bytes159_length, bytes160_length, bytes161_length, bytes162_length, bytes163_length, bytes164_length, bytes165_length, bytes166_length, bytes167_length, bytes168_length, bytes169_length, bytes170_length, bytes171_length, bytes172_length, bytes173_length, bytes174_length, bytes175_length, bytes176_length, bytes177_length, bytes178_length, bytes179_length, bytes180_length, bytes181_length, bytes182_length, bytes183_length, bytes184_length, bytes185_length, bytes186_length, bytes187_length, bytes188_length, bytes189_length, bytes190_length, bytes191_length, bytes192_length, bytes193_length, bytes194_length, bytes195_length, bytes196_length, bytes197_length, bytes198_length, bytes199_length, bytes200_length, bytes201_length, bytes202_length, bytes203_length, bytes204_length, bytes205_length, bytes206_length, bytes207_length, bytes208_length, bytes209_length, bytes210_length, bytes211_length, bytes212_length, bytes213_length, bytes214_length, bytes215_length, bytes216_length, bytes217_length, bytes218_length, bytes219_length, bytes220_length]
+    bytes000_length, bytes001_length, bytes002_length, bytes003_length, bytes004_length, bytes005_length, bytes006_length, bytes007_length, bytes008_length, bytes009_length, bytes010_length, bytes011_length,
+    bytes012_length, bytes013_length, bytes014_length, bytes015_length, bytes016_length, bytes017_length, bytes018_length, bytes019_length, bytes020_length, bytes021_length, bytes022_length, bytes023_length,
+    bytes024_length, bytes025_length, bytes026_length, bytes027_length, bytes028_length, bytes029_length, bytes030_length, bytes031_length, bytes032_length, bytes033_length, bytes034_length, bytes035_length,
+    bytes036_length, bytes037_length, bytes038_length, bytes039_length, bytes040_length, bytes041_length, bytes042_length, bytes043_length, bytes044_length, bytes045_length, bytes046_length, bytes047_length,
+    bytes048_length, bytes049_length, bytes050_length, bytes051_length, bytes052_length, bytes053_length, bytes054_length, bytes055_length, bytes056_length, bytes057_length, bytes058_length, bytes059_length,
+    bytes060_length, bytes061_length, bytes062_length, bytes063_length, bytes064_length, bytes065_length, bytes066_length, bytes067_length, bytes068_length, bytes069_length, bytes070_length, bytes071_length,
+    bytes072_length, bytes073_length, bytes074_length, bytes075_length, bytes076_length, bytes077_length, bytes078_length, bytes079_length, bytes080_length, bytes081_length, bytes082_length, bytes083_length,
+    bytes084_length, bytes085_length, bytes086_length, bytes087_length, bytes088_length, bytes089_length, bytes090_length, bytes091_length, bytes092_length, bytes093_length, bytes094_length, bytes095_length,
+    bytes096_length, bytes097_length, bytes098_length, bytes099_length, bytes100_length, bytes101_length, bytes102_length, bytes103_length, bytes104_length, bytes105_length, bytes106_length, bytes107_length,
+    bytes108_length, bytes109_length, bytes110_length, bytes111_length, bytes112_length, bytes113_length, bytes114_length, bytes115_length, bytes116_length, bytes117_length, bytes118_length, bytes119_length,
+    bytes120_length, bytes121_length, bytes122_length, bytes123_length, bytes124_length, bytes125_length, bytes126_length, bytes127_length, bytes128_length, bytes129_length, bytes130_length, bytes131_length,
+    bytes132_length, bytes133_length, bytes134_length, bytes135_length, bytes136_length, bytes137_length, bytes138_length, bytes139_length, bytes140_length, bytes141_length, bytes142_length, bytes143_length,
+    bytes144_length, bytes145_length, bytes146_length, bytes147_length, bytes148_length, bytes149_length, bytes150_length, bytes151_length, bytes152_length, bytes153_length, bytes154_length, bytes155_length,
+    bytes156_length, bytes157_length, bytes158_length, bytes159_length, bytes160_length, bytes161_length, bytes162_length, bytes163_length, bytes164_length, bytes165_length, bytes166_length, bytes167_length,
+    bytes168_length, bytes169_length, bytes170_length, bytes171_length, bytes172_length, bytes173_length, bytes174_length, bytes175_length, bytes176_length, bytes177_length, bytes178_length, bytes179_length,
+    bytes180_length, bytes181_length, bytes182_length, bytes183_length, bytes184_length, bytes185_length, bytes186_length, bytes187_length, bytes188_length, bytes189_length, bytes190_length, bytes191_length,
+    bytes192_length, bytes193_length, bytes194_length, bytes195_length, bytes196_length, bytes197_length, bytes198_length, bytes199_length, bytes200_length, bytes201_length, bytes202_length, bytes203_length,
+    bytes204_length, bytes205_length, bytes206_length, bytes207_length, bytes208_length, bytes209_length, bytes210_length, bytes211_length, bytes212_length, bytes213_length, bytes214_length, bytes215_length,
+    bytes216_length, bytes217_length, bytes218_length, bytes219_length, bytes220_length, bytes221_length, bytes222_length, bytes223_length, bytes224_length, bytes225_length, bytes226_length, bytes227_length,
+    bytes228_length, bytes229_length, bytes230_length, bytes231_length, bytes232_length, bytes233_length, bytes234_length, bytes235_length, bytes236_length, bytes237_length, bytes238_length, bytes239_length]
   decide
 
-theorem bootPrefix_length : InitECandidate.bootPrefix.length = 4496 := by
+theorem bootPrefix_length : InitECandidate.bootPrefix.length = 4208 := by
   simp only [InitECandidate.bootPrefix, List.length_flatten, List.map_cons, List.map_nil,
     List.sum_cons, List.sum_nil,
     prefix000_length, prefix001_length]
   decide
 
-theorem suffix_length : InitECandidate.suffix.length = 41652 := by
+theorem suffix_length : InitECandidate.suffix.length = 44732 := by
   simp only [InitECandidate.suffix, List.length_flatten, List.map_cons, List.map_nil,
     List.sum_cons, List.sum_nil,
     suffix000_length, suffix001_length, suffix002_length, suffix003_length, suffix004_length, suffix005_length, suffix006_length, suffix007_length, suffix008_length, suffix009_length, suffix010_length]
   decide
 
-theorem code_length : InitECandidate.code.length = 950344 := by
+theorem code_length : InitECandidate.code.length = 1028080 := by
   simp only [InitECandidate.code, List.length_append,
     bootPrefix_length, nativeCode_length, suffix_length]
 
