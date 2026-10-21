@@ -7,8 +7,7 @@
 #   halt   : ecall with a7 = 93
 #
 # The Pancake program itself reads/writes those regions with shared-memory
-# loads/stores (!ldw / !st8 ...). Runtime foreign calls also provide halt,
-# trap, and the accelerator stubs below.
+# loads/stores (!ldw / !st8 ...). Runtime foreign calls provide halt and trap.
 .option norelax
 .option norvc
 .section .text
@@ -28,39 +27,25 @@ _start:
     bltu t1, t2, .Lcopy_data
     la   t0, cml_heap
     ori  t1, zero, 161
-    slli t1, t1, 24 # 0xa1000000          # Pancake memory start (@base), before scratch
+    slli t1, t1, 24 # 0xa1000000          # Pancake heap start (@base)
     sd   t1, 0(t0)
     la   t0, cml_stack
-    ori  t1, zero, 2015
-    slli t1, t1, 24 # 0x7df000000         # globals end / machine stack start
+    ori  t1, zero, 176
+    slli t1, t1, 24 # 0xb0000000          # Pancake heap end / stack start
     sd   t1, 0(t0)
     la   t0, cml_stackend
-    ori  t1, zero, 63
-    slli t1, t1, 29 # 0x7e0000000         # aligned RAM end / machine stack end
+    ori  t1, zero, 191
+    slli t1, t1, 24 # 0xbf000000         # Pancake stack end
     sd   t1, 0(t0)
-    # Initial heap-page headers required by panInstalled. These live below
-    # SCRATCH_BASE and HEAP_BASE and are reserved from both allocators.
-    ori  t0, zero, 161
-    slli t0, t0, 24 # 0xa1000000
-    la   t1, cake_bitmaps
-    sd   t1, 0(t0)
-    la   t1, cake_bitmaps_buffer_begin
-    sd   t1, 8(t0)
-    la   t1, cake_bitmaps_buffer_end
-    sd   t1, 16(t0)
-    la   t1, cake_codebuffer_begin
-    sd   t1, 24(t0)
-    la   t1, cake_codebuffer_end
-    sd   t1, 32(t0)
     # Enter the verified native artifact directly. The renderer wrapper uses
     # registers/instruction sequences outside its abstract encoder admission.
     # Every instruction on this startup path uses the admitted integer subset.
     ori  a1, zero, 161
     slli a1, a1, 24
-    ori  a2, zero, 2015
+    ori  a2, zero, 176
     slli a2, a2, 24
-    ori  a3, zero, 63
-    slli a3, a3, 29
+    ori  a3, zero, 191
+    slli a3, a3, 24
     la   a0, cake_main
     j    cake_main
 
@@ -86,93 +71,3 @@ ffitrap:
     sb   t1, 32(t0)
     sb   a1, 33(t0)
     j    cml_exit
-
-# ---- ZisK accelerator FFI stubs ----------------------------------------------
-# Each stub implements one foreign call of docs/ACCEL-FFI.md.  `@name(c, 0, a, n)` has
-# an empty configuration, and the operands lie at fixed offsets from the array `a`, which
-# arrives in a2 (the ExtCall arguments are a0 = c, a1 = 0, a2 = a, a3 = n).  The ZisK
-# CSRs take absolute pointers, so a stub builds the pointer block they expect on its own
-# fixed RAM pointer block from a2, issues the CSR, and returns.  The Pancake side therefore holds no
-# addresses in the array: the effect is a function of the array's bytes alone.  Only t0,
-# t1, t4 and the reserved pointer block at 0xa00f0000 are touched, so the argument registers are preserved.
-# tools/spike/spike_run implements the same CSRs (tools/spike/zisk_accel.cc).
-
-# The CSR takes the operand's pointer itself: the array is the operand.
-.macro ACCEL_DIRECT name, csr
-.globl ffi\name
-ffi\name:
-    csrrs x0, \csr, a2
-    ret
-.endm
-
-# The CSR takes a block {a2, a2 + off}.
-.macro ACCEL_PTRS2 name, csr, off
-.globl ffi\name
-ffi\name:
-    li   t4, 0xa00f0000
-    sd   a2, 0(t4)
-    addi t0, a2, \off
-    sd   t0, 8(t4)
-    mv   t0, t4
-    csrrs x0, \csr, t0
-    ret
-.endm
-
-# The CSR takes a block of five pointers, `stride` bytes apart from a2.
-.macro ACCEL_PTRS5 name, csr, stride
-.globl ffi\name
-ffi\name:
-    li   t4, 0xa00f0000
-    sd   a2, 0(t4)
-    addi t0, a2, \stride
-    sd   t0, 8(t4)
-    addi t0, a2, 2*\stride
-    sd   t0, 16(t4)
-    addi t0, a2, 3*\stride
-    sd   t0, 24(t4)
-    addi t0, a2, 4*\stride
-    sd   t0, 32(t4)
-    mv   t0, t4
-    csrrs x0, \csr, t0
-    ret
-.endm
-
-# Keccak-f[1600] on the 200-byte state; point doubling in place on the 64- or 96-byte point.
-ACCEL_DIRECT keccakf,    0x800
-ACCEL_DIRECT secpdbl,    0x804
-ACCEL_DIRECT bn_g1_dbl,  0x807
-ACCEL_DIRECT bls_g1_dbl, 0x80d
-
-# One SHA-256 compression: array = 32-byte packed state, then the 64-byte block.
-ACCEL_PTRS2 sha256f,     0x805, 32
-
-# Point addition (p1 += p2) and Fp2 operations (f1 = f1 op f2): two operands back to back.
-ACCEL_PTRS2 secpadd,     0x803, 64
-ACCEL_PTRS2 bn_g1_add,   0x806, 64
-ACCEL_PTRS2 bn_fp2_add,  0x808, 64
-ACCEL_PTRS2 bn_fp2_sub,  0x809, 64
-ACCEL_PTRS2 bn_fp2_mul,  0x80a, 64
-ACCEL_PTRS2 bls_g1_add,  0x80c, 96
-ACCEL_PTRS2 bls_fp2_add, 0x80e, 96
-ACCEL_PTRS2 bls_fp2_sub, 0x80f, 96
-ACCEL_PTRS2 bls_fp2_mul, 0x810, 96
-
-# d = (a * b + c) mod m: array = a, b, c, m, d, each `stride` bytes.
-ACCEL_PTRS5 arith256mod,  0x802, 32
-ACCEL_PTRS5 bn_arith256,  0x802, 32
-ACCEL_PTRS5 bls_arith384, 0x80b, 48
-
-# One BLAKE2b round: array = SIGMA row (a value, 8 bytes), 128-byte state, 128-byte
-# message.  The CSR's block is {row, state*, message*}.
-.globl ffiblake2bround
-ffiblake2bround:
-    li   t4, 0xa00f0000
-    ld   t1, 0(a2)
-    sd   t1, 0(t4)
-    addi t0, a2, 8
-    sd   t0, 8(t4)
-    addi t0, a2, 136
-    sd   t0, 16(t4)
-    mv   t0, t4
-    csrrs x0, 0x819, t0
-    ret

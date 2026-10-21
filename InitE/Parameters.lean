@@ -20,7 +20,7 @@ def heapStart : Nat := sourceBase
 /-- Reserve the final 16 MiB of RAM for the compiler's stack. -/
 def stackSize : Nat := 16 * 1024 * 1024
 def stackStart : Nat := ramEnd - stackSize
-def globalsWords : Nat := 93
+def globalsWords : Nat := 67
 def heapEnd : Nat := 0xb0000000
 def gasLimit : Nat := 200000000
 

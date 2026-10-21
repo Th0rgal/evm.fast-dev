@@ -21,13 +21,13 @@ theorem sourceStructContext : decsStcnamesHOLExact [] sourceDeclarations = some 
   try rfl
 
 open scoped InitE.MetadataComputation InitE.NameComputation in
-theorem sourceGlobalShapes : decShapesHOL sourceDeclarations = List.replicate 93 .one := by
+theorem sourceGlobalShapes : decShapesHOL sourceDeclarations = List.replicate 67 .one := by
   conv => lhs; cbv
   try rfl
 
 theorem sourceGlobalsSize :
     ((decShapesHOL sourceDeclarations).map
-      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] sourceDeclarations)))).sum = 93 := by
+      (sizeOfShapeWithContextHOL (holThe (decsStcnamesHOLExact [] sourceDeclarations)))).sum = 67 := by
   rw [sourceStructContext, sourceGlobalShapes]
   simp [holThe, sizeOfShapeWithContextHOL]
 
