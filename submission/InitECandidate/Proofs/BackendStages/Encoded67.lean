@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Filtered67
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.LabToTarget.Compile
@@ -33,21 +34,22 @@ def Encoded67 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 11 10
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 12 10
                 (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551608#64)))))
-        [147#8, 5#8, 133#8, 255#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 2713714688#64)))
-        [183#8, 15#8, 192#8, 161#8, 147#8, 143#8, 15#8, 0#8, 55#8, 6#8, 0#8, 0#8, 19#8, 70#8, 246#8, 255#8, 19#8, 22#8,
-          6#8, 2#8, 51#8, 70#8, 246#8, 1#8]
-        24,
+        [19#8, 6#8, 133#8, 255#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 12
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 11 0#64))))
-        [35#8, 176#8, 197#8, 0#8] 4,
+            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 11 26
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 26)))))
+        [179#8, 101#8, 173#8, 1#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
+            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 11
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 12 0#64))))
+        [35#8, 48#8, 182#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
@@ -57,8 +59,8 @@ def Encoded67 : LabSem.LabSectionHOL 64 :=
         [147#8, 5#8, 133#8, 254#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 2713714688#64)))
-        [183#8, 15#8, 192#8, 161#8, 147#8, 143#8, 15#8, 0#8, 55#8, 6#8, 0#8, 0#8, 19#8, 70#8, 246#8, 255#8, 19#8, 22#8,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 2701127680#64)))
+        [183#8, 255#8, 255#8, 160#8, 147#8, 143#8, 15#8, 0#8, 55#8, 6#8, 0#8, 0#8, 19#8, 70#8, 246#8, 255#8, 19#8, 22#8,
           6#8, 2#8, 51#8, 70#8, 246#8, 1#8]
         24,
       Flapjack.Compiler.Backend.LabLang.Line.asm
@@ -76,8 +78,8 @@ def Encoded67 : LabSem.LabSectionHOL 64 :=
         [19#8, 5#8, 5#8, 254#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 2701135872#64)))
-        [183#8, 31#8, 0#8, 161#8, 147#8, 143#8, 15#8, 0#8, 183#8, 5#8, 0#8, 0#8, 147#8, 197#8, 245#8, 255#8, 147#8,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 2688618496#64)))
+        [183#8, 31#8, 65#8, 160#8, 147#8, 143#8, 15#8, 0#8, 183#8, 5#8, 0#8, 0#8, 147#8, 197#8, 245#8, 255#8, 147#8,
           149#8, 5#8, 2#8, 179#8, 197#8, 245#8, 1#8]
         24,
       Flapjack.Compiler.Backend.LabLang.Line.asm
@@ -95,6 +97,6 @@ def Encoded67 : LabSem.LabSectionHOL 64 :=
         [103#8, 128#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 67 2 4] }
 theorem Encoded67_eq : LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length Filtered67 = Encoded67 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms Encoded67_eq
 end InitECandidate.Proofs.BackendStages

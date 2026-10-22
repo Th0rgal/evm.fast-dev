@@ -24,7 +24,7 @@ def stackBody401_4 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_5 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1196#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1188#64)
 
 def stackBody401_6 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -188,7 +188,7 @@ def stackBody401_55 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_56 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1197#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1189#64)
 
 def stackBody401_57 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -416,7 +416,7 @@ def stackBody401_129 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_130 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1198#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1190#64)
 
 def stackBody401_131 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -554,7 +554,7 @@ def stackBody401_174 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_175 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1199#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1191#64)
 
 def stackBody401_176 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -695,7 +695,7 @@ def stackBody401_220 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_221 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1200#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1192#64)
 
 def stackBody401_222 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -872,7 +872,7 @@ def stackBody401_277 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_278 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1201#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1193#64)
 
 def stackBody401_279 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1022,7 +1022,7 @@ def stackBody401_326 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_327 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1202#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1194#64)
 
 def stackBody401_328 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1187,7 +1187,7 @@ def stackBody401_379 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_380 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1203#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1195#64)
 
 def stackBody401_381 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1439,7 +1439,7 @@ def stackBody401_461 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_462 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1204#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1196#64)
 
 def stackBody401_463 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1733,7 +1733,7 @@ def stackBody401_554 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody401_555 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1205#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1197#64)
 
 def stackBody401_556 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -2088,8 +2088,8 @@ def function401 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × N
         (Flapjack.AppList.list [16#64]))
       (Flapjack.AppList.list [16#64]))
     (Flapjack.AppList.list [16#64]),
-  1205)
-theorem function401_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized401.2.2 InitECandidate.Proofs.StackAnalysis.optimized401.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1195) = function401 bitmapPrefix := by
+  1197)
+theorem function401_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized401.2.2 InitECandidate.Proofs.StackAnalysis.optimized401.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1187) = function401 bitmapPrefix := by
   kernel_rfl
 #print axioms function401_eq
 end InitECandidate.Proofs.BackendStages

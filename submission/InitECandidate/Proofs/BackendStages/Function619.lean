@@ -170,7 +170,7 @@ def stackBody619_49 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_50 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2430#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2422#64)
 
 def stackBody619_51 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -552,7 +552,7 @@ def stackBody619_165 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_166 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2431#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2423#64)
 
 def stackBody619_167 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -738,7 +738,7 @@ def stackBody619_227 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_228 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2432#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2424#64)
 
 def stackBody619_229 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1018,7 +1018,7 @@ def stackBody619_317 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_318 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2433#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2425#64)
 
 def stackBody619_319 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1156,7 +1156,7 @@ def stackBody619_362 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_363 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2434#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2426#64)
 
 def stackBody619_364 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1594,7 +1594,7 @@ def stackBody619_505 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_506 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2435#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2427#64)
 
 def stackBody619_507 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1798,7 +1798,7 @@ def stackBody619_571 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody619_572 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2436#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2428#64)
 
 def stackBody619_573 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -2096,8 +2096,8 @@ def function619 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × N
         (Flapjack.AppList.list [2097152#64]))
       (Flapjack.AppList.list [2097152#64]))
     (Flapjack.AppList.list [2097152#64]),
-  2436)
-theorem function619_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized619.2.2 InitECandidate.Proofs.StackAnalysis.optimized619.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2429) = function619 bitmapPrefix := by
+  2428)
+theorem function619_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized619.2.2 InitECandidate.Proofs.StackAnalysis.optimized619.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2421) = function619 bitmapPrefix := by
   kernel_rfl
 #print axioms function619_eq
 end InitECandidate.Proofs.BackendStages

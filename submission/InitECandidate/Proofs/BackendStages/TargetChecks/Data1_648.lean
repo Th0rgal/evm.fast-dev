@@ -1,4 +1,3 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectData1_648
 import InitECandidate.Proofs.BackendStages.TargetChecks.Data0_648
 import InitECandidate.Proofs.BackendStages.TargetLabels1
 import InitECandidate.Proofs.BackendStages.TargetFfis
@@ -11,7 +10,7 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks
 def localLabels1_648 : List (Nat × Nat) :=
-[(2, 555136), (1, 555072)]
+[(2, 611752), (1, 611636)]
 def Reencode1_648 : LabSem.LabSectionHOL 64 :=
 Reencode0_648
 end InitECandidate.Proofs.BackendStages.TargetChecks

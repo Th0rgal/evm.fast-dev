@@ -9,341 +9,61 @@ namespace InitECandidate.Proofs.BackendStages
 def Alignment490 : LabSem.LabSectionHOL 64 :=
 { sectionId := 490,
   lines :=
-    [Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 254#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jumpCmp Flapjack.Cmp.notLower 24
-          (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 7))
-        16#64 [99#8, 120#8, 156#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
-        [19#8, 101#8, 32#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709206260#64 [111#8, 176#8, 90#8, 175#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 7 0, Flapjack.Compiler.Backend.LabLang.Line.label 490 1 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 176#64)))
-        [19#8, 101#8, 0#8, 11#8] 4,
+    [Flapjack.Compiler.Backend.LabLang.Line.label 490 1 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 1
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [35#8, 56#8, 28#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1547#64)))
-        [19#8, 107#8, 176#8, 96#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))))
-        [35#8, 48#8, 108#8, 1#8] 4,
+            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 11
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551592#64))))
+        [131#8, 181#8, 140#8, 254#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 254#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jumpCmp Flapjack.Cmp.notLower 24
-          (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 8))
-        16#64 [99#8, 120#8, 156#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
-        [19#8, 101#8, 32#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709206220#64 [111#8, 176#8, 218#8, 172#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 8 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)))
-        [19#8, 107#8, 16#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))))
-        [35#8, 48#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.locValue 22 (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 3))
-        76#64 [23#8, 11#8, 0#8, 0#8, 19#8, 11#8, 203#8, 4#8] 8,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))))
-        [35#8, 52#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [3#8, 187#8, 140#8, 252#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [35#8, 56#8, 108#8, 1#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsl 11 11
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 1#64)))))
+        [147#8, 149#8, 21#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))))
-        [51#8, 107#8, 140#8, 1#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 11 11
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 26)))))
+        [179#8, 133#8, 165#8, 1#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
+            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 11
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 11 18446744073709551360#64))))
+        [131#8, 181#8, 5#8, 240#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
+            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 12
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 11 0#64))))
+        [3#8, 182#8, 5#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))))
-        [51#8, 11#8, 155#8, 65#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))))
-        [19#8, 91#8, 59#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [35#8, 180#8, 108#8, 253#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.locValue 1 (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 2))
-        16#64 [151#8, 0#8, 0#8, 0#8, 147#8, 128#8, 0#8, 1#8] 8,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 74 0))
-        18446744073709213288#64 [111#8, 208#8, 138#8, 230#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 2 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [3#8, 59#8, 12#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [35#8, 180#8, 108#8, 253#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 10
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 10)))))
-        [179#8, 96#8, 165#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 9)) 16#64
-        [111#8, 0#8, 0#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 3 0,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709207008#64 [111#8, 176#8, 26#8, 222#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 9 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 10 1
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1)))))
-        [51#8, 229#8, 16#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 176#64)))
-        [147#8, 101#8, 0#8, 11#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 10 10
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 12)))))
+        [51#8, 5#8, 197#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 10
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))))
-        [35#8, 52#8, 172#8, 0#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 11 0#64))))
+        [35#8, 176#8, 165#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1548#64)))
-        [19#8, 107#8, 192#8, 96#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))))
-        [35#8, 48#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 254#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jumpCmp Flapjack.Cmp.notLower 24
-          (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 10))
-        16#64 [99#8, 120#8, 156#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
-        [19#8, 101#8, 32#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709206088#64 [111#8, 176#8, 154#8, 164#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 10 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)))
-        [19#8, 107#8, 16#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))))
-        [35#8, 48#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.locValue 22 (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 5))
-        80#64 [23#8, 11#8, 0#8, 0#8, 19#8, 11#8, 11#8, 5#8] 8,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))))
-        [35#8, 52#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [3#8, 187#8, 140#8, 252#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [35#8, 56#8, 108#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))))
-        [51#8, 107#8, 140#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))))
-        [51#8, 11#8, 155#8, 65#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))))
-        [19#8, 91#8, 59#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [35#8, 180#8, 108#8, 253#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.locValue 1 (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 4))
-        16#64 [151#8, 0#8, 0#8, 0#8, 147#8, 128#8, 0#8, 1#8] 8,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 78 0))
-        18446744073709214060#64 [111#8, 208#8, 218#8, 150#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 4 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [3#8, 59#8, 12#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))))
-        [35#8, 180#8, 108#8, 253#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 1
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [131#8, 48#8, 12#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 11
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))))
-        [131#8, 53#8, 140#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 490 11)) 24#64
-        [111#8, 0#8, 128#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 5 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 1
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))))
-        [131#8, 48#8, 12#8, 1#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 11
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))))
-        [131#8, 53#8, 140#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709206864#64 [111#8, 176#8, 26#8, 213#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 11 0,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 10 11
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 11)))))
-        [51#8, 229#8, 181#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))))
-        [19#8, 12#8, 140#8, 1#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 0#64)))
+        [19#8, 101#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 1))
         [103#8, 128#8, 0#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.label 490 12 0] }
-theorem Alignment490_eq : LabToTarget.linesUpdLabLen 309452 TargetChecks.Reencode1_490.lines [] = (Alignment490.lines, 309720) := by
+      Flapjack.Compiler.Backend.LabLang.Line.label 490 2 0] }
+theorem Alignment490_eq : LabToTarget.linesUpdLabLen 366644 TargetChecks.Reencode1_490.lines [] = (Alignment490.lines, 366680) := by
   kernel_rfl
 #print axioms Alignment490_eq
 end InitECandidate.Proofs.BackendStages

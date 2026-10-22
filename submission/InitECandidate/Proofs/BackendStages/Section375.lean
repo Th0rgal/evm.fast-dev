@@ -25,7 +25,7 @@ def section375 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0)) 0#64 [] 0,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0)) 0#64 [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.label 375 2 0] }
 theorem section375_eq : StackToLab.progToSectionHOL Named375 = section375 := by
   kernel_rfl

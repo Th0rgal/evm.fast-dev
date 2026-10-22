@@ -38,7 +38,7 @@ def RemovedBody95_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody95_9 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 42#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 41#64)
 
 def RemovedBody95_10 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst

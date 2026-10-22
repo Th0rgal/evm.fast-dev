@@ -273,8 +273,8 @@ def stackBody609_72 : StackLang.HolProg 64 :=
 .seq stackBody609_0 stackBody609_71
 
 def function609 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody609_72, 0, bitmapPrefix, 2352)
-theorem function609_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized609.2.2 InitECandidate.Proofs.StackAnalysis.optimized609.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2352) = function609 bitmapPrefix := by
+(stackBody609_72, 0, bitmapPrefix, 2344)
+theorem function609_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized609.2.2 InitECandidate.Proofs.StackAnalysis.optimized609.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2344) = function609 bitmapPrefix := by
   kernel_rfl
 #print axioms function609_eq
 end InitECandidate.Proofs.BackendStages

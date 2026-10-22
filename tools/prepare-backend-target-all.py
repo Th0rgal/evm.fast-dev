@@ -6,7 +6,8 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument("--generate",action="store_true")
 p.add_argument("--generate-only",action="store_true")
 p.add_argument("--labels",nargs="*",type=int)
-p.add_argument("--workers",type=int,default=4,choices=range(1,5))
+p.add_argument("--end-label",type=int)
+p.add_argument("--workers",type=int,default=16,choices=range(1,31))
 p.add_argument("--seconds",type=int,default=180)
 p.add_argument("--generation-seconds",type=int,default=900)
 p.add_argument("--bridges-only",action="store_true",help="Resume origin bridges without repeating target certificates")
@@ -14,11 +15,12 @@ p.add_argument("--bridges",action="store_true",help="Check available Encoded ori
 a=p.parse_args();root=Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages/target-checks"
 work.mkdir(parents=True,exist_ok=True)
 labels=a.labels or [int(row[0]) for row in csv.reader((root/"tools/target-encoding/Positions0.csv").open())]
+if a.end_label is not None:labels=[label for label in labels if label<=a.end_label]
 state=work/"queue-state";state.mkdir(exist_ok=True)
 def command(name,args,seconds):
  started=time.monotonic()
  with (work/f"{name}.log").open("w") as out,(work/f"{name}.time").open("w") as err:
-  r=subprocess.run(["/usr/bin/time","-v","timeout","--kill-after=5s",str(seconds),"taskset","-c","0-3",*args],cwd=root,stdout=out,stderr=err)
+  r=subprocess.run(["/usr/bin/time","-v","timeout","--kill-after=5s",str(seconds),*args],cwd=root,stdout=out,stderr=err)
  if r.returncode:raise RuntimeError(f"{name}:exit{r.returncode}")
  return time.monotonic()-started
 if a.generate or a.generate_only:

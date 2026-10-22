@@ -15,8 +15,11 @@ instance : ToExpr LabToTarget.ShmemInfoNum where
 
 private def common := "set_option autoImplicit false\nset_option Elab.async false\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend\nopen InitECandidate.Proofs.BackendStages\nnamespace InitECandidate.Proofs.BackendStages.Metadata\n"
 private def ending := "end InitECandidate.Proofs.BackendStages.Metadata\n"
-private def emit (name text : String) : IO Unit :=
-  IO.FS.writeFile s!"submission/InitECandidate/Proofs/BackendStages/Metadata/{name}.lean" text
+private def emit (name text : String) : IO Unit := do
+  let path := System.FilePath.mk s!"submission/InitECandidate/Proofs/BackendStages/Metadata/{name}.lean"
+  if ← path.pathExists then
+    if (← IO.FS.readFile path) == text then return
+  IO.FS.writeFile path text
 
 partial def stable (program : LabSem.LabProgHOL 64) (ffis : List HolFfiName)
     (clock : Nat) : IO (LabSem.LabProgHOL 64) := do
@@ -67,7 +70,7 @@ def prepare (env : Environment) (stack : List (Nat × StackLang.HolProg 64)) : I
     emit s!"Ffi{identifier}" (s!"import InitECandidate.Proofs.BackendStages.Metadata.Data{identifier}\nimport InitECandidate.Proofs.BackendStages.Filtered{identifier}\n" ++ common ++
       s!"theorem localFfis{identifier}_eq : ffiLines Filtered{identifier}.lines = localFfis{identifier} := by\n  with_unfolding_all rfl\ntheorem ffiStep{identifier} (rest : LabSem.LabProgHOL 64) (h : LabToTarget.findFfiNames rest = nextFfis{identifier}) : LabToTarget.findFfiNames (Filtered{identifier} :: rest) = suffixFfis{identifier} := by\n  rw [findFfiNames_section, localFfis{identifier}_eq, h]\n  with_unfolding_all rfl\n#print axioms ffiStep{identifier}\n" ++ ending)
     emit s!"Shmem{identifier}" (s!"import InitECandidate.Proofs.BackendStages.Metadata.Data{identifier}\nimport InitECandidate.Proofs.BackendStages.Padded{identifier}\n" ++ common ++
-      s!"theorem walkStep{identifier} : walkShmemLines Padded{identifier}.lines {position} beforeFfis{identifier} beforeShmem{identifier} = ({next}, afterFfis{identifier}, afterShmem{identifier}) := by\n  with_unfolding_all rfl\ntheorem shmemStep{identifier} (rest : LabSem.LabProgHOL 64) : LabToTarget.getShmemInfo (Padded{identifier} :: rest) {position} beforeFfis{identifier} beforeShmem{identifier} = LabToTarget.getShmemInfo rest {next} afterFfis{identifier} afterShmem{identifier} := by\n  rw [getShmemInfo_section, walkStep{identifier}]\ntheorem symbolLength{identifier} : LabToTarget.secLength Padded{identifier}.lines 0 = {length} := by\n  with_unfolding_all rfl\n#print axioms shmemStep{identifier}\n#print axioms symbolLength{identifier}\n" ++ ending)
+      s!"theorem walkStep{identifier} : walkShmemLines Padded{identifier}.lines {position} beforeFfis{identifier} beforeShmem{identifier} = ({next}, afterFfis{identifier}, afterShmem{identifier}) := by\n  kernel_rfl\ntheorem shmemStep{identifier} (rest : LabSem.LabProgHOL 64) : LabToTarget.getShmemInfo (Padded{identifier} :: rest) {position} beforeFfis{identifier} beforeShmem{identifier} = LabToTarget.getShmemInfo rest {next} afterFfis{identifier} afterShmem{identifier} := by\n  rw [getShmemInfo_section, walkStep{identifier}]\ntheorem symbolLength{identifier} : LabToTarget.secLength Padded{identifier}.lines 0 = {length} := by\n  kernel_rfl\n#print axioms shmemStep{identifier}\n#print axioms symbolLength{identifier}\n" ++ ending)
     csv := csv ++ [s!"{identifier},{position},{next},{length}"]
     position := next
     beforeF := afterF

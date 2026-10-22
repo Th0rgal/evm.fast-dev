@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.RawStubs
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.Backend
@@ -113,6 +114,6 @@ def AllocStubsBody_34 : StackLang.HolProg 64 :=
 
 def AllocStubs : List (Nat × StackLang.HolProg 64) := [(4, AllocStubsBody_16), (5, AllocStubsBody_31), (6, AllocStubsBody_34)]
 theorem AllocStubs_eq : StackAlloc.stubs RiscVConfig.pancakeRiscVBackendConfig.dataConf ++ RawStubs.map StackAlloc.progComp = AllocStubs := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms AllocStubs_eq
 end InitECandidate.Proofs.BackendStages

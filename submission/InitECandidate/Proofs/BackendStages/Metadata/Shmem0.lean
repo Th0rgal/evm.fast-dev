@@ -8,11 +8,11 @@ open Flapjack Flapjack.Compiler.Backend
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.Metadata
 theorem walkStep0 : walkShmemLines Padded0.lines 0 beforeFfis0 beforeShmem0 = (756, afterFfis0, afterShmem0) := by
-  with_unfolding_all rfl
+  kernel_rfl
 theorem shmemStep0 (rest : LabSem.LabProgHOL 64) : LabToTarget.getShmemInfo (Padded0 :: rest) 0 beforeFfis0 beforeShmem0 = LabToTarget.getShmemInfo rest 756 afterFfis0 afterShmem0 := by
   rw [getShmemInfo_section, walkStep0]
 theorem symbolLength0 : LabToTarget.secLength Padded0.lines 0 = 756 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms shmemStep0
 #print axioms symbolLength0
 end InitECandidate.Proofs.BackendStages.Metadata

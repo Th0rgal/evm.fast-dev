@@ -178,8 +178,8 @@ def stackBody540_48 : StackLang.HolProg 64 :=
 .seq stackBody540_0 stackBody540_47
 
 def function540 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody540_48, 0, bitmapPrefix, 1797)
-theorem function540_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized540.2.2 InitECandidate.Proofs.StackAnalysis.optimized540.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1797) = function540 bitmapPrefix := by
+(stackBody540_48, 0, bitmapPrefix, 1789)
+theorem function540_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized540.2.2 InitECandidate.Proofs.StackAnalysis.optimized540.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1789) = function540 bitmapPrefix := by
   kernel_rfl
 #print axioms function540_eq
 end InitECandidate.Proofs.BackendStages

@@ -10,17 +10,19 @@ for ids,suffix in chunks:
  name=stage+suffix;cert=work/f"{name}.check.json"
  baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
  source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
  fresh=lambda p: p.exists() and (suffix=="Stubs" or p.stat().st_mtime_ns>=baseline.stat().st_mtime_ns)
- if fresh(source) and cert.exists() and (suffix=="Stubs" or cert.stat().st_mtime_ns>=source.stat().st_mtime_ns) and json.loads(cert.read_text()).get("returncode")==0:continue
+ if fresh(source) and output.exists() and cert.exists() and output.stat().st_mtime_ns>=source.stat().st_mtime_ns and cert.stat().st_mtime_ns>=output.stat().st_mtime_ns and json.loads(cert.read_text()).get("returncode")==0:continue
  for n in ids:
   dep=work/f"{stage}{n}.check.json"
   dep_source=root/f"submission/InitECandidate/Proofs/BackendStages/{stage}{n}.lean"
-  while not (fresh(dep_source) and dep.exists() and (n<64 or dep.stat().st_mtime_ns>=dep_source.stat().st_mtime_ns) and json.loads(dep.read_text()).get("returncode")==0):time.sleep(2)
+  dep_output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{stage}{n}.olean"
+  while not (fresh(dep_source) and dep_output.exists() and dep.exists() and dep_output.stat().st_mtime_ns>=dep_source.stat().st_mtime_ns and dep.stat().st_mtime_ns>=dep_output.stat().st_mtime_ns and json.loads(dep.read_text()).get("returncode")==0):time.sleep(2)
  prev="Section"+suffix if stage=="Filtered" else "Filtered"+suffix
  prior=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prev}.olean"
  prior_source=root/f"submission/InitECandidate/Proofs/BackendStages/{prev}.lean"
  prior_cert=work/f"{prev}.check.json"
- while not (fresh(prior_source) and prior.exists() and (suffix=="Stubs" or prior_cert.exists() and prior_cert.stat().st_mtime_ns>=prior_source.stat().st_mtime_ns and json.loads(prior_cert.read_text()).get("returncode")==0)):time.sleep(2)
+ while not (fresh(prior_source) and prior.exists() and prior.stat().st_mtime_ns>=prior_source.stat().st_mtime_ns and (suffix=="Stubs" or prior_cert.exists() and prior_cert.stat().st_mtime_ns>=prior.stat().st_mtime_ns and json.loads(prior_cert.read_text()).get("returncode")==0)):time.sleep(2)
  inp="SectionStubs" if suffix=="Stubs" and stage=="Filtered" else prev+".sections"
  vals=[("section"+str(n)) if stage=="Filtered" else "Filtered"+str(n) for n in ids]
  fun="(fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip })" if stage=="Filtered" else "(LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length)"

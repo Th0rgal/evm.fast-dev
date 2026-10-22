@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Function68
 import InitECandidate.Proofs.BackendStages.RawInfoData
 import Flapjack.Compiler.Backend.StackRawCall
@@ -29,7 +30,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 2 18446744073709551608#64))
 
 def rawBody68_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 33806089496#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2952790016#64)
 
 def rawBody68_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -71,7 +72,7 @@ def rawBody68_17 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody68_18 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 28#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 27#64)
 
 def rawBody68_19 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -266,7 +267,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551608#64)))
 
 def rawBody68_80 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 33806089496#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 0 2952790016#64)
 
 def rawBody68_81 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -290,7 +291,7 @@ def rawBody68_87 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody68_88 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 29#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 28#64)
 
 def rawBody68_89 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -599,6 +600,6 @@ def rawBody68_186 : StackLang.HolProg 64 :=
 
 def raw68 : StackLang.HolProg 64 := rawBody68_186
 theorem raw68_eq : StackRawCall.compTop RawInfo.rawInfo (function68 (.list [])).1 = raw68 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms raw68_eq
 end InitECandidate.Proofs.BackendStages

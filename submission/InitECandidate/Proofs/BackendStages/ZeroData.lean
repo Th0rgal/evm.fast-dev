@@ -49,16 +49,14 @@ import InitECandidate.Proofs.BackendStages.ZeroChunkData800_815
 import InitECandidate.Proofs.BackendStages.ZeroChunkData816_831
 import InitECandidate.Proofs.BackendStages.ZeroChunkData832_847
 import InitECandidate.Proofs.BackendStages.ZeroChunkData848_863
-import InitECandidate.Proofs.BackendStages.ZeroChunkData864_879
-import InitECandidate.Proofs.BackendStages.ZeroChunkData880_889
+import InitECandidate.Proofs.BackendStages.ZeroChunkData864_877
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack
 namespace InitECandidate.Proofs.BackendStages.ZeroData
-def keys53 : List Nat := []
-def allKeys52 := ZeroChunkData880_889.keys ++ keys53
-def allKeys51 := ZeroChunkData864_879.keys ++ allKeys52
+def keys52 : List Nat := []
+def allKeys51 := ZeroChunkData864_877.keys ++ keys52
 def allKeys50 := ZeroChunkData848_863.keys ++ allKeys51
 def allKeys49 := ZeroChunkData832_847.keys ++ allKeys50
 def allKeys48 := ZeroChunkData816_831.keys ++ allKeys49

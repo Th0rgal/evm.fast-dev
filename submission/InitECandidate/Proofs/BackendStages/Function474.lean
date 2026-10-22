@@ -233,8 +233,8 @@ def stackBody474_62 : StackLang.HolProg 64 :=
 .seq stackBody474_0 stackBody474_61
 
 def function474 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody474_62, 0, bitmapPrefix, 1503)
-theorem function474_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized474.2.2 InitECandidate.Proofs.StackAnalysis.optimized474.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1503) = function474 bitmapPrefix := by
+(stackBody474_62, 0, bitmapPrefix, 1495)
+theorem function474_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized474.2.2 InitECandidate.Proofs.StackAnalysis.optimized474.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1495) = function474 bitmapPrefix := by
   kernel_rfl
 #print axioms function474_eq
 end InitECandidate.Proofs.BackendStages

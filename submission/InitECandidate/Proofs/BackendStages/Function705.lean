@@ -153,8 +153,8 @@ def stackBody705_42 : StackLang.HolProg 64 :=
 .seq stackBody705_0 stackBody705_41
 
 def function705 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody705_42, 0, bitmapPrefix, 3158)
-theorem function705_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized705.2.2 InitECandidate.Proofs.StackAnalysis.optimized705.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3158) = function705 bitmapPrefix := by
+(stackBody705_42, 0, bitmapPrefix, 3151)
+theorem function705_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized705.2.2 InitECandidate.Proofs.StackAnalysis.optimized705.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3151) = function705 bitmapPrefix := by
   kernel_rfl
 #print axioms function705_eq
 end InitECandidate.Proofs.BackendStages

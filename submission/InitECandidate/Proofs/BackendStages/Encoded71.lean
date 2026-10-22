@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Filtered71
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.LabToTarget.Compile
@@ -110,8 +111,8 @@ def Encoded71 : LabSem.LabSectionHOL 64 :=
         [35#8, 52#8, 188#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 30#64)))
-        [19#8, 107#8, 224#8, 1#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 29#64)))
+        [19#8, 107#8, 208#8, 1#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
@@ -331,8 +332,8 @@ def Encoded71 : LabSem.LabSectionHOL 64 :=
         [35#8, 52#8, 188#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 31#64)))
-        [19#8, 107#8, 240#8, 1#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 30#64)))
+        [19#8, 107#8, 224#8, 1#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
@@ -537,6 +538,6 @@ def Encoded71 : LabSem.LabSectionHOL 64 :=
         [103#8, 128#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 71 16 4] }
 theorem Encoded71_eq : LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length Filtered71 = Encoded71 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms Encoded71_eq
 end InitECandidate.Proofs.BackendStages

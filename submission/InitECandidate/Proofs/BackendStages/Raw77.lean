@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Function77
 import InitECandidate.Proofs.BackendStages.RawInfoData
 import Flapjack.Compiler.Backend.StackRawCall
@@ -1146,6 +1147,6 @@ def rawBody77_326 : StackLang.HolProg 64 :=
 
 def raw77 : StackLang.HolProg 64 := rawBody77_326
 theorem raw77_eq : StackRawCall.compTop RawInfo.rawInfo (function77 (.list [])).1 = raw77 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms raw77_eq
 end InitECandidate.Proofs.BackendStages

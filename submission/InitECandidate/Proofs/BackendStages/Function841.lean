@@ -278,8 +278,8 @@ def stackBody841_77 : StackLang.HolProg 64 :=
 .seq stackBody841_0 stackBody841_76
 
 def function841 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody841_77, 0, bitmapPrefix, 4215)
-theorem function841_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized841.2.2 InitECandidate.Proofs.StackAnalysis.optimized841.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4215) = function841 bitmapPrefix := by
+(stackBody841_77, 0, bitmapPrefix, 4208)
+theorem function841_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized841.2.2 InitECandidate.Proofs.StackAnalysis.optimized841.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4208) = function841 bitmapPrefix := by
   kernel_rfl
 #print axioms function841_eq
 end InitECandidate.Proofs.BackendStages

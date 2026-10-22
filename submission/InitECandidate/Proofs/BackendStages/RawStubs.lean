@@ -1,5 +1,6 @@
-import InitECandidate.Proofs.CompilerComputation
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.RawInfoData
+import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.Backend
 import Flapjack.Compiler.Backend.RiscVConfig.Executable
 set_option maxRecDepth 1000000
@@ -62,6 +63,6 @@ def RawStubsBody_17 : StackLang.HolProg 64 :=
 
 def RawStubs : List (Nat × StackLang.HolProg 64) := [(5, RawStubsBody_14), (6, RawStubsBody_17)]
 theorem RawStubs_eq : [(raiseStubLocation, StackRawCall.compTop RawInfo.rawInfo (WordToStack.Native.raiseStubNative false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)))), (storeConstsStubLocation, StackRawCall.compTop RawInfo.rawInfo (WordToStack.Native.storeConstsStubNative (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))))] = RawStubs := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms RawStubs_eq
 end InitECandidate.Proofs.BackendStages

@@ -290,8 +290,8 @@ def stackBody486_80 : StackLang.HolProg 64 :=
 .seq stackBody486_0 stackBody486_79
 
 def function486 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody486_80, 0, bitmapPrefix, 1532)
-theorem function486_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized486.2.2 InitECandidate.Proofs.StackAnalysis.optimized486.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1532) = function486 bitmapPrefix := by
+(stackBody486_80, 0, bitmapPrefix, 1524)
+theorem function486_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized486.2.2 InitECandidate.Proofs.StackAnalysis.optimized486.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1524) = function486 bitmapPrefix := by
   kernel_rfl
 #print axioms function486_eq
 end InitECandidate.Proofs.BackendStages

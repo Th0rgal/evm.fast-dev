@@ -452,8 +452,8 @@ def stackBody456_139 : StackLang.HolProg 64 :=
 .seq stackBody456_0 stackBody456_138
 
 def function456 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody456_139, 0, bitmapPrefix, 1406)
-theorem function456_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized456.2.2 InitECandidate.Proofs.StackAnalysis.optimized456.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1406) = function456 bitmapPrefix := by
+(stackBody456_139, 0, bitmapPrefix, 1398)
+theorem function456_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized456.2.2 InitECandidate.Proofs.StackAnalysis.optimized456.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1398) = function456 bitmapPrefix := by
   kernel_rfl
 #print axioms function456_eq
 end InitECandidate.Proofs.BackendStages

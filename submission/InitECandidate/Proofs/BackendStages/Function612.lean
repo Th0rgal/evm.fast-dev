@@ -151,7 +151,7 @@ def stackBody612_44 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody612_45 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2358#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2350#64)
 
 def stackBody612_46 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -1297,8 +1297,8 @@ def stackBody612_384 : StackLang.HolProg 64 :=
 .seq stackBody612_0 stackBody612_383
 
 def function612 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody612_384, 20, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [524288#64]), 2358)
-theorem function612_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized612.2.2 InitECandidate.Proofs.StackAnalysis.optimized612.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2357) = function612 bitmapPrefix := by
+(stackBody612_384, 20, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [524288#64]), 2350)
+theorem function612_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized612.2.2 InitECandidate.Proofs.StackAnalysis.optimized612.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2349) = function612 bitmapPrefix := by
   kernel_rfl
 #print axioms function612_eq
 end InitECandidate.Proofs.BackendStages

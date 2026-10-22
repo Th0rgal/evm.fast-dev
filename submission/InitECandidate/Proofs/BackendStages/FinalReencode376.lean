@@ -26,10 +26,10 @@ def FinalReencode376 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [147#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0))
-        18446744073709551020#64 [111#8, 240#8, 223#8, 218#8] 4,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709550988#64 [111#8, 240#8, 223#8, 216#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 376 2 0] }
-theorem FinalReencode376_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 231892 riscvConfig.encode Alignment376.lines [] true = (FinalReencode376.lines, 231908, true) := by
+theorem FinalReencode376_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 287208 riscvConfig.encode Alignment376.lines [] true = (FinalReencode376.lines, 287224, true) := by
   kernel_rfl
 #print axioms FinalReencode376_eq
 end InitECandidate.Proofs.BackendStages

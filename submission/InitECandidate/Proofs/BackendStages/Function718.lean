@@ -234,8 +234,8 @@ def stackBody718_58 : StackLang.HolProg 64 :=
 .seq stackBody718_0 stackBody718_57
 
 def function718 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody718_58, 0, bitmapPrefix, 3237)
-theorem function718_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized718.2.2 InitECandidate.Proofs.StackAnalysis.optimized718.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3237) = function718 bitmapPrefix := by
+(stackBody718_58, 0, bitmapPrefix, 3230)
+theorem function718_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized718.2.2 InitECandidate.Proofs.StackAnalysis.optimized718.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3230) = function718 bitmapPrefix := by
   kernel_rfl
 #print axioms function718_eq
 end InitECandidate.Proofs.BackendStages

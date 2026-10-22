@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Removed68
 import Flapjack.Compiler.Backend.Backend
 set_option maxRecDepth 1000000
@@ -54,7 +55,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 11 18446744073709551608#64))
 
 def NamedBody68_12 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 33806089496#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 2952790016#64)
 
 def NamedBody68_13 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -102,7 +103,7 @@ def NamedBody68_23 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody68_24 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 28#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 27#64)
 
 def NamedBody68_25 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -368,7 +369,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551608#64)))
 
 def NamedBody68_96 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 33806089496#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2952790016#64)
 
 def NamedBody68_97 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -396,7 +397,7 @@ def NamedBody68_103 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody68_104 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 29#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 28#64)
 
 def NamedBody68_105 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -788,6 +789,6 @@ def NamedBody68_212 : StackLang.HolProg 64 :=
 
 def Named68 : Nat × StackLang.HolProg 64 := (68, NamedBody68_212)
 theorem Named68_eq : StackNames.progCompEntryHOL RiscVConfig.riscvNames Removed68 = Named68 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms Named68_eq
 end InitECandidate.Proofs.BackendStages

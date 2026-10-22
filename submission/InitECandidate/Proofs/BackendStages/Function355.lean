@@ -38,8 +38,8 @@ def stackBody355_8 : StackLang.HolProg 64 :=
 .seq stackBody355_0 stackBody355_7
 
 def function355 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody355_8, 0, bitmapPrefix, 1034)
-theorem function355_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized355.2.2 InitECandidate.Proofs.StackAnalysis.optimized355.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1034) = function355 bitmapPrefix := by
+(stackBody355_8, 0, bitmapPrefix, 1026)
+theorem function355_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized355.2.2 InitECandidate.Proofs.StackAnalysis.optimized355.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1026) = function355 bitmapPrefix := by
   kernel_rfl
 #print axioms function355_eq
 end InitECandidate.Proofs.BackendStages

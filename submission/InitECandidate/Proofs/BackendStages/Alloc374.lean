@@ -11,41 +11,38 @@ Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 def AllocBody374_1 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 4 3
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 3)))
-
-def AllocBody374_2 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 3 2
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 4 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 2)))
 
+def AllocBody374_2 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 0#64)
+
 def AllocBody374_3 : StackLang.HolProg 64 :=
-.seq AllocBody374_1 AllocBody374_2
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 1#64)
 
 def AllocBody374_4 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2#64)
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody374_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody374_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.call none (Sum.inl 370) none
 
 def AllocBody374_7 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.seq AllocBody374_5 AllocBody374_6
 
 def AllocBody374_8 : StackLang.HolProg 64 :=
-.seq AllocBody374_6 AllocBody374_7
+.seq AllocBody374_4 AllocBody374_7
 
 def AllocBody374_9 : StackLang.HolProg 64 :=
-.seq AllocBody374_5 AllocBody374_8
+.seq AllocBody374_3 AllocBody374_8
 
 def AllocBody374_10 : StackLang.HolProg 64 :=
-.seq AllocBody374_4 AllocBody374_9
+.seq AllocBody374_2 AllocBody374_9
 
 def AllocBody374_11 : StackLang.HolProg 64 :=
-.seq AllocBody374_3 AllocBody374_10
+.seq AllocBody374_1 AllocBody374_10
 
 def AllocBody374_12 : StackLang.HolProg 64 :=
 .seq AllocBody374_0 AllocBody374_11

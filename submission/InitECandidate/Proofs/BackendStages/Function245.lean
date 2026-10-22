@@ -42,8 +42,8 @@ def stackBody245_10 : StackLang.HolProg 64 :=
 .seq stackBody245_0 stackBody245_9
 
 def function245 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody245_10, 0, bitmapPrefix, 490)
-theorem function245_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized245.2.2 InitECandidate.Proofs.StackAnalysis.optimized245.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 490) = function245 bitmapPrefix := by
+(stackBody245_10, 0, bitmapPrefix, 482)
+theorem function245_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized245.2.2 InitECandidate.Proofs.StackAnalysis.optimized245.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 482) = function245 bitmapPrefix := by
   kernel_rfl
 #print axioms function245_eq
 end InitECandidate.Proofs.BackendStages

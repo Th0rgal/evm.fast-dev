@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
 """Link independently generated stack literals to certified optimizer outputs."""
 from pathlib import Path
+from guest_layout import STOP_LABEL
 root = Path(__file__).resolve().parents[1]
 directory = root / "submission/InitECandidate/Proofs/WordBackend/StackAgreement"
 directory.mkdir(parents=True, exist_ok=True)
-labels = range(64, 890)
+labels = range(64, STOP_LABEL)
 chunks = []
-for start in range(64, 890, 16):
-    selected = range(start, min(start + 16, 890))
+for start in range(64, STOP_LABEL, 16):
+    selected = range(start, min(start + 16, STOP_LABEL))
     module = f"InitECandidate.Proofs.WordBackend.StackAgreement.Chunk{start}"
     chunks.append(module)
     imports = "".join(f"import InitECandidate.Proofs.WordStages.Optimize{n}\nimport InitECandidate.Proofs.StackAnalysis.Data{n}\n" for n in selected)

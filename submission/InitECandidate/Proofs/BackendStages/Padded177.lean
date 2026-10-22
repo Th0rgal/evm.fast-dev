@@ -23,7 +23,7 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
         [19#8, 101#8, 32#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709503352#64 [111#8, 64#8, 143#8, 183#8] 4,
+        18446744073709454596#64 [111#8, 128#8, 78#8, 208#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 177 7 0, Flapjack.Compiler.Backend.LabLang.Line.label 177 1 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -139,8 +139,8 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
         [35#8, 56#8, 204#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 209#64)))
-        [19#8, 107#8, 16#8, 13#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 199#64)))
+        [19#8, 107#8, 112#8, 12#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
@@ -163,7 +163,7 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
         [19#8, 101#8, 32#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709503244#64 [111#8, 64#8, 207#8, 176#8] 4,
+        18446744073709454488#64 [111#8, 128#8, 142#8, 201#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 177 10 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -286,7 +286,7 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
         [131#8, 48#8, 140#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709503976#64 [111#8, 64#8, 143#8, 222#8] 4,
+        18446744073709455220#64 [111#8, 128#8, 78#8, 247#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 177 11 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -316,8 +316,8 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
         [35#8, 56#8, 204#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 210#64)))
-        [19#8, 107#8, 32#8, 13#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 200#64)))
+        [19#8, 107#8, 128#8, 12#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
@@ -340,7 +340,7 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
         [19#8, 101#8, 32#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709503108#64 [111#8, 64#8, 79#8, 168#8] 4,
+        18446744073709454352#64 [111#8, 128#8, 14#8, 193#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 177 12 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -456,7 +456,7 @@ def Padded177 : LabSem.LabSectionHOL 64 :=
         [131#8, 48#8, 12#8, 1#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709503844#64 [111#8, 64#8, 79#8, 214#8] 4,
+        18446744073709455088#64 [111#8, 128#8, 14#8, 239#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 177 13 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi

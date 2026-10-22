@@ -5917,7 +5917,7 @@ def stackBody645_1350 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody645_1351 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2633#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2625#64)
 
 def stackBody645_1352 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -6712,7 +6712,7 @@ def stackBody645_1611 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody645_1612 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2635#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2627#64)
 
 def stackBody645_1613 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -6910,7 +6910,7 @@ def stackBody645_1675 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody645_1676 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2637#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2629#64)
 
 def stackBody645_1677 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -10843,8 +10843,8 @@ def function645 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × N
       (Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [9223372036854775808#64, 8#64]))
       (Flapjack.AppList.list [9223372036854775808#64, 8#64]))
     (Flapjack.AppList.list [9223372036854775808#64, 8#64]),
-  2638)
-theorem function645_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized645.2.2 InitECandidate.Proofs.StackAnalysis.optimized645.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2632) = function645 bitmapPrefix := by
+  2630)
+theorem function645_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized645.2.2 InitECandidate.Proofs.StackAnalysis.optimized645.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2624) = function645 bitmapPrefix := by
   kernel_rfl
 #print axioms function645_eq
 end InitECandidate.Proofs.BackendStages

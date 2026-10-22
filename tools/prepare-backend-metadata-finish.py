@@ -8,7 +8,14 @@ ids=[int(p.stem[4:]) for p in base.glob('Data*.lean')]
 start=time.monotonic()
 def successful(name):
     p=work/(name+'.json')
-    try:return json.loads(p.read_text()).get('returncode')==0
+    source=base/(name+'.lean')
+    output=root/('.lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Metadata/'+name+'.olean')
+    stage='Data' if name.startswith('Ffi') else 'Padded'
+    label=name[3:] if name.startswith('Ffi') else name[5:]
+    dependency=root/('.lake/build/lib/lean/InitECandidate/Proofs/BackendStages/'+('Metadata/' if stage=='Data' else '')+stage+label+'.olean')
+    try:return (json.loads(p.read_text()).get('returncode')==0 and
+                output.stat().st_mtime_ns>=source.stat().st_mtime_ns and
+                output.stat().st_mtime_ns>=dependency.stat().st_mtime_ns)
     except (OSError,json.JSONDecodeError):return False
 while not all(successful(stage+str(n)) for n in ids for stage in ['Ffi','Shmem']):
     if time.monotonic()-start>28800:raise SystemExit('metadata sections still pending after eight hours')

@@ -14,73 +14,82 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody354_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 5
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 320#64))
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 1
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 0#64))
 
 def rawBody354_3 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 0#64)
 
 def rawBody354_4 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 328#64))
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def rawBody354_5 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 1#64)
 
 def rawBody354_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 3
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 336#64))
-
-def rawBody354_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def rawBody354_8 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 344#64))
-
-def rawBody354_9 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 5
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 5)))
-
-def rawBody354_10 : StackLang.HolProg 64 :=
+def rawBody354_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 0
 
+def rawBody354_8 : StackLang.HolProg 64 :=
+.seq rawBody354_6 rawBody354_7
+
+def rawBody354_9 : StackLang.HolProg 64 :=
+.seq rawBody354_5 rawBody354_8
+
+def rawBody354_10 : StackLang.HolProg 64 :=
+.seq rawBody354_4 rawBody354_9
+
 def rawBody354_11 : StackLang.HolProg 64 :=
-.seq rawBody354_9 rawBody354_10
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody354_12 : StackLang.HolProg 64 :=
-.seq rawBody354_8 rawBody354_11
+.ite (Flapjack.Cmp.notEqual) 1 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 2) rawBody354_10 rawBody354_11
 
 def rawBody354_13 : StackLang.HolProg 64 :=
-.seq rawBody354_7 rawBody354_12
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def rawBody354_14 : StackLang.HolProg 64 :=
-.seq rawBody354_6 rawBody354_13
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def rawBody354_15 : StackLang.HolProg 64 :=
-.seq rawBody354_5 rawBody354_14
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)
 
 def rawBody354_16 : StackLang.HolProg 64 :=
-.seq rawBody354_4 rawBody354_15
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody354_17 : StackLang.HolProg 64 :=
-.seq rawBody354_3 rawBody354_16
+Flapjack.Compiler.Backend.StackLang.Prog.ret 0
 
 def rawBody354_18 : StackLang.HolProg 64 :=
-.seq rawBody354_2 rawBody354_17
+.seq rawBody354_16 rawBody354_17
 
 def rawBody354_19 : StackLang.HolProg 64 :=
-.seq rawBody354_1 rawBody354_18
+.seq rawBody354_15 rawBody354_18
 
 def rawBody354_20 : StackLang.HolProg 64 :=
-.seq rawBody354_0 rawBody354_19
+.seq rawBody354_14 rawBody354_19
 
-def raw354 : StackLang.HolProg 64 := rawBody354_20
+def rawBody354_21 : StackLang.HolProg 64 :=
+.seq rawBody354_13 rawBody354_20
+
+def rawBody354_22 : StackLang.HolProg 64 :=
+.seq rawBody354_12 rawBody354_21
+
+def rawBody354_23 : StackLang.HolProg 64 :=
+.seq rawBody354_3 rawBody354_22
+
+def rawBody354_24 : StackLang.HolProg 64 :=
+.seq rawBody354_2 rawBody354_23
+
+def rawBody354_25 : StackLang.HolProg 64 :=
+.seq rawBody354_1 rawBody354_24
+
+def rawBody354_26 : StackLang.HolProg 64 :=
+.seq rawBody354_0 rawBody354_25
+
+def raw354 : StackLang.HolProg 64 := rawBody354_26
 theorem raw354_eq : StackRawCall.compTop RawInfo.rawInfo (function354 (.list [])).1 = raw354 := by
   kernel_rfl
 #print axioms raw354_eq

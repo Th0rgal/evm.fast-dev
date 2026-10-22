@@ -1,3 +1,0 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.Labels0_879
-import InitECandidate.Proofs.BackendStages.TargetChecks.Encode0_879
-set_option autoImplicit false

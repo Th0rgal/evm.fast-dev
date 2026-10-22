@@ -50,22 +50,17 @@ import InitECandidate.Proofs.BackendStages.NamedChunk800_815
 import InitECandidate.Proofs.BackendStages.NamedChunk816_831
 import InitECandidate.Proofs.BackendStages.NamedChunk832_847
 import InitECandidate.Proofs.BackendStages.NamedChunk848_863
-import InitECandidate.Proofs.BackendStages.NamedChunk864_879
-import InitECandidate.Proofs.BackendStages.NamedChunk880_889
+import InitECandidate.Proofs.BackendStages.NamedChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Named
-def bodies52 : List (Nat × StackLang.HolProg 64) := []
-theorem bodies52_eq : Removed.bodies52.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = bodies52 := by rfl
-def bodies51 := NamedChunk880_889.bodies ++ bodies52
-theorem bodies51_eq : Removed.bodies51.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = bodies51 := by
-  unfold Removed.bodies51 bodies51
-  rw [List.map_append, NamedChunk880_889.compiled_eq, bodies52_eq]
-def bodies50 := NamedChunk864_879.bodies ++ bodies51
+def bodies51 : List (Nat × StackLang.HolProg 64) := []
+theorem bodies51_eq : Removed.bodies51.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = bodies51 := by rfl
+def bodies50 := NamedChunk864_877.bodies ++ bodies51
 theorem bodies50_eq : Removed.bodies50.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = bodies50 := by
   unfold Removed.bodies50 bodies50
-  rw [List.map_append, NamedChunk864_879.compiled_eq, bodies51_eq]
+  rw [List.map_append, NamedChunk864_877.compiled_eq, bodies51_eq]
 def bodies49 := NamedChunk848_863.bodies ++ bodies50
 theorem bodies49_eq : Removed.bodies49.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = bodies49 := by
   unfold Removed.bodies49 bodies49

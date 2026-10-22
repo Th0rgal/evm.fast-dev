@@ -11,41 +11,38 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def NamedBody374_1 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 13 12
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 12)))
-
-def NamedBody374_2 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 12 11
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 13 11
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 11)))
 
+def NamedBody374_2 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 12 0#64)
+
 def NamedBody374_3 : StackLang.HolProg 64 :=
-.seq NamedBody374_1 NamedBody374_2
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)
 
 def NamedBody374_4 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 2#64)
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody374_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody374_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.call none (Sum.inl 370) none
 
 def NamedBody374_7 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.seq NamedBody374_5 NamedBody374_6
 
 def NamedBody374_8 : StackLang.HolProg 64 :=
-.seq NamedBody374_6 NamedBody374_7
+.seq NamedBody374_4 NamedBody374_7
 
 def NamedBody374_9 : StackLang.HolProg 64 :=
-.seq NamedBody374_5 NamedBody374_8
+.seq NamedBody374_3 NamedBody374_8
 
 def NamedBody374_10 : StackLang.HolProg 64 :=
-.seq NamedBody374_4 NamedBody374_9
+.seq NamedBody374_2 NamedBody374_9
 
 def NamedBody374_11 : StackLang.HolProg 64 :=
-.seq NamedBody374_3 NamedBody374_10
+.seq NamedBody374_1 NamedBody374_10
 
 def NamedBody374_12 : StackLang.HolProg 64 :=
 .seq NamedBody374_0 NamedBody374_11

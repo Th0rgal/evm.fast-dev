@@ -6,7 +6,7 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks
-theorem localLabels0_173_eq : LabToTarget.sectionLabels 53488 Initial173.lines [] = (53556, localLabels0_173) := by
+theorem localLabels0_173_eq : LabToTarget.sectionLabels 102052 Initial173.lines [] = (102120, localLabels0_173) := by
   with_unfolding_all rfl
 #print axioms localLabels0_173_eq
 end InitECandidate.Proofs.BackendStages.TargetChecks

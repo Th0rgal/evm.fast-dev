@@ -4,8 +4,8 @@ set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 namespace InitECandidate.Proofs.BackendStages.BytePieces
-theorem section620_eq : ByteData.bytes620 = [piece620_0, piece620_1].flatten := by
-  rw [piece620_0_eq, piece620_1_eq]
+theorem section620_eq : ByteData.bytes620 = [piece620_0].flatten := by
+  rw [piece620_0_eq]
   rfl
 #print axioms section620_eq
 end InitECandidate.Proofs.BackendStages.BytePieces

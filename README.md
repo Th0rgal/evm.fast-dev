@@ -66,12 +66,11 @@ The assignment includes `guest/src/`, the authoritative software guest AST in
 semantics. The authoritative source evaluator is the compiler theorem's
 `PanSemStateFiniteExact.semanticsDecls`, fixed by
 [InitE/SourceSemantics.lean](InitE/SourceSemantics.lean). Flapjack is a pinned Lake
-dependency from the `riscv-im` branch. The checked-in submission was generated
-for the previous accelerated guest and needs regeneration before it can certify
-the updated challenge.
+dependency from the `riscv-im` branch. The checked-in submission contains the
+software guest ROM and its compiler, bytecode, and installation certificates.
 
 The fixed challenge and source semantics live in `InitE/` and `Guest/`.
-The previous submission's compiler, bootstrap and installation certificates live
+The submission's compiler, bootstrap and installation certificates live
 in [`submission/InitECandidate/Proofs`](submission/InitECandidate/Proofs) and are
 checked by the submission verifier after regeneration. See [the proof boundary](docs/CHALLENGE.md#challenge-and-initial-submission-proof-boundary).
 

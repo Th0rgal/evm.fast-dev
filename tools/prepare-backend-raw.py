@@ -21,7 +21,7 @@ os.environ["LAKE_ARTIFACT_CACHE"] = "false"
 root = pathlib.Path(__file__).resolve().parents[1]
 work = root / "work/lean-perf/backend-stages"
 labels = list(range(args.start_label,STOP_LABEL)) if args.all else args.labels
-prefix = ["rtk","proxy","taskset","-c","8-11","timeout","180","lake","env","lean"]
+prefix = ["rtk","proxy","timeout","900","lake","env","lean"]
 def check(n):
     started = time.monotonic()
     source = root / f"submission/InitECandidate/Proofs/BackendStages/Raw{n}.lean"

@@ -4,9 +4,10 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages
 def localLabelsFinal_438 : List (Nat × Nat) :=
-[(12, 268356), (11, 268320), (5, 268304), (4, 268272), (10, 268216), (9, 268172), (3, 268160), (2, 268132), (8, 268076),
-  (1, 268032), (7, 268032)]
-theorem localLabelsFinal_438_eq : LabToTarget.sectionLabels 268016 Alignment438.lines [] = (268356, localLabelsFinal_438) := by
+[(20, 324668), (19, 324624), (9, 324616), (8, 324592), (18, 324536), (17, 324488), (7, 324484), (6, 324464),
+  (16, 324408), (15, 324356), (5, 324352), (4, 324332), (14, 324276), (13, 324224), (3, 324220), (2, 324200),
+  (12, 324144), (1, 324108), (11, 324108)]
+theorem localLabelsFinal_438_eq : LabToTarget.sectionLabels 324092 Alignment438.lines [] = (324668, localLabelsFinal_438) := by
   with_unfolding_all rfl
 #print axioms localLabelsFinal_438_eq
 end InitECandidate.Proofs.BackendStages

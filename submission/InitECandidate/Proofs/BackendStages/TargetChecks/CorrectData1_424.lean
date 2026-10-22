@@ -1,7 +1,3 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectData0_424
-import InitECandidate.Proofs.BackendStages.TargetLabels1
-import InitECandidate.Proofs.BackendStages.TargetFfis
-import Flapjack.Compiler.Encoders.RiscV.Target.Configuration
 import InitECandidate.Proofs.BackendStages.TargetChecks.Data1_424
 set_option autoImplicit false
 set_option Elab.async false

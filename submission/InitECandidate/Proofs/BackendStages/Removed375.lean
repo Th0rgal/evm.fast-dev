@@ -27,7 +27,7 @@ def RemovedBody375_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody375_6 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.call none (Sum.inl 370) none
 
 def RemovedBody375_7 : StackLang.HolProg 64 :=
 .seq RemovedBody375_5 RemovedBody375_6

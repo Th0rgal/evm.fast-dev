@@ -27,7 +27,7 @@ def AllocBody264_6 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_7 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 626#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 621#64)
 
 def AllocBody264_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -159,7 +159,7 @@ def AllocBody264_49 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def AllocBody264_50 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 96#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 64#64)
 
 def AllocBody264_51 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 0 4
@@ -168,7 +168,7 @@ def AllocBody264_52 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_53 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 627#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 622#64)
 
 def AllocBody264_54 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -327,7 +327,7 @@ def AllocBody264_103 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_104 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 628#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 623#64)
 
 def AllocBody264_105 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -414,7 +414,7 @@ def AllocBody264_132 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
 
 def AllocBody264_133 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 1
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 2 1
 
 def AllocBody264_134 : StackLang.HolProg 64 :=
 .seq AllocBody264_132 AllocBody264_133
@@ -435,7 +435,7 @@ def AllocBody264_139 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
 
 def AllocBody264_140 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 1
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 2 1
 
 def AllocBody264_141 : StackLang.HolProg 64 :=
 .seq AllocBody264_139 AllocBody264_140
@@ -447,7 +447,7 @@ def AllocBody264_143 : StackLang.HolProg 64 :=
 .seq AllocBody264_141 AllocBody264_142
 
 def AllocBody264_144 : StackLang.HolProg 64 :=
-.call (some (AllocBody264_138, 0, 264, 6)) (Sum.inl 248) (some (AllocBody264_143, 264, 7))
+.call (some (AllocBody264_138, 0, 264, 6)) (Sum.inl 242) (some (AllocBody264_143, 264, 7))
 
 def AllocBody264_145 : StackLang.HolProg 64 :=
 .seq AllocBody264_127 AllocBody264_144
@@ -473,7 +473,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def AllocBody264_152 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 4
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 20#64)))
 
 def AllocBody264_153 : StackLang.HolProg 64 :=
@@ -492,744 +492,546 @@ def AllocBody264_156 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 0 3
 
 def AllocBody264_157 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 4 1
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_158 : StackLang.HolProg 64 :=
-.seq AllocBody264_156 AllocBody264_157
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 624#64)
 
 def AllocBody264_159 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
 def AllocBody264_160 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 629#64)
+.seq AllocBody264_158 AllocBody264_159
 
 def AllocBody264_161 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def AllocBody264_162 : StackLang.HolProg 64 :=
-.seq AllocBody264_160 AllocBody264_161
-
-def AllocBody264_163 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
 
-def AllocBody264_164 : StackLang.HolProg 64 :=
+def AllocBody264_162 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
 
-def AllocBody264_165 : StackLang.HolProg 64 :=
+def AllocBody264_163 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
-def AllocBody264_166 : StackLang.HolProg 64 :=
+def AllocBody264_164 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 9
 
-def AllocBody264_167 : StackLang.HolProg 64 :=
+def AllocBody264_165 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
 
-def AllocBody264_168 : StackLang.HolProg 64 :=
+def AllocBody264_166 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
 
-def AllocBody264_169 : StackLang.HolProg 64 :=
+def AllocBody264_167 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
 
-def AllocBody264_170 : StackLang.HolProg 64 :=
+def AllocBody264_168 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def AllocBody264_171 : StackLang.HolProg 64 :=
+def AllocBody264_169 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
 
-def AllocBody264_172 : StackLang.HolProg 64 :=
+def AllocBody264_170 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
+
+def AllocBody264_171 : StackLang.HolProg 64 :=
+.seq AllocBody264_169 AllocBody264_170
+
+def AllocBody264_172 : StackLang.HolProg 64 :=
+.seq AllocBody264_168 AllocBody264_171
 
 def AllocBody264_173 : StackLang.HolProg 64 :=
-.seq AllocBody264_171 AllocBody264_172
+.seq AllocBody264_167 AllocBody264_172
 
 def AllocBody264_174 : StackLang.HolProg 64 :=
-.seq AllocBody264_170 AllocBody264_173
+.seq AllocBody264_166 AllocBody264_173
 
 def AllocBody264_175 : StackLang.HolProg 64 :=
-.seq AllocBody264_169 AllocBody264_174
+.seq AllocBody264_165 AllocBody264_174
 
 def AllocBody264_176 : StackLang.HolProg 64 :=
-.seq AllocBody264_168 AllocBody264_175
+.seq AllocBody264_164 AllocBody264_175
 
 def AllocBody264_177 : StackLang.HolProg 64 :=
-.seq AllocBody264_167 AllocBody264_176
+.seq AllocBody264_163 AllocBody264_176
 
 def AllocBody264_178 : StackLang.HolProg 64 :=
-.seq AllocBody264_166 AllocBody264_177
+.seq AllocBody264_162 AllocBody264_177
 
 def AllocBody264_179 : StackLang.HolProg 64 :=
-.seq AllocBody264_165 AllocBody264_178
+.seq AllocBody264_161 AllocBody264_178
 
 def AllocBody264_180 : StackLang.HolProg 64 :=
-.seq AllocBody264_164 AllocBody264_179
-
-def AllocBody264_181 : StackLang.HolProg 64 :=
-.seq AllocBody264_163 AllocBody264_180
-
-def AllocBody264_182 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 
+def AllocBody264_181 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def AllocBody264_182 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
 def AllocBody264_183 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_184 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_185 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
 
-def AllocBody264_186 : StackLang.HolProg 64 :=
+def AllocBody264_184 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
 
-def AllocBody264_187 : StackLang.HolProg 64 :=
+def AllocBody264_185 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
 
-def AllocBody264_188 : StackLang.HolProg 64 :=
+def AllocBody264_186 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
+
+def AllocBody264_187 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 2
+
+def AllocBody264_188 : StackLang.HolProg 64 :=
+.seq AllocBody264_186 AllocBody264_187
 
 def AllocBody264_189 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 2 1
+.seq AllocBody264_185 AllocBody264_188
 
 def AllocBody264_190 : StackLang.HolProg 64 :=
-.seq AllocBody264_188 AllocBody264_189
+.seq AllocBody264_184 AllocBody264_189
 
 def AllocBody264_191 : StackLang.HolProg 64 :=
-.seq AllocBody264_187 AllocBody264_190
+.seq AllocBody264_183 AllocBody264_190
 
 def AllocBody264_192 : StackLang.HolProg 64 :=
-.seq AllocBody264_186 AllocBody264_191
+.seq AllocBody264_182 AllocBody264_191
 
 def AllocBody264_193 : StackLang.HolProg 64 :=
-.seq AllocBody264_185 AllocBody264_192
-
-def AllocBody264_194 : StackLang.HolProg 64 :=
-.seq AllocBody264_184 AllocBody264_193
-
-def AllocBody264_195 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
 
+def AllocBody264_194 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 2
+
+def AllocBody264_195 : StackLang.HolProg 64 :=
+.seq AllocBody264_193 AllocBody264_194
+
 def AllocBody264_196 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 2 1
+.call none (Sum.inl 5) none
 
 def AllocBody264_197 : StackLang.HolProg 64 :=
 .seq AllocBody264_195 AllocBody264_196
 
 def AllocBody264_198 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
+.call (some (AllocBody264_192, 0, 264, 8)) (Sum.inl 242) (some (AllocBody264_197, 264, 9))
 
 def AllocBody264_199 : StackLang.HolProg 64 :=
-.seq AllocBody264_197 AllocBody264_198
+.seq AllocBody264_181 AllocBody264_198
 
 def AllocBody264_200 : StackLang.HolProg 64 :=
-.call (some (AllocBody264_194, 0, 264, 8)) (Sum.inl 248) (some (AllocBody264_199, 264, 9))
+.seq AllocBody264_180 AllocBody264_199
 
 def AllocBody264_201 : StackLang.HolProg 64 :=
-.seq AllocBody264_183 AllocBody264_200
+.seq AllocBody264_179 AllocBody264_200
 
 def AllocBody264_202 : StackLang.HolProg 64 :=
-.seq AllocBody264_182 AllocBody264_201
+.seq AllocBody264_160 AllocBody264_201
 
 def AllocBody264_203 : StackLang.HolProg 64 :=
-.seq AllocBody264_181 AllocBody264_202
+.seq AllocBody264_157 AllocBody264_202
 
 def AllocBody264_204 : StackLang.HolProg 64 :=
-.seq AllocBody264_162 AllocBody264_203
-
-def AllocBody264_205 : StackLang.HolProg 64 :=
-.seq AllocBody264_159 AllocBody264_204
-
-def AllocBody264_206 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
-def AllocBody264_207 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_208 : StackLang.HolProg 64 :=
+def AllocBody264_205 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 2
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 68#64)))
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
+
+def AllocBody264_206 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2#64)
+
+def AllocBody264_207 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2#64)
+
+def AllocBody264_208 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_209 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_210 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 3 0
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 64#64)))
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 625#64)
 
 def AllocBody264_211 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 48#64)
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
 def AllocBody264_212 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 0 3
+.seq AllocBody264_210 AllocBody264_211
 
 def AllocBody264_213 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
 
 def AllocBody264_214 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 630#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
 
 def AllocBody264_215 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
 def AllocBody264_216 : StackLang.HolProg 64 :=
-.seq AllocBody264_214 AllocBody264_215
-
-def AllocBody264_217 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
-
-def AllocBody264_218 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
-
-def AllocBody264_219 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def AllocBody264_220 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 11
 
-def AllocBody264_221 : StackLang.HolProg 64 :=
+def AllocBody264_217 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
 
-def AllocBody264_222 : StackLang.HolProg 64 :=
+def AllocBody264_218 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
 
-def AllocBody264_223 : StackLang.HolProg 64 :=
+def AllocBody264_219 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
 
-def AllocBody264_224 : StackLang.HolProg 64 :=
+def AllocBody264_220 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def AllocBody264_225 : StackLang.HolProg 64 :=
+def AllocBody264_221 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
 
-def AllocBody264_226 : StackLang.HolProg 64 :=
+def AllocBody264_222 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
+
+def AllocBody264_223 : StackLang.HolProg 64 :=
+.seq AllocBody264_221 AllocBody264_222
+
+def AllocBody264_224 : StackLang.HolProg 64 :=
+.seq AllocBody264_220 AllocBody264_223
+
+def AllocBody264_225 : StackLang.HolProg 64 :=
+.seq AllocBody264_219 AllocBody264_224
+
+def AllocBody264_226 : StackLang.HolProg 64 :=
+.seq AllocBody264_218 AllocBody264_225
 
 def AllocBody264_227 : StackLang.HolProg 64 :=
-.seq AllocBody264_225 AllocBody264_226
+.seq AllocBody264_217 AllocBody264_226
 
 def AllocBody264_228 : StackLang.HolProg 64 :=
-.seq AllocBody264_224 AllocBody264_227
+.seq AllocBody264_216 AllocBody264_227
 
 def AllocBody264_229 : StackLang.HolProg 64 :=
-.seq AllocBody264_223 AllocBody264_228
+.seq AllocBody264_215 AllocBody264_228
 
 def AllocBody264_230 : StackLang.HolProg 64 :=
-.seq AllocBody264_222 AllocBody264_229
+.seq AllocBody264_214 AllocBody264_229
 
 def AllocBody264_231 : StackLang.HolProg 64 :=
-.seq AllocBody264_221 AllocBody264_230
+.seq AllocBody264_213 AllocBody264_230
 
 def AllocBody264_232 : StackLang.HolProg 64 :=
-.seq AllocBody264_220 AllocBody264_231
-
-def AllocBody264_233 : StackLang.HolProg 64 :=
-.seq AllocBody264_219 AllocBody264_232
-
-def AllocBody264_234 : StackLang.HolProg 64 :=
-.seq AllocBody264_218 AllocBody264_233
-
-def AllocBody264_235 : StackLang.HolProg 64 :=
-.seq AllocBody264_217 AllocBody264_234
-
-def AllocBody264_236 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 
-def AllocBody264_237 : StackLang.HolProg 64 :=
+def AllocBody264_233 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def AllocBody264_238 : StackLang.HolProg 64 :=
+def AllocBody264_234 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def AllocBody264_239 : StackLang.HolProg 64 :=
+def AllocBody264_235 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
 
-def AllocBody264_240 : StackLang.HolProg 64 :=
+def AllocBody264_236 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
 
-def AllocBody264_241 : StackLang.HolProg 64 :=
+def AllocBody264_237 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
 
+def AllocBody264_238 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 4
+
+def AllocBody264_239 : StackLang.HolProg 64 :=
+.seq AllocBody264_237 AllocBody264_238
+
+def AllocBody264_240 : StackLang.HolProg 64 :=
+.seq AllocBody264_236 AllocBody264_239
+
+def AllocBody264_241 : StackLang.HolProg 64 :=
+.seq AllocBody264_235 AllocBody264_240
+
 def AllocBody264_242 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
+.seq AllocBody264_234 AllocBody264_241
 
 def AllocBody264_243 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 2
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 4
 
 def AllocBody264_244 : StackLang.HolProg 64 :=
-.seq AllocBody264_242 AllocBody264_243
-
-def AllocBody264_245 : StackLang.HolProg 64 :=
-.seq AllocBody264_241 AllocBody264_244
-
-def AllocBody264_246 : StackLang.HolProg 64 :=
-.seq AllocBody264_240 AllocBody264_245
-
-def AllocBody264_247 : StackLang.HolProg 64 :=
-.seq AllocBody264_239 AllocBody264_246
-
-def AllocBody264_248 : StackLang.HolProg 64 :=
-.seq AllocBody264_238 AllocBody264_247
-
-def AllocBody264_249 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 3
-
-def AllocBody264_250 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 4 2
-
-def AllocBody264_251 : StackLang.HolProg 64 :=
-.seq AllocBody264_249 AllocBody264_250
-
-def AllocBody264_252 : StackLang.HolProg 64 :=
 .call none (Sum.inl 5) none
 
-def AllocBody264_253 : StackLang.HolProg 64 :=
-.seq AllocBody264_251 AllocBody264_252
+def AllocBody264_245 : StackLang.HolProg 64 :=
+.seq AllocBody264_243 AllocBody264_244
 
-def AllocBody264_254 : StackLang.HolProg 64 :=
-.call (some (AllocBody264_248, 0, 264, 10)) (Sum.inl 248) (some (AllocBody264_253, 264, 11))
+def AllocBody264_246 : StackLang.HolProg 64 :=
+.call (some (AllocBody264_242, 0, 264, 10)) (Sum.inl 235) (some (AllocBody264_245, 264, 11))
 
-def AllocBody264_255 : StackLang.HolProg 64 :=
-.seq AllocBody264_237 AllocBody264_254
+def AllocBody264_247 : StackLang.HolProg 64 :=
+.seq AllocBody264_233 AllocBody264_246
 
-def AllocBody264_256 : StackLang.HolProg 64 :=
-.seq AllocBody264_236 AllocBody264_255
+def AllocBody264_248 : StackLang.HolProg 64 :=
+.seq AllocBody264_232 AllocBody264_247
 
-def AllocBody264_257 : StackLang.HolProg 64 :=
-.seq AllocBody264_235 AllocBody264_256
+def AllocBody264_249 : StackLang.HolProg 64 :=
+.seq AllocBody264_231 AllocBody264_248
 
-def AllocBody264_258 : StackLang.HolProg 64 :=
-.seq AllocBody264_216 AllocBody264_257
+def AllocBody264_250 : StackLang.HolProg 64 :=
+.seq AllocBody264_212 AllocBody264_249
 
-def AllocBody264_259 : StackLang.HolProg 64 :=
-.seq AllocBody264_213 AllocBody264_258
+def AllocBody264_251 : StackLang.HolProg 64 :=
+.seq AllocBody264_209 AllocBody264_250
 
-def AllocBody264_260 : StackLang.HolProg 64 :=
+def AllocBody264_252 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
-def AllocBody264_261 : StackLang.HolProg 64 :=
+def AllocBody264_253 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
 
+def AllocBody264_254 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def AllocBody264_255 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 626#64)
+
+def AllocBody264_256 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
+
+def AllocBody264_257 : StackLang.HolProg 64 :=
+.seq AllocBody264_255 AllocBody264_256
+
+def AllocBody264_258 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
+
+def AllocBody264_259 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
+
+def AllocBody264_260 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
+
+def AllocBody264_261 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 13
+
 def AllocBody264_262 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 3#64)
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
 
 def AllocBody264_263 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 3#64)
+Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
 
 def AllocBody264_264 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
 
 def AllocBody264_265 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_266 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 631#64)
+Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
 
 def AllocBody264_267 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
+Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
 
 def AllocBody264_268 : StackLang.HolProg 64 :=
 .seq AllocBody264_266 AllocBody264_267
 
 def AllocBody264_269 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
+.seq AllocBody264_265 AllocBody264_268
 
 def AllocBody264_270 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
+.seq AllocBody264_264 AllocBody264_269
 
 def AllocBody264_271 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
+.seq AllocBody264_263 AllocBody264_270
 
 def AllocBody264_272 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 13
+.seq AllocBody264_262 AllocBody264_271
 
 def AllocBody264_273 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
+.seq AllocBody264_261 AllocBody264_272
 
 def AllocBody264_274 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
+.seq AllocBody264_260 AllocBody264_273
 
 def AllocBody264_275 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
+.seq AllocBody264_259 AllocBody264_274
 
 def AllocBody264_276 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.seq AllocBody264_258 AllocBody264_275
 
 def AllocBody264_277 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
+Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 
 def AllocBody264_278 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_279 : StackLang.HolProg 64 :=
-.seq AllocBody264_277 AllocBody264_278
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody264_280 : StackLang.HolProg 64 :=
-.seq AllocBody264_276 AllocBody264_279
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
 
 def AllocBody264_281 : StackLang.HolProg 64 :=
-.seq AllocBody264_275 AllocBody264_280
+Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
 
 def AllocBody264_282 : StackLang.HolProg 64 :=
-.seq AllocBody264_274 AllocBody264_281
+Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
 
 def AllocBody264_283 : StackLang.HolProg 64 :=
-.seq AllocBody264_273 AllocBody264_282
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 5
 
 def AllocBody264_284 : StackLang.HolProg 64 :=
-.seq AllocBody264_272 AllocBody264_283
+.seq AllocBody264_282 AllocBody264_283
 
 def AllocBody264_285 : StackLang.HolProg 64 :=
-.seq AllocBody264_271 AllocBody264_284
+.seq AllocBody264_281 AllocBody264_284
 
 def AllocBody264_286 : StackLang.HolProg 64 :=
-.seq AllocBody264_270 AllocBody264_285
+.seq AllocBody264_280 AllocBody264_285
 
 def AllocBody264_287 : StackLang.HolProg 64 :=
-.seq AllocBody264_269 AllocBody264_286
+.seq AllocBody264_279 AllocBody264_286
 
 def AllocBody264_288 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 5
 
 def AllocBody264_289 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.call none (Sum.inl 5) none
 
 def AllocBody264_290 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.seq AllocBody264_288 AllocBody264_289
 
 def AllocBody264_291 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
+.call (some (AllocBody264_287, 0, 264, 12)) (Sum.inl 70) (some (AllocBody264_290, 264, 13))
 
 def AllocBody264_292 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
+.seq AllocBody264_278 AllocBody264_291
 
 def AllocBody264_293 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
+.seq AllocBody264_277 AllocBody264_292
 
 def AllocBody264_294 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 4
+.seq AllocBody264_276 AllocBody264_293
 
 def AllocBody264_295 : StackLang.HolProg 64 :=
-.seq AllocBody264_293 AllocBody264_294
+.seq AllocBody264_257 AllocBody264_294
 
 def AllocBody264_296 : StackLang.HolProg 64 :=
-.seq AllocBody264_292 AllocBody264_295
+.seq AllocBody264_254 AllocBody264_295
 
 def AllocBody264_297 : StackLang.HolProg 64 :=
-.seq AllocBody264_291 AllocBody264_296
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def AllocBody264_298 : StackLang.HolProg 64 :=
-.seq AllocBody264_290 AllocBody264_297
-
-def AllocBody264_299 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 4
-
-def AllocBody264_300 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
-
-def AllocBody264_301 : StackLang.HolProg 64 :=
-.seq AllocBody264_299 AllocBody264_300
-
-def AllocBody264_302 : StackLang.HolProg 64 :=
-.call (some (AllocBody264_298, 0, 264, 12)) (Sum.inl 241) (some (AllocBody264_301, 264, 13))
-
-def AllocBody264_303 : StackLang.HolProg 64 :=
-.seq AllocBody264_289 AllocBody264_302
-
-def AllocBody264_304 : StackLang.HolProg 64 :=
-.seq AllocBody264_288 AllocBody264_303
-
-def AllocBody264_305 : StackLang.HolProg 64 :=
-.seq AllocBody264_287 AllocBody264_304
-
-def AllocBody264_306 : StackLang.HolProg 64 :=
-.seq AllocBody264_268 AllocBody264_305
-
-def AllocBody264_307 : StackLang.HolProg 64 :=
-.seq AllocBody264_265 AllocBody264_306
-
-def AllocBody264_308 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.tick
-
-def AllocBody264_309 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
-
-def AllocBody264_310 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_311 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 632#64)
-
-def AllocBody264_312 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def AllocBody264_313 : StackLang.HolProg 64 :=
-.seq AllocBody264_311 AllocBody264_312
-
-def AllocBody264_314 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
-
-def AllocBody264_315 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
-
-def AllocBody264_316 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def AllocBody264_317 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 15
-
-def AllocBody264_318 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
-
-def AllocBody264_319 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
-
-def AllocBody264_320 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
-
-def AllocBody264_321 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_322 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
-
-def AllocBody264_323 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
-
-def AllocBody264_324 : StackLang.HolProg 64 :=
-.seq AllocBody264_322 AllocBody264_323
-
-def AllocBody264_325 : StackLang.HolProg 64 :=
-.seq AllocBody264_321 AllocBody264_324
-
-def AllocBody264_326 : StackLang.HolProg 64 :=
-.seq AllocBody264_320 AllocBody264_325
-
-def AllocBody264_327 : StackLang.HolProg 64 :=
-.seq AllocBody264_319 AllocBody264_326
-
-def AllocBody264_328 : StackLang.HolProg 64 :=
-.seq AllocBody264_318 AllocBody264_327
-
-def AllocBody264_329 : StackLang.HolProg 64 :=
-.seq AllocBody264_317 AllocBody264_328
-
-def AllocBody264_330 : StackLang.HolProg 64 :=
-.seq AllocBody264_316 AllocBody264_329
-
-def AllocBody264_331 : StackLang.HolProg 64 :=
-.seq AllocBody264_315 AllocBody264_330
-
-def AllocBody264_332 : StackLang.HolProg 64 :=
-.seq AllocBody264_314 AllocBody264_331
-
-def AllocBody264_333 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
-
-def AllocBody264_334 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_335 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def AllocBody264_336 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
-
-def AllocBody264_337 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
-
-def AllocBody264_338 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
-
-def AllocBody264_339 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 5
-
-def AllocBody264_340 : StackLang.HolProg 64 :=
-.seq AllocBody264_338 AllocBody264_339
-
-def AllocBody264_341 : StackLang.HolProg 64 :=
-.seq AllocBody264_337 AllocBody264_340
-
-def AllocBody264_342 : StackLang.HolProg 64 :=
-.seq AllocBody264_336 AllocBody264_341
-
-def AllocBody264_343 : StackLang.HolProg 64 :=
-.seq AllocBody264_335 AllocBody264_342
-
-def AllocBody264_344 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 5
-
-def AllocBody264_345 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
-
-def AllocBody264_346 : StackLang.HolProg 64 :=
-.seq AllocBody264_344 AllocBody264_345
-
-def AllocBody264_347 : StackLang.HolProg 64 :=
-.call (some (AllocBody264_343, 0, 264, 14)) (Sum.inl 70) (some (AllocBody264_346, 264, 15))
-
-def AllocBody264_348 : StackLang.HolProg 64 :=
-.seq AllocBody264_334 AllocBody264_347
-
-def AllocBody264_349 : StackLang.HolProg 64 :=
-.seq AllocBody264_333 AllocBody264_348
-
-def AllocBody264_350 : StackLang.HolProg 64 :=
-.seq AllocBody264_332 AllocBody264_349
-
-def AllocBody264_351 : StackLang.HolProg 64 :=
-.seq AllocBody264_313 AllocBody264_350
-
-def AllocBody264_352 : StackLang.HolProg 64 :=
-.seq AllocBody264_310 AllocBody264_351
-
-def AllocBody264_353 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.tick
-
-def AllocBody264_354 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)
 
-def AllocBody264_355 : StackLang.HolProg 64 :=
+def AllocBody264_299 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def AllocBody264_356 : StackLang.HolProg 64 :=
+def AllocBody264_300 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 6
 
-def AllocBody264_357 : StackLang.HolProg 64 :=
+def AllocBody264_301 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 0
 
-def AllocBody264_358 : StackLang.HolProg 64 :=
-.seq AllocBody264_356 AllocBody264_357
+def AllocBody264_302 : StackLang.HolProg 64 :=
+.seq AllocBody264_300 AllocBody264_301
 
-def AllocBody264_359 : StackLang.HolProg 64 :=
-.seq AllocBody264_355 AllocBody264_358
+def AllocBody264_303 : StackLang.HolProg 64 :=
+.seq AllocBody264_299 AllocBody264_302
 
-def AllocBody264_360 : StackLang.HolProg 64 :=
-.seq AllocBody264_354 AllocBody264_359
+def AllocBody264_304 : StackLang.HolProg 64 :=
+.seq AllocBody264_298 AllocBody264_303
 
-def AllocBody264_361 : StackLang.HolProg 64 :=
-.seq AllocBody264_353 AllocBody264_360
+def AllocBody264_305 : StackLang.HolProg 64 :=
+.seq AllocBody264_297 AllocBody264_304
 
-def AllocBody264_362 : StackLang.HolProg 64 :=
-.seq AllocBody264_352 AllocBody264_361
+def AllocBody264_306 : StackLang.HolProg 64 :=
+.seq AllocBody264_296 AllocBody264_305
 
-def AllocBody264_363 : StackLang.HolProg 64 :=
-.seq AllocBody264_309 AllocBody264_362
+def AllocBody264_307 : StackLang.HolProg 64 :=
+.seq AllocBody264_253 AllocBody264_306
 
-def AllocBody264_364 : StackLang.HolProg 64 :=
-.seq AllocBody264_308 AllocBody264_363
+def AllocBody264_308 : StackLang.HolProg 64 :=
+.seq AllocBody264_252 AllocBody264_307
 
-def AllocBody264_365 : StackLang.HolProg 64 :=
-.seq AllocBody264_307 AllocBody264_364
+def AllocBody264_309 : StackLang.HolProg 64 :=
+.seq AllocBody264_251 AllocBody264_308
 
-def AllocBody264_366 : StackLang.HolProg 64 :=
-.seq AllocBody264_264 AllocBody264_365
+def AllocBody264_310 : StackLang.HolProg 64 :=
+.seq AllocBody264_208 AllocBody264_309
 
-def AllocBody264_367 : StackLang.HolProg 64 :=
-.seq AllocBody264_263 AllocBody264_366
+def AllocBody264_311 : StackLang.HolProg 64 :=
+.seq AllocBody264_207 AllocBody264_310
 
-def AllocBody264_368 : StackLang.HolProg 64 :=
-.seq AllocBody264_262 AllocBody264_367
+def AllocBody264_312 : StackLang.HolProg 64 :=
+.seq AllocBody264_206 AllocBody264_311
 
-def AllocBody264_369 : StackLang.HolProg 64 :=
-.seq AllocBody264_261 AllocBody264_368
+def AllocBody264_313 : StackLang.HolProg 64 :=
+.seq AllocBody264_205 AllocBody264_312
 
-def AllocBody264_370 : StackLang.HolProg 64 :=
-.seq AllocBody264_260 AllocBody264_369
+def AllocBody264_314 : StackLang.HolProg 64 :=
+.seq AllocBody264_204 AllocBody264_313
 
-def AllocBody264_371 : StackLang.HolProg 64 :=
-.seq AllocBody264_259 AllocBody264_370
+def AllocBody264_315 : StackLang.HolProg 64 :=
+.seq AllocBody264_203 AllocBody264_314
 
-def AllocBody264_372 : StackLang.HolProg 64 :=
-.seq AllocBody264_212 AllocBody264_371
+def AllocBody264_316 : StackLang.HolProg 64 :=
+.seq AllocBody264_156 AllocBody264_315
 
-def AllocBody264_373 : StackLang.HolProg 64 :=
-.seq AllocBody264_211 AllocBody264_372
+def AllocBody264_317 : StackLang.HolProg 64 :=
+.seq AllocBody264_155 AllocBody264_316
 
-def AllocBody264_374 : StackLang.HolProg 64 :=
-.seq AllocBody264_210 AllocBody264_373
+def AllocBody264_318 : StackLang.HolProg 64 :=
+.seq AllocBody264_154 AllocBody264_317
 
-def AllocBody264_375 : StackLang.HolProg 64 :=
-.seq AllocBody264_209 AllocBody264_374
+def AllocBody264_319 : StackLang.HolProg 64 :=
+.seq AllocBody264_153 AllocBody264_318
 
-def AllocBody264_376 : StackLang.HolProg 64 :=
-.seq AllocBody264_208 AllocBody264_375
+def AllocBody264_320 : StackLang.HolProg 64 :=
+.seq AllocBody264_152 AllocBody264_319
 
-def AllocBody264_377 : StackLang.HolProg 64 :=
-.seq AllocBody264_207 AllocBody264_376
+def AllocBody264_321 : StackLang.HolProg 64 :=
+.seq AllocBody264_151 AllocBody264_320
 
-def AllocBody264_378 : StackLang.HolProg 64 :=
-.seq AllocBody264_206 AllocBody264_377
+def AllocBody264_322 : StackLang.HolProg 64 :=
+.seq AllocBody264_150 AllocBody264_321
 
-def AllocBody264_379 : StackLang.HolProg 64 :=
-.seq AllocBody264_205 AllocBody264_378
+def AllocBody264_323 : StackLang.HolProg 64 :=
+.seq AllocBody264_149 AllocBody264_322
 
-def AllocBody264_380 : StackLang.HolProg 64 :=
-.seq AllocBody264_158 AllocBody264_379
+def AllocBody264_324 : StackLang.HolProg 64 :=
+.seq AllocBody264_102 AllocBody264_323
 
-def AllocBody264_381 : StackLang.HolProg 64 :=
-.seq AllocBody264_155 AllocBody264_380
+def AllocBody264_325 : StackLang.HolProg 64 :=
+.seq AllocBody264_99 AllocBody264_324
 
-def AllocBody264_382 : StackLang.HolProg 64 :=
-.seq AllocBody264_154 AllocBody264_381
+def AllocBody264_326 : StackLang.HolProg 64 :=
+.seq AllocBody264_98 AllocBody264_325
 
-def AllocBody264_383 : StackLang.HolProg 64 :=
-.seq AllocBody264_153 AllocBody264_382
+def AllocBody264_327 : StackLang.HolProg 64 :=
+.seq AllocBody264_97 AllocBody264_326
 
-def AllocBody264_384 : StackLang.HolProg 64 :=
-.seq AllocBody264_152 AllocBody264_383
+def AllocBody264_328 : StackLang.HolProg 64 :=
+.seq AllocBody264_96 AllocBody264_327
 
-def AllocBody264_385 : StackLang.HolProg 64 :=
-.seq AllocBody264_151 AllocBody264_384
+def AllocBody264_329 : StackLang.HolProg 64 :=
+.seq AllocBody264_51 AllocBody264_328
 
-def AllocBody264_386 : StackLang.HolProg 64 :=
-.seq AllocBody264_150 AllocBody264_385
+def AllocBody264_330 : StackLang.HolProg 64 :=
+.seq AllocBody264_50 AllocBody264_329
 
-def AllocBody264_387 : StackLang.HolProg 64 :=
-.seq AllocBody264_149 AllocBody264_386
+def AllocBody264_331 : StackLang.HolProg 64 :=
+.seq AllocBody264_49 AllocBody264_330
 
-def AllocBody264_388 : StackLang.HolProg 64 :=
-.seq AllocBody264_102 AllocBody264_387
+def AllocBody264_332 : StackLang.HolProg 64 :=
+.seq AllocBody264_48 AllocBody264_331
 
-def AllocBody264_389 : StackLang.HolProg 64 :=
-.seq AllocBody264_99 AllocBody264_388
+def AllocBody264_333 : StackLang.HolProg 64 :=
+.seq AllocBody264_5 AllocBody264_332
 
-def AllocBody264_390 : StackLang.HolProg 64 :=
-.seq AllocBody264_98 AllocBody264_389
+def AllocBody264_334 : StackLang.HolProg 64 :=
+.seq AllocBody264_0 AllocBody264_333
 
-def AllocBody264_391 : StackLang.HolProg 64 :=
-.seq AllocBody264_97 AllocBody264_390
-
-def AllocBody264_392 : StackLang.HolProg 64 :=
-.seq AllocBody264_96 AllocBody264_391
-
-def AllocBody264_393 : StackLang.HolProg 64 :=
-.seq AllocBody264_51 AllocBody264_392
-
-def AllocBody264_394 : StackLang.HolProg 64 :=
-.seq AllocBody264_50 AllocBody264_393
-
-def AllocBody264_395 : StackLang.HolProg 64 :=
-.seq AllocBody264_49 AllocBody264_394
-
-def AllocBody264_396 : StackLang.HolProg 64 :=
-.seq AllocBody264_48 AllocBody264_395
-
-def AllocBody264_397 : StackLang.HolProg 64 :=
-.seq AllocBody264_5 AllocBody264_396
-
-def AllocBody264_398 : StackLang.HolProg 64 :=
-.seq AllocBody264_0 AllocBody264_397
-
-def Alloc264 : Nat × StackLang.HolProg 64 := (264, AllocBody264_398)
+def Alloc264 : Nat × StackLang.HolProg 64 := (264, AllocBody264_334)
 theorem Alloc264_eq : StackAlloc.progComp (264, raw264) = Alloc264 := by
   kernel_rfl
 #print axioms Alloc264_eq

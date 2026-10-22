@@ -8,15 +8,23 @@ header="set_option autoImplicit false\nset_option maxRecDepth 1000000\nset_optio
 insert="(fun key acc => sptInsert key () acc)"
 def check(name,source):
  cert=work/f"{name}.check.json"
- if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:return
- start=time.monotonic();r=subprocess.run(["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py"),"-o",str(root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"),str(source)],cwd=root,text=True,capture_output=True)
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
+ if (cert.exists() and output.exists() and json.loads(cert.read_text()).get("returncode")==0 and
+     output.stat().st_mtime_ns>=source.stat().st_mtime_ns and cert.stat().st_mtime_ns>=output.stat().st_mtime_ns):return
+ start=time.monotonic();r=subprocess.run(["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py"),"-o",str(output),str(source)],cwd=root,text=True,capture_output=True)
  (work/f"{name}.check.log").write_text(r.stdout+r.stderr);cert.write_text(json.dumps(dict(returncode=r.returncode,seconds=time.monotonic()-start)));print(name,r.returncode,r.stdout+r.stderr,flush=True);r.check_returncode()
 for ids,suffix in groups:
  for n in ids:
+  source=root/f"submission/InitECandidate/Proofs/BackendStages/ZeroTargets{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/ZeroTargets{n}.olean"
   dep=work/f"ZeroTargets{n}.check.json"
-  while not dep.exists():time.sleep(5)
+  while not (source.exists() and output.exists() and dep.exists() and
+             output.stat().st_mtime_ns>=source.stat().st_mtime_ns and
+             dep.stat().st_mtime_ns>=output.stat().st_mtime_ns):time.sleep(5)
   if json.loads(dep.read_text())["returncode"]:raise RuntimeError(str(dep))
- while not (root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/FinalChunk{suffix}.olean").exists():time.sleep(5)
+ finalSource=root/f"submission/InitECandidate/Proofs/BackendStages/FinalChunk{suffix}.lean"
+ finalOutput=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/FinalChunk{suffix}.olean"
+ while not (finalSource.exists() and finalOutput.exists() and finalOutput.stat().st_mtime_ns>=finalSource.stat().st_mtime_ns):time.sleep(5)
  name=f"ZeroChunkData{suffix}";source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
  source.write_text("".join(f"import InitECandidate.Proofs.BackendStages.ZeroData{n}\n" for n in ids)+header.replace("open Flapjack Flapjack.Compiler.Backend", "open Flapjack")+f"namespace InitECandidate.Proofs.BackendStages.{name}\ndef keys : List Nat := ["+", ".join(f"ZeroData.keys{n}" for n in ids)+f"].flatten\nend InitECandidate.Proofs.BackendStages.{name}\n");check(name,source)
  name=f"ZeroChunk{suffix}";source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
@@ -29,7 +37,9 @@ s+="def full := allKeys0\nend InitECandidate.Proofs.BackendStages.ZeroData\n";so
 name="ZeroValidity";source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
 s="import InitECandidate.Proofs.BackendStages.ZeroData\nimport InitECandidate.Proofs.BackendStages.TargetLabelsFinal\nimport InitECandidate.Proofs.BackendComputation\n"+header+"namespace InitECandidate.Proofs.BackendStages.ZeroValidity\n"
 s+=f"theorem valid : (sptToAList (ZeroData.full.foldr {insert} .ln)).all (fun p => match sptLookup p.1 Target.labelsFinal with | none => false | some labels => (sptLookup 0 labels).isSome) = true := by\n  with_unfolding_all rfl\n#print axioms valid\nend InitECandidate.Proofs.BackendStages.ZeroValidity\n";source.write_text(s);check(name,source)
-while not (root/".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Final.olean").exists():time.sleep(5)
+finalSource=root/"submission/InitECandidate/Proofs/BackendStages/Final.lean"
+finalOutput=root/".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Final.olean"
+while not (finalOutput.exists() and finalOutput.stat().st_mtime_ns>=finalSource.stat().st_mtime_ns):time.sleep(5)
 name="ZeroLabels";source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
 s="import InitECandidate.Proofs.BackendStages.ZeroValidity\nimport InitECandidate.Proofs.BackendStages.Final\n"+"".join(f"import InitECandidate.Proofs.BackendStages.ZeroChunk{suffix}\n" for _,suffix in groups)+header+"namespace InitECandidate.Proofs.BackendStages.ZeroLabels\n"
 s+=f"theorem suffix{count}_eq : ZeroProgramCollection.targets Final.padded{count} = ZeroData.keys{count} := by rfl\n"

@@ -6,12 +6,21 @@ root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backe
 chunks=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 for ids,suffix in chunks:
  name="FinalChunk"+suffix;cert=work/f"{name}.check.json"
- if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:continue
  for n in ids:
   for stage in ["Alignment","FinalReencode","Padded"]:
+   source=root/f"submission/InitECandidate/Proofs/BackendStages/{stage}{n}.lean"
+   output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{stage}{n}.olean"
    dep=work/f"{stage}{n}.check.json"
-   while not dep.exists():time.sleep(3)
+   while not (source.exists() and output.exists() and dep.exists() and
+              output.stat().st_mtime_ns>=source.stat().st_mtime_ns and
+              dep.stat().st_mtime_ns>=output.stat().st_mtime_ns):time.sleep(3)
    if json.loads(dep.read_text())["returncode"]:raise RuntimeError(str(dep))
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
+ if (cert.exists() and source.exists() and output.exists() and
+     json.loads(cert.read_text()).get("returncode")==0 and
+     source.stat().st_mtime_ns>=max((root/f"submission/InitECandidate/Proofs/BackendStages/Padded{n}.lean").stat().st_mtime_ns for n in ids) and
+     output.stat().st_mtime_ns>=source.stat().st_mtime_ns and cert.stat().st_mtime_ns>=output.stat().st_mtime_ns):continue
  pos=[];end=[]
  for n in ids:
   src=(root/f"submission/InitECandidate/Proofs/BackendStages/Alignment{n}.lean").read_text()
@@ -28,6 +37,6 @@ for ids,suffix in chunks:
  s+="  exact tail\n"
  s+="theorem padding_eq : LabToTarget.padCode (riscvConfig.encode (.inst .skip)) final = padded := by\n  unfold final padded\n  simp only [LabToTarget.padCode]\n  rw ["+", ".join(f"Padded{n}_eq" for n in ids)+"]\n  rfl\n"
  s+="theorem valid : LabToTarget.allEncOkLight riscvConfig padded = true := by\n  unfold padded LabToTarget.allEncOkLight\n  simp only [List.all_cons, List.all_nil, "+", ".join(f"Padded{n}_valid" for n in ids)+"]\n  rfl\n#print axioms alignment_eq\n#print axioms rewrite_eq\n#print axioms padding_eq\n#print axioms valid\nend InitECandidate.Proofs.BackendStages."+name+"\n"
- source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean";source.write_text(s);start=time.monotonic()
- r=subprocess.run(["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py"),"-o",str(root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"),str(source)],cwd=root,text=True,capture_output=True)
+ source.write_text(s);start=time.monotonic()
+ r=subprocess.run(["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py"),"-o",str(output),str(source)],cwd=root,text=True,capture_output=True)
  (work/f"{name}.check.log").write_text(r.stdout+r.stderr);cert.write_text(json.dumps(dict(returncode=r.returncode,seconds=time.monotonic()-start)));print(name,r.returncode,r.stdout+r.stderr,flush=True);r.check_returncode()

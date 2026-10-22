@@ -17,7 +17,6 @@ import InitECandidate.Proofs.BackendStages.BytesData431
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
-open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages.BytesChunkData416_431
 def bytes : List (BitVec 8) := [ByteData.bytes416, ByteData.bytes417, ByteData.bytes418, ByteData.bytes419, ByteData.bytes420, ByteData.bytes421, ByteData.bytes422, ByteData.bytes423, ByteData.bytes424, ByteData.bytes425, ByteData.bytes426, ByteData.bytes427, ByteData.bytes428, ByteData.bytes429, ByteData.bytes430, ByteData.bytes431].flatten
 end InitECandidate.Proofs.BackendStages.BytesChunkData416_431

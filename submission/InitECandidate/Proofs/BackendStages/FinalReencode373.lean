@@ -26,10 +26,10 @@ def FinalReencode373 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [147#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0))
-        18446744073709551068#64 [111#8, 240#8, 223#8, 221#8] 4,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709551036#64 [111#8, 240#8, 223#8, 219#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 373 2 0] }
-theorem FinalReencode373_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 231844 riscvConfig.encode Alignment373.lines [] true = (FinalReencode373.lines, 231860, true) := by
+theorem FinalReencode373_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 287160 riscvConfig.encode Alignment373.lines [] true = (FinalReencode373.lines, 287176, true) := by
   kernel_rfl
 #print axioms FinalReencode373_eq
 end InitECandidate.Proofs.BackendStages

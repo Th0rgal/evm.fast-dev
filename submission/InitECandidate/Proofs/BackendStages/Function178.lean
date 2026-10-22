@@ -45,8 +45,8 @@ def stackBody178_10 : StackLang.HolProg 64 :=
 .seq stackBody178_0 stackBody178_9
 
 def function178 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody178_10, 0, bitmapPrefix, 208)
-theorem function178_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized178.2.2 InitECandidate.Proofs.StackAnalysis.optimized178.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 208) = function178 bitmapPrefix := by
+(stackBody178_10, 0, bitmapPrefix, 200)
+theorem function178_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized178.2.2 InitECandidate.Proofs.StackAnalysis.optimized178.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 200) = function178 bitmapPrefix := by
   kernel_rfl
 #print axioms function178_eq
 end InitECandidate.Proofs.BackendStages

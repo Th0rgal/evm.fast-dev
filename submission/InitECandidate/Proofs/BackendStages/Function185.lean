@@ -443,8 +443,8 @@ def stackBody185_125 : StackLang.HolProg 64 :=
 .seq stackBody185_0 stackBody185_124
 
 def function185 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody185_125, 0, bitmapPrefix, 218)
-theorem function185_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized185.2.2 InitECandidate.Proofs.StackAnalysis.optimized185.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 218) = function185 bitmapPrefix := by
+(stackBody185_125, 0, bitmapPrefix, 210)
+theorem function185_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized185.2.2 InitECandidate.Proofs.StackAnalysis.optimized185.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 210) = function185 bitmapPrefix := by
   kernel_rfl
 #print axioms function185_eq
 end InitECandidate.Proofs.BackendStages

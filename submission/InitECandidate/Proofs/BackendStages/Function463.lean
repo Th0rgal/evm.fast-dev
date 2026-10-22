@@ -90,8 +90,8 @@ def stackBody463_24 : StackLang.HolProg 64 :=
 .seq stackBody463_0 stackBody463_23
 
 def function463 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody463_24, 0, bitmapPrefix, 1495)
-theorem function463_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized463.2.2 InitECandidate.Proofs.StackAnalysis.optimized463.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1495) = function463 bitmapPrefix := by
+(stackBody463_24, 0, bitmapPrefix, 1487)
+theorem function463_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized463.2.2 InitECandidate.Proofs.StackAnalysis.optimized463.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1487) = function463 bitmapPrefix := by
   kernel_rfl
 #print axioms function463_eq
 end InitECandidate.Proofs.BackendStages

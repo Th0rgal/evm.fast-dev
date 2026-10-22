@@ -5,8 +5,14 @@ import pathlib,json,time,re,subprocess
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 groups=[([0,1,2,4,5,6],"Stubs")]+[(list(range(a,min(a+16,STOP_LABEL))),f"{a}_{min(a+15,LAST_LABEL)}") for a in range(64,STOP_LABEL,16)]
 for ids,suffix in groups:
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/FinalChunk{suffix}.lean"
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/FinalChunk{suffix}.olean"
  p=work/f"FinalChunk{suffix}.check.json"
- while not p.exists():time.sleep(5)
+ while not (source.exists() and output.exists() and p.exists() and
+            all((root/f"submission/InitECandidate/Proofs/BackendStages/Padded{n}.lean").exists() for n in ids) and
+            source.stat().st_mtime_ns>=max((root/f"submission/InitECandidate/Proofs/BackendStages/Padded{n}.lean").stat().st_mtime_ns for n in ids) and
+            output.stat().st_mtime_ns>=source.stat().st_mtime_ns and
+            p.stat().st_mtime_ns>=output.stat().st_mtime_ns):time.sleep(5)
  if json.loads(p.read_text())["returncode"]:raise RuntimeError(str(p))
 positions=[]
 for ids,_ in groups:

@@ -12,11 +12,13 @@ for first in range(args.start_label,STOP_LABEL,16):
  name=f"RawChunk{first}_{last}"
  for n in ns:
   source=root/f"submission/InitECandidate/Proofs/BackendStages/Raw{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Raw{n}.olean"
   cert=work/f"Raw{n}.check.json"
   info=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
-  while not (source.exists() and cert.exists() and
+  while not (source.exists() and output.exists() and cert.exists() and
              source.stat().st_mtime_ns >= info.stat().st_mtime_ns and
-             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             output.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= output.stat().st_mtime_ns and
              json.loads(cert.read_text()).get("returncode")==0):
    time.sleep(1)
  s=f"import InitECandidate.Proofs.BackendStages.Chunk{first}_{last}\n"+"".join(f"import InitECandidate.Proofs.BackendStages.Raw{n}\n" for n in ns)

@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Named79
 import Flapjack.Compiler.Backend.StackToLab.Native
 import InitECandidate.Proofs.StackToLabKernelComputation

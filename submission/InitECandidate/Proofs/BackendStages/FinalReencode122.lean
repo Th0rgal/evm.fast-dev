@@ -215,7 +215,7 @@ def FinalReencode122 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 1))
         [103#8, 128#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 122 12 0] }
-theorem FinalReencode122_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 18472 riscvConfig.encode Alignment122.lines [] true = (FinalReencode122.lines, 18720, true) := by
+theorem FinalReencode122_eq : LabToTarget.encLinesAgain Target.labelsFinal Target.ffis 17980 riscvConfig.encode Alignment122.lines [] true = (FinalReencode122.lines, 18228, true) := by
   kernel_rfl
 #print axioms FinalReencode122_eq
 end InitECandidate.Proofs.BackendStages

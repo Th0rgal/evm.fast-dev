@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.RemovedStubs
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.Backend
@@ -1829,6 +1830,6 @@ def NamedStubsBody_460 : StackLang.HolProg 64 :=
 
 def NamedStubs : List (Nat × StackLang.HolProg 64) := [(0, NamedStubsBody_362), (1, NamedStubsBody_365), (2, NamedStubsBody_368), (4, NamedStubsBody_385), (5, NamedStubsBody_404), (6, NamedStubsBody_460)]
 theorem NamedStubs_eq : RemovedStubs.map (StackNames.progCompEntryHOL RiscVConfig.riscvNames) = NamedStubs := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms NamedStubs_eq
 end InitECandidate.Proofs.BackendStages

@@ -30,8 +30,8 @@ def stackBody180_6 : StackLang.HolProg 64 :=
 .seq stackBody180_0 stackBody180_5
 
 def function180 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody180_6, 0, bitmapPrefix, 209)
-theorem function180_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized180.2.2 InitECandidate.Proofs.StackAnalysis.optimized180.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 209) = function180 bitmapPrefix := by
+(stackBody180_6, 0, bitmapPrefix, 201)
+theorem function180_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized180.2.2 InitECandidate.Proofs.StackAnalysis.optimized180.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 201) = function180 bitmapPrefix := by
   kernel_rfl
 #print axioms function180_eq
 end InitECandidate.Proofs.BackendStages

@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.AllocStubs
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.Backend
@@ -1829,6 +1830,6 @@ def RemovedStubsBody_460 : StackLang.HolProg 64 :=
 
 def RemovedStubs : List (Nat × StackLang.HolProg 64) := [(0, RemovedStubsBody_362), (1, RemovedStubsBody_365), (2, RemovedStubsBody_368), (4, RemovedStubsBody_385), (5, RemovedStubsBody_404), (6, RemovedStubsBody_460)]
 theorem RemovedStubs_eq : StackRemove.initStubs (StackToLab.isGenGc RiscVConfig.pancakeRiscVBackendConfig.dataConf.gcKind) (2 * DataToWord.maxHeapLimit 64 RiscVConfig.pancakeRiscVBackendConfig.dataConf - 1) (riscvConfig.regCount - (riscvConfig.avoidRegs.length + 3)) BvlToBvi.initGlobalsLocation ++ AllocStubs.map (StackRemove.progComp false riscvConfig.addrOffset (riscvConfig.regCount - (riscvConfig.avoidRegs.length + 3))) = RemovedStubs := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms RemovedStubs_eq
 end InitECandidate.Proofs.BackendStages

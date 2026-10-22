@@ -50,22 +50,17 @@ import InitECandidate.Proofs.BackendStages.SectionChunk800_815
 import InitECandidate.Proofs.BackendStages.SectionChunk816_831
 import InitECandidate.Proofs.BackendStages.SectionChunk832_847
 import InitECandidate.Proofs.BackendStages.SectionChunk848_863
-import InitECandidate.Proofs.BackendStages.SectionChunk864_879
-import InitECandidate.Proofs.BackendStages.SectionChunk880_889
+import InitECandidate.Proofs.BackendStages.SectionChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Sections
-def sections52 : LabSem.LabProgHOL 64 := []
-theorem sections52_eq : Named.bodies52.map StackToLab.progToSectionHOL = sections52 := by rfl
-def sections51 := SectionChunk880_889.sections ++ sections52
-theorem sections51_eq : Named.bodies51.map StackToLab.progToSectionHOL = sections51 := by
-  unfold Named.bodies51 sections51
-  rw [List.map_append, SectionChunk880_889.compiled_eq, sections52_eq]
-def sections50 := SectionChunk864_879.sections ++ sections51
+def sections51 : LabSem.LabProgHOL 64 := []
+theorem sections51_eq : Named.bodies51.map StackToLab.progToSectionHOL = sections51 := by rfl
+def sections50 := SectionChunk864_877.sections ++ sections51
 theorem sections50_eq : Named.bodies50.map StackToLab.progToSectionHOL = sections50 := by
   unfold Named.bodies50 sections50
-  rw [List.map_append, SectionChunk864_879.compiled_eq, sections51_eq]
+  rw [List.map_append, SectionChunk864_877.compiled_eq, sections51_eq]
 def sections49 := SectionChunk848_863.sections ++ sections50
 theorem sections49_eq : Named.bodies49.map StackToLab.progToSectionHOL = sections49 := by
   unfold Named.bodies49 sections49

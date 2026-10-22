@@ -5,10 +5,20 @@ import pathlib,subprocess,json,time,re,concurrent.futures
 root=pathlib.Path(__file__).resolve().parents[1];work=root/"work/lean-perf/backend-stages"
 def process(n):
  name=f"AlignmentLabels{n}";cert=work/f"{name}.check.json"
- if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:return
+ alignment=root/f"submission/InitECandidate/Proofs/BackendStages/Alignment{n}.lean"
  prior=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Alignment{n}.olean"
- while not prior.exists() or not (root/f"submission/InitECandidate/Proofs/BackendStages/Alignment{n}.lean").exists() or not (work/f"Alignment{n}.check.json").exists():time.sleep(5)
- original=(root/f"submission/InitECandidate/Proofs/BackendStages/Alignment{n}.lean").read_text();position=int(re.search(r"linesUpdLabLen (\d+)",original).group(1))
+ alignmentCert=work/f"Alignment{n}.check.json"
+ while not (alignment.exists() and prior.exists() and alignmentCert.exists() and
+            prior.stat().st_mtime_ns>=alignment.stat().st_mtime_ns and
+            alignmentCert.stat().st_mtime_ns>=prior.stat().st_mtime_ns and
+            json.loads(alignmentCert.read_text()).get("returncode")==0):time.sleep(5)
+ source=root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
+ if (cert.exists() and source.exists() and output.exists() and
+     json.loads(cert.read_text()).get("returncode")==0 and
+     source.stat().st_mtime_ns>=alignment.stat().st_mtime_ns and
+     output.stat().st_mtime_ns>=source.stat().st_mtime_ns and cert.stat().st_mtime_ns>=output.stat().st_mtime_ns):return
+ original=alignment.read_text();position=int(re.search(r"linesUpdLabLen (\d+)",original).group(1))
  runner=work/f"GenerateAlignmentLabels{n}.lean"
  runner.write_text(f"import Tools.GenBackendStages\nimport InitECandidate.Proofs.BackendStages.Alignment{n}\nopen Lean Flapjack Flapjack.Compiler.Backend\nrun_meta do\n  let env ← Lean.getEnv\n  let (next, labels) := LabToTarget.sectionLabels {position} InitECandidate.Proofs.BackendStages.Alignment{n}.lines []\n  let text ← liftM (renderWordStage env (toExpr labels))\n  liftM (IO.FS.writeFile \"submission/InitECandidate/Proofs/BackendStages/{name}.lean\" (\"import InitECandidate.Proofs.BackendStages.Alignment{n}\\nset_option maxRecDepth 1000000\\nset_option maxHeartbeats 0\\nopen Flapjack Flapjack.Compiler.Backend\\nnamespace InitECandidate.Proofs.BackendStages\\ndef localLabelsFinal_{n} : List (Nat × Nat) :=\\n\" ++ text ++ s!\"\\ntheorem localLabelsFinal_{n}_eq : LabToTarget.sectionLabels {position} Alignment{n}.lines [] = ({{next}}, localLabelsFinal_{n}) := by\\n  with_unfolding_all rfl\\n#print axioms localLabelsFinal_{n}_eq\\nend InitECandidate.Proofs.BackendStages\\n\"))\n")
  for label,source,out in [(f"GenerateAlignmentLabels{n}",runner,None),(name,root/f"submission/InitECandidate/Proofs/BackendStages/{name}.lean",root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean")]:

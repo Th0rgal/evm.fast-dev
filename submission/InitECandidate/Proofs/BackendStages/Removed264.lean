@@ -54,7 +54,7 @@ def RemovedBody264_12 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_13 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 626#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 621#64)
 
 def RemovedBody264_14 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -247,7 +247,7 @@ def RemovedBody264_65 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def RemovedBody264_66 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 96#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 64#64)
 
 def RemovedBody264_67 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -258,7 +258,7 @@ def RemovedBody264_68 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_69 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 627#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 622#64)
 
 def RemovedBody264_70 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -486,7 +486,7 @@ def RemovedBody264_129 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_130 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 628#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 623#64)
 
 def RemovedBody264_131 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -637,7 +637,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
 
 def RemovedBody264_169 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
 
 def RemovedBody264_170 : StackLang.HolProg 64 :=
@@ -662,7 +662,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
 
 def RemovedBody264_176 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
 
 def RemovedBody264_177 : StackLang.HolProg 64 :=
@@ -675,7 +675,7 @@ def RemovedBody264_179 : StackLang.HolProg 64 :=
 .seq RemovedBody264_177 RemovedBody264_178
 
 def RemovedBody264_180 : StackLang.HolProg 64 :=
-.call (some (RemovedBody264_174, 0, 264, 6)) (Sum.inl 248) (some (RemovedBody264_179, 264, 7))
+.call (some (RemovedBody264_174, 0, 264, 6)) (Sum.inl 242) (some (RemovedBody264_179, 264, 7))
 
 def RemovedBody264_181 : StackLang.HolProg 64 :=
 .seq RemovedBody264_163 RemovedBody264_180
@@ -701,7 +701,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody264_188 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 4
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 20#64)))
 
 def RemovedBody264_189 : StackLang.HolProg 64 :=
@@ -722,1019 +722,748 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
 
 def RemovedBody264_193 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
-
-def RemovedBody264_194 : StackLang.HolProg 64 :=
-.seq RemovedBody264_192 RemovedBody264_193
-
-def RemovedBody264_195 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_196 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 629#64)
+def RemovedBody264_194 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 624#64)
 
-def RemovedBody264_197 : StackLang.HolProg 64 :=
+def RemovedBody264_195 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
 
-def RemovedBody264_198 : StackLang.HolProg 64 :=
-.seq RemovedBody264_196 RemovedBody264_197
+def RemovedBody264_196 : StackLang.HolProg 64 :=
+.seq RemovedBody264_194 RemovedBody264_195
 
-def RemovedBody264_199 : StackLang.HolProg 64 :=
+def RemovedBody264_197 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
 
-def RemovedBody264_200 : StackLang.HolProg 64 :=
+def RemovedBody264_198 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2#64)
 
-def RemovedBody264_201 : StackLang.HolProg 64 :=
+def RemovedBody264_199 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.halt 1
 
-def RemovedBody264_202 : StackLang.HolProg 64 :=
-.seq RemovedBody264_200 RemovedBody264_201
+def RemovedBody264_200 : StackLang.HolProg 64 :=
+.seq RemovedBody264_198 RemovedBody264_199
 
-def RemovedBody264_203 : StackLang.HolProg 64 :=
+def RemovedBody264_201 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
+def RemovedBody264_202 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_200 RemovedBody264_201
+
+def RemovedBody264_203 : StackLang.HolProg 64 :=
+.seq RemovedBody264_197 RemovedBody264_202
+
 def RemovedBody264_204 : StackLang.HolProg 64 :=
-.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_202 RemovedBody264_203
-
-def RemovedBody264_205 : StackLang.HolProg 64 :=
-.seq RemovedBody264_199 RemovedBody264_204
-
-def RemovedBody264_206 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
 
-def RemovedBody264_207 : StackLang.HolProg 64 :=
+def RemovedBody264_205 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
 
-def RemovedBody264_208 : StackLang.HolProg 64 :=
+def RemovedBody264_206 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 9
 
-def RemovedBody264_209 : StackLang.HolProg 64 :=
+def RemovedBody264_207 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
 
-def RemovedBody264_210 : StackLang.HolProg 64 :=
+def RemovedBody264_208 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
-def RemovedBody264_211 : StackLang.HolProg 64 :=
+def RemovedBody264_209 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
 
-def RemovedBody264_212 : StackLang.HolProg 64 :=
+def RemovedBody264_210 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_213 : StackLang.HolProg 64 :=
+def RemovedBody264_211 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))
 
-def RemovedBody264_214 : StackLang.HolProg 64 :=
+def RemovedBody264_212 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))
+
+def RemovedBody264_213 : StackLang.HolProg 64 :=
+.seq RemovedBody264_211 RemovedBody264_212
+
+def RemovedBody264_214 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
 
 def RemovedBody264_215 : StackLang.HolProg 64 :=
 .seq RemovedBody264_213 RemovedBody264_214
 
 def RemovedBody264_216 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
 def RemovedBody264_217 : StackLang.HolProg 64 :=
 .seq RemovedBody264_215 RemovedBody264_216
 
 def RemovedBody264_218 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+.seq RemovedBody264_210 RemovedBody264_217
 
 def RemovedBody264_219 : StackLang.HolProg 64 :=
-.seq RemovedBody264_217 RemovedBody264_218
+.seq RemovedBody264_209 RemovedBody264_218
 
 def RemovedBody264_220 : StackLang.HolProg 64 :=
-.seq RemovedBody264_212 RemovedBody264_219
+.seq RemovedBody264_208 RemovedBody264_219
 
 def RemovedBody264_221 : StackLang.HolProg 64 :=
-.seq RemovedBody264_211 RemovedBody264_220
+.seq RemovedBody264_207 RemovedBody264_220
 
 def RemovedBody264_222 : StackLang.HolProg 64 :=
-.seq RemovedBody264_210 RemovedBody264_221
+.seq RemovedBody264_206 RemovedBody264_221
 
 def RemovedBody264_223 : StackLang.HolProg 64 :=
-.seq RemovedBody264_209 RemovedBody264_222
+.seq RemovedBody264_205 RemovedBody264_222
 
 def RemovedBody264_224 : StackLang.HolProg 64 :=
-.seq RemovedBody264_208 RemovedBody264_223
+.seq RemovedBody264_204 RemovedBody264_223
 
 def RemovedBody264_225 : StackLang.HolProg 64 :=
-.seq RemovedBody264_207 RemovedBody264_224
+.seq RemovedBody264_203 RemovedBody264_224
 
 def RemovedBody264_226 : StackLang.HolProg 64 :=
-.seq RemovedBody264_206 RemovedBody264_225
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_227 : StackLang.HolProg 64 :=
-.seq RemovedBody264_205 RemovedBody264_226
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_228 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_229 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_230 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_231 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
 
-def RemovedBody264_232 : StackLang.HolProg 64 :=
+def RemovedBody264_230 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
-def RemovedBody264_233 : StackLang.HolProg 64 :=
+def RemovedBody264_231 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
 
-def RemovedBody264_234 : StackLang.HolProg 64 :=
+def RemovedBody264_232 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
+
+def RemovedBody264_233 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+
+def RemovedBody264_234 : StackLang.HolProg 64 :=
+.seq RemovedBody264_232 RemovedBody264_233
 
 def RemovedBody264_235 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
+.seq RemovedBody264_231 RemovedBody264_234
 
 def RemovedBody264_236 : StackLang.HolProg 64 :=
-.seq RemovedBody264_234 RemovedBody264_235
+.seq RemovedBody264_230 RemovedBody264_235
 
 def RemovedBody264_237 : StackLang.HolProg 64 :=
-.seq RemovedBody264_233 RemovedBody264_236
+.seq RemovedBody264_229 RemovedBody264_236
 
 def RemovedBody264_238 : StackLang.HolProg 64 :=
-.seq RemovedBody264_232 RemovedBody264_237
+.seq RemovedBody264_228 RemovedBody264_237
 
 def RemovedBody264_239 : StackLang.HolProg 64 :=
-.seq RemovedBody264_231 RemovedBody264_238
-
-def RemovedBody264_240 : StackLang.HolProg 64 :=
-.seq RemovedBody264_230 RemovedBody264_239
-
-def RemovedBody264_241 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
 
-def RemovedBody264_242 : StackLang.HolProg 64 :=
+def RemovedBody264_240 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+
+def RemovedBody264_241 : StackLang.HolProg 64 :=
+.seq RemovedBody264_239 RemovedBody264_240
+
+def RemovedBody264_242 : StackLang.HolProg 64 :=
+.call none (Sum.inl 5) none
 
 def RemovedBody264_243 : StackLang.HolProg 64 :=
 .seq RemovedBody264_241 RemovedBody264_242
 
 def RemovedBody264_244 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
+.call (some (RemovedBody264_238, 0, 264, 8)) (Sum.inl 242) (some (RemovedBody264_243, 264, 9))
 
 def RemovedBody264_245 : StackLang.HolProg 64 :=
-.seq RemovedBody264_243 RemovedBody264_244
+.seq RemovedBody264_227 RemovedBody264_244
 
 def RemovedBody264_246 : StackLang.HolProg 64 :=
-.call (some (RemovedBody264_240, 0, 264, 8)) (Sum.inl 248) (some (RemovedBody264_245, 264, 9))
+.seq RemovedBody264_226 RemovedBody264_245
 
 def RemovedBody264_247 : StackLang.HolProg 64 :=
-.seq RemovedBody264_229 RemovedBody264_246
+.seq RemovedBody264_225 RemovedBody264_246
 
 def RemovedBody264_248 : StackLang.HolProg 64 :=
-.seq RemovedBody264_228 RemovedBody264_247
+.seq RemovedBody264_196 RemovedBody264_247
 
 def RemovedBody264_249 : StackLang.HolProg 64 :=
-.seq RemovedBody264_227 RemovedBody264_248
+.seq RemovedBody264_193 RemovedBody264_248
 
 def RemovedBody264_250 : StackLang.HolProg 64 :=
-.seq RemovedBody264_198 RemovedBody264_249
-
-def RemovedBody264_251 : StackLang.HolProg 64 :=
-.seq RemovedBody264_195 RemovedBody264_250
-
-def RemovedBody264_252 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
-def RemovedBody264_253 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_254 : StackLang.HolProg 64 :=
+def RemovedBody264_251 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 1 2
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 68#64)))
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
+
+def RemovedBody264_252 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2#64)
+
+def RemovedBody264_253 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2#64)
+
+def RemovedBody264_254 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_255 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_256 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 3 0
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 64#64)))
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 625#64)
 
 def RemovedBody264_257 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 48#64)
-
-def RemovedBody264_258 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
-
-def RemovedBody264_259 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_260 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 630#64)
-
-def RemovedBody264_261 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
+
+def RemovedBody264_258 : StackLang.HolProg 64 :=
+.seq RemovedBody264_256 RemovedBody264_257
+
+def RemovedBody264_259 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
+
+def RemovedBody264_260 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2#64)
+
+def RemovedBody264_261 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.halt 1
 
 def RemovedBody264_262 : StackLang.HolProg 64 :=
 .seq RemovedBody264_260 RemovedBody264_261
 
 def RemovedBody264_263 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
-
-def RemovedBody264_264 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2#64)
-
-def RemovedBody264_265 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.halt 1
-
-def RemovedBody264_266 : StackLang.HolProg 64 :=
-.seq RemovedBody264_264 RemovedBody264_265
-
-def RemovedBody264_267 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_268 : StackLang.HolProg 64 :=
-.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_266 RemovedBody264_267
+def RemovedBody264_264 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_262 RemovedBody264_263
 
-def RemovedBody264_269 : StackLang.HolProg 64 :=
-.seq RemovedBody264_263 RemovedBody264_268
+def RemovedBody264_265 : StackLang.HolProg 64 :=
+.seq RemovedBody264_259 RemovedBody264_264
 
-def RemovedBody264_270 : StackLang.HolProg 64 :=
+def RemovedBody264_266 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
 
-def RemovedBody264_271 : StackLang.HolProg 64 :=
+def RemovedBody264_267 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
 
-def RemovedBody264_272 : StackLang.HolProg 64 :=
+def RemovedBody264_268 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 11
 
-def RemovedBody264_273 : StackLang.HolProg 64 :=
+def RemovedBody264_269 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
 
-def RemovedBody264_274 : StackLang.HolProg 64 :=
+def RemovedBody264_270 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
-def RemovedBody264_275 : StackLang.HolProg 64 :=
+def RemovedBody264_271 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
 
-def RemovedBody264_276 : StackLang.HolProg 64 :=
+def RemovedBody264_272 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_277 : StackLang.HolProg 64 :=
+def RemovedBody264_273 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))
 
-def RemovedBody264_278 : StackLang.HolProg 64 :=
+def RemovedBody264_274 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))
+
+def RemovedBody264_275 : StackLang.HolProg 64 :=
+.seq RemovedBody264_273 RemovedBody264_274
+
+def RemovedBody264_276 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
+
+def RemovedBody264_277 : StackLang.HolProg 64 :=
+.seq RemovedBody264_275 RemovedBody264_276
+
+def RemovedBody264_278 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
 def RemovedBody264_279 : StackLang.HolProg 64 :=
 .seq RemovedBody264_277 RemovedBody264_278
 
 def RemovedBody264_280 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
+.seq RemovedBody264_272 RemovedBody264_279
 
 def RemovedBody264_281 : StackLang.HolProg 64 :=
-.seq RemovedBody264_279 RemovedBody264_280
+.seq RemovedBody264_271 RemovedBody264_280
 
 def RemovedBody264_282 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+.seq RemovedBody264_270 RemovedBody264_281
 
 def RemovedBody264_283 : StackLang.HolProg 64 :=
-.seq RemovedBody264_281 RemovedBody264_282
+.seq RemovedBody264_269 RemovedBody264_282
 
 def RemovedBody264_284 : StackLang.HolProg 64 :=
-.seq RemovedBody264_276 RemovedBody264_283
+.seq RemovedBody264_268 RemovedBody264_283
 
 def RemovedBody264_285 : StackLang.HolProg 64 :=
-.seq RemovedBody264_275 RemovedBody264_284
+.seq RemovedBody264_267 RemovedBody264_284
 
 def RemovedBody264_286 : StackLang.HolProg 64 :=
-.seq RemovedBody264_274 RemovedBody264_285
+.seq RemovedBody264_266 RemovedBody264_285
 
 def RemovedBody264_287 : StackLang.HolProg 64 :=
-.seq RemovedBody264_273 RemovedBody264_286
+.seq RemovedBody264_265 RemovedBody264_286
 
 def RemovedBody264_288 : StackLang.HolProg 64 :=
-.seq RemovedBody264_272 RemovedBody264_287
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_289 : StackLang.HolProg 64 :=
-.seq RemovedBody264_271 RemovedBody264_288
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_290 : StackLang.HolProg 64 :=
-.seq RemovedBody264_270 RemovedBody264_289
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_291 : StackLang.HolProg 64 :=
-.seq RemovedBody264_269 RemovedBody264_290
-
-def RemovedBody264_292 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_293 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_294 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_295 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
 
-def RemovedBody264_296 : StackLang.HolProg 64 :=
+def RemovedBody264_292 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
-def RemovedBody264_297 : StackLang.HolProg 64 :=
+def RemovedBody264_293 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
 
-def RemovedBody264_298 : StackLang.HolProg 64 :=
+def RemovedBody264_294 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 32#64))
+
+def RemovedBody264_295 : StackLang.HolProg 64 :=
+.seq RemovedBody264_293 RemovedBody264_294
+
+def RemovedBody264_296 : StackLang.HolProg 64 :=
+.seq RemovedBody264_292 RemovedBody264_295
+
+def RemovedBody264_297 : StackLang.HolProg 64 :=
+.seq RemovedBody264_291 RemovedBody264_296
+
+def RemovedBody264_298 : StackLang.HolProg 64 :=
+.seq RemovedBody264_290 RemovedBody264_297
 
 def RemovedBody264_299 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 32#64))
 
 def RemovedBody264_300 : StackLang.HolProg 64 :=
-.seq RemovedBody264_298 RemovedBody264_299
-
-def RemovedBody264_301 : StackLang.HolProg 64 :=
-.seq RemovedBody264_297 RemovedBody264_300
-
-def RemovedBody264_302 : StackLang.HolProg 64 :=
-.seq RemovedBody264_296 RemovedBody264_301
-
-def RemovedBody264_303 : StackLang.HolProg 64 :=
-.seq RemovedBody264_295 RemovedBody264_302
-
-def RemovedBody264_304 : StackLang.HolProg 64 :=
-.seq RemovedBody264_294 RemovedBody264_303
-
-def RemovedBody264_305 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 24#64))
-
-def RemovedBody264_306 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
-
-def RemovedBody264_307 : StackLang.HolProg 64 :=
-.seq RemovedBody264_305 RemovedBody264_306
-
-def RemovedBody264_308 : StackLang.HolProg 64 :=
 .call none (Sum.inl 5) none
 
-def RemovedBody264_309 : StackLang.HolProg 64 :=
-.seq RemovedBody264_307 RemovedBody264_308
+def RemovedBody264_301 : StackLang.HolProg 64 :=
+.seq RemovedBody264_299 RemovedBody264_300
 
-def RemovedBody264_310 : StackLang.HolProg 64 :=
-.call (some (RemovedBody264_304, 0, 264, 10)) (Sum.inl 248) (some (RemovedBody264_309, 264, 11))
+def RemovedBody264_302 : StackLang.HolProg 64 :=
+.call (some (RemovedBody264_298, 0, 264, 10)) (Sum.inl 235) (some (RemovedBody264_301, 264, 11))
 
-def RemovedBody264_311 : StackLang.HolProg 64 :=
-.seq RemovedBody264_293 RemovedBody264_310
+def RemovedBody264_303 : StackLang.HolProg 64 :=
+.seq RemovedBody264_289 RemovedBody264_302
 
-def RemovedBody264_312 : StackLang.HolProg 64 :=
-.seq RemovedBody264_292 RemovedBody264_311
+def RemovedBody264_304 : StackLang.HolProg 64 :=
+.seq RemovedBody264_288 RemovedBody264_303
 
-def RemovedBody264_313 : StackLang.HolProg 64 :=
-.seq RemovedBody264_291 RemovedBody264_312
+def RemovedBody264_305 : StackLang.HolProg 64 :=
+.seq RemovedBody264_287 RemovedBody264_304
 
-def RemovedBody264_314 : StackLang.HolProg 64 :=
-.seq RemovedBody264_262 RemovedBody264_313
+def RemovedBody264_306 : StackLang.HolProg 64 :=
+.seq RemovedBody264_258 RemovedBody264_305
 
-def RemovedBody264_315 : StackLang.HolProg 64 :=
-.seq RemovedBody264_259 RemovedBody264_314
+def RemovedBody264_307 : StackLang.HolProg 64 :=
+.seq RemovedBody264_255 RemovedBody264_306
 
-def RemovedBody264_316 : StackLang.HolProg 64 :=
+def RemovedBody264_308 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
-def RemovedBody264_317 : StackLang.HolProg 64 :=
+def RemovedBody264_309 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
 
-def RemovedBody264_318 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 3#64)
-
-def RemovedBody264_319 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 3#64)
-
-def RemovedBody264_320 : StackLang.HolProg 64 :=
+def RemovedBody264_310 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_321 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+def RemovedBody264_311 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 626#64)
 
-def RemovedBody264_322 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 631#64)
-
-def RemovedBody264_323 : StackLang.HolProg 64 :=
+def RemovedBody264_312 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
     (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
 
-def RemovedBody264_324 : StackLang.HolProg 64 :=
-.seq RemovedBody264_322 RemovedBody264_323
+def RemovedBody264_313 : StackLang.HolProg 64 :=
+.seq RemovedBody264_311 RemovedBody264_312
 
-def RemovedBody264_325 : StackLang.HolProg 64 :=
+def RemovedBody264_314 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
 
-def RemovedBody264_326 : StackLang.HolProg 64 :=
+def RemovedBody264_315 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2#64)
 
-def RemovedBody264_327 : StackLang.HolProg 64 :=
+def RemovedBody264_316 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.halt 1
 
-def RemovedBody264_328 : StackLang.HolProg 64 :=
-.seq RemovedBody264_326 RemovedBody264_327
+def RemovedBody264_317 : StackLang.HolProg 64 :=
+.seq RemovedBody264_315 RemovedBody264_316
 
-def RemovedBody264_329 : StackLang.HolProg 64 :=
+def RemovedBody264_318 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
+def RemovedBody264_319 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_317 RemovedBody264_318
+
+def RemovedBody264_320 : StackLang.HolProg 64 :=
+.seq RemovedBody264_314 RemovedBody264_319
+
+def RemovedBody264_321 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
+
+def RemovedBody264_322 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
+
+def RemovedBody264_323 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 13
+
+def RemovedBody264_324 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
+
+def RemovedBody264_325 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+
+def RemovedBody264_326 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+
+def RemovedBody264_327 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def RemovedBody264_328 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))
+
+def RemovedBody264_329 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))
+
 def RemovedBody264_330 : StackLang.HolProg 64 :=
-.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_328 RemovedBody264_329
+.seq RemovedBody264_328 RemovedBody264_329
 
 def RemovedBody264_331 : StackLang.HolProg 64 :=
-.seq RemovedBody264_325 RemovedBody264_330
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
 
 def RemovedBody264_332 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
+.seq RemovedBody264_330 RemovedBody264_331
 
 def RemovedBody264_333 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
 def RemovedBody264_334 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 13
+.seq RemovedBody264_332 RemovedBody264_333
 
 def RemovedBody264_335 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
+.seq RemovedBody264_327 RemovedBody264_334
 
 def RemovedBody264_336 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+.seq RemovedBody264_326 RemovedBody264_335
 
 def RemovedBody264_337 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+.seq RemovedBody264_325 RemovedBody264_336
 
 def RemovedBody264_338 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.seq RemovedBody264_324 RemovedBody264_337
 
 def RemovedBody264_339 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))
+.seq RemovedBody264_323 RemovedBody264_338
 
 def RemovedBody264_340 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))
+.seq RemovedBody264_322 RemovedBody264_339
 
 def RemovedBody264_341 : StackLang.HolProg 64 :=
-.seq RemovedBody264_339 RemovedBody264_340
+.seq RemovedBody264_321 RemovedBody264_340
 
 def RemovedBody264_342 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
+.seq RemovedBody264_320 RemovedBody264_341
 
 def RemovedBody264_343 : StackLang.HolProg 64 :=
-.seq RemovedBody264_341 RemovedBody264_342
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_344 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_345 : StackLang.HolProg 64 :=
-.seq RemovedBody264_343 RemovedBody264_344
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody264_346 : StackLang.HolProg 64 :=
-.seq RemovedBody264_338 RemovedBody264_345
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
 
 def RemovedBody264_347 : StackLang.HolProg 64 :=
-.seq RemovedBody264_337 RemovedBody264_346
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
 
 def RemovedBody264_348 : StackLang.HolProg 64 :=
-.seq RemovedBody264_336 RemovedBody264_347
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
 
 def RemovedBody264_349 : StackLang.HolProg 64 :=
-.seq RemovedBody264_335 RemovedBody264_348
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 40#64))
 
 def RemovedBody264_350 : StackLang.HolProg 64 :=
-.seq RemovedBody264_334 RemovedBody264_349
+.seq RemovedBody264_348 RemovedBody264_349
 
 def RemovedBody264_351 : StackLang.HolProg 64 :=
-.seq RemovedBody264_333 RemovedBody264_350
+.seq RemovedBody264_347 RemovedBody264_350
 
 def RemovedBody264_352 : StackLang.HolProg 64 :=
-.seq RemovedBody264_332 RemovedBody264_351
+.seq RemovedBody264_346 RemovedBody264_351
 
 def RemovedBody264_353 : StackLang.HolProg 64 :=
-.seq RemovedBody264_331 RemovedBody264_352
+.seq RemovedBody264_345 RemovedBody264_352
 
 def RemovedBody264_354 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 40#64))
 
 def RemovedBody264_355 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.call none (Sum.inl 5) none
 
 def RemovedBody264_356 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.seq RemovedBody264_354 RemovedBody264_355
 
 def RemovedBody264_357 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
+.call (some (RemovedBody264_353, 0, 264, 12)) (Sum.inl 70) (some (RemovedBody264_356, 264, 13))
 
 def RemovedBody264_358 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
+.seq RemovedBody264_344 RemovedBody264_357
 
 def RemovedBody264_359 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
+.seq RemovedBody264_343 RemovedBody264_358
 
 def RemovedBody264_360 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 32#64))
+.seq RemovedBody264_342 RemovedBody264_359
 
 def RemovedBody264_361 : StackLang.HolProg 64 :=
-.seq RemovedBody264_359 RemovedBody264_360
+.seq RemovedBody264_313 RemovedBody264_360
 
 def RemovedBody264_362 : StackLang.HolProg 64 :=
-.seq RemovedBody264_358 RemovedBody264_361
+.seq RemovedBody264_310 RemovedBody264_361
 
 def RemovedBody264_363 : StackLang.HolProg 64 :=
-.seq RemovedBody264_357 RemovedBody264_362
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def RemovedBody264_364 : StackLang.HolProg 64 :=
-.seq RemovedBody264_356 RemovedBody264_363
-
-def RemovedBody264_365 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 32#64))
-
-def RemovedBody264_366 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
-
-def RemovedBody264_367 : StackLang.HolProg 64 :=
-.seq RemovedBody264_365 RemovedBody264_366
-
-def RemovedBody264_368 : StackLang.HolProg 64 :=
-.call (some (RemovedBody264_364, 0, 264, 12)) (Sum.inl 241) (some (RemovedBody264_367, 264, 13))
-
-def RemovedBody264_369 : StackLang.HolProg 64 :=
-.seq RemovedBody264_355 RemovedBody264_368
-
-def RemovedBody264_370 : StackLang.HolProg 64 :=
-.seq RemovedBody264_354 RemovedBody264_369
-
-def RemovedBody264_371 : StackLang.HolProg 64 :=
-.seq RemovedBody264_353 RemovedBody264_370
-
-def RemovedBody264_372 : StackLang.HolProg 64 :=
-.seq RemovedBody264_324 RemovedBody264_371
-
-def RemovedBody264_373 : StackLang.HolProg 64 :=
-.seq RemovedBody264_321 RemovedBody264_372
-
-def RemovedBody264_374 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.tick
-
-def RemovedBody264_375 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
-
-def RemovedBody264_376 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_377 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 632#64)
-
-def RemovedBody264_378 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
-
-def RemovedBody264_379 : StackLang.HolProg 64 :=
-.seq RemovedBody264_377 RemovedBody264_378
-
-def RemovedBody264_380 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 24 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
-
-def RemovedBody264_381 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 2#64)
-
-def RemovedBody264_382 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.halt 1
-
-def RemovedBody264_383 : StackLang.HolProg 64 :=
-.seq RemovedBody264_381 RemovedBody264_382
-
-def RemovedBody264_384 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_385 : StackLang.HolProg 64 :=
-.ite (Flapjack.Cmp.lower) 24 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25) RemovedBody264_383 RemovedBody264_384
-
-def RemovedBody264_386 : StackLang.HolProg 64 :=
-.seq RemovedBody264_380 RemovedBody264_385
-
-def RemovedBody264_387 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
-
-def RemovedBody264_388 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 0#64))
-
-def RemovedBody264_389 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 264 15
-
-def RemovedBody264_390 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 8#64))
-
-def RemovedBody264_391 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
-
-def RemovedBody264_392 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
-
-def RemovedBody264_393 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_394 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 22 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 24)))
-
-def RemovedBody264_395 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.sub 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 25)))
-
-def RemovedBody264_396 : StackLang.HolProg 64 :=
-.seq RemovedBody264_394 RemovedBody264_395
-
-def RemovedBody264_397 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.shift Flapjack.Shift.lsr 22 22
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 3#64)))
-
-def RemovedBody264_398 : StackLang.HolProg 64 :=
-.seq RemovedBody264_396 RemovedBody264_397
-
-def RemovedBody264_399 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
-
-def RemovedBody264_400 : StackLang.HolProg 64 :=
-.seq RemovedBody264_398 RemovedBody264_399
-
-def RemovedBody264_401 : StackLang.HolProg 64 :=
-.seq RemovedBody264_393 RemovedBody264_400
-
-def RemovedBody264_402 : StackLang.HolProg 64 :=
-.seq RemovedBody264_392 RemovedBody264_401
-
-def RemovedBody264_403 : StackLang.HolProg 64 :=
-.seq RemovedBody264_391 RemovedBody264_402
-
-def RemovedBody264_404 : StackLang.HolProg 64 :=
-.seq RemovedBody264_390 RemovedBody264_403
-
-def RemovedBody264_405 : StackLang.HolProg 64 :=
-.seq RemovedBody264_389 RemovedBody264_404
-
-def RemovedBody264_406 : StackLang.HolProg 64 :=
-.seq RemovedBody264_388 RemovedBody264_405
-
-def RemovedBody264_407 : StackLang.HolProg 64 :=
-.seq RemovedBody264_387 RemovedBody264_406
-
-def RemovedBody264_408 : StackLang.HolProg 64 :=
-.seq RemovedBody264_386 RemovedBody264_407
-
-def RemovedBody264_409 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_410 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_411 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def RemovedBody264_412 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 16#64))
-
-def RemovedBody264_413 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 22
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551560#64))
-
-def RemovedBody264_414 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 24#64)))
-
-def RemovedBody264_415 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 40#64))
-
-def RemovedBody264_416 : StackLang.HolProg 64 :=
-.seq RemovedBody264_414 RemovedBody264_415
-
-def RemovedBody264_417 : StackLang.HolProg 64 :=
-.seq RemovedBody264_413 RemovedBody264_416
-
-def RemovedBody264_418 : StackLang.HolProg 64 :=
-.seq RemovedBody264_412 RemovedBody264_417
-
-def RemovedBody264_419 : StackLang.HolProg 64 :=
-.seq RemovedBody264_411 RemovedBody264_418
-
-def RemovedBody264_420 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 24 40#64))
-
-def RemovedBody264_421 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
-
-def RemovedBody264_422 : StackLang.HolProg 64 :=
-.seq RemovedBody264_420 RemovedBody264_421
-
-def RemovedBody264_423 : StackLang.HolProg 64 :=
-.call (some (RemovedBody264_419, 0, 264, 14)) (Sum.inl 70) (some (RemovedBody264_422, 264, 15))
-
-def RemovedBody264_424 : StackLang.HolProg 64 :=
-.seq RemovedBody264_410 RemovedBody264_423
-
-def RemovedBody264_425 : StackLang.HolProg 64 :=
-.seq RemovedBody264_409 RemovedBody264_424
-
-def RemovedBody264_426 : StackLang.HolProg 64 :=
-.seq RemovedBody264_408 RemovedBody264_425
-
-def RemovedBody264_427 : StackLang.HolProg 64 :=
-.seq RemovedBody264_379 RemovedBody264_426
-
-def RemovedBody264_428 : StackLang.HolProg 64 :=
-.seq RemovedBody264_376 RemovedBody264_427
-
-def RemovedBody264_429 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.tick
-
-def RemovedBody264_430 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)
 
-def RemovedBody264_431 : StackLang.HolProg 64 :=
+def RemovedBody264_365 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def RemovedBody264_432 : StackLang.HolProg 64 :=
+def RemovedBody264_366 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 48#64)))
 
-def RemovedBody264_433 : StackLang.HolProg 64 :=
+def RemovedBody264_367 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 0
 
-def RemovedBody264_434 : StackLang.HolProg 64 :=
-.seq RemovedBody264_432 RemovedBody264_433
+def RemovedBody264_368 : StackLang.HolProg 64 :=
+.seq RemovedBody264_366 RemovedBody264_367
 
-def RemovedBody264_435 : StackLang.HolProg 64 :=
-.seq RemovedBody264_431 RemovedBody264_434
+def RemovedBody264_369 : StackLang.HolProg 64 :=
+.seq RemovedBody264_365 RemovedBody264_368
 
-def RemovedBody264_436 : StackLang.HolProg 64 :=
-.seq RemovedBody264_430 RemovedBody264_435
+def RemovedBody264_370 : StackLang.HolProg 64 :=
+.seq RemovedBody264_364 RemovedBody264_369
 
-def RemovedBody264_437 : StackLang.HolProg 64 :=
-.seq RemovedBody264_429 RemovedBody264_436
+def RemovedBody264_371 : StackLang.HolProg 64 :=
+.seq RemovedBody264_363 RemovedBody264_370
 
-def RemovedBody264_438 : StackLang.HolProg 64 :=
-.seq RemovedBody264_428 RemovedBody264_437
+def RemovedBody264_372 : StackLang.HolProg 64 :=
+.seq RemovedBody264_362 RemovedBody264_371
 
-def RemovedBody264_439 : StackLang.HolProg 64 :=
-.seq RemovedBody264_375 RemovedBody264_438
+def RemovedBody264_373 : StackLang.HolProg 64 :=
+.seq RemovedBody264_309 RemovedBody264_372
 
-def RemovedBody264_440 : StackLang.HolProg 64 :=
-.seq RemovedBody264_374 RemovedBody264_439
+def RemovedBody264_374 : StackLang.HolProg 64 :=
+.seq RemovedBody264_308 RemovedBody264_373
 
-def RemovedBody264_441 : StackLang.HolProg 64 :=
-.seq RemovedBody264_373 RemovedBody264_440
+def RemovedBody264_375 : StackLang.HolProg 64 :=
+.seq RemovedBody264_307 RemovedBody264_374
 
-def RemovedBody264_442 : StackLang.HolProg 64 :=
-.seq RemovedBody264_320 RemovedBody264_441
+def RemovedBody264_376 : StackLang.HolProg 64 :=
+.seq RemovedBody264_254 RemovedBody264_375
 
-def RemovedBody264_443 : StackLang.HolProg 64 :=
-.seq RemovedBody264_319 RemovedBody264_442
+def RemovedBody264_377 : StackLang.HolProg 64 :=
+.seq RemovedBody264_253 RemovedBody264_376
 
-def RemovedBody264_444 : StackLang.HolProg 64 :=
-.seq RemovedBody264_318 RemovedBody264_443
+def RemovedBody264_378 : StackLang.HolProg 64 :=
+.seq RemovedBody264_252 RemovedBody264_377
 
-def RemovedBody264_445 : StackLang.HolProg 64 :=
-.seq RemovedBody264_317 RemovedBody264_444
+def RemovedBody264_379 : StackLang.HolProg 64 :=
+.seq RemovedBody264_251 RemovedBody264_378
 
-def RemovedBody264_446 : StackLang.HolProg 64 :=
-.seq RemovedBody264_316 RemovedBody264_445
+def RemovedBody264_380 : StackLang.HolProg 64 :=
+.seq RemovedBody264_250 RemovedBody264_379
 
-def RemovedBody264_447 : StackLang.HolProg 64 :=
-.seq RemovedBody264_315 RemovedBody264_446
+def RemovedBody264_381 : StackLang.HolProg 64 :=
+.seq RemovedBody264_249 RemovedBody264_380
 
-def RemovedBody264_448 : StackLang.HolProg 64 :=
-.seq RemovedBody264_258 RemovedBody264_447
+def RemovedBody264_382 : StackLang.HolProg 64 :=
+.seq RemovedBody264_192 RemovedBody264_381
 
-def RemovedBody264_449 : StackLang.HolProg 64 :=
-.seq RemovedBody264_257 RemovedBody264_448
+def RemovedBody264_383 : StackLang.HolProg 64 :=
+.seq RemovedBody264_191 RemovedBody264_382
 
-def RemovedBody264_450 : StackLang.HolProg 64 :=
-.seq RemovedBody264_256 RemovedBody264_449
+def RemovedBody264_384 : StackLang.HolProg 64 :=
+.seq RemovedBody264_190 RemovedBody264_383
 
-def RemovedBody264_451 : StackLang.HolProg 64 :=
-.seq RemovedBody264_255 RemovedBody264_450
+def RemovedBody264_385 : StackLang.HolProg 64 :=
+.seq RemovedBody264_189 RemovedBody264_384
 
-def RemovedBody264_452 : StackLang.HolProg 64 :=
-.seq RemovedBody264_254 RemovedBody264_451
+def RemovedBody264_386 : StackLang.HolProg 64 :=
+.seq RemovedBody264_188 RemovedBody264_385
 
-def RemovedBody264_453 : StackLang.HolProg 64 :=
-.seq RemovedBody264_253 RemovedBody264_452
+def RemovedBody264_387 : StackLang.HolProg 64 :=
+.seq RemovedBody264_187 RemovedBody264_386
 
-def RemovedBody264_454 : StackLang.HolProg 64 :=
-.seq RemovedBody264_252 RemovedBody264_453
+def RemovedBody264_388 : StackLang.HolProg 64 :=
+.seq RemovedBody264_186 RemovedBody264_387
 
-def RemovedBody264_455 : StackLang.HolProg 64 :=
-.seq RemovedBody264_251 RemovedBody264_454
+def RemovedBody264_389 : StackLang.HolProg 64 :=
+.seq RemovedBody264_185 RemovedBody264_388
 
-def RemovedBody264_456 : StackLang.HolProg 64 :=
-.seq RemovedBody264_194 RemovedBody264_455
+def RemovedBody264_390 : StackLang.HolProg 64 :=
+.seq RemovedBody264_128 RemovedBody264_389
 
-def RemovedBody264_457 : StackLang.HolProg 64 :=
-.seq RemovedBody264_191 RemovedBody264_456
+def RemovedBody264_391 : StackLang.HolProg 64 :=
+.seq RemovedBody264_125 RemovedBody264_390
 
-def RemovedBody264_458 : StackLang.HolProg 64 :=
-.seq RemovedBody264_190 RemovedBody264_457
+def RemovedBody264_392 : StackLang.HolProg 64 :=
+.seq RemovedBody264_124 RemovedBody264_391
 
-def RemovedBody264_459 : StackLang.HolProg 64 :=
-.seq RemovedBody264_189 RemovedBody264_458
+def RemovedBody264_393 : StackLang.HolProg 64 :=
+.seq RemovedBody264_123 RemovedBody264_392
 
-def RemovedBody264_460 : StackLang.HolProg 64 :=
-.seq RemovedBody264_188 RemovedBody264_459
+def RemovedBody264_394 : StackLang.HolProg 64 :=
+.seq RemovedBody264_122 RemovedBody264_393
 
-def RemovedBody264_461 : StackLang.HolProg 64 :=
-.seq RemovedBody264_187 RemovedBody264_460
+def RemovedBody264_395 : StackLang.HolProg 64 :=
+.seq RemovedBody264_67 RemovedBody264_394
 
-def RemovedBody264_462 : StackLang.HolProg 64 :=
-.seq RemovedBody264_186 RemovedBody264_461
+def RemovedBody264_396 : StackLang.HolProg 64 :=
+.seq RemovedBody264_66 RemovedBody264_395
 
-def RemovedBody264_463 : StackLang.HolProg 64 :=
-.seq RemovedBody264_185 RemovedBody264_462
+def RemovedBody264_397 : StackLang.HolProg 64 :=
+.seq RemovedBody264_65 RemovedBody264_396
 
-def RemovedBody264_464 : StackLang.HolProg 64 :=
-.seq RemovedBody264_128 RemovedBody264_463
+def RemovedBody264_398 : StackLang.HolProg 64 :=
+.seq RemovedBody264_64 RemovedBody264_397
 
-def RemovedBody264_465 : StackLang.HolProg 64 :=
-.seq RemovedBody264_125 RemovedBody264_464
+def RemovedBody264_399 : StackLang.HolProg 64 :=
+.seq RemovedBody264_11 RemovedBody264_398
 
-def RemovedBody264_466 : StackLang.HolProg 64 :=
-.seq RemovedBody264_124 RemovedBody264_465
+def RemovedBody264_400 : StackLang.HolProg 64 :=
+.seq RemovedBody264_6 RemovedBody264_399
 
-def RemovedBody264_467 : StackLang.HolProg 64 :=
-.seq RemovedBody264_123 RemovedBody264_466
-
-def RemovedBody264_468 : StackLang.HolProg 64 :=
-.seq RemovedBody264_122 RemovedBody264_467
-
-def RemovedBody264_469 : StackLang.HolProg 64 :=
-.seq RemovedBody264_67 RemovedBody264_468
-
-def RemovedBody264_470 : StackLang.HolProg 64 :=
-.seq RemovedBody264_66 RemovedBody264_469
-
-def RemovedBody264_471 : StackLang.HolProg 64 :=
-.seq RemovedBody264_65 RemovedBody264_470
-
-def RemovedBody264_472 : StackLang.HolProg 64 :=
-.seq RemovedBody264_64 RemovedBody264_471
-
-def RemovedBody264_473 : StackLang.HolProg 64 :=
-.seq RemovedBody264_11 RemovedBody264_472
-
-def RemovedBody264_474 : StackLang.HolProg 64 :=
-.seq RemovedBody264_6 RemovedBody264_473
-
-def Removed264 : Nat × StackLang.HolProg 64 := (264, RemovedBody264_474)
+def Removed264 : Nat × StackLang.HolProg 64 := (264, RemovedBody264_400)
 theorem Removed264_eq : StackRemove.progComp false riscvConfig.addrOffset (riscvConfig.regCount - (riscvConfig.avoidRegs.length + 3)) Alloc264 = Removed264 := by
   kernel_rfl
 #print axioms Removed264_eq

@@ -6,7 +6,7 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks
-theorem Reencode0_515_eq : LabToTarget.encLinesAgain Target.labels0 Target.ffis 362992 riscvConfig.encode Initial515.lines [] true = (Reencode0_515.lines, 363696, true) := by
+theorem Reencode0_515_eq : LabToTarget.encLinesAgain Target.labels0 Target.ffis 419316 riscvConfig.encode Initial515.lines [] true = (Reencode0_515.lines, 420076, true) := by
   with_unfolding_all rfl
 #print axioms Reencode0_515_eq
 end InitECandidate.Proofs.BackendStages.TargetChecks

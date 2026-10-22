@@ -1,4 +1,4 @@
 import Flapjack.Misc.Sptree
 namespace InitECandidate.Proofs.BackendStages.ZeroData
-def keys635 : List Nat := [77, 5, 77, 5, 77, 5]
+def keys635 : List Nat := []
 end InitECandidate.Proofs.BackendStages.ZeroData

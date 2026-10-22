@@ -51,8 +51,8 @@ def stackBody371_12 : StackLang.HolProg 64 :=
 .seq stackBody371_0 stackBody371_11
 
 def function371 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody371_12, 0, bitmapPrefix, 1096)
-theorem function371_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized371.2.2 InitECandidate.Proofs.StackAnalysis.optimized371.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1096) = function371 bitmapPrefix := by
+(stackBody371_12, 0, bitmapPrefix, 1088)
+theorem function371_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized371.2.2 InitECandidate.Proofs.StackAnalysis.optimized371.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1088) = function371 bitmapPrefix := by
   kernel_rfl
 #print axioms function371_eq
 end InitECandidate.Proofs.BackendStages

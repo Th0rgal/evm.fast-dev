@@ -14,23 +14,31 @@ def beforeFfis802 : List HolFfiName := [Flapjack.HolFfiName.sharedMem Flapjack.H
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
-  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite]
-def beforeShmem802 : List LabToTarget.ShmemInfoNum := [{ entryPc := 5216, nbytes := 1#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 5220 },
-  { entryPc := 5260, nbytes := 0#8, addrReg := 13, addrOff := 0, reg := 12, exitPc := 5264 },
-  { entryPc := 5292, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 10, exitPc := 5296 },
-  { entryPc := 9888, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9892 },
-  { entryPc := 10184, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 12, exitPc := 10188 },
-  { entryPc := 10268, nbytes := 1#8, addrReg := 5, addrOff := 0, reg := 13, exitPc := 10272 }]
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead]
+def beforeShmem802 : List LabToTarget.ShmemInfoNum := [{ entryPc := 4744, nbytes := 1#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 4748 },
+  { entryPc := 4788, nbytes := 0#8, addrReg := 13, addrOff := 0, reg := 12, exitPc := 4792 },
+  { entryPc := 4820, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 10, exitPc := 4824 },
+  { entryPc := 9396, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9400 },
+  { entryPc := 9692, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 12, exitPc := 9696 },
+  { entryPc := 9776, nbytes := 1#8, addrReg := 5, addrOff := 0, reg := 13, exitPc := 9780 },
+  { entryPc := 179152, nbytes := 0#8, addrReg := 11, addrOff := 0, reg := 11, exitPc := 179156 },
+  { entryPc := 179760, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 179764 }]
 def afterFfis802 : List HolFfiName := [Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
-  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite]
-def afterShmem802 : List LabToTarget.ShmemInfoNum := [{ entryPc := 5216, nbytes := 1#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 5220 },
-  { entryPc := 5260, nbytes := 0#8, addrReg := 13, addrOff := 0, reg := 12, exitPc := 5264 },
-  { entryPc := 5292, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 10, exitPc := 5296 },
-  { entryPc := 9888, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9892 },
-  { entryPc := 10184, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 12, exitPc := 10188 },
-  { entryPc := 10268, nbytes := 1#8, addrReg := 5, addrOff := 0, reg := 13, exitPc := 10272 }]
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead]
+def afterShmem802 : List LabToTarget.ShmemInfoNum := [{ entryPc := 4744, nbytes := 1#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 4748 },
+  { entryPc := 4788, nbytes := 0#8, addrReg := 13, addrOff := 0, reg := 12, exitPc := 4792 },
+  { entryPc := 4820, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 10, exitPc := 4824 },
+  { entryPc := 9396, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9400 },
+  { entryPc := 9692, nbytes := 0#8, addrReg := 12, addrOff := 0, reg := 12, exitPc := 9696 },
+  { entryPc := 9776, nbytes := 1#8, addrReg := 5, addrOff := 0, reg := 13, exitPc := 9780 },
+  { entryPc := 179152, nbytes := 0#8, addrReg := 11, addrOff := 0, reg := 11, exitPc := 179156 },
+  { entryPc := 179760, nbytes := 0#8, addrReg := 10, addrOff := 0, reg := 11, exitPc := 179764 }]
 end InitECandidate.Proofs.BackendStages.Metadata

@@ -24,8 +24,8 @@ def Padded375 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [147#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0))
-        18446744073709551036#64 [111#8, 240#8, 223#8, 219#8] 4,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709551004#64 [111#8, 240#8, 223#8, 217#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 375 2 0] }
 theorem Padded375_eq : LabToTarget.padSection (riscvConfig.encode (.inst .skip)) FinalReencode375.lines [] = Padded375.lines := by
   kernel_rfl

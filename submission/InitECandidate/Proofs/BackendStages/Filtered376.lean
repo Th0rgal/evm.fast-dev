@@ -26,7 +26,7 @@ def Filtered376 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0)) 0#64 [] 0,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0)) 0#64 [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.label 376 2 0] }
 theorem Filtered376_eq : { section376 with lines := section376.lines.filter LabFilter.notSkip } = Filtered376 := by
   kernel_rfl

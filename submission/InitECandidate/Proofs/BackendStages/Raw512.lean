@@ -16,7 +16,7 @@ def rawBody512_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_3 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1646#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1638#64)
 
 def rawBody512_4 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -127,7 +127,7 @@ def rawBody512_38 : StackLang.HolProg 64 :=
 .seq rawBody512_36 rawBody512_37
 
 def rawBody512_39 : StackLang.HolProg 64 :=
-.call (some (rawBody512_35, 0, 512, 2)) (Sum.inl 477) (some (rawBody512_38, 512, 3))
+.call (some (rawBody512_35, 0, 512, 2)) (Sum.inl 475) (some (rawBody512_38, 512, 3))
 
 def rawBody512_40 : StackLang.HolProg 64 :=
 .seq rawBody512_26 rawBody512_39
@@ -172,7 +172,7 @@ def rawBody512_53 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_54 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1647#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1639#64)
 
 def rawBody512_55 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -283,7 +283,7 @@ def rawBody512_89 : StackLang.HolProg 64 :=
 .seq rawBody512_87 rawBody512_88
 
 def rawBody512_90 : StackLang.HolProg 64 :=
-.call (some (rawBody512_86, 0, 512, 4)) (Sum.inl 477) (some (rawBody512_89, 512, 5))
+.call (some (rawBody512_86, 0, 512, 4)) (Sum.inl 475) (some (rawBody512_89, 512, 5))
 
 def rawBody512_91 : StackLang.HolProg 64 :=
 .seq rawBody512_77 rawBody512_90
@@ -331,7 +331,7 @@ def rawBody512_105 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_106 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1648#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1640#64)
 
 def rawBody512_107 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -523,7 +523,7 @@ def rawBody512_169 : StackLang.HolProg 64 :=
 .seq rawBody512_167 rawBody512_168
 
 def rawBody512_170 : StackLang.HolProg 64 :=
-.call (some (rawBody512_152, 0, 512, 6)) (Sum.inl 472) (some (rawBody512_169, 512, 7))
+.call (some (rawBody512_152, 0, 512, 6)) (Sum.inl 470) (some (rawBody512_169, 512, 7))
 
 def rawBody512_171 : StackLang.HolProg 64 :=
 .seq rawBody512_129 rawBody512_170
@@ -553,7 +553,7 @@ def rawBody512_178 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_179 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1649#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1641#64)
 
 def rawBody512_180 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -664,7 +664,7 @@ def rawBody512_214 : StackLang.HolProg 64 :=
 .seq rawBody512_212 rawBody512_213
 
 def rawBody512_215 : StackLang.HolProg 64 :=
-.call (some (rawBody512_211, 0, 512, 8)) (Sum.inl 108) (some (rawBody512_214, 512, 9))
+.call (some (rawBody512_211, 0, 512, 8)) (Sum.inl 105) (some (rawBody512_214, 512, 9))
 
 def rawBody512_216 : StackLang.HolProg 64 :=
 .seq rawBody512_202 rawBody512_215
@@ -694,7 +694,7 @@ def rawBody512_223 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_224 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1650#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1642#64)
 
 def rawBody512_225 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -802,7 +802,7 @@ def rawBody512_259 : StackLang.HolProg 64 :=
 .seq rawBody512_257 rawBody512_258
 
 def rawBody512_260 : StackLang.HolProg 64 :=
-.call (some (rawBody512_256, 0, 512, 10)) (Sum.inl 480) (some (rawBody512_259, 512, 11))
+.call (some (rawBody512_256, 0, 512, 10)) (Sum.inl 478) (some (rawBody512_259, 512, 11))
 
 def rawBody512_261 : StackLang.HolProg 64 :=
 .seq rawBody512_247 rawBody512_260
@@ -832,7 +832,7 @@ def rawBody512_269 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody512_270 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1651#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1643#64)
 
 def rawBody512_271 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -940,7 +940,7 @@ def rawBody512_305 : StackLang.HolProg 64 :=
 .seq rawBody512_303 rawBody512_304
 
 def rawBody512_306 : StackLang.HolProg 64 :=
-.call (some (rawBody512_302, 0, 512, 12)) (Sum.inl 492) (some (rawBody512_305, 512, 13))
+.call (some (rawBody512_302, 0, 512, 12)) (Sum.inl 490) (some (rawBody512_305, 512, 13))
 
 def rawBody512_307 : StackLang.HolProg 64 :=
 .seq rawBody512_293 rawBody512_306

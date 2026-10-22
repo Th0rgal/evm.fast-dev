@@ -12,41 +12,38 @@ Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 def rawBody374_1 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 4 3
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 3)))
-
-def rawBody374_2 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 3 2
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 4 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 2)))
 
+def rawBody374_2 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 0#64)
+
 def rawBody374_3 : StackLang.HolProg 64 :=
-.seq rawBody374_1 rawBody374_2
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 1#64)
 
 def rawBody374_4 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2#64)
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody374_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody374_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+.call none (Sum.inl 370) none
 
 def rawBody374_7 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.seq rawBody374_5 rawBody374_6
 
 def rawBody374_8 : StackLang.HolProg 64 :=
-.seq rawBody374_6 rawBody374_7
+.seq rawBody374_4 rawBody374_7
 
 def rawBody374_9 : StackLang.HolProg 64 :=
-.seq rawBody374_5 rawBody374_8
+.seq rawBody374_3 rawBody374_8
 
 def rawBody374_10 : StackLang.HolProg 64 :=
-.seq rawBody374_4 rawBody374_9
+.seq rawBody374_2 rawBody374_9
 
 def rawBody374_11 : StackLang.HolProg 64 :=
-.seq rawBody374_3 rawBody374_10
+.seq rawBody374_1 rawBody374_10
 
 def rawBody374_12 : StackLang.HolProg 64 :=
 .seq rawBody374_0 rawBody374_11

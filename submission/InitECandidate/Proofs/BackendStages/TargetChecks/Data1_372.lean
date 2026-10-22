@@ -10,9 +10,31 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks
 def localLabels1_372 : List (Nat × Nat) :=
-[(20, 257880), (19, 257864), (9, 257852), (8, 257828), (18, 257768), (17, 257736), (7, 257724), (6, 257700),
-  (16, 257640), (15, 257608), (5, 257588), (4, 257552), (14, 257492), (13, 257456), (3, 257436), (2, 257400),
-  (12, 257340), (1, 257292), (11, 257288)]
+[(2, 312788), (1, 312768)]
 def Reencode1_372 : LabSem.LabSectionHOL 64 :=
-Reencode0_372
+{ sectionId := 372,
+  lines :=
+    [Flapjack.Compiler.Backend.LabLang.Line.label 372 1 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
+            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 13 12
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 12)))))
+        [179#8, 102#8, 198#8, 0#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
+            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 12 11
+                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 11)))))
+        [51#8, 230#8, 181#8, 0#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.asm
+        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 2#64)))
+        [147#8, 101#8, 32#8, 0#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.labAsm
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709550964#64 [111#8, 240#8, 95#8, 215#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.label 372 2 4] }
 end InitECandidate.Proofs.BackendStages.TargetChecks

@@ -369,8 +369,8 @@ def stackBody468_112 : StackLang.HolProg 64 :=
 .seq stackBody468_0 stackBody468_111
 
 def function468 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody468_112, 0, bitmapPrefix, 1501)
-theorem function468_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized468.2.2 InitECandidate.Proofs.StackAnalysis.optimized468.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1501) = function468 bitmapPrefix := by
+(stackBody468_112, 0, bitmapPrefix, 1493)
+theorem function468_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized468.2.2 InitECandidate.Proofs.StackAnalysis.optimized468.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1493) = function468 bitmapPrefix := by
   kernel_rfl
 #print axioms function468_eq
 end InitECandidate.Proofs.BackendStages

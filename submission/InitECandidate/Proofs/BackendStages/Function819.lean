@@ -157,8 +157,8 @@ def stackBody819_42 : StackLang.HolProg 64 :=
 .seq stackBody819_0 stackBody819_41
 
 def function819 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody819_42, 0, bitmapPrefix, 4096)
-theorem function819_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized819.2.2 InitECandidate.Proofs.StackAnalysis.optimized819.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4096) = function819 bitmapPrefix := by
+(stackBody819_42, 0, bitmapPrefix, 4089)
+theorem function819_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized819.2.2 InitECandidate.Proofs.StackAnalysis.optimized819.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4089) = function819 bitmapPrefix := by
   kernel_rfl
 #print axioms function819_eq
 end InitECandidate.Proofs.BackendStages

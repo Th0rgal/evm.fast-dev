@@ -1,3 +1,4 @@
+import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.Raw67
 import Flapjack.Compiler.Backend.Backend
 set_option maxRecDepth 1000000
@@ -25,19 +26,19 @@ Flapjack.Compiler.Backend.StackLang.Prog.opCurrHeap Flapjack.BinOp.add 1 1
 def AllocBody67_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 2 1
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 3 1
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551608#64)))
 
 def AllocBody67_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2713714688#64)
+Flapjack.Compiler.Backend.StackLang.Prog.get 2 Flapjack.Compiler.Backend.StackLang.StoreName.currHeap
 
 def AllocBody67_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def AllocBody67_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 3
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 2 0#64))
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 2
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 3 0#64))
 
 def AllocBody67_9 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -49,7 +50,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551592#64)))
 
 def AllocBody67_11 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2713714688#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 3 2701127680#64)
 
 def AllocBody67_12 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -69,7 +70,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.inst
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 18446744073709551584#64)))
 
 def AllocBody67_16 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2701135872#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 2 2688618496#64)
 
 def AllocBody67_17 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -153,6 +154,6 @@ def AllocBody67_42 : StackLang.HolProg 64 :=
 
 def Alloc67 : Nat × StackLang.HolProg 64 := (67, AllocBody67_42)
 theorem Alloc67_eq : StackAlloc.progComp (67, raw67) = Alloc67 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms Alloc67_eq
 end InitECandidate.Proofs.BackendStages

@@ -381,8 +381,8 @@ def stackBody290_105 : StackLang.HolProg 64 :=
 .seq stackBody290_0 stackBody290_104
 
 def function290 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody290_105, 0, bitmapPrefix, 800)
-theorem function290_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized290.2.2 InitECandidate.Proofs.StackAnalysis.optimized290.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 800) = function290 bitmapPrefix := by
+(stackBody290_105, 0, bitmapPrefix, 792)
+theorem function290_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized290.2.2 InitECandidate.Proofs.StackAnalysis.optimized290.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 792) = function290 bitmapPrefix := by
   kernel_rfl
 #print axioms function290_eq
 end InitECandidate.Proofs.BackendStages

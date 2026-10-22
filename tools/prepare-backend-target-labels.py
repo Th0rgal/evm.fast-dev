@@ -13,7 +13,7 @@ if a.watch:
   print(f"WAIT final label sources: {len(ids)-len(missing)}/{len(ids)}",flush=True);time.sleep(30)
 entries=[]
 for n in ids:
- prefix="Correct" if a.phase=="1" and n>=596 else ""
+ prefix="Correct" if a.phase in {"0", "1"} and n>=596 else ""
  module=f"InitECandidate.Proofs.BackendStages.AlignmentLabels{n}" if a.phase=="Final" else f"InitECandidate.Proofs.BackendStages.TargetChecks.{prefix}Labels{a.phase}_{n}"
  match=re.search(r"sectionLabels (\d+) ([\w.]+).lines \[\] = \((\d+), ([\w.]+)\)",(root/"submission"/(module.replace(".","/")+".lean")).read_text())
  if not match:raise ValueError(module)

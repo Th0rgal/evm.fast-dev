@@ -60,8 +60,8 @@ def stackBody209_16 : StackLang.HolProg 64 :=
 .seq stackBody209_0 stackBody209_15
 
 def function209 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody209_16, 0, bitmapPrefix, 269)
-theorem function209_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized209.2.2 InitECandidate.Proofs.StackAnalysis.optimized209.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 269) = function209 bitmapPrefix := by
+(stackBody209_16, 0, bitmapPrefix, 261)
+theorem function209_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized209.2.2 InitECandidate.Proofs.StackAnalysis.optimized209.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 261) = function209 bitmapPrefix := by
   kernel_rfl
 #print axioms function209_eq
 end InitECandidate.Proofs.BackendStages

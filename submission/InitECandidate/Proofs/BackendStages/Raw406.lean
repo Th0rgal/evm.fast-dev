@@ -56,7 +56,7 @@ def rawBody406_12 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody406_13 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1222#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1208#64)
 
 def rawBody406_14 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -164,7 +164,7 @@ def rawBody406_48 : StackLang.HolProg 64 :=
 .seq rawBody406_46 rawBody406_47
 
 def rawBody406_49 : StackLang.HolProg 64 :=
-.call (some (rawBody406_45, 0, 406, 2)) (Sum.inl 190) (some (rawBody406_48, 406, 3))
+.call (some (rawBody406_45, 0, 406, 2)) (Sum.inl 192) (some (rawBody406_48, 406, 3))
 
 def rawBody406_50 : StackLang.HolProg 64 :=
 .seq rawBody406_36 rawBody406_49
@@ -199,7 +199,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.opCurrHeap Flapjack.BinOp.add 0 0
 def rawBody406_59 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 0
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 0 18446744073709551440#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 0 18446744073709551432#64))
 
 def rawBody406_60 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -213,7 +213,7 @@ def rawBody406_62 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody406_63 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1223#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1209#64)
 
 def rawBody406_64 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -414,118 +414,121 @@ def rawBody406_126 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 4 2
 
 def rawBody406_127 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 3 1
+.seq rawBody406_125 rawBody406_126
 
 def rawBody406_128 : StackLang.HolProg 64 :=
-.seq rawBody406_126 rawBody406_127
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody406_129 : StackLang.HolProg 64 :=
-.seq rawBody406_125 rawBody406_128
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1210#64)
 
 def rawBody406_130 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
+Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
 def rawBody406_131 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1224#64)
+.seq rawBody406_129 rawBody406_130
 
 def rawBody406_132 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def rawBody406_133 : StackLang.HolProg 64 :=
-.seq rawBody406_131 rawBody406_132
-
-def rawBody406_134 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
 
-def rawBody406_135 : StackLang.HolProg 64 :=
+def rawBody406_133 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
 
-def rawBody406_136 : StackLang.HolProg 64 :=
+def rawBody406_134 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
 
-def rawBody406_137 : StackLang.HolProg 64 :=
+def rawBody406_135 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 406 7
 
-def rawBody406_138 : StackLang.HolProg 64 :=
+def rawBody406_136 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
 
-def rawBody406_139 : StackLang.HolProg 64 :=
+def rawBody406_137 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
 
-def rawBody406_140 : StackLang.HolProg 64 :=
+def rawBody406_138 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
 
-def rawBody406_141 : StackLang.HolProg 64 :=
+def rawBody406_139 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def rawBody406_142 : StackLang.HolProg 64 :=
+def rawBody406_140 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
 
-def rawBody406_143 : StackLang.HolProg 64 :=
+def rawBody406_141 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
+
+def rawBody406_142 : StackLang.HolProg 64 :=
+.seq rawBody406_140 rawBody406_141
+
+def rawBody406_143 : StackLang.HolProg 64 :=
+.seq rawBody406_139 rawBody406_142
 
 def rawBody406_144 : StackLang.HolProg 64 :=
-.seq rawBody406_142 rawBody406_143
+.seq rawBody406_138 rawBody406_143
 
 def rawBody406_145 : StackLang.HolProg 64 :=
-.seq rawBody406_141 rawBody406_144
+.seq rawBody406_137 rawBody406_144
 
 def rawBody406_146 : StackLang.HolProg 64 :=
-.seq rawBody406_140 rawBody406_145
+.seq rawBody406_136 rawBody406_145
 
 def rawBody406_147 : StackLang.HolProg 64 :=
-.seq rawBody406_139 rawBody406_146
+.seq rawBody406_135 rawBody406_146
 
 def rawBody406_148 : StackLang.HolProg 64 :=
-.seq rawBody406_138 rawBody406_147
+.seq rawBody406_134 rawBody406_147
 
 def rawBody406_149 : StackLang.HolProg 64 :=
-.seq rawBody406_137 rawBody406_148
+.seq rawBody406_133 rawBody406_148
 
 def rawBody406_150 : StackLang.HolProg 64 :=
-.seq rawBody406_136 rawBody406_149
+.seq rawBody406_132 rawBody406_149
 
 def rawBody406_151 : StackLang.HolProg 64 :=
-.seq rawBody406_135 rawBody406_150
-
-def rawBody406_152 : StackLang.HolProg 64 :=
-.seq rawBody406_134 rawBody406_151
-
-def rawBody406_153 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
 
+def rawBody406_152 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def rawBody406_153 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
 def rawBody406_154 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_155 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_156 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
 
-def rawBody406_157 : StackLang.HolProg 64 :=
+def rawBody406_155 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
 
-def rawBody406_158 : StackLang.HolProg 64 :=
+def rawBody406_156 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
 
+def rawBody406_157 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 2 1
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1)))
+
+def rawBody406_158 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 2
+
 def rawBody406_159 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 1
+.seq rawBody406_157 rawBody406_158
 
 def rawBody406_160 : StackLang.HolProg 64 :=
-.seq rawBody406_158 rawBody406_159
+.seq rawBody406_156 rawBody406_159
 
 def rawBody406_161 : StackLang.HolProg 64 :=
-.seq rawBody406_157 rawBody406_160
+.seq rawBody406_155 rawBody406_160
 
 def rawBody406_162 : StackLang.HolProg 64 :=
-.seq rawBody406_156 rawBody406_161
+.seq rawBody406_154 rawBody406_161
 
 def rawBody406_163 : StackLang.HolProg 64 :=
-.seq rawBody406_155 rawBody406_162
+.seq rawBody406_153 rawBody406_162
 
 def rawBody406_164 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 1
+Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 2
 
 def rawBody406_165 : StackLang.HolProg 64 :=
 .call none (Sum.inl 5) none
@@ -534,22 +537,22 @@ def rawBody406_166 : StackLang.HolProg 64 :=
 .seq rawBody406_164 rawBody406_165
 
 def rawBody406_167 : StackLang.HolProg 64 :=
-.call (some (rawBody406_163, 0, 406, 6)) (Sum.inl 398) (some (rawBody406_166, 406, 7))
+.call (some (rawBody406_163, 0, 406, 6)) (Sum.inl 404) (some (rawBody406_166, 406, 7))
 
 def rawBody406_168 : StackLang.HolProg 64 :=
-.seq rawBody406_154 rawBody406_167
+.seq rawBody406_152 rawBody406_167
 
 def rawBody406_169 : StackLang.HolProg 64 :=
-.seq rawBody406_153 rawBody406_168
+.seq rawBody406_151 rawBody406_168
 
 def rawBody406_170 : StackLang.HolProg 64 :=
-.seq rawBody406_152 rawBody406_169
+.seq rawBody406_150 rawBody406_169
 
 def rawBody406_171 : StackLang.HolProg 64 :=
-.seq rawBody406_133 rawBody406_170
+.seq rawBody406_131 rawBody406_170
 
 def rawBody406_172 : StackLang.HolProg 64 :=
-.seq rawBody406_130 rawBody406_171
+.seq rawBody406_128 rawBody406_171
 
 def rawBody406_173 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
@@ -557,262 +560,106 @@ Flapjack.Compiler.Backend.StackLang.Prog.tick
 def rawBody406_174 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 0
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 0)))
-
-def rawBody406_175 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_176 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1225#64)
-
-def rawBody406_177 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def rawBody406_178 : StackLang.HolProg 64 :=
-.seq rawBody406_176 rawBody406_177
-
-def rawBody406_179 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 3
-
-def rawBody406_180 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1#64)
-
-def rawBody406_181 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
-
-def rawBody406_182 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.locValue 22 406 9
-
-def rawBody406_183 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 1
-
-def rawBody406_184 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.get 22 Flapjack.Compiler.Backend.StackLang.StoreName.handler
-
-def rawBody406_185 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 2
-
-def rawBody406_186 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_187 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackGetSize 22
-
-def rawBody406_188 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
-
-def rawBody406_189 : StackLang.HolProg 64 :=
-.seq rawBody406_187 rawBody406_188
-
-def rawBody406_190 : StackLang.HolProg 64 :=
-.seq rawBody406_186 rawBody406_189
-
-def rawBody406_191 : StackLang.HolProg 64 :=
-.seq rawBody406_185 rawBody406_190
-
-def rawBody406_192 : StackLang.HolProg 64 :=
-.seq rawBody406_184 rawBody406_191
-
-def rawBody406_193 : StackLang.HolProg 64 :=
-.seq rawBody406_183 rawBody406_192
-
-def rawBody406_194 : StackLang.HolProg 64 :=
-.seq rawBody406_182 rawBody406_193
-
-def rawBody406_195 : StackLang.HolProg 64 :=
-.seq rawBody406_181 rawBody406_194
-
-def rawBody406_196 : StackLang.HolProg 64 :=
-.seq rawBody406_180 rawBody406_195
-
-def rawBody406_197 : StackLang.HolProg 64 :=
-.seq rawBody406_179 rawBody406_196
-
-def rawBody406_198 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackAlloc 0
-
-def rawBody406_199 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_200 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.skip
-
-def rawBody406_201 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 22 2
-
-def rawBody406_202 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.set Flapjack.Compiler.Backend.StackLang.StoreName.handler 22
-
-def rawBody406_203 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
-
-def rawBody406_204 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 2 1
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1)))
-
-def rawBody406_205 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 2
-
-def rawBody406_206 : StackLang.HolProg 64 :=
-.seq rawBody406_204 rawBody406_205
-
-def rawBody406_207 : StackLang.HolProg 64 :=
-.seq rawBody406_203 rawBody406_206
-
-def rawBody406_208 : StackLang.HolProg 64 :=
-.seq rawBody406_202 rawBody406_207
-
-def rawBody406_209 : StackLang.HolProg 64 :=
-.seq rawBody406_201 rawBody406_208
-
-def rawBody406_210 : StackLang.HolProg 64 :=
-.seq rawBody406_200 rawBody406_209
-
-def rawBody406_211 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.stackLoad 0 2
-
-def rawBody406_212 : StackLang.HolProg 64 :=
-.call none (Sum.inl 5) none
-
-def rawBody406_213 : StackLang.HolProg 64 :=
-.seq rawBody406_211 rawBody406_212
-
-def rawBody406_214 : StackLang.HolProg 64 :=
-.call (some (rawBody406_210, 0, 406, 8)) (Sum.inl 400) (some (rawBody406_213, 406, 9))
-
-def rawBody406_215 : StackLang.HolProg 64 :=
-.seq rawBody406_199 rawBody406_214
-
-def rawBody406_216 : StackLang.HolProg 64 :=
-.seq rawBody406_198 rawBody406_215
-
-def rawBody406_217 : StackLang.HolProg 64 :=
-.seq rawBody406_197 rawBody406_216
-
-def rawBody406_218 : StackLang.HolProg 64 :=
-.seq rawBody406_178 rawBody406_217
-
-def rawBody406_219 : StackLang.HolProg 64 :=
-.seq rawBody406_175 rawBody406_218
-
-def rawBody406_220 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.tick
-
-def rawBody406_221 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 1 2
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 2)))
 
-def rawBody406_222 : StackLang.HolProg 64 :=
+def rawBody406_175 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackFree 3
 
-def rawBody406_223 : StackLang.HolProg 64 :=
+def rawBody406_176 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 0
 
-def rawBody406_224 : StackLang.HolProg 64 :=
-.seq rawBody406_222 rawBody406_223
+def rawBody406_177 : StackLang.HolProg 64 :=
+.seq rawBody406_175 rawBody406_176
 
-def rawBody406_225 : StackLang.HolProg 64 :=
-.seq rawBody406_221 rawBody406_224
+def rawBody406_178 : StackLang.HolProg 64 :=
+.seq rawBody406_174 rawBody406_177
 
-def rawBody406_226 : StackLang.HolProg 64 :=
-.seq rawBody406_220 rawBody406_225
+def rawBody406_179 : StackLang.HolProg 64 :=
+.seq rawBody406_173 rawBody406_178
 
-def rawBody406_227 : StackLang.HolProg 64 :=
-.seq rawBody406_219 rawBody406_226
+def rawBody406_180 : StackLang.HolProg 64 :=
+.seq rawBody406_172 rawBody406_179
 
-def rawBody406_228 : StackLang.HolProg 64 :=
-.seq rawBody406_174 rawBody406_227
+def rawBody406_181 : StackLang.HolProg 64 :=
+.seq rawBody406_127 rawBody406_180
 
-def rawBody406_229 : StackLang.HolProg 64 :=
-.seq rawBody406_173 rawBody406_228
+def rawBody406_182 : StackLang.HolProg 64 :=
+.seq rawBody406_124 rawBody406_181
 
-def rawBody406_230 : StackLang.HolProg 64 :=
-.seq rawBody406_172 rawBody406_229
+def rawBody406_183 : StackLang.HolProg 64 :=
+.seq rawBody406_123 rawBody406_182
 
-def rawBody406_231 : StackLang.HolProg 64 :=
-.seq rawBody406_129 rawBody406_230
+def rawBody406_184 : StackLang.HolProg 64 :=
+.seq rawBody406_122 rawBody406_183
 
-def rawBody406_232 : StackLang.HolProg 64 :=
-.seq rawBody406_124 rawBody406_231
+def rawBody406_185 : StackLang.HolProg 64 :=
+.seq rawBody406_113 rawBody406_184
 
-def rawBody406_233 : StackLang.HolProg 64 :=
-.seq rawBody406_123 rawBody406_232
+def rawBody406_186 : StackLang.HolProg 64 :=
+.seq rawBody406_112 rawBody406_185
 
-def rawBody406_234 : StackLang.HolProg 64 :=
-.seq rawBody406_122 rawBody406_233
+def rawBody406_187 : StackLang.HolProg 64 :=
+.seq rawBody406_111 rawBody406_186
 
-def rawBody406_235 : StackLang.HolProg 64 :=
-.seq rawBody406_113 rawBody406_234
+def rawBody406_188 : StackLang.HolProg 64 :=
+.seq rawBody406_110 rawBody406_187
 
-def rawBody406_236 : StackLang.HolProg 64 :=
-.seq rawBody406_112 rawBody406_235
+def rawBody406_189 : StackLang.HolProg 64 :=
+.seq rawBody406_61 rawBody406_188
 
-def rawBody406_237 : StackLang.HolProg 64 :=
-.seq rawBody406_111 rawBody406_236
+def rawBody406_190 : StackLang.HolProg 64 :=
+.seq rawBody406_60 rawBody406_189
 
-def rawBody406_238 : StackLang.HolProg 64 :=
-.seq rawBody406_110 rawBody406_237
+def rawBody406_191 : StackLang.HolProg 64 :=
+.seq rawBody406_59 rawBody406_190
 
-def rawBody406_239 : StackLang.HolProg 64 :=
-.seq rawBody406_61 rawBody406_238
+def rawBody406_192 : StackLang.HolProg 64 :=
+.seq rawBody406_58 rawBody406_191
 
-def rawBody406_240 : StackLang.HolProg 64 :=
-.seq rawBody406_60 rawBody406_239
+def rawBody406_193 : StackLang.HolProg 64 :=
+.seq rawBody406_57 rawBody406_192
 
-def rawBody406_241 : StackLang.HolProg 64 :=
-.seq rawBody406_59 rawBody406_240
+def rawBody406_194 : StackLang.HolProg 64 :=
+.seq rawBody406_56 rawBody406_193
 
-def rawBody406_242 : StackLang.HolProg 64 :=
-.seq rawBody406_58 rawBody406_241
+def rawBody406_195 : StackLang.HolProg 64 :=
+.seq rawBody406_55 rawBody406_194
 
-def rawBody406_243 : StackLang.HolProg 64 :=
-.seq rawBody406_57 rawBody406_242
+def rawBody406_196 : StackLang.HolProg 64 :=
+.seq rawBody406_54 rawBody406_195
 
-def rawBody406_244 : StackLang.HolProg 64 :=
-.seq rawBody406_56 rawBody406_243
+def rawBody406_197 : StackLang.HolProg 64 :=
+.seq rawBody406_11 rawBody406_196
 
-def rawBody406_245 : StackLang.HolProg 64 :=
-.seq rawBody406_55 rawBody406_244
+def rawBody406_198 : StackLang.HolProg 64 :=
+.seq rawBody406_8 rawBody406_197
 
-def rawBody406_246 : StackLang.HolProg 64 :=
-.seq rawBody406_54 rawBody406_245
+def rawBody406_199 : StackLang.HolProg 64 :=
+.seq rawBody406_7 rawBody406_198
 
-def rawBody406_247 : StackLang.HolProg 64 :=
-.seq rawBody406_11 rawBody406_246
+def rawBody406_200 : StackLang.HolProg 64 :=
+.seq rawBody406_6 rawBody406_199
 
-def rawBody406_248 : StackLang.HolProg 64 :=
-.seq rawBody406_8 rawBody406_247
+def rawBody406_201 : StackLang.HolProg 64 :=
+.seq rawBody406_5 rawBody406_200
 
-def rawBody406_249 : StackLang.HolProg 64 :=
-.seq rawBody406_7 rawBody406_248
+def rawBody406_202 : StackLang.HolProg 64 :=
+.seq rawBody406_4 rawBody406_201
 
-def rawBody406_250 : StackLang.HolProg 64 :=
-.seq rawBody406_6 rawBody406_249
+def rawBody406_203 : StackLang.HolProg 64 :=
+.seq rawBody406_3 rawBody406_202
 
-def rawBody406_251 : StackLang.HolProg 64 :=
-.seq rawBody406_5 rawBody406_250
+def rawBody406_204 : StackLang.HolProg 64 :=
+.seq rawBody406_2 rawBody406_203
 
-def rawBody406_252 : StackLang.HolProg 64 :=
-.seq rawBody406_4 rawBody406_251
+def rawBody406_205 : StackLang.HolProg 64 :=
+.seq rawBody406_1 rawBody406_204
 
-def rawBody406_253 : StackLang.HolProg 64 :=
-.seq rawBody406_3 rawBody406_252
+def rawBody406_206 : StackLang.HolProg 64 :=
+.seq rawBody406_0 rawBody406_205
 
-def rawBody406_254 : StackLang.HolProg 64 :=
-.seq rawBody406_2 rawBody406_253
-
-def rawBody406_255 : StackLang.HolProg 64 :=
-.seq rawBody406_1 rawBody406_254
-
-def rawBody406_256 : StackLang.HolProg 64 :=
-.seq rawBody406_0 rawBody406_255
-
-def raw406 : StackLang.HolProg 64 := rawBody406_256
+def raw406 : StackLang.HolProg 64 := rawBody406_206
 theorem raw406_eq : StackRawCall.compTop RawInfo.rawInfo (function406 (.list [])).1 = raw406 := by
   kernel_rfl
 #print axioms raw406_eq

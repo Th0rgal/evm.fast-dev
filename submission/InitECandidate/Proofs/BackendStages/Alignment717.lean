@@ -1,6 +1,5 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectData1_717
 import InitECandidate.Proofs.CompactComputation
-import InitECandidate.Proofs.BackendStages.TargetChecks.Data1_717
+import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectData1_717
 import InitECandidate.Proofs.CompilerComputation
 import Flapjack.Compiler.Backend.LabToTarget.Compile
 set_option maxRecDepth 1000000
@@ -13,73 +12,33 @@ def Alignment717 : LabSem.LabSectionHOL 64 :=
     [Flapjack.Compiler.Backend.LabLang.Line.label 717 1 0,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 30 1
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1)))))
-        [51#8, 239#8, 16#8, 0#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 29 0#64)))
+        [147#8, 110#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)))
-        [147#8, 96#8, 0#8, 0#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 28 0#64)))
+        [19#8, 110#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 10 10 7 1))))
-        [179#8, 63#8, 16#8, 0#8, 51#8, 5#8, 117#8, 0#8, 179#8, 48#8, 117#8, 0#8, 51#8, 5#8, 245#8, 1#8, 179#8, 63#8,
-          245#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 27 0#64)))
+        [147#8, 109#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 11 11 8 1))))
-        [179#8, 63#8, 16#8, 0#8, 179#8, 133#8, 133#8, 0#8, 179#8, 176#8, 133#8, 0#8, 179#8, 133#8, 245#8, 1#8, 179#8,
-          191#8, 245#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 9 0#64)))
+        [147#8, 100#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 12 12 9 1))))
-        [179#8, 63#8, 16#8, 0#8, 51#8, 6#8, 150#8, 0#8, 179#8, 48#8, 150#8, 0#8, 51#8, 6#8, 246#8, 1#8, 179#8, 63#8,
-          246#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 8 0#64)))
+        [19#8, 100#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 13 13 27 1))))
-        [179#8, 63#8, 16#8, 0#8, 179#8, 134#8, 182#8, 1#8, 179#8, 176#8, 182#8, 1#8, 179#8, 134#8, 246#8, 1#8, 179#8,
-          191#8, 246#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 5 5 28 1))))
-        [179#8, 63#8, 16#8, 0#8, 179#8, 130#8, 194#8, 1#8, 179#8, 176#8, 194#8, 1#8, 179#8, 130#8, 242#8, 1#8, 179#8,
-          191#8, 242#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith (Flapjack.Compiler.Encoders.Asm.HolArith.addCarry 6 6 29 1))))
-        [179#8, 63#8, 16#8, 0#8, 51#8, 3#8, 211#8, 1#8, 179#8, 48#8, 211#8, 1#8, 51#8, 3#8, 243#8, 1#8, 179#8, 63#8,
-          243#8, 1#8, 179#8, 224#8, 240#8, 1#8]
-        24,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
-          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-              (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 7 1
-                (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1)))))
-        [179#8, 227#8, 16#8, 0#8] 4,
-      Flapjack.Compiler.Backend.LabLang.Line.asm
-        (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 30))
-        [103#8, 0#8, 15#8, 0#8] 4,
+          (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 7 1#64)))
+        [147#8, 99#8, 16#8, 0#8] 4,
+      Flapjack.Compiler.Backend.LabLang.Line.labAsm
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 714 0))
+        18446744073709532092#64 [111#8, 176#8, 207#8, 187#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 717 2 0] }
-theorem Alignment717_eq : LabToTarget.linesUpdLabLen 644404 TargetChecks.Reencode1_717.lines [] = (Alignment717.lines, 644564) := by
+theorem Alignment717_eq : LabToTarget.linesUpdLabLen 722900 TargetChecks.Correct.Reencode1_717.lines [] = (Alignment717.lines, 722928) := by
   kernel_rfl
 #print axioms Alignment717_eq
 end InitECandidate.Proofs.BackendStages

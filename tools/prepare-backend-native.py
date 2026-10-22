@@ -42,7 +42,7 @@ source = root / f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
 source.write_text("\n".join(lines)+"\n")
 output = root / f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
 started = time.monotonic()
-result = subprocess.run(["rtk", "proxy", "taskset", "-c", "8-11", "timeout", "180", "lake", "env", "lean", "-R", "submission", "-o", str(output), str(source)], cwd=root, text=True, capture_output=True)
+result = subprocess.run(["rtk", "proxy", "timeout", "900", "lake", "env", "lean", "-R", "submission", "-o", str(output), str(source)], cwd=root, text=True, capture_output=True)
 (work / f"{name}.check.log").write_text(result.stdout+result.stderr)
 (work / f"{name}.check.json").write_text(json.dumps({"first":args.first,"last":args.last,"returncode":result.returncode,"seconds":time.monotonic()-started}))
 print(result.stdout+result.stderr, end="")

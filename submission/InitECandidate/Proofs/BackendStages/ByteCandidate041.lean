@@ -1,15 +1,12 @@
-import InitECandidate.Proofs.BackendStages.BytePiecesData283
-import InitECandidate.Proofs.BackendStages.BytePiecesData284
-import InitECandidate.Proofs.BackendStages.BytePiecesData285
-import InitECandidate.Proofs.BackendStages.BytePiecesData286
-import InitECandidate.Proofs.BackendStages.BytePiecesData287
+import InitECandidate.Proofs.BackendStages.BytePiecesData234
+import InitECandidate.Proofs.BackendStages.BytePiecesData235
 import InitECandidate.Bytes041
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 namespace InitECandidate.Proofs.BackendStages.BytePieces
-theorem candidate041_eq : InitECandidate.bytes041 = [piece283_1, piece284_0, piece285_0, piece286_0, piece287_0].flatten := by
-  rw [piece283_1_eq, piece284_0_eq, piece285_0_eq, piece286_0_eq, piece287_0_eq]
+theorem candidate041_eq : InitECandidate.bytes041 = [piece234_2, piece235_0].flatten := by
+  rw [piece234_2_eq, piece235_0_eq]
   rfl
 #print axioms candidate041_eq
 end InitECandidate.Proofs.BackendStages.BytePieces

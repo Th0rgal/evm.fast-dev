@@ -51,22 +51,17 @@ import InitECandidate.Proofs.BackendStages.FilteredChunk800_815
 import InitECandidate.Proofs.BackendStages.FilteredChunk816_831
 import InitECandidate.Proofs.BackendStages.FilteredChunk832_847
 import InitECandidate.Proofs.BackendStages.FilteredChunk848_863
-import InitECandidate.Proofs.BackendStages.FilteredChunk864_879
-import InitECandidate.Proofs.BackendStages.FilteredChunk880_889
+import InitECandidate.Proofs.BackendStages.FilteredChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Filtered
-def sections52 : LabSem.LabProgHOL 64 := []
-theorem sections52_eq : Sections.sections52.map (fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip }) = sections52 := by rfl
-def sections51 := FilteredChunk880_889.sections ++ sections52
-theorem sections51_eq : Sections.sections51.map (fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip }) = sections51 := by
-  unfold Sections.sections51 sections51
-  rw [List.map_append, FilteredChunk880_889.compiled_eq, sections52_eq]
-def sections50 := FilteredChunk864_879.sections ++ sections51
+def sections51 : LabSem.LabProgHOL 64 := []
+theorem sections51_eq : Sections.sections51.map (fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip }) = sections51 := by rfl
+def sections50 := FilteredChunk864_877.sections ++ sections51
 theorem sections50_eq : Sections.sections50.map (fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip }) = sections50 := by
   unfold Sections.sections50 sections50
-  rw [List.map_append, FilteredChunk864_879.compiled_eq, sections51_eq]
+  rw [List.map_append, FilteredChunk864_877.compiled_eq, sections51_eq]
 def sections49 := FilteredChunk848_863.sections ++ sections50
 theorem sections49_eq : Sections.sections49.map (fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip }) = sections49 := by
   unfold Sections.sections49 sections49

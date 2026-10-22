@@ -166,8 +166,8 @@ def stackBody820_44 : StackLang.HolProg 64 :=
 .seq stackBody820_0 stackBody820_43
 
 def function820 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody820_44, 0, bitmapPrefix, 4096)
-theorem function820_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized820.2.2 InitECandidate.Proofs.StackAnalysis.optimized820.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4096) = function820 bitmapPrefix := by
+(stackBody820_44, 0, bitmapPrefix, 4089)
+theorem function820_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized820.2.2 InitECandidate.Proofs.StackAnalysis.optimized820.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4089) = function820 bitmapPrefix := by
   kernel_rfl
 #print axioms function820_eq
 end InitECandidate.Proofs.BackendStages

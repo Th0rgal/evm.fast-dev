@@ -29,7 +29,7 @@ def Alignment93 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 1))
         [103#8, 128#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 93 3 0] }
-theorem Alignment93_eq : LabToTarget.linesUpdLabLen 10312 TargetChecks.Reencode1_93.lines [] = (Alignment93.lines, 10328) := by
+theorem Alignment93_eq : LabToTarget.linesUpdLabLen 9820 TargetChecks.Reencode1_93.lines [] = (Alignment93.lines, 9836) := by
   kernel_rfl
 #print axioms Alignment93_eq
 end InitECandidate.Proofs.BackendStages

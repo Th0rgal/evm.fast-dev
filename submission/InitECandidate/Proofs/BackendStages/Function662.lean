@@ -60,8 +60,8 @@ def stackBody662_16 : StackLang.HolProg 64 :=
 .seq stackBody662_0 stackBody662_15
 
 def function662 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody662_16, 0, bitmapPrefix, 2759)
-theorem function662_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized662.2.2 InitECandidate.Proofs.StackAnalysis.optimized662.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2759) = function662 bitmapPrefix := by
+(stackBody662_16, 0, bitmapPrefix, 2751)
+theorem function662_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized662.2.2 InitECandidate.Proofs.StackAnalysis.optimized662.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2751) = function662 bitmapPrefix := by
   kernel_rfl
 #print axioms function662_eq
 end InitECandidate.Proofs.BackendStages

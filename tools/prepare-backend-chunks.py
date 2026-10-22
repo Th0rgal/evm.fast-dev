@@ -38,7 +38,7 @@ lines += [f"def programs := programs{labels[0]}", f"def bodies := bodies{labels[
 source = root / f"submission/InitECandidate/Proofs/BackendStages/{name}.lean"
 source.write_text("\n".join(lines) + "\n")
 output = root / f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
-result = subprocess.run(["rtk", "proxy", "taskset", "-c", "8-11", "timeout", "180", "lake", "env", "lean", "-R", "submission", "-o", str(output), str(source)], cwd=root, text=True, capture_output=True)
+result = subprocess.run(["rtk", "proxy", "timeout", "900", "lake", "env", "lean", "-R", "submission", "-o", str(output), str(source)], cwd=root, text=True, capture_output=True)
 (work / f"{name}.check.log").write_text(result.stdout + result.stderr)
 print(result.stdout + result.stderr, end="")
 raise SystemExit(result.returncode)

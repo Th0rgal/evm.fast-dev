@@ -122,8 +122,8 @@ def stackBody359_34 : StackLang.HolProg 64 :=
 .seq stackBody359_0 stackBody359_33
 
 def function359 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody359_34, 0, bitmapPrefix, 1040)
-theorem function359_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized359.2.2 InitECandidate.Proofs.StackAnalysis.optimized359.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1040) = function359 bitmapPrefix := by
+(stackBody359_34, 0, bitmapPrefix, 1032)
+theorem function359_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized359.2.2 InitECandidate.Proofs.StackAnalysis.optimized359.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1032) = function359 bitmapPrefix := by
   kernel_rfl
 #print axioms function359_eq
 end InitECandidate.Proofs.BackendStages

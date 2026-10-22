@@ -58,12 +58,12 @@ def programs51 : List (Nat × Nat × WordLangProgHOL (BitVec 64)) := []
 def bodies51 : List (Nat × StackLang.HolProg 64) := []
 def frames51 : List Nat := []
 def after51 (bitmapPrefix : AppList (BitVec 64)) := bitmapPrefix
-theorem compiled51_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs51 (bitmapPrefix, 4610) = (bodies51, frames51, after51 bitmapPrefix, 4610) := by rfl
+theorem compiled51_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs51 (bitmapPrefix, 4603) = (bodies51, frames51, after51 bitmapPrefix, 4603) := by rfl
 def programs50 := Chunk864_877.programs ++ programs51
 def bodies50 := Chunk864_877.bodies ++ bodies51
 def frames50 := Chunk864_877.frames ++ frames51
 def after50 (bitmapPrefix : AppList (BitVec 64)) := after51 (Chunk864_877.after bitmapPrefix)
-theorem compiled50_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs50 (bitmapPrefix, 4526) = (bodies50, frames50, after50 bitmapPrefix, 4610) := by
+theorem compiled50_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs50 (bitmapPrefix, 4519) = (bodies50, frames50, after50 bitmapPrefix, 4603) := by
   unfold programs50
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk864_877.compiled_eq]
@@ -74,7 +74,7 @@ def programs49 := Chunk848_863.programs ++ programs50
 def bodies49 := Chunk848_863.bodies ++ bodies50
 def frames49 := Chunk848_863.frames ++ frames50
 def after49 (bitmapPrefix : AppList (BitVec 64)) := after50 (Chunk848_863.after bitmapPrefix)
-theorem compiled49_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs49 (bitmapPrefix, 4247) = (bodies49, frames49, after49 bitmapPrefix, 4610) := by
+theorem compiled49_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs49 (bitmapPrefix, 4240) = (bodies49, frames49, after49 bitmapPrefix, 4603) := by
   unfold programs49
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk848_863.compiled_eq]
@@ -85,7 +85,7 @@ def programs48 := Chunk832_847.programs ++ programs49
 def bodies48 := Chunk832_847.bodies ++ bodies49
 def frames48 := Chunk832_847.frames ++ frames49
 def after48 (bitmapPrefix : AppList (BitVec 64)) := after49 (Chunk832_847.after bitmapPrefix)
-theorem compiled48_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs48 (bitmapPrefix, 4134) = (bodies48, frames48, after48 bitmapPrefix, 4610) := by
+theorem compiled48_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs48 (bitmapPrefix, 4127) = (bodies48, frames48, after48 bitmapPrefix, 4603) := by
   unfold programs48
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk832_847.compiled_eq]
@@ -96,7 +96,7 @@ def programs47 := Chunk816_831.programs ++ programs48
 def bodies47 := Chunk816_831.bodies ++ bodies48
 def frames47 := Chunk816_831.frames ++ frames48
 def after47 (bitmapPrefix : AppList (BitVec 64)) := after48 (Chunk816_831.after bitmapPrefix)
-theorem compiled47_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs47 (bitmapPrefix, 4065) = (bodies47, frames47, after47 bitmapPrefix, 4610) := by
+theorem compiled47_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs47 (bitmapPrefix, 4058) = (bodies47, frames47, after47 bitmapPrefix, 4603) := by
   unfold programs47
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk816_831.compiled_eq]
@@ -107,7 +107,7 @@ def programs46 := Chunk800_815.programs ++ programs47
 def bodies46 := Chunk800_815.bodies ++ bodies47
 def frames46 := Chunk800_815.frames ++ frames47
 def after46 (bitmapPrefix : AppList (BitVec 64)) := after47 (Chunk800_815.after bitmapPrefix)
-theorem compiled46_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs46 (bitmapPrefix, 3847) = (bodies46, frames46, after46 bitmapPrefix, 4610) := by
+theorem compiled46_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs46 (bitmapPrefix, 3840) = (bodies46, frames46, after46 bitmapPrefix, 4603) := by
   unfold programs46
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk800_815.compiled_eq]
@@ -118,7 +118,7 @@ def programs45 := Chunk784_799.programs ++ programs46
 def bodies45 := Chunk784_799.bodies ++ bodies46
 def frames45 := Chunk784_799.frames ++ frames46
 def after45 (bitmapPrefix : AppList (BitVec 64)) := after46 (Chunk784_799.after bitmapPrefix)
-theorem compiled45_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs45 (bitmapPrefix, 3624) = (bodies45, frames45, after45 bitmapPrefix, 4610) := by
+theorem compiled45_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs45 (bitmapPrefix, 3617) = (bodies45, frames45, after45 bitmapPrefix, 4603) := by
   unfold programs45
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk784_799.compiled_eq]
@@ -129,7 +129,7 @@ def programs44 := Chunk768_783.programs ++ programs45
 def bodies44 := Chunk768_783.bodies ++ bodies45
 def frames44 := Chunk768_783.frames ++ frames45
 def after44 (bitmapPrefix : AppList (BitVec 64)) := after45 (Chunk768_783.after bitmapPrefix)
-theorem compiled44_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs44 (bitmapPrefix, 3460) = (bodies44, frames44, after44 bitmapPrefix, 4610) := by
+theorem compiled44_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs44 (bitmapPrefix, 3453) = (bodies44, frames44, after44 bitmapPrefix, 4603) := by
   unfold programs44
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk768_783.compiled_eq]
@@ -140,7 +140,7 @@ def programs43 := Chunk752_767.programs ++ programs44
 def bodies43 := Chunk752_767.bodies ++ bodies44
 def frames43 := Chunk752_767.frames ++ frames44
 def after43 (bitmapPrefix : AppList (BitVec 64)) := after44 (Chunk752_767.after bitmapPrefix)
-theorem compiled43_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs43 (bitmapPrefix, 3326) = (bodies43, frames43, after43 bitmapPrefix, 4610) := by
+theorem compiled43_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs43 (bitmapPrefix, 3319) = (bodies43, frames43, after43 bitmapPrefix, 4603) := by
   unfold programs43
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk752_767.compiled_eq]
@@ -151,7 +151,7 @@ def programs42 := Chunk736_751.programs ++ programs43
 def bodies42 := Chunk736_751.bodies ++ bodies43
 def frames42 := Chunk736_751.frames ++ frames43
 def after42 (bitmapPrefix : AppList (BitVec 64)) := after43 (Chunk736_751.after bitmapPrefix)
-theorem compiled42_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs42 (bitmapPrefix, 3274) = (bodies42, frames42, after42 bitmapPrefix, 4610) := by
+theorem compiled42_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs42 (bitmapPrefix, 3267) = (bodies42, frames42, after42 bitmapPrefix, 4603) := by
   unfold programs42
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk736_751.compiled_eq]
@@ -162,7 +162,7 @@ def programs41 := Chunk720_735.programs ++ programs42
 def bodies41 := Chunk720_735.bodies ++ bodies42
 def frames41 := Chunk720_735.frames ++ frames42
 def after41 (bitmapPrefix : AppList (BitVec 64)) := after42 (Chunk720_735.after bitmapPrefix)
-theorem compiled41_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs41 (bitmapPrefix, 3238) = (bodies41, frames41, after41 bitmapPrefix, 4610) := by
+theorem compiled41_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs41 (bitmapPrefix, 3231) = (bodies41, frames41, after41 bitmapPrefix, 4603) := by
   unfold programs41
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk720_735.compiled_eq]
@@ -173,7 +173,7 @@ def programs40 := Chunk704_719.programs ++ programs41
 def bodies40 := Chunk704_719.bodies ++ bodies41
 def frames40 := Chunk704_719.frames ++ frames41
 def after40 (bitmapPrefix : AppList (BitVec 64)) := after41 (Chunk704_719.after bitmapPrefix)
-theorem compiled40_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs40 (bitmapPrefix, 3158) = (bodies40, frames40, after40 bitmapPrefix, 4610) := by
+theorem compiled40_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs40 (bitmapPrefix, 3150) = (bodies40, frames40, after40 bitmapPrefix, 4603) := by
   unfold programs40
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk704_719.compiled_eq]
@@ -184,7 +184,7 @@ def programs39 := Chunk688_703.programs ++ programs40
 def bodies39 := Chunk688_703.bodies ++ bodies40
 def frames39 := Chunk688_703.frames ++ frames40
 def after39 (bitmapPrefix : AppList (BitVec 64)) := after40 (Chunk688_703.after bitmapPrefix)
-theorem compiled39_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs39 (bitmapPrefix, 2934) = (bodies39, frames39, after39 bitmapPrefix, 4610) := by
+theorem compiled39_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs39 (bitmapPrefix, 2926) = (bodies39, frames39, after39 bitmapPrefix, 4603) := by
   unfold programs39
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk688_703.compiled_eq]
@@ -195,7 +195,7 @@ def programs38 := Chunk672_687.programs ++ programs39
 def bodies38 := Chunk672_687.bodies ++ bodies39
 def frames38 := Chunk672_687.frames ++ frames39
 def after38 (bitmapPrefix : AppList (BitVec 64)) := after39 (Chunk672_687.after bitmapPrefix)
-theorem compiled38_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs38 (bitmapPrefix, 2795) = (bodies38, frames38, after38 bitmapPrefix, 4610) := by
+theorem compiled38_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs38 (bitmapPrefix, 2787) = (bodies38, frames38, after38 bitmapPrefix, 4603) := by
   unfold programs38
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk672_687.compiled_eq]
@@ -206,7 +206,7 @@ def programs37 := Chunk656_671.programs ++ programs38
 def bodies37 := Chunk656_671.bodies ++ bodies38
 def frames37 := Chunk656_671.frames ++ frames38
 def after37 (bitmapPrefix : AppList (BitVec 64)) := after38 (Chunk656_671.after bitmapPrefix)
-theorem compiled37_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs37 (bitmapPrefix, 2741) = (bodies37, frames37, after37 bitmapPrefix, 4610) := by
+theorem compiled37_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs37 (bitmapPrefix, 2733) = (bodies37, frames37, after37 bitmapPrefix, 4603) := by
   unfold programs37
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk656_671.compiled_eq]
@@ -217,7 +217,7 @@ def programs36 := Chunk640_655.programs ++ programs37
 def bodies36 := Chunk640_655.bodies ++ bodies37
 def frames36 := Chunk640_655.frames ++ frames37
 def after36 (bitmapPrefix : AppList (BitVec 64)) := after37 (Chunk640_655.after bitmapPrefix)
-theorem compiled36_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs36 (bitmapPrefix, 2600) = (bodies36, frames36, after36 bitmapPrefix, 4610) := by
+theorem compiled36_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs36 (bitmapPrefix, 2592) = (bodies36, frames36, after36 bitmapPrefix, 4603) := by
   unfold programs36
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk640_655.compiled_eq]
@@ -228,7 +228,7 @@ def programs35 := Chunk624_639.programs ++ programs36
 def bodies35 := Chunk624_639.bodies ++ bodies36
 def frames35 := Chunk624_639.frames ++ frames36
 def after35 (bitmapPrefix : AppList (BitVec 64)) := after36 (Chunk624_639.after bitmapPrefix)
-theorem compiled35_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs35 (bitmapPrefix, 2533) = (bodies35, frames35, after35 bitmapPrefix, 4610) := by
+theorem compiled35_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs35 (bitmapPrefix, 2525) = (bodies35, frames35, after35 bitmapPrefix, 4603) := by
   unfold programs35
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk624_639.compiled_eq]
@@ -239,7 +239,7 @@ def programs34 := Chunk608_623.programs ++ programs35
 def bodies34 := Chunk608_623.bodies ++ bodies35
 def frames34 := Chunk608_623.frames ++ frames35
 def after34 (bitmapPrefix : AppList (BitVec 64)) := after35 (Chunk608_623.after bitmapPrefix)
-theorem compiled34_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs34 (bitmapPrefix, 2342) = (bodies34, frames34, after34 bitmapPrefix, 4610) := by
+theorem compiled34_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs34 (bitmapPrefix, 2334) = (bodies34, frames34, after34 bitmapPrefix, 4603) := by
   unfold programs34
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk608_623.compiled_eq]
@@ -250,7 +250,7 @@ def programs33 := Chunk592_607.programs ++ programs34
 def bodies33 := Chunk592_607.bodies ++ bodies34
 def frames33 := Chunk592_607.frames ++ frames34
 def after33 (bitmapPrefix : AppList (BitVec 64)) := after34 (Chunk592_607.after bitmapPrefix)
-theorem compiled33_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs33 (bitmapPrefix, 2135) = (bodies33, frames33, after33 bitmapPrefix, 4610) := by
+theorem compiled33_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs33 (bitmapPrefix, 2127) = (bodies33, frames33, after33 bitmapPrefix, 4603) := by
   unfold programs33
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk592_607.compiled_eq]
@@ -261,7 +261,7 @@ def programs32 := Chunk576_591.programs ++ programs33
 def bodies32 := Chunk576_591.bodies ++ bodies33
 def frames32 := Chunk576_591.frames ++ frames33
 def after32 (bitmapPrefix : AppList (BitVec 64)) := after33 (Chunk576_591.after bitmapPrefix)
-theorem compiled32_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs32 (bitmapPrefix, 2015) = (bodies32, frames32, after32 bitmapPrefix, 4610) := by
+theorem compiled32_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs32 (bitmapPrefix, 2007) = (bodies32, frames32, after32 bitmapPrefix, 4603) := by
   unfold programs32
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk576_591.compiled_eq]
@@ -272,7 +272,7 @@ def programs31 := Chunk560_575.programs ++ programs32
 def bodies31 := Chunk560_575.bodies ++ bodies32
 def frames31 := Chunk560_575.frames ++ frames32
 def after31 (bitmapPrefix : AppList (BitVec 64)) := after32 (Chunk560_575.after bitmapPrefix)
-theorem compiled31_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs31 (bitmapPrefix, 1918) = (bodies31, frames31, after31 bitmapPrefix, 4610) := by
+theorem compiled31_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs31 (bitmapPrefix, 1910) = (bodies31, frames31, after31 bitmapPrefix, 4603) := by
   unfold programs31
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk560_575.compiled_eq]
@@ -283,7 +283,7 @@ def programs30 := Chunk544_559.programs ++ programs31
 def bodies30 := Chunk544_559.bodies ++ bodies31
 def frames30 := Chunk544_559.frames ++ frames31
 def after30 (bitmapPrefix : AppList (BitVec 64)) := after31 (Chunk544_559.after bitmapPrefix)
-theorem compiled30_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs30 (bitmapPrefix, 1807) = (bodies30, frames30, after30 bitmapPrefix, 4610) := by
+theorem compiled30_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs30 (bitmapPrefix, 1799) = (bodies30, frames30, after30 bitmapPrefix, 4603) := by
   unfold programs30
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk544_559.compiled_eq]
@@ -294,7 +294,7 @@ def programs29 := Chunk528_543.programs ++ programs30
 def bodies29 := Chunk528_543.bodies ++ bodies30
 def frames29 := Chunk528_543.frames ++ frames30
 def after29 (bitmapPrefix : AppList (BitVec 64)) := after30 (Chunk528_543.after bitmapPrefix)
-theorem compiled29_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs29 (bitmapPrefix, 1737) = (bodies29, frames29, after29 bitmapPrefix, 4610) := by
+theorem compiled29_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs29 (bitmapPrefix, 1729) = (bodies29, frames29, after29 bitmapPrefix, 4603) := by
   unfold programs29
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk528_543.compiled_eq]
@@ -305,7 +305,7 @@ def programs28 := Chunk512_527.programs ++ programs29
 def bodies28 := Chunk512_527.bodies ++ bodies29
 def frames28 := Chunk512_527.frames ++ frames29
 def after28 (bitmapPrefix : AppList (BitVec 64)) := after29 (Chunk512_527.after bitmapPrefix)
-theorem compiled28_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs28 (bitmapPrefix, 1645) = (bodies28, frames28, after28 bitmapPrefix, 4610) := by
+theorem compiled28_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs28 (bitmapPrefix, 1637) = (bodies28, frames28, after28 bitmapPrefix, 4603) := by
   unfold programs28
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk512_527.compiled_eq]
@@ -316,7 +316,7 @@ def programs27 := Chunk496_511.programs ++ programs28
 def bodies27 := Chunk496_511.bodies ++ bodies28
 def frames27 := Chunk496_511.frames ++ frames28
 def after27 (bitmapPrefix : AppList (BitVec 64)) := after28 (Chunk496_511.after bitmapPrefix)
-theorem compiled27_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs27 (bitmapPrefix, 1550) = (bodies27, frames27, after27 bitmapPrefix, 4610) := by
+theorem compiled27_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs27 (bitmapPrefix, 1542) = (bodies27, frames27, after27 bitmapPrefix, 4603) := by
   unfold programs27
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk496_511.compiled_eq]
@@ -327,7 +327,7 @@ def programs26 := Chunk480_495.programs ++ programs27
 def bodies26 := Chunk480_495.bodies ++ bodies27
 def frames26 := Chunk480_495.frames ++ frames27
 def after26 (bitmapPrefix : AppList (BitVec 64)) := after27 (Chunk480_495.after bitmapPrefix)
-theorem compiled26_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs26 (bitmapPrefix, 1511) = (bodies26, frames26, after26 bitmapPrefix, 4610) := by
+theorem compiled26_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs26 (bitmapPrefix, 1503) = (bodies26, frames26, after26 bitmapPrefix, 4603) := by
   unfold programs26
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk480_495.compiled_eq]
@@ -338,7 +338,7 @@ def programs25 := Chunk464_479.programs ++ programs26
 def bodies25 := Chunk464_479.bodies ++ bodies26
 def frames25 := Chunk464_479.frames ++ frames26
 def after25 (bitmapPrefix : AppList (BitVec 64)) := after26 (Chunk464_479.after bitmapPrefix)
-theorem compiled25_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs25 (bitmapPrefix, 1495) = (bodies25, frames25, after25 bitmapPrefix, 4610) := by
+theorem compiled25_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs25 (bitmapPrefix, 1487) = (bodies25, frames25, after25 bitmapPrefix, 4603) := by
   unfold programs25
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk464_479.compiled_eq]
@@ -349,7 +349,7 @@ def programs24 := Chunk448_463.programs ++ programs25
 def bodies24 := Chunk448_463.bodies ++ bodies25
 def frames24 := Chunk448_463.frames ++ frames25
 def after24 (bitmapPrefix : AppList (BitVec 64)) := after25 (Chunk448_463.after bitmapPrefix)
-theorem compiled24_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs24 (bitmapPrefix, 1356) = (bodies24, frames24, after24 bitmapPrefix, 4610) := by
+theorem compiled24_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs24 (bitmapPrefix, 1348) = (bodies24, frames24, after24 bitmapPrefix, 4603) := by
   unfold programs24
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk448_463.compiled_eq]
@@ -360,7 +360,7 @@ def programs23 := Chunk432_447.programs ++ programs24
 def bodies23 := Chunk432_447.bodies ++ bodies24
 def frames23 := Chunk432_447.frames ++ frames24
 def after23 (bitmapPrefix : AppList (BitVec 64)) := after24 (Chunk432_447.after bitmapPrefix)
-theorem compiled23_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs23 (bitmapPrefix, 1308) = (bodies23, frames23, after23 bitmapPrefix, 4610) := by
+theorem compiled23_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs23 (bitmapPrefix, 1300) = (bodies23, frames23, after23 bitmapPrefix, 4603) := by
   unfold programs23
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk432_447.compiled_eq]
@@ -371,7 +371,7 @@ def programs22 := Chunk416_431.programs ++ programs23
 def bodies22 := Chunk416_431.bodies ++ bodies23
 def frames22 := Chunk416_431.frames ++ frames23
 def after22 (bitmapPrefix : AppList (BitVec 64)) := after23 (Chunk416_431.after bitmapPrefix)
-theorem compiled22_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs22 (bitmapPrefix, 1248) = (bodies22, frames22, after22 bitmapPrefix, 4610) := by
+theorem compiled22_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs22 (bitmapPrefix, 1240) = (bodies22, frames22, after22 bitmapPrefix, 4603) := by
   unfold programs22
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk416_431.compiled_eq]
@@ -382,7 +382,7 @@ def programs21 := Chunk400_415.programs ++ programs22
 def bodies21 := Chunk400_415.bodies ++ bodies22
 def frames21 := Chunk400_415.frames ++ frames22
 def after21 (bitmapPrefix : AppList (BitVec 64)) := after22 (Chunk400_415.after bitmapPrefix)
-theorem compiled21_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs21 (bitmapPrefix, 1192) = (bodies21, frames21, after21 bitmapPrefix, 4610) := by
+theorem compiled21_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs21 (bitmapPrefix, 1184) = (bodies21, frames21, after21 bitmapPrefix, 4603) := by
   unfold programs21
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk400_415.compiled_eq]
@@ -393,7 +393,7 @@ def programs20 := Chunk384_399.programs ++ programs21
 def bodies20 := Chunk384_399.bodies ++ bodies21
 def frames20 := Chunk384_399.frames ++ frames21
 def after20 (bitmapPrefix : AppList (BitVec 64)) := after21 (Chunk384_399.after bitmapPrefix)
-theorem compiled20_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs20 (bitmapPrefix, 1137) = (bodies20, frames20, after20 bitmapPrefix, 4610) := by
+theorem compiled20_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs20 (bitmapPrefix, 1129) = (bodies20, frames20, after20 bitmapPrefix, 4603) := by
   unfold programs20
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk384_399.compiled_eq]
@@ -404,7 +404,7 @@ def programs19 := Chunk368_383.programs ++ programs20
 def bodies19 := Chunk368_383.bodies ++ bodies20
 def frames19 := Chunk368_383.frames ++ frames20
 def after19 (bitmapPrefix : AppList (BitVec 64)) := after20 (Chunk368_383.after bitmapPrefix)
-theorem compiled19_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs19 (bitmapPrefix, 1091) = (bodies19, frames19, after19 bitmapPrefix, 4610) := by
+theorem compiled19_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs19 (bitmapPrefix, 1083) = (bodies19, frames19, after19 bitmapPrefix, 4603) := by
   unfold programs19
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk368_383.compiled_eq]
@@ -415,7 +415,7 @@ def programs18 := Chunk352_367.programs ++ programs19
 def bodies18 := Chunk352_367.bodies ++ bodies19
 def frames18 := Chunk352_367.frames ++ frames19
 def after18 (bitmapPrefix : AppList (BitVec 64)) := after19 (Chunk352_367.after bitmapPrefix)
-theorem compiled18_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs18 (bitmapPrefix, 1034) = (bodies18, frames18, after18 bitmapPrefix, 4610) := by
+theorem compiled18_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs18 (bitmapPrefix, 1026) = (bodies18, frames18, after18 bitmapPrefix, 4603) := by
   unfold programs18
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk352_367.compiled_eq]
@@ -426,7 +426,7 @@ def programs17 := Chunk336_351.programs ++ programs18
 def bodies17 := Chunk336_351.bodies ++ bodies18
 def frames17 := Chunk336_351.frames ++ frames18
 def after17 (bitmapPrefix : AppList (BitVec 64)) := after18 (Chunk336_351.after bitmapPrefix)
-theorem compiled17_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs17 (bitmapPrefix, 977) = (bodies17, frames17, after17 bitmapPrefix, 4610) := by
+theorem compiled17_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs17 (bitmapPrefix, 969) = (bodies17, frames17, after17 bitmapPrefix, 4603) := by
   unfold programs17
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk336_351.compiled_eq]
@@ -437,7 +437,7 @@ def programs16 := Chunk320_335.programs ++ programs17
 def bodies16 := Chunk320_335.bodies ++ bodies17
 def frames16 := Chunk320_335.frames ++ frames17
 def after16 (bitmapPrefix : AppList (BitVec 64)) := after17 (Chunk320_335.after bitmapPrefix)
-theorem compiled16_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs16 (bitmapPrefix, 903) = (bodies16, frames16, after16 bitmapPrefix, 4610) := by
+theorem compiled16_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs16 (bitmapPrefix, 895) = (bodies16, frames16, after16 bitmapPrefix, 4603) := by
   unfold programs16
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk320_335.compiled_eq]
@@ -448,7 +448,7 @@ def programs15 := Chunk304_319.programs ++ programs16
 def bodies15 := Chunk304_319.bodies ++ bodies16
 def frames15 := Chunk304_319.frames ++ frames16
 def after15 (bitmapPrefix : AppList (BitVec 64)) := after16 (Chunk304_319.after bitmapPrefix)
-theorem compiled15_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs15 (bitmapPrefix, 842) = (bodies15, frames15, after15 bitmapPrefix, 4610) := by
+theorem compiled15_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs15 (bitmapPrefix, 834) = (bodies15, frames15, after15 bitmapPrefix, 4603) := by
   unfold programs15
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk304_319.compiled_eq]
@@ -459,7 +459,7 @@ def programs14 := Chunk288_303.programs ++ programs15
 def bodies14 := Chunk288_303.bodies ++ bodies15
 def frames14 := Chunk288_303.frames ++ frames15
 def after14 (bitmapPrefix : AppList (BitVec 64)) := after15 (Chunk288_303.after bitmapPrefix)
-theorem compiled14_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs14 (bitmapPrefix, 797) = (bodies14, frames14, after14 bitmapPrefix, 4610) := by
+theorem compiled14_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs14 (bitmapPrefix, 789) = (bodies14, frames14, after14 bitmapPrefix, 4603) := by
   unfold programs14
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk288_303.compiled_eq]
@@ -470,7 +470,7 @@ def programs13 := Chunk272_287.programs ++ programs14
 def bodies13 := Chunk272_287.bodies ++ bodies14
 def frames13 := Chunk272_287.frames ++ frames14
 def after13 (bitmapPrefix : AppList (BitVec 64)) := after14 (Chunk272_287.after bitmapPrefix)
-theorem compiled13_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs13 (bitmapPrefix, 666) = (bodies13, frames13, after13 bitmapPrefix, 4610) := by
+theorem compiled13_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs13 (bitmapPrefix, 658) = (bodies13, frames13, after13 bitmapPrefix, 4603) := by
   unfold programs13
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk272_287.compiled_eq]
@@ -481,7 +481,7 @@ def programs12 := Chunk256_271.programs ++ programs13
 def bodies12 := Chunk256_271.bodies ++ bodies13
 def frames12 := Chunk256_271.frames ++ frames13
 def after12 (bitmapPrefix : AppList (BitVec 64)) := after13 (Chunk256_271.after bitmapPrefix)
-theorem compiled12_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs12 (bitmapPrefix, 542) = (bodies12, frames12, after12 bitmapPrefix, 4610) := by
+theorem compiled12_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs12 (bitmapPrefix, 534) = (bodies12, frames12, after12 bitmapPrefix, 4603) := by
   unfold programs12
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk256_271.compiled_eq]
@@ -492,7 +492,7 @@ def programs11 := Chunk240_255.programs ++ programs12
 def bodies11 := Chunk240_255.bodies ++ bodies12
 def frames11 := Chunk240_255.frames ++ frames12
 def after11 (bitmapPrefix : AppList (BitVec 64)) := after12 (Chunk240_255.after bitmapPrefix)
-theorem compiled11_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs11 (bitmapPrefix, 468) = (bodies11, frames11, after11 bitmapPrefix, 4610) := by
+theorem compiled11_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs11 (bitmapPrefix, 460) = (bodies11, frames11, after11 bitmapPrefix, 4603) := by
   unfold programs11
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk240_255.compiled_eq]
@@ -503,7 +503,7 @@ def programs10 := Chunk224_239.programs ++ programs11
 def bodies10 := Chunk224_239.bodies ++ bodies11
 def frames10 := Chunk224_239.frames ++ frames11
 def after10 (bitmapPrefix : AppList (BitVec 64)) := after11 (Chunk224_239.after bitmapPrefix)
-theorem compiled10_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs10 (bitmapPrefix, 306) = (bodies10, frames10, after10 bitmapPrefix, 4610) := by
+theorem compiled10_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs10 (bitmapPrefix, 298) = (bodies10, frames10, after10 bitmapPrefix, 4603) := by
   unfold programs10
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk224_239.compiled_eq]
@@ -514,7 +514,7 @@ def programs9 := Chunk208_223.programs ++ programs10
 def bodies9 := Chunk208_223.bodies ++ bodies10
 def frames9 := Chunk208_223.frames ++ frames10
 def after9 (bitmapPrefix : AppList (BitVec 64)) := after10 (Chunk208_223.after bitmapPrefix)
-theorem compiled9_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs9 (bitmapPrefix, 266) = (bodies9, frames9, after9 bitmapPrefix, 4610) := by
+theorem compiled9_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs9 (bitmapPrefix, 258) = (bodies9, frames9, after9 bitmapPrefix, 4603) := by
   unfold programs9
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk208_223.compiled_eq]
@@ -525,7 +525,7 @@ def programs8 := Chunk192_207.programs ++ programs9
 def bodies8 := Chunk192_207.bodies ++ bodies9
 def frames8 := Chunk192_207.frames ++ frames9
 def after8 (bitmapPrefix : AppList (BitVec 64)) := after9 (Chunk192_207.after bitmapPrefix)
-theorem compiled8_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs8 (bitmapPrefix, 232) = (bodies8, frames8, after8 bitmapPrefix, 4610) := by
+theorem compiled8_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs8 (bitmapPrefix, 224) = (bodies8, frames8, after8 bitmapPrefix, 4603) := by
   unfold programs8
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk192_207.compiled_eq]
@@ -536,7 +536,7 @@ def programs7 := Chunk176_191.programs ++ programs8
 def bodies7 := Chunk176_191.bodies ++ bodies8
 def frames7 := Chunk176_191.frames ++ frames8
 def after7 (bitmapPrefix : AppList (BitVec 64)) := after8 (Chunk176_191.after bitmapPrefix)
-theorem compiled7_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs7 (bitmapPrefix, 204) = (bodies7, frames7, after7 bitmapPrefix, 4610) := by
+theorem compiled7_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs7 (bitmapPrefix, 196) = (bodies7, frames7, after7 bitmapPrefix, 4603) := by
   unfold programs7
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk176_191.compiled_eq]
@@ -547,7 +547,7 @@ def programs6 := Chunk160_175.programs ++ programs7
 def bodies6 := Chunk160_175.bodies ++ bodies7
 def frames6 := Chunk160_175.frames ++ frames7
 def after6 (bitmapPrefix : AppList (BitVec 64)) := after7 (Chunk160_175.after bitmapPrefix)
-theorem compiled6_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs6 (bitmapPrefix, 154) = (bodies6, frames6, after6 bitmapPrefix, 4610) := by
+theorem compiled6_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs6 (bitmapPrefix, 146) = (bodies6, frames6, after6 bitmapPrefix, 4603) := by
   unfold programs6
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk160_175.compiled_eq]
@@ -558,7 +558,7 @@ def programs5 := Chunk144_159.programs ++ programs6
 def bodies5 := Chunk144_159.bodies ++ bodies6
 def frames5 := Chunk144_159.frames ++ frames6
 def after5 (bitmapPrefix : AppList (BitVec 64)) := after6 (Chunk144_159.after bitmapPrefix)
-theorem compiled5_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs5 (bitmapPrefix, 107) = (bodies5, frames5, after5 bitmapPrefix, 4610) := by
+theorem compiled5_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs5 (bitmapPrefix, 107) = (bodies5, frames5, after5 bitmapPrefix, 4603) := by
   unfold programs5
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk144_159.compiled_eq]
@@ -569,7 +569,7 @@ def programs4 := Chunk128_143.programs ++ programs5
 def bodies4 := Chunk128_143.bodies ++ bodies5
 def frames4 := Chunk128_143.frames ++ frames5
 def after4 (bitmapPrefix : AppList (BitVec 64)) := after5 (Chunk128_143.after bitmapPrefix)
-theorem compiled4_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs4 (bitmapPrefix, 72) = (bodies4, frames4, after4 bitmapPrefix, 4610) := by
+theorem compiled4_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs4 (bitmapPrefix, 72) = (bodies4, frames4, after4 bitmapPrefix, 4603) := by
   unfold programs4
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk128_143.compiled_eq]
@@ -580,7 +580,7 @@ def programs3 := Chunk112_127.programs ++ programs4
 def bodies3 := Chunk112_127.bodies ++ bodies4
 def frames3 := Chunk112_127.frames ++ frames4
 def after3 (bitmapPrefix : AppList (BitVec 64)) := after4 (Chunk112_127.after bitmapPrefix)
-theorem compiled3_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs3 (bitmapPrefix, 46) = (bodies3, frames3, after3 bitmapPrefix, 4610) := by
+theorem compiled3_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs3 (bitmapPrefix, 46) = (bodies3, frames3, after3 bitmapPrefix, 4603) := by
   unfold programs3
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk112_127.compiled_eq]
@@ -591,7 +591,7 @@ def programs2 := Chunk96_111.programs ++ programs3
 def bodies2 := Chunk96_111.bodies ++ bodies3
 def frames2 := Chunk96_111.frames ++ frames3
 def after2 (bitmapPrefix : AppList (BitVec 64)) := after3 (Chunk96_111.after bitmapPrefix)
-theorem compiled2_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs2 (bitmapPrefix, 41) = (bodies2, frames2, after2 bitmapPrefix, 4610) := by
+theorem compiled2_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs2 (bitmapPrefix, 41) = (bodies2, frames2, after2 bitmapPrefix, 4603) := by
   unfold programs2
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk96_111.compiled_eq]
@@ -602,7 +602,7 @@ def programs1 := Chunk80_95.programs ++ programs2
 def bodies1 := Chunk80_95.bodies ++ bodies2
 def frames1 := Chunk80_95.frames ++ frames2
 def after1 (bitmapPrefix : AppList (BitVec 64)) := after2 (Chunk80_95.after bitmapPrefix)
-theorem compiled1_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs1 (bitmapPrefix, 32) = (bodies1, frames1, after1 bitmapPrefix, 4610) := by
+theorem compiled1_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs1 (bitmapPrefix, 32) = (bodies1, frames1, after1 bitmapPrefix, 4603) := by
   unfold programs1
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk80_95.compiled_eq]
@@ -613,7 +613,7 @@ def programs0 := Chunk64_79.programs ++ programs1
 def bodies0 := Chunk64_79.bodies ++ bodies1
 def frames0 := Chunk64_79.frames ++ frames1
 def after0 (bitmapPrefix : AppList (BitVec 64)) := after1 (Chunk64_79.after bitmapPrefix)
-theorem compiled0_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs0 (bitmapPrefix, 1) = (bodies0, frames0, after0 bitmapPrefix, 4610) := by
+theorem compiled0_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileWordToStackNative riscvConfig false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) programs0 (bitmapPrefix, 1) = (bodies0, frames0, after0 bitmapPrefix, 4603) := by
   unfold programs0
   rw [InitECandidate.Proofs.BackendComputation.compileWordToStack_append]
   rw [Chunk64_79.compiled_eq]
@@ -624,7 +624,7 @@ theorem programs_eq : programs0 = [StackAnalysis.optimized64, StackAnalysis.opti
 #print axioms compiled0_eq
 #print axioms programs_eq
 def bitmaps : List (BitVec 64) := appListAppend (after0 (.list [4]))
-def wordConfig : WordToStack.Native.Config := { bitmapsLength := 4610, stackFrameSize := sptFromAList ((bodies0.zip frames0).map (fun ((identifier, _), frame) => (identifier, frame))) }
+def wordConfig : WordToStack.Native.Config := { bitmapsLength := 4603, stackFrameSize := sptFromAList ((bodies0.zip frames0).map (fun ((identifier, _), frame) => (identifier, frame))) }
 def stack : List (Nat × StackLang.HolProg 64) := (raiseStubLocation, WordToStack.Native.raiseStubNative false (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))) :: (storeConstsStubLocation, WordToStack.Native.storeConstsStubNative (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length))) :: bodies0
 theorem native_eq : WordToStack.Native.compileNative riscvConfig false programs0 = (bitmaps, wordConfig, 0 :: frames0, stack) := by
   exact InitECandidate.Proofs.BackendComputation.compileNative_of_bodies riscvConfig false programs0 bodies0 frames0 _ (compiled0_eq (.list [4]))

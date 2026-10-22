@@ -306,8 +306,8 @@ def stackBody220_88 : StackLang.HolProg 64 :=
 .seq stackBody220_0 stackBody220_87
 
 def function220 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody220_88, 0, bitmapPrefix, 284)
-theorem function220_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized220.2.2 InitECandidate.Proofs.StackAnalysis.optimized220.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 284) = function220 bitmapPrefix := by
+(stackBody220_88, 0, bitmapPrefix, 276)
+theorem function220_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized220.2.2 InitECandidate.Proofs.StackAnalysis.optimized220.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 276) = function220 bitmapPrefix := by
   kernel_rfl
 #print axioms function220_eq
 end InitECandidate.Proofs.BackendStages

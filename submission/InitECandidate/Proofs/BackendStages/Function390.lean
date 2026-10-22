@@ -59,8 +59,8 @@ def stackBody390_14 : StackLang.HolProg 64 :=
 .seq stackBody390_0 stackBody390_13
 
 def function390 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody390_14, 0, bitmapPrefix, 1174)
-theorem function390_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized390.2.2 InitECandidate.Proofs.StackAnalysis.optimized390.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1174) = function390 bitmapPrefix := by
+(stackBody390_14, 0, bitmapPrefix, 1166)
+theorem function390_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized390.2.2 InitECandidate.Proofs.StackAnalysis.optimized390.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1166) = function390 bitmapPrefix := by
   kernel_rfl
 #print axioms function390_eq
 end InitECandidate.Proofs.BackendStages

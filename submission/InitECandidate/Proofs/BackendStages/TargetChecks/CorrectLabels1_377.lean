@@ -1,7 +1,3 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectLabels0_377
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectEncode0_377
-import InitECandidate.Proofs.BackendStages.TargetChecks.LabelReuse
-import InitECandidate.Proofs.CompactComputation
 import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectData1_377
 import InitECandidate.Proofs.BackendStages.TargetChecks.Labels1_377
 set_option autoImplicit false
@@ -11,10 +7,6 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks.Correct
-theorem localLabels1_377_eq : LabToTarget.sectionLabels 257976 Reencode0_377.lines [] = (258000, localLabels1_377) := by
-  exact (InitECandidate.Proofs.BackendStages.TargetChecks.sectionLabels_of_encLinesAgain
-    Target.labels0 Target.ffis 257976 258000 riscvConfig.encode
-    Initial377.lines Reencode0_377.lines [] Reencode0_377_eq).trans
-    (localLabels0_377_eq.trans (by kernel_rfl))
-#print axioms localLabels1_377_eq
+theorem localLabels1_377_eq : LabToTarget.sectionLabels 312884 Reencode0_377.lines [] = (313744, localLabels1_377) := by
+  exact InitECandidate.Proofs.BackendStages.TargetChecks.localLabels1_377_eq
 end InitECandidate.Proofs.BackendStages.TargetChecks.Correct

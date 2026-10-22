@@ -50,22 +50,17 @@ import InitECandidate.Proofs.BackendStages.RawChunk800_815
 import InitECandidate.Proofs.BackendStages.RawChunk816_831
 import InitECandidate.Proofs.BackendStages.RawChunk832_847
 import InitECandidate.Proofs.BackendStages.RawChunk848_863
-import InitECandidate.Proofs.BackendStages.RawChunk864_879
-import InitECandidate.Proofs.BackendStages.RawChunk880_889
+import InitECandidate.Proofs.BackendStages.RawChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages.Raw
-def bodies52 : List (Nat × StackLang.HolProg 64) := []
-theorem bodies52_eq : Native.bodies52.map (fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body)) = bodies52 := by rfl
-def bodies51 := RawChunk880_889.bodies ++ bodies52
-theorem bodies51_eq : Native.bodies51.map (fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body)) = bodies51 := by
-  unfold Native.bodies51 bodies51
-  rw [List.map_append, RawChunk880_889.compiled_eq, bodies52_eq]
-def bodies50 := RawChunk864_879.bodies ++ bodies51
+def bodies51 : List (Nat × StackLang.HolProg 64) := []
+theorem bodies51_eq : Native.bodies51.map (fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body)) = bodies51 := by rfl
+def bodies50 := RawChunk864_877.bodies ++ bodies51
 theorem bodies50_eq : Native.bodies50.map (fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body)) = bodies50 := by
   unfold Native.bodies50 bodies50
-  rw [List.map_append, RawChunk864_879.compiled_eq, bodies51_eq]
+  rw [List.map_append, RawChunk864_877.compiled_eq, bodies51_eq]
 def bodies49 := RawChunk848_863.bodies ++ bodies50
 theorem bodies49_eq : Native.bodies49.map (fun (identifier, body) => (identifier, StackRawCall.compTop RawInfo.rawInfo body)) = bodies49 := by
   unfold Native.bodies49 bodies49

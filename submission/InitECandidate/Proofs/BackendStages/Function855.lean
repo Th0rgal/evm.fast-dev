@@ -92,8 +92,8 @@ def stackBody855_26 : StackLang.HolProg 64 :=
 .seq stackBody855_0 stackBody855_25
 
 def function855 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody855_26, 0, bitmapPrefix, 4366)
-theorem function855_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized855.2.2 InitECandidate.Proofs.StackAnalysis.optimized855.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4366) = function855 bitmapPrefix := by
+(stackBody855_26, 0, bitmapPrefix, 4359)
+theorem function855_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized855.2.2 InitECandidate.Proofs.StackAnalysis.optimized855.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 4359) = function855 bitmapPrefix := by
   kernel_rfl
 #print axioms function855_eq
 end InitECandidate.Proofs.BackendStages

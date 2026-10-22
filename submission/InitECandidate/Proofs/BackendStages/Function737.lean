@@ -33,8 +33,8 @@ def stackBody737_6 : StackLang.HolProg 64 :=
 .seq stackBody737_0 stackBody737_5
 
 def function737 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody737_6, 0, bitmapPrefix, 3276)
-theorem function737_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized737.2.2 InitECandidate.Proofs.StackAnalysis.optimized737.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3276) = function737 bitmapPrefix := by
+(stackBody737_6, 0, bitmapPrefix, 3269)
+theorem function737_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized737.2.2 InitECandidate.Proofs.StackAnalysis.optimized737.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3269) = function737 bitmapPrefix := by
   kernel_rfl
 #print axioms function737_eq
 end InitECandidate.Proofs.BackendStages

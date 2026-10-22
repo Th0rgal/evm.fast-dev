@@ -13,6 +13,11 @@ def ready(module):
  source=root/("submission" if module.startswith("InitECandidate.") else ".")/(module.replace(".","/")+".lean");artifact=root/".lake/build/lib/lean"/(module.replace(".","/")+".olean")
  if not artifact.exists():return False
  if not source.exists() or artifact.stat().st_mtime>=source.stat().st_mtime:return True
+ aggregate=state/(module.rsplit('.',1)[-1]+".json")
+ if aggregate.exists() and source.exists():
+  recorded=json.loads(aggregate.read_text())
+  digest=hashlib.sha256(source.read_bytes()+(base/"Composition.lean").read_bytes()).hexdigest()
+  if recorded.get("returncode")==0 and recorded.get("sha256")==digest:return True
  m=re.fullmatch(r"InitECandidate.Proofs.BackendStages.TargetChecks.(Correct)?(?:Phase|Labels|Encode)[01]_(\d+)",module)
  if m:
   prefix=m[1] or "";n=m[2];marker=work/("correct-queue-state" if prefix else "queue-state")/(n+".json")

@@ -98,8 +98,8 @@ def stackBody473_24 : StackLang.HolProg 64 :=
 .seq stackBody473_0 stackBody473_23
 
 def function473 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody473_24, 0, bitmapPrefix, 1503)
-theorem function473_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized473.2.2 InitECandidate.Proofs.StackAnalysis.optimized473.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1503) = function473 bitmapPrefix := by
+(stackBody473_24, 0, bitmapPrefix, 1495)
+theorem function473_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized473.2.2 InitECandidate.Proofs.StackAnalysis.optimized473.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1495) = function473 bitmapPrefix := by
   kernel_rfl
 #print axioms function473_eq
 end InitECandidate.Proofs.BackendStages

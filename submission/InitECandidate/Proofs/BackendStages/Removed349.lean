@@ -14,7 +14,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody349_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 1
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 144#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 152#64))
 
 def RemovedBody349_3 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip

@@ -5,7 +5,7 @@ import Guest.Bookkeeping
 import Guest.Ast
 import Guest.SoftwareAst
 import Guest.Accel
-import Guest.AccelFfi
+import Guest.ByteCodec
 
 /-!
 # The guest as a flapjack program: state, host, handlers, and the stepped run
@@ -81,7 +81,7 @@ def heapEnd : Word := 2952790016
 /-- `WORD`: bytes per word. -/
 def bytesInWord : Word := 8
 
-/-! Bytes and words (little-endian, as the RISC-V target) are in `Guest.AccelFfi`. -/
+/-! Bytes and words (little-endian, as the RISC-V target) are in `Guest.ByteCodec`. -/
 
 /-! ### Pancake memory -/
 

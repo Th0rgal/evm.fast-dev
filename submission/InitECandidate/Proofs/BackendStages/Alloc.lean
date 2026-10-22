@@ -50,22 +50,17 @@ import InitECandidate.Proofs.BackendStages.AllocChunk800_815
 import InitECandidate.Proofs.BackendStages.AllocChunk816_831
 import InitECandidate.Proofs.BackendStages.AllocChunk832_847
 import InitECandidate.Proofs.BackendStages.AllocChunk848_863
-import InitECandidate.Proofs.BackendStages.AllocChunk864_879
-import InitECandidate.Proofs.BackendStages.AllocChunk880_889
+import InitECandidate.Proofs.BackendStages.AllocChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Alloc
-def bodies52 : List (Nat × StackLang.HolProg 64) := []
-theorem bodies52_eq : Raw.bodies52.map (StackAlloc.progComp) = bodies52 := by rfl
-def bodies51 := AllocChunk880_889.bodies ++ bodies52
-theorem bodies51_eq : Raw.bodies51.map (StackAlloc.progComp) = bodies51 := by
-  unfold Raw.bodies51 bodies51
-  rw [List.map_append, AllocChunk880_889.compiled_eq, bodies52_eq]
-def bodies50 := AllocChunk864_879.bodies ++ bodies51
+def bodies51 : List (Nat × StackLang.HolProg 64) := []
+theorem bodies51_eq : Raw.bodies51.map (StackAlloc.progComp) = bodies51 := by rfl
+def bodies50 := AllocChunk864_877.bodies ++ bodies51
 theorem bodies50_eq : Raw.bodies50.map (StackAlloc.progComp) = bodies50 := by
   unfold Raw.bodies50 bodies50
-  rw [List.map_append, AllocChunk864_879.compiled_eq, bodies51_eq]
+  rw [List.map_append, AllocChunk864_877.compiled_eq, bodies51_eq]
 def bodies49 := AllocChunk848_863.bodies ++ bodies50
 theorem bodies49_eq : Raw.bodies49.map (StackAlloc.progComp) = bodies49 := by
   unfold Raw.bodies49 bodies49

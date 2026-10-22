@@ -27,7 +27,7 @@ def NamedBody376_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody376_6 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.call none (Sum.inl 370) none
 
 def NamedBody376_7 : StackLang.HolProg 64 :=
 .seq NamedBody376_5 NamedBody376_6

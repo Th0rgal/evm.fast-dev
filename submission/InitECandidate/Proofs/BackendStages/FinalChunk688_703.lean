@@ -23,7 +23,7 @@ def input : LabSem.LabProgHOL 64 := [TargetChecks.Correct.Reencode1_688, TargetC
 def aligned : LabSem.LabProgHOL 64 := [Alignment688, Alignment689, Alignment690, Alignment691, Alignment692, Alignment693, Alignment694, Alignment695, Alignment696, Alignment697, Alignment698, Alignment699, Alignment700, Alignment701, Alignment702, Alignment703]
 def final : LabSem.LabProgHOL 64 := [FinalReencode688, FinalReencode689, FinalReencode690, FinalReencode691, FinalReencode692, FinalReencode693, FinalReencode694, FinalReencode695, FinalReencode696, FinalReencode697, FinalReencode698, FinalReencode699, FinalReencode700, FinalReencode701, FinalReencode702, FinalReencode703]
 def padded : LabSem.LabProgHOL 64 := [Padded688, Padded689, Padded690, Padded691, Padded692, Padded693, Padded694, Padded695, Padded696, Padded697, Padded698, Padded699, Padded700, Padded701, Padded702, Padded703]
-theorem alignment_eq (rest output : LabSem.LabProgHOL 64) (tail : LabToTarget.updLabLen 590308 rest = output) : LabToTarget.updLabLen 541940 (input ++ rest) = aligned ++ output := by
+theorem alignment_eq (rest output : LabSem.LabProgHOL 64) (tail : LabToTarget.updLabLen 666848 rest = output) : LabToTarget.updLabLen 627408 (input ++ rest) = aligned ++ output := by
   unfold input aligned
   simp only [List.cons_append, List.nil_append]
   apply InitECandidate.Proofs.BackendComputation.updLabLen_cons (head := Alignment688_eq)
@@ -43,7 +43,7 @@ theorem alignment_eq (rest output : LabSem.LabProgHOL 64) (tail : LabToTarget.up
   apply InitECandidate.Proofs.BackendComputation.updLabLen_cons (head := Alignment702_eq)
   apply InitECandidate.Proofs.BackendComputation.updLabLen_cons (head := Alignment703_eq)
   exact tail
-theorem rewrite_eq (rest output : LabSem.LabProgHOL 64) (tail : LabToTarget.encSecsAgain 590308 Target.labelsFinal Target.ffis riscvConfig.encode rest = (output, true)) : LabToTarget.encSecsAgain 541940 Target.labelsFinal Target.ffis riscvConfig.encode (aligned ++ rest) = (final ++ output, true) := by
+theorem rewrite_eq (rest output : LabSem.LabProgHOL 64) (tail : LabToTarget.encSecsAgain 666848 Target.labelsFinal Target.ffis riscvConfig.encode rest = (output, true)) : LabToTarget.encSecsAgain 627408 Target.labelsFinal Target.ffis riscvConfig.encode (aligned ++ rest) = (final ++ output, true) := by
   unfold aligned final
   simp only [List.cons_append, List.nil_append]
   apply InitECandidate.Proofs.BackendComputation.encSecsAgain_cons (head := FinalReencode688_eq)

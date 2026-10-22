@@ -1,4 +1,3 @@
-import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectPhase0_521
 import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectLabels1_521
 import InitECandidate.Proofs.BackendStages.TargetChecks.CorrectEncode1_521
 set_option autoImplicit false

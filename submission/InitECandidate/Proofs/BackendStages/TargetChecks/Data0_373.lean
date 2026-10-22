@@ -10,7 +10,7 @@ open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks
 def localLabels0_373 : List (Nat × Nat) :=
-[(2, 257904), (1, 257884)]
+[(2, 312808), (1, 312788)]
 def Reencode0_373 : LabSem.LabSectionHOL 64 :=
 { sectionId := 373,
   lines :=
@@ -31,7 +31,7 @@ def Reencode0_373 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [147#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0))
-        18446744073709550988#64 [111#8, 240#8, 223#8, 216#8] 4,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709550936#64 [111#8, 240#8, 159#8, 213#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 373 2 4] }
 end InitECandidate.Proofs.BackendStages.TargetChecks

@@ -249,8 +249,8 @@ def stackBody628_78 : StackLang.HolProg 64 :=
 .seq stackBody628_0 stackBody628_77
 
 def function628 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody628_78, 0, bitmapPrefix, 2569)
-theorem function628_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized628.2.2 InitECandidate.Proofs.StackAnalysis.optimized628.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2569) = function628 bitmapPrefix := by
+(stackBody628_78, 0, bitmapPrefix, 2561)
+theorem function628_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized628.2.2 InitECandidate.Proofs.StackAnalysis.optimized628.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2561) = function628 bitmapPrefix := by
   kernel_rfl
 #print axioms function628_eq
 end InitECandidate.Proofs.BackendStages

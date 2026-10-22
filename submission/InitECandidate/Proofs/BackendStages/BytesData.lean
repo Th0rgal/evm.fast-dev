@@ -49,16 +49,13 @@ import InitECandidate.Proofs.BackendStages.BytesChunkData800_815
 import InitECandidate.Proofs.BackendStages.BytesChunkData816_831
 import InitECandidate.Proofs.BackendStages.BytesChunkData832_847
 import InitECandidate.Proofs.BackendStages.BytesChunkData848_863
-import InitECandidate.Proofs.BackendStages.BytesChunkData864_879
-import InitECandidate.Proofs.BackendStages.BytesChunkData880_889
+import InitECandidate.Proofs.BackendStages.BytesChunkData864_877
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
-open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages.ByteData
-def chunks53 : List (BitVec 8) := []
-def chunks52 := BytesChunkData880_889.bytes ++ chunks53
-def chunks51 := BytesChunkData864_879.bytes ++ chunks52
+def chunks52 : List (BitVec 8) := []
+def chunks51 := BytesChunkData864_877.bytes ++ chunks52
 def chunks50 := BytesChunkData848_863.bytes ++ chunks51
 def chunks49 := BytesChunkData832_847.bytes ++ chunks50
 def chunks48 := BytesChunkData816_831.bytes ++ chunks49

@@ -7,6 +7,6 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks.Correct
-theorem localLabels0_80_eq : LabToTarget.sectionLabels 9620 Initial80.lines [] = (9704, localLabels0_80) := by
+theorem localLabels0_80_eq : LabToTarget.sectionLabels 9108 Initial80.lines [] = (9192, localLabels0_80) := by
   exact InitECandidate.Proofs.BackendStages.TargetChecks.localLabels0_80_eq
 end InitECandidate.Proofs.BackendStages.TargetChecks.Correct

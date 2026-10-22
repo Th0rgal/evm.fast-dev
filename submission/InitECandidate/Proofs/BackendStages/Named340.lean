@@ -69,7 +69,7 @@ def NamedBody340_15 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody340_16 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 992#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 974#64)
 
 def NamedBody340_17 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -281,7 +281,7 @@ def NamedBody340_73 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_74 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 15#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 17#64)
 
 def NamedBody340_75 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -331,84 +331,212 @@ def NamedBody340_89 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_90 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 10 11
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 11)))
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody340_91 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst
-  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
-    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 11 12
-      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 12)))
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 0#64)
 
 def NamedBody340_92 : StackLang.HolProg 64 :=
-.seq NamedBody340_90 NamedBody340_91
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_93 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 0#64)
+
+def NamedBody340_94 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def NamedBody340_95 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.arith
     (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
       (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 16#64)))
 
-def NamedBody340_94 : StackLang.HolProg 64 :=
+def NamedBody340_96 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.ret 13
 
-def NamedBody340_95 : StackLang.HolProg 64 :=
-.seq NamedBody340_93 NamedBody340_94
-
-def NamedBody340_96 : StackLang.HolProg 64 :=
-.seq NamedBody340_92 NamedBody340_95
-
 def NamedBody340_97 : StackLang.HolProg 64 :=
-.seq NamedBody340_89 NamedBody340_96
+.seq NamedBody340_95 NamedBody340_96
 
 def NamedBody340_98 : StackLang.HolProg 64 :=
-.seq NamedBody340_88 NamedBody340_97
+.seq NamedBody340_94 NamedBody340_97
 
 def NamedBody340_99 : StackLang.HolProg 64 :=
-.seq NamedBody340_87 NamedBody340_98
+.seq NamedBody340_93 NamedBody340_98
 
 def NamedBody340_100 : StackLang.HolProg 64 :=
-.seq NamedBody340_72 NamedBody340_99
+.seq NamedBody340_92 NamedBody340_99
 
 def NamedBody340_101 : StackLang.HolProg 64 :=
-.seq NamedBody340_71 NamedBody340_100
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody340_102 : StackLang.HolProg 64 :=
-.seq NamedBody340_70 NamedBody340_101
+.ite (Flapjack.Cmp.equal) 12 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1) NamedBody340_100 NamedBody340_101
 
 def NamedBody340_103 : StackLang.HolProg 64 :=
-.seq NamedBody340_69 NamedBody340_102
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_104 : StackLang.HolProg 64 :=
-.seq NamedBody340_14 NamedBody340_103
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_105 : StackLang.HolProg 64 :=
-.seq NamedBody340_13 NamedBody340_104
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody340_106 : StackLang.HolProg 64 :=
-.seq NamedBody340_12 NamedBody340_105
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 20#64)
 
 def NamedBody340_107 : StackLang.HolProg 64 :=
-.seq NamedBody340_11 NamedBody340_106
+Flapjack.Compiler.Backend.StackLang.Prog.tick
 
 def NamedBody340_108 : StackLang.HolProg 64 :=
-.seq NamedBody340_10 NamedBody340_107
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 1 17#64)
 
 def NamedBody340_109 : StackLang.HolProg 64 :=
-.seq NamedBody340_9 NamedBody340_108
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody340_110 : StackLang.HolProg 64 :=
-.seq NamedBody340_8 NamedBody340_109
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.store 1
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 25 18446744073709551480#64))
 
 def NamedBody340_111 : StackLang.HolProg 64 :=
-.seq NamedBody340_7 NamedBody340_110
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 6#64)
 
 def NamedBody340_112 : StackLang.HolProg 64 :=
-.seq NamedBody340_6 NamedBody340_111
+Flapjack.Compiler.Backend.StackLang.Prog.skip
 
-def Named340 : Nat × StackLang.HolProg 64 := (340, NamedBody340_112)
+def NamedBody340_113 : StackLang.HolProg 64 :=
+.call none (Sum.inl 5) none
+
+def NamedBody340_114 : StackLang.HolProg 64 :=
+.seq NamedBody340_112 NamedBody340_113
+
+def NamedBody340_115 : StackLang.HolProg 64 :=
+.seq NamedBody340_111 NamedBody340_114
+
+def NamedBody340_116 : StackLang.HolProg 64 :=
+.seq NamedBody340_110 NamedBody340_115
+
+def NamedBody340_117 : StackLang.HolProg 64 :=
+.seq NamedBody340_109 NamedBody340_116
+
+def NamedBody340_118 : StackLang.HolProg 64 :=
+.seq NamedBody340_108 NamedBody340_117
+
+def NamedBody340_119 : StackLang.HolProg 64 :=
+.seq NamedBody340_107 NamedBody340_118
+
+def NamedBody340_120 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.skip
+
+def NamedBody340_121 : StackLang.HolProg 64 :=
+.ite (Flapjack.Cmp.notEqual) 12 (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 1) NamedBody340_119 NamedBody340_120
+
+def NamedBody340_122 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def NamedBody340_123 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.tick
+
+def NamedBody340_124 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.or 10 11
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.reg 11)))
+
+def NamedBody340_125 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.inst
+  (Flapjack.Compiler.Encoders.Asm.HolInst.arith
+    (Flapjack.Compiler.Encoders.Asm.HolArith.binop Flapjack.BinOp.add 24 24
+      (Flapjack.Compiler.Encoders.Asm.HolRegImm.imm 16#64)))
+
+def NamedBody340_126 : StackLang.HolProg 64 :=
+Flapjack.Compiler.Backend.StackLang.Prog.ret 13
+
+def NamedBody340_127 : StackLang.HolProg 64 :=
+.seq NamedBody340_125 NamedBody340_126
+
+def NamedBody340_128 : StackLang.HolProg 64 :=
+.seq NamedBody340_124 NamedBody340_127
+
+def NamedBody340_129 : StackLang.HolProg 64 :=
+.seq NamedBody340_123 NamedBody340_128
+
+def NamedBody340_130 : StackLang.HolProg 64 :=
+.seq NamedBody340_122 NamedBody340_129
+
+def NamedBody340_131 : StackLang.HolProg 64 :=
+.seq NamedBody340_121 NamedBody340_130
+
+def NamedBody340_132 : StackLang.HolProg 64 :=
+.seq NamedBody340_106 NamedBody340_131
+
+def NamedBody340_133 : StackLang.HolProg 64 :=
+.seq NamedBody340_105 NamedBody340_132
+
+def NamedBody340_134 : StackLang.HolProg 64 :=
+.seq NamedBody340_104 NamedBody340_133
+
+def NamedBody340_135 : StackLang.HolProg 64 :=
+.seq NamedBody340_103 NamedBody340_134
+
+def NamedBody340_136 : StackLang.HolProg 64 :=
+.seq NamedBody340_102 NamedBody340_135
+
+def NamedBody340_137 : StackLang.HolProg 64 :=
+.seq NamedBody340_91 NamedBody340_136
+
+def NamedBody340_138 : StackLang.HolProg 64 :=
+.seq NamedBody340_90 NamedBody340_137
+
+def NamedBody340_139 : StackLang.HolProg 64 :=
+.seq NamedBody340_89 NamedBody340_138
+
+def NamedBody340_140 : StackLang.HolProg 64 :=
+.seq NamedBody340_88 NamedBody340_139
+
+def NamedBody340_141 : StackLang.HolProg 64 :=
+.seq NamedBody340_87 NamedBody340_140
+
+def NamedBody340_142 : StackLang.HolProg 64 :=
+.seq NamedBody340_72 NamedBody340_141
+
+def NamedBody340_143 : StackLang.HolProg 64 :=
+.seq NamedBody340_71 NamedBody340_142
+
+def NamedBody340_144 : StackLang.HolProg 64 :=
+.seq NamedBody340_70 NamedBody340_143
+
+def NamedBody340_145 : StackLang.HolProg 64 :=
+.seq NamedBody340_69 NamedBody340_144
+
+def NamedBody340_146 : StackLang.HolProg 64 :=
+.seq NamedBody340_14 NamedBody340_145
+
+def NamedBody340_147 : StackLang.HolProg 64 :=
+.seq NamedBody340_13 NamedBody340_146
+
+def NamedBody340_148 : StackLang.HolProg 64 :=
+.seq NamedBody340_12 NamedBody340_147
+
+def NamedBody340_149 : StackLang.HolProg 64 :=
+.seq NamedBody340_11 NamedBody340_148
+
+def NamedBody340_150 : StackLang.HolProg 64 :=
+.seq NamedBody340_10 NamedBody340_149
+
+def NamedBody340_151 : StackLang.HolProg 64 :=
+.seq NamedBody340_9 NamedBody340_150
+
+def NamedBody340_152 : StackLang.HolProg 64 :=
+.seq NamedBody340_8 NamedBody340_151
+
+def NamedBody340_153 : StackLang.HolProg 64 :=
+.seq NamedBody340_7 NamedBody340_152
+
+def NamedBody340_154 : StackLang.HolProg 64 :=
+.seq NamedBody340_6 NamedBody340_153
+
+def Named340 : Nat × StackLang.HolProg 64 := (340, NamedBody340_154)
 theorem Named340_eq : StackNames.progCompEntryHOL RiscVConfig.riscvNames Removed340 = Named340 := by
   kernel_rfl
 #print axioms Named340_eq

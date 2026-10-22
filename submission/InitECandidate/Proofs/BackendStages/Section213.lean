@@ -27,10 +27,10 @@ def section213 : LabSem.LabSectionHOL 64 :=
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
-            (Flapjack.Compiler.Encoders.Asm.HolInst.const 5 18446744069414583341#64)))
+            (Flapjack.Compiler.Encoders.Asm.HolInst.const 5 18446744069414583343#64)))
         [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 212 0)) 0#64 [] 0,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 210 0)) 0#64 [] 0,
       Flapjack.Compiler.Backend.LabLang.Line.label 213 2 0] }
 theorem section213_eq : StackToLab.progToSectionHOL Named213 = section213 := by
   kernel_rfl

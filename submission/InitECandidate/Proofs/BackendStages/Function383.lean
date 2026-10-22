@@ -251,8 +251,8 @@ def stackBody383_73 : StackLang.HolProg 64 :=
 .seq stackBody383_0 stackBody383_72
 
 def function383 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody383_73, 0, bitmapPrefix, 1137)
-theorem function383_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized383.2.2 InitECandidate.Proofs.StackAnalysis.optimized383.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1137) = function383 bitmapPrefix := by
+(stackBody383_73, 0, bitmapPrefix, 1129)
+theorem function383_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized383.2.2 InitECandidate.Proofs.StackAnalysis.optimized383.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1129) = function383 bitmapPrefix := by
   kernel_rfl
 #print axioms function383_eq
 end InitECandidate.Proofs.BackendStages

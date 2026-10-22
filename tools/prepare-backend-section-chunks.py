@@ -9,10 +9,12 @@ for first in range(args.start_label,STOP_LABEL,16):
  baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
  for n in ns:
   source=root/f"submission/InitECandidate/Proofs/BackendStages/Section{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Section{n}.olean"
   cert=work/f"Section{n}.check.json"
-  while not (source.exists() and cert.exists() and
+  while not (source.exists() and output.exists() and cert.exists() and
              source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
-             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             output.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= output.stat().st_mtime_ns and
              json.loads(cert.read_text()).get("returncode")==0):
    time.sleep(1)
  named=f"NamedChunk{first}_{last}"
@@ -21,7 +23,8 @@ for first in range(args.start_label,STOP_LABEL,16):
  namedcert=work/f"{named}.check.json"
  while not (namedsource.exists() and namedoutput.exists() and namedcert.exists() and
             namedsource.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
-            namedcert.stat().st_mtime_ns >= namedsource.stat().st_mtime_ns and
+            namedoutput.stat().st_mtime_ns >= namedsource.stat().st_mtime_ns and
+            namedcert.stat().st_mtime_ns >= namedoutput.stat().st_mtime_ns and
             json.loads(namedcert.read_text()).get("returncode")==0):
   time.sleep(1)
  s=f"import InitECandidate.Proofs.BackendStages.NamedChunk{first}_{last}\n"+"".join(f"import InitECandidate.Proofs.BackendStages.Section{n}\n" for n in ns)

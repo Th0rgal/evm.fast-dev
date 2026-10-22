@@ -54,7 +54,10 @@ def main (args : List String) : IO Unit := do
     return ()
 
   let env ← importModules #[{module := `InitECandidate.Proofs.StackAnalysis.Data}] {} 0
+  let selected := args.filterMap String.toNat?
   for (identifier, arguments, body) in InitECandidate.Proofs.StackAnalysis.outputs do
+    if !selected.isEmpty && !selected.contains identifier then
+      continue
     let frame := InitECandidate.Proofs.StackFrameComputation.frameSize
       (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) arguments body
     let slim := WordDepth.Executable.slim body

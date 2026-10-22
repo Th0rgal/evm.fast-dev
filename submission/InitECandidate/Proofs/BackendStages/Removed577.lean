@@ -44,7 +44,7 @@ def RemovedBody577_10 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody577_11 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2023#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2018#64)
 
 def RemovedBody577_12 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -213,7 +213,7 @@ def RemovedBody577_56 : StackLang.HolProg 64 :=
 .seq RemovedBody577_54 RemovedBody577_55
 
 def RemovedBody577_57 : StackLang.HolProg 64 :=
-.call (some (RemovedBody577_53, 0, 577, 2)) (Sum.inl 472) (some (RemovedBody577_56, 577, 3))
+.call (some (RemovedBody577_53, 0, 577, 2)) (Sum.inl 470) (some (RemovedBody577_56, 577, 3))
 
 def RemovedBody577_58 : StackLang.HolProg 64 :=
 .seq RemovedBody577_44 RemovedBody577_57
@@ -240,7 +240,7 @@ def RemovedBody577_65 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody577_66 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2024#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2019#64)
 
 def RemovedBody577_67 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -412,7 +412,7 @@ def RemovedBody577_111 : StackLang.HolProg 64 :=
 .seq RemovedBody577_109 RemovedBody577_110
 
 def RemovedBody577_112 : StackLang.HolProg 64 :=
-.call (some (RemovedBody577_108, 0, 577, 4)) (Sum.inl 574) (some (RemovedBody577_111, 577, 5))
+.call (some (RemovedBody577_108, 0, 577, 4)) (Sum.inl 572) (some (RemovedBody577_111, 577, 5))
 
 def RemovedBody577_113 : StackLang.HolProg 64 :=
 .seq RemovedBody577_99 RemovedBody577_112
@@ -438,7 +438,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody577_120 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 1
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 0 96#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 0 32#64))
 
 def RemovedBody577_121 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -447,7 +447,7 @@ def RemovedBody577_122 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody577_123 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2025#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2020#64)
 
 def RemovedBody577_124 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -619,7 +619,7 @@ def RemovedBody577_168 : StackLang.HolProg 64 :=
 .seq RemovedBody577_166 RemovedBody577_167
 
 def RemovedBody577_169 : StackLang.HolProg 64 :=
-.call (some (RemovedBody577_165, 0, 577, 6)) (Sum.inl 282) (some (RemovedBody577_168, 577, 7))
+.call (some (RemovedBody577_165, 0, 577, 6)) (Sum.inl 467) (some (RemovedBody577_168, 577, 7))
 
 def RemovedBody577_170 : StackLang.HolProg 64 :=
 .seq RemovedBody577_156 RemovedBody577_169
@@ -649,7 +649,7 @@ def RemovedBody577_177 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody577_178 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2026#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2021#64)
 
 def RemovedBody577_179 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -818,7 +818,7 @@ def RemovedBody577_223 : StackLang.HolProg 64 :=
 .seq RemovedBody577_221 RemovedBody577_222
 
 def RemovedBody577_224 : StackLang.HolProg 64 :=
-.call (some (RemovedBody577_220, 0, 577, 8)) (Sum.inl 478) (some (RemovedBody577_223, 577, 9))
+.call (some (RemovedBody577_220, 0, 577, 8)) (Sum.inl 476) (some (RemovedBody577_223, 577, 9))
 
 def RemovedBody577_225 : StackLang.HolProg 64 :=
 .seq RemovedBody577_211 RemovedBody577_224
@@ -848,7 +848,7 @@ def RemovedBody577_233 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def RemovedBody577_234 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2027#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 2022#64)
 
 def RemovedBody577_235 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -1021,7 +1021,7 @@ def RemovedBody577_279 : StackLang.HolProg 64 :=
 .seq RemovedBody577_277 RemovedBody577_278
 
 def RemovedBody577_280 : StackLang.HolProg 64 :=
-.call (some (RemovedBody577_276, 0, 577, 10)) (Sum.inl 492) (some (RemovedBody577_279, 577, 11))
+.call (some (RemovedBody577_276, 0, 577, 10)) (Sum.inl 490) (some (RemovedBody577_279, 577, 11))
 
 def RemovedBody577_281 : StackLang.HolProg 64 :=
 .seq RemovedBody577_267 RemovedBody577_280

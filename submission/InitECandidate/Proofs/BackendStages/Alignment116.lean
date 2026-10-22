@@ -57,7 +57,7 @@ def Alignment116 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 9))
         [103#8, 128#8, 4#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 116 2 0] }
-theorem Alignment116_eq : LabToTarget.linesUpdLabLen 12440 TargetChecks.Reencode1_116.lines [] = (Alignment116.lines, 12548) := by
+theorem Alignment116_eq : LabToTarget.linesUpdLabLen 11948 TargetChecks.Reencode1_116.lines [] = (Alignment116.lines, 12056) := by
   kernel_rfl
 #print axioms Alignment116_eq
 end InitECandidate.Proofs.BackendStages

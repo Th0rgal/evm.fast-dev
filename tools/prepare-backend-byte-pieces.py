@@ -7,7 +7,11 @@ ids=[0,1,2,4,5,6]+list(range(64,STOP_LABEL));position=0;groups={};manifest=[]
 header="set_option autoImplicit false\nset_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nnamespace InitECandidate.Proofs.BackendStages.BytePieces\n"
 def check(name,source):
  cert=work/f"{name}.check.json"
- if cert.exists() and json.loads(cert.read_text()).get("returncode")==0:return
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"
+ if (cert.exists() and output.exists() and
+     output.stat().st_mtime_ns>=source.stat().st_mtime_ns and
+     cert.stat().st_mtime_ns>=output.stat().st_mtime_ns and
+     json.loads(cert.read_text()).get("returncode")==0):return
  start=time.monotonic();r=subprocess.run(["rtk","proxy","python3",str(root/"tools/prepare-backend-lean.py"),"-o",str(root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{name}.olean"),str(source)],cwd=root,text=True,capture_output=True)
  (work/f"{name}.check.log").write_text(r.stdout+r.stderr);cert.write_text(json.dumps(dict(returncode=r.returncode,seconds=time.monotonic()-start)));print(name,r.returncode,flush=True);r.check_returncode()
 def candidate(index):
@@ -27,7 +31,11 @@ def section_checks(n,data_source,agreement_source):
 
 for n in ids:
  dep=work/f"BytesData{n}.check.json"
- while not dep.exists():time.sleep(5)
+ data_source=root/f"submission/InitECandidate/Proofs/BackendStages/BytesData{n}.lean"
+ data_output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/BytesData{n}.olean"
+ while not (dep.exists() and data_output.exists() and
+            data_output.stat().st_mtime_ns>=data_source.stat().st_mtime_ns and
+            dep.stat().st_mtime_ns>=data_output.stat().st_mtime_ns):time.sleep(5)
  if json.loads(dep.read_text())["returncode"]:raise RuntimeError(str(dep))
  text=(root/f"submission/InitECandidate/Proofs/BackendStages/BytesData{n}.lean").read_text();values=[int(x) for x in re.findall(r"(\d+)#8",text)]
  pieces=[];cursor=0;completed=[];s="import InitECandidate.Proofs.ComputationCache\nimport Std\n"+header
@@ -50,5 +58,5 @@ for n in ids:
 for f in futures.values():f.result()
 pool.shutdown()
 if position%4096:candidate(position//4096)
-assert position==979000,position
+assert position==979140,position
 print(f"All section/candidate byte agreements complete: {position} bytes",flush=True)

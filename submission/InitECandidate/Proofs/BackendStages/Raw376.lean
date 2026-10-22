@@ -28,7 +28,7 @@ def rawBody376_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody376_6 : StackLang.HolProg 64 :=
-.call none (Sum.inl 372) none
+.call none (Sum.inl 370) none
 
 def rawBody376_7 : StackLang.HolProg 64 :=
 .seq rawBody376_5 rawBody376_6

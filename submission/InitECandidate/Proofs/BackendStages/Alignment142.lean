@@ -360,7 +360,7 @@ def Alignment142 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi (Flapjack.Compiler.Encoders.Asm.HolAsm.jumpReg 1))
         [103#8, 128#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 142 11 0] }
-theorem Alignment142_eq : LabToTarget.linesUpdLabLen 29160 TargetChecks.Reencode1_142.lines [] = (Alignment142.lines, 29404) := by
+theorem Alignment142_eq : LabToTarget.linesUpdLabLen 28668 TargetChecks.Reencode1_142.lines [] = (Alignment142.lines, 28912) := by
   kernel_rfl
 #print axioms Alignment142_eq
 end InitECandidate.Proofs.BackendStages

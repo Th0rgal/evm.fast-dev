@@ -219,8 +219,8 @@ def stackBody541_66 : StackLang.HolProg 64 :=
 .seq stackBody541_0 stackBody541_65
 
 def function541 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody541_66, 0, bitmapPrefix, 1797)
-theorem function541_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized541.2.2 InitECandidate.Proofs.StackAnalysis.optimized541.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1797) = function541 bitmapPrefix := by
+(stackBody541_66, 0, bitmapPrefix, 1789)
+theorem function541_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized541.2.2 InitECandidate.Proofs.StackAnalysis.optimized541.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1789) = function541 bitmapPrefix := by
   kernel_rfl
 #print axioms function541_eq
 end InitECandidate.Proofs.BackendStages

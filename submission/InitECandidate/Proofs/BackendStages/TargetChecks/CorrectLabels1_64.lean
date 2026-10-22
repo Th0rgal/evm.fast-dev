@@ -11,9 +11,9 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.TargetChecks.Correct
-theorem localLabels1_64_eq : LabToTarget.sectionLabels 1112 Reencode0_64.lines [] = (2252, localLabels1_64) := by
+theorem localLabels1_64_eq : LabToTarget.sectionLabels 1112 Reencode0_64.lines [] = (1940, localLabels1_64) := by
   exact (InitECandidate.Proofs.BackendStages.TargetChecks.sectionLabels_of_encLinesAgain
-    Target.labels0 Target.ffis 1112 2252 riscvConfig.encode
+    Target.labels0 Target.ffis 1112 1940 riscvConfig.encode
     Initial64.lines Reencode0_64.lines [] Reencode0_64_eq).trans
     (localLabels0_64_eq.trans (by kernel_rfl))
 #print axioms localLabels1_64_eq

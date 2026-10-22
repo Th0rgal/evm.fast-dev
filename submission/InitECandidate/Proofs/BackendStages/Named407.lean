@@ -38,7 +38,7 @@ def NamedBody407_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody407_9 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1226#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1211#64)
 
 def NamedBody407_10 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -246,7 +246,7 @@ def NamedBody407_66 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def NamedBody407_67 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1227#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1212#64)
 
 def NamedBody407_68 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
@@ -428,7 +428,7 @@ def NamedBody407_114 : StackLang.HolProg 64 :=
 .seq NamedBody407_112 NamedBody407_113
 
 def NamedBody407_115 : StackLang.HolProg 64 :=
-.call (some (NamedBody407_111, 1, 407, 4)) (Sum.inl 396) (some (NamedBody407_114, 407, 5))
+.call (some (NamedBody407_111, 1, 407, 4)) (Sum.inl 394) (some (NamedBody407_114, 407, 5))
 
 def NamedBody407_116 : StackLang.HolProg 64 :=
 .seq NamedBody407_100 NamedBody407_115

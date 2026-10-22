@@ -12,26 +12,26 @@ def Initial352 : LabSem.LabSectionHOL 64 :=
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 5
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 160#64))))
-        [131#8, 50#8, 5#8, 10#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 320#64))))
+        [131#8, 50#8, 5#8, 20#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 11
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 168#64))))
-        [131#8, 53#8, 133#8, 10#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 328#64))))
+        [131#8, 53#8, 133#8, 20#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 12
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 176#64))))
-        [3#8, 54#8, 5#8, 11#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 336#64))))
+        [3#8, 54#8, 5#8, 21#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst
             (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 13
-              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 184#64))))
-        [131#8, 54#8, 133#8, 11#8] 4,
+              (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 10 344#64))))
+        [131#8, 54#8, 133#8, 21#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst

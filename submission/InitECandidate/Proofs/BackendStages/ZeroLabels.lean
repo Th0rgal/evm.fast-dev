@@ -51,20 +51,16 @@ import InitECandidate.Proofs.BackendStages.ZeroChunk800_815
 import InitECandidate.Proofs.BackendStages.ZeroChunk816_831
 import InitECandidate.Proofs.BackendStages.ZeroChunk832_847
 import InitECandidate.Proofs.BackendStages.ZeroChunk848_863
-import InitECandidate.Proofs.BackendStages.ZeroChunk864_879
-import InitECandidate.Proofs.BackendStages.ZeroChunk880_889
+import InitECandidate.Proofs.BackendStages.ZeroChunk864_877
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages.ZeroLabels
-theorem suffix53_eq : ZeroProgramCollection.targets Final.padded53 = ZeroData.keys53 := by rfl
-theorem suffix52_eq : ZeroProgramCollection.targets Final.padded52 = ZeroData.allKeys52 := by
-  unfold Final.padded52 ZeroData.allKeys52
-  rw [ZeroProgramCollection.targets_append, ZeroChunk880_889.targets_eq, suffix53_eq]
+theorem suffix52_eq : ZeroProgramCollection.targets Final.padded52 = ZeroData.keys52 := by rfl
 theorem suffix51_eq : ZeroProgramCollection.targets Final.padded51 = ZeroData.allKeys51 := by
   unfold Final.padded51 ZeroData.allKeys51
-  rw [ZeroProgramCollection.targets_append, ZeroChunk864_879.targets_eq, suffix52_eq]
+  rw [ZeroProgramCollection.targets_append, ZeroChunk864_877.targets_eq, suffix52_eq]
 theorem suffix50_eq : ZeroProgramCollection.targets Final.padded50 = ZeroData.allKeys50 := by
   unfold Final.padded50 ZeroData.allKeys50
   rw [ZeroProgramCollection.targets_append, ZeroChunk848_863.targets_eq, suffix51_eq]

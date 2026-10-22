@@ -22,9 +22,9 @@ def Alignment159 : LabSem.LabSectionHOL 64 :=
         [19#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709508812#64 [111#8, 80#8, 223#8, 140#8] 4,
+        18446744073709460244#64 [111#8, 144#8, 94#8, 177#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 159 2 0] }
-theorem Alignment159_eq : LabToTarget.linesUpdLabLen 38824 TargetChecks.Reencode1_159.lines [] = (Alignment159.lines, 38836) := by
+theorem Alignment159_eq : LabToTarget.linesUpdLabLen 87580 TargetChecks.Reencode1_159.lines [] = (Alignment159.lines, 87592) := by
   kernel_rfl
 #print axioms Alignment159_eq
 end InitECandidate.Proofs.BackendStages

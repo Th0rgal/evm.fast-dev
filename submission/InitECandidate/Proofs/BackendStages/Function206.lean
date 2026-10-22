@@ -8455,8 +8455,8 @@ def stackBody206_2240 : StackLang.HolProg 64 :=
 .seq stackBody206_0 stackBody206_2239
 
 def function206 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody206_2240, 9, bitmapPrefix, 266)
-theorem function206_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized206.2.2 InitECandidate.Proofs.StackAnalysis.optimized206.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 266) = function206 bitmapPrefix := by
+(stackBody206_2240, 9, bitmapPrefix, 258)
+theorem function206_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized206.2.2 InitECandidate.Proofs.StackAnalysis.optimized206.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 258) = function206 bitmapPrefix := by
   kernel_rfl
 #print axioms function206_eq
 end InitECandidate.Proofs.BackendStages

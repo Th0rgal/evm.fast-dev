@@ -51,20 +51,16 @@ import InitECandidate.Proofs.BackendStages.BytesChunk800_815
 import InitECandidate.Proofs.BackendStages.BytesChunk816_831
 import InitECandidate.Proofs.BackendStages.BytesChunk832_847
 import InitECandidate.Proofs.BackendStages.BytesChunk848_863
-import InitECandidate.Proofs.BackendStages.BytesChunk864_879
-import InitECandidate.Proofs.BackendStages.BytesChunk880_889
+import InitECandidate.Proofs.BackendStages.BytesChunk864_877
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend
 namespace InitECandidate.Proofs.BackendStages.Bytes
-theorem suffix53_eq : LabToTarget.progToBytes Final.padded53 = ByteData.chunks53 := by rw [LabToTarget.progToBytesMap]; rfl
-theorem suffix52_eq : LabToTarget.progToBytes Final.padded52 = ByteData.chunks52 := by
-  unfold Final.padded52 ByteData.chunks52
-  rw [Composition.progToBytes_append, BytesChunk880_889.compiled_eq, suffix53_eq]
+theorem suffix52_eq : LabToTarget.progToBytes Final.padded52 = ByteData.chunks52 := by rw [LabToTarget.progToBytesMap]; rfl
 theorem suffix51_eq : LabToTarget.progToBytes Final.padded51 = ByteData.chunks51 := by
   unfold Final.padded51 ByteData.chunks51
-  rw [Composition.progToBytes_append, BytesChunk864_879.compiled_eq, suffix52_eq]
+  rw [Composition.progToBytes_append, BytesChunk864_877.compiled_eq, suffix52_eq]
 theorem suffix50_eq : LabToTarget.progToBytes Final.padded50 = ByteData.chunks50 := by
   unfold Final.padded50 ByteData.chunks50
   rw [Composition.progToBytes_append, BytesChunk848_863.compiled_eq, suffix51_eq]

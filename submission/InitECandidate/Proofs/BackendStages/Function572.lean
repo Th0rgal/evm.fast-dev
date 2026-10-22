@@ -75,8 +75,8 @@ def stackBody572_18 : StackLang.HolProg 64 :=
 .seq stackBody572_0 stackBody572_17
 
 def function572 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody572_18, 0, bitmapPrefix, 1999)
-theorem function572_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized572.2.2 InitECandidate.Proofs.StackAnalysis.optimized572.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1999) = function572 bitmapPrefix := by
+(stackBody572_18, 0, bitmapPrefix, 1991)
+theorem function572_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized572.2.2 InitECandidate.Proofs.StackAnalysis.optimized572.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1991) = function572 bitmapPrefix := by
   kernel_rfl
 #print axioms function572_eq
 end InitECandidate.Proofs.BackendStages

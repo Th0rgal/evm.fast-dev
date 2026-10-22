@@ -25,7 +25,7 @@ work.mkdir(parents=True, exist_ok=True)
 ast = (root / "Guest/SoftwareAst.lean").read_text()
 function_count = len(re.findall(r"\bguestFn_\w+", ast[ast.index("def guestAst :"):])) + 1
 labels = list(range(args.start_label, 64 + function_count)) if args.all else args.labels
-prefix = ["rtk", "proxy", "taskset", "-c", "8-11", "timeout", str(args.seconds), "lake", "env", "lean"]
+prefix = ["rtk", "proxy", "timeout", str(args.seconds), "lake", "env", "lean"]
 def check(label):
     source = root / f"submission/InitECandidate/Proofs/BackendStages/Function{label}.lean"
     output = root / f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/Function{label}.olean"

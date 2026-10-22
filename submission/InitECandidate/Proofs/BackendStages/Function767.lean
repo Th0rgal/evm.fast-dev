@@ -117,8 +117,8 @@ def stackBody767_30 : StackLang.HolProg 64 :=
 .seq stackBody767_0 stackBody767_29
 
 def function767 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody767_30, 0, bitmapPrefix, 3460)
-theorem function767_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized767.2.2 InitECandidate.Proofs.StackAnalysis.optimized767.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3460) = function767 bitmapPrefix := by
+(stackBody767_30, 0, bitmapPrefix, 3453)
+theorem function767_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized767.2.2 InitECandidate.Proofs.StackAnalysis.optimized767.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 3453) = function767 bitmapPrefix := by
   kernel_rfl
 #print axioms function767_eq
 end InitECandidate.Proofs.BackendStages

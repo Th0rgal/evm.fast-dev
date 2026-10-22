@@ -26,10 +26,6 @@ import InitECandidate.Proofs.WordStages.Optimize876
 import InitECandidate.Proofs.StackAnalysis.Data876
 import InitECandidate.Proofs.WordStages.Optimize877
 import InitECandidate.Proofs.StackAnalysis.Data877
-import InitECandidate.Proofs.WordStages.Optimize878
-import InitECandidate.Proofs.StackAnalysis.Data878
-import InitECandidate.Proofs.WordStages.Optimize879
-import InitECandidate.Proofs.StackAnalysis.Data879
 set_option autoImplicit false
 set_option Elab.async false
 set_option maxRecDepth 1000000
@@ -49,6 +45,4 @@ theorem function874_eq : InitECandidate.Proofs.WordStages.optimized874 = InitECa
 theorem function875_eq : InitECandidate.Proofs.WordStages.optimized875 = InitECandidate.Proofs.StackAnalysis.optimized875 := by rfl
 theorem function876_eq : InitECandidate.Proofs.WordStages.optimized876 = InitECandidate.Proofs.StackAnalysis.optimized876 := by rfl
 theorem function877_eq : InitECandidate.Proofs.WordStages.optimized877 = InitECandidate.Proofs.StackAnalysis.optimized877 := by rfl
-theorem function878_eq : InitECandidate.Proofs.WordStages.optimized878 = InitECandidate.Proofs.StackAnalysis.optimized878 := by rfl
-theorem function879_eq : InitECandidate.Proofs.WordStages.optimized879 = InitECandidate.Proofs.StackAnalysis.optimized879 := by rfl
 end InitECandidate.Proofs.WordBackend.StackAgreement

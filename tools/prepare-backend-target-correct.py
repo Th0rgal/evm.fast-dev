@@ -6,8 +6,8 @@ p=argparse.ArgumentParser(description=__doc__)
 p.add_argument("--generate",action="store_true")
 p.add_argument("--generate-only",action="store_true")
 p.add_argument("--labels",nargs="*",type=int)
-p.add_argument("--affected-only",action="store_true",help="Reuse original valid certificates through595; check corrected596..889")
-p.add_argument("--workers",type=int,default=4,choices=range(1,5))
+p.add_argument("--affected-only",action="store_true",help="Reuse original valid certificates through 595")
+p.add_argument("--workers",type=int,default=16,choices=range(1,31))
 p.add_argument("--seconds",type=int,default=180)
 p.add_argument("--generation-seconds",type=int,default=900)
 p.add_argument("--bridges-only",action="store_true",help="Resume origin bridges without repeating target certificates")
@@ -20,7 +20,7 @@ state=work/"correct-queue-state";state.mkdir(exist_ok=True)
 def command(name,args,seconds):
  started=time.monotonic()
  with (work/f"{name}.log").open("w") as out,(work/f"{name}.time").open("w") as err:
-  r=subprocess.run(["/usr/bin/time","-v","timeout","--kill-after=5s",str(seconds),"taskset","-c","4-7",*args],cwd=root,stdout=out,stderr=err)
+  r=subprocess.run(["/usr/bin/time","-v","timeout","--kill-after=5s",str(seconds),*args],cwd=root,stdout=out,stderr=err)
  if r.returncode:raise RuntimeError(f"{name}:exit{r.returncode}")
  return time.monotonic()-started
 if a.generate or a.generate_only:

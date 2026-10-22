@@ -27,7 +27,7 @@ def stackBody496_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def stackBody496_6 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1551#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1543#64)
 
 def stackBody496_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -222,8 +222,8 @@ def stackBody496_70 : StackLang.HolProg 64 :=
 .seq stackBody496_0 stackBody496_69
 
 def function496 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody496_70, 2, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [2#64]), 1551)
-theorem function496_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized496.2.2 InitECandidate.Proofs.StackAnalysis.optimized496.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1550) = function496 bitmapPrefix := by
+(stackBody496_70, 2, Flapjack.AppList.append bitmapPrefix (Flapjack.AppList.list [2#64]), 1543)
+theorem function496_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized496.2.2 InitECandidate.Proofs.StackAnalysis.optimized496.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1542) = function496 bitmapPrefix := by
   kernel_rfl
 #print axioms function496_eq
 end InitECandidate.Proofs.BackendStages

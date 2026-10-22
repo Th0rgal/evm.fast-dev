@@ -16,7 +16,7 @@ def rawBody407_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody407_3 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1226#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1211#64)
 
 def rawBody407_4 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -163,7 +163,7 @@ def rawBody407_50 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
 
 def rawBody407_51 : StackLang.HolProg 64 :=
-Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1227#64)
+Flapjack.Compiler.Backend.StackLang.Prog.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 22 1212#64)
 
 def rawBody407_52 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.stackStore 22 0
@@ -280,7 +280,7 @@ def rawBody407_88 : StackLang.HolProg 64 :=
 .seq rawBody407_86 rawBody407_87
 
 def rawBody407_89 : StackLang.HolProg 64 :=
-.call (some (rawBody407_85, 0, 407, 4)) (Sum.inl 396) (some (rawBody407_88, 407, 5))
+.call (some (rawBody407_85, 0, 407, 4)) (Sum.inl 394) (some (rawBody407_88, 407, 5))
 
 def rawBody407_90 : StackLang.HolProg 64 :=
 .seq rawBody407_74 rawBody407_89

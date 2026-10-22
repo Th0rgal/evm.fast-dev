@@ -9,17 +9,18 @@ baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
 for suffix in ["Stubs"]+[f"Chunk{a}_{b}" for a,b in chunks]:
  p=work/f"{stage}{suffix}.check.json"
  source=root/f"submission/InitECandidate/Proofs/BackendStages/{stage}{suffix}.lean"
- while not (source.exists() and p.exists() and (suffix=="Stubs" or source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and p.stat().st_mtime_ns>=source.stat().st_mtime_ns) and json.loads(p.read_text()).get("returncode")==0):time.sleep(3)
+ output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{stage}{suffix}.olean"
+ while not (source.exists() and output.exists() and p.exists() and (suffix=="Stubs" or source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and output.stat().st_mtime_ns>=source.stat().st_mtime_ns and p.stat().st_mtime_ns>=output.stat().st_mtime_ns) and json.loads(p.read_text()).get("returncode")==0):time.sleep(3)
 prev="Sections" if stage=="Filtered" else "Filtered"
 prior_source=root/f"submission/InitECandidate/Proofs/BackendStages/{prev}.lean"
 prior_out=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{prev}.olean"
 prior_cert=work/f"{prev}.check.json"
-while not (prior_source.exists() and prior_out.exists() and prior_cert.exists() and prior_source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and prior_cert.stat().st_mtime_ns>=prior_source.stat().st_mtime_ns and json.loads(prior_cert.read_text()).get("returncode")==0):time.sleep(3)
+while not (prior_source.exists() and prior_out.exists() and prior_cert.exists() and prior_source.stat().st_mtime_ns>=baseline.stat().st_mtime_ns and prior_out.stat().st_mtime_ns>=prior_source.stat().st_mtime_ns and prior_cert.stat().st_mtime_ns>=prior_out.stat().st_mtime_ns and json.loads(prior_cert.read_text()).get("returncode")==0):time.sleep(3)
 fun="(fun sec => { sec with lines := sec.lines.filter LabFilter.notSkip })" if stage=="Filtered" else "(LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length)"
 priorName=lambda i: f"Sections.sections{i}" if stage=="Filtered" else f"Filtered.sections{i}"
 s=f"import InitECandidate.Proofs.BackendStages.{prev}\nimport InitECandidate.Proofs.BackendComputation\nimport InitECandidate.Proofs.BackendStages.{stage}Stubs\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{stage}Chunk{a}_{b}\n" for a,b in chunks)
 s+="set_option maxRecDepth 1000000\nset_option maxHeartbeats 0\nopen Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target\nnamespace InitECandidate.Proofs.BackendStages."+stage+"\n"
-s+="def sections52 : LabSem.LabProgHOL 64 := []\n"+f"theorem sections52_eq : {priorName(52)}.map {fun} = sections52 := by rfl\n"
+s+=f"def sections{len(chunks)} : LabSem.LabProgHOL 64 := []\n"+f"theorem sections{len(chunks)}_eq : {priorName(len(chunks))}.map {fun} = sections{len(chunks)} := by rfl\n"
 for i,(a,b) in reversed(list(enumerate(chunks))):
  s+=f"def sections{i} := {stage}Chunk{a}_{b}.sections ++ sections{i+1}\n"
  s+=f"theorem sections{i}_eq : {priorName(i)}.map {fun} = sections{i} := by\n  unfold {priorName(i)} sections{i}\n  rw [List.map_append, {stage}Chunk{a}_{b}.compiled_eq, sections{i+1}_eq]\n"

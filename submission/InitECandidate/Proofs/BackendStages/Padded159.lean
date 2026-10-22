@@ -20,7 +20,7 @@ def Padded159 : LabSem.LabSectionHOL 64 :=
         [19#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709513596#64 [111#8, 96#8, 223#8, 183#8] 4,
+        18446744073709464840#64 [111#8, 160#8, 158#8, 208#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 159 2 0] }
 theorem Padded159_eq : LabToTarget.padSection (riscvConfig.encode (.inst .skip)) FinalReencode159.lines [] = Padded159.lines := by
   kernel_rfl

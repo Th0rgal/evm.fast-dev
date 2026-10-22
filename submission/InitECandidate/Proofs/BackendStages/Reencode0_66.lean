@@ -7,7 +7,7 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages
 def localLabels0_66 : List (Nat × Nat) :=
-[(4, 5920), (3, 5900), (1, 5756), (2, 5752)]
+[(4, 5428), (3, 5408), (1, 5264), (2, 5260)]
 def Reencode0_66 : LabSem.LabSectionHOL 64 :=
 { sectionId := 66,
   lines :=
@@ -27,7 +27,7 @@ def Reencode0_66 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 10 2#64)))
         [19#8, 101#8, 32#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm Flapjack.Compiler.Backend.LabLang.AsmWithLab.halt
-        18446744073709545856#64 [111#8, 224#8, 31#8, 152#8] 4,
+        18446744073709546348#64 [111#8, 224#8, 223#8, 182#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 66 2 4, Flapjack.Compiler.Backend.LabLang.Line.label 66 1 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -134,7 +134,7 @@ def Reencode0_66 : LabSem.LabSectionHOL 64 :=
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.callFFI
           (Flapjack.Basis.Pure.MlString.MlString.implode [116#8, 114#8, 97#8, 112#8]))
-        18446744073709545388#64 [111#8, 224#8, 207#8, 250#8] 4,
+        18446744073709546168#64 [111#8, 224#8, 159#8, 171#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 66 3 4,
       Flapjack.Compiler.Backend.LabLang.Line.asm
         (Flapjack.Compiler.Backend.LabLang.AsmOrCbw.asmi
@@ -154,11 +154,11 @@ def Reencode0_66 : LabSem.LabSectionHOL 64 :=
         [19#8, 101#8, 0#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
         (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 5 0))
-        18446744073709546568#64 [111#8, 224#8, 159#8, 196#8] 4,
+        18446744073709547060#64 [111#8, 224#8, 95#8, 227#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 66 4 4] }
-theorem localLabels0_66_eq : LabToTarget.sectionLabels 5732 Encoded66.lines [] = (5920, localLabels0_66) := by
+theorem localLabels0_66_eq : LabToTarget.sectionLabels 5240 Encoded66.lines [] = (5428, localLabels0_66) := by
   kernel_rfl
-theorem Reencode0_66_eq : LabToTarget.encLinesAgain Target.labels0 Target.ffis 5732 riscvConfig.encode Encoded66.lines [] true = (Reencode0_66.lines, 5920, true) := by
+theorem Reencode0_66_eq : LabToTarget.encLinesAgain Target.labels0 Target.ffis 5240 riscvConfig.encode Encoded66.lines [] true = (Reencode0_66.lines, 5428, true) := by
   kernel_rfl
 #print axioms localLabels0_66_eq
 #print axioms Reencode0_66_eq

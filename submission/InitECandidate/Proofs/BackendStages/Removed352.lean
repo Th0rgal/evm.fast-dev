@@ -14,7 +14,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody352_2 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 5
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 160#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 320#64))
 
 def RemovedBody352_3 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -22,7 +22,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody352_4 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 2
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 168#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 328#64))
 
 def RemovedBody352_5 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -30,7 +30,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody352_6 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 3
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 176#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 336#64))
 
 def RemovedBody352_7 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.skip
@@ -38,7 +38,7 @@ Flapjack.Compiler.Backend.StackLang.Prog.skip
 def RemovedBody352_8 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst
   (Flapjack.Compiler.Encoders.Asm.HolInst.mem Flapjack.WordMemOp.load 4
-    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 184#64))
+    (Flapjack.Compiler.Encoders.Asm.HolAddr.addr 1 344#64))
 
 def RemovedBody352_9 : StackLang.HolProg 64 :=
 Flapjack.Compiler.Backend.StackLang.Prog.inst

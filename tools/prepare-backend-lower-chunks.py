@@ -10,11 +10,13 @@ for first in range(args.start_label,STOP_LABEL,16):
  last=min(first+15,LAST_LABEL);ns=range(first,last+1);name=f"{args.stage}Chunk{first}_{last}"
  for n in ns:
   source=root/f"submission/InitECandidate/Proofs/BackendStages/{args.stage}{n}.lean"
+  output=root/f".lake/build/lib/lean/InitECandidate/Proofs/BackendStages/{args.stage}{n}.olean"
   cert=work/f"{args.stage}{n}.check.json"
   baseline=root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
-  while not (source.exists() and cert.exists() and
+  while not (source.exists() and output.exists() and cert.exists() and
              source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
-             cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             output.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+             cert.stat().st_mtime_ns >= output.stat().st_mtime_ns and
              json.loads(cert.read_text()).get("returncode")==0):
    time.sleep(1)
  prevchunk=f"{previous}Chunk{first}_{last}"
@@ -23,7 +25,8 @@ for first in range(args.start_label,STOP_LABEL,16):
  prevcert=work/f"{prevchunk}.check.json"
  while not (prevsource.exists() and prevoutput.exists() and prevcert.exists() and
             prevsource.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
-            prevcert.stat().st_mtime_ns >= prevsource.stat().st_mtime_ns and
+            prevoutput.stat().st_mtime_ns >= prevsource.stat().st_mtime_ns and
+            prevcert.stat().st_mtime_ns >= prevoutput.stat().st_mtime_ns and
             json.loads(prevcert.read_text()).get("returncode")==0):
   time.sleep(1)
  s=f"import InitECandidate.Proofs.BackendStages.{prevchunk}\n"+"".join(f"import InitECandidate.Proofs.BackendStages.{args.stage}{n}\n" for n in ns)

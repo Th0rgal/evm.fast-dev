@@ -12,6 +12,8 @@ def shmemFfis : List HolFfiName := [Flapjack.HolFfiName.sharedMem Flapjack.HolSh
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
+  Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedRead,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,
   Flapjack.HolFfiName.sharedMem Flapjack.HolShmemOp.mappedWrite,

@@ -7,12 +7,12 @@ set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend
 open InitECandidate.Proofs.BackendStages
 namespace InitECandidate.Proofs.BackendStages.Metadata
-theorem walkStep181 : walkShmemLines Padded181.lines 48840 beforeFfis181 beforeShmem181 = (49012, afterFfis181, afterShmem181) := by
-  with_unfolding_all rfl
-theorem shmemStep181 (rest : LabSem.LabProgHOL 64) : LabToTarget.getShmemInfo (Padded181 :: rest) 48840 beforeFfis181 beforeShmem181 = LabToTarget.getShmemInfo rest 49012 afterFfis181 afterShmem181 := by
+theorem walkStep181 : walkShmemLines Padded181.lines 97596 beforeFfis181 beforeShmem181 = (97768, afterFfis181, afterShmem181) := by
+  kernel_rfl
+theorem shmemStep181 (rest : LabSem.LabProgHOL 64) : LabToTarget.getShmemInfo (Padded181 :: rest) 97596 beforeFfis181 beforeShmem181 = LabToTarget.getShmemInfo rest 97768 afterFfis181 afterShmem181 := by
   rw [getShmemInfo_section, walkStep181]
 theorem symbolLength181 : LabToTarget.secLength Padded181.lines 0 = 172 := by
-  with_unfolding_all rfl
+  kernel_rfl
 #print axioms shmemStep181
 #print axioms symbolLength181
 end InitECandidate.Proofs.BackendStages.Metadata

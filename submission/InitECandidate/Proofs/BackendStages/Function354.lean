@@ -92,8 +92,8 @@ def stackBody354_26 : StackLang.HolProg 64 :=
 .seq stackBody354_0 stackBody354_25
 
 def function354 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody354_26, 0, bitmapPrefix, 1034)
-theorem function354_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized354.2.2 InitECandidate.Proofs.StackAnalysis.optimized354.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1034) = function354 bitmapPrefix := by
+(stackBody354_26, 0, bitmapPrefix, 1026)
+theorem function354_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized354.2.2 InitECandidate.Proofs.StackAnalysis.optimized354.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1026) = function354 bitmapPrefix := by
   kernel_rfl
 #print axioms function354_eq
 end InitECandidate.Proofs.BackendStages

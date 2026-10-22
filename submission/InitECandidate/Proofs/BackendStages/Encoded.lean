@@ -51,22 +51,17 @@ import InitECandidate.Proofs.BackendStages.EncodedChunk800_815
 import InitECandidate.Proofs.BackendStages.EncodedChunk816_831
 import InitECandidate.Proofs.BackendStages.EncodedChunk832_847
 import InitECandidate.Proofs.BackendStages.EncodedChunk848_863
-import InitECandidate.Proofs.BackendStages.EncodedChunk864_879
-import InitECandidate.Proofs.BackendStages.EncodedChunk880_889
+import InitECandidate.Proofs.BackendStages.EncodedChunk864_877
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 namespace InitECandidate.Proofs.BackendStages.Encoded
-def sections52 : LabSem.LabProgHOL 64 := []
-theorem sections52_eq : Filtered.sections52.map (LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length) = sections52 := by rfl
-def sections51 := EncodedChunk880_889.sections ++ sections52
-theorem sections51_eq : Filtered.sections51.map (LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length) = sections51 := by
-  unfold Filtered.sections51 sections51
-  rw [List.map_append, EncodedChunk880_889.compiled_eq, sections52_eq]
-def sections50 := EncodedChunk864_879.sections ++ sections51
+def sections51 : LabSem.LabProgHOL 64 := []
+theorem sections51_eq : Filtered.sections51.map (LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length) = sections51 := by rfl
+def sections50 := EncodedChunk864_877.sections ++ sections51
 theorem sections50_eq : Filtered.sections50.map (LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length) = sections50 := by
   unfold Filtered.sections50 sections50
-  rw [List.map_append, EncodedChunk864_879.compiled_eq, sections51_eq]
+  rw [List.map_append, EncodedChunk864_877.compiled_eq, sections51_eq]
 def sections49 := EncodedChunk848_863.sections ++ sections50
 theorem sections49_eq : Filtered.sections49.map (LabToTarget.encSec riscvConfig.encode (riscvConfig.encode (.inst .skip)).length) = sections49 := by
   unfold Filtered.sections49 sections49

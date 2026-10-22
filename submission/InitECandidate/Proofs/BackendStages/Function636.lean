@@ -331,8 +331,8 @@ def stackBody636_93 : StackLang.HolProg 64 :=
 .seq stackBody636_0 stackBody636_92
 
 def function636 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody636_93, 0, bitmapPrefix, 2593)
-theorem function636_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized636.2.2 InitECandidate.Proofs.StackAnalysis.optimized636.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2593) = function636 bitmapPrefix := by
+(stackBody636_93, 0, bitmapPrefix, 2585)
+theorem function636_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized636.2.2 InitECandidate.Proofs.StackAnalysis.optimized636.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 2585) = function636 bitmapPrefix := by
   kernel_rfl
 #print axioms function636_eq
 end InitECandidate.Proofs.BackendStages

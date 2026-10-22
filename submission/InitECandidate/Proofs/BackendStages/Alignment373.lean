@@ -26,10 +26,10 @@ def Alignment373 : LabSem.LabSectionHOL 64 :=
           (Flapjack.Compiler.Encoders.Asm.HolAsm.inst (Flapjack.Compiler.Encoders.Asm.HolInst.const 11 1#64)))
         [147#8, 101#8, 16#8, 0#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.labAsm
-        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 372 0))
-        18446744073709550988#64 [111#8, 240#8, 223#8, 216#8] 4,
+        (Flapjack.Compiler.Backend.LabLang.AsmWithLab.jump (Flapjack.Compiler.Backend.LabLang.Lab.lab 370 0))
+        18446744073709550940#64 [111#8, 240#8, 223#8, 213#8] 4,
       Flapjack.Compiler.Backend.LabLang.Line.label 373 2 0] }
-theorem Alignment373_eq : LabToTarget.linesUpdLabLen 231844 TargetChecks.Reencode1_373.lines [] = (Alignment373.lines, 231860) := by
+theorem Alignment373_eq : LabToTarget.linesUpdLabLen 287160 TargetChecks.Reencode1_373.lines [] = (Alignment373.lines, 287176) := by
   kernel_rfl
 #print axioms Alignment373_eq
 end InitECandidate.Proofs.BackendStages

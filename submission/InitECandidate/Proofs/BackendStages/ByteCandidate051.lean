@@ -1,20 +1,13 @@
-import InitECandidate.Proofs.BackendStages.BytePiecesData335
-import InitECandidate.Proofs.BackendStages.BytePiecesData336
-import InitECandidate.Proofs.BackendStages.BytePiecesData337
-import InitECandidate.Proofs.BackendStages.BytePiecesData338
-import InitECandidate.Proofs.BackendStages.BytePiecesData339
-import InitECandidate.Proofs.BackendStages.BytePiecesData340
-import InitECandidate.Proofs.BackendStages.BytePiecesData341
-import InitECandidate.Proofs.BackendStages.BytePiecesData342
-import InitECandidate.Proofs.BackendStages.BytePiecesData343
-import InitECandidate.Proofs.BackendStages.BytePiecesData344
+import InitECandidate.Proofs.BackendStages.BytePiecesData272
+import InitECandidate.Proofs.BackendStages.BytePiecesData273
+import InitECandidate.Proofs.BackendStages.BytePiecesData274
 import InitECandidate.Bytes051
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 namespace InitECandidate.Proofs.BackendStages.BytePieces
-theorem candidate051_eq : InitECandidate.bytes051 = [piece335_1, piece336_0, piece337_0, piece338_0, piece339_0, piece340_0, piece341_0, piece342_0, piece343_0, piece344_0].flatten := by
-  rw [piece335_1_eq, piece336_0_eq, piece337_0_eq, piece338_0_eq, piece339_0_eq, piece340_0_eq, piece341_0_eq, piece342_0_eq, piece343_0_eq, piece344_0_eq]
+theorem candidate051_eq : InitECandidate.bytes051 = [piece272_1, piece273_0, piece274_0].flatten := by
+  rw [piece272_1_eq, piece273_0_eq, piece274_0_eq]
   rfl
 #print axioms candidate051_eq
 end InitECandidate.Proofs.BackendStages.BytePieces

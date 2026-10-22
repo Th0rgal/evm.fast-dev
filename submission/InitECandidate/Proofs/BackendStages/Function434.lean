@@ -236,8 +236,8 @@ def stackBody434_66 : StackLang.HolProg 64 :=
 .seq stackBody434_0 stackBody434_65
 
 def function434 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody434_66, 0, bitmapPrefix, 1320)
-theorem function434_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized434.2.2 InitECandidate.Proofs.StackAnalysis.optimized434.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1320) = function434 bitmapPrefix := by
+(stackBody434_66, 0, bitmapPrefix, 1312)
+theorem function434_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized434.2.2 InitECandidate.Proofs.StackAnalysis.optimized434.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1312) = function434 bitmapPrefix := by
   kernel_rfl
 #print axioms function434_eq
 end InitECandidate.Proofs.BackendStages

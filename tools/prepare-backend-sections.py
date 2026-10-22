@@ -42,7 +42,8 @@ for start in range(0,len(labels),args.batch_size):
         baseline = root/"submission/InitECandidate/Proofs/BackendStages/RawInfoData.lean"
         while not (source.exists() and output.exists() and cert.exists() and
                    source.stat().st_mtime_ns >= baseline.stat().st_mtime_ns and
-                   cert.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+                   output.stat().st_mtime_ns >= source.stat().st_mtime_ns and
+                   cert.stat().st_mtime_ns >= output.stat().st_mtime_ns and
                    json.loads(cert.read_text()).get("returncode")==0):
             time.sleep(1)
     runner = work/f"GenerateSection{batch[0]}_{batch[-1]}.lean"

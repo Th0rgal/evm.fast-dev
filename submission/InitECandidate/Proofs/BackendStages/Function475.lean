@@ -288,8 +288,8 @@ def stackBody475_80 : StackLang.HolProg 64 :=
 .seq stackBody475_0 stackBody475_79
 
 def function475 (bitmapPrefix : AppList (BitVec 64)) : StackLang.HolProg 64 × Nat × (AppList (BitVec 64) × Nat) :=
-(stackBody475_80, 0, bitmapPrefix, 1503)
-theorem function475_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized475.2.2 InitECandidate.Proofs.StackAnalysis.optimized475.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1503) = function475 bitmapPrefix := by
+(stackBody475_80, 0, bitmapPrefix, 1495)
+theorem function475_eq (bitmapPrefix : AppList (BitVec 64)) : WordToStack.Native.compileProgNative riscvConfig false InitECandidate.Proofs.StackAnalysis.optimized475.2.2 InitECandidate.Proofs.StackAnalysis.optimized475.2.1 (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) (bitmapPrefix, 1495) = function475 bitmapPrefix := by
   kernel_rfl
 #print axioms function475_eq
 end InitECandidate.Proofs.BackendStages
