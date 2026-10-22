@@ -1,3 +1,4 @@
+import InitECandidate.Solver.SoftwareGuestHintedPrecompiles
 import InitECandidate.Solver.PanToCrepClock
 import InitECandidate.Solver.StackToLabClock
 import InitECandidate.Solver.LabToTargetClock
