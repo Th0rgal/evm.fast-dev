@@ -5,6 +5,14 @@ import InitECandidate.Proofs.BootstrapProgram
 import InitECandidate.Proofs.OracleBaselineCorrectness
 import Flapjack.Compiler.Backend.LabToTarget.EvaluateIgnoreClocks
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 set_option autoImplicit false
 
 /-!

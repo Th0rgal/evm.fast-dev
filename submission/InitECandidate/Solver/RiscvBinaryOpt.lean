@@ -3,6 +3,14 @@ import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Solver.FastHalt
 import InitECandidate.Solver.BoundedCertificate
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000
@@ -42,7 +50,6 @@ open InitECandidate.Proofs.BootstrapSteps
 open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapAsmComposition
 open InitECandidate.Solver.YukonSelfContainedCert (bootstrapTraceSteps)
-open InitECandidate.Proofs.BootstrapTrace
 open InitECandidate.Solver.YukonSelfContainedCert (prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps full_baseline_evaluator_exact)
 open InitECandidate.Solver.FastHalt
 open InitECandidate.Solver.BoundedCertificate

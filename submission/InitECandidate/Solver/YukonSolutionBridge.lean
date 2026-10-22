@@ -4,6 +4,14 @@ import InitECandidate.Solver.YukonSelfContainedCert
 import InitECandidate.Solver.FiniteKMasterComposition
 import InitECandidate.Solver.EvmOpcodeTightBound
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000
@@ -105,8 +113,8 @@ theorem claimed_scores_values_and_hierarchy :
     submissionFinite.code.length ≤ InitE.codeSizeLimit ∧
     submissionRefined.code.length ≤ InitE.codeSizeLimit ∧
     submissionTight.code.length ≤ InitE.codeSizeLimit := by
-  have hcode : InitE.baselineSubmission.code.length ≤ InitE.codeSizeLimit :=
-    InitE.baselineSubmission_admitted.code_limit
+  have hcode : InitECandidate.Solver.FastEnv.baselineSubmission.code.length ≤ InitE.codeSizeLimit :=
+    InitECandidate.Solver.FastEnv.baselineSubmission_admitted.code_limit
   refine ⟨by rw [claimedScoreFinite, candidateFiniteK_eq],
     rfl,
     by rw [claimedScoreTight]; decide,
@@ -235,12 +243,12 @@ theorem solution_certificate_tight
 
 /-- Theorem 6 (`non_vacuous_and_tight`): Monotone upward transfer between finite certificates
 (`K₁ ≤ K₂ → Certificate (baselineWithFiniteK K₁) (.finite K₁) → Certificate (baselineWithFiniteK K₂) (.finite K₂)`),
-plus direct downgrade from any finite `K` certificate to `InitE.Certificate InitE.baselineSubmission .infinity`. -/
+plus direct downgrade from any finite `K` certificate to `InitE.Certificate InitECandidate.Solver.FastEnv.baselineSubmission .infinity`. -/
 theorem solution_certificate_monotone_transfer
     {K₁ K₂ : Nat} (hle : K₁ ≤ K₂)
     (hcert₁ : InitE.Certificate (baselineWithFiniteK K₁) (.finite K₁)) :
     InitE.Certificate (baselineWithFiniteK K₂) (.finite K₂) ∧
-    InitE.Certificate InitE.baselineSubmission .infinity := by
+    InitE.Certificate InitECandidate.Solver.FastEnv.baselineSubmission .infinity := by
   refine ⟨?_, ?_⟩
   · refine ⟨rfl, YukonSelfContainedCert.baselineWithFiniteK_admitted K₂, ?_⟩
     intro input hgas outcome events hsrc hcov
@@ -253,14 +261,14 @@ theorem solution_certificate_monotone_transfer
     rw [YukonSelfContainedCert.baselineWithFiniteK_machineConfig K₂,
         YukonSelfContainedCert.baselineWithFiniteK_initialState K₂]
     exact hrun
-  · refine ⟨rfl, InitE.baselineSubmission_admitted, ?_⟩
+  · refine ⟨rfl, InitECandidate.Solver.FastEnv.baselineSubmission_admitted, ?_⟩
     intro input hgas outcome events hsrc hcov
     obtain ⟨steps, _, hm⟩ := hcert₁.correct input hgas outcome events hsrc hcov
     obtain ⟨out', ms', ffi', hrun, hmatch⟩ := hm
     rw [YukonSelfContainedCert.baselineWithFiniteK_machineConfig K₁,
         YukonSelfContainedCert.baselineWithFiniteK_initialState K₁] at hrun
     refine ⟨steps, trivial, out', ms', ffi', ?_, hmatch⟩
-    rw [InitE.baselineSubmission_machineConfig, InitE.baselineSubmission_initialState]
+    rw [InitECandidate.Solver.FastEnv.baselineSubmission_machineConfig, InitECandidate.Solver.FastEnv.baselineSubmission_initialState]
     exact hrun
 
 

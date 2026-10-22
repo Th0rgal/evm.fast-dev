@@ -1,6 +1,13 @@
 import InitECandidate.Solver.StackRemoveToStackNamesStateRelAndClockBridge
 import Flapjack.Compiler.Backend.StackToLab.Proofs.FlattenSemantics
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option linter.unusedVariables false
 set_option maxHeartbeats 1600000

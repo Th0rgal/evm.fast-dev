@@ -1,6 +1,13 @@
 import InitECandidate.Solver.FastBoundedPanToWord
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitClock
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000
@@ -180,7 +187,7 @@ theorem crep_eval_exp_clock_irrel {width : Nat} [NeZero width] {σ : Type}
 
 /-- 6a. `baselineSubmission` equipped with a finite step budget `.finite K`. -/
 def baselineWithFiniteK (K : Nat) : InitE.Submission :=
-  { InitE.baselineSubmission with K := .finite K }
+  { InitECandidate.Solver.FastEnv.baselineSubmission with K := .finite K }
 
 private theorem baselineWithFiniteK_machineConfig (K : Nat) :
     (baselineWithFiniteK K).machineConfig = baselineMachineConfig := rfl
@@ -209,7 +216,7 @@ private theorem baselineWithFiniteK_initialState (K : Nat) :
 /-- 6b. Admission theorem for `baselineWithFiniteK K`. -/
 theorem baselineWithFiniteK_admitted (K : Nat) :
     (baselineWithFiniteK K).Admitted := by
-  have h := InitE.baselineSubmission_admitted
+  have h := InitECandidate.Solver.FastEnv.baselineSubmission_admitted
   exact ⟨h.code_nonempty, h.code_limit, h.anchor_lower, h.anchor_upper,
     h.anchor_aligned, h.name_boundary, h.metadata_length, h.ordinary_slots_loaded,
     h.mmio_valid, h.entry_distinct, h.entry_loaded, h.entry_aligned,

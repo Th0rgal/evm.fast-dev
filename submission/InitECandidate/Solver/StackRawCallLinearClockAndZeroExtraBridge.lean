@@ -6,6 +6,13 @@ import Flapjack.Compiler.Backend.StackRawCall.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.StackRawCall.Proofs.CompLn
 import InitECandidate.Solver.PanToStackAllocIdentityAndUnconditionalNoGcCall
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option linter.unusedVariables false
 set_option maxHeartbeats 1000000

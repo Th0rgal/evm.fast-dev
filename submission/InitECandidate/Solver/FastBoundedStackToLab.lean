@@ -4,6 +4,13 @@ import Flapjack.Compiler.Backend.WordToStack.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.WordToWord.Proofs.CompileSemantics
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyTopResource
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 namespace InitE
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
 open Flapjack.Compiler.Backend.LabSem Flapjack.Compiler.Backend.LabProps

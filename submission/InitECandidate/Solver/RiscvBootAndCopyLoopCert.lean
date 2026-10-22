@@ -1,6 +1,13 @@
 import InitECandidate.Solver.SelfContainedIsoReducedK
 import InitECandidate.Solver.FastHalt
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000
@@ -19,7 +26,7 @@ open InitECandidate.Proofs
 open InitECandidate.Proofs.BootstrapSteps
 open InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapAsmComposition
-open InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.FastEnv.BootstrapTrace
 open InitECandidate.Solver.YukonBaselineCompat (bootstrapTraceSteps prefix_steps loopBody_steps tail_steps loopProgram_steps full_steps)
 open InitECandidate.Solver
 open InitECandidate.Solver.FastHalt

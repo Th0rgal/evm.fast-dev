@@ -5,6 +5,7 @@ import Guest.GasLimit
 import Flapjack.Pancake.Semantics.PanSem.StateExactFiniteMap
 import Flapjack.Pancake.Semantics.PanProps.EvalInvariant
 
+
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0

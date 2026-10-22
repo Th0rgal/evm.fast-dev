@@ -4,6 +4,13 @@ import InitECandidate.Solver.LoopWordStackExactClockIso
 import InitECandidate.Solver.WordToStackClockExactOffset
 import InitECandidate.Solver.SelfContainedBasicBlockBridge
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 /-!
@@ -147,11 +154,11 @@ theorem reduced_finite_certificate
 theorem reduced_baseline_compatible
     (finite : InitE.Certificate (baselineWithFiniteK sixPassReducedK) (.finite sixPassReducedK)) :
     InitE.Certificate SelfContainedEndToEndCert.submission .infinity := by
-  refine ⟨rfl, InitE.baselineSubmission_admitted, ?_⟩
+  refine ⟨rfl, InitECandidate.Solver.FastEnv.baselineSubmission_admitted, ?_⟩
   intro input gas outcome events source covered
   obtain ⟨steps, _, execution⟩ := finite.correct input gas outcome events source covered
   exact ⟨steps, trivial,
-    (SelfContainedEndToEndCert.matchingExecutionAt_with_score InitE.baselineSubmission
+    (SelfContainedEndToEndCert.matchingExecutionAt_with_score InitECandidate.Solver.FastEnv.baselineSubmission
       (.finite sixPassReducedK) input outcome events steps).mp execution⟩
 
 end InitECandidate.Solver.SelfContainedSixPassMaster

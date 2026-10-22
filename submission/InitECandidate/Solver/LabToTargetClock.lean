@@ -8,6 +8,14 @@ import InitECandidate.Solver.BoundedCertificate
 import InitECandidate.Solver.LabToTargetMultiStepBound
 import InitECandidate.Solver.LoopToWordToStackNamesAndLabToTargetClockMaster
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 open scoped InitECandidate.Proofs.CompilerComputation
 
 set_option autoImplicit false

@@ -3,6 +3,13 @@ import Flapjack.Pancake.PanToWord
 import Flapjack.Compiler.Backend.WordToStack.NativeTopCompile
 import Flapjack.Compiler.Backend.StackAlloc.Compile
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 namespace InitECandidate.Solver.PanToStackNoStoreConsts

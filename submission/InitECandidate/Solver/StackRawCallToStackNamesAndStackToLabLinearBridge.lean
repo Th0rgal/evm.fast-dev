@@ -2,6 +2,13 @@ import InitECandidate.Solver.StackRawCallLinearClockAndZeroExtraBridge
 import InitECandidate.Solver.StackNamesExactClockIso
 import Flapjack.Compiler.Backend.StackToLab.Proofs.FlattenCorrect
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 /-!

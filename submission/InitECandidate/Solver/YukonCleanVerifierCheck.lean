@@ -7,6 +7,14 @@ import Flapjack.Compiler.Backend.StackRemove.Proofs.InitSemantics
 import Flapjack.Compiler.Backend.StackNames.Proofs.CompileSemantics
 import Flapjack.Compiler.Backend.StackProps.EvaluateAddClock
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 open scoped InitECandidate.Proofs.CompilerComputation
 
 set_option autoImplicit false

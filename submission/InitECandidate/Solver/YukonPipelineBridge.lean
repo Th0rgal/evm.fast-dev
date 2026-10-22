@@ -5,6 +5,13 @@ import InitECandidate.Solver.FastBoundedTarget
 import InitECandidate.Solver.FastBoundedStackToLab
 import InitECandidate.Solver.FastBoundedPanToWord
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000

@@ -1,6 +1,14 @@
 import InitECandidate.Solver.FastBaselineEnv
 import InitECandidate.Proofs.CompilerOracles
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 /-! Yukon compatibility copies: all new exact-clock proofs live in Solver.
 The imported module paths already exist in the pinned initial submission.
 No post-baseline Proofs declaration is used as a proof of an exact-clock fact. -/
@@ -17,7 +25,7 @@ open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Compiler.Backend.Semantics.TargetProps
 open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapCopy
 open InitECandidate.Proofs.BootstrapAsmComposition
-open InitECandidate.Proofs.BootstrapStraightLine InitECandidate.Proofs.BootstrapTrace
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine InitECandidate.Solver.FastEnv.BootstrapTrace
 open Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
 open Flapjack.Compiler.Backend.BackendProof Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Pancake.Proofs.PanToTarget
@@ -53,9 +61,9 @@ theorem baseline_finite_facts :
     (∀ i : Fin baselineEntryPcs.length, 20 ≤ i.val →
       dispatchAddress 0 ≠ baselineEntryPcs[i] ∧ dispatchAddress 1 ≠ baselineEntryPcs[i]) ∧
     baselineNames.length = baselineEntryPcs.length := by
-  have h := InitE.baseline_finite_facts
-  unfold InitE.baselineEntryPcs InitE.dispatchAddress at h
-  unfold InitE.baselineNames InitE.baselineMmio at h
+  have h := InitECandidate.Solver.FastEnv.baseline_finite_facts
+  unfold InitECandidate.Solver.FastEnv.baselineEntryPcs InitECandidate.Solver.FastEnv.dispatchAddress at h
+  unfold InitECandidate.Solver.FastEnv.baselineNames InitECandidate.Solver.FastEnv.baselineMmio at h
   unfold baselineEntryPcs dispatchAddress baselineNames baselineMmio
   exact h
 
@@ -71,7 +79,7 @@ theorem baseline_pan_installed (input : Guest.InputBlob) :
       baselineMachineConfig baselineLabConfig.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ (sourceInitialState input).memory)
       (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs :=
-  InitE.baseline_pan_installed input
+  InitECandidate.Solver.FastEnv.baseline_pan_installed input
 
 /-- Exact witness count for every instruction in the bootstrap instruction subset. -/
 def BootstrapInstOk : HolAsm 64 → Prop

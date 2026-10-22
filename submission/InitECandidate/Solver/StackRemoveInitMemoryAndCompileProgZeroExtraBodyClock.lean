@@ -2,6 +2,13 @@ import InitECandidate.Solver.StackRemoveNoStoreConstsZeroExtraClock
 import Flapjack.Compiler.Backend.StackToLab.Compile
 import Flapjack.Compiler.Backend.StackRemove.Proofs.InitClock
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 /-!

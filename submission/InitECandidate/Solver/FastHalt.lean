@@ -2,6 +2,7 @@ import InitE.Challenge
 import InitE.SubmissionAdmission
 import Flapjack.RiscV.CorrectnessEncoding.Jump.Native
 
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000

@@ -16,6 +16,7 @@ import Flapjack.Pancake.Proofs.PanSimp.StateRelImpSemantics
 import Flapjack.Pancake.Proofs.PanStructs.SemanticsEq
 import Flapjack.Pancake.Proofs.PanGlobals.CompileTopSemanticsDecls
 
+
 /-! Clock agreement proofs kept in Solver so Yukon preserves them.
 Only the fixed baseline CompilerOracles module is imported from InitECandidate.Proofs. -/
 

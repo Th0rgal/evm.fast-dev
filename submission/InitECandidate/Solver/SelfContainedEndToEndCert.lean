@@ -1,6 +1,13 @@
 import InitECandidate.Solver.SelfContainedPipelineBridge
 import InitECandidate.Solver.SelfContainedMasterK
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 set_option maxRecDepth 200000
 set_option maxHeartbeats 2000000
@@ -136,7 +143,7 @@ theorem end_to_end_refined_finite_certificate
     stack_not_timeOut lab_not_timeOut target_not_timeOut_of_lab_halt
 
 /-- Baseline submission used by Solution.lean, with the unchanged infinity claim. -/
-def submission : InitE.Submission := InitE.baselineSubmission
+def submission : InitE.Submission := InitECandidate.Solver.FastEnv.baselineSubmission
 
 /-- Changing the score field preserves every concrete matching execution. -/
 theorem matchingExecutionAt_with_score (s : InitE.Submission) (K : InitE.NatE)
@@ -150,11 +157,11 @@ theorem matchingExecutionAt_with_score (s : InitE.Submission) (K : InitE.NatE)
 theorem baseline_certificate_of_refined
     (finite : InitE.Certificate (baselineWithFiniteK refinedCandidateK) (.finite refinedCandidateK)) :
     InitE.Certificate submission .infinity := by
-  refine ⟨rfl, InitE.baselineSubmission_admitted, ?_⟩
+  refine ⟨rfl, InitECandidate.Solver.FastEnv.baselineSubmission_admitted, ?_⟩
   intro input gas outcome events source covered
   obtain ⟨steps, _, execution⟩ := finite.correct input gas outcome events source covered
   exact ⟨steps, trivial,
-    (matchingExecutionAt_with_score InitE.baselineSubmission (.finite refinedCandidateK)
+    (matchingExecutionAt_with_score InitECandidate.Solver.FastEnv.baselineSubmission (.finite refinedCandidateK)
       input outcome events steps).mp execution⟩
 
 /-- Exact assembly of the finite claim and its Solution-compatible baseline claim. -/

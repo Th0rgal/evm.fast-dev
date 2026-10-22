@@ -1,6 +1,13 @@
 import InitECandidate.Solver.StackRemoveAndNamesNoStoreConsts
 import Flapjack.Compiler.Backend.StackToLab.Native
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 namespace InitECandidate.Solver.PanToStackToLabUnconditionalNoStoreConsts

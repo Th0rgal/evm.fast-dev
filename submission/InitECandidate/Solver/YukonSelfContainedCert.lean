@@ -7,6 +7,14 @@ import InitECandidate.Proofs.OracleBaselineCorrectness
 import InitECandidate.Proofs.BootstrapComposition
 import InitECandidate.Solver.FastBaselineEnv
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
+
 open scoped InitECandidate.Proofs.CompilerComputation
 
 set_option autoImplicit false
@@ -38,10 +46,8 @@ open InitE
 open InitECandidate.Proofs
 open InitECandidate.Proofs.BootstrapSteps (after)
 open InitECandidate.Proofs.BootstrapCopy
-open InitECandidate.Proofs.BootstrapStraightLine
-open InitECandidate.Proofs.BootstrapCopyGuards
 open InitECandidate.Proofs.BootstrapAsmComposition (EvaluatorGuards shiftInterfer_identity)
-open InitECandidate.Proofs.BootstrapTrace (fullBootstrapCode full_length full_checked full_guards full_endpoint)
+open InitECandidate.Solver.FastEnv.BootstrapTrace (fullBootstrapCode full_length full_checked full_guards full_endpoint)
 open Flapjack
 open Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Encoders.AsmSem
@@ -1366,7 +1372,7 @@ theorem oracle_full_baseline_certificate_of_not_timeOut (submission : Submission
 
 /-- `baselineSubmission` equipped with a finite step budget `.finite K`. -/
 def baselineWithFiniteK (K : Nat) : InitE.Submission :=
-  { InitE.baselineSubmission with K := .finite K }
+  { InitECandidate.Solver.FastEnv.baselineSubmission with K := .finite K }
 
 theorem baselineWithFiniteK_machineConfig (K : Nat) :
     (baselineWithFiniteK K).machineConfig = baselineMachineConfig := rfl
@@ -1395,7 +1401,7 @@ theorem baselineWithFiniteK_initialState (K : Nat) :
 /-- Admission theorem for `baselineWithFiniteK K`. -/
 theorem baselineWithFiniteK_admitted (K : Nat) :
     (baselineWithFiniteK K).Admitted := by
-  have h := InitE.baselineSubmission_admitted
+  have h := InitECandidate.Solver.FastEnv.baselineSubmission_admitted
   exact ⟨h.code_nonempty, h.code_limit, h.anchor_lower, h.anchor_upper,
     h.anchor_aligned, h.name_boundary, h.metadata_length, h.ordinary_slots_loaded,
     h.mmio_valid, h.entry_distinct, h.entry_loaded, h.entry_aligned,

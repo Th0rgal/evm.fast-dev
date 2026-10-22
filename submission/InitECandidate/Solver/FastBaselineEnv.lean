@@ -46,7 +46,8 @@ set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Flapjack Flapjack.RiscV.L3
 open Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Encoders.RiscV.Target
@@ -78,7 +79,7 @@ theorem baseline_finite_facts :
   unfold ffiNameBoundaryValid baselineEntryPcs baselineNames baselineMmio baselineLabConfig
   exact of_decide_eq_true (by kernel_rfl)
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BaselineInstallationFacts -/
 
@@ -88,7 +89,8 @@ set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open InitECandidate.Proofs
 open Flapjack Flapjack.RiscV.L3
 open Flapjack.Compiler.Encoders.Asm
@@ -278,11 +280,12 @@ theorem baseline_native_codeLoaded :
   rw [if_pos hprog]
   exact congrArg some (baseline_native_loaded_byte i)
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BaselineMemoryDomains -/
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Flapjack Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Compiler.Backend.LabToTarget
@@ -459,13 +462,14 @@ theorem baseline_heap_bitmap_disjoint (a : BitVec 64) :
   norm_num [sourceBase, ramEnd, ramStart, ramSize, initDataRam, initDataEnd]
   omega
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section StartupEnvironment -/
 
 set_option maxRecDepth 10000
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Classical
 open Flapjack Flapjack.RiscV.L3 Flapjack.Compiler.Encoders.RiscV.Target
 
@@ -504,11 +508,12 @@ theorem baselineInitialState_ram_zero (input : Guest.InputBlob) (a : BitVec 64)
 theorem baselineInitialState_registers_zero (input : Guest.InputBlob) (r : BitVec 5) :
     (baselineInitialState input).c_gpr (baselineInitialState input).procID r = 0 := rfl
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BaselineSubmissionDefinition -/
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Classical
 set_option maxRecDepth 100000
 set_option maxHeartbeats 0
@@ -541,7 +546,7 @@ theorem baselineSubmission_initialState (input : Guest.InputBlob) :
 
 
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BaselineSubmissionFacts -/
 
@@ -553,7 +558,8 @@ set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Flapjack
 
 private def admissionMmio : List Compiler.Backend.LabToTarget.ShmemInfoNum :=
@@ -669,11 +675,12 @@ theorem baseline_submission_finite :
   exact ⟨admission_names_length, admission_entry_nodup,
     admission_entry_conditions, admission_mmio_bounds⟩
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BaselineSubmission -/
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 set_option maxRecDepth 10000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend.LabToTarget
@@ -740,7 +747,7 @@ theorem baselineSubmission_admitted : baselineSubmission.Admitted := by
     simpa only [baseline_literal_layout.2.2] using h
   · rw [hsize]; decide
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section BootstrapCopyGuards -/
 
@@ -752,7 +759,8 @@ set_option cbv.warning false
 
 set_option autoImplicit false
 
-namespace InitECandidate.Proofs.BootstrapCopyGuards
+namespace InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitE InitECandidate.Proofs InitECandidate.Solver.FastEnv
 open InitE
 open Flapjack Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.AsmSem
 open Flapjack.Compiler.Encoders.RiscV.Target
@@ -846,7 +854,7 @@ theorem copyLoop_guards :
     EvaluatorGuards baselineMachineConfig (loopProgram 4617) copyEntryAsm :=
   copyLoop_guards_from 4617 0 (by decide)
 
-end InitECandidate.Proofs.BootstrapCopyGuards
+end InitECandidate.Solver.FastEnv.BootstrapCopyGuards
 
 /-! ## Section BootstrapTailChecks -/
 
@@ -854,14 +862,15 @@ set_option maxRecDepth 8192
 set_option linter.unusedSimpArgs false
 set_option autoImplicit false
 
-namespace InitECandidate.Proofs.BootstrapStraightLine
+namespace InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitE InitECandidate.Proofs InitECandidate.Solver.FastEnv InitECandidate.Proofs.BootstrapStraightLine InitECandidate.Solver.FastEnv.BootstrapCopyGuards
 open InitE
 open Flapjack Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.AsmSem
 open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Compiler.Backend.LabToTarget
 open Flapjack.Compiler.Backend.Semantics.TargetProps
 open Flapjack.RiscV.TargetProof
-open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapCopy InitECandidate.Proofs.BootstrapCopyGuards
+open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapCopy InitECandidate.Solver.FastEnv.BootstrapCopyGuards
 open InitECandidate.Proofs.BootstrapAsmComposition
 
 private theorem input_pc : (copyState 4617).pc = 0x8000002c := by
@@ -2008,20 +2017,21 @@ theorem tail_guards : EvaluatorGuards baselineMachineConfig tailCode (copyState 
   Eq.mp (congrArg (EvaluatorGuards baselineMachineConfig tailCode)
     (tailState0_eq (copyState 4617))) (trace_guards tail_trace)
 
-end InitECandidate.Proofs.BootstrapStraightLine
+end InitECandidate.Solver.FastEnv.BootstrapStraightLine
 
 /-! ## Section BootstrapTrace -/
 
 set_option autoImplicit false
 
-namespace InitECandidate.Proofs.BootstrapTrace
+namespace InitECandidate.Solver.FastEnv.BootstrapTrace
+open InitE InitECandidate.Proofs InitECandidate.Solver.FastEnv InitECandidate.Proofs.BootstrapStraightLine InitECandidate.Solver.FastEnv.BootstrapCopyGuards InitECandidate.Solver.FastEnv.BootstrapStraightLine
 open InitE
 open Flapjack Flapjack.RiscV.L3
 open Flapjack.Compiler.Encoders.Asm Flapjack.Compiler.Encoders.AsmSem
 open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Compiler.Backend.Semantics.TargetProps
-open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapCopy InitECandidate.Proofs.BootstrapStraightLine
-open InitECandidate.Proofs.BootstrapAsmComposition InitECandidate.Proofs.BootstrapCopyGuards
+open InitECandidate.Proofs.BootstrapSteps InitECandidate.Proofs.BootstrapCopy InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Proofs.BootstrapAsmComposition InitECandidate.Solver.FastEnv.BootstrapCopyGuards
 
 def fullBootstrapCode : List (HolAsm 64) :=
   prefixCode ++ (loopProgram 4617 ++ tailCode)
@@ -2117,7 +2127,7 @@ theorem full_evaluator {σ : Type} (io : HolFfiState σ) (ms : riscv_state)
       targetStateRel riscvTarget installedAsm post :=
   full_evaluator_of_tail io ms initial tail_checked tail_guards
 
-end InitECandidate.Proofs.BootstrapTrace
+end InitECandidate.Solver.FastEnv.BootstrapTrace
 
 /-! ## Section CompilerInstallationMetadata -/
 
@@ -2127,7 +2137,8 @@ set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open InitECandidate.Proofs
 open Flapjack Flapjack.Compiler.Backend.LabToTarget
 
@@ -2141,11 +2152,12 @@ theorem baseline_installation_metadata :
   rw [LiteralFacts.nativeCode_length]
   decide_cbv
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 /-! ## Section PanInstallationCore -/
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 0
 
@@ -2237,7 +2249,7 @@ theorem baseline_pan_installed_core :
           rec.reg,BitVec.ofNat 64 rec.exitPc+BitVec.ofNat 64 nativePc))
     simp only [machineMmioInfo,BitVec.add_comm]
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 
 /-! ## Section PanInstallation -/
@@ -2248,7 +2260,8 @@ set_option maxHeartbeats 0
 set_option cbv.maxSteps 1000000000
 set_option cbv.warning false
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 set_option maxRecDepth 10000
 set_option maxHeartbeats 0
 open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.RiscVConfig
@@ -2283,14 +2296,15 @@ theorem baseline_pan_installed (input : Guest.InputBlob) :
     _ _ (wlabWlocExact ∘ sourceMemory) _ ordinaryDomain _ sharedDomain
     rfl rfl rfl rfl (source_memory_domain input) rfl baseline_pan_installed_metadata
 
-end InitE
+end InitECandidate.Solver.FastEnv
 
 
 /-! ## Section InstallationTransport -/
 
 set_option maxRecDepth 10000
 
-namespace InitE
+namespace InitECandidate.Solver.FastEnv
+open InitE InitECandidate.Proofs
 open Flapjack Flapjack.Compiler.Encoders.Asm
 open Flapjack.Compiler.Encoders.RiscV.Target
 open Flapjack.Pancake.Proofs.PanToTarget
@@ -2366,4 +2380,4 @@ theorem baseline_endpoint_agreement (ms : Flapjack.RiscV.L3.riscv_state)
   · intro r hr
     exact (related.2.2.2.2 r hr).trans (canonical.2.2.2.2 r hr).symm
 
-end InitE
+end InitECandidate.Solver.FastEnv

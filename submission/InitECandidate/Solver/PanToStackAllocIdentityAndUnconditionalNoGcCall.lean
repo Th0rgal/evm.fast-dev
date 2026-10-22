@@ -7,6 +7,13 @@ import InitECandidate.Solver.PanToStackNoStoreConsts
 import InitECandidate.Solver.WordToWordFullCompileNoStoreConsts
 import InitECandidate.Solver.PanToStackRawCallNoAllocAndStackAllocStructural
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 

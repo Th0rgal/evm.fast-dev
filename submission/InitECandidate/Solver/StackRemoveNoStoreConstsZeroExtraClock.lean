@@ -3,6 +3,13 @@ import InitECandidate.Solver.WordToWordNoStubCall
 import Flapjack.Compiler.Backend.StackProps.EvaluateCodeBitmaps
 import Flapjack.Compiler.Backend.StackRemove.Proofs.CompCorrect
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 set_option autoImplicit false
 
 namespace InitECandidate.Solver.StackRemoveNoStoreConstsZeroExtraClock

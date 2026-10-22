@@ -5,6 +5,13 @@ import InitECandidate.Solver.LabToTargetClock
 import InitECandidate.Solver.GuestGasAndSpecFixes
 import InitECandidate.Solver.RiscvFastPathsAndSailBridge
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 open scoped InitECandidate.Proofs.CompilerComputation
 
 set_option autoImplicit false

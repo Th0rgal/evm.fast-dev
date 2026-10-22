@@ -8,6 +8,13 @@ import Flapjack.Pancake.Proofs.PanSimp.StateRelImpSemantics
 import Flapjack.Pancake.Proofs.PanStructs.SemanticsEq
 import Flapjack.Pancake.Proofs.PanGlobals.CompileTopSemanticsDecls
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 namespace InitE
 open Flapjack Flapjack.Pancake.PanLang
 open Flapjack.Basis.Pure.MlString

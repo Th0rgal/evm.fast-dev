@@ -5,6 +5,13 @@ import Flapjack.Compiler.Backend.LabToTarget.SemanticsCompileFinal
 import Flapjack.Compiler.Backend.LabFilter.Proofs.Semantics
 import Flapjack.Pancake.Proofs.PanToTarget.AssemblyMachineToLab
 
+open InitECandidate.Solver.FastEnv
+open InitECandidate.Proofs.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapCopyGuards
+open InitECandidate.Solver.FastEnv.BootstrapStraightLine
+open InitECandidate.Solver.FastEnv.BootstrapTrace
+
+
 namespace InitE
 open InitECandidate.Proofs
 open InitECandidate.Solver.YukonSelfContainedCert
