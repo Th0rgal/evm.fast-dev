@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Build the verification tools next to the project: comparator, lean4export and (on Linux) landrun.
+# Build the verification tools next to the project: comparator, lean4export, nanoda and (on Linux) landrun.
 #
 #   verifier/setup_tools.sh          # builds into verifier/.tools/ and runs comparator's test suite
 #
@@ -21,6 +21,8 @@ readonly comparator_rev="c0c5a52d2aff92b457c3e5ed4a68c1ebc5795809"
 readonly comparator_spool_sha256="de157a76ea8749d19456b32b48fab4ba60cf2ac1615d907a0e395b75ac7d2d4a"
 # Zouuup/landrun (Linux only)
 readonly landrun_rev="811cfff51ceaf3d9843708aa6d22e9b84ccac8b4"
+# ammkrn/nanoda_lib (independent Lean kernel)
+readonly nanoda_rev="998e0a84e4c1572ca279ff05007af6ec6639405a"
 
 minor() { sed -E 's/^leanprover\/lean4:v([0-9]+\.[0-9]+)\..*$/\1/' "$1"; }
 
@@ -68,6 +70,12 @@ lean4export_bin="${tools}/comparator/.lake/packages/lean4export/.lake/build/bin/
 comparator_bin="${tools}/comparator/.lake/build/bin/comparator"
 [[ -x "${lean4export_bin}" && -x "${comparator_bin}" ]]
 
+command -v cargo >/dev/null 2>&1 || { echo "Cargo is required to build nanoda" >&2; exit 1; }
+clone_at https://github.com/ammkrn/nanoda_lib.git "${nanoda_rev}" "${tools}/nanoda_lib"
+( cd "${tools}/nanoda_lib" && cargo build --release --bin nanoda_bin )
+nanoda_bin="${tools}/nanoda_lib/target/release/nanoda_bin"
+[[ -x "${nanoda_bin}" ]]
+
 if [[ "$(uname -s)" == Linux ]]; then
   command -v go >/dev/null 2>&1 || { echo "Go 1.24+ is required to build landrun" >&2; exit 1; }
   clone_at https://github.com/Zouuup/landrun.git "${landrun_rev}" "${tools}/landrun"
@@ -87,6 +95,7 @@ cat > "${tools}/env.sh" <<ENV
 export COMPARATOR_BIN="${comparator_bin}"
 export COMPARATOR_LEAN4EXPORT="${lean4export_bin}"
 export COMPARATOR_LANDRUN="${landrun_bin}"
+export COMPARATOR_NANODA="${nanoda_bin}"
 ENV
 echo "tools ready; source ${tools}/env.sh"
 echo "  lean4export rev: $(python3 -c "import json;print([p['rev'] for p in json.load(open('${tools}/comparator/lake-manifest.json'))['packages'] if p['name']=='lean4export'][0])")"

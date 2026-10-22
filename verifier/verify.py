@@ -48,7 +48,7 @@ def tools_env(root: Path) -> dict[str, str]:
         if line.startswith('export ') and '=' in line:
             name, value = line[7:].split('=', 1)
             values[name] = value.strip().strip('"')
-    for name in ('COMPARATOR_BIN', 'COMPARATOR_LEAN4EXPORT', 'COMPARATOR_LANDRUN'):
+    for name in ('COMPARATOR_BIN', 'COMPARATOR_LEAN4EXPORT', 'COMPARATOR_LANDRUN', 'COMPARATOR_NANODA'):
         file = Path(values.get(name, ''))
         if not file.is_absolute() or not file.is_file() or not os.access(file, os.X_OK):
             raise VerifyError(f'{name} must point to an installed executable')
@@ -142,6 +142,7 @@ def linux_command(cmd: list[str], project: Path, env: dict[str, str], hidden: li
              'HOME': str(Path.home()), 'LANG': 'C.UTF-8', 'LAKE_ARTIFACT_CACHE': 'false',
              'COMPARATOR_LANDRUN': env['COMPARATOR_LANDRUN'],
              'COMPARATOR_LEAN4EXPORT': env['COMPARATOR_LEAN4EXPORT'],
+             'COMPARATOR_NANODA': env['COMPARATOR_NANODA'],
              'INIT_E_VERIFIER_HOST_DEV': str(Path('/dev').stat().st_dev),
              'INIT_E_VERIFIER_HOST_PIDNS': str(Path('/proc/self/ns/pid').stat().st_ino),
              'INIT_E_VERIFIER_HOST_SHM_DEV': str(Path('/dev/shm').stat().st_dev)}
