@@ -25,7 +25,8 @@ for n in range(11):
     options = "\n".join(line for line in options.splitlines() if not line.startswith("import ")) + "\n"
     data = prefix.replace("namespace InitECandidate.Proofs.WordStages", f"namespace {ns}")
     data = re.sub(rf"import InitECandidate.Proofs.WordStages.Pass{a.label}_(\d+)",
-        lambda m: "import InitE.SourceDeclarations" if a.independent_data else f"import InitECandidate.Proofs.WordStages.{tag}{a.label}.Data{m.group(1)}", data)
+        lambda m: ("import InitE.SourceDeclarations" if a.independent_data and n != 6 else
+                   f"import InitECandidate.Proofs.WordStages.{tag}{a.label}.Data{m.group(1)}"), data)
     data = data.replace(f"import InitECandidate.Proofs.DeadStages{a.label}\n", "")
     (base / f"Data{n}.lean").write_text(data + f"end {ns}\n")
     proof = proof.replace("end InitECandidate.Proofs.WordStages", f"end {ns}")

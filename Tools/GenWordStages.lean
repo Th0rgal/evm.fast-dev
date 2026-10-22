@@ -1262,6 +1262,19 @@ unsafe def genWordStagesMain (args : List String) : IO Unit := do
           | _ => s!"WordRemove.removeMustTerminate ({prev})"
         let colorText ← if index == 9 then renderWordStage env (toExpr proposal) else pure ""
         let colorDef := if index == 9 then s!"def proposed{label} : Option (Spt Nat) :=\n" ++ colorText ++ "\n" else ""
+        -- RISC-V has `twoRegArith = false`, so pass 6 is exactly its input.
+        -- Reusing pass 5 avoids emitting and kernel-checking another full AST.
+        if index == 6 && !fused then
+          writeCompactCertificate s!"submission/InitECandidate/Proofs/WordStages/Pass{label}_6.lean"
+            (imports ++ "import InitECandidate.Proofs.CompilerComputation\n" ++
+             "open scoped InitECandidate.Proofs.CompilerComputation\n" ++
+             "open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target\n" ++
+             "namespace InitECandidate.Proofs.WordStages\n" ++
+             s!"def pass{label}_6 : WordLangProgHOL (BitVec 64) := pass{label}_5\n" ++
+             s!"theorem pass{label}_6_eq : WordInst.threeToTwoRegProg riscvConfig.twoRegArith pass{label}_5 = pass{label}_6 := by\n" ++
+             s!"  simp only [WordInst.threeToTwoRegProg, riscvConfig, Bool.false_eq_true, if_false, pass{label}_6]\n" ++
+             s!"#print axioms pass{label}_6_eq\nend InitECandidate.Proofs.WordStages\n")
+          continue
         let dataState ← IO.mkRef ({tag := s!"word{label}_{index}_"} : PancakeDataState)
         let text ← if args.contains "--word-data-dag" then wordProgData env dataState program
           else renderWordStage env (toExpr program)
