@@ -175,14 +175,14 @@ if [[ "${1:-}" == "--include-full-master-export" ]]; then
     InitECandidate.Solver.PanToTargetLinearClockAndGasMaster.pan_to_lab_eleven_pass_linear_clock \
     InitECandidate.Solver.PanToTargetLinearClockAndGasMaster.pan_to_riscv_target_full_compiler_clock_ratio
 else
-  EXP_SECS_MASTER="95.310"
-  EXP_BYTES_MASTER="1368491520"
-  EXP_MB_MASTER="1305.09"
-  EXP_LINES_MASTER="25452118"
-  NAN_SECS_MASTER="Verified (5 components: 34.737 s)"
-  NAN_RC_MASTER="0"
-  CMP_SECS_MASTER="Verified (5 components: 227.205 s)"
-  CMP_RC_MASTER="0"
+  EXP_SECS_MASTER="Skipped (pass --include-full-master-export)"
+  EXP_BYTES_MASTER="N/A"
+  EXP_MB_MASTER="N/A"
+  EXP_LINES_MASTER="N/A"
+  NAN_SECS_MASTER="Skipped (5 components verified above)"
+  NAN_RC_MASTER="skipped"
+  CMP_SECS_MASTER="Skipped (5 components verified above)"
+  CMP_RC_MASTER="skipped"
 fi
 
 echo "--- [3] Summary Table: FullBaseline vs OracleBaselineCertificate vs 6 Canonical Modules ---"

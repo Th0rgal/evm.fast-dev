@@ -27,11 +27,6 @@ import verify  # noqa: E402
 from check_submission import check, score_literal  # noqa: E402
 import time_score  # noqa: E402
 
-# Yukon scores are doubles and come back with 15 significant digits, so this sentinel reads back as
-# 9007199254740990. A finite K is scored with its verification time (scripts/time_score.py) and must
-# stay at most time_score.LARGEST_K to remain distinguishable from infinity.
-INFINITY_SCORE = 2**53 - 1
-
 CHECK = """import Solution
 import Lean.Util.CollectAxioms
 import Lean.Elab.Command
@@ -152,18 +147,19 @@ def main() -> None:
         raise SystemExit(f"Verifier did not accept the submission: {report.get('status')}")
     claim = report["score"]
     if claim == "infinity":
-        score = INFINITY_SCORE
+        scored = time_score.INFINITY
     elif type(claim) is int and 0 <= claim <= time_score.LARGEST_K:
-        score = time_score.encode(claim, time_score.minutes(timing["verifySeconds"]))
+        scored = time_score.exact_score(time_score.encode(claim, time_score.minutes(timing["verifySeconds"])))
     else:
-        raise SystemExit("K exceeds the range a Yukon score can hold with verification time")
+        raise SystemExit("K must be below 10^295: a Yukon exact score holds at most 299 integer digits, "
+                         "four of them verification minutes")
     contract = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True, cwd=ROOT).strip()
     metrics = {"claim": claim, "finite": claim != "infinity", "verification": mode,
                "comparatorVerified": mode == "comparator", "permittedAxioms": report.get("permitted_axioms"),
                "axioms": report.get("axioms"), "contractSha256": report["contract_sha256"],
                "contractCommit": contract, **timing}
     temporary = score_path.with_suffix(".tmp")
-    temporary.write_text(json.dumps({"score": score, "metrics": metrics}) + "\n")
+    temporary.write_text(json.dumps({**scored, "metrics": metrics}) + "\n")
     temporary.replace(score_path)
 
 

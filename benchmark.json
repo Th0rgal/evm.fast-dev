@@ -24,6 +24,7 @@
         "scripts/run.py"
       ],
       "scorePath": "scripts/score.json",
+      "exactScores": true,
       "hardware": "Official runs: Linux guest with systemd 257+ and Landlock ABI 3+, up to 30 Lean processes, 112 GiB memory cap per build unit, no verifier time limit (23-hour job timeout). The initial submission takes hours to build and writes about 120 GB of build output. Use a case-sensitive file system (paths differ only by case).",
       "runner": {
         "provider": "github-actions",

@@ -9,7 +9,3 @@ cakeml/
 evm-asm/
 flapjack/
 work-*.log
-
-.turbo-lean/
-tools/rv_sim/target/
-

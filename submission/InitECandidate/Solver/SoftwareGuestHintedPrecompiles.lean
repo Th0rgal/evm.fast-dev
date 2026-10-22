@@ -1,3 +1,5 @@
+import Guest.Model
+
 /-
   InitECandidate.Solver.SoftwareGuestHintedPrecompiles
 
@@ -15,14 +17,18 @@
      `200,000,000`), and malformed SSZ headers in `O(1)` preamble steps (`C_reject`)
      before copying input or building the Patricia trie bounds rejected-input traces
      by a constant independent of payload or witness size.
-  3. Software Precompile Step-Cost Reductions via Prover Hints (`expand` / `verify`):
+  3. Software Precompile Step-Cost Reductions via Prover Hints (`expand` / `verify`)
+     and `Guest.guestOracle` Preservation:
      Replacing in-guest `fp_inv` (`a^(p-2)`, `256` squarings for `Fp256` / `384` for
      `Fp384`) and `fp_sqrt` (`a^((p+1)/4)`) with hinted witness verification (`1`
      modular multiplication + canonical `< p` range check) strictly reduces software
      guest RISC-V instruction counts across `ecrecover` (`secp256k1`), `bn254_add`,
-     `bn254_mul`, `bn254_pairing`, and `bls12381_pairing` (`fp384`), while preserving
-     the exact `guestOracle` I/O relation (`@halt`, `@trap`, `MappedRead`, `MappedWrite`
-     with zero hardware accelerator FFI calls) and tightening the finite-score ceiling `K`.
+     `bn254_mul`, `bn254_pairing`, and `bls12381_pairing` (`fp384`).
+     For the authoritative `Guest.guestOracle : Flapjack.FfiOracle Guest.HostMemory`,
+     the pure software-precompile FFI interface restricts external calls to
+     `.sharedMem .mappedRead`, `.sharedMem .mappedWrite`, `.extCall "halt"`, and
+     `.extCall "trap"`, which agree identically with `Guest.guestOracle` without
+     invoking `Guest.acceleratorBytes`.
 -/
 
 namespace InitECandidate.Solver.SoftwareGuestHintedPrecompiles
@@ -306,7 +312,7 @@ theorem guardedExecutionSteps_finite_score_K_bound
 end EarlyForkHeaderAdmissionGuard
 
 -- ============================================================================
--- Section 3: Hinted Precompile Cost Reductions & `guestOracle` Preservation
+-- Section 3: Hinted Precompile Cost Reductions & `Guest.guestOracle` Preservation
 -- ============================================================================
 
 namespace PrecompileHintReductions
@@ -456,79 +462,55 @@ theorem canonical_inverse_spec {p a inv1 inv2 : Nat}
   simp [validCanonicalInverse, Bool.and_eq_true, decide_eq_true_eq] at h1 h2
   exact hUnique inv1 inv2 h1.1 h2.1 h1.2 h2.2
 
-inductive GuestTermination : Type
-  | halt (exitCode : Nat) : GuestTermination
-  | trap (trapCode : Nat) : GuestTermination
-  deriving Repr, DecidableEq
+/-- Predicate characterizing the foreign calls permitted in Yoichi Hirai's pure
+    software-precompile guest (`Guest/SoftwareAst.lean`): only shared-memory
+    accesses (`mappedRead`, `mappedWrite`) and terminal control calls (`halt`, `trap`),
+    with zero hardware accelerator `@ffi` calls. -/
+def isSoftwareGuestFfiCall : Flapjack.FfiName → Prop
+  | .sharedMem .mappedRead => True
+  | .sharedMem .mappedWrite => True
+  | .extCall name => name = "halt" ∨ name = "trap"
 
-inductive GuestIoEvent : Type
-  | MappedRead (addr : Nat) (val : Nat) : GuestIoEvent
-  | MappedWrite (addr : Nat) (val : Nat) : GuestIoEvent
-  deriving Repr, DecidableEq
+/-- Pure software-precompile FFI oracle over `Guest.HostMemory`: handles
+    `mappedRead`, `mappedWrite`, `halt`, and `trap` exactly as `Guest.guestOracle`,
+    and rejects all hardware accelerator `.extCall`s with `.final .failed`. -/
+def softwareGuestOracle : Flapjack.FfiOracle Guest.HostMemory :=
+  fun name host configuration bytes =>
+    match name with
+    | .sharedMem .mappedRead =>
+        Guest.guestOracle (.sharedMem .mappedRead) host configuration bytes
+    | .sharedMem .mappedWrite =>
+        Guest.guestOracle (.sharedMem .mappedWrite) host configuration bytes
+    | .extCall fn =>
+        if fn == "halt" || fn == "trap" then .returned host bytes
+        else .final .failed
 
-structure GuestOracleTrace where
-  ioEvents : List GuestIoEvent
-  termination : GuestTermination
-  hwAcceleratorFfiCalls : Nat
-  stepCount : Nat
-  deriving Repr, DecidableEq
+/-- On every foreign call in the software-guest interface (`mappedRead`, `mappedWrite`,
+    `halt`, `trap`), `softwareGuestOracle` is definitionally identical to the
+    authoritative `Guest.guestOracle` (`Guest/Model.lean:152`). -/
+theorem softwareGuestOracle_agrees_with_guestOracle
+    (name : Flapjack.FfiName) (host : Guest.HostMemory)
+    (configuration bytes : List UInt8)
+    (hSoft : isSoftwareGuestFfiCall name) :
+    softwareGuestOracle name host configuration bytes =
+      Guest.guestOracle name host configuration bytes := by
+  cases name with
+  | sharedMem op =>
+      cases op <;> rfl
+  | extCall fn =>
+      rcases hSoft with rfl | rfl <;> rfl
 
-def guestOracleRelation (input : List Nat) (trace : GuestOracleTrace) : Prop :=
-  trace.hwAcceleratorFfiCalls = 0 ∧
-  trace.ioEvents =
-    [ GuestIoEvent.MappedRead 0x1000 input.length
-    , GuestIoEvent.MappedWrite 0x2000 (input.foldl (· + ·) 0) ] ∧
-  trace.termination =
-    (if input.isEmpty then GuestTermination.trap 1 else GuestTermination.halt 0)
-
-def evalUnHintedPrecompileGuest (p : PrecompileId) (input : List Nat) : GuestOracleTrace :=
-  { ioEvents :=
-      [ GuestIoEvent.MappedRead 0x1000 input.length
-      , GuestIoEvent.MappedWrite 0x2000 (input.foldl (· + ·) 0) ]
-    termination :=
-      if input.isEmpty then GuestTermination.trap 1 else GuestTermination.halt 0
-    hwAcceleratorFfiCalls := 0
-    stepCount := UnHintedPrecompileCost p }
-
-def evalHintedPrecompileGuest (p : PrecompileId) (input : List Nat) : GuestOracleTrace :=
-  { ioEvents :=
-      [ GuestIoEvent.MappedRead 0x1000 input.length
-      , GuestIoEvent.MappedWrite 0x2000 (input.foldl (· + ·) 0) ]
-    termination :=
-      if input.isEmpty then GuestTermination.trap 1 else GuestTermination.halt 0
-    hwAcceleratorFfiCalls := 0
-    stepCount := HintedPrecompileCost p }
-
-theorem unhinted_guest_satisfies_oracle (p : PrecompileId) (input : List Nat) :
-    guestOracleRelation input (evalUnHintedPrecompileGuest p input) := by
-  exact ⟨rfl, rfl, rfl⟩
-
-theorem hinted_guest_satisfies_oracle (p : PrecompileId) (input : List Nat) :
-    guestOracleRelation input (evalHintedPrecompileGuest p input) := by
-  exact ⟨rfl, rfl, rfl⟩
-
-theorem hinted_and_unhinted_preserve_exact_guestOracle_io
-    (p : PrecompileId) (input : List Nat) :
-    (evalHintedPrecompileGuest p input).ioEvents =
-      (evalUnHintedPrecompileGuest p input).ioEvents ∧
-    (evalHintedPrecompileGuest p input).termination =
-      (evalUnHintedPrecompileGuest p input).termination ∧
-    (evalHintedPrecompileGuest p input).hwAcceleratorFfiCalls = 0 ∧
-    (evalUnHintedPrecompileGuest p input).hwAcceleratorFfiCalls = 0 ∧
-    (evalHintedPrecompileGuest p input).stepCount <
-      (evalUnHintedPrecompileGuest p input).stepCount := by
-  refine ⟨rfl, rfl, rfl, rfl, ?_⟩
-  exact hinted_strictly_reduces_all_precompiles p
-
-theorem hinted_precompile_preserves_guestOracle_iff
-    (p : PrecompileId) (input : List Nat) :
-    guestOracleRelation input (evalHintedPrecompileGuest p input) ↔
-      guestOracleRelation input (evalUnHintedPrecompileGuest p input) := by
-  constructor
-  · intro _
-    exact unhinted_guest_satisfies_oracle p input
-  · intro _
-    exact hinted_guest_satisfies_oracle p input
+/-- Conversely, for any external call outside `{ "halt", "trap" }` (such as hardware
+    accelerators `"sha256f"`, `"keccakf"`, `"arith256mod"`, `"bls_arith384"`),
+    `softwareGuestOracle` immediately returns `.final .failed`. -/
+theorem softwareGuestOracle_rejects_hw_accelerators
+    (fn : String) (host : Guest.HostMemory) (configuration bytes : List UInt8)
+    (hNotHalt : fn ≠ "halt") (hNotTrap : fn ≠ "trap") :
+    softwareGuestOracle (.extCall fn) host configuration bytes = .final .failed := by
+  unfold softwareGuestOracle
+  have h1 : (fn == "halt") = false := beq_false_of_ne hNotHalt
+  have h2 : (fn == "trap") = false := beq_false_of_ne hNotTrap
+  simp [h1, h2]
 
 end PrecompileHintReductions
 
