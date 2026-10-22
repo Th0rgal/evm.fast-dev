@@ -2,7 +2,7 @@
 -- Generated Pancake AST for the init-e challenge.
 -- Made with `tools/gen-guest-ast.sh`, which cpp-expands the Pancake guest and
 -- runs Flapjack's parser on the preprocessed source.
--- Upstream source: https://github.com/flamingoponderado/stateless-pancaketh/blob/35e422bb3fb28e89948114d1415484afdd78a4db/Guest/guest.pp.pnk
+-- Upstream source: https://github.com/flamingoponderado/stateless-pancaketh/blob/35569814e3fd569fd98cccdf2a9704683d42d2d9/Guest/guest.pp.pnk
 import Flapjack.Pancake.PanLang
 
 set_option maxRecDepth 100000

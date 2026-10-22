@@ -39,7 +39,7 @@ termination within infinity is proved in
 The reference program is the literal **`Guest.Software.guestAst`** in
 [`Guest/SoftwareAst.lean`](../Guest/SoftwareAst.lean), generated from
 `flamingoponderado/stateless-pancaketh` main at commit
-`b42b0af0c4d028429a49d2c4e0c9db393e19f6c4`. Its entry point is `main`. The Pancake
+`35569814e3fd569fd98cccdf2a9704683d42d2d9`. Its entry point is `main`. The Pancake
 files under `guest/src/` and preprocessed text `Guest/guest-software.pp.pnk` provide
 readable provenance. The AST header records its generation command and
 permanent provenance links; parser agreement is not a certificate premise.
