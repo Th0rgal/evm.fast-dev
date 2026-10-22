@@ -29,21 +29,17 @@ private theorem sourceMemory_cell (i : Nat)
     (hi : sourceBase+8*i < 2^64) :
     sourceMemory (BitVec.ofNat 64 (sourceBase+8*i)) =
       .word (Guest.startupHeaders[i]?.getD 0) := by
-  have ho : (BitVec.ofNat 64 (sourceBase+8*i) - BitVec.ofNat 64 sourceBase).toNat = 8*i := by
-    have heq : BitVec.ofNat 64 (sourceBase+8*i) - BitVec.ofNat 64 sourceBase =
-        BitVec.ofNat 64 (8*i) := by
-      rw [←BitVec.ofNat_add_ofNat]
-      bv_omega
-    rw [heq, BitVec.toNat_ofNat]
-    rw [Nat.mod_eq_of_lt (by omega : 8*i < 2^64)]
-  have hdiv : 8*i/8 = i := Nat.mul_div_right i (by decide)
-  simp only [sourceMemory,ho,Nat.mul_mod_right,hdiv, true_and]
-  split
-  · rfl
-  · rename_i h
-    have hnot : ¬ i < Guest.startupHeaders.length := by simpa using h
-    rw [List.getElem?_eq_none (by omega : Guest.startupHeaders.length ≤ i)]
-    rfl
+  have hval := cell_toNat i hi
+  have hidx : (sourceBase + 8*i - sourceBase) / 8 = i := by omega
+  by_cases hsmall : i < 5
+  · have hregion : sourceBase ≤ sourceBase + 8*i ∧ sourceBase + 8*i < sourceBase + 40 := by omega
+    simp only [sourceMemory, hval, hidx, if_pos hregion]
+  · have hregion : ¬ (sourceBase ≤ sourceBase + 8*i ∧ sourceBase + 8*i < sourceBase + 40) := by omega
+    have hnone : Guest.startupHeaders[i]? = none := by
+      apply List.getElem?_eq_none
+      simp [Guest.startupHeaders]
+      omega
+    simp only [sourceMemory, hval, if_neg hregion, hnone, Option.getD_none]
 
 theorem installed_ordinary_word (a : BitVec 64) (ha : ordinaryDomain a) :
     packedWordMemory installedMemory a = wlabWlocExact (sourceMemory a) := by

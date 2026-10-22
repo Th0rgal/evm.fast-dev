@@ -2,7 +2,7 @@ import InitECandidate.Proofs.BootstrapStraightLine
 import InitECandidate.Proofs.BootstrapTailMemory
 import InitECandidate.Proofs.BootstrapCopyGuards
 
-set_option maxRecDepth 8192
+set_option maxRecDepth 32768
 set_option linter.unusedSimpArgs false
 set_option autoImplicit false
 
@@ -777,9 +777,9 @@ private theorem tail_guard19 : baselineMachineConfig.progAddresses = (tailState1
   · rw [((tailState19_control (copyState 4606) input_pc).1)]; decide
   · rw [((tailState19_control (copyState 4606) input_pc).1)]; decide
 
-private theorem tail_step20 : asmStep riscvConfig (tailState20 (copyState 4606)) (bootLoc 6 0x80000094 0x800ddd94) (tailState21 (copyState 4606)) := by
-  apply checked_step_to (tailState20 (copyState 4606)) (tailState21 (copyState 4606)) (bootLoc 6 0x80000094 0x800ddd94) rfl
-  · exact installed_tail_instruction (tailState20 (copyState 4606)) 2147483796 (bootLoc 6 0x80000094 0x800ddd94)
+private theorem tail_step20 : asmStep riscvConfig (tailState20 (copyState 4606)) (bootLoc 6 0x80000094 0x800f0134) (tailState21 (copyState 4606)) := by
+  apply checked_step_to (tailState20 (copyState 4606)) (tailState21 (copyState 4606)) (bootLoc 6 0x80000094 0x800f0134) rfl
+  · exact installed_tail_instruction (tailState20 (copyState 4606)) 2147483796 (bootLoc 6 0x80000094 0x800f0134)
       (by simp [bootstrapBlocks, bootLoc, bootConst, bootShift, bootStore])
       ((tailState20_control (copyState 4606) input_pc).1) ((tailState20_control (copyState 4606) input_pc).2.2.1.trans (copyState_fields 4606).2.1) tailState20_frame (by decide) (by decide)
   · exact (tailState20_control (copyState 4606) input_pc).2.2.2.1.trans (copyState_fields 4606).2.2.2.1
@@ -789,7 +789,7 @@ private theorem tail_step20 : asmStep riscvConfig (tailState20 (copyState 4606))
   · decide
 
 private theorem tail_guard20 : baselineMachineConfig.progAddresses = (tailState20 (copyState 4606)).memDomain ∧
-    ffiEntryPcsDisjoint baselineMachineConfig (tailState20 (copyState 4606)) (riscvEnc (bootLoc 6 0x80000094 0x800ddd94)).length := by
+    ffiEntryPcsDisjoint baselineMachineConfig (tailState20 (copyState 4606)) (riscvEnc (bootLoc 6 0x80000094 0x800f0134)).length := by
   refine ⟨((tailState20_control (copyState 4606) input_pc).2.2.1.trans (copyState_fields 4606).2.1).symm, ?_⟩
   apply bootstrap_ffi_disjoint
   · rw [((tailState20_control (copyState 4606) input_pc).1)]; decide
@@ -813,9 +813,9 @@ private theorem tail_guard21 : baselineMachineConfig.progAddresses = (tailState2
   · rw [((tailState21_control (copyState 4606) input_pc).1)]; decide
   · rw [((tailState21_control (copyState 4606) input_pc).1)]; decide
 
-private theorem tail_step22 : asmStep riscvConfig (tailState22 (copyState 4606)) (bootLoc 6 0x800000a0 0x800de000) (tailState23 (copyState 4606)) := by
-  apply checked_step_to (tailState22 (copyState 4606)) (tailState23 (copyState 4606)) (bootLoc 6 0x800000a0 0x800de000) rfl
-  · exact installed_tail_instruction (tailState22 (copyState 4606)) 2147483808 (bootLoc 6 0x800000a0 0x800de000)
+private theorem tail_step22 : asmStep riscvConfig (tailState22 (copyState 4606)) (bootLoc 6 0x800000a0 0x800f1000) (tailState23 (copyState 4606)) := by
+  apply checked_step_to (tailState22 (copyState 4606)) (tailState23 (copyState 4606)) (bootLoc 6 0x800000a0 0x800f1000) rfl
+  · exact installed_tail_instruction (tailState22 (copyState 4606)) 2147483808 (bootLoc 6 0x800000a0 0x800f1000)
       (by simp [bootstrapBlocks, bootLoc, bootConst, bootShift, bootStore])
       ((tailState22_control (copyState 4606) input_pc).1) ((tailState22_control (copyState 4606) input_pc).2.2.1.trans (copyState_fields 4606).2.1) tailState22_frame (by decide) (by decide)
   · exact (tailState22_control (copyState 4606) input_pc).2.2.2.1.trans (copyState_fields 4606).2.2.2.1
@@ -825,7 +825,7 @@ private theorem tail_step22 : asmStep riscvConfig (tailState22 (copyState 4606))
   · decide
 
 private theorem tail_guard22 : baselineMachineConfig.progAddresses = (tailState22 (copyState 4606)).memDomain ∧
-    ffiEntryPcsDisjoint baselineMachineConfig (tailState22 (copyState 4606)) (riscvEnc (bootLoc 6 0x800000a0 0x800de000)).length := by
+    ffiEntryPcsDisjoint baselineMachineConfig (tailState22 (copyState 4606)) (riscvEnc (bootLoc 6 0x800000a0 0x800f1000)).length := by
   refine ⟨((tailState22_control (copyState 4606) input_pc).2.2.1.trans (copyState_fields 4606).2.1).symm, ?_⟩
   apply bootstrap_ffi_disjoint
   · rw [((tailState22_control (copyState 4606) input_pc).1)]; decide
@@ -1136,9 +1136,9 @@ private theorem tail_trace : TailCheckedTrace tailCode (tailState0 (copyState 46
     (bootStore 6 5 8)
     (bootLoc 6 0x80000088 initDataEnd)
     (bootStore 6 5 16)
-    (bootLoc 6 0x80000094 0x800ddd94)
+    (bootLoc 6 0x80000094 0x800f0134)
     (bootStore 6 5 24)
-    (bootLoc 6 0x800000a0 0x800de000)
+    (bootLoc 6 0x800000a0 0x800f1000)
     (bootStore 6 5 32)
     (bootConst 11 161)
     (bootShift 11 24)

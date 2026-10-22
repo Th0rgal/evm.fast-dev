@@ -21,7 +21,9 @@ def heapStart : Nat := sourceBase
 def stackSize : Nat := 16 * 1024 * 1024
 def stackStart : Nat := ramEnd - stackSize
 def globalsWords : Nat := 67
-def heapEnd : Nat := 0xb0000000
+/-- Source-memory top used by the compiler; the guest allocator has its own
+`0xb0000000` ceiling in the fixed Pancake source. -/
+def heapEnd : Nat := stackStart - globalsWords * 8
 def gasLimit : Nat := 200000000
 
 theorem regions_disjoint :

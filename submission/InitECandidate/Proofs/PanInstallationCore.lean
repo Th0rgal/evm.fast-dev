@@ -38,7 +38,7 @@ private theorem align_bitmapPtr : holByteAligned (BitVec.ofNat 64 (initDataRam+2
   decide
 
 private theorem baseline_good_init :
-    goodInitState baselineMachineConfig baselineInstalledState InitECandidate.nativeCode 620
+    goodInitState baselineMachineConfig baselineInstalledState InitECandidate.nativeCode 3788
       installedAsm (packedWordMemory installedMemory) baselineDataDm baselineSharedDm := by
   refine ⟨machineStateOfAsm_relation _ (by decide),⟨rfl,rfl,rfl,rfl,rfl⟩,rfl,
     baseline_start_pc,by decide,baseline_machine_noInterference,
@@ -48,7 +48,7 @@ private theorem baseline_good_init :
     packedWordMemory_certificate installedMemory,baseline_code_buffer,baseline_code_size_bound⟩
 
 theorem baseline_pan_installed_core :
-    panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+    panInstalled InitECandidate.nativeCode 3788 InitECandidate.bitmaps 0
       (some baselineNames) (11,13) baselineMachineConfig baselineMmio baselineInstalledState
       (wlabWlocExact ∘ sourceMemory) ordinaryDomain sharedDomain := by
   apply panInstalled_intro _ _ _ _ _ _ _ _ _ _ _ _ installedAsm

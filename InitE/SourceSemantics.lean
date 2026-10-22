@@ -39,20 +39,22 @@ def sourceOracle : HolOracle Guest.HostMemory := fun name host configuration byt
 def sourceFfi (input : Guest.InputBlob) : HolFfiState Guest.HostMemory :=
   initialHolFfiState sourceOracle (Guest.guestHostMemory input)
 
-/-- Word-cell domain required by the compiler, excluding the globals tail. -/
+/-- Compiler-managed word cells, excluding the globals tail. -/
 def ordinaryDomain : BitVec 64 → Prop :=
-  fun address =>
-    (scratchStart ≤ address.toNat ∧ address.toNat < scratchEnd) ∨
-    StackRemove.addresses (BitVec.ofNat 64 sourceBase)
-      ((stackStart - sourceBase) / 8 - globalsWords) address
+  StackRemove.addresses (BitVec.ofNat 64 sourceBase)
+    ((stackStart - sourceBase) / 8 - globalsWords)
 
 def sharedDomain (address : BitVec 64) : Prop :=
   holByteAligned address = true ∧
     ((inputStart ≤ address.toNat ∧ address.toNat < inputEnd) ∨
       (outputStart ≤ address.toNat ∧ address.toNat < outputEnd))
 
-/-- Ordinary scratch and heap cells start at zero. -/
-def sourceMemory (_address : BitVec 64) : HolWordLab 64 := .word 0
+/-- The startup page contains the runtime pointers installed by the bootstrap;
+all remaining ordinary scratch and heap cells start at zero. -/
+def sourceMemory (address : BitVec 64) : HolWordLab 64 :=
+  .word (if sourceBase ≤ address.toNat ∧ address.toNat < sourceBase + 40 then
+    Guest.startupHeaders[(address.toNat - sourceBase) / 8]?.getD 0
+  else 0)
 
 def sourceInitialState (input : Guest.InputBlob) : PanSemStateFiniteExact 64 Guest.HostMemory :=
   { locals := HolFiniteMapExact.empty

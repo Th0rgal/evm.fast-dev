@@ -75,13 +75,13 @@ theorem baseline_program_shared_disjoint :
   intro a prog shared
   exact prog.1.2 shared
 
-private theorem native_address_nat (offset : Nat) (bound : offset < 904956) :
+private theorem native_address_nat (offset : Nat) (bound : offset < 982928) :
     (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 offset).toNat = nativePc + offset := by
   rw [← BitVec.ofNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt]
   norm_num [nativePc]
   omega
 
-private theorem native_data_excluded (offset : Nat) (bound : offset < 904956) :
+private theorem native_data_excluded (offset : Nat) (bound : offset < 982928) :
     baselineDataDm (BitVec.ofNat 64 nativePc + BitVec.ofNat 64 offset) ≠ true := by
   rw [baselineDataDm, baselineBitmapDm, native_address_nat offset bound]
   norm_num [sourceBase, ramEnd, ramStart, ramSize, initDataRam, initDataEnd, nativePc]
@@ -92,17 +92,17 @@ theorem baseline_code_bytes :
       installedAsm.memDomain (fun a => baselineDataDm a = true) := by
   apply bytesInMem_literal
   intro i
-  have bound : i.val < 904956 := by
+  have bound : i.val < 982928 := by
     have hi : i.val < 979140 := by simpa only [baseline_literal_layout.2.1] using i.isLt
     omega
   exact ⟨baseline_native_program_byte i, native_data_excluded i.val bound,
     baseline_native_loaded_byte i⟩
 
-theorem baseline_code_buffer (n : Nat) (hn : n < 620) :
+theorem baseline_code_buffer (n : Nat) (hn : n < 3788) :
     installedAsm.memDomain (BitVec.ofNat 64 (n + InitECandidate.nativeCode.length) + installedAsm.pc) ∧
     baselineDataDm (BitVec.ofNat 64 (n + InitECandidate.nativeCode.length) + installedAsm.pc) ≠ true := by
   have count := baseline_literal_layout.2.1
-  have offset : n + InitECandidate.nativeCode.length < 904956 := by rw [count]; omega
+  have offset : n + InitECandidate.nativeCode.length < 982928 := by rw [count]; omega
   have addr : BitVec.ofNat 64 (n + InitECandidate.nativeCode.length) + installedAsm.pc =
       BitVec.ofNat 64 nativePc + BitVec.ofNat 64 (n + InitECandidate.nativeCode.length) :=
     BitVec.add_comm _ _
@@ -120,11 +120,11 @@ theorem baseline_code_buffer (n : Nat) (hn : n < 620) :
     rw [native_address_nat _ offset] at value
     omega
 
-theorem baseline_code_size_bound : 620 + InitECandidate.nativeCode.length < 2 ^ 64 := by
+theorem baseline_code_size_bound : 3788 + InitECandidate.nativeCode.length < 2 ^ 64 := by
   rw [baseline_literal_layout.2.1]
   decide
 
-private theorem bitmap_index_address (i : Nat) (hi : i < 4614) :
+private theorem bitmap_index_address (i : Nat) (hi : i < 4603) :
     (BitVec.ofNat 64 (initDataRam + 24) + BitVec.ofNat 64 i * (8 : BitVec 64)).toNat =
       0xa0020018 + 8 * i := by
   have sum : BitVec.ofNat 64 (initDataRam + 24) + BitVec.ofNat 64 i * (8 : BitVec 64) =
@@ -152,7 +152,7 @@ theorem baseline_bitmap_aligned_domain :
     let i := (a.toNat - 0xa0020018) / 8
     have remainder : (a.toNat - 0xa0020018) % 8 = 0 := by omega
     have division := Nat.div_add_mod (a.toNat - 0xa0020018) 8
-    have ibound : i < 4614 := by dsimp [i]; omega
+    have ibound : i < 4603 := by dsimp [i]; omega
     refine ⟨i, ibound, ?_⟩
     apply BitVec.eq_of_toNat_eq
     have addr := bitmap_index_address i ibound

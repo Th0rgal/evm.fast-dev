@@ -17,8 +17,8 @@ set_option maxHeartbeats 0 in
 theorem baseline_installation_metadata :
     baselineConfig.labConf.ffiNames = some baselineNames ∧
     baselineMmio.map (fun rec => nativePc+rec.entryPc) =
-      (baselineEntryPcs.map BitVec.toNat).drop 20 ∧
-    620+InitECandidate.nativeCode.length+ffiOffset*(20+3) < 2^64 := by
+      (baselineEntryPcs.map BitVec.toNat).drop 2 ∧
+    3788+InitECandidate.nativeCode.length+ffiOffset*(2+3) < 2^64 := by
   rw [LiteralFacts.nativeCode_length]
   decide_cbv
 

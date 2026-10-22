@@ -9,7 +9,7 @@ proved; none is an assumption on the challenge input. -/
 theorem baseline_installed (input : Guest.InputBlob) :
     BaselineInstallation input baselineOutput baselineMachineConfig
       baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
-      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0 :=
+      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0 :=
   baseline_installation input (baseline_pan_installed input)
 
 /-- The upstream compiler theorem applies to every concrete native-entry

@@ -28,9 +28,9 @@ theorem source_globals_allocatable (input : Guest.InputBlob) :
   dsimp only
   rw [sourceGlobalsSize, sourceStructContext]
   change (some ([] : Pancake.PanLang.StructContextExact) ≠ none) ∧
-    (∀ a, ¬ (ordinaryDomain a ∧ StackRemove.addresses (BitVec.ofNat 64 heapEnd) 93 a)) ∧
-    ¬ ordinaryDomain (BitVec.ofNat 64 heapEnd + StackRemove.bytesInWord 64 * BitVec.ofNat 64 93) ∧
-    93 * (StackRemove.bytesInWord 64).toNat < 2 ^ 64
+    (∀ a, ¬ (ordinaryDomain a ∧ StackRemove.addresses (BitVec.ofNat 64 heapEnd) 67 a)) ∧
+    ¬ ordinaryDomain (BitVec.ofNat 64 heapEnd + StackRemove.bytesInWord 64 * BitVec.ofNat 64 67) ∧
+    67 * (StackRemove.bytesInWord 64).toNat < 2 ^ 64
   refine ⟨by simp, ?_, ?_, by decide⟩
   · intro address ⟨ha, hg⟩
     have hlt := ordinaryDomain_below_top address ha
@@ -42,8 +42,8 @@ theorem source_globals_allocatable (input : Guest.InputBlob) :
     omega
   · intro ha
     have hlt := ordinaryDomain_below_top _ ha
-    have hb : heapEnd + 93 * 8 < 2 ^ 64 := by decide
-    rw [BitVec.mul_comm, address_toNat heapEnd 93 hb] at hlt
+    have hb : heapEnd + 67 * 8 < 2 ^ 64 := by decide
+    rw [BitVec.mul_comm, address_toNat heapEnd 67 hb] at hlt
     omega
 
 end InitE

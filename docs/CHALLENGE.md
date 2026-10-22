@@ -51,7 +51,11 @@ little-endian. Declaration maps and locals begin empty. Ordinary memory uses
 aligned eight-byte cells in the scratch region and ordinary memory above
 `@base`. The shared-memory domain contains aligned cells in the input and
 output arenas. The base is `0xa1000000`; the guest's allocation ceiling is
-`0xb0000000`. Ordinary source memory begins at zero.
+`0xb0000000`. The compiler-managed source-memory domain extends from
+`sourceBase` to the stack split minus the 67 global words. Its first five words
+contain the startup pointers; the remaining words begin at zero. The separate
+scratch arena is present in the executable guest model, but is outside this
+compiler installation domain.
 
 The fixed oracle is `InitE.sourceOracle`. It uses the shared-memory
 specification in [`Guest/Model.lean`](../Guest/Model.lean), with terminal

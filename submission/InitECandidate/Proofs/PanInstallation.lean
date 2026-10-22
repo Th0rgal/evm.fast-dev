@@ -19,7 +19,7 @@ private theorem baseline_mmio_projection : baselineConfig.labConf.shmemExtra = b
 
 set_option maxRecDepth 10000 in
 theorem baseline_pan_installed_metadata :
-    panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+    panInstalled InitECandidate.nativeCode 3788 InitECandidate.bitmaps 0
       baselineConfig.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
       baselineMachineConfig baselineConfig.labConf.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ sourceMemory) ordinaryDomain sharedDomain := by
@@ -33,7 +33,7 @@ theorem baseline_pan_installed_metadata :
 
 /-- Every compiler installation premise is certified after the bootstrap. -/
 theorem baseline_pan_installed (input : Guest.InputBlob) :
-    panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+    panInstalled InitECandidate.nativeCode 3788 InitECandidate.bitmaps 0
       baselineConfig.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
       baselineMachineConfig baselineConfig.labConf.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ (sourceInitialState input).memory)

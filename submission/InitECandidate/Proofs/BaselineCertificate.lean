@@ -31,14 +31,14 @@ def baselineAdj4 : BitVec 64 := BitVec.ofNat 64 ramEnd -
 /-- Remaining numeric and register premises are fixed baseline facts, rather
 than requirements on inputs or assumptions supplied by a participant. -/
 theorem baseline_installation (input : Guest.InputBlob)
-    (memory : panInstalled InitECandidate.nativeCode 620 InitECandidate.bitmaps 0
+    (memory : panInstalled InitECandidate.nativeCode 3788 InitECandidate.bitmaps 0
       baselineConfig.labConf.ffiNames (heapRegs pancakeRiscVBackendConfig.stackConf.regNames)
       baselineMachineConfig baselineConfig.labConf.shmemExtra baselineInstalledState
       (wlabWlocExact ∘ (sourceInitialState input).memory)
       (sourceInitialState input).memaddrs (sourceInitialState input).shMemaddrs) :
     BaselineInstallation input baselineOutput baselineMachineConfig baselineInstalledState
       InitECandidate.nativeCode InitECandidate.bitmaps baselineConfig baselineHeapLen
-      baselineAdj2 baselineAdj4 620 0 := by
+      baselineAdj2 baselineAdj4 3788 0 := by
   refine ⟨baseline_machine_isRiscv, baseline_artifact_complete,
     ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, memory, ?_⟩
   · change (0 : BitVec 64) < BitVec.ofNat 64 sourceBase
@@ -85,14 +85,14 @@ theorem baseline_installation (input : Guest.InputBlob)
 theorem baseline_native_behaviour_eq (input : Guest.InputBlob)
     (installation : BaselineInstallation input baselineOutput baselineMachineConfig
       baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
-      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0)
     (nonfail : sourceBehaviour input ≠ HolBehaviour.fail) :
     ∀ behaviour, machineSemHOL baselineMachineConfig (sourceFfi input)
       baselineInstalledState behaviour → behaviour = sourceBehaviour input :=
   baseline_behaviour_eq input baselineOutput baseline_ast_compilation
     baselineMachineConfig baselineInstalledState InitECandidate.nativeCode
     InitECandidate.bitmaps baselineConfig baselineHeapLen baselineAdj2 baselineAdj4
-    620 0 installation nonfail
+    3788 0 installation nonfail
 
 /-- Installations are stable under the machine projection agreement established
 by the bootstrap, including the precise compiler resource limits. -/
@@ -101,10 +101,10 @@ theorem baseline_installation_transport (input : Guest.InputBlob)
     (related : targetStateRel riscvTarget installedAsm ms)
     (installed : BaselineInstallation input baselineOutput baselineMachineConfig
       baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
-      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0) :
+      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0) :
     BaselineInstallation input baselineOutput baselineMachineConfig ms
       InitECandidate.nativeCode InitECandidate.bitmaps baselineConfig baselineHeapLen
-      baselineAdj2 baselineAdj4 620 0 := by
+      baselineAdj2 baselineAdj4 3788 0 := by
   have agreement := baseline_endpoint_agreement ms related
   have r11 := agreement.regs 11 (by decide)
   have r12 := agreement.regs 12 (by decide)
@@ -142,13 +142,13 @@ theorem baseline_endpoint_behaviour_eq (input : Guest.InputBlob)
     (related : targetStateRel riscvTarget installedAsm ms)
     (installed : BaselineInstallation input baselineOutput baselineMachineConfig
       baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
-      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0)
     (nonfail : sourceBehaviour input ≠ HolBehaviour.fail) :
     ∀ behaviour, machineSemHOL baselineMachineConfig (sourceFfi input) ms behaviour →
       behaviour = sourceBehaviour input :=
   baseline_behaviour_eq input baselineOutput baseline_ast_compilation
     baselineMachineConfig ms InitECandidate.nativeCode InitECandidate.bitmaps
-    baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0
+    baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0
     (baseline_installation_transport input ms related installed) nonfail
 
 /-- Source termination yields a finite target Halt witness with the same full
@@ -158,7 +158,7 @@ theorem baseline_endpoint_terminates (input : Guest.InputBlob)
     (related : targetStateRel riscvTarget installedAsm ms)
     (installed : BaselineInstallation input baselineOutput baselineMachineConfig
       baselineInstalledState InitECandidate.nativeCode InitECandidate.bitmaps
-      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 620 0)
+      baselineConfig baselineHeapLen baselineAdj2 baselineAdj4 3788 0)
     (outcome : HolOutcome) (events : List HolIoEvent)
     (source : sourceBehaviour input = .terminate outcome events) :
     machineSemHOL baselineMachineConfig (sourceFfi input) ms (.terminate outcome events) ∧

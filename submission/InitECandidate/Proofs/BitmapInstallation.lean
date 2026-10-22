@@ -21,7 +21,7 @@ private theorem wordByte_getByte (word : BitVec 64) (offset : Nat) (ho : offset 
 theorem installed_bitmap_byte (i : Fin InitECandidate.bitmaps.length) (j : Fin 8) :
     installedMemory (BitVec.ofNat 64 (initDataRam+24+8*i.val) + BitVec.ofNat 64 j.val) =
       HolByte.getByte (BitVec.ofNat 64 j.val) InitECandidate.bitmaps[i] false := by
-  have hi : i.val < 4614 := by simpa only [bitmap_count] using i.isLt
+  have hi : i.val < 4603 := by simpa only [bitmap_count] using i.isLt
   have hj := j.isLt
   have ha : (BitVec.ofNat 64 (initDataRam+24+8*i.val) + BitVec.ofNat 64 j.val).toNat =
       initDataRam+24+8*i.val+j.val := by
@@ -60,7 +60,7 @@ theorem installed_bitmap_word (i : Fin InitECandidate.bitmaps.length) :
     change holAligned 3 (BitVec.ofNat 64 (initDataRam+24+8*i.val)) = true
     apply (holAligned_iff _ _).mpr
     change (BitVec.ofNat 64 (initDataRam+24+8*i.val)).toNat % 8 = 0
-    have hi : i.val < 4614 := by simpa only [bitmap_count] using i.isLt
+    have hi : i.val < 4603 := by simpa only [bitmap_count] using i.isLt
     simp only [BitVec.toNat_ofNat]
     have hbase : initDataRam+24+8*i.val < 2^64 := by
       simp only [initDataRam]; omega

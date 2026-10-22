@@ -75,8 +75,9 @@ def outputAddr : Word := 2688614400
 def scratchBase : Word := 2688618496
 /-- Pancake memory start, `@base`; persistent allocation starts after scratch. -/
 def heapBase : Word := 2701131776
-/-- `HEAP_END`: end of the Pancake heap. -/
-def heapEnd : Word := 2952790016
+/-- Source-memory top for the compiler layout. The guest allocator itself caps
+allocations at `HEAP_END = 0xb0000000` in the committed Pancake source. -/
+def heapEnd : Word := 33806089704
 /-- `WORD`: bytes per word. -/
 def bytesInWord : Word := 8
 
@@ -84,13 +85,16 @@ def bytesInWord : Word := 8
 
 /-! ### Pancake memory -/
 
-/-- Initial Pancake memory: the scratch and heap regions
-(`[SCRATCH_BASE, HEAP_END)`) zero-filled, everything else unmapped. The host
+/-- Initial Pancake memory: the reserved startup words contain the runtime
+pointers and remaining ordinary cells are zero-filled. The host
 regions are not here: the guest reaches them only through shared-memory
 accesses, i.e. through the FFI oracle below. -/
 def guestInitialMemory : Memory :=
   fun address =>
-    if scratchBase ≤ address ∧ address < heapEnd then some (.word 0) else none
+    if scratchBase ≤ address ∧ address < heapEnd then
+      some (.word (if heapBase ≤ address ∧ address < heapBase + 40 then
+        startupHeaders[(address.toNat - heapBase.toNat) / 8]?.getD 0 else 0))
+    else none
 
 /-- Initial program state. Declarations are evaluated by the run itself, so
 the declaration tables start empty. -/

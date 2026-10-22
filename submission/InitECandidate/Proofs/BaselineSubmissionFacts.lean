@@ -14,7 +14,21 @@ namespace InitE
 open Flapjack
 
 private def admissionMmio : List Compiler.Backend.LabToTarget.ShmemInfoNum :=
-  [{ entryPc := 5216, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 11, exitPc := 5220 }, { entryPc := 5260, nbytes := BitVec.ofNat 8 0, addrReg := 13, addrOff := 0, reg := 12, exitPc := 5264 }, { entryPc := 5292, nbytes := BitVec.ofNat 8 0, addrReg := 12, addrOff := 0, reg := 10, exitPc := 5296 }, { entryPc := 9888, nbytes := BitVec.ofNat 8 0, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9892 }, { entryPc := 10184, nbytes := BitVec.ofNat 8 0, addrReg := 12, addrOff := 0, reg := 12, exitPc := 10188 }, { entryPc := 10268, nbytes := BitVec.ofNat 8 1, addrReg := 5, addrOff := 0, reg := 13, exitPc := 10272 }, { entryPc := 902772, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 902776 }, { entryPc := 902972, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 902976 }, { entryPc := 903172, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 903176 }, { entryPc := 903372, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 903376 }, { entryPc := 903572, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 903576 }, { entryPc := 903772, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 903776 }, { entryPc := 903972, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 903976 }]
+  [{ entryPc := 4744, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 11, exitPc := 4748 },
+   { entryPc := 4788, nbytes := BitVec.ofNat 8 0, addrReg := 13, addrOff := 0, reg := 12, exitPc := 4792 },
+   { entryPc := 4820, nbytes := BitVec.ofNat 8 0, addrReg := 12, addrOff := 0, reg := 10, exitPc := 4824 },
+   { entryPc := 9396, nbytes := BitVec.ofNat 8 0, addrReg := 10, addrOff := 0, reg := 11, exitPc := 9400 },
+   { entryPc := 9692, nbytes := BitVec.ofNat 8 0, addrReg := 12, addrOff := 0, reg := 12, exitPc := 9696 },
+   { entryPc := 9776, nbytes := BitVec.ofNat 8 1, addrReg := 5, addrOff := 0, reg := 13, exitPc := 9780 },
+   { entryPc := 179152, nbytes := BitVec.ofNat 8 0, addrReg := 11, addrOff := 0, reg := 11, exitPc := 179156 },
+   { entryPc := 179760, nbytes := BitVec.ofNat 8 0, addrReg := 10, addrOff := 0, reg := 11, exitPc := 179764 },
+   { entryPc := 977604, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 977608 },
+   { entryPc := 977820, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 977824 },
+   { entryPc := 978036, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 978040 },
+   { entryPc := 978252, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 978256 },
+   { entryPc := 978468, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 978472 },
+   { entryPc := 978684, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 978688 },
+   { entryPc := 978900, nbytes := BitVec.ofNat 8 1, addrReg := 10, addrOff := 0, reg := 1, exitPc := 978904 }]
 
 -- Reduce the large configuration projection once, before finite checks.
 private theorem admission_mmio_eq : baselineMmio = admissionMmio := by
@@ -23,39 +37,23 @@ private theorem admission_mmio_eq : baselineMmio = admissionMmio := by
   rfl
 
 private def admissionEntryPcs : List (BitVec 64) :=
-  [BitVec.ofNat 64 2147488096,
-    BitVec.ofNat 64 2147488080,
-    BitVec.ofNat 64 2147488064,
-    BitVec.ofNat 64 2147488048,
-    BitVec.ofNat 64 2147488032,
-    BitVec.ofNat 64 2147488016,
-    BitVec.ofNat 64 2147488000,
-    BitVec.ofNat 64 2147487984,
-    BitVec.ofNat 64 2147487968,
-    BitVec.ofNat 64 2147487952,
-    BitVec.ofNat 64 2147487936,
-    BitVec.ofNat 64 2147487920,
-    BitVec.ofNat 64 2147487904,
-    BitVec.ofNat 64 2147487888,
-    BitVec.ofNat 64 2147487872,
-    BitVec.ofNat 64 2147487856,
-    BitVec.ofNat 64 2147487840,
-    BitVec.ofNat 64 2147487824,
-    BitVec.ofNat 64 2147487808,
-    BitVec.ofNat 64 2147487792,
-    BitVec.ofNat 64 2147493360,
-    BitVec.ofNat 64 2147493404,
-    BitVec.ofNat 64 2147493436,
-    BitVec.ofNat 64 2147498032,
-    BitVec.ofNat 64 2147498328,
-    BitVec.ofNat 64 2147498412,
-    BitVec.ofNat 64 2148390916,
-    BitVec.ofNat 64 2148391116,
-    BitVec.ofNat 64 2148391316,
-    BitVec.ofNat 64 2148391516,
-    BitVec.ofNat 64 2148391716,
-    BitVec.ofNat 64 2148391916,
-    BitVec.ofNat 64 2148392116]
+  [BitVec.ofNat 64 2147487808,
+   BitVec.ofNat 64 2147487792,
+   BitVec.ofNat 64 2147492600,
+   BitVec.ofNat 64 2147492644,
+   BitVec.ofNat 64 2147492676,
+   BitVec.ofNat 64 2147497252,
+   BitVec.ofNat 64 2147497548,
+   BitVec.ofNat 64 2147497632,
+   BitVec.ofNat 64 2147667008,
+   BitVec.ofNat 64 2147667616,
+   BitVec.ofNat 64 2148465460,
+   BitVec.ofNat 64 2148465676,
+   BitVec.ofNat 64 2148465892,
+   BitVec.ofNat 64 2148466108,
+   BitVec.ofNat 64 2148466324,
+   BitVec.ofNat 64 2148466540,
+   BitVec.ofNat 64 2148466756]
 
 private theorem admission_entry_pcs_eq : baselineEntryPcs = admissionEntryPcs := by
   unfold baselineEntryPcs
