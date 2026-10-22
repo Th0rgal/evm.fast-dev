@@ -1,4 +1,5 @@
 import InitECandidate.Proofs.StackFrameComputation
+import InitECandidate.Proofs.StackAnalysis.FastDepth
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxDepth
 
 namespace InitECandidate.Proofs.StackDepthComputation
@@ -9,7 +10,7 @@ def depthOfWordOutputs (outputs : List (Nat × Nat × WordLangProgHOL (BitVec 64
   let registers := riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)
   let frames := outputs.map (fun (identifier, arguments, body) =>
     (identifier, StackFrameComputation.frameSize registers arguments body))
-  WordDepth.Executable.fullCallGraphDepthExecutable (sptFromAList frames)
+  StackAnalysis.FastDepth.fullCallGraphDepthFast (sptFromAList frames)
     BvlToBvi.initGlobalsLocation (sptFromAList outputs)
 
 theorem depth_eq_of_word_compile
@@ -24,7 +25,8 @@ theorem depth_eq_of_word_compile
   rw [compiled]
   dsimp only
   rw [StackFrameComputation.frameMap_eq]
-  rfl
+  unfold depthOfWordOutputs
+  rw [StackAnalysis.FastDepth.fullCallGraphDepthFast_eq]
 
 #print axioms depth_eq_of_word_compile
 end InitECandidate.Proofs.StackDepthComputation

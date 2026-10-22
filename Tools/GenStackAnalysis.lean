@@ -1,5 +1,6 @@
 import Lean
 import InitECandidate.Proofs.StackAnalysis.Data
+import InitECandidate.Proofs.StackAnalysis.FastDepth
 import Flapjack.RiscV.NativeSource
 open Lean Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Encoders.RiscV.Target
 set_option maxRecDepth 1000000
@@ -70,6 +71,5 @@ def main (args : List String) : IO Unit := do
     IO.println s!"{identifier}: {frame}"
   unless args.contains "--depth" do return ()
   let frames := InitECandidate.Proofs.StackAnalysis.outputs.map (fun (i,a,p) => (i, InitECandidate.Proofs.StackFrameComputation.frameSize (riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)) a p))
-  let slim := InitECandidate.Proofs.StackAnalysis.outputs.map (fun (i,a,p) => (i,a,WordDepth.Executable.slim p))
-  IO.println s!"depth: {WordDepth.Executable.fullCallGraphDepth (sptFromAList frames) BvlToBvi.initGlobalsLocation (sptFromAList slim)}"
+  IO.println s!"depth: {InitECandidate.Proofs.StackAnalysis.FastDepth.fullCallGraphDepthFast (sptFromAList frames) BvlToBvi.initGlobalsLocation (sptFromAList InitECandidate.Proofs.StackAnalysis.outputs)}"
 

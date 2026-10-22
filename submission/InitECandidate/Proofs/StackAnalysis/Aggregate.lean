@@ -832,7 +832,9 @@ theorem slimEntries_eq : outputs.map slimEntry = slimEntries := by
 theorem depth_eq : StackDepthComputation.depthOfWordOutputs outputs =
     WordDepth.Executable.fullCallGraphDepth (sptFromAList frameEntries)
       BvlToBvi.initGlobalsLocation (sptFromAList slimEntries) := by
-  unfold StackDepthComputation.depthOfWordOutputs WordDepth.Executable.fullCallGraphDepthExecutable
+  unfold StackDepthComputation.depthOfWordOutputs
+  rw [StackAnalysis.FastDepth.fullCallGraphDepthFast_eq]
+  unfold WordDepth.Executable.fullCallGraphDepthExecutable
   rw [slimCode_fromList]
   change WordDepth.Executable.fullCallGraphDepth (sptFromAList (outputs.map frameEntry))
     BvlToBvi.initGlobalsLocation (sptFromAList (outputs.map slimEntry)) = _

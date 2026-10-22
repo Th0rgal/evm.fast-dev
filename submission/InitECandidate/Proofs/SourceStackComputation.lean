@@ -1,4 +1,5 @@
 import InitECandidate.Proofs.CompilerComputation
+import InitECandidate.Proofs.StackAnalysis.FastDepth
 import Flapjack.Compiler.Backend.WordDepth.AnalysisInput
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxDepth
 import InitECandidate.Proofs.FrontendStages.Pass5
@@ -14,7 +15,7 @@ def analyzeWordStack (program : List (Nat × Nat × WordLangProgHOL (BitVec 64))
   let (_, wordProgram) := WordToWord.compileWith RegAlloc.regAllocExecutable
     config.wordToWordConf riscvConfig program
   let (_, wordConfig, _, _) := WordToStack.Native.compileNative riscvConfig false wordProgram
-  WordDepth.Executable.fullCallGraphDepthExecutable wordConfig.stackFrameSize
+  InitECandidate.Proofs.StackAnalysis.FastDepth.fullCallGraphDepthFast wordConfig.stackFrameSize
     BvlToBvi.initGlobalsLocation (sptFromAList wordProgram)
 
 /-- Maximum compiler stack use in 64-bit words, before installation margins. -/
@@ -32,7 +33,7 @@ theorem compilerDepthStack_eq (declarations : List (DeclHOL 64)) :
       analyzeSourceStack declarations := by
   unfold Pancake.Proofs.PanToTarget.compileProgMaxAsmDepthExecutable
     analyzeSourceStack analyzeWordStack
-  simp only []
+  simp only [InitECandidate.Proofs.StackAnalysis.FastDepth.fullCallGraphDepthFast_eq]
 
 #print axioms compilerDepthStack_eq
 #print axioms analyzeSourceStack_fixed_eq

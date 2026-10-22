@@ -1,4 +1,5 @@
 import InitE.SourceDeclarations
+import InitECandidate.Proofs.StackAnalysis.FastDepth
 import Flapjack.Compiler.Backend.WordToStack.NativeTopCompile
 
 namespace InitECandidate.Proofs.StackComputation
@@ -50,7 +51,7 @@ def analyzeFrames (declarations : List (Flapjack.Pancake.PanLang.DeclHOL 64)) : 
     config.wordToWordConf riscvConfig program
   let regs := riscvConfig.regCount - (5 + riscvConfig.avoidRegs.length)
   let frames := sptFromAList (wordProgram.map fun (id, argc, p) => (id, frameSize p argc regs))
-  WordDepth.Executable.fullCallGraphDepthExecutable frames
+  StackAnalysis.FastDepth.fullCallGraphDepthFast frames
     BvlToBvi.initGlobalsLocation (sptFromAList wordProgram)
 
 theorem analyzeFrames_eq (declarations : List (Flapjack.Pancake.PanLang.DeclHOL 64)) :
@@ -63,6 +64,7 @@ theorem analyzeFrames_eq (declarations : List (Flapjack.Pancake.PanLang.DeclHOL 
        WordDepth.Executable.fullCallGraphDepthExecutable wordConfig.stackFrameSize
          BvlToBvi.initGlobalsLocation (sptFromAList wordProgram)) := by
   simp only [analyzeFrames, compile_frameMap]
+  rw [StackAnalysis.FastDepth.fullCallGraphDepthFast_eq]
 
 #print axioms analyzeFrames_eq
 end InitECandidate.Proofs.StackComputation
