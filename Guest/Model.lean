@@ -4,7 +4,6 @@ import Guest.Basic
 import Guest.Bookkeeping
 import Guest.Ast
 import Guest.SoftwareAst
-import Guest.Accel
 import Guest.ByteCodec
 
 /-!
