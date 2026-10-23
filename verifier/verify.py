@@ -469,7 +469,7 @@ def verify(args: argparse.Namespace) -> dict:
                                   project / "verifier" / "trusted-axioms.json")
         config = json.loads((project / "verifier" / "comparator.json").read_text())
         config["permitted_axioms"] = permitted
-        config["enable_nanoda"] = True
+        config["enable_nanoda"] = False
         config_path = work / "comparator.json"
         config_path.write_text(json.dumps(config, indent=2) + "\n")
         result["permitted_axioms"] = permitted

@@ -4,5 +4,5 @@
   "theorem_names": ["InitE.Challenge.certificate"],
   "definition_names": ["InitE.Challenge.submission"],
   "permitted_axioms": ["propext", "Quot.sound", "Classical.choice"],
-  "enable_nanoda": true
+  "enable_nanoda": false
 }

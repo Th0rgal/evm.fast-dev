@@ -14,7 +14,7 @@ write access only to the Lake cache. Temporary files are held by their open
 handles, rewound after successful exporter exit, and removed on normal or
 exceptional completion. Failed exporters and failed writes reject the run.
 
-The verifier enables nanoda, so its runs use the original buffered path.
+The verifier disables nanoda, so its runs use this disk-backed export path.
 The existing declaration comparison, definition-hole handling, both theorem
 and definition axiom closures, primitive checks, and full Lean kernel replay
 are retained.
