@@ -20,7 +20,10 @@ def run(fn, passes):
     result={'fn_id':fn,'source_sha':sha(files[0]),'turbo_lean_sha':TURBO_SHA,'axioms':None,'olean_bytes':None,'status':'running'}
     out.write_text(json.dumps(result,indent=2)+'\n')
     for p in files:
-        cp=subprocess.run(['turbo-lean','check','--project-dir',str(ROOT),str(p)],cwd=ROOT,text=True,capture_output=True)
+        
+        mod='.'.join(p.relative_to(ROOT).with_suffix('').parts).replace('submission.InitECandidate','InitECandidate')
+        b=subprocess.run(['turbo-lean','build','--project-dir',str(ROOT),'--max-memory-mb','2500',mod],cwd=ROOT,text=True,capture_output=True)
+        cp=subprocess.run(['turbo-lean','check','--project-dir',str(ROOT),str(p)],cwd=ROOT,text=True,capture_output=True) if b.returncode == 0 else b
         if cp.returncode:
             result['status']='failed'; result['error']=cp.stdout[-4000:]+cp.stderr[-4000:]; out.write_text(json.dumps(result,indent=2)+'\n'); return False
     result['status']='passed'; out.write_text(json.dumps(result,indent=2)+'\n'); print(f'{fn}: passed'); return True
