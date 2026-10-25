@@ -1,0 +1,1502 @@
+[
+ {
+  "line": 79,
+  "fn": "memcpy",
+  "cond": "i + 32 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 86,
+  "fn": "memcpy",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 91,
+  "fn": "memcpy",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 102,
+  "fn": "memcpy",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 111,
+  "fn": "memzero",
+  "cond": "i + 32 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 118,
+  "fn": "memzero",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 123,
+  "fn": "memzero",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 134,
+  "fn": "memzero",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 172,
+  "fn": "memeq",
+  "cond": "i + 32 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 187,
+  "fn": "memeq",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 194,
+  "fn": "memeq",
+  "cond": "i + 8 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 205,
+  "fn": "memeq",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 215,
+  "fn": "is_zero_bytes",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 281,
+  "fn": "input_blob",
+  "cond": "i <+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 290,
+  "fn": "output_write",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 314,
+  "fn": "udivmod",
+  "cond": "i > 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 334,
+  "fn": "ceil_log2",
+  "cond": "(1 << d) <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 564,
+  "fn": "div64by32",
+  "cond": "i > 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 592,
+  "fn": "digits_len",
+  "cond": "n >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 605,
+  "fn": "divmnu",
+  "cond": "j >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 618,
+  "fn": "divmnu",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 625,
+  "fn": "divmnu",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 633,
+  "fn": "divmnu",
+  "cond": "j >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 649,
+  "fn": "divmnu",
+  "cond": "again == 1",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 661,
+  "fn": "divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 673,
+  "fn": "divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 686,
+  "fn": "divmnu",
+  "cond": "j <+ m",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 691,
+  "fn": "divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 705,
+  "fn": "digits_divmod",
+  "cond": "i <+ 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 713,
+  "fn": "digits_divmod",
+  "cond": "i <+ 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 834,
+  "fn": "u256_exp",
+  "cond": "t <+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 933,
+  "fn": "u256_from_be",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 966,
+  "fn": "u256_to_be_min",
+  "cond": "i <+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 1270,
+  "fn": "sha256_finish",
+  "cond": "i < 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 1279,
+  "fn": "sha256",
+  "cond": "i + 64 <=+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 1875,
+  "fn": "keccak_f1600",
+  "cond": "r < 24",
+  "cls": "const-bound"
+ },
+ {
+  "line": 1994,
+  "fn": "keccak_absorb_block",
+  "cond": "i < 136",
+  "cls": "const-bound"
+ },
+ {
+  "line": 1999,
+  "fn": "keccak_absorb_block",
+  "cond": "i < 136",
+  "cls": "const-bound"
+ },
+ {
+  "line": 2011,
+  "fn": "keccak256",
+  "cond": "i + 136 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2042,
+  "fn": "rlp_read_length",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2170,
+  "fn": "_rlp_validate_items_body",
+  "cond": "go != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2219,
+  "fn": "rlp_list_count",
+  "cond": "off <+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2251,
+  "fn": "rlp_list_to_slices",
+  "cond": "i <+ count",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2269,
+  "fn": "rlp_bytes_to_word",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2286,
+  "fn": "rlp_be_len",
+  "cond": "v != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2294,
+  "fn": "rlp_put_be",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 2412,
+  "fn": "htab_first_diff",
+  "cond": "i <+ key_len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2416,
+  "fn": "htab_first_diff",
+  "cond": "j < 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 2431,
+  "fn": "htab_find_leaf",
+  "cond": "n != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2545,
+  "fn": "htab_set",
+  "cond": "n != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2631,
+  "fn": "htab_truncate",
+  "cond": "(lds 1 (t + 24)) >+ n",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2661,
+  "fn": "htab_keys",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 2852,
+  "fn": "fp_pow",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 2877,
+  "fn": "modinv_bin",
+  "cond": "true",
+  "cls": "unbounded-guard"
+ },
+ {
+  "line": 2884,
+  "fn": "modinv_bin",
+  "cond": "(u.0 & 1) == 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2888,
+  "fn": "modinv_bin",
+  "cond": "(v.0 & 1) == 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 2934,
+  "fn": "fn_pow",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 3110,
+  "fn": "ec_mul",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 3138,
+  "fn": "ec_mul2",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 3561,
+  "fn": "merkleize",
+  "cond": "cur > 1",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 3564,
+  "fn": "merkleize",
+  "cond": "j < half",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3571,
+  "fn": "merkleize",
+  "cond": "d < target",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3592,
+  "fn": "merkleize_progressive",
+  "cond": "off <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3603,
+  "fn": "merkleize_progressive",
+  "cond": "k != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 3630,
+  "fn": "htr_pcontainer",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3747,
+  "fn": "ssz_check_offsets",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3782,
+  "fn": "ssz_split_var_list",
+  "cond": "i < count",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3850,
+  "fn": "decode_requests",
+  "cond": "i < 5",
+  "cls": "const-bound"
+ },
+ {
+  "line": 3881,
+  "fn": "decode_bytes_list",
+  "cond": "i < r.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 3934,
+  "fn": "decode_stateless_input",
+  "cond": "i < 3",
+  "cls": "const-bound"
+ },
+ {
+  "line": 3991,
+  "fn": "htr_payload",
+  "cond": "i < ntx",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4001,
+  "fn": "htr_payload",
+  "cond": "i < nwd",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4071,
+  "fn": "htr_request_list",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4140,
+  "fn": "hdr_word_field",
+  "cond": "j <+ f.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4329,
+  "fn": "validate_headers",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4336,
+  "fn": "validate_headers",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4354,
+  "fn": "taylor_exponential",
+  "cond": "nz == 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 4522,
+  "fn": "key_to_nibbles",
+  "cond": "i + 4 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4537,
+  "fn": "key_to_nibbles",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4572,
+  "fn": "nibble_list_to_compact",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4582,
+  "fn": "common_prefix_length",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4598,
+  "fn": "nodedb_build",
+  "cond": "cap <+ 2 * n + 2",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4603,
+  "fn": "nodedb_build",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 4748,
+  "fn": "_decode_witness_node_body",
+  "cond": "go != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 4878,
+  "fn": "trie_walk",
+  "cond": "node != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 5017,
+  "fn": "_mpt_insert_node",
+  "cond": "go != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 5083,
+  "fn": "_collapse_branch",
+  "cond": "i < 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 5139,
+  "fn": "_mpt_delete_node_body",
+  "cond": "go != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 5201,
+  "fn": "_mpt_delete_node_body",
+  "cond": "top != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 5272,
+  "fn": "_node_rlp_finish",
+  "cond": "i < 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 5296,
+  "fn": "_node_rlp_finish",
+  "cond": "j < 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 5328,
+  "fn": "_node_rlp_fill",
+  "cond": "top != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 5342,
+  "fn": "_node_rlp_fill",
+  "cond": "(i < 16) && (found == 0)",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5461,
+  "fn": "build_mpt_indexed",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5497,
+  "fn": "decode_account_from_leaf",
+  "cond": "i <+ f0.2",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5507,
+  "fn": "decode_account_from_leaf",
+  "cond": "i <+ f1.2",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5540,
+  "fn": "encode_account",
+  "cond": "z <+ 32",
+  "cls": "const-bound"
+ },
+ {
+  "line": 5588,
+  "fn": "tx_scalar_word",
+  "cond": "j <+ f.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5635,
+  "fn": "decode_access_list",
+  "cond": "i <+ lst.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5649,
+  "fn": "decode_access_list",
+  "cond": "j <+ slots.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5666,
+  "fn": "decode_blob_hashes",
+  "cond": "i <+ lst.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5677,
+  "fn": "decode_authorizations",
+  "cond": "i <+ lst.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5879,
+  "fn": "access_list_payload_len",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5894,
+  "fn": "tx_put_access_list",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5907,
+  "fn": "tx_put_access_list",
+  "cond": "j <+ ns",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5920,
+  "fn": "tx_put_blob_hashes",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5938,
+  "fn": "auth_list_payload_len",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 5951,
+  "fn": "tx_put_authorizations",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6195,
+  "fn": "count_tokens_in_data",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6230,
+  "fn": "calculate_intrinsic_cost",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6387,
+  "fn": "state_restore",
+  "cond": "journal_n >+ snap",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 6700,
+  "fn": "destroy_storage",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6807,
+  "fn": "htab_union_into",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6826,
+  "fn": "merge_tx_into_block",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6918,
+  "fn": "lst_upsert_idx",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 6960,
+  "fn": "add_nonce_change",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7048,
+  "fn": "bal_list_remove_idx",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7089,
+  "fn": "update_builder_from_tx",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7130,
+  "fn": "update_builder_from_tx",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7136,
+  "fn": "update_builder_from_tx",
+  "cond": "j < icap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7172,
+  "fn": "bal_sort_gt",
+  "cond": "k < len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7194,
+  "fn": "sort_elems",
+  "cond": "width < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7196,
+  "fn": "sort_elems",
+  "cond": "left < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7208,
+  "fn": "sort_elems",
+  "cond": "(i < mid) && (j < right)",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7221,
+  "fn": "sort_elems",
+  "cond": "i < mid",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7226,
+  "fn": "sort_elems",
+  "cond": "j < right",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7258,
+  "fn": "bal_encode_account",
+  "cond": "i < slots.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7271,
+  "fn": "bal_encode_account",
+  "cond": "j < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7302,
+  "fn": "bal_encode_account",
+  "cond": "i < rk.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7313,
+  "fn": "bal_encode_account",
+  "cond": "i < kept",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7329,
+  "fn": "bal_encode_account",
+  "cond": "i < n2",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7352,
+  "fn": "bal_encode_account",
+  "cond": "i < n3",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7375,
+  "fn": "bal_encode_account",
+  "cond": "i < n4",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7403,
+  "fn": "build_block_access_list_rlp",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7413,
+  "fn": "build_block_access_list_rlp",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7425,
+  "fn": "build_block_access_list_rlp",
+  "cond": "i < addrs.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7433,
+  "fn": "build_block_access_list_rlp",
+  "cond": "j < scap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7446,
+  "fn": "build_block_access_list_rlp",
+  "cond": "j < cn",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7455,
+  "fn": "build_block_access_list_rlp",
+  "cond": "i < addrs.1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7471,
+  "fn": "validate_block_access_list_gas_limit",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7480,
+  "fn": "validate_block_access_list_gas_limit",
+  "cond": "j < rcap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 7735,
+  "fn": "compute_jumpdests",
+  "cond": "pc <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 8355,
+  "fn": "op_log",
+  "cond": "i < ntopics",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 8795,
+  "fn": "evm_init",
+  "cond": "i < 20",
+  "cls": "const-bound"
+ },
+ {
+  "line": 8989,
+  "fn": "set_delegation",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 9344,
+  "fn": "run_frames",
+  "cond": "go != 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 9536,
+  "fn": "incorporate_child_on_success",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10085,
+  "fn": "ripemd160_block",
+  "cond": "i < 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10100,
+  "fn": "ripemd160_block",
+  "cond": "j < 80",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10142,
+  "fn": "ripemd160",
+  "cond": "i + 64 <=+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10160,
+  "fn": "ripemd160",
+  "cond": "i < 5",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10229,
+  "fn": "blake2b_f",
+  "cond": "r <+ rounds",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10245,
+  "fn": "blake2b_f",
+  "cond": "i < 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10254,
+  "fn": "bn_from_be",
+  "cond": "i <+ nd",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10259,
+  "fn": "bn_from_be",
+  "cond": "i <+ nbytes",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10269,
+  "fn": "bn_to_be",
+  "cond": "i <+ nbytes",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10282,
+  "fn": "bn_mul",
+  "cond": "i <+ na + nb",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10287,
+  "fn": "bn_mul",
+  "cond": "i <+ na",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10292,
+  "fn": "bn_mul",
+  "cond": "j <+ nb",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10310,
+  "fn": "bn_divmnu",
+  "cond": "j >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 10321,
+  "fn": "bn_divmnu",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 10328,
+  "fn": "bn_divmnu",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 10336,
+  "fn": "bn_divmnu",
+  "cond": "j >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 10352,
+  "fn": "bn_divmnu",
+  "cond": "again == 1",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 10364,
+  "fn": "bn_divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10376,
+  "fn": "bn_divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10389,
+  "fn": "bn_divmnu",
+  "cond": "j <+ m",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10394,
+  "fn": "bn_divmnu",
+  "cond": "i <+ n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10412,
+  "fn": "be_top_bit",
+  "cond": "i <+ nbytes",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 10454,
+  "fn": "modexp",
+  "cond": "t > 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 10551,
+  "fn": "p256_fp_mul",
+  "cond": "c < 0",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10603,
+  "fn": "p256_fp_sqr",
+  "cond": "c < 0",
+  "cls": "const-bound"
+ },
+ {
+  "line": 10710,
+  "fn": "p256_ec_mul2",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11003,
+  "fn": "fq_mul_small",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11029,
+  "fn": "fq12_reduce",
+  "cond": "e >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11047,
+  "fn": "fq12_mul",
+  "cond": "k <+ 23",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11057,
+  "fn": "fq12_mul",
+  "cond": "i <=+ iend",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11076,
+  "fn": "fq12_sqr",
+  "cond": "k <+ 23",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11082,
+  "fn": "fq12_sqr",
+  "cond": "i <+ (k - i)",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11128,
+  "fn": "fe_add",
+  "cond": "i <+ fld",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11139,
+  "fn": "fe_sub",
+  "cond": "i <+ fld",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11150,
+  "fn": "fe_neg",
+  "cond": "i <+ fld",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11160,
+  "fn": "fe_mul_small",
+  "cond": "i <+ fld",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11310,
+  "fn": "ecp_mul",
+  "cond": "i <+ len",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11385,
+  "fn": "fq12_twist",
+  "cond": "j <+ 3",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11409,
+  "fn": "fq12_frob",
+  "cond": "k <+ 6",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11433,
+  "fn": "fq_poly_deg",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11444,
+  "fn": "fq_poly_submul",
+  "cond": "i <=+ db",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 11471,
+  "fn": "fq12_inv",
+  "cond": "true",
+  "cls": "unbounded-guard"
+ },
+ {
+  "line": 11480,
+  "fn": "fq12_inv",
+  "cond": "d0 >= d1",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 11489,
+  "fn": "fq12_inv",
+  "cond": "j <+ 13",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11514,
+  "fn": "fq12_inv",
+  "cond": "i <+ 12",
+  "cls": "const-bound"
+ },
+ {
+  "line": 11527,
+  "fn": "fq12_pow_words",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11554,
+  "fn": "bn254_miller_raw",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 11759,
+  "fn": "bn254_pairing_check",
+  "cond": "i <+ n_pairs",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 12869,
+  "fn": "bls_fp_inv_raw",
+  "cond": "true",
+  "cls": "unbounded-guard"
+ },
+ {
+  "line": 12876,
+  "fn": "bls_fp_inv_raw",
+  "cond": "(u.0 & 1) == 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 12880,
+  "fn": "bls_fp_inv_raw",
+  "cond": "(v.0 & 1) == 0",
+  "cls": "other(data-dependent)"
+ },
+ {
+  "line": 12905,
+  "fn": "bls_fp_pow",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 13101,
+  "fn": "fp2_pow",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 13309,
+  "fn": "fp12_pow_absx",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 13486,
+  "fn": "g1_mul",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 13690,
+  "fn": "g2_mul",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 13907,
+  "fn": "pair_miller_loop",
+  "cond": "i >+ 0",
+  "cls": "decrement-to-zero"
+ },
+ {
+  "line": 14000,
+  "fn": "iso_horner_fp",
+  "cond": "j <+ n - 1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 14019,
+  "fn": "iso_map_g1",
+  "cond": "j <+ 15",
+  "cls": "const-bound"
+ },
+ {
+  "line": 14060,
+  "fn": "swu_sqrt_division_fp2",
+  "cond": "i <+ 6",
+  "cls": "const-bound"
+ },
+ {
+  "line": 14072,
+  "fn": "swu_sqrt_division_fp2",
+  "cond": "i <+ 4",
+  "cls": "const-bound"
+ },
+ {
+  "line": 14131,
+  "fn": "swu_g2",
+  "cond": "i <+ 4",
+  "cls": "const-bound"
+ },
+ {
+  "line": 14164,
+  "fn": "iso_horner_fp2",
+  "cond": "j <+ n - 1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 14330,
+  "fn": "bls_g1_msm_exec",
+  "cond": "i < k",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 14379,
+  "fn": "bls_g2_msm_exec",
+  "cond": "i < k",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 14412,
+  "fn": "bls_pairing_exec",
+  "cond": "i < k",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15043,
+  "fn": "pre_blake2f",
+  "cond": "i < 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15048,
+  "fn": "pre_blake2f",
+  "cond": "i < 16",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15054,
+  "fn": "pre_blake2f",
+  "cond": "i < 8",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15163,
+  "fn": "add_to_bloom",
+  "cond": "idx < 6",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15179,
+  "fn": "logs_bloom",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15184,
+  "fn": "logs_bloom",
+  "cond": "j < nt",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15204,
+  "fn": "logs_encoded_bound",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15216,
+  "fn": "encode_logs",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15225,
+  "fn": "encode_logs",
+  "cond": "j < nt",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15296,
+  "fn": "encode_execution_requests",
+  "cond": "i < 5",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15320,
+  "fn": "compute_requests_hash",
+  "cond": "i < n",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15393,
+  "fn": "compute_state_root",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15406,
+  "fn": "compute_state_root",
+  "cond": "pass < 2",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15409,
+  "fn": "compute_state_root",
+  "cond": "j < icount",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15437,
+  "fn": "compute_state_root",
+  "cond": "i < cap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15460,
+  "fn": "compute_state_root",
+  "cond": "i < acap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15513,
+  "fn": "fork_init",
+  "cond": "i < 17",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15548,
+  "fn": "block_rlp_length",
+  "cond": "i < ntx",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15567,
+  "fn": "block_rlp_length",
+  "cond": "i < nwd",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15627,
+  "fn": "payload_header",
+  "cond": "i < nwd",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15667,
+  "fn": "is_valid_versioned_hashes",
+  "cond": "i < ntx",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15673,
+  "fn": "is_valid_versioned_hashes",
+  "cond": "j < nb",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15815,
+  "fn": "check_transaction",
+  "cond": "j < nb",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15934,
+  "fn": "process_transaction",
+  "cond": "i < nal",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15943,
+  "fn": "process_transaction",
+  "cond": "i < nal",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15947,
+  "fn": "process_transaction",
+  "cond": "j < ns",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 15990,
+  "fn": "process_transaction",
+  "cond": "i < 18",
+  "cls": "const-bound"
+ },
+ {
+  "line": 15995,
+  "fn": "process_transaction",
+  "cond": "i < nal + 1",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16002,
+  "fn": "process_transaction",
+  "cond": "i < nkeys",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16069,
+  "fn": "process_transaction",
+  "cond": "i < nl",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16082,
+  "fn": "process_transaction",
+  "cond": "i < nl",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16092,
+  "fn": "process_transaction",
+  "cond": "i < dcap",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16117,
+  "fn": "process_withdrawals",
+  "cond": "i < nwd",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16146,
+  "fn": "process_general_purpose_requests",
+  "cond": "i < nr",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16151,
+  "fn": "process_general_purpose_requests",
+  "cond": "j < nl",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16223,
+  "fn": "execute_block",
+  "cond": "i < ntx",
+  "cls": "counter<var-bound"
+ },
+ {
+  "line": 16317,
+  "fn": "run_attempt",
+  "cond": "i < ntx",
+  "cls": "counter<var-bound"
+ }
+]

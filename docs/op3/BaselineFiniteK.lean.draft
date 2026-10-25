@@ -1,0 +1,61 @@
+import InitECandidate.Solver.FiniteKBridge
+import InitECandidate.Proofs.FullBaseline
+import InitECandidate.Proofs.BaselineSubmission
+
+/-!
+# Op 3: vanilla baseline specialised to a finite `K`
+
+`baselineWithFiniteK N` is `InitE.baselineSubmission` with `K := .finite N`
+(same ROM, anchor, names, MMIO). Admission and exact behaviour are inherited
+from the vanilla proofs; the certificate then reduces to the single uniform
+clock obligation `BaselineClockBound N`.
+-/
+
+namespace InitECandidate.Solver.BaselineFiniteK
+
+open InitE
+open Flapjack
+open InitECandidate.Solver.FiniteKBridge
+
+def baselineWithFiniteK (N : Nat) : Submission :=
+  { baselineSubmission with K := .finite N }
+
+theorem baselineWithFiniteK_machineConfig (N : Nat) :
+    (baselineWithFiniteK N).machineConfig = baselineMachineConfig :=
+  baselineSubmission_machineConfig
+
+theorem baselineWithFiniteK_initialState (N : Nat) (input : Guest.InputBlob) :
+    (baselineWithFiniteK N).initialState input = baselineInitialState input :=
+  baselineSubmission_initialState input
+
+theorem baselineWithFiniteK_admitted (N : Nat) : (baselineWithFiniteK N).Admitted :=
+  baselineSubmission_admitted
+
+theorem baselineWithFiniteK_correct (N : Nat) (input : Guest.InputBlob)
+    (outcome : HolOutcome) (events : List HolIoEvent)
+    (source : sourceBehaviour input = .terminate outcome events) :
+    ∀ behaviour, machineSemHOL (baselineWithFiniteK N).machineConfig (sourceFfi input)
+      ((baselineWithFiniteK N).initialState input) behaviour →
+      behaviour = .terminate outcome events := by
+  intro behaviour execution
+  rw [baselineWithFiniteK_machineConfig, baselineWithFiniteK_initialState] at execution
+  have nonfail : sourceBehaviour input ≠ HolBehaviour.fail := by
+    rw [source]; intro h; cases h
+  exact (full_baseline_correct input nonfail behaviour execution).trans source
+
+/-- The only open obligation: a uniform clock bound for the vanilla image. -/
+def BaselineClockBound (N : Nat) : Prop :=
+  ∀ input outcome events, InScope input outcome events →
+    ∃ k, k ≤ N ∧ (evaluateTargetHOL baselineMachineConfig (sourceFfi input) k
+      (baselineInitialState input)).1 ≠ .timeOut
+
+/-- Vanilla finite certificate from the clock bound. -/
+theorem baseline_certificate_finite (N : Nat) (clock : BaselineClockBound N) :
+    Certificate (baselineWithFiniteK N) (.finite N) := by
+  apply certificate_finite_of_exact_behaviour _ N rfl (baselineWithFiniteK_admitted N)
+    (baselineWithFiniteK_correct N)
+  intro input outcome events hin
+  rw [baselineWithFiniteK_machineConfig, baselineWithFiniteK_initialState]
+  exact clock input outcome events hin
+
+end InitECandidate.Solver.BaselineFiniteK
