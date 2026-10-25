@@ -23,7 +23,8 @@ def run(fn, passes):
         
         mod='.'.join(p.relative_to(ROOT).with_suffix('').parts).replace('submission.InitECandidate','InitECandidate')
         b=subprocess.run(['turbo-lean','build','--project-dir',str(ROOT),'--max-memory-mb','2500',mod],cwd=ROOT,text=True,capture_output=True)
-        cp=subprocess.run(['turbo-lean','check','--project-dir',str(ROOT),str(p)],cwd=ROOT,text=True,capture_output=True) if b.returncode == 0 else b
+        env = os.environ.copy(); env['TURBO_LEAN_TIMEOUT_MS'] = '120000'
+        cp=subprocess.run(['turbo-lean','check','--project-dir',str(ROOT),'--timeout','120',str(p)],cwd=ROOT,text=True,capture_output=True,env=env) if b.returncode == 0 else b
         if cp.returncode:
             result['status']='failed'; result['error']=cp.stdout[-4000:]+cp.stderr[-4000:]; out.write_text(json.dumps(result,indent=2)+'\n'); return False
     result['status']='passed'; out.write_text(json.dumps(result,indent=2)+'\n'); print(f'{fn}: passed'); return True
