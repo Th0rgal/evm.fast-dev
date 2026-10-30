@@ -859,9 +859,13 @@ def HtabWF {F : Type} (s : PanSemStateFiniteExact 64 F) (t : BitVec 64) : Prop :
     (∀ n : Nat, n ≤ ncap.toNat → ∀ off ∈ [8, 16], ∃ c : BitVec 64,
       MemWord s (nodes + BitVec.ofNat 64 (32 * n + off)) c ∧ c.toNat ≤ ncap.toNat)
 
-/-- Entry precondition: the table argument `t` is well formed. -/
+/-- Entry precondition: the table held in local `name` is well formed. -/
+def HtabLocalWF (name : String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => GuestInv s ∧ ∃ t, LocalWord s name t ∧ HtabWF s t
+
+/-- The table parameter `t` (`htab_set`, `htab_keys`, `htab_truncate`) is well formed. -/
 def HtabArgWF : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => GuestInv s ∧ ∃ t, LocalWord s "t" t ∧ HtabWF s t
+  fun s => HtabLocalWF "t" s
 
 /-- One EVM frame record `e` (offsets from `frame_new`, `SoftwareAst.lean:15372`): 280 bytes in
 the scratch arena; its EVM memory `[e+24, e+24 + cap(e+40))` lies in the frame-memory arena
@@ -926,7 +930,7 @@ def K_htab_del : Nat := 4 * K_htab_find_leaf + 8 * K_walk + 2 * K_htab_first_dif
 def K_htab_keys : Nat := (W / 8 + 1) * (K_walk + 64) + 128
 /-- Requires `HtabWF` (count lives in memory and is rewritten by every deletion). -/
 def K_htab_truncate : Nat := (H / 32 + 1) * (K_htab_del + 64) + 64
-def K_htab_union_into : Nat := (H / 32 + 1) * (K_htab_set + 64) + 64
+def K_htab_union_into : Nat := (H / 32 + 1) * (K_htab_set + 4096) + 64
 def K_nodedb_build : Nat := W * (K_htab_set + 512) + 256
 /-! Data-structure refinements (`HtabWF`: key_len ≤ 52, node indices ≤ ncap ≤ H/32). -/
 def K_htab_find_leaf_wf : Nat := H / 32 + 4096
@@ -1126,9 +1130,12 @@ theorem set_storage_on :
 
 theorem htab_truncate_on_wf :
     TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") R.K_htab_truncate := by sorry
-/-- Precondition on the destination table argument `t`; see DESIGN.md (open question Q4). -/
+/-- `htab_union_into(dst, src)` caches `cap := src.count` in a local before its loop, so only
+`src` needs to be well formed at entry (count ≤ ncap ≤ H/32); each iteration is one
+`htab_item` plus one all-memory `htab_set`, whatever `dst` aliases. -/
 theorem htab_union_into_on_wf :
-    TerminatingFunBoundedOn HtabArgWF (ofString "htab_union_into") R.K_htab_union_into := by
+    TerminatingFunBoundedOn (HtabLocalWF "src") (ofString "htab_union_into")
+      R.K_htab_union_into := by
   sorry
 theorem run_frames_on :
     TerminatingFunBoundedOn (EvmFramesWF R.G) (ofString "run_frames") (R.K_run_frames R.G) := by
