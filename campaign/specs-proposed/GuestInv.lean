@@ -775,6 +775,52 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnCovered {K : Nat}
           (guestInv_postDecls input stCtxt s_decls hdecls)),
        coveredFfi_postDecls input stCtxt s_decls hgas hdecls⟩
 
+/-- `main`-only entry guard: the covered entry also fixes memory to the bootstrap image
+(`sourceMemory`: 40-byte startup header, zero elsewhere). `alloc` never zeroes, so `main`
+may rely on fresh heap cells being `0`; no leaf below `main` gets this conjunct. -/
+def InitialMemory : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => s.memory = sourceMemory
+
+def MainEntry : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => GuestInvCovered s ∧ InitialMemory s
+
+def MainEntryWordGas : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => GuestInv s ∧ InitialMemory s
+
+theorem initialMemory_postDecls (input : Guest.InputBlob) (stCtxt : StructContextExact)
+    (s_decls : PanSemStateFiniteExact 64 Guest.HostMemory) (k : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hdecls : @evaluateDeclsHOLFinite 64 Guest.HostMemory _
+      { sourceInitialState input with structs := stCtxt }
+      (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a))
+      sourceDeclarations = some s_decls) :
+    InitialMemory (callEntryStateHOLFinite { s_decls with clock := k } callee) :=
+  (B2PostDecls.evaluateDecls_meta sourceDeclarations
+    { sourceInitialState input with structs := stCtxt } s_decls
+    (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a)) hdecls).memory
+
+/-- Strongest bridge: guarded by the exact covered entry shape (used for `K_pan`). -/
+theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry {K : Nat}
+    (hmain : TerminatingFunBoundedOn MainEntry (ofString "main") K) :
+    CoveredSourceTicksConsumedBounded (K + 1) :=
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnP hmain
+    fun input stCtxt s_decls k callee hgas hdecls =>
+      ⟨⟨guestInv_callEntry _ callee
+          (guestInv_with_locals_clock s_decls s_decls.locals k
+            (guestInv_postDecls input stCtxt s_decls hdecls)),
+        coveredFfi_postDecls input stCtxt s_decls hgas hdecls⟩,
+       initialMemory_postDecls input stCtxt s_decls k callee hdecls⟩
+
+theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnEntryWordGas {K : Nat}
+    (hmain : TerminatingFunBoundedOn MainEntryWordGas (ofString "main") K) :
+    CoveredSourceTicksConsumedBounded (K + 1) :=
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnP hmain
+    fun input stCtxt s_decls k callee _ hdecls =>
+      ⟨guestInv_callEntry _ callee
+          (guestInv_with_locals_clock s_decls s_decls.locals k
+            (guestInv_postDecls input stCtxt s_decls hdecls)),
+       initialMemory_postDecls input stCtxt s_decls k callee hdecls⟩
+
 /-! ## 5. Memory well-formedness predicates (entry preconditions of specific leaves only) -/
 
 /-- Aligned in-domain word `a` holds `w` (exactly what a successful `load` reads). -/
@@ -1106,14 +1152,21 @@ theorem run_attempt_on_wordGas :
 theorem mem_init_ready :
     PreservesOn GuestInv GuestInvReady
       (sourceFunctionEntry Guest.Software.guestFn_mem_init).2.2.1 := by sorry
-theorem main_on_covered :
-    TerminatingFunBoundedOn GuestInvCovered (ofString "main") (R.K_main_body R.G) := by sorry
-theorem main_on_wordGas :
-    TerminatingFunBoundedOn GuestInv (ofString "main") (R.K_main_body (2 ^ 64)) := by sorry
+/-- The `main` obligation used for `K_pan` (guard = exact covered entry shape). -/
+theorem main_on_entry :
+    TerminatingFunBoundedOn MainEntry (ofString "main") (R.K_main_body R.G) := by sorry
+/-- Fallback without the input→header gas link (Q1). -/
+theorem main_on_entry_wordGas :
+    TerminatingFunBoundedOn MainEntryWordGas (ofString "main") (R.K_main_body (2 ^ 64)) := by
+  sorry
 
-/-- End-to-end target of the campaign under this proposal. -/
+/-- End-to-end target of the campaign under this proposal (depends on `main_on_entry`). -/
 theorem coveredSourceTicksConsumedBounded_K_pan : CoveredSourceTicksConsumedBounded K_pan :=
-  coveredSourceTicksConsumedBounded_of_terminatingMainOnCovered main_on_covered
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry main_on_entry
+
+theorem coveredSourceTicksConsumedBounded_K_pan_wordGas :
+    CoveredSourceTicksConsumedBounded K_pan_wordGas :=
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnEntryWordGas main_on_entry_wordGas
 
 /-! ### 6e. Remaining frozen declarations (audit: UNCLEAR), restated over `GuestInv` -/
 
