@@ -160,18 +160,21 @@ theorem TerminatingProgBounded.seq {first second : ProgHOL 64} {a b : Nat}
     (h1 : TerminatingProgBounded first a)
     (h2 : TerminatingProgBounded second b) :
     TerminatingProgBounded (.seq first second) (a + b) := by
-  intro F state hcode hnt
+  intro F state hcode
   have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
   unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
   rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
   rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
-  rw [hr1] at hmeta hnt ⊢
+  simp only [hr1] at hmeta hnt ⊢
   cases r1 with
   | none =>
     dsimp only at hnt ⊢
     have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
     obtain ⟨s1, k1⟩ := h1 state hcode hnt1
     rw [hr1] at s1 k1
+    dsimp only at s1 k1
     obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) hnt
     exact ⟨by omega, by omega⟩
   | some r =>
@@ -179,35 +182,44 @@ theorem TerminatingProgBounded.seq {first second : ProgHOL 64} {a b : Nat}
     have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
     obtain ⟨s1, k1⟩ := h1 state hcode hnt1
     rw [hr1] at s1 k1
+    dsimp only at s1 k1
     exact ⟨by omega, k1⟩
 
 theorem TerminatingProgBounded.ite {cond : ExpHOL 64} {yes no : ProgHOL 64} {a b : Nat}
     (hyes : TerminatingProgBounded yes a)
     (hno : TerminatingProgBounded no b) :
     TerminatingProgBounded (.ite cond yes no) (max a b) := by
-  intro F state hcode hnt
-  unfold TerminatingRunBounded at hnt ⊢
+  intro F state hcode
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
   rw [evaluateHOLFiniteState_ite] at hnt ⊢
-  split at hnt ⊢
-  · split at hnt ⊢
-    · exact (hno state hcode hnt).weaken (Nat.le_max_right a b)
-    · exact (hyes state hcode hnt).weaken (Nat.le_max_left a b)
+  revert hnt
+  split <;> intro hnt
+  · revert hnt
+    split <;> intro hnt
+    · exact TerminatingRunBounded.weaken (hno state hcode) (Nat.le_max_right a b) hnt
+    · exact TerminatingRunBounded.weaken (hyes state hcode) (Nat.le_max_left a b) hnt
   · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
 
 theorem TerminatingProgBounded.dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
     {body : ProgHOL 64} {K : Nat}
     (hbody : TerminatingProgBounded body K) :
     TerminatingProgBounded (.dec name shape init body) K := by
-  intro F state hcode hnt
-  unfold TerminatingRunBounded at hnt ⊢
+  intro F state hcode
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
   rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
   dsimp only at hnt ⊢
-  split at hnt ⊢
+  revert hnt
+  split <;> intro hnt
   · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
-  · split at hnt ⊢
+  · revert hnt
+    split <;> intro hnt
     · rename_i val _ _
       have hb := hbody (setVarHOLFinite name val state) hcode hnt
-      simpa using hb
+      simpa [setVarHOLFinite] using hb
     · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
 
 /-! ## 5. Reduction from `TerminatingFunBounded "main"` to `CoveredSourceTicksConsumedBounded` -/
@@ -236,13 +248,19 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMain
         PanSemStateFiniteExact 64 Guest.HostMemory).memaddrs a)) [] = some [] := rfl
   rw [hargs] at hrun
   dsimp only at hrun
-  have hlookup_call : lookupCodeHOLFinite ({ s_decls with clock := k } :
-      PanSemStateFiniteExact 64 Guest.HostMemory).code.lookup (ofString "main") [] =
-      some (body, HolFiniteMapExact.empty, retShape) := by
-    change lookupCodeHOLFinite s_decls.code.lookup (ofString "main") [] = _
+  -- The callee locals are irrelevant: `hbody` bounds `body` from every state with this code.
+  obtain ⟨callee, hlookup_call⟩ : ∃ callee,
+      PanSemStateFiniteExact.lookupCodeHOLFinite s_decls.code.lookup (ofString "main") [] =
+        some (body, callee, retShape) := by
     rw [hcode]
-    unfold lookupCodeHOLFinite
-    simp [lookupCodeHOLExact, hlook]
+    rcases hx : PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup
+        (ofString "main") [] with _ | ⟨b, c, r⟩
+    · rw [PanSemStateFiniteExact.lookupCodeHOLFinite_eq_none_iff] at hx
+      simp [lookupCodeHOLExact, hlook] at hx
+    · have hx' := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some _ _ _ _ _ _ hx
+      simp [lookupCodeHOLExact, hlook] at hx'
+      obtain ⟨rfl, -, rfl⟩ := hx'
+      exact ⟨c, rfl⟩
   rw [hlookup_call] at hrun
   dsimp only at hrun
   by_cases hk0 : k = 0
@@ -251,7 +269,7 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMain
     rcases hrun with ⟨rfl, _⟩
     exact absurd rfl hnt
   · simp only [hk0, ↓reduceIte] at hrun
-    let entry := callEntryStateHOLFinite { s_decls with clock := k } HolFiniteMapExact.empty
+    let entry := callEntryStateHOLFinite { s_decls with clock := k } callee
     have hentry_code : entry.code = originalRuntimeCode := hcode
     have hentry_clk : entry.clock = k - 1 := rfl
     rcases hb_run : evaluateHOLFiniteState entry body with ⟨bres, bpost⟩
@@ -259,9 +277,7 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMain
       have hle := evaluateHOLFiniteState_clock_le entry body
       rw [hb_run] at hle
       exact hle
-    have hfix : fixClockHOLFinite entry (bres, bpost) = (bres, bpost) := by
-      simp [fixClockHOLFinite, Nat.not_lt.mpr hkept_raw]
-    rw [hb_run, hfix] at hrun
+    rw [hb_run] at hrun
     have hb_nt : bres ≠ some .timeOut := by
       intro hbt
       subst hbt
@@ -271,6 +287,7 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMain
     have hb_bound := hbody entry hentry_code (by rw [hb_run]; exact hb_nt)
     rw [hb_run] at hb_bound
     obtain ⟨hspent, _⟩ := hb_bound
+    dsimp only at hspent
     have hpost_clk : s_post.clock = bpost.clock := by
       cases bres with
       | none => simp at hrun; obtain ⟨_, rfl⟩ := hrun; rfl
