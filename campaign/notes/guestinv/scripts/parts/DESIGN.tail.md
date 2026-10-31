@@ -7,18 +7,19 @@
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`. The
   assembly uses ten of them directly. `htab_union_into_spec`, `htab_new_scratch_spec` and the two
   MPT specs are the lemmas the frame and table contract proofs are expected to use.
-- Generated callee contracts (142): `ro_*` (30), `ww_*` (50), `wk_*` (43), `ek_*` (10), `ak_*` (1),
-  `fk_frame_open`, `nf_*` (7). (Revision 4: `wk_*` 47, `ek_*` 6.)
+- Generated callee contracts (144): `ro_*` (30), `ww_*` (50), `wk_*` (43), `ek_*` (10), `ak_*` (1),
+  `fk_frame_open`, `nf_*` (7), `nk_mpt_nibble_key`, `rv_common_prefix_length`. (Revision 4: 142,
+  with `wk_*` 47, `ek_*` 6.)
 
 ## 7. Every `sorry`
 
 - Combinators, glue, bridge, assembly: none.
 - §7 contract leaves (14).
-- Generated callee contracts (142).
+- Generated callee contracts (144).
 - Composition obligations `gbody_*` (35; the other 12 are proved).
 - Unguarded bound leaves `fb_*` (727).
 
-918 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
+920 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
 `assembly_main` are `sorry`-free. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
 depends on `sorryAx` only through the `Primitives` fields. `run_frames_step` depends on the four
 frame contracts.
@@ -53,7 +54,7 @@ frame contracts.
 - **Q2 (`finish_child` on `EvmErr`).** Unchanged from revision 3.
 - **Q3 (`TriesTyped`).** Unchanged: storage tries are typed through the `ws+32` cache only.
 - **Q4 (MPT descent).** Unchanged.
-- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 142 contracts, mostly
+- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 144 contracts, mostly
   loop-free.
 - **Q6, Q7.** Unchanged (arithmetic facts behind two `MONO` measures; divergence obligations).
 - **Q8 (heap-resident frame blocks).** Logs arrays and, new in revision 4, return-data buffers live

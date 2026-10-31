@@ -1,10 +1,11 @@
-# GuestInv revision 5: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 6: a guarded route to `CoveredSourceTicksConsumedBounded`
 
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
 (`guestinv-r2.md`), revision 4 the round-3 quorum (`guestinv-r3.md`, §0.3 and §0.4), and revision
-5 answers the round-4 quorum (`guestinv-r4.md`), §0.1 and §0.2. Revision 5 is a narrow fix round:
-only the statements listed in §0.2 changed. All statements are in
+5 (Fable's items) and revision 6 (Astra's items, commit d16ff8bc0) answer the round-4 quorum
+(`guestinv-r4.md`), §0.1 and §0.2. Both are narrow fix rounds: only the statements listed in §0.2
+changed. All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -22,7 +23,7 @@ is touched.
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements, textually unchanged) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
-| callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (55: `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`), `NodeFn` (7) | §7 (generated) | `sorry` (142 statements; revision 5: 4 restated, 4 replaced, §0.2) |
+| callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (55: `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`), `NodeFn` (7), value contracts (2: `nk_mpt_nibble_key`, `rv_common_prefix_length`) | §7 (generated) | `sorry` (144 statements; revisions 5-6, §0.2) |
 | **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | 12 **proved** by concrete-body composition, 35 `sorry` |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
@@ -30,7 +31,7 @@ is touched.
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | `assembly primitives`; its `sorry` dependencies are exactly the primitive leaves |
 
-## 0.1 Round-4 items and how each is addressed (revision 5)
+## 0.1 Round-4 items and how each is addressed (revisions 5 and 6)
 
 Round 4 (`campaign/reviews/guestinv-r4.md`) found 6 false `KeepsOn` leaves, plus two
 non-blocking items. Each fix is confined to the listed statements. The rest of the interface,
@@ -114,48 +115,145 @@ restated `MptObjReady`. Its body needs only the node typing, which is unchanged.
   revision 5 they are `ww_*` 50, `wk_*` 43, `ek_*` 10 (§6, §7).
 - **Scratch-copy `#print axioms` procedure.** Kept, with the exact commands, in §9.
 
-## 0.2 Changes since 0f8dea8c7 (revision 5)
+### Astra 6, blocking (revision 6, commit d16ff8bc0)
 
-`sigdiff.py` (§9) on revision 4 (0f8dea8c7) vs revision 5:
+Astra's round-4 review was appended after revision 5 (`52f2459bf`). Revision 6 answers it. Each
+fix is again confined to the statements listed in §0.2.
 
-**Changed leaf statements (6 restated in place, 4 removed, 4 added; all callee contracts):**
-- `ek_depth0_prepare`: `KeepsOn EvmInv EvmInv` → `KeepsOn EvmMsgReady EvmInv`;
-- `fk_frame_open`: `KeepsOn FrameOpenReady EvmInv` → `KeepsOn FrameOpenReady EvmMsgReady`;
-- `wk_mpt_set`: pre `fun s => WorldOK s ∧ MptObjReady s` → `MptObjReady` (restated);
-- `wk_mpt_root`: pre `fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s` →
-  `MptObjAvoids (fun s => [(locN s "out", 32)])`;
-- removed `wk_charge_gas`, `wk_stack_pop`, `wk_warm_storage_key`, `wk_get_storage_original`;
-- added `ek_charge_gas`, `ek_stack_pop`, `ek_warm_storage_key`, `ek_get_storage_original`
-  (`KeepsOn EvmInv EvmInv`).
+**1. Shared deletion tables.** The release exemption of `MarksOK` is now exclusive. A table of
+`S` may lie below the child's mark only if it is the deletion table `e_j+136` of a frame `j ≤ i`
+and `DelExclusive s S ch i t` holds:
+- no world reference names it. `worldTableRefs` lists the `ws`/`bs`/`ts` record slots, the
+  global roots, the live values of `bs+32`/`ts+32`, the two tables of every BAL account record,
+  and the table of every journal record;
+- every chain slot `+136/+168/+176` holding it is a deletion slot `+136` at a position `j ≤ i`.
 
-All 727 `fb_*`, all 14 §7 contract leaves (incl. `op_dispatch_spec`) and the other 134 callee
-contracts are textually unchanged.
+Astra's witness `parent+136 = bal_idx_accts = child+136` is excluded. Only `frame_new`
+(`htab_new_scratch`) creates a deletion table. Each `jset`/`jdel` call writes into a `ts` slot
+table or into a table nested in one, never a deletion table. The one copy of `e+136`
+(`process_message_call` 19711) happens after the outermost frame has ended.
 
-**Changed composition obligations (9 `GBody.«f»`, all still `sorry`):**
-- `op_dispatch`, `op_sload`, `op_sstore`: guard `WorldOK` → `EvmRun`; the `op_sload`/`op_sstore`
-  hypotheses use the `ek_*` contracts;
-- `run_frames`: hypothesis `gb_op_dispatch` under `EvmRun`;
-- `process_message`: `fk_frame_open`/`ek_depth0_prepare` as above;
-- `build_mpt_indexed`, `compute_state_root`: hypotheses `gb_mpt_set` (restated guard),
-  `wk_mpt_set`, `wk_mpt_root`;
-- `execute_block`: guard `WorldOK` → `BlockReady`;
-- `run_attempt`: hypothesis `gb_execute_block` under `BlockReady`.
+**2. Return data (and other writes) over trie nodes.** `TriesTyped` is restated as
+`∃ Nd, TriesTypedWith s S Nd`, and `nodeExtents s Nd` lists the node records and their paths.
+`AvoidsTries s S os` says some typed node set of the tries, for the same `S`, avoids the regions
+`os`. It is required of:
+- every frame block (new `EvmInv` conjunct, mirrored in `EvmInvAt`);
+- the message record (`MsgReady`, `MsgOwned`);
+- the `WorldAvoids` output regions;
+- the trie object `m` and the `MptObjAvoids` regions.
 
-**Changed guarded bounds (4, proved):** `gb_op_dispatch`, `gb_op_sload`, `gb_op_sstore` (guard
-`EvmRun`), `gb_execute_block` (guard `BlockReady`). `Primitives` changes accordingly (field types
-above, the four renamed contracts).
+**3.** Fable's item 1, already fixed in revision 5 (`EvmRun`, `ek_*`). Astra's `wk_charge_gas`
+and `wk_stack_pop` no longer exist.
 
-**Changed definitions (1):** `MptObjReady` (now `MptObjAvoids (fun _ => [])`, item 3). The proof of
-`localsOnly_mptObjReady` is adjusted; its statement is unchanged.
+**4. Byte-granularity framing.** `FrameOutside` is cell-granular: a cell may change iff it meets a
+kept or fresh region (`CellHits`). Memory maps cells to words, and a byte store rewrites its whole
+aligned cell. The one definition covers every frame: `WritesWithin`, `HtabExit`, `UnionExit`,
+`HtabNewExit`, `MptExit`, `NodeFnExit`. This includes every byte-writing contract (`ww_memcpy`,
+`ww_memzero`, `ww_rlp_encode_*`, …). Supporting results:
+- the regression `example` for `memzero(a+1, 1)`;
+- `cellHits_aligned` (proved): for word-aligned objects the cell frame is the old address frame,
+  so owned objects are protected exactly as before.
 
-**New definitions:** `EvmRun`, `EvmInvAt`, `MsgOwned`, `EvmMsgReady`, `MptObjIn`, `MptObjAvoids`,
-`BlockReady`. **New proved theorems:** `localsFree_evmRun`, `evmInv_iff_at` (`Iff.rfl`),
-`evmInv_of_evmMsgReady`, `localsFree_evmMsgReady`, `localsOnly_blockReady`.
+**5. Nibble keys and paths.** New definitions:
+- `memB`: the byte `loadByte` reads, with the state's `be`;
+- `NibblesOK`;
+- `KeyIn s Nd p len`: empty, or nibbles in allocated heap, disjoint from every node record;
+- `nodePath`.
 
-**Unchanged:** `EvmInv`, `frameObjects`, `WorldOK`, `TxReady`, `fixedObjects`,
-`blockOutObjects`, every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
-`run_frames_step_of_specs`, every combinator, and the 12 proved `gbody_*`. The leaf census is
-unchanged at 918: 727 `fb_*`, 14 §7 contracts, 142 callee contracts, 35 `gbody_*`.
+`NodeHeap` requires every leaf/extension path to satisfy `KeyIn`. `MptReady` requires
+`level ≤ klen` and the unread key suffix to satisfy `KeyIn`. Two value contracts let the callers
+establish this:
+- `nk_mpt_nibble_key : RetNibbles "mpt_nibble_key"` (fresh heap nibble array);
+- `rv_common_prefix_length : RetLe (min al bl)`.
+
+**6. Function-specific node kinds.** `NodeFn names req g` carries `g`'s own requirement, read off
+its body (`NODE_REQ` in `coverage.py`). `NodeKind` is the kind of the node it reads/writes at
+fixed offsets:
+- `_insert_into_leaf`: 1;
+- `_split_extension`: 2, plus `pl < node+40` and `pl ≤ rl`;
+- `_delete_ext_finish`: 2;
+- `_collapse_branch`: 3.
+
+It also carries `KeyIn` for every array the function copies into a path. `NodeFnExit` adds that
+old nodes keep their kinds and new nodes are fresh heap records. The callers' loop invariants need
+both.
+
+**7. Aligned allocator.** `ArenaOK` requires `heap_ptr`, `frame_mem_ptr` and `scratch_ptr ≡ 0
+(mod 8)`. `mem_init` sets aligned constants; the allocators set `(p + n + 7) & -8` /
+`(p - n) & -8`; the releases restore earlier pointer values. `MarksOK` requires its marks
+aligned.
+
+**8. Assembly boundary (for the round-5 ruling).** Each `GBody.«f»` is now visibly
+single-function:
+- its docstring lists the direct callees of `f`, then the contract hypotheses;
+- a proved `«callees_f»` checks by `decide` on the literal AST (`progCallees`, `fnBody`,
+  `sameNames`) that the direct callees of `f` are exactly the functions whose bounds are
+  hypotheses (47 theorems);
+- `coverage.py` asserts that every hypothesis names a direct callee of `f`;
+- §6 has the per-function table (`out/gbody.md`).
+
+So `gbody_f` assumes only facts about `f`'s callees and concludes only about `f`'s body. That is
+the shape of an `fb_*` leaf, plus callee hypotheses. Whether it meets the round-3 boundary is the
+quorum's ruling.
+
+**Found while auditing the hypotheses: `RollbackReady`.** `rollback_child_access` truncates
+`child+168`, then reloads `child+176` and `child+272`. Its guard therefore also requires:
+- the child record `(child, 280)` allocated words, outside both table footprints;
+- the two tables equal, or with disjoint footprints.
+
+`finish_child` gets these from `EvmInv`.
+
+## 0.2 Changes since 0f8dea8c7 (revisions 5 and 6)
+
+`sigdiff.py` (§9) on revision 4 (0f8dea8c7) vs revision 6 (d16ff8bc0 + this DESIGN):
+
+**Changed leaf statements:**
+- revision 5: `ek_depth0_prepare`, `fk_frame_open`, `wk_mpt_set`, `wk_mpt_root` restated;
+  `wk_charge_gas`, `wk_stack_pop`, `wk_warm_storage_key`, `wk_get_storage_original` replaced by
+  `ek_*` (`KeepsOn EvmInv EvmInv`);
+- revision 6: the seven `nf_*` (`NodeFn` with requirements, item 6); new value contracts
+  `nk_mpt_nibble_key`, `rv_common_prefix_length` (item 5).
+
+All 727 `fb_*` and all 14 §7 contract leaves are textually unchanged. Some leaves keep their text
+but change meaning through a definition below: the frames through `FrameOutside`, the `EvmInv`
+contracts through `EvmInv`/`MarksOK`, the MPT specs through `NodeHeap`/`MptReady`.
+
+**Changed definitions:** `ArenaOK` (7), `FrameOutside` (4), `NodeHeap` (5), `TriesTyped` (2),
+`MarksOK` (1, 7), `EvmInv` (2), `MptReady` (5), `MptObjReady` (Fable 3), `MsgReady` (2),
+`WorldAvoids` (2), `NodeArgs`, `NodeFn`, `NodeFnExit` (6), `RollbackReady` (audit).
+`localsOnly_mptReady` now lists `key`, `klen`, `level`.
+
+**Changed composition obligations (13 `GBody.«f»`, all still `sorry`):** `op_dispatch`, `op_sload`,
+`op_sstore`, `run_frames`, `process_message`, `build_mpt_indexed`, `compute_state_root`,
+`execute_block`, `run_attempt` (revision 5); `mpt_set`, `_mpt_insert_node`,
+`_mpt_delete_node_body` (revision 6, new hypotheses). Every `GBody` docstring is regenerated
+(item 8).
+
+**Changed guarded bounds (4, proved):** `gb_op_dispatch`, `gb_op_sload`, `gb_op_sstore` (`EvmRun`),
+`gb_execute_block` (`BlockReady`). `Primitives` changes accordingly.
+
+**New definitions:**
+- revision 5: `EvmRun`, `EvmInvAt`, `MsgOwned`, `EvmMsgReady`, `MptObjIn`, `MptObjAvoids`,
+  `BlockReady`;
+- revision 6: `CellHits`, `memB`, `NibblesOK`, `KeyIn`, `nodePath`, `nodeExtents`,
+  `TriesTypedWith`, `AvoidsTries`, `htabValues`, `recordSlots`, `worldTableRefs`, `DelExclusive`,
+  `NodeKind`, `RetLe`, `RetNibbles`, `progCallees`, `fnBody`, `sameNames`.
+
+**New proved theorems:**
+- revision 5: `localsFree_evmRun`, `evmInv_iff_at` (`Iff.rfl`), `evmInv_of_evmMsgReady`,
+  `localsFree_evmMsgReady`, `localsOnly_blockReady`;
+- revision 6: `cellHits_aligned`, the 47 `«callees_f»`.
+
+**Unchanged:** `frameObjects`, `fixedObjects`, `blockOutObjects`, `WorldOK`, `TxReady`, every
+`K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue `run_frames_step_of_specs`, every
+combinator, the 12 proved `gbody_*`.
+
+**Census:** 920 leaf sorries:
+- 727 `fb_*`;
+- 14 §7 contracts;
+- 144 callee contracts: `ro_*` 30, `ww_*` 50, `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`,
+  `nf_*` 7, `nk_*` 1, `rv_*` 1;
+- 35 `gbody_*`.
 
 ## 0.3 Round-3 items and how each was addressed (revision 4)
 
@@ -1904,6 +2002,58 @@ ws_get_storage [WorldOK]: memeq ws_storage_root_of
 ws_storage_trie [WorldOK]: htab_get
 ```
 
+Per-function composition table (revision 6, round-4 Astra item 8; generated, `out/gbody.md`):
+
+| `gbody_*` (function) | guard | loops | direct callees = bound hypotheses | contract hypotheses | status |
+|---|---|---|---|---|---|
+| `_decode_witness_node_body` (AST 10196) | `ArenaReady` | #0 GUARD | 5: _decode_step, _resolve_step, mpt_fail, node_new_ext, rlp_item | 5: `ak__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item` | primitive |
+| `_decode_witness_node_mpt` (AST 10311) | `WorldOK` | loop-free | 2: _decode_witness_node_body, scratch_release | 0: — | **proved** |
+| `_decode_witness_node` (AST 10328) | `WorldOK` | loop-free | 3: _decode_witness_node_mpt, scratch_mark, scratch_release | 1: `ro_scratch_mark` | **proved** |
+| `_mpt_delete_node_body` (AST 10758) | `MptReady` | #0 GUARD; #1 GUARD | 7: _collapse_branch, _delete_ext_finish, common_prefix_length, memeq, mpt_fail, node_invalidate, scratch_alloc | 8: `nf__collapse_branch`, `nf__delete_ext_finish`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_memeq`, `ro_mpt_fail`, `nf_node_invalidate`, `ww_scratch_alloc` | primitive |
+| `_mpt_delete_node` (AST 10852) | `MptReady` | loop-free | 3: _mpt_delete_node_body, scratch_mark, scratch_release | 1: `ro_scratch_mark` | primitive |
+| `_mpt_insert_node` (AST 10598) | `MptReady` | #0 GUARD | 7: _insert_into_leaf, _split_extension, common_prefix_length, mpt_fail, node_invalidate, node_new_ext, node_new_leaf | 8: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf` | primitive |
+| `mpt_set` (AST 10872) | `MptObjReady` | loop-free | 3: _mpt_delete_node, _mpt_insert_node, mpt_nibble_key | 2: `ww_mpt_nibble_key`, `nk_mpt_nibble_key` | primitive |
+| `build_mpt_indexed` (AST 11243) | `WorldOK` | #0 CTR | 6: heap_mark, heap_release, mpt_new, mpt_root, mpt_set, rlp_encode_word | 4: `ro_heap_mark`, `ww_mpt_new`, `wk_mpt_set`, `ww_rlp_encode_word` | primitive |
+| `decode_witness_to_mpt` (AST 10348) | `WorldOK` | loop-free | 6: _decode_witness_node, alloc, memcpy, memeq, mpt_fail, nodedb_lookup | 3: `ro_memeq`, `ro_mpt_fail`, `ro_nodedb_lookup` | primitive |
+| `mpt_from_witness` (AST 10459) | `WorldOK` | loop-free | 2: decode_witness_to_mpt, mpt_new | 0: — | **proved** |
+| `compute_state_root` (AST 32341) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR | 18: alloc, cache_get_root, encode_account, htab_copy, htab_get, htab_has, htab_item, htab_new, htab_set, memcpy, mpt_from_witness, mpt_root, mpt_set, rlp_encode_bytes, u256_is_zero, u256_to_be_min, ws_get_account_optional, ws_storage_root_of | 18: `ww_alloc`, `ww_cache_get_root`, `ww_encode_account`, `ww_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `ww_memcpy`, `wk_mpt_from_witness`, `wk_mpt_root`, `wk_mpt_set`, `ww_rlp_encode_bytes`, `ro_u256_is_zero`, `ww_u256_to_be_min`, `ww_ws_get_account_optional`, `ww_ws_storage_root_of` | primitive |
+| `ws_storage_trie` (AST 13042) | `WorldOK` | loop-free | 3: decode_witness_to_mpt, htab_get, htab_set | 1: `ro_htab_get` | primitive |
+| `ws_get_storage` (AST 13061) | `WorldOK` | loop-free | 10: alloc, heap_mark, heap_release, keccak256, memeq, rlp_decode_fully, trie_lookup, u256_from_be, ws_storage_root_of, ws_storage_trie | 2: `ro_memeq`, `ww_ws_storage_root_of` | primitive |
+| `get_pre_tx_storage` (AST 14069) | `WorldOK` | loop-free | 3: record_pre_state_read, stor_lookup, ws_get_storage | 2: `wk_record_pre_state_read`, `ro_stor_lookup` | primitive |
+| `idx_start_storage` (AST 14129) | `WorldOK` | loop-free | 6: alloc, get_pre_tx_storage, htab_get, htab_set, memcpy, st_le64 | 3: `ro_htab_get`, `ww_memcpy`, `ww_st_le64` | primitive |
+| `update_builder_from_tx` (AST 14233) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR | 12: add_balance_change, add_code_change, add_nonce_change, add_storage_write, bal_remove_change, get_code, htab_item, idx_start_account, idx_start_storage, memeq, remove_storage_write, u256_eq | 12: `wk_add_balance_change`, `wk_add_code_change`, `wk_add_nonce_change`, `wk_add_storage_write`, `wk_bal_remove_change`, `wk_get_code`, `ro_htab_item`, `wk_idx_start_account`, `wk_idx_start_storage`, `ro_memeq`, `wk_remove_storage_write`, `ro_u256_eq` | primitive |
+| `incorporate_tx_into_block` (AST 14313) | `WorldOK` | loop-free | 2: merge_tx_into_block, update_builder_from_tx | 0: — | **proved** |
+| `htab_truncate` (AST 5278) | `HtabArgWF` | #0 WF | 1: htab_del | 2: `htab_del_spec`, `htab_del_progress_spec` | primitive |
+| `rollback_child_access` (AST 18995) | `RollbackReady` | loop-free | 1: htab_truncate | 1: `htab_truncate_spec` | primitive |
+| `finish_child` (AST 18572) | `FinishReady` | loop-free | 16: address_to_u256, create_finish, credit_state_gas_refund, frame_halt, frame_mem_release, incorporate_child_on_error, incorporate_child_on_success, memcpy, min, pc_add, refill_frame_state_gas, rollback_child_access, scratch_release, set_retdata, stack_push, state_restore | 4: `ek_create_finish`, `ek_frame_halt`, `ek_refill_frame_state_gas`, `ek_state_restore` | primitive |
+| `get_storage` (AST 13249) | `WorldOK` | loop-free | 5: htab_set, record_pre_state_read, sk_make, stor_lookup, ws_get_storage | 4: `htab_set_spec`, `wk_record_pre_state_read`, `ww_sk_make`, `ro_stor_lookup` | primitive |
+| `op_sload` (AST 16584) | `EvmRun` | loop-free | 8: charge_gas, get_storage, is_warm_storage_key, pc_add, stack_pop, stack_push, u256_to_be32, warm_storage_key | 5: `ek_charge_gas`, `ww_is_warm_storage_key`, `ek_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key` | primitive |
+| `get_storage_original` (AST 13276) | `WorldOK` | loop-free | 4: htab_has, record_pre_state_read, stor_lookup, ws_get_storage | 3: `ro_htab_has`, `wk_record_pre_state_read`, `ro_stor_lookup` | primitive |
+| `op_sstore` (AST 16611) | `EvmRun` | loop-free | 16: charge_gas, charge_state_gas, check_gas, credit_state_gas_refund, get_storage, get_storage_original, is_warm_storage_key, max, pc_add, require_not_static, set_storage, stack_pop, u256_eq, u256_is_zero, u256_to_be32, warm_storage_key | 9: `ek_charge_gas`, `ro_check_gas`, `ek_get_storage_original`, `ww_is_warm_storage_key`, `ro_max`, `ro_require_not_static`, `ek_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key` | primitive |
+| `op_dispatch` (AST 17902) | `EvmRun` | loop-free | 87: op_add, op_addmod, op_address, op_and, op_balance, op_basefee, op_blobbasefee, op_blobhash, op_blockhash, op_byte, op_call, op_callcode, op_calldatacopy, op_calldataload, op_calldatasize, op_caller, op_callvalue, op_chainid, op_clz, op_codecopy, op_codesize, op_coinbase, op_create, op_create2, op_delegatecall, op_div, op_dup, op_dupn, op_eq, op_exchange, op_exp, op_extcodecopy, op_extcodehash, op_extcodesize, op_gas, op_gaslimit, op_gasprice, op_gt, op_iszero, op_jump, op_jumpdest, op_jumpi, op_keccak, op_log, op_lt, op_mcopy, op_mload, op_mod, op_msize, op_mstore, op_mstore8, op_mul, op_mulmod, op_not, op_number, op_or, op_origin, op_pc, op_pop, op_prevrandao, op_push, op_return, op_returndatacopy, op_returndatasize, op_revert, op_sar, op_sdiv, op_selfbalance, op_selfdestruct, op_sgt, op_shl, op_shr, op_signextend, op_sload, op_slotnum, op_slt, op_smod, op_sstore, op_staticcall, op_stop, op_sub, op_swap, op_swapn, op_timestamp, op_tload, op_tstore, op_xor | 0: — | primitive |
+| `run_frames` (AST 18663) | `EvmInv` | #0 POT | 4: finish_child, frame_epilogue, frame_exception, op_dispatch | 4: `finish_child_spec`, `frame_epilogue_spec`, `frame_exception_spec`, `op_dispatch_spec` | primitive |
+| `process_message` (AST 18803) | `MsgReady` | loop-free | 10: depth0_prepare, frame_halt, frame_mem_release, frame_open, frame_start, refill_frame_state_gas, run_frames, scratch_release, state_restore, state_snapshot | 4: `ek_depth0_prepare`, `fk_frame_open`, `ek_frame_start`, `ro_state_snapshot` | primitive |
+| `process_create_message` (AST 18899) | `MsgReady` | loop-free | 9: create_finish, destroy_storage, frame_halt, increment_nonce, mark_account_created, process_message, refill_frame_state_gas, state_restore, state_snapshot | 4: `wk_destroy_storage`, `wk_increment_nonce`, `wk_mark_account_created`, `ro_state_snapshot` | primitive |
+| `process_message_call` (AST 19661) | `MsgReady` | loop-free | 6: account_deployable, alloc, frame_state_gas_used, memzero, process_create_message, process_message | 3: `wk_account_deployable`, `ww_alloc`, `ww_memzero` | primitive |
+| `process_unchecked_system_transaction` (AST 32851) | `WorldOK` | loop-free | 11: alloc, ext_code_of, frame_mem_release, htab_new, incorporate_tx_into_block, memcpy, msg_new, process_message_call, scratch_release, state_fresh_tx, te_new | 6: `wk_ext_code_of`, `htab_new_spec`, `ww_msg_new`, `wk_process_message_call`, `ww_state_fresh_tx`, `ww_te_new` | primitive |
+| `process_checked_system_transaction` (AST 32928) | `WorldOK` | loop-free | 4: alloc, ext_code_of, process_unchecked_system_transaction, state_fresh_tx | 3: `ww_alloc`, `wk_ext_code_of`, `ww_state_fresh_tx` | primitive |
+| `process_general_purpose_requests` (AST 33507) | `ReqsFresh` | #0 CTR; #1 CTR | 6: alloc, extract_deposit_data, memcpy, memeq, process_checked_system_transaction, requests_append | 6: `ww_alloc`, `ww_extract_deposit_data`, `ww_memcpy`, `ro_memeq`, `wk_process_checked_system_transaction`, `wk_requests_append` | primitive |
+| `process_transaction` (AST 33103) | `TxReady` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR | 37: alloc, calculate_blob_gas_price, calculate_total_blob_gas, check_transaction, clear_account_preserving_balance, compute_contract_address, create_ether, encode_receipt, encode_transaction, fee_mul, frame_mem_release, get_account, htab_item, htab_new, htab_set, incorporate_tx_into_block, increment_nonce, keccak256, lst_new, lst_push, max, memcpy, min, msg_new, process_message_call, recover_sender_with_chain_id, scratch_release, set_account_balance, state_fresh_tx, te_new, tx_chain_id, tx_has_access_list, tx_is_blob, tx_is_setcode, u256_sub, udiv_small5, validate_transaction | 34: `ww_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `ww_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `ww_keccak256`, `ww_lst_new`, `ww_lst_push`, `ro_max`, `ww_memcpy`, `ro_min`, `ww_msg_new`, `wk_process_message_call`, `ww_recover_sender_with_chain_id`, `wk_set_account_balance`, `ww_state_fresh_tx`, `ww_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction` | primitive |
+| `process_withdrawals` (AST 33458) | `WorldOK` | #0 CTR | 4: create_ether, incorporate_tx_into_block, state_fresh_tx, u256_mul | 3: `wk_create_ether`, `ww_state_fresh_tx`, `ro_u256_mul` | primitive |
+| `execute_block` (AST 33580) | `BlockReady` | #0 CTR | 20: alloc, bal_init, build_block_access_list_rlp, build_mpt_indexed, compute_requests_hash, compute_state_root, decode_transaction, keccak256, logs_bloom, lst_new, max, memeq, memzero, process_general_purpose_requests, process_transaction, process_unchecked_system_transaction, process_withdrawals, state_fresh_tx, track_ancestor_access, validate_block_access_list_gas_limit | 16: `ww_alloc`, `ww_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `ww_decode_transaction`, `ww_logs_bloom`, `ww_lst_new`, `ww_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `ww_state_fresh_tx`, `ww_track_ancestor_access`, `ro_validate_block_access_list_gas_limit` | primitive |
+| `payload_header` (AST 32645) | `WorldOK` | #0 CTR | 8: alloc, block_rlp_length, build_mpt_indexed, compute_requests_hash, encode_execution_requests, encode_withdrawal_rlp, keccak256, memzero | 6: `ww_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `ww_keccak256`, `ww_memzero` | primitive |
+| `state_init` (AST 12708) | `WorldOK` | loop-free | 3: alloc, decode_witness_to_mpt, htab_new | 1: `ww_alloc` | primitive |
+| `run_attempt` (AST 33734) | `WorldOK` | #0 CTR | 12: alloc, check_gas_limit, execute_block, header_hash, is_valid_versioned_hashes, memeq, memzero, nodedb_build, payload_header, state_init, validate_header, validate_headers | 11: `ww_alloc`, `ro_check_gas_limit`, `ww_header_hash`, `ww_is_valid_versioned_hashes`, `ro_memeq`, `ww_memzero`, `wk_nodedb_build`, `wk_payload_header`, `wk_state_init`, `wk_validate_header`, `ww_validate_headers` | primitive |
+| `attempt_l1` (AST 33847) | `WorldOK` | loop-free | 1: run_attempt | 0: — | **proved** |
+| `attempt_l2` (AST 33863) | `WorldOK` | loop-free | 1: attempt_l1 | 0: — | **proved** |
+| `attempt_l3` (AST 33879) | `WorldOK` | loop-free | 1: attempt_l2 | 0: — | **proved** |
+| `attempt_l4` (AST 33895) | `WorldOK` | loop-free | 1: attempt_l3 | 0: — | **proved** |
+| `attempt_l5` (AST 33911) | `WorldOK` | loop-free | 1: attempt_l4 | 0: — | **proved** |
+| `attempt_l6` (AST 33927) | `WorldOK` | loop-free | 1: attempt_l5 | 0: — | **proved** |
+| `attempt_l7` (AST 33943) | `WorldOK` | loop-free | 1: attempt_l6 | 0: — | **proved** |
+| `verify_stateless_new_payload` (AST 33959) | `WorldOK` | loop-free | 1: attempt_l7 | 0: — | **proved** |
+| `main` (AST 33979) | `MainEntry` | loop-free | 21: alloc, blake2_init, bls_precompiles_init, bn254_init, decode_host_input, evm_init, fork_init, header_init, htr_new_payload_request, keccak_init, mem_init, memzero, mpt_init, output_write, ripemd160_init, secp256k1_init, serialize_result, sha256_init, ssz_init, u256_ws_init, verify_stateless_new_payload | 18: `ww_alloc`, `ww_blake2_init`, `ww_bls_precompiles_init`, `ww_bn254_init`, `wk_decode_host_input`, `ww_evm_init`, `ww_fork_init`, `ww_header_init`, `ww_htr_new_payload_request`, `ww_keccak_init`, `mem_init_world`, `ww_memzero`, `ww_mpt_init`, `ww_ripemd160_init`, `ro_secp256k1_init`, `ww_sha256_init`, `ww_ssz_init`, `ww_u256_ws_init` | primitive |
+
 ### Contract leaves (all `sorry`)
 
 - §7 (hand-written, unchanged statements): `htab_set_spec`, `htab_del_spec`,
@@ -1912,18 +2062,19 @@ ws_storage_trie [WorldOK]: htab_get
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`. The
   assembly uses ten of them directly. `htab_union_into_spec`, `htab_new_scratch_spec` and the two
   MPT specs are the lemmas the frame and table contract proofs are expected to use.
-- Generated callee contracts (142): `ro_*` (30), `ww_*` (50), `wk_*` (43), `ek_*` (10), `ak_*` (1),
-  `fk_frame_open`, `nf_*` (7). (Revision 4: `wk_*` 47, `ek_*` 6.)
+- Generated callee contracts (144): `ro_*` (30), `ww_*` (50), `wk_*` (43), `ek_*` (10), `ak_*` (1),
+  `fk_frame_open`, `nf_*` (7), `nk_mpt_nibble_key`, `rv_common_prefix_length`. (Revision 4: 142,
+  with `wk_*` 47, `ek_*` 6.)
 
 ## 7. Every `sorry`
 
 - Combinators, glue, bridge, assembly: none.
 - §7 contract leaves (14).
-- Generated callee contracts (142).
+- Generated callee contracts (144).
 - Composition obligations `gbody_*` (35; the other 12 are proved).
 - Unguarded bound leaves `fb_*` (727).
 
-918 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
+920 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
 `assembly_main` are `sorry`-free. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
 depends on `sorryAx` only through the `Primitives` fields. `run_frames_step` depends on the four
 frame contracts.
@@ -1958,7 +2109,7 @@ frame contracts.
 - **Q2 (`finish_child` on `EvmErr`).** Unchanged from revision 3.
 - **Q3 (`TriesTyped`).** Unchanged: storage tries are typed through the `ws+32` cache only.
 - **Q4 (MPT descent).** Unchanged.
-- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 142 contracts, mostly
+- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 144 contracts, mostly
   loop-free.
 - **Q6, Q7.** Unchanged (arithmetic facts behind two `MONO` measures; divergence obligations).
 - **Q8 (heap-resident frame blocks).** Logs arrays and, new in revision 4, return-data buffers live
@@ -2022,9 +2173,9 @@ F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxiom
 lake env lean $S; rm $S
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 918 `declaration uses
-'sorry'` warnings, all leaves: 14 §7 contracts, 142 generated callee contracts, 35 `gbody_*`, 727
-`fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
+Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 6): no errors; 920
+`declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 144 generated callee contracts,
+35 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
 There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
 `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
@@ -2038,6 +2189,7 @@ There are also style-linter notes about the `__` in generated names such as `fb_
     `localsOnly_htabNewReady`; revision 5: `localsFree_evmRun`, `localsFree_evmMsgReady`,
     `localsOnly_blockReady`, `localsOnly_mptObjReady`);
   - revision 5: `evmInv_iff_at`, `evmInv_of_evmMsgReady`;
+  - revision 6: `cellHits_aligned` and the 47 `«callees_f»` (`decide` on the AST);
   - the glue `run_frames_step_of_specs`;
   - the bridge (unchanged).
 - `[propext]`: `K_pan_budget`.
