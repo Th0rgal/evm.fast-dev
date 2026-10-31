@@ -84,12 +84,33 @@ parameter. -/
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
 
-/-- `mpt_set(m, …)`: the 16-byte trie object `m` (`mpt_new` 10446: `+0` root node) is allocated
-and its root is typed. -/
+/-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
+relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
+every node of `Nd` are disjoint from every table footprint of `S` and every fixed object, as
+`TriesTyped` requires of the world tries. `mpt_set` stores `m+0` (10886) and rewrites node records;
+`mpt_root` stores hash pointers into the node caches (`+8/+16`). A node at `nodes + 8` of a table
+in `S` made `mpt_root` overwrite that table's root. -/
+def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "m", 16) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (locN s "m", 16) j) ∧
+  ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
+    ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (nodeIvl s n) i) ∧
+      ∀ j ∈ fixedObjects s, Disj (nodeIvl s n) j
+
+/-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
+`R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
+buffer, as in `WorldAvoids`). -/
+def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ ∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+
+/-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
+revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
 def MptObjReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
-    ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
-      ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16)
+  fun s => MptObjAvoids (fun _ => []) s
 
 /-- Exit: the returned root is typed in the new node heap, which extends the old one by fresh
 heap records; old memory outside the old nodes (sized by kind), the heap free at entry and the
@@ -167,6 +188,13 @@ theorem finish_child_spec :
       (ofString "finish_child") := by sorry
 
 /-! ### Guards of the guarded bound leaves -/
+
+/-- `op_dispatch`, `op_sload`, `op_sstore` entry (revision 5, round-4 Fable item 1): a running
+frame, the precondition of `op_dispatch_spec`, which `run_frames` provides at its `op_dispatch`
+call. `charge_gas`, `stack_pop` and `warm_storage_key` write through the global `ev` (the frame's
+gas, stack and access table), which `WorldOK` does not own; `EvmInv` does (`frameObjects`). -/
+def EvmRun : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => EvmInv s ∧ ¬ EvmDone s
 
 /-- `finish_child` entry (inside `run_frames`). -/
 def FinishReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -259,6 +287,10 @@ theorem localsFree_finishReady : LocalsFree FinishReady := by
   intro F s locals k h
   exact ⟨localsFree_evmInv s locals k h.1, h.2⟩
 
+theorem localsFree_evmRun : LocalsFree EvmRun := by
+  intro F s locals k h
+  exact ⟨localsFree_evmInv s locals k h.1, h.2⟩
+
 theorem localsOnly_htabArgWF : LocalsOnly ["t"] HtabArgWF := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "t" (hl "t" (by simp))
@@ -283,7 +315,8 @@ theorem localsOnly_mptReady : LocalsOnly ["node"] MptReady := by
 theorem localsOnly_mptObjReady : LocalsOnly ["m"] MptObjReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "m" (hl "m" (by simp))
-  simp only [MptObjReady, arenaReady_with_locals] at hP ⊢
+  simp only [MptObjReady, MptObjAvoids, MptObjIn, worldTyped_with_locals, arenaReady_with_locals]
+    at hP ⊢
   rw [ht]
   exact hP
 
@@ -359,6 +392,19 @@ def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
 def TxReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ locN s "index" < memW s (globN s "bo" + 80)
 
+/-- `execute_block(si, hdr)` (revision 5, round-4 non-blocking): the transaction count
+`ntx = (si+0)+40` (33588) sizes the arrays `alloc(16·ntx + 16)` (33593, 33596) without wrapping,
+so `blockOutObjects` (unwrapped length `16·(bo+80) + 16`) is the block `alloc` returns. -/
+def BlockReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ 16 * memW s (memW s (locN s "si") + 40) + 16 < 2 ^ 64
+
+theorem localsOnly_blockReady : LocalsOnly ["si"] BlockReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "si" (hl "si" (by simp))
+  refine ⟨localsFree_worldOK s locals k hP.1, ?_⟩
+  show 16 * memW s (memW s (locN { s with locals := locals, clock := k } "si") + 40) + 16 < 2 ^ 64
+  rw [ht]; exact hP.2
+
 /-- `process_general_purpose_requests` runs once per block, right after `execute_block` zeroed
 `bo` (so no request is recorded yet); it appends at most three requests (`requests_append` 33485
 writes slot `bo+64` of the 8-slot array `bo+56`). -/
@@ -404,6 +450,49 @@ theorem localsOnly_frameOpenReady : LocalsOnly ["msg", "kind"] FrameOpenReady :=
   refine ⟨localsOnly_msgReady s locals k (fun n hn => hl n (by simp at hn ⊢; exact Or.inl hn)) hP.1, ?_⟩
   show locN { s with locals := locals, clock := k } "kind" = 0
   rw [hk]; exact hP.2
+
+/-- `EvmInv` with its table set `S` exposed (revision 5): the body of `EvmInv` after `∃ S`,
+verbatim, so that a guard can state more facts about the same `S` (`evmInv_iff_at`, by `Iff.rfl`). -/
+def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  WorldTyped s S ∧
+    let ch := evmChain s
+    ch ≠ [] ∧ ch.length ≤ maxChain ∧ (∃ ec ∈ ch.getLast?, memW s (ec.2 + 16) = 0) ∧
+    (∀ ec ∈ ch, FrameWF s S ec) ∧ (∀ ec ∈ ch.tail, FrameRoom s ec) ∧ RetWindowsOK s ch ∧
+    ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
+    (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
+    MarksOK s S ch ∧
+    (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
+
+theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
+
+/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
+from every table footprint of `S`, every fixed object and every frame block of the chain. -/
+def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
+  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
+  ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o
+
+/-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
+and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
+still owned, for the same table set. `depth0_prepare` stores `msg+48` (18772) and
+`prepare_dispatch`, its only caller's callee, `msg+112`, `msg+120` (17836); `EvmInv` alone does not
+own `ev+112` (a message at `t − 112` for a typed table `t` overwrote its key length). Only depth
+`0` writes through the message, so `frameObjects` (all depths) is unchanged. -/
+def EvmMsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, EvmInvAt s S ∧ MsgOwned s S (memW s (globN s "ev" + 112))
+
+theorem evmInv_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmMsgReady s) :
+    EvmInv s :=
+  ⟨h.1, h.2.elim fun S hS => ⟨S, hS.1⟩⟩
+
+theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
+  intro F s locals k h
+  simp only [EvmMsgReady, EvmInvAt, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
+    evmChain_with_locals] at h ⊢
+  exact h
 
 /-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
 parameters are rooted in a typed node heap. -/

@@ -5884,12 +5884,33 @@ parameter. -/
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
 
-/-- `mpt_set(m, …)`: the 16-byte trie object `m` (`mpt_new` 10446: `+0` root node) is allocated
-and its root is typed. -/
+/-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
+relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
+every node of `Nd` are disjoint from every table footprint of `S` and every fixed object, as
+`TriesTyped` requires of the world tries. `mpt_set` stores `m+0` (10886) and rewrites node records;
+`mpt_root` stores hash pointers into the node caches (`+8/+16`). A node at `nodes + 8` of a table
+in `S` made `mpt_root` overwrite that table's root. -/
+def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "m", 16) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (locN s "m", 16) j) ∧
+  ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
+    ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (nodeIvl s n) i) ∧
+      ∀ j ∈ fixedObjects s, Disj (nodeIvl s n) j
+
+/-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
+`R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
+buffer, as in `WorldAvoids`). -/
+def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ ∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+
+/-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
+revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
 def MptObjReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
-    ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
-      ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16)
+  fun s => MptObjAvoids (fun _ => []) s
 
 /-- Exit: the returned root is typed in the new node heap, which extends the old one by fresh
 heap records; old memory outside the old nodes (sized by kind), the heap free at entry and the
@@ -5967,6 +5988,13 @@ theorem finish_child_spec :
       (ofString "finish_child") := by sorry
 
 /-! ### Guards of the guarded bound leaves -/
+
+/-- `op_dispatch`, `op_sload`, `op_sstore` entry (revision 5, round-4 Fable item 1): a running
+frame, the precondition of `op_dispatch_spec`, which `run_frames` provides at its `op_dispatch`
+call. `charge_gas`, `stack_pop` and `warm_storage_key` write through the global `ev` (the frame's
+gas, stack and access table), which `WorldOK` does not own; `EvmInv` does (`frameObjects`). -/
+def EvmRun : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => EvmInv s ∧ ¬ EvmDone s
 
 /-- `finish_child` entry (inside `run_frames`). -/
 def FinishReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -6059,6 +6087,10 @@ theorem localsFree_finishReady : LocalsFree FinishReady := by
   intro F s locals k h
   exact ⟨localsFree_evmInv s locals k h.1, h.2⟩
 
+theorem localsFree_evmRun : LocalsFree EvmRun := by
+  intro F s locals k h
+  exact ⟨localsFree_evmInv s locals k h.1, h.2⟩
+
 theorem localsOnly_htabArgWF : LocalsOnly ["t"] HtabArgWF := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "t" (hl "t" (by simp))
@@ -6083,7 +6115,8 @@ theorem localsOnly_mptReady : LocalsOnly ["node"] MptReady := by
 theorem localsOnly_mptObjReady : LocalsOnly ["m"] MptObjReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "m" (hl "m" (by simp))
-  simp only [MptObjReady, arenaReady_with_locals] at hP ⊢
+  simp only [MptObjReady, MptObjAvoids, MptObjIn, worldTyped_with_locals, arenaReady_with_locals]
+    at hP ⊢
   rw [ht]
   exact hP
 
@@ -6159,6 +6192,19 @@ def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
 def TxReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ locN s "index" < memW s (globN s "bo" + 80)
 
+/-- `execute_block(si, hdr)` (revision 5, round-4 non-blocking): the transaction count
+`ntx = (si+0)+40` (33588) sizes the arrays `alloc(16·ntx + 16)` (33593, 33596) without wrapping,
+so `blockOutObjects` (unwrapped length `16·(bo+80) + 16`) is the block `alloc` returns. -/
+def BlockReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ 16 * memW s (memW s (locN s "si") + 40) + 16 < 2 ^ 64
+
+theorem localsOnly_blockReady : LocalsOnly ["si"] BlockReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "si" (hl "si" (by simp))
+  refine ⟨localsFree_worldOK s locals k hP.1, ?_⟩
+  show 16 * memW s (memW s (locN { s with locals := locals, clock := k } "si") + 40) + 16 < 2 ^ 64
+  rw [ht]; exact hP.2
+
 /-- `process_general_purpose_requests` runs once per block, right after `execute_block` zeroed
 `bo` (so no request is recorded yet); it appends at most three requests (`requests_append` 33485
 writes slot `bo+64` of the 8-slot array `bo+56`). -/
@@ -6204,6 +6250,49 @@ theorem localsOnly_frameOpenReady : LocalsOnly ["msg", "kind"] FrameOpenReady :=
   refine ⟨localsOnly_msgReady s locals k (fun n hn => hl n (by simp at hn ⊢; exact Or.inl hn)) hP.1, ?_⟩
   show locN { s with locals := locals, clock := k } "kind" = 0
   rw [hk]; exact hP.2
+
+/-- `EvmInv` with its table set `S` exposed (revision 5): the body of `EvmInv` after `∃ S`,
+verbatim, so that a guard can state more facts about the same `S` (`evmInv_iff_at`, by `Iff.rfl`). -/
+def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  WorldTyped s S ∧
+    let ch := evmChain s
+    ch ≠ [] ∧ ch.length ≤ maxChain ∧ (∃ ec ∈ ch.getLast?, memW s (ec.2 + 16) = 0) ∧
+    (∀ ec ∈ ch, FrameWF s S ec) ∧ (∀ ec ∈ ch.tail, FrameRoom s ec) ∧ RetWindowsOK s ch ∧
+    ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
+    (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
+    MarksOK s S ch ∧
+    (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
+
+theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
+
+/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
+from every table footprint of `S`, every fixed object and every frame block of the chain. -/
+def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
+  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
+  ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o
+
+/-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
+and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
+still owned, for the same table set. `depth0_prepare` stores `msg+48` (18772) and
+`prepare_dispatch`, its only caller's callee, `msg+112`, `msg+120` (17836); `EvmInv` alone does not
+own `ev+112` (a message at `t − 112` for a typed table `t` overwrote its key length). Only depth
+`0` writes through the message, so `frameObjects` (all depths) is unchanged. -/
+def EvmMsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, EvmInvAt s S ∧ MsgOwned s S (memW s (globN s "ev" + 112))
+
+theorem evmInv_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmMsgReady s) :
+    EvmInv s :=
+  ⟨h.1, h.2.elim fun S hS => ⟨S, hS.1⟩⟩
+
+theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
+  intro F s locals k h
+  simp only [EvmMsgReady, EvmInvAt, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
+    evmChain_with_locals] at h ⊢
+  exact h
 
 /-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
 parameters are rooted in a typed node heap. -/
@@ -7426,27 +7515,39 @@ theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
 /-- `_decode_step` (AST line 10110): keeps `ArenaReady`. -/
 theorem «ak__decode_step» :
     KeepsOn ArenaReady ArenaReady (ofString "_decode_step") := by sorry
+/-- `charge_gas` (AST line 14949): keeps `EvmInv`. -/
+theorem «ek_charge_gas» :
+    KeepsOn EvmInv EvmInv (ofString "charge_gas") := by sorry
 /-- `create_finish` (AST line 18867): keeps `EvmInv`. -/
 theorem «ek_create_finish» :
     KeepsOn EvmInv EvmInv (ofString "create_finish") := by sorry
 /-- `depth0_prepare` (AST line 18772): keeps `EvmInv`. -/
 theorem «ek_depth0_prepare» :
-    KeepsOn EvmInv EvmInv (ofString "depth0_prepare") := by sorry
+    KeepsOn EvmMsgReady EvmInv (ofString "depth0_prepare") := by sorry
 /-- `frame_halt` (AST line 18756): keeps `EvmInv`. -/
 theorem «ek_frame_halt» :
     KeepsOn EvmInv EvmInv (ofString "frame_halt") := by sorry
 /-- `frame_start` (AST line 18539): keeps `EvmInv`. -/
 theorem «ek_frame_start» :
     KeepsOn EvmInv EvmInv (ofString "frame_start") := by sorry
+/-- `get_storage_original` (AST line 13276): keeps `EvmInv`. -/
+theorem «ek_get_storage_original» :
+    KeepsOn EvmInv EvmInv (ofString "get_storage_original") := by sorry
 /-- `refill_frame_state_gas` (AST line 15029): keeps `EvmInv`. -/
 theorem «ek_refill_frame_state_gas» :
     KeepsOn EvmInv EvmInv (ofString "refill_frame_state_gas") := by sorry
+/-- `stack_pop` (AST line 15046): keeps `EvmInv`. -/
+theorem «ek_stack_pop» :
+    KeepsOn EvmInv EvmInv (ofString "stack_pop") := by sorry
 /-- `state_restore` (AST line 12903): keeps `EvmInv`. -/
 theorem «ek_state_restore» :
     KeepsOn EvmInv EvmInv (ofString "state_restore") := by sorry
+/-- `warm_storage_key` (AST line 16571): keeps `EvmInv`. -/
+theorem «ek_warm_storage_key» :
+    KeepsOn EvmInv EvmInv (ofString "warm_storage_key") := by sorry
 /-- `frame_open` (AST line 18450): carries the frame built by `frame_open` (hand-written). -/
 theorem «fk_frame_open» :
-    KeepsOn FrameOpenReady EvmInv (ofString "frame_open") := by sorry
+    KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open") := by sorry
 /-- `_collapse_branch` (AST line 10674): typed nodes in, typed nodes out (MPT tier). -/
 theorem «nf__collapse_branch» :
     NodeFn ["node"] (ofString "_collapse_branch") := by sorry
@@ -7588,9 +7689,6 @@ theorem «wk_build_mpt_indexed» :
 /-- `calculate_blob_gas_price` (AST line 9550): keeps `WorldOK`. -/
 theorem «wk_calculate_blob_gas_price» :
     KeepsOn WorldOK WorldOK (ofString "calculate_blob_gas_price") := by sorry
-/-- `charge_gas` (AST line 14949): keeps `WorldOK`. -/
-theorem «wk_charge_gas» :
-    KeepsOn WorldOK WorldOK (ofString "charge_gas") := by sorry
 /-- `check_transaction` (AST line 32951): keeps `WorldOK`. -/
 theorem «wk_check_transaction» :
     KeepsOn WorldOK WorldOK (ofString "check_transaction") := by sorry
@@ -7627,9 +7725,6 @@ theorem «wk_get_account» :
 /-- `get_code` (AST line 13203): keeps `WorldOK`. -/
 theorem «wk_get_code» :
     KeepsOn WorldOK WorldOK (ofString "get_code") := by sorry
-/-- `get_storage_original` (AST line 13276): keeps `WorldOK`. -/
-theorem «wk_get_storage_original» :
-    KeepsOn WorldOK WorldOK (ofString "get_storage_original") := by sorry
 /-- `idx_start_account` (AST line 14087): keeps `WorldOK`. -/
 theorem «wk_idx_start_account» :
     KeepsOn WorldOK WorldOK (ofString "idx_start_account") := by sorry
@@ -7647,10 +7742,10 @@ theorem «wk_mpt_from_witness» :
     KeepsOn WorldOK WorldOK (ofString "mpt_from_witness") := by sorry
 /-- `mpt_root` (AST line 11223): keeps `WorldOK`. -/
 theorem «wk_mpt_root» :
-    KeepsOn (fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s) WorldOK (ofString "mpt_root") := by sorry
+    KeepsOn (MptObjAvoids (fun s => [(locN s "out", 32)])) WorldOK (ofString "mpt_root") := by sorry
 /-- `mpt_set` (AST line 10872): keeps `WorldOK`. -/
 theorem «wk_mpt_set» :
-    KeepsOn (fun s => WorldOK s ∧ MptObjReady s) WorldOK (ofString "mpt_set") := by sorry
+    KeepsOn MptObjReady WorldOK (ofString "mpt_set") := by sorry
 /-- `nodedb_build` (AST line 9937): keeps `WorldOK`. -/
 theorem «wk_nodedb_build» :
     KeepsOn WorldOK WorldOK (ofString "nodedb_build") := by sorry
@@ -7687,18 +7782,12 @@ theorem «wk_requests_append» :
 /-- `set_account_balance` (AST line 13647): keeps `WorldOK`. -/
 theorem «wk_set_account_balance» :
     KeepsOn WorldOK WorldOK (ofString "set_account_balance") := by sorry
-/-- `stack_pop` (AST line 15046): keeps `WorldOK`. -/
-theorem «wk_stack_pop» :
-    KeepsOn WorldOK WorldOK (ofString "stack_pop") := by sorry
 /-- `state_init` (AST line 12708): keeps `WorldOK`. -/
 theorem «wk_state_init» :
     KeepsOn WorldOK WorldOK (ofString "state_init") := by sorry
 /-- `validate_header` (AST line 9675): keeps `WorldOK`. -/
 theorem «wk_validate_header» :
     KeepsOn WorldOK WorldOK (ofString "validate_header") := by sorry
-/-- `warm_storage_key` (AST line 16571): keeps `WorldOK`. -/
-theorem «wk_warm_storage_key» :
-    KeepsOn WorldOK WorldOK (ofString "warm_storage_key") := by sorry
 /-- `_resolve_step` (AST line 10077): writes only memory it allocates. -/
 theorem «ww__resolve_step» :
     WritesWithin (fun s => [])
@@ -8075,7 +8164,7 @@ def GBody.«build_mpt_indexed» : Prop :=
   (ReadOnlyFn (ofString "heap_mark")) →
   (WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "mpt_new")) →
-  (KeepsOn (fun s => WorldOK s ∧ MptObjReady s) WorldOK (ofString "mpt_set")) →
+  (KeepsOn MptObjReady WorldOK (ofString "mpt_set")) →
   (WritesWithin (fun s => [(locN s "dst", 33)])
     [] (ofString "rlp_encode_word")) →
   TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed»
@@ -8164,8 +8253,8 @@ def GBody.«compute_state_root» : Prop :=
   (WritesWithin (fun s => [(locN s "dst", locN s "n")])
     [] (ofString "memcpy")) →
   (KeepsOn WorldOK WorldOK (ofString "mpt_from_witness")) →
-  (KeepsOn (fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s) WorldOK (ofString "mpt_root")) →
-  (KeepsOn (fun s => WorldOK s ∧ MptObjReady s) WorldOK (ofString "mpt_set")) →
+  (KeepsOn (MptObjAvoids (fun s => [(locN s "out", 32)])) WorldOK (ofString "mpt_root")) →
+  (KeepsOn MptObjReady WorldOK (ofString "mpt_set")) →
   (WritesWithin (fun s => [(locN s "dst", locN s "n" + 9)])
     [] (ofString "rlp_encode_bytes")) →
   (ReadOnlyFn (ofString "u256_is_zero")) →
@@ -8380,7 +8469,7 @@ theorem «gbody_get_storage» : GBody.«get_storage» := by sorry
 theorem «gb_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage» :=
   «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «wk_record_pre_state_read» «ww_sk_make» «ro_stor_lookup»
 
-/-- `op_sload` (AST line 16584, guard `WorldOK`): loop-free; 8 callees, 5 guard-carrying. -/
+/-- `op_sload` (AST line 16584, guard `EvmRun`): loop-free; 8 callees, 5 guard-carrying. -/
 def GBody.«op_sload» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas») →
   (TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage») →
@@ -8390,19 +8479,19 @@ def GBody.«op_sload» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "stack_push") K.«stack_push») →
   (TerminatingFunBoundedOn GuestInv (ofString "u256_to_be32") K.«u256_to_be32») →
   (TerminatingFunBoundedOn GuestInv (ofString "warm_storage_key") K.«warm_storage_key») →
-  (KeepsOn WorldOK WorldOK (ofString "charge_gas")) →
+  (KeepsOn EvmInv EvmInv (ofString "charge_gas")) →
   (WritesWithin (fun s => [(globN s "sk_buf", 64)])
     [] (ofString "is_warm_storage_key")) →
-  (KeepsOn WorldOK WorldOK (ofString "stack_pop")) →
+  (KeepsOn EvmInv EvmInv (ofString "stack_pop")) →
   (WritesWithin (fun s => [(locN s "out", 32)])
     [] (ofString "u256_to_be32")) →
-  (KeepsOn WorldOK WorldOK (ofString "warm_storage_key")) →
-  TerminatingFunBoundedOn WorldOK (ofString "op_sload") K.«op_sload»
+  (KeepsOn EvmInv EvmInv (ofString "warm_storage_key")) →
+  TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload»
 
 theorem «gbody_op_sload» : GBody.«op_sload» := by sorry
 
-theorem «gb_op_sload» : TerminatingFunBoundedOn WorldOK (ofString "op_sload") K.«op_sload» :=
-  «gbody_op_sload» «fb_charge_gas» «gb_get_storage» «fb_is_warm_storage_key» «fb_pc_add» «fb_stack_pop» «fb_stack_push» «fb_u256_to_be32» «fb_warm_storage_key» «wk_charge_gas» «ww_is_warm_storage_key» «wk_stack_pop» «ww_u256_to_be32» «wk_warm_storage_key»
+theorem «gb_op_sload» : TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload» :=
+  «gbody_op_sload» «fb_charge_gas» «gb_get_storage» «fb_is_warm_storage_key» «fb_pc_add» «fb_stack_pop» «fb_stack_push» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ww_is_warm_storage_key» «ek_stack_pop» «ww_u256_to_be32» «ek_warm_storage_key»
 
 /-- `get_storage_original` (AST line 13276, guard `WorldOK`): loop-free; 4 callees, 3 guard-carrying. -/
 def GBody.«get_storage_original» : Prop :=
@@ -8420,7 +8509,7 @@ theorem «gbody_get_storage_original» : GBody.«get_storage_original» := by so
 theorem «gb_get_storage_original» : TerminatingFunBoundedOn WorldOK (ofString "get_storage_original") K.«get_storage_original» :=
   «gbody_get_storage_original» «fb_htab_has» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «ro_htab_has» «wk_record_pre_state_read» «ro_stor_lookup»
 
-/-- `op_sstore` (AST line 16611, guard `WorldOK`): loop-free; 16 callees, 9 guard-carrying. -/
+/-- `op_sstore` (AST line 16611, guard `EvmRun`): loop-free; 16 callees, 9 guard-carrying. -/
 def GBody.«op_sstore» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas») →
   (TerminatingFunBoundedOn GuestInv (ofString "charge_state_gas") K.«charge_state_gas») →
@@ -8438,25 +8527,25 @@ def GBody.«op_sstore» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero») →
   (TerminatingFunBoundedOn GuestInv (ofString "u256_to_be32") K.«u256_to_be32») →
   (TerminatingFunBoundedOn GuestInv (ofString "warm_storage_key") K.«warm_storage_key») →
-  (KeepsOn WorldOK WorldOK (ofString "charge_gas")) →
+  (KeepsOn EvmInv EvmInv (ofString "charge_gas")) →
   (ReadOnlyFn (ofString "check_gas")) →
-  (KeepsOn WorldOK WorldOK (ofString "get_storage_original")) →
+  (KeepsOn EvmInv EvmInv (ofString "get_storage_original")) →
   (WritesWithin (fun s => [(globN s "sk_buf", 64)])
     [] (ofString "is_warm_storage_key")) →
   (ReadOnlyFn (ofString "max")) →
   (ReadOnlyFn (ofString "require_not_static")) →
-  (KeepsOn WorldOK WorldOK (ofString "stack_pop")) →
+  (KeepsOn EvmInv EvmInv (ofString "stack_pop")) →
   (WritesWithin (fun s => [(locN s "out", 32)])
     [] (ofString "u256_to_be32")) →
-  (KeepsOn WorldOK WorldOK (ofString "warm_storage_key")) →
-  TerminatingFunBoundedOn WorldOK (ofString "op_sstore") K.«op_sstore»
+  (KeepsOn EvmInv EvmInv (ofString "warm_storage_key")) →
+  TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore»
 
 theorem «gbody_op_sstore» : GBody.«op_sstore» := by sorry
 
-theorem «gb_op_sstore» : TerminatingFunBoundedOn WorldOK (ofString "op_sstore") K.«op_sstore» :=
-  «gbody_op_sstore» «fb_charge_gas» «fb_charge_state_gas» «fb_check_gas» «fb_credit_state_gas_refund» «gb_get_storage» «gb_get_storage_original» «fb_is_warm_storage_key» «fb_max» «fb_pc_add» «fb_require_not_static» «fb_set_storage» «fb_stack_pop» «fb_u256_eq» «fb_u256_is_zero» «fb_u256_to_be32» «fb_warm_storage_key» «wk_charge_gas» «ro_check_gas» «wk_get_storage_original» «ww_is_warm_storage_key» «ro_max» «ro_require_not_static» «wk_stack_pop» «ww_u256_to_be32» «wk_warm_storage_key»
+theorem «gb_op_sstore» : TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore» :=
+  «gbody_op_sstore» «fb_charge_gas» «fb_charge_state_gas» «fb_check_gas» «fb_credit_state_gas_refund» «gb_get_storage» «gb_get_storage_original» «fb_is_warm_storage_key» «fb_max» «fb_pc_add» «fb_require_not_static» «fb_set_storage» «fb_stack_pop» «fb_u256_eq» «fb_u256_is_zero» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ro_check_gas» «ek_get_storage_original» «ww_is_warm_storage_key» «ro_max» «ro_require_not_static» «ek_stack_pop» «ww_u256_to_be32» «ek_warm_storage_key»
 
-/-- `op_dispatch` (AST line 17902, guard `WorldOK`): loop-free; 87 callees, 0 guard-carrying. -/
+/-- `op_dispatch` (AST line 17902, guard `EvmRun`): loop-free; 87 callees, 0 guard-carrying. -/
 def GBody.«op_dispatch» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "op_add") K.«op_add») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_addmod") K.«op_addmod») →
@@ -8531,11 +8620,11 @@ def GBody.«op_dispatch» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "op_shl") K.«op_shl») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_shr") K.«op_shr») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_signextend") K.«op_signextend») →
-  (TerminatingFunBoundedOn WorldOK (ofString "op_sload") K.«op_sload») →
+  (TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_slotnum") K.«op_slotnum») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_slt") K.«op_slt») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_smod") K.«op_smod») →
-  (TerminatingFunBoundedOn WorldOK (ofString "op_sstore") K.«op_sstore») →
+  (TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_staticcall") K.«op_staticcall») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_stop") K.«op_stop») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_sub") K.«op_sub») →
@@ -8545,11 +8634,11 @@ def GBody.«op_dispatch» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "op_tload") K.«op_tload») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_tstore") K.«op_tstore») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_xor") K.«op_xor») →
-  TerminatingFunBoundedOn WorldOK (ofString "op_dispatch") K.«op_dispatch»
+  TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch»
 
 theorem «gbody_op_dispatch» : GBody.«op_dispatch» := by sorry
 
-theorem «gb_op_dispatch» : TerminatingFunBoundedOn WorldOK (ofString "op_dispatch") K.«op_dispatch» :=
+theorem «gb_op_dispatch» : TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch» :=
   «gbody_op_dispatch» «fb_op_add» «fb_op_addmod» «fb_op_address» «fb_op_and» «fb_op_balance» «fb_op_basefee» «fb_op_blobbasefee» «fb_op_blobhash» «fb_op_blockhash» «fb_op_byte» «fb_op_call» «fb_op_callcode» «fb_op_calldatacopy» «fb_op_calldataload» «fb_op_calldatasize» «fb_op_caller» «fb_op_callvalue» «fb_op_chainid» «fb_op_clz» «fb_op_codecopy» «fb_op_codesize» «fb_op_coinbase» «fb_op_create» «fb_op_create2» «fb_op_delegatecall» «fb_op_div» «fb_op_dup» «fb_op_dupn» «fb_op_eq» «fb_op_exchange» «fb_op_exp» «fb_op_extcodecopy» «fb_op_extcodehash» «fb_op_extcodesize» «fb_op_gas» «fb_op_gaslimit» «fb_op_gasprice» «fb_op_gt» «fb_op_iszero» «fb_op_jump» «fb_op_jumpdest» «fb_op_jumpi» «fb_op_keccak» «fb_op_log» «fb_op_lt» «fb_op_mcopy» «fb_op_mload» «fb_op_mod» «fb_op_msize» «fb_op_mstore» «fb_op_mstore8» «fb_op_mul» «fb_op_mulmod» «fb_op_not» «fb_op_number» «fb_op_or» «fb_op_origin» «fb_op_pc» «fb_op_pop» «fb_op_prevrandao» «fb_op_push» «fb_op_return» «fb_op_returndatacopy» «fb_op_returndatasize» «fb_op_revert» «fb_op_sar» «fb_op_sdiv» «fb_op_selfbalance» «fb_op_selfdestruct» «fb_op_sgt» «fb_op_shl» «fb_op_shr» «fb_op_signextend» «gb_op_sload» «fb_op_slotnum» «fb_op_slt» «fb_op_smod» «gb_op_sstore» «fb_op_staticcall» «fb_op_stop» «fb_op_sub» «fb_op_swap» «fb_op_swapn» «fb_op_timestamp» «fb_op_tload» «fb_op_tstore» «fb_op_xor»
 
 /-- `run_frames` (AST line 18663, guard `EvmInv`): #0 POT; 4 callees, 4 guard-carrying. -/
@@ -8557,7 +8646,7 @@ def GBody.«run_frames» : Prop :=
   (TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child») →
   (TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue») →
   (TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception») →
-  (TerminatingFunBoundedOn WorldOK (ofString "op_dispatch") K.«op_dispatch») →
+  (TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch») →
   (type_of% @finish_child_spec) →
   (type_of% @frame_epilogue_spec) →
   (type_of% @frame_exception_spec) →
@@ -8581,8 +8670,8 @@ def GBody.«process_message» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_restore") K.«state_restore») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_snapshot") K.«state_snapshot») →
-  (KeepsOn EvmInv EvmInv (ofString "depth0_prepare")) →
-  (KeepsOn FrameOpenReady EvmInv (ofString "frame_open")) →
+  (KeepsOn EvmMsgReady EvmInv (ofString "depth0_prepare")) →
+  (KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")) →
   (KeepsOn EvmInv EvmInv (ofString "frame_start")) →
   (ReadOnlyFn (ofString "state_snapshot")) →
   TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message»
@@ -8812,7 +8901,7 @@ theorem «gbody_process_withdrawals» : GBody.«process_withdrawals» := by sorr
 theorem «gb_process_withdrawals» : TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals» :=
   «gbody_process_withdrawals» «fb_create_ether» «gb_incorporate_tx_into_block» «fb_state_fresh_tx» «fb_u256_mul» «wk_create_ether» «ww_state_fresh_tx» «ro_u256_mul»
 
-/-- `execute_block` (AST line 33580, guard `WorldOK`): #0 CTR; 20 callees, 16 guard-carrying. -/
+/-- `execute_block` (AST line 33580, guard `BlockReady`): #0 CTR; 20 callees, 16 guard-carrying. -/
 def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "bal_init") K.«bal_init») →
@@ -8858,11 +8947,11 @@ def GBody.«execute_block» : Prop :=
   (WritesWithin (fun s => [(globN s "bs", 80)])
     [] (ofString "track_ancestor_access")) →
   (ReadOnlyFn (ofString "validate_block_access_list_gas_limit")) →
-  TerminatingFunBoundedOn WorldOK (ofString "execute_block") K.«execute_block»
+  TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block»
 
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
-theorem «gb_execute_block» : TerminatingFunBoundedOn WorldOK (ofString "execute_block") K.«execute_block» :=
+theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block» :=
   «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «ww_alloc» «ww_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «ww_decode_transaction» «ww_logs_bloom» «ww_lst_new» «ww_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «ww_state_fresh_tx» «ww_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
 
 /-- `payload_header` (AST line 32645, guard `WorldOK`): #0 CTR; 8 callees, 6 guard-carrying. -/
@@ -8909,7 +8998,7 @@ theorem «gb_state_init» : TerminatingFunBoundedOn WorldOK (ofString "state_ini
 def GBody.«run_attempt» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit») →
-  (TerminatingFunBoundedOn WorldOK (ofString "execute_block") K.«execute_block») →
+  (TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block») →
   (TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash») →
   (TerminatingFunBoundedOn GuestInv (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes») →
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
@@ -9260,7 +9349,7 @@ structure Primitives : Prop where
   «fb_rlp_encode_word» : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»
   «ro_heap_mark» : ReadOnlyFn (ofString "heap_mark")
   «ww_mpt_new» : WritesWithin (fun s => [])     ["heap_ptr"] (ofString "mpt_new")
-  «wk_mpt_set» : KeepsOn (fun s => WorldOK s ∧ MptObjReady s) WorldOK (ofString "mpt_set")
+  «wk_mpt_set» : KeepsOn MptObjReady WorldOK (ofString "mpt_set")
   «ww_rlp_encode_word» : WritesWithin (fun s => [(locN s "dst", 33)])     [] (ofString "rlp_encode_word")
   «gbody_build_mpt_indexed» : GBody.«build_mpt_indexed»
   «fb_alloc» : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»
@@ -9292,7 +9381,7 @@ structure Primitives : Prop where
   «htab_set_spec» : type_of% @htab_set_spec
   «ww_memcpy» : WritesWithin (fun s => [(locN s "dst", locN s "n")])     [] (ofString "memcpy")
   «wk_mpt_from_witness» : KeepsOn WorldOK WorldOK (ofString "mpt_from_witness")
-  «wk_mpt_root» : KeepsOn (fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s) WorldOK (ofString "mpt_root")
+  «wk_mpt_root» : KeepsOn (MptObjAvoids (fun s => [(locN s "out", 32)])) WorldOK (ofString "mpt_root")
   «ww_rlp_encode_bytes» : WritesWithin (fun s => [(locN s "dst", locN s "n" + 9)])     [] (ofString "rlp_encode_bytes")
   «ro_u256_is_zero» : ReadOnlyFn (ofString "u256_is_zero")
   «ww_u256_to_be_min» : WritesWithin (fun s => [(locN s "out", 32)])     [] (ofString "u256_to_be_min")
@@ -9366,11 +9455,11 @@ structure Primitives : Prop where
   «fb_stack_pop» : TerminatingFunBoundedOn GuestInv (ofString "stack_pop") K.«stack_pop»
   «fb_u256_to_be32» : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be32") K.«u256_to_be32»
   «fb_warm_storage_key» : TerminatingFunBoundedOn GuestInv (ofString "warm_storage_key") K.«warm_storage_key»
-  «wk_charge_gas» : KeepsOn WorldOK WorldOK (ofString "charge_gas")
+  «ek_charge_gas» : KeepsOn EvmInv EvmInv (ofString "charge_gas")
   «ww_is_warm_storage_key» : WritesWithin (fun s => [(globN s "sk_buf", 64)])     [] (ofString "is_warm_storage_key")
-  «wk_stack_pop» : KeepsOn WorldOK WorldOK (ofString "stack_pop")
+  «ek_stack_pop» : KeepsOn EvmInv EvmInv (ofString "stack_pop")
   «ww_u256_to_be32» : WritesWithin (fun s => [(locN s "out", 32)])     [] (ofString "u256_to_be32")
-  «wk_warm_storage_key» : KeepsOn WorldOK WorldOK (ofString "warm_storage_key")
+  «ek_warm_storage_key» : KeepsOn EvmInv EvmInv (ofString "warm_storage_key")
   «gbody_op_sload» : GBody.«op_sload»
   «gbody_get_storage_original» : GBody.«get_storage_original»
   «fb_charge_state_gas» : TerminatingFunBoundedOn GuestInv (ofString "charge_state_gas") K.«charge_state_gas»
@@ -9379,7 +9468,7 @@ structure Primitives : Prop where
   «fb_require_not_static» : TerminatingFunBoundedOn GuestInv (ofString "require_not_static") K.«require_not_static»
   «fb_set_storage» : TerminatingFunBoundedOn GuestInv (ofString "set_storage") K.«set_storage»
   «ro_check_gas» : ReadOnlyFn (ofString "check_gas")
-  «wk_get_storage_original» : KeepsOn WorldOK WorldOK (ofString "get_storage_original")
+  «ek_get_storage_original» : KeepsOn EvmInv EvmInv (ofString "get_storage_original")
   «ro_max» : ReadOnlyFn (ofString "max")
   «ro_require_not_static» : ReadOnlyFn (ofString "require_not_static")
   «gbody_op_sstore» : GBody.«op_sstore»
@@ -9480,8 +9569,8 @@ structure Primitives : Prop where
   «fb_frame_open» : TerminatingFunBoundedOn GuestInv (ofString "frame_open") K.«frame_open»
   «fb_frame_start» : TerminatingFunBoundedOn GuestInv (ofString "frame_start") K.«frame_start»
   «fb_state_snapshot» : TerminatingFunBoundedOn GuestInv (ofString "state_snapshot") K.«state_snapshot»
-  «ek_depth0_prepare» : KeepsOn EvmInv EvmInv (ofString "depth0_prepare")
-  «fk_frame_open» : KeepsOn FrameOpenReady EvmInv (ofString "frame_open")
+  «ek_depth0_prepare» : KeepsOn EvmMsgReady EvmInv (ofString "depth0_prepare")
+  «fk_frame_open» : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")
   «ek_frame_start» : KeepsOn EvmInv EvmInv (ofString "frame_start")
   «ro_state_snapshot» : ReadOnlyFn (ofString "state_snapshot")
   «gbody_process_message» : GBody.«process_message»
@@ -9664,9 +9753,9 @@ theorem assembly_main (P : Primitives) :
   have «g_rollback_child_access» := P.«gbody_rollback_child_access» «g_htab_truncate» P.«htab_truncate_spec»
   have «g_finish_child» := P.«gbody_finish_child» P.«fb_address_to_u256» P.«fb_create_finish» P.«fb_credit_state_gas_refund» P.«fb_frame_halt» P.«fb_frame_mem_release» P.«fb_incorporate_child_on_error» P.«fb_incorporate_child_on_success» P.«fb_memcpy» P.«fb_min» P.«fb_pc_add» P.«fb_refill_frame_state_gas» «g_rollback_child_access» P.«fb_scratch_release» P.«fb_set_retdata» P.«fb_stack_push» P.«fb_state_restore» P.«ek_create_finish» P.«ek_frame_halt» P.«ek_refill_frame_state_gas» P.«ek_state_restore»
   have «g_get_storage» := P.«gbody_get_storage» P.«fb_htab_set» P.«fb_record_pre_state_read» P.«fb_sk_make» P.«fb_stor_lookup» «g_ws_get_storage» P.«htab_set_spec» P.«wk_record_pre_state_read» P.«ww_sk_make» P.«ro_stor_lookup»
-  have «g_op_sload» := P.«gbody_op_sload» P.«fb_charge_gas» «g_get_storage» P.«fb_is_warm_storage_key» P.«fb_pc_add» P.«fb_stack_pop» P.«fb_stack_push» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«wk_charge_gas» P.«ww_is_warm_storage_key» P.«wk_stack_pop» P.«ww_u256_to_be32» P.«wk_warm_storage_key»
+  have «g_op_sload» := P.«gbody_op_sload» P.«fb_charge_gas» «g_get_storage» P.«fb_is_warm_storage_key» P.«fb_pc_add» P.«fb_stack_pop» P.«fb_stack_push» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ww_is_warm_storage_key» P.«ek_stack_pop» P.«ww_u256_to_be32» P.«ek_warm_storage_key»
   have «g_get_storage_original» := P.«gbody_get_storage_original» P.«fb_htab_has» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«ro_htab_has» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
-  have «g_op_sstore» := P.«gbody_op_sstore» P.«fb_charge_gas» P.«fb_charge_state_gas» P.«fb_check_gas» P.«fb_credit_state_gas_refund» «g_get_storage» «g_get_storage_original» P.«fb_is_warm_storage_key» P.«fb_max» P.«fb_pc_add» P.«fb_require_not_static» P.«fb_set_storage» P.«fb_stack_pop» P.«fb_u256_eq» P.«fb_u256_is_zero» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«wk_charge_gas» P.«ro_check_gas» P.«wk_get_storage_original» P.«ww_is_warm_storage_key» P.«ro_max» P.«ro_require_not_static» P.«wk_stack_pop» P.«ww_u256_to_be32» P.«wk_warm_storage_key»
+  have «g_op_sstore» := P.«gbody_op_sstore» P.«fb_charge_gas» P.«fb_charge_state_gas» P.«fb_check_gas» P.«fb_credit_state_gas_refund» «g_get_storage» «g_get_storage_original» P.«fb_is_warm_storage_key» P.«fb_max» P.«fb_pc_add» P.«fb_require_not_static» P.«fb_set_storage» P.«fb_stack_pop» P.«fb_u256_eq» P.«fb_u256_is_zero» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ro_check_gas» P.«ek_get_storage_original» P.«ww_is_warm_storage_key» P.«ro_max» P.«ro_require_not_static» P.«ek_stack_pop» P.«ww_u256_to_be32» P.«ek_warm_storage_key»
   have «g_op_dispatch» := P.«gbody_op_dispatch» P.«fb_op_add» P.«fb_op_addmod» P.«fb_op_address» P.«fb_op_and» P.«fb_op_balance» P.«fb_op_basefee» P.«fb_op_blobbasefee» P.«fb_op_blobhash» P.«fb_op_blockhash» P.«fb_op_byte» P.«fb_op_call» P.«fb_op_callcode» P.«fb_op_calldatacopy» P.«fb_op_calldataload» P.«fb_op_calldatasize» P.«fb_op_caller» P.«fb_op_callvalue» P.«fb_op_chainid» P.«fb_op_clz» P.«fb_op_codecopy» P.«fb_op_codesize» P.«fb_op_coinbase» P.«fb_op_create» P.«fb_op_create2» P.«fb_op_delegatecall» P.«fb_op_div» P.«fb_op_dup» P.«fb_op_dupn» P.«fb_op_eq» P.«fb_op_exchange» P.«fb_op_exp» P.«fb_op_extcodecopy» P.«fb_op_extcodehash» P.«fb_op_extcodesize» P.«fb_op_gas» P.«fb_op_gaslimit» P.«fb_op_gasprice» P.«fb_op_gt» P.«fb_op_iszero» P.«fb_op_jump» P.«fb_op_jumpdest» P.«fb_op_jumpi» P.«fb_op_keccak» P.«fb_op_log» P.«fb_op_lt» P.«fb_op_mcopy» P.«fb_op_mload» P.«fb_op_mod» P.«fb_op_msize» P.«fb_op_mstore» P.«fb_op_mstore8» P.«fb_op_mul» P.«fb_op_mulmod» P.«fb_op_not» P.«fb_op_number» P.«fb_op_or» P.«fb_op_origin» P.«fb_op_pc» P.«fb_op_pop» P.«fb_op_prevrandao» P.«fb_op_push» P.«fb_op_return» P.«fb_op_returndatacopy» P.«fb_op_returndatasize» P.«fb_op_revert» P.«fb_op_sar» P.«fb_op_sdiv» P.«fb_op_selfbalance» P.«fb_op_selfdestruct» P.«fb_op_sgt» P.«fb_op_shl» P.«fb_op_shr» P.«fb_op_signextend» «g_op_sload» P.«fb_op_slotnum» P.«fb_op_slt» P.«fb_op_smod» «g_op_sstore» P.«fb_op_staticcall» P.«fb_op_stop» P.«fb_op_sub» P.«fb_op_swap» P.«fb_op_swapn» P.«fb_op_timestamp» P.«fb_op_tload» P.«fb_op_tstore» P.«fb_op_xor»
   have «g_run_frames» := P.«gbody_run_frames» «g_finish_child» P.«fb_frame_epilogue» P.«fb_frame_exception» «g_op_dispatch» P.«finish_child_spec» P.«frame_epilogue_spec» P.«frame_exception_spec» P.«op_dispatch_spec»
   have «g_process_message» := P.«gbody_process_message» P.«fb_depth0_prepare» P.«fb_frame_halt» P.«fb_frame_mem_release» P.«fb_frame_open» P.«fb_frame_start» P.«fb_refill_frame_state_gas» «g_run_frames» P.«fb_scratch_release» P.«fb_state_restore» P.«fb_state_snapshot» P.«ek_depth0_prepare» P.«fk_frame_open» P.«ek_frame_start» P.«ro_state_snapshot»
@@ -9846,11 +9935,11 @@ theorem primitives : Primitives where
   «fb_stack_pop» := «fb_stack_pop»
   «fb_u256_to_be32» := «fb_u256_to_be32»
   «fb_warm_storage_key» := «fb_warm_storage_key»
-  «wk_charge_gas» := «wk_charge_gas»
+  «ek_charge_gas» := «ek_charge_gas»
   «ww_is_warm_storage_key» := «ww_is_warm_storage_key»
-  «wk_stack_pop» := «wk_stack_pop»
+  «ek_stack_pop» := «ek_stack_pop»
   «ww_u256_to_be32» := «ww_u256_to_be32»
-  «wk_warm_storage_key» := «wk_warm_storage_key»
+  «ek_warm_storage_key» := «ek_warm_storage_key»
   «gbody_op_sload» := «gbody_op_sload»
   «gbody_get_storage_original» := «gbody_get_storage_original»
   «fb_charge_state_gas» := «fb_charge_state_gas»
@@ -9859,7 +9948,7 @@ theorem primitives : Primitives where
   «fb_require_not_static» := «fb_require_not_static»
   «fb_set_storage» := «fb_set_storage»
   «ro_check_gas» := «ro_check_gas»
-  «wk_get_storage_original» := «wk_get_storage_original»
+  «ek_get_storage_original» := «ek_get_storage_original»
   «ro_max» := «ro_max»
   «ro_require_not_static» := «ro_require_not_static»
   «gbody_op_sstore» := «gbody_op_sstore»

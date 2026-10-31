@@ -650,7 +650,8 @@ def costs(fns, graph, reach, recursive, loops):
 # Guarded compositions (revision 4, round-3 item 5 and the assembly ruling)
 
 GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK',
-           'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv',
+           'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'BlockReady': 'WorldOK',
+           'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv', 'EvmRun': 'EvmInv',
            'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptObjReady': 'ArenaReady',
            'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
 W_PREFIX = {'WorldOK': 'wk', 'EvmInv': 'ek', 'ArenaReady': 'ak'}
@@ -678,10 +679,13 @@ REGION = {
 }
 REGION_RAW = {'lst_push': '(locN s "l", 24), (memW s (locN s "l"), locN s "esz" * memW s (locN s "l" + 16))'}
 # call sites whose guard-carrying frame is not the caller's guard: `process_message` builds the
-# outermost frame with `frame_open(msg, 0)`, after which it runs under `EvmInv`
+# outermost frame with `frame_open(msg, 0)`, after which it runs under `EvmInv`; revision 5: the
+# message record stays owned (`EvmMsgReady`) until `depth0_prepare`, which writes through it
 CALL_STMT = {('process_message', 'frame_open'):
-             ('fk_frame_open', 'KeepsOn FrameOpenReady EvmInv (ofString "frame_open")')}
+             ('fk_frame_open', 'KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")')}
 CALL_W = {('process_message', g): 'EvmInv' for g in ('depth0_prepare', 'state_snapshot', 'frame_start')}
+# KeepsOn preconditions at one call site (revision 5)
+CALL_PRE = {('process_message', 'depth0_prepare'): 'EvmMsgReady'}
 # node-returning callees of the MPT tier (guards MptReady/MptObjReady) and their node parameters
 NODE_FN = {'_insert_into_leaf': ['node'], '_split_extension': ['node'], '_collapse_branch': ['node'],
            '_delete_ext_finish': ['node', 'nc'], 'node_new_ext': ['child'], 'node_new_leaf': [],
@@ -793,10 +797,10 @@ def ast_index(path, fname):
 # KeepsOn preconditions other than the caller's world guard
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
-    'mpt_root': 'fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s',
+    'mpt_root': 'MptObjAvoids (fun s => [(locN s "out", 32)])',
     'compute_state_root': 'WorldAvoids (fun s => [(locN s "out", 32)])',
     'build_mpt_indexed': 'WorldAvoids (fun s => [(locN s "out", 32)])',
-    'mpt_set': 'fun s => WorldOK s ∧ MptObjReady s',
+    'mpt_set': 'MptObjReady',
 }
 
 
@@ -1054,8 +1058,12 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 Wc = CALL_W.get((f, g), W)
                 name = '%s_%s' % (W_PREFIX[Wc], g)
                 W, W0 = Wc, W
-                if g in KEEP_PRE and W == 'WorldOK':
+                if (f, g) in CALL_PRE:
+                    pre = CALL_PRE[(f, g)]
+                elif g in KEEP_PRE and W == 'WorldOK':
                     pre = KEEP_PRE[g]
+                elif g in guarded and W == 'EvmInv' and G(g) == 'WorldOK':
+                    pre = 'EvmInv'   # `worldOK_of_evmInv` (revision 5: `op_sstore`)
                 elif g in guarded and GUARD_W[G(g)] == W and G(g) != W:
                     pre = G(g)
                 elif g in guarded and G(g) != W:
@@ -1174,7 +1182,10 @@ def main():
         'mpt_set': 'MptObjReady', 'main': 'MainEntry',
         'process_transaction': 'TxReady', 'process_general_purpose_requests': 'ReqsFresh',
         'process_message': 'MsgReady', 'process_message_call': 'MsgReady',
-        'process_create_message': 'MsgReady'}
+        'process_create_message': 'MsgReady',
+        # revision 5 (round-4 Fable item 1 and non-blocking item)
+        'op_dispatch': 'EvmRun', 'op_sload': 'EvmRun', 'op_sstore': 'EvmRun',
+        'execute_block': 'BlockReady'}
     nloops = sum(len(v) for f, v in loops.items())
     with open(os.path.join(outdir, 'coverage.md'), 'w') as o:
         o.write('functions: %d, reachable from main: %d, loops in reachable: %d, recursive: %s\n\n'
