@@ -686,6 +686,110 @@ CALL_W = {('process_message', g): 'EvmInv' for g in ('depth0_prepare', 'state_sn
 NODE_FN = {'_insert_into_leaf': ['node'], '_split_extension': ['node'], '_collapse_branch': ['node'],
            '_delete_ext_finish': ['node', 'nc'], 'node_new_ext': ['child'], 'node_new_leaf': [],
            'node_invalidate': ['nd']}
+# guarded bodies proved by concrete composition (revision 4: shrinking the primitive list); the
+# placeholders {LOOKUP} and {UNFOLD} are filled per function
+WOK = 'LocalsOnly.of_localsFree localsFree_worldOK'
+CALLWOK = 'callEntryOn_of_localsFree localsFree_worldOK _ _'
+HANDLER_SHM = ('(TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) '
+               '(fun s => clock_raise s _ _)))')
+RET0 = '(TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))'
+
+
+def attempt_proof(f):
+    return """  intro h1
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ %s _ (%s))
+        worldOK_guestInv %s)) ?_
+  unfold K.«%s»; omega
+""" % (WOK, HANDLER_SHM, CALLWOK, RET0, f)
+
+
+GBODY_PROOF = {'attempt_l%d' % k: attempt_proof('attempt_l%d' % k) for k in range(1, 8)}
+GBODY_PROOF['verify_stateless_new_payload'] = """  intro h1
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+      (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+        (TerminatingProgBoundedOn.seq_guestInv_after
+          (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _
+            (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_assign s _ _ _)
+              (fun s => clock_assign s _ _ _))) _ (%s))
+          worldOK_guestInv %s))) ?_
+  unfold K.«verify_stateless_new_payload»; omega
+""" % (WOK, WOK, CALLWOK, RET0)
+GBODY_PROOF['incorporate_tx_into_block'] = """  intro hm hu
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.seq_guestInv_after
+      (TerminatingProgBoundedOn.call_on hu _ _ (%s)) worldOK_guestInv
+      (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _) %s)) ?_
+  unfold K.«incorporate_tx_into_block»; omega
+""" % (CALLWOK, RET0)
+GBODY_PROOF['mpt_from_witness'] = """  intro hd hn
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hd _ _ _ (%s)
+      (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+      (TerminatingProgBoundedOn.tailCall_guestInv hn _)) ?_
+  unfold K.«mpt_from_witness»; omega
+""" % CALLWOK
+HANDLER_REL = ('(TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _) '
+               '(TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _)))')
+GBODY_PROOF['_decode_witness_node_mpt'] = """  intro hb hsr
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+      (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+        (TerminatingProgBoundedOn.seq_guestInv_after
+          (TerminatingProgBoundedOn.callHandle_on hb worldOK_guestInv _ _ _ %s _
+            (callEntryOn_of_imp localsFree_arenaReady (fun s h => h.1) _ _))
+          worldOK_guestInv %s))) ?_
+  unfold K.«_decode_witness_node_mpt»; omega
+""" % (WOK, WOK, HANDLER_REL, RET0)
+GBODY_PROOF['_decode_witness_node'] = """  intro hmpt hmk hsr hro
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hmk _ _ _
+      (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _)
+      (ReadOnlyFn.resumeOn (%s) worldOK_guestInv hro _ (by simp) _)
+      (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+        (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+          (TerminatingProgBoundedOn.seq_guestInv_after
+            (TerminatingProgBoundedOn.callHandle_on hmpt worldOK_guestInv _ _ _ %s _ (%s))
+            worldOK_guestInv
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _)
+              %s))))) ?_
+  unfold K.«_decode_witness_node»; omega
+""" % (WOK, WOK, WOK, HANDLER_REL, CALLWOK, RET0)
+
+UNFOLD_LEMMAS = ('sourceFunctionEntry, Guest.Software.guestFn_{F}, '
+                 'InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, '
+                 'Option.map_none, Option.map_some, List.map_cons, List.map_nil')
+
+
+def ast_index(path, fname):
+    lines = open(path).read().split('\n')
+    start = next(i for i, l in enumerate(lines) if l.startswith('def guestAst :'))
+    for k, l in enumerate(lines[start + 1:]):
+        if l.strip().rstrip(',').rstrip(']').strip() == 'guestFn_' + fname:
+            return k
+    raise KeyError(fname)
+
+
 # KeepsOn preconditions other than the caller's world guard
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
@@ -987,7 +1091,19 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             for t, _n in hyps[f]:
                 o.write('  (%s) →\n' % t)
             o.write('  TerminatingFunBoundedOn %s (ofString "%s") K.«%s»\n\n' % (g0, f, f))
-            o.write('theorem «gbody_%s» : GBody.«%s» := by sorry\n\n' % (f, f))
+            if f in GBODY_PROOF:
+                idx = ast_index(path, f)
+                o.write('theorem «lookup_%s» : originalRuntimeCode.lookup (ofString "%s") =\n'
+                        '    some ((sourceFunctionEntry Guest.Software.guestFn_%s).2) :=\n'
+                        '  originalRuntimeCode_lookup_of_guestAst_getElem %d (by rw [guestAst_len]; decide)\n'
+                        '    (extractFn Guest.Software.guestFn_%s) rfl\n\n' % (f, f, f, idx, f))
+                o.write('/-- PROVED by concrete-body composition (no longer a primitive). -/\n'
+                        'theorem «gbody_%s» : GBody.«%s» := by\n' % (f, f))
+                o.write(GBODY_PROOF[f].replace('{LOOKUP}', '«lookup_%s»' % f).replace(
+                    '{UNFOLD}', UNFOLD_LEMMAS.replace('{F}', f)))
+                o.write('\n')
+            else:
+                o.write('theorem «gbody_%s» : GBody.«%s» := by sorry\n\n' % (f, f))
             o.write('theorem «gb_%s» : TerminatingFunBoundedOn %s (ofString "%s") K.«%s» :=\n  «gbody_%s»'
                     % (f, g0, f, f, f))
             for _t, n in hyps[f]:
@@ -1004,7 +1120,8 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                     continue
                 seen.add(n)
                 prims.append((n, t))
-            prims.append(('gbody_' + f, 'GBody.«%s»' % f))
+            if f not in GBODY_PROOF:
+                prims.append(('gbody_' + f, 'GBody.«%s»' % f))
         o.write('/-! #### Assembly (PROVED): the primitive obligations imply `main`\'s guarded bound -/\n\n'
                 '/-- Every primitive obligation the guarded compositions use: the `fb_*` bounds of the\n'
                 'unguarded callees of guarded functions, the §7 contract leaves, the generated callee\n'
@@ -1017,7 +1134,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
         for f in order:
             if f not in guarded:
                 continue
-            o.write('  have «g_%s» := P.«gbody_%s»' % (f, f))
+            o.write('  have «g_%s» := %s«gbody_%s»' % (f, '' if f in GBODY_PROOF else 'P.', f))
             for _t, n in hyps[f]:
                 o.write(' «g_%s»' % n[3:] if n.startswith('gb_') else ' P.«%s»' % n)
             o.write('\n')

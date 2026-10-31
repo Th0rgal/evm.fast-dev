@@ -7281,6 +7281,144 @@ theorem run_frames_step : ∀ c b, runFramesLoop = some (c, b) →
   run_frames_step_of_specs op_dispatch_spec frame_exception_spec frame_epilogue_spec
     finish_child_spec
 
+/-! ### Concrete compositions (revision 4: shrinking the primitive list) -/
+
+theorem TerminatingProgBoundedOn.mono_bound {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64} {a b : Nat} (h : TerminatingProgBoundedOn P prog a) (hle : a ≤ b) :
+    TerminatingProgBoundedOn P prog b :=
+  fun s hc hP => (h s hc hP).weaken hle
+
+/-- A program that never changes the clock costs nothing. -/
+theorem TerminatingProgBoundedOn.of_clock {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64}
+    (h : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s prog).2.clock = s.clock) :
+    TerminatingProgBoundedOn P prog 0 :=
+  fun s _ _ _ => ⟨by have := h s; omega, by have := h s; omega⟩
+
+theorem clock_return {F : Type} (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.return e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_return]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+
+theorem clock_raise {F : Type} (s : PanSemStateFiniteExact 64 F) (n : MlS) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.raise n e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_raise]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+
+theorem clock_shMemStore {F : Type} (s : PanSemStateFiniteExact 64 F) (op : OpSize) (a v : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.shMemStore op a v)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_shMemStore]
+  show (shMemStoreClauseHOLFiniteExact s op a v).2.clock = s.clock
+  simp only [shMemStoreClauseHOLFiniteExact, shMemStoreClauseHOLExact, shMemStoreHOLExact]
+  repeat' split
+  all_goals rfl
+
+/-- A guard that ignores locals and clock holds at every callee entry. -/
+theorem callEntryOn_of_localsFree {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (h : LocalsFree P) (fname : MlS) (arguments : List (ExpHOL 64)) :
+    CallEntryOn P P fname arguments :=
+  fun state _ _ _ _ _ hP _ _ => h state _ _ hP
+
+/-- `seq` whose second part needs only `GuestInv` (which every evaluation keeps). -/
+theorem TerminatingProgBoundedOn.seq_guestInv_after
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {first second : ProgHOL 64} {a b : Nat}
+    (h1 : TerminatingProgBoundedOn P first a)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (h2 : TerminatingProgBoundedOn GuestInv second b) :
+    TerminatingProgBoundedOn P (.seq first second) (a + b) := by
+  intro F state hcode hP
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
+  have hmid := guestInv_evaluate state first (hPG state hP)
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hmid ⊢
+  cases r1 with
+  | none =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) hmid hnt
+    exact ⟨by omega, by omega⟩
+  | some r =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    exact ⟨by omega, k1⟩
+
+theorem seq_clock {first second : ProgHOL 64}
+    (h1 : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s first).2.clock = s.clock)
+    (h2 : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s second).2.clock = s.clock) :
+    ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s (.seq first second)).2.clock = s.clock := by
+  intro F s
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases hr : evaluateHOLFiniteState s first with ⟨r, mid⟩
+  have := h1 s
+  rw [hr] at this
+  cases r with
+  | none => dsimp only; rw [h2 mid]; exact this
+  | some _ => exact this
+
+theorem clock_assign {F : Type} (s : PanSemStateFiniteExact 64 F) (k : VarKind) (n : MlS)
+    (e : ExpHOL 64) : (evaluateHOLFiniteState s (.assign k n e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_assign]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+  all_goals (cases k <;> rfl)
+
+/-- A guard implied by the caller's guard holds at every callee entry, if it ignores locals. -/
+theorem callEntryOn_of_imp {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hQ : LocalsFree Q) (himp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → Q s)
+    (fname : MlS) (arguments : List (ExpHOL 64)) : CallEntryOn P Q fname arguments :=
+  fun state _ _ _ _ _ hP _ _ => hQ state _ _ (himp state hP)
+
+/-- The continuation of any `decCall` is a `GuestInv` state. -/
+theorem decCallResumeOn_guestInv {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (name fname : MlS) (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn P GuestInv name fname arguments := by
+  intro F state values body callee ret value post _ hP _ _ hrun
+  have hpost := guestInv_evaluate (callEntryStateHOLFinite state callee) body
+    (guestInv_callEntry state callee (hPG state hP))
+  rw [hrun] at hpost
+  exact guestInv_setVar name value _ (guestInv_with_locals_clock post state.locals post.clock hpost)
+
+/-- A read-only callee resumes its caller in the caller's guard (the declared name is not read by
+the guard). -/
+theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {names : List String} (hP : LocalsOnly names P)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    {fname : MlS} (h : ReadOnlyFn fname) (name : MlS) (hname : ∀ n ∈ names, ofString n ≠ name)
+    (arguments : List (ExpHOL 64)) : DecCallResumeOn P P name fname arguments := by
+  obtain ⟨params, body', ret', hlook, hb⟩ := h
+  intro F state values body callee ret value post hcode hPs _ hl hrun
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
+    ret' ret values callee (by rw [hcode]; exact hlook) hl
+  subst hsame
+  have hro := hb (callEntryStateHOLFinite state callee) hcode
+    (guestInv_callEntry state callee (hPG state hPs)) (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+  rw [hrun] at hro
+  dsimp only at hro
+  have heq : ({ post with locals := state.locals } : PanSemStateFiniteExact 64 F) =
+      { state with locals := state.locals, clock := post.clock } := by
+    rw [hro]; rfl
+  rw [heq]
+  exact hP.setVar hname value _ (hP state state.locals post.clock (fun _ _ => rfl) hPs)
+
 /-! ### Guarded bound leaves (generated) -/
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
@@ -7796,7 +7934,24 @@ def GBody.«_decode_witness_node_mpt» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
   TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt»
 
-theorem «gbody__decode_witness_node_mpt» : GBody.«_decode_witness_node_mpt» := by sorry
+theorem «lookup__decode_witness_node_mpt» : originalRuntimeCode.lookup (ofString "_decode_witness_node_mpt") =
+    some ((sourceFunctionEntry Guest.Software.guestFn__decode_witness_node_mpt).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 263 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn__decode_witness_node_mpt) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody__decode_witness_node_mpt» : GBody.«_decode_witness_node_mpt» := by
+  intro hb hsr
+  refine ⟨_, _, _, «lookup__decode_witness_node_mpt», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn__decode_witness_node_mpt, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+        (TerminatingProgBoundedOn.seq_guestInv_after
+          (TerminatingProgBoundedOn.callHandle_on hb worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))) _
+            (callEntryOn_of_imp localsFree_arenaReady (fun s h => h.1) _ _))
+          worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))) ?_
+  unfold K.«_decode_witness_node_mpt»; omega
 
 theorem «gb__decode_witness_node_mpt» : TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt» :=
   «gbody__decode_witness_node_mpt» «gb__decode_witness_node_body» «fb_scratch_release»
@@ -7809,7 +7964,28 @@ def GBody.«_decode_witness_node» : Prop :=
   (ReadOnlyFn (ofString "scratch_mark")) →
   TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node") K.«_decode_witness_node»
 
-theorem «gbody__decode_witness_node» : GBody.«_decode_witness_node» := by sorry
+theorem «lookup__decode_witness_node» : originalRuntimeCode.lookup (ofString "_decode_witness_node") =
+    some ((sourceFunctionEntry Guest.Software.guestFn__decode_witness_node).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 264 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn__decode_witness_node) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody__decode_witness_node» : GBody.«_decode_witness_node» := by
+  intro hmpt hmk hsr hro
+  refine ⟨_, _, _, «lookup__decode_witness_node», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn__decode_witness_node, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hmk _ _ _
+      (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _)
+      (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hro _ (by simp) _)
+      (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+        (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+          (TerminatingProgBoundedOn.seq_guestInv_after
+            (TerminatingProgBoundedOn.callHandle_on hmpt worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+            worldOK_guestInv
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _)
+              (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
+  unfold K.«_decode_witness_node»; omega
 
 theorem «gb__decode_witness_node» : TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node") K.«_decode_witness_node» :=
   «gbody__decode_witness_node» «gb__decode_witness_node_mpt» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
@@ -7933,7 +8109,21 @@ def GBody.«mpt_from_witness» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new») →
   TerminatingFunBoundedOn WorldOK (ofString "mpt_from_witness") K.«mpt_from_witness»
 
-theorem «gbody_mpt_from_witness» : GBody.«mpt_from_witness» := by sorry
+theorem «lookup_mpt_from_witness» : originalRuntimeCode.lookup (ofString "mpt_from_witness") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_mpt_from_witness).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 269 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_mpt_from_witness) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_mpt_from_witness» : GBody.«mpt_from_witness» := by
+  intro hd hn
+  refine ⟨_, _, _, «lookup_mpt_from_witness», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_mpt_from_witness, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hd _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+      (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+      (TerminatingProgBoundedOn.tailCall_guestInv hn _)) ?_
+  unfold K.«mpt_from_witness»; omega
 
 theorem «gb_mpt_from_witness» : TerminatingFunBoundedOn WorldOK (ofString "mpt_from_witness") K.«mpt_from_witness» :=
   «gbody_mpt_from_witness» «gb_decode_witness_to_mpt» «fb_mpt_new»
@@ -8100,7 +8290,21 @@ def GBody.«incorporate_tx_into_block» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx») →
   TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block»
 
-theorem «gbody_incorporate_tx_into_block» : GBody.«incorporate_tx_into_block» := by sorry
+theorem «lookup_incorporate_tx_into_block» : originalRuntimeCode.lookup (ofString "incorporate_tx_into_block") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_incorporate_tx_into_block).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 428 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_incorporate_tx_into_block) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_incorporate_tx_into_block» : GBody.«incorporate_tx_into_block» := by
+  intro hm hu
+  refine ⟨_, _, _, «lookup_incorporate_tx_into_block», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_incorporate_tx_into_block, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.seq_guestInv_after
+      (TerminatingProgBoundedOn.call_on hu _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)) worldOK_guestInv
+      (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«incorporate_tx_into_block»; omega
 
 theorem «gb_incorporate_tx_into_block» : TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block» :=
   «gbody_incorporate_tx_into_block» «fb_merge_tx_into_block» «gb_update_builder_from_tx»
@@ -8743,7 +8947,22 @@ def GBody.«attempt_l1» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "run_attempt") K.«run_attempt») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1»
 
-theorem «gbody_attempt_l1» : GBody.«attempt_l1» := by sorry
+theorem «lookup_attempt_l1» : originalRuntimeCode.lookup (ofString "attempt_l1") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l1).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 880 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l1) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l1» : GBody.«attempt_l1» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l1», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l1, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l1»; omega
 
 theorem «gb_attempt_l1» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1» :=
   «gbody_attempt_l1» «gb_run_attempt»
@@ -8753,7 +8972,22 @@ def GBody.«attempt_l2» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2»
 
-theorem «gbody_attempt_l2» : GBody.«attempt_l2» := by sorry
+theorem «lookup_attempt_l2» : originalRuntimeCode.lookup (ofString "attempt_l2") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l2).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 881 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l2) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l2» : GBody.«attempt_l2» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l2», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l2, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l2»; omega
 
 theorem «gb_attempt_l2» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2» :=
   «gbody_attempt_l2» «gb_attempt_l1»
@@ -8763,7 +8997,22 @@ def GBody.«attempt_l3» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3»
 
-theorem «gbody_attempt_l3» : GBody.«attempt_l3» := by sorry
+theorem «lookup_attempt_l3» : originalRuntimeCode.lookup (ofString "attempt_l3") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l3).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 882 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l3) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l3» : GBody.«attempt_l3» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l3», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l3, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l3»; omega
 
 theorem «gb_attempt_l3» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3» :=
   «gbody_attempt_l3» «gb_attempt_l2»
@@ -8773,7 +9022,22 @@ def GBody.«attempt_l4» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4»
 
-theorem «gbody_attempt_l4» : GBody.«attempt_l4» := by sorry
+theorem «lookup_attempt_l4» : originalRuntimeCode.lookup (ofString "attempt_l4") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l4).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 883 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l4) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l4» : GBody.«attempt_l4» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l4», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l4, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l4»; omega
 
 theorem «gb_attempt_l4» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4» :=
   «gbody_attempt_l4» «gb_attempt_l3»
@@ -8783,7 +9047,22 @@ def GBody.«attempt_l5» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5»
 
-theorem «gbody_attempt_l5» : GBody.«attempt_l5» := by sorry
+theorem «lookup_attempt_l5» : originalRuntimeCode.lookup (ofString "attempt_l5") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l5).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 884 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l5) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l5» : GBody.«attempt_l5» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l5», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l5, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l5»; omega
 
 theorem «gb_attempt_l5» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5» :=
   «gbody_attempt_l5» «gb_attempt_l4»
@@ -8793,7 +9072,22 @@ def GBody.«attempt_l6» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6»
 
-theorem «gbody_attempt_l6» : GBody.«attempt_l6» := by sorry
+theorem «lookup_attempt_l6» : originalRuntimeCode.lookup (ofString "attempt_l6") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l6).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 885 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l6) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l6» : GBody.«attempt_l6» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l6», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l6, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l6»; omega
 
 theorem «gb_attempt_l6» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6» :=
   «gbody_attempt_l6» «gb_attempt_l5»
@@ -8803,7 +9097,22 @@ def GBody.«attempt_l7» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7»
 
-theorem «gbody_attempt_l7» : GBody.«attempt_l7» := by sorry
+theorem «lookup_attempt_l7» : originalRuntimeCode.lookup (ofString "attempt_l7") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l7).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 886 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_attempt_l7) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_attempt_l7» : GBody.«attempt_l7» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_attempt_l7», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_attempt_l7, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.seq_guestInv_after
+        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_shMemStore s _ _ _) (fun s => clock_raise s _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+        worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
+  unfold K.«attempt_l7»; omega
 
 theorem «gb_attempt_l7» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7» :=
   «gbody_attempt_l7» «gb_attempt_l6»
@@ -8813,7 +9122,25 @@ def GBody.«verify_stateless_new_payload» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7») →
   TerminatingFunBoundedOn WorldOK (ofString "verify_stateless_new_payload") K.«verify_stateless_new_payload»
 
-theorem «gbody_verify_stateless_new_payload» : GBody.«verify_stateless_new_payload» := by sorry
+theorem «lookup_verify_stateless_new_payload» : originalRuntimeCode.lookup (ofString "verify_stateless_new_payload") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_verify_stateless_new_payload).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 887 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_verify_stateless_new_payload) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_verify_stateless_new_payload» : GBody.«verify_stateless_new_payload» := by
+  intro h1
+  refine ⟨_, _, _, «lookup_verify_stateless_new_payload», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_verify_stateless_new_payload, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+        (TerminatingProgBoundedOn.seq_guestInv_after
+          (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _
+            (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_assign s _ _ _)
+              (fun s => clock_assign s _ _ _))) _ (callEntryOn_of_localsFree localsFree_worldOK _ _))
+          worldOK_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))) ?_
+  unfold K.«verify_stateless_new_payload»; omega
 
 theorem «gb_verify_stateless_new_payload» : TerminatingFunBoundedOn WorldOK (ofString "verify_stateless_new_payload") K.«verify_stateless_new_payload» :=
   «gbody_verify_stateless_new_payload» «gb_attempt_l7»
@@ -8899,10 +9226,8 @@ structure Primitives : Prop where
   «ww_rlp_item» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "rlp_item")
   «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body»
   «fb_scratch_release» : TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release»
-  «gbody__decode_witness_node_mpt» : GBody.«_decode_witness_node_mpt»
   «fb_scratch_mark» : TerminatingFunBoundedOn GuestInv (ofString "scratch_mark") K.«scratch_mark»
   «ro_scratch_mark» : ReadOnlyFn (ofString "scratch_mark")
-  «gbody__decode_witness_node» : GBody.«_decode_witness_node»
   «fb__collapse_branch» : TerminatingFunBoundedOn GuestInv (ofString "_collapse_branch") K.«_collapse_branch»
   «fb__delete_ext_finish» : TerminatingFunBoundedOn GuestInv (ofString "_delete_ext_finish") K.«_delete_ext_finish»
   «fb_common_prefix_length» : TerminatingFunBoundedOn GuestInv (ofString "common_prefix_length") K.«common_prefix_length»
@@ -8943,7 +9268,6 @@ structure Primitives : Prop where
   «fb_nodedb_lookup» : TerminatingFunBoundedOn GuestInv (ofString "nodedb_lookup") K.«nodedb_lookup»
   «ro_nodedb_lookup» : ReadOnlyFn (ofString "nodedb_lookup")
   «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt»
-  «gbody_mpt_from_witness» : GBody.«mpt_from_witness»
   «fb_cache_get_root» : TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root»
   «fb_encode_account» : TerminatingFunBoundedOn GuestInv (ofString "encode_account") K.«encode_account»
   «fb_htab_copy» : TerminatingFunBoundedOn GuestInv (ofString "htab_copy") K.«htab_copy»
@@ -9010,7 +9334,6 @@ structure Primitives : Prop where
   «ro_u256_eq» : ReadOnlyFn (ofString "u256_eq")
   «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx»
   «fb_merge_tx_into_block» : TerminatingFunBoundedOn GuestInv (ofString "merge_tx_into_block") K.«merge_tx_into_block»
-  «gbody_incorporate_tx_into_block» : GBody.«incorporate_tx_into_block»
   «fb_htab_del» : TerminatingFunBoundedOn GuestInv (ofString "htab_del") K.«htab_del»
   «htab_del_spec» : type_of% @htab_del_spec
   «htab_del_progress_spec» : type_of% @htab_del_progress_spec
@@ -9282,14 +9605,6 @@ structure Primitives : Prop where
   «wk_validate_header» : KeepsOn WorldOK WorldOK (ofString "validate_header")
   «ww_validate_headers» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200)])     ["heap_ptr", "scratch_ptr"] (ofString "validate_headers")
   «gbody_run_attempt» : GBody.«run_attempt»
-  «gbody_attempt_l1» : GBody.«attempt_l1»
-  «gbody_attempt_l2» : GBody.«attempt_l2»
-  «gbody_attempt_l3» : GBody.«attempt_l3»
-  «gbody_attempt_l4» : GBody.«attempt_l4»
-  «gbody_attempt_l5» : GBody.«attempt_l5»
-  «gbody_attempt_l6» : GBody.«attempt_l6»
-  «gbody_attempt_l7» : GBody.«attempt_l7»
-  «gbody_verify_stateless_new_payload» : GBody.«verify_stateless_new_payload»
   «fb_blake2_init» : TerminatingFunBoundedOn GuestInv (ofString "blake2_init") K.«blake2_init»
   «fb_bls_precompiles_init» : TerminatingFunBoundedOn GuestInv (ofString "bls_precompiles_init") K.«bls_precompiles_init»
   «fb_bn254_init» : TerminatingFunBoundedOn GuestInv (ofString "bn254_init") K.«bn254_init»
@@ -9329,22 +9644,22 @@ structure Primitives : Prop where
 theorem assembly_main (P : Primitives) :
     TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» := by
   have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ak__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
-  have «g__decode_witness_node_mpt» := P.«gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
-  have «g__decode_witness_node» := P.«gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
+  have «g__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
+  have «g__decode_witness_node» := «gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«ww_scratch_alloc»
   have «g__mpt_delete_node» := P.«gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«ww_mpt_new» P.«wk_mpt_set» P.«ww_rlp_encode_word»
   have «g_decode_witness_to_mpt» := P.«gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
-  have «g_mpt_from_witness» := P.«gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
+  have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
   have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«ww_alloc» P.«ww_cache_get_root» P.«ww_encode_account» P.«ww_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«ww_memcpy» P.«wk_mpt_from_witness» P.«wk_mpt_root» P.«wk_mpt_set» P.«ww_rlp_encode_bytes» P.«ro_u256_is_zero» P.«ww_u256_to_be_min» P.«ww_ws_get_account_optional» P.«ww_ws_storage_root_of»
   have «g_ws_storage_trie» := P.«gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
   have «g_ws_get_storage» := P.«gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«ww_ws_storage_root_of»
   have «g_get_pre_tx_storage» := P.«gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
   have «g_idx_start_storage» := P.«gbody_idx_start_storage» P.«fb_alloc» «g_get_pre_tx_storage» P.«fb_htab_get» P.«fb_htab_set» P.«fb_memcpy» P.«fb_st_le64» P.«ro_htab_get» P.«ww_memcpy» P.«ww_st_le64»
   have «g_update_builder_from_tx» := P.«gbody_update_builder_from_tx» P.«fb_add_balance_change» P.«fb_add_code_change» P.«fb_add_nonce_change» P.«fb_add_storage_write» P.«fb_bal_remove_change» P.«fb_get_code» P.«fb_htab_item» P.«fb_idx_start_account» «g_idx_start_storage» P.«fb_memeq» P.«fb_remove_storage_write» P.«fb_u256_eq» P.«wk_add_balance_change» P.«wk_add_code_change» P.«wk_add_nonce_change» P.«wk_add_storage_write» P.«wk_bal_remove_change» P.«wk_get_code» P.«ro_htab_item» P.«wk_idx_start_account» P.«wk_idx_start_storage» P.«ro_memeq» P.«wk_remove_storage_write» P.«ro_u256_eq»
-  have «g_incorporate_tx_into_block» := P.«gbody_incorporate_tx_into_block» P.«fb_merge_tx_into_block» «g_update_builder_from_tx»
+  have «g_incorporate_tx_into_block» := «gbody_incorporate_tx_into_block» P.«fb_merge_tx_into_block» «g_update_builder_from_tx»
   have «g_htab_truncate» := P.«gbody_htab_truncate» P.«fb_htab_del» P.«htab_del_spec» P.«htab_del_progress_spec»
   have «g_rollback_child_access» := P.«gbody_rollback_child_access» «g_htab_truncate» P.«htab_truncate_spec»
   have «g_finish_child» := P.«gbody_finish_child» P.«fb_address_to_u256» P.«fb_create_finish» P.«fb_credit_state_gas_refund» P.«fb_frame_halt» P.«fb_frame_mem_release» P.«fb_incorporate_child_on_error» P.«fb_incorporate_child_on_success» P.«fb_memcpy» P.«fb_min» P.«fb_pc_add» P.«fb_refill_frame_state_gas» «g_rollback_child_access» P.«fb_scratch_release» P.«fb_set_retdata» P.«fb_stack_push» P.«fb_state_restore» P.«ek_create_finish» P.«ek_frame_halt» P.«ek_refill_frame_state_gas» P.«ek_state_restore»
@@ -9366,14 +9681,14 @@ theorem assembly_main (P : Primitives) :
   have «g_payload_header» := P.«gbody_payload_header» P.«fb_alloc» P.«fb_block_rlp_length» «g_build_mpt_indexed» P.«fb_compute_requests_hash» P.«fb_encode_execution_requests» P.«fb_encode_withdrawal_rlp» P.«fb_keccak256» P.«fb_memzero» P.«ww_alloc» P.«wk_block_rlp_length» P.«wk_build_mpt_indexed» P.«wk_encode_withdrawal_rlp» P.«ww_keccak256» P.«ww_memzero»
   have «g_state_init» := P.«gbody_state_init» P.«fb_alloc» «g_decode_witness_to_mpt» P.«fb_htab_new» P.«ww_alloc»
   have «g_run_attempt» := P.«gbody_run_attempt» P.«fb_alloc» P.«fb_check_gas_limit» «g_execute_block» P.«fb_header_hash» P.«fb_is_valid_versioned_hashes» P.«fb_memeq» P.«fb_memzero» P.«fb_nodedb_build» «g_payload_header» «g_state_init» P.«fb_validate_header» P.«fb_validate_headers» P.«ww_alloc» P.«ro_check_gas_limit» P.«ww_header_hash» P.«ww_is_valid_versioned_hashes» P.«ro_memeq» P.«ww_memzero» P.«wk_nodedb_build» P.«wk_payload_header» P.«wk_state_init» P.«wk_validate_header» P.«ww_validate_headers»
-  have «g_attempt_l1» := P.«gbody_attempt_l1» «g_run_attempt»
-  have «g_attempt_l2» := P.«gbody_attempt_l2» «g_attempt_l1»
-  have «g_attempt_l3» := P.«gbody_attempt_l3» «g_attempt_l2»
-  have «g_attempt_l4» := P.«gbody_attempt_l4» «g_attempt_l3»
-  have «g_attempt_l5» := P.«gbody_attempt_l5» «g_attempt_l4»
-  have «g_attempt_l6» := P.«gbody_attempt_l6» «g_attempt_l5»
-  have «g_attempt_l7» := P.«gbody_attempt_l7» «g_attempt_l6»
-  have «g_verify_stateless_new_payload» := P.«gbody_verify_stateless_new_payload» «g_attempt_l7»
+  have «g_attempt_l1» := «gbody_attempt_l1» «g_run_attempt»
+  have «g_attempt_l2» := «gbody_attempt_l2» «g_attempt_l1»
+  have «g_attempt_l3» := «gbody_attempt_l3» «g_attempt_l2»
+  have «g_attempt_l4» := «gbody_attempt_l4» «g_attempt_l3»
+  have «g_attempt_l5» := «gbody_attempt_l5» «g_attempt_l4»
+  have «g_attempt_l6» := «gbody_attempt_l6» «g_attempt_l5»
+  have «g_attempt_l7» := «gbody_attempt_l7» «g_attempt_l6»
+  have «g_verify_stateless_new_payload» := «gbody_verify_stateless_new_payload» «g_attempt_l7»
   have «g_main» := P.«gbody_main» P.«fb_alloc» P.«fb_blake2_init» P.«fb_bls_precompiles_init» P.«fb_bn254_init» P.«fb_decode_host_input» P.«fb_evm_init» P.«fb_fork_init» P.«fb_header_init» P.«fb_htr_new_payload_request» P.«fb_keccak_init» P.«fb_mem_init» P.«fb_memzero» P.«fb_mpt_init» P.«fb_output_write» P.«fb_ripemd160_init» P.«fb_secp256k1_init» P.«fb_serialize_result» P.«fb_sha256_init» P.«fb_ssz_init» P.«fb_u256_ws_init» «g_verify_stateless_new_payload» P.«ww_alloc» P.«ww_blake2_init» P.«ww_bls_precompiles_init» P.«ww_bn254_init» P.«wk_decode_host_input» P.«ww_evm_init» P.«ww_fork_init» P.«ww_header_init» P.«ww_htr_new_payload_request» P.«ww_keccak_init» P.«mem_init_world» P.«ww_memzero» P.«ww_mpt_init» P.«ww_ripemd160_init» P.«ro_secp256k1_init» P.«ww_sha256_init» P.«ww_ssz_init» P.«ww_u256_ws_init»
   exact «g_main»
 
@@ -9391,10 +9706,8 @@ theorem primitives : Primitives where
   «ww_rlp_item» := «ww_rlp_item»
   «gbody__decode_witness_node_body» := «gbody__decode_witness_node_body»
   «fb_scratch_release» := «fb_scratch_release»
-  «gbody__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt»
   «fb_scratch_mark» := «fb_scratch_mark»
   «ro_scratch_mark» := «ro_scratch_mark»
-  «gbody__decode_witness_node» := «gbody__decode_witness_node»
   «fb__collapse_branch» := «fb__collapse_branch»
   «fb__delete_ext_finish» := «fb__delete_ext_finish»
   «fb_common_prefix_length» := «fb_common_prefix_length»
@@ -9435,7 +9748,6 @@ theorem primitives : Primitives where
   «fb_nodedb_lookup» := «fb_nodedb_lookup»
   «ro_nodedb_lookup» := «ro_nodedb_lookup»
   «gbody_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt»
-  «gbody_mpt_from_witness» := «gbody_mpt_from_witness»
   «fb_cache_get_root» := «fb_cache_get_root»
   «fb_encode_account» := «fb_encode_account»
   «fb_htab_copy» := «fb_htab_copy»
@@ -9502,7 +9814,6 @@ theorem primitives : Primitives where
   «ro_u256_eq» := «ro_u256_eq»
   «gbody_update_builder_from_tx» := «gbody_update_builder_from_tx»
   «fb_merge_tx_into_block» := «fb_merge_tx_into_block»
-  «gbody_incorporate_tx_into_block» := «gbody_incorporate_tx_into_block»
   «fb_htab_del» := «fb_htab_del»
   «htab_del_spec» := «htab_del_spec»
   «htab_del_progress_spec» := «htab_del_progress_spec»
@@ -9774,14 +10085,6 @@ theorem primitives : Primitives where
   «wk_validate_header» := «wk_validate_header»
   «ww_validate_headers» := «ww_validate_headers»
   «gbody_run_attempt» := «gbody_run_attempt»
-  «gbody_attempt_l1» := «gbody_attempt_l1»
-  «gbody_attempt_l2» := «gbody_attempt_l2»
-  «gbody_attempt_l3» := «gbody_attempt_l3»
-  «gbody_attempt_l4» := «gbody_attempt_l4»
-  «gbody_attempt_l5» := «gbody_attempt_l5»
-  «gbody_attempt_l6» := «gbody_attempt_l6»
-  «gbody_attempt_l7» := «gbody_attempt_l7»
-  «gbody_verify_stateless_new_payload» := «gbody_verify_stateless_new_payload»
   «fb_blake2_init» := «fb_blake2_init»
   «fb_bls_precompiles_init» := «fb_bls_precompiles_init»
   «fb_bn254_init» := «fb_bn254_init»

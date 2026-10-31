@@ -1480,3 +1480,141 @@ theorem run_frames_step : ∀ c b, runFramesLoop = some (c, b) →
       locN (evaluateHOLFiniteState (decClockHOLFinite s) b).2 "go" = 0 :=
   run_frames_step_of_specs op_dispatch_spec frame_exception_spec frame_epilogue_spec
     finish_child_spec
+
+/-! ### Concrete compositions (revision 4: shrinking the primitive list) -/
+
+theorem TerminatingProgBoundedOn.mono_bound {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64} {a b : Nat} (h : TerminatingProgBoundedOn P prog a) (hle : a ≤ b) :
+    TerminatingProgBoundedOn P prog b :=
+  fun s hc hP => (h s hc hP).weaken hle
+
+/-- A program that never changes the clock costs nothing. -/
+theorem TerminatingProgBoundedOn.of_clock {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64}
+    (h : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s prog).2.clock = s.clock) :
+    TerminatingProgBoundedOn P prog 0 :=
+  fun s _ _ _ => ⟨by have := h s; omega, by have := h s; omega⟩
+
+theorem clock_return {F : Type} (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.return e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_return]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+
+theorem clock_raise {F : Type} (s : PanSemStateFiniteExact 64 F) (n : MlS) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.raise n e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_raise]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+
+theorem clock_shMemStore {F : Type} (s : PanSemStateFiniteExact 64 F) (op : OpSize) (a v : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.shMemStore op a v)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_shMemStore]
+  show (shMemStoreClauseHOLFiniteExact s op a v).2.clock = s.clock
+  simp only [shMemStoreClauseHOLFiniteExact, shMemStoreClauseHOLExact, shMemStoreHOLExact]
+  repeat' split
+  all_goals rfl
+
+/-- A guard that ignores locals and clock holds at every callee entry. -/
+theorem callEntryOn_of_localsFree {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (h : LocalsFree P) (fname : MlS) (arguments : List (ExpHOL 64)) :
+    CallEntryOn P P fname arguments :=
+  fun state _ _ _ _ _ hP _ _ => h state _ _ hP
+
+/-- `seq` whose second part needs only `GuestInv` (which every evaluation keeps). -/
+theorem TerminatingProgBoundedOn.seq_guestInv_after
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {first second : ProgHOL 64} {a b : Nat}
+    (h1 : TerminatingProgBoundedOn P first a)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (h2 : TerminatingProgBoundedOn GuestInv second b) :
+    TerminatingProgBoundedOn P (.seq first second) (a + b) := by
+  intro F state hcode hP
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
+  have hmid := guestInv_evaluate state first (hPG state hP)
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hmid ⊢
+  cases r1 with
+  | none =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) hmid hnt
+    exact ⟨by omega, by omega⟩
+  | some r =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    exact ⟨by omega, k1⟩
+
+theorem seq_clock {first second : ProgHOL 64}
+    (h1 : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s first).2.clock = s.clock)
+    (h2 : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s second).2.clock = s.clock) :
+    ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), (evaluateHOLFiniteState s (.seq first second)).2.clock = s.clock := by
+  intro F s
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases hr : evaluateHOLFiniteState s first with ⟨r, mid⟩
+  have := h1 s
+  rw [hr] at this
+  cases r with
+  | none => dsimp only; rw [h2 mid]; exact this
+  | some _ => exact this
+
+theorem clock_assign {F : Type} (s : PanSemStateFiniteExact 64 F) (k : VarKind) (n : MlS)
+    (e : ExpHOL 64) : (evaluateHOLFiniteState s (.assign k n e)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_assign]
+  repeat' split
+  all_goals (try dsimp only)
+  all_goals (try split)
+  all_goals (try rfl)
+  all_goals (cases k <;> rfl)
+
+/-- A guard implied by the caller's guard holds at every callee entry, if it ignores locals. -/
+theorem callEntryOn_of_imp {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hQ : LocalsFree Q) (himp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → Q s)
+    (fname : MlS) (arguments : List (ExpHOL 64)) : CallEntryOn P Q fname arguments :=
+  fun state _ _ _ _ _ hP _ _ => hQ state _ _ (himp state hP)
+
+/-- The continuation of any `decCall` is a `GuestInv` state. -/
+theorem decCallResumeOn_guestInv {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (name fname : MlS) (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn P GuestInv name fname arguments := by
+  intro F state values body callee ret value post _ hP _ _ hrun
+  have hpost := guestInv_evaluate (callEntryStateHOLFinite state callee) body
+    (guestInv_callEntry state callee (hPG state hP))
+  rw [hrun] at hpost
+  exact guestInv_setVar name value _ (guestInv_with_locals_clock post state.locals post.clock hpost)
+
+/-- A read-only callee resumes its caller in the caller's guard (the declared name is not read by
+the guard). -/
+theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {names : List String} (hP : LocalsOnly names P)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    {fname : MlS} (h : ReadOnlyFn fname) (name : MlS) (hname : ∀ n ∈ names, ofString n ≠ name)
+    (arguments : List (ExpHOL 64)) : DecCallResumeOn P P name fname arguments := by
+  obtain ⟨params, body', ret', hlook, hb⟩ := h
+  intro F state values body callee ret value post hcode hPs _ hl hrun
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
+    ret' ret values callee (by rw [hcode]; exact hlook) hl
+  subst hsame
+  have hro := hb (callEntryStateHOLFinite state callee) hcode
+    (guestInv_callEntry state callee (hPG state hPs)) (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+  rw [hrun] at hro
+  dsimp only at hro
+  have heq : ({ post with locals := state.locals } : PanSemStateFiniteExact 64 F) =
+      { state with locals := state.locals, clock := post.clock } := by
+    rw [hro]; rfl
+  rw [heq]
+  exact hP.setVar hname value _ (hP state state.locals post.clock (fun _ _ => rfl) hPs)
