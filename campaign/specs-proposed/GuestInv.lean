@@ -1696,16 +1696,22 @@ global in the `*_init` functions, `state_init`, `state_fresh_tx`, `bal_init`; ge
 def globalBuffers : List (String × Nat) :=
   [("b2_iv", 64), ("b2_sigma", 80), ("b2_v", 128), ("bal_key_buf", 64), ("be", 120), ("beacon_roots_address", 24), ("bls_c", 7136), ("bo", 88), ("bs", 80), ("builder_deposit_address", 24), ("builder_exit_address", 24), ("consolidation_request_address", 24), ("deposit_contract_address", 24), ("deposit_event_signature_hash", 32), ("empty_code_hash", 32), ("empty_trie_root", 32), ("evm_empty", 8), ("evm_key_buf", 32), ("hdr_zero8", 8), ("history_storage_address", 24), ("keccak_pad", 136), ("keccak_rc", 192), ("keccak_st", 200), ("mpt_hash_scratch", 40), ("mpt_key_scratch", 16), ("mpt_nib_scratch", 64), ("null_address", 24), ("pre_hdr_buf", 96), ("rmd_h", 40), ("rmd_pad", 128), ("rmd_tab", 160), ("rmd_x", 128), ("sha_pad", 128), ("sha_st", 64), ("sk_buf", 64), ("ssz_len_chunk", 32), ("ssz_offs", 64), ("transfer_topic", 32), ("ts", 72), ("u256_ws", 640), ("vm_system_address", 24), ("withdrawal_request_address", 24), ("ws", 40), ("zero32", 32)]
 
-/-- The block-output arrays hanging off the record `bo` (`execute_block` 33580-33609): transactions
-`bo+24` and receipts `bo+32` (`16·ntx + 16` bytes, `ntx = bo+80`), requests `bo+56` (8 slots of 16
-bytes). They are written through by `process_transaction` (33368-33374) and `requests_append`
-(33499-33501), the only stores through a pointer field of a global record outside the frame tier
-(round-3 item 5, `coverage.py` write-root scan), so `WorldOK` owns them. An array whose pointer is
-still `0` (between `bo := alloc(88)`/`memzero` and the stores) is empty. -/
+/-- The block-output objects hanging off the record `bo` (`execute_block` 33580-33609): the
+transaction and receipt arrays `bo+24`, `bo+32` (`16·ntx + 16` bytes, `ntx = bo+80`), the request
+array `bo+56` (8 slots of 16 bytes), and the two 8-byte-element lists `bo+40` (block logs) and
+`bo+72` (`lst_new(8, 16)`: 24-byte header, backing array `8·capacity`). They are written through by
+`process_transaction` (33368-33374, `lst_push` 33398/33418) and `requests_append` (33499-33501),
+the only writes through a pointer field of a global record outside the frame tier and the typed
+table slots (round-3 item 5, `coverage.py` write-root scan, DESIGN.md Q1), so `WorldOK` owns them.
+An object whose pointer is still `0` (between `bo := alloc(88)`/`memzero` and the stores) is
+empty. -/
 def blockOutObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   let bo := globN s "bo"
-  let arr (k len : Nat) : Ivl := if bo = 0 ∨ memW s (bo + k) = 0 then (0, 0) else (memW s (bo + k), len)
-  [arr 24 (16 * memW s (bo + 80) + 16), arr 32 (16 * memW s (bo + 80) + 16), arr 56 128]
+  let obj (p len : Nat) : Ivl := if bo = 0 ∨ p = 0 then (0, 0) else (p, len)
+  let lst (k : Nat) : List Ivl :=
+    [obj (memW s (bo + k)) 24, obj (memW s (memW s (bo + k))) (8 * memW s (memW s (bo + k) + 16))]
+  [obj (memW s (bo + 24)) (16 * memW s (bo + 80) + 16), obj (memW s (bo + 32)) (16 * memW s (bo + 80) + 16),
+   obj (memW s (bo + 56)) 128] ++ lst 40 ++ lst 72
 
 /-- The fixed objects: every global buffer (empty while its global is still `0`), the journal
 array and the block-output arrays (round-3 item 5). -/
