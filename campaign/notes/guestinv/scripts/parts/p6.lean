@@ -7,10 +7,15 @@ def K_pan : Nat := K.«main» + 1
 /-- Kernel-checked budget inequality (target side `32·K + 23077`, `ConcreteStage1To5Transfer`). -/
 theorem K_pan_budget : 32 * K_pan + 23077 ≤ (10 ^ 299 - 1) / 10 ^ 4 := by decide
 
-/-- End-to-end target of the campaign under this proposal. Its only `sorry` dependencies are the
-leaves below `main` (through `gb_main`). -/
+/-- The conditional assembly (round-3 assembly ruling), PROVED and `sorry`-free: the primitive
+obligations imply the campaign target. `#print axioms assembly` lists no `sorryAx`. -/
+theorem assembly (P : Primitives) : CoveredSourceTicksConsumedBounded K_pan :=
+  coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry (assembly_main P)
+
+/-- End-to-end target of the campaign under this proposal: the assembly applied to the leaves. Its
+`sorry` dependencies are exactly the primitive leaves (`primitives`). -/
 theorem coveredSourceTicksConsumedBounded_K_pan : CoveredSourceTicksConsumedBounded K_pan :=
-  coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry «gb_main»
+  assembly primitives
 
 /-! ### Round-1 counterexamples, pinned (each is the tick count of the counterexample run) -/
 

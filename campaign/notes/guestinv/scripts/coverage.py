@@ -24,6 +24,7 @@ Writes OUTDIR/coverage.md (tables) and OUTDIR/kgen.lean (one symbolic Lean `def 
 OUTDIR/tiers.txt (guarded tier, buffers).
 """
 import os
+import re
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -624,6 +625,311 @@ def costs(fns, graph, reach, recursive, loops):
     return K, formula, order
 
 
+# ---------------------------------------------------------------------------------------------
+# Guarded compositions (revision 4, round-3 item 5 and the assembly ruling)
+
+GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK',
+           'ReqsFresh': 'WorldOK', 'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv',
+           'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptObjReady': 'ArenaReady',
+           'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
+W_PREFIX = {'WorldOK': 'wk', 'EvmInv': 'ek', 'ArenaReady': 'ak'}
+# callees with a hand-written contract leaf (§7): those leaves are the hypotheses
+SPEC_OF = {
+    'htab_set': ['htab_set_spec'], 'htab_del': ['htab_del_spec', 'htab_del_progress_spec'],
+    'htab_truncate': ['htab_truncate_spec'], 'htab_union_into': ['htab_union_into_spec'],
+    'htab_new': ['htab_new_spec'], 'htab_new_scratch': ['htab_new_scratch_spec'],
+    '_mpt_insert_node': ['mpt_insert_node_spec'],
+    '_mpt_delete_node_body': ['mpt_delete_node_body_spec'], 'mem_init': ['mem_init_world'],
+    'op_dispatch': ['op_dispatch_spec'], 'frame_exception': ['frame_exception_spec'],
+    'frame_epilogue': ['frame_epilogue_spec'], 'finish_child': ['finish_child_spec']}
+# write regions of the pointer-parameter writers (hand-checked on the AST, DESIGN.md §6)
+REGION = {
+    'memcpy': [('dst', 'locN s "n"')], 'memzero': [('dst', 'locN s "n"')],
+    'st_le64': [('p', '8')], 'u256_to_be32': [('out', '32')], 'u256_to_be_min': [('out', '32')],
+    'keccak256': [('out', '32')], 'header_hash': [('out', '32')],
+    'rlp_encode_word': [('dst', '33')], 'rlp_encode_bytes': [('dst', 'locN s "n" + 9')],
+    'encode_account': [('out', '110')], 'logs_bloom': [('out', '256')],
+    'compute_contract_address': [('out', '20')], 'recover_sender_with_chain_id': [('out20', '20')],
+    'extract_deposit_data': [('out', '192')], 'htr_new_payload_request': [('out', '32')],
+    'node_invalidate': [('nd', '32')], '_delete_ext_finish': [('node', '176')],
+    '_insert_into_leaf': [('node', '176')],
+    'lst_push': None,   # header and current backing array, below
+}
+REGION_RAW = {'lst_push': '(locN s "l", 24), (memW s (locN s "l"), locN s "esz" * memW s (locN s "l" + 16))'}
+# KeepsOn preconditions other than the caller's world guard
+KEEP_PRE = {
+    'requests_append': 'ReqRoom',
+    'mpt_root': 'fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s',
+    'compute_state_root': 'WorldAvoids (fun s => [(locN s "out", 32)])',
+    'build_mpt_indexed': 'WorldAvoids (fun s => [(locN s "out", 32)])',
+    'mpt_set': 'fun s => WorldOK s ∧ MptObjReady s',
+}
+
+
+def needed_calls(fns, f, guarded, root_loop):
+    """Callees of f with a call site after which a guarded call or a guarded loop head is
+    reachable inside f (return/raise end the path; a tail call flows only into its callee)."""
+    def has_event(t):
+        found = [False]
+
+        def g(x, _c):
+            if is_app(x, 'Prog.while') and root_loop:
+                found[0] = True
+            cp = call_parts(x)
+            if cp and cp[0] in guarded:
+                found[0] = True
+        panast.walk(t, g)
+        return found[0]
+    out = []
+
+    def walk(t, after):
+        if not (isinstance(t, tuple) and t[0] == 'app'):
+            return after
+        h, a = t[1], t[2]
+        if h == 'Prog.seq':
+            return walk(a[0], walk(a[1], after))
+        if h == 'Prog.ite':
+            x = walk(a[1], after)
+            y = walk(a[2], after)
+            return x or y
+        if h == 'Prog.while':
+            r = has_event(a[1]) or root_loop or after
+            walk(a[1], r)
+            return r
+        if h == 'Prog.dec':
+            return walk(a[3], after)
+        if h in ('Prog.return', 'Prog.raise'):
+            return False
+        cp = call_parts(t)
+        if cp:
+            g, handler, cont = cp
+            if is_app(t, 'Prog.call') and is_app(a[0], 'none'):
+                return g in guarded
+            k = walk(cont, after) if cont is not None else after
+            hh = walk(handler, after) if handler is not None else False
+            out.append((g, k or hh))
+            return (g in guarded) or k or hh
+        return after
+    walk(fns[f], False)
+    return sorted({g for g, n in out if n})
+
+
+def written_params(path, fns, line_of, graph):
+    """Parameters each function writes through (directly, or by passing them to a written
+    parameter of a callee)."""
+    src = open(path).read().split('\n')
+    par = {}
+    for f, ln in line_of.items():
+        for j in range(ln, ln + 8):
+            if src[j].strip().startswith('params :='):
+                par[f] = re.findall(r'\("([A-Za-z0-9_]+)", ', src[j])
+                break
+
+    def fv(e):
+        return {n for (k, n) in free_vars(e) if k == 'local'}
+
+    def stores(t):
+        res = []
+
+        def g(x, _c):
+            if is_app(x) and x[1] in ('Prog.store', 'Prog.storeByte'):
+                res.append(x[2][0])
+        panast.walk(t, g)
+        return res
+
+    def calls(t):
+        res = []
+
+        def g(x, _c):
+            if is_app(x, 'Prog.call') or is_app(x, 'Prog.decCall'):
+                args = x[2][2] if is_app(x, 'Prog.call') else x[2][3]
+                res.append((call_parts(x)[0], args[1] if isinstance(args, tuple) and args[0] == 'list' else []))
+        panast.walk(t, g)
+        return res
+    wp = {f: {p for p in par.get(f, []) if any(p in fv(a) for a in stores(fns[f]))} for f in fns}
+    changed = True
+    while changed:
+        changed = False
+        for f in fns:
+            for g, args in calls(fns[f]):
+                if not wp.get(g):
+                    continue
+                for i, pn in enumerate(par.get(g, [])):
+                    if pn in wp[g] and i < len(args):
+                        new = (fv(args[i]) & set(par.get(f, []))) - wp[f]
+                        if new:
+                            wp[f] |= new
+                            changed = True
+    return wp, stores, calls, par
+
+
+def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of, order, loops, bufs):
+    roots = {'run_frames', 'htab_truncate', '_decode_witness_node_body', '_mpt_insert_node',
+             '_mpt_delete_node_body'}
+    wp, stores, calls_of, par = written_params(path, fns, line_of, graph)
+    gw = {}
+
+    def gwf(f):
+        if f not in gw:
+            gw[f] = set()
+            r = set(global_writes(fns[f]))
+            for g in graph[f]:
+                if g in fns:
+                    r |= gwf(g)
+            gw[f] = r
+        return gw[f]
+    bufsize = {g: sorted(v)[0][1] for g, v in bufs.items()}
+
+    def closure(g):
+        seen, st = set(), [g]
+        while st:
+            x = st.pop()
+            if x in seen or x not in fns or (x in SPEC_OF and x != g):
+                continue
+            seen.add(x)
+            st.extend(graph[x])
+        return seen
+
+    def buffers_written(g):
+        res = set()
+        for x in closure(g):
+            decs = {}
+
+            def d(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    decs[strval(y[2][0])] = y[2][2]
+            panast.walk(fns[x], d)
+            targets = list(stores(fns[x]))
+            for cg, args in calls_of(fns[x]):
+                for i, pn in enumerate(par.get(cg, [])):
+                    if pn in wp.get(cg, ()) and i < len(args):
+                        targets.append(args[i])
+            for a in targets:
+                exprs = [a] + [decs[n] for (k, n) in free_vars(a) if k == 'local' and n in decs]
+                for e in exprs:
+                    for (k, n) in free_vars(e):
+                        if k == 'global' and n in bufsize:
+                            res.add(n)
+        return sorted(res)
+    G = lambda f: guard_of.get(f, 'WorldOK')
+    need = {f: needed_calls(fns, f, guarded, f in roots) for f in guarded}
+    contracts = {}   # name -> (statement, comment)
+    hyps = {}        # f -> list of (type, primitive-or-local name)
+    for f in order:
+        if f not in guarded:
+            continue
+        W = GUARD_W[G(f)]
+        hs = []
+        for g in sorted(graph[f]):
+            if g not in reach:
+                continue
+            if g in guarded:
+                hs.append(('TerminatingFunBoundedOn %s (ofString "%s") K.«%s»' % (G(g), g, g), 'gb_' + g))
+            else:
+                hs.append(('TerminatingFunBoundedOn GuestInv (ofString "%s") K.«%s»' % (g, g), 'fb_' + g))
+        for g in need[f]:
+            if g in SPEC_OF:
+                for sp in SPEC_OF[g]:
+                    hs.append(('type_of% @' + sp, sp))
+                continue
+            if g not in impure:
+                name = 'ro_' + g
+                contracts[name] = ('ReadOnlyFn (ofString "%s")' % g, 'read-only')
+            elif g in REGION and not (g in guarded):
+                name = 'ww_' + g
+                parts = REGION_RAW[g] if REGION[g] is None else ', '.join(
+                    '(locN s "%s", %s)' % (pn, ln) for pn, ln in REGION[g])
+                bw = buffers_written(g)
+                if bw:
+                    parts += ', ' + ', '.join('(globN s "%s", %d)' % (b, bufsize[b]) for b in bw)
+                gws = sorted(gwf(g))
+                contracts[name] = ('WritesWithin (fun s => [%s])\n    [%s] (ofString "%s")' % (
+                    parts, ', '.join('"%s"' % x for x in gws), g),
+                    'writes its parameter extents' + (' and the buffers ' + ', '.join(bw) if bw else ''))
+            else:
+                name = '%s_%s' % (W_PREFIX[W], g)
+                if g in KEEP_PRE and W == 'WorldOK':
+                    pre = KEEP_PRE[g]
+                elif g in guarded and GUARD_W[G(g)] == W and G(g) != W:
+                    pre = G(g)
+                elif g in guarded and G(g) != W:
+                    pre = 'fun s => %s s ∧ %s s' % (W, G(g))
+                else:
+                    pre = W
+                pre_s = pre if pre.isidentifier() else '(%s)' % pre
+                contracts[name] = ('KeepsOn %s %s (ofString "%s")' % (pre_s, W, g),
+                                   'keeps `%s`' % W)
+            hs.append((contracts[name][0], name))
+        hyps[f] = hs
+    with open(os.path.join(outdir, 'gleaves.lean'), 'w') as o:
+        o.write('/-! #### Callee contracts (generated; one leaf per callee and world guard) -/\n\n')
+        for name in sorted(contracts):
+            st, why = contracts[name]
+            g = name.split('_', 1)[1]
+            o.write('/-- `%s` (AST line %d): %s. -/\ntheorem «%s» :\n    %s := by sorry\n'
+                    % (g, line_of[g], why, name, st))
+        o.write('\n/-! #### Composition obligations of the guarded bodies (generated)\n\n'
+                '`GBody.«f»`: from the bounds of `f`\'s direct callees and the contracts of the callees at\n'
+                'its guard-carrying call sites, `f`\'s body is bounded under its guard. `gbody_f` is the\n'
+                'primitive; `gb_f` is PROVED from it. -/\n\n')
+        for f in order:
+            if f not in guarded:
+                continue
+            g0 = G(f)
+            ls = loops[f]
+            note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
+            o.write('/-- `%s` (AST line %d, guard `%s`): %s; %d callees, %d guard-carrying. -/\n'
+                    'def GBody.«%s» : Prop :=\n' % (f, line_of[f], g0, note, len(graph[f] & reach),
+                                                   len(need[f]), f))
+            for t, _n in hyps[f]:
+                o.write('  (%s) →\n' % t)
+            o.write('  TerminatingFunBoundedOn %s (ofString "%s") K.«%s»\n\n' % (g0, f, f))
+            o.write('theorem «gbody_%s» : GBody.«%s» := by sorry\n\n' % (f, f))
+            o.write('theorem «gb_%s» : TerminatingFunBoundedOn %s (ofString "%s") K.«%s» :=\n  «gbody_%s»'
+                    % (f, g0, f, f, f))
+            for _t, n in hyps[f]:
+                o.write(' «%s»' % n)
+            o.write('\n\n')
+        # the primitive obligations used by the guarded compositions, and the assembly
+        prims = []
+        seen = set()
+        for f in order:
+            if f not in guarded:
+                continue
+            for t, n in hyps[f]:
+                if n.startswith('gb_') or n in seen:
+                    continue
+                seen.add(n)
+                prims.append((n, t))
+            prims.append(('gbody_' + f, 'GBody.«%s»' % f))
+        o.write('/-! #### Assembly (PROVED): the primitive obligations imply `main`\'s guarded bound -/\n\n'
+                '/-- Every primitive obligation the guarded compositions use: the `fb_*` bounds of the\n'
+                'unguarded callees of guarded functions, the §7 contract leaves, the generated callee\n'
+                'contracts and the `gbody_*` composition obligations. -/\n'
+                'structure Primitives : Prop where\n')
+        for n, t in prims:
+            o.write('  «%s» : %s\n' % (n, t.replace('\n', ' ')))
+        o.write('\ntheorem assembly_main (P : Primitives) :\n'
+                '    TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» := by\n')
+        for f in order:
+            if f not in guarded:
+                continue
+            o.write('  have «g_%s» := P.«gbody_%s»' % (f, f))
+            for _t, n in hyps[f]:
+                o.write(' «g_%s»' % n[3:] if n.startswith('gb_') else ' P.«%s»' % n)
+            o.write('\n')
+        o.write('  exact «g_main»\n\n')
+        o.write('/-- The leaves discharge the primitives (each field is its `sorry` leaf). -/\n'
+                'theorem primitives : Primitives where\n')
+        for n, _t in prims:
+            o.write('  «%s» := «%s»\n' % (n, n))
+        o.write('\n')
+    with open(os.path.join(outdir, 'contracts.txt'), 'w') as o:
+        for f in sorted(guarded):
+            o.write('%s [%s]: %s\n' % (f, G(f), ' '.join(need[f])))
+    print('contracts', len(contracts), 'primitives', len(prims))
+
+
 def main():
     path, outdir = sys.argv[1], sys.argv[2]
     fns, line_of, graph, reach, impure, recursive, loops = analyse(path, outdir)
@@ -645,7 +951,8 @@ def main():
         'finish_child': 'FinishReady', 'run_frames': 'EvmInv',
         '_decode_witness_node_body': 'ArenaReady', '_mpt_insert_node': 'MptReady',
         '_mpt_delete_node_body': 'MptReady', '_mpt_delete_node': 'MptReady',
-        'mpt_set': 'MptObjReady', 'main': 'MainEntry'}
+        'mpt_set': 'MptObjReady', 'main': 'MainEntry',
+        'process_transaction': 'TxReady', 'process_general_purpose_requests': 'ReqsFresh'}
     nloops = sum(len(v) for f, v in loops.items())
     with open(os.path.join(outdir, 'coverage.md'), 'w') as o:
         o.write('functions: %d, reachable from main: %d, loops in reachable: %d, recursive: %s\n\n'
@@ -735,16 +1042,7 @@ def main():
             note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
             o.write('/-- `%s` (AST line %d): %s. -/\ntheorem «fb_%s» : TerminatingFunBoundedOn '
                     'GuestInv (ofString "%s") K.«%s» := by sorry\n' % (f, line_of[f], note, f, f, f))
-    with open(os.path.join(outdir, 'gleaves.lean'), 'w') as o:
-        for f in order:
-            if f not in guarded:
-                continue
-            g = guard_of.get(f, 'WorldOK')
-            ls = loops[f]
-            note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
-            o.write('/-- `%s` (AST line %d, guard `%s`): %s. -/\ntheorem «gb_%s» : '
-                    'TerminatingFunBoundedOn %s (ofString "%s") K.«%s» := by sorry\n'
-                    % (f, line_of[f], g, note, f, g, f, f))
+    compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of, order, loops, bufs)
     print('guarded', len(guarded), 'between', len(between), 'bufs', len(bufs))
     with open(os.path.join(outdir, 'manual.txt'), 'w') as o:
         for f, i, why in man:

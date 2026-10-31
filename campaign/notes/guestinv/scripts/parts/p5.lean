@@ -294,6 +294,99 @@ theorem localsOnly_htabNewReady : LocalsOnly ["key_len", "cap"] HtabNewReady := 
 `t`, so `HtabArgWF` passes every `dec` of the body. -/
 example : ∀ n ∈ ["t"], ofString n ≠ ofString "pos" := by decide
 
+/-! ### Callee contracts for the guarded compositions (round-3 recommendation, item 5)
+
+Each guarded body (`gbody_*`, below) is composed from its callees' bounds and, at every call site
+that is followed by a guarded call or a guarded loop head (computed by `coverage.py`, DESIGN.md
+§6), a contract that carries the caller's world guard across the call. A contract only speaks
+about outcomes that resume the caller: a normal return, or an exception other than `TrapErr`
+(`trap_with` is the only raiser of `TrapErr`, after its FFI call, and no handler in the program
+catches it). Three uniform shapes, chosen mechanically:
+* `ReadOnlyFn`: the callee (transitively) has no store, no global assignment and no FFI call
+  (`trap_with` aside), so it changes nothing but its own locals and the clock;
+* `WritesWithin R`: the callee writes only the region `R` (its pointer parameters' extents and the
+  global scratch buffers it uses), memory that is free at entry (above `heap_ptr`, between
+  `frame_mem_ptr` and `scratch_ptr`) and the allocator globals it lists; true for arbitrary
+  states, the caller shows `R` is unowned;
+* `KeepsOn P W`: from a `P` entry the callee ends in a `W` state (the reviewers'
+  `PreservesOn WorldOK WorldOK`, restricted to resuming outcomes). -/
+
+/-- The outcomes after which the caller resumes (return, or a catchable exception). -/
+def Resumes (r : Option (PanSemResultExact 64)) : Prop :=
+  (∃ v, r = some (.returned v)) ∨ ∃ e v, r = some (.exception e v) ∧ e ≠ ofString "TrapErr"
+
+/-- `fname` changes nothing but locals and clock. -/
+def ReadOnlyFn (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r post => Resumes r → post = { s with locals := post.locals, clock := post.clock })
+    fname
+
+/-- From a `P` entry, every resuming outcome is a `W` state. -/
+def KeepsOn (P W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (fname : MlS) : Prop :=
+  FunSpec P (fun _ r post => Resumes r → W post) fname
+
+/-- Write frame: on every resuming outcome the arenas stay separated and only grow, memory changes
+only inside `R s` and the memory free at entry, and only the globals in `gw` change. -/
+def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => Resumes r →
+    ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    FrameOutside s post
+      (R s ++ [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
+      (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
+    ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    fname
+
+/-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object. -/
+def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ ∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+
+/-- `process_transaction(tx, index)` writes the receipt slots `bo+24`/`bo+32` at `16·index`
+(33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop). -/
+def TxReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ locN s "index" < memW s (globN s "bo" + 80)
+
+/-- `process_general_purpose_requests` runs once per block, right after `execute_block` zeroed
+`bo` (so no request is recorded yet); it appends at most three requests (`requests_append` 33485
+writes slot `bo+64` of the 8-slot array `bo+56`). -/
+def ReqsFresh : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ memW s (globN s "bo" + 64) = 0
+
+/-- `requests_append` entry: the next request slot exists. -/
+def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ memW s (globN s "bo" + 64) < 8
+
+/-- A read-only callee keeps every guard that ignores locals and the clock (proved). -/
+theorem ReadOnlyFn.keepsOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → GuestInv s)
+    {fname : MlS} (h : ReadOnlyFn fname) : KeepsOn W W fname := by
+  obtain ⟨params, body, ret, hlook, hb⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hc hWs hnt hr => ?_⟩
+  rw [hb s hc (hG s hWs) hnt hr]
+  exact hW s _ _ hWs
+
+theorem worldOK_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : WorldOK s) :
+    GuestInv s := h.1.1
+
+theorem evmInv_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmInv s) :
+    GuestInv s := h.1.1
+
+/-- `EvmInv` implies `WorldOK` (the frame-level guard is stronger). -/
+theorem worldOK_of_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmInv s) :
+    WorldOK s :=
+  ⟨h.1, h.2.elim fun S hS => ⟨S, hS.1⟩⟩
+
+theorem localsOnly_txReady : LocalsOnly ["index"] TxReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "index" (hl "index" (by simp))
+  refine ⟨localsFree_worldOK s locals k hP.1, ?_⟩
+  show locN { s with locals := locals, clock := k } "index" < memW s (globN s "bo" + 80)
+  rw [ht]; exact hP.2
+
+theorem localsFree_reqsFresh : LocalsFree ReqsFresh :=
+  fun s locals k h => ⟨localsFree_worldOK s locals k h.1, h.2⟩
+
 /-! ### Outcome triples (proved rules, used to prove the frame glue)
 
 `Hoare P prog Q`: every non-timeout run of `prog` from a `P` state ends with result `r` in a state
