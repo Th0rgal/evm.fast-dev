@@ -46,3 +46,29 @@ Fable could not run Lean, so the coordinator must confirm elaboration and `#prin
 - `nodedb_build` (AST:9948) passes a computed power-of-two `cap`, so 31 of the 32 `htab_new` sites pass literals, not 32 (DESIGN:36, 124). Guard `cap` by a bound, e.g. `cap ≤ 2^32`.
 - `MainEntry` has no `LocalsFree`/`LocalsOnly` instance.
 - Q1 (opcodes write only owned memory): do a field-by-field audit of `frame_new`'s record (AST:15370) and of the continuation (AST:18450).
+
+## Astra 6 (mission ef93d111): REQUEST_CHANGES
+
+All five round-2 counterexamples are confirmed fixed. Q8 (the log-regrowth / heap-release pattern) was not found: across the 534-function dispatch cone, no function that calls `heap_release` reaches `log_append`. There are 788 admissions; the combinators and the glue have proof bodies. Lean was not run, so elaboration and the axiom claim remain unconfirmed by Astra. Counterexamples come from an executable AST interpreter.
+
+**Blocking:**
+
+1. **Zero-capacity logs break `op_dispatch_spec`** (Spec:1738, 5736). With `len = cap = 0`, `LOG0` returns normally with `len = 1`, `cap = 0`. This is the same issue as Fable's item 3; the stack needs the same audit.
+
+2. **Unowned return-data buffers break `finish_child_spec`** (Spec:1716, 1729, 5762; AST:18572, 19064). Take `parent+144 = parent+64` and `parent+216 = 8`, with child output the word 10000. `set_retdata` copies over the parent's gas, so `evmR` goes from 100 to 10000. Fix: ownership, capacity and disjointness for the reusable return-data storage, preserved across reuse, allocation and release, plus constraints on the continuation output-copy ranges. This is the same issue as Fable's item 4.
+
+3. **Release marks don't protect surviving tables** (Spec:1627, 1756, 5762; AST:18657–18660). Witness:
+   - both frames reference a table from `htab_new_scratch(20,4)`, with header `0xb0bdffa8`;
+   - the child's release mark is `0xb0be8000`.
+
+   On the child-error path, `finish_child` sets `scratch_ptr = 0xb0be8000`, so the parent's table is no longer `Allocated` and `EvmInv` fails. Fix: release-lifetime conditions for every surviving table and fixed object, including globally rooted ones.
+
+**Assembly ruling: NOT acceptable as claimed** (Spec:7010, 7022–7023). The final theorem applies the bridge directly to `gb_main`, which is itself `sorry`, so the other 787 obligations are not connected to the target. To freeze, either:
+- prove `gb_main` (and the assembly down to an explicit leaf boundary) by concrete-body composition from lower obligations, including guard establishment and transport at guarded calls, loop invariants, and rank/stationary obligations; or
+- prove an equivalent conditional assembly theorem: (all primitive obligations) → target.
+
+## Coordinator decision on the assembly question
+
+Fable judged `gb_main` as a leaf acceptable in principle, with `PreservesOn` contracts for the BETWEEN functions. Astra did not. The stricter requirement is adopted for revision 4, because otherwise proving the leaves proves nothing about `main`. There must be a proved assembly theorem
+`(∀ primitive obligation) → CoveredSourceTicksConsumedBounded K_pan`,
+or equivalently every `gb_*` must be proved by composition. The primitive obligations are the `fb_*` leaves, the contract leaves, and the new `PreservesOn` contracts for BETWEEN functions. Each primitive must be a small statement about a single function body.
