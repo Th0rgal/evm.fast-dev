@@ -3,9 +3,10 @@
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
 (`guestinv-r2.md`), revision 4 the round-3 quorum (`guestinv-r3.md`, §0.3 and §0.4), and revision
-5 (Fable's items), revision 6 (Astra's items, commit d16ff8bc0; Gemini's item 2) and revision 7
-(Gemini's item 1: relational callee contracts) answer the round-4 quorum (`guestinv-r4.md`), §0.1
-and §0.2. Only the statements listed there changed. All statements are in
+5 (Fable's items), revision 6 (Astra's items, commit d16ff8bc0) and revision 7 (Gemini's items 1
+and 2: relational callee contracts, constructor return typing, typed init post-states, the BAL
+storage lists, and the walk audit of every `gbody_*`) answer the round-4 quorum
+(`guestinv-r4.md`), §0.1 and §0.2a. Only the statements listed there changed. All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -23,8 +24,9 @@ is touched.
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements, textually unchanged) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
-| callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (55: `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`), `NodeFn` (7), value contracts (2: `nk_mpt_nibble_key`, `rv_common_prefix_length`) | §7 (generated) | `sorry` (144 statements; revisions 5-6, §0.2) |
-| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; revision 6: each checked single-function, `«callees_f»`) | §7 (generated) | 16 **proved** by concrete-body composition (revision 6: +4), 31 `sorry` |
+| callee contracts (revision 7: RELATIONAL in the world and EVM tiers): `WorldKeeps` (84 `wk_*`: `WorldStep` = typing `S ⊆ S'`, `OwnedGrows`, `FrameOutside`, `GlobalsKept`, `RecordsKept`, extra), `EvmKeeps` (12 `ek_*`: `EvmInv`, `ev`/`cur_cont`/`evmChain` kept), `MptKeeps` (2 `mk_*`), `ReadOnlyFn` (30), `WritesWithin` (5, `ArenaReady` tier only), `KeepsOn` (`ak__decode_step`, `fk_frame_open`), `NodeFn` (7), return typing (6 `rt_*`), value contracts (10: `nk_*`, `rv_*` ×5, `zv_memzero`, `nz_htab_set`, `dm_*` ×2) | §7 (generated) | `sorry` (158 statements; revision 7, §0.2a) |
+| composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; each checked single-function, `«callees_f»`; revision 7: every walk checked against its hypotheses, §6) | §7 (generated) | 17 **proved** by concrete-body composition (revision 7: +1, `process_checked_system_transaction`), 30 `sorry` |
+| revision-7 lemmas: `worldTyped_iff_with`, `WorldStep.worldOK(_nil)`, `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`, `callEntryOn_inputReady`, `KeepsOn.resumeOn`, `Hoare.ite_raise_skip`, `localsOnly_inputReady` | §7 | **proved** |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
 | `LocalsOnly`/`LocalsFree` instances for every guard (incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`; revision 5: `EvmRun`, `EvmMsgReady`, `BlockReady`, the restated `MptObjReady`) | §7 | **proved** |
@@ -280,120 +282,202 @@ statements are textually unchanged, and only the two definitions change (`sigdif
 `TablesTyped`, `balObjects`).
 
 **Non-blocking (fixed):**
-- the Lean header now says revision 6;
+- the Lean header now says revision 7;
 - `mpt_insert_node_spec` has a docstring: a cycle of empty extension segments never returns and
   reaches `WhileTimesOut` within the `2^130` bound, so the spec is vacuous on such runs.
 
-**Item 1 (fixed in revision 7, commits d589ac3e5 and 26e8a8484): relational callee contracts.**
-`KeepsOn W W` allowed any `W → W` transition, so a caller lost its local facts across the call.
-Revision 7 implements Gemini's Option A mechanically in `coverage.py`. It changes no existing
-statement except the `GBody`s and `Primitives`, which gain hypotheses.
+**Item 1 (fixed in revision 7): relational callee contracts.** `KeepsOn W W` allowed any
+`W → W` transition, so a caller lost its local facts across a call. Revision 7 REPLACES every
+non-read-only callee contract at a world-tier or EVM-tier call site by a relational one. It does
+not add a second leaf next to the old `KeepsOn` (a parallel revision-7 attempt on this branch,
+commits d589ac3e5..f6d059cd0, did that; it is merged in history and superseded by b2ccd7a97, see
+§0.2a). The definitions are in §7 of the Lean file ("Relational callee contracts").
 
-- **(a) World steps `ws_g : WorldStepFn P gw wb wf R g`**, one per `wk_g` with the same entry
-  `P` (45 for the existing `wk_*`, plus 12 for `main`'s inits). A resuming outcome is a
-  `WorldStep`:
-  - `heap_ptr` only grows;
-  - every global outside `gw` (the closure's computed global writes) is unchanged;
-  - every typed table set `S` of the entry extends to one of the exit (`S ⊆ S'`);
-  - memory changes only in `WorldMutable s S Nd wb wf`, in the callee's regions `R`, and in the
-    free memory. `WorldMutable` lists the tables of `S`, the trie nodes and paths of `Nd`, the
-    global buffers the closure writes (`wb` whole), the constant fields of the others it writes
-    (`wf`), the journal array, and the block-output and BAL objects.
+- **(a) `wk_g : WorldKeeps P R gw keep Q g`**: from a `P` entry, every resuming outcome is a
+  `WorldStep R gw keep Q`:
+  - `ArenaReady post`; `heap_ptr` only grows;
+  - every global outside `gw` (the closure's global writes, `coverage.py` `gwf`) is unchanged;
+  - `RecordsKept`: the words `keep` of the four typed records `ws`, `bs`, `ts`, `bo` that the
+    closure never stores to are unchanged (`coverage.py` `rec_written`: a field-precise scan of
+    every store target and written-parameter argument over the full closure, contracted callees
+    included; a non-constant offset counts as the whole record). Example: `process_transaction`
+    writes `bo+0/8/16/48`, so `wk_process_transaction` keeps `bo+24 … bo+80`, in particular
+    `bo+64` and `bo+80`; `requests_append` writes only `bo+64`;
+  - for EVERY typing `(S, Nd)` of the entry (`WorldTypedWith`, `WorldTyped` with the trie node set
+    exposed) whose typed memory (`worldTypedIvls`) the callee's output regions `R s` avoid:
+    - some `S' ⊇ S`, `Nd'` type the exit, so a caller's own tables in `S` stay typed tables;
+    - `OwnedGrows`: every exit-owned interval (`worldOwned`: table footprints, fixed objects,
+      trie nodes and paths) is `(0, 0)`, inside an entry-owned interval, or in the heap allocated
+      during the call; a caller object disjoint from the world at entry stays disjoint;
+    - `FrameOutside`: memory outside the entry-owned intervals, `R s`, the free scratch gap and
+      the free heap is unchanged; a caller object outside the world keeps its contents;
+    - the callee-specific extra `Q` for the same `S'`.
 
-  `wb`/`wf` come from a field-precise scan, `buffer_fields`. A buffer counts as written where it
-  is the base of a store target outside any load. A pointer loaded from a record field targets a
-  world object that `WorldMutable` already lists, e.g. the `bo` arrays. `R` is declared for the
-  five parameter writers (`KEEP_REGION`):
-  - `out` (32 bytes) of `build_mpt_indexed`, `compute_state_root`, `mpt_root`;
-  - `msg` (176 bytes) of `process_message_call`;
-  - the trie object and its reachable nodes (`mptRegion`, `mptReach` with fuel
-    `(heapLimit − sourceBase)/32 + 1`) for `mpt_set`/`mpt_root`.
+  `R` is the callee's caller-memory output: the `REGION` parameter extents (`dst`/`out`/…), plus
+  `RREG`: `msg` (176 bytes) of `process_message_call`, `out` (32 bytes) of `compute_state_root`,
+  `build_mpt_indexed`, `mpt_root`. Writes into world objects (the `bo` arrays and lists, tables,
+  content-free global buffers such as `keccak_pad`, `bal_key_buf`) are covered by the owned
+  intervals instead; `lst_push` at a world site has pre `BoListArg` (its list is `bo+40` or
+  `bo+72`) and no region. The revision-6 `WorldAvoids [(out, 32)]` preconditions are gone: the
+  avoidance is now a hypothesis inside `WorldStep`. Extras `Q`: `ReqCountInc` (`requests_append`:
+  `bo+64` up by exactly 1), `RetMptObj` (`mpt_from_witness`), `RetInput` (`decode_host_input`).
 
-  The other written parameters are indices into world objects (`WORLD_PARAM`). The script asserts
-  the two tables cover every written parameter.
-- **(b) EVM steps `es_g : EvmStepFn P gw wb wf g`**, one per `ek_g` (10). The same frame applies,
-  for the table sets of `EvmInvAt`, and the chain's frame blocks also count as owned. In addition:
-  - `evmChain` is unchanged;
-  - `ev` and `cur_cont` are unchanged (not in any `ek` callee's `gw`);
-  - every `RollbackAt s c → RollbackAt post c`. `RollbackAt` is `RollbackReady` for an explicit
-    record, `rollbackReady_iff_at` by `Iff.rfl`. So `finish_child` keeps `RollbackReady` on its
-    local `child`.
-- **(c) Return typing**, used at every guard-carrying call site of an unproved composition:
-  - `rb_alloc : RetBlock n` (fresh, aligned, in-domain words);
-  - `rb_msg_new : RetBlock 176`, zeroed;
-  - `rl_lst_new : RetList` (fresh header with length 0 and capacity `cap`, fresh array);
-  - `rt_htab_copy : RetTable` (fresh `HtabWF` footprint);
-  - `rm_mpt_new : RetMptNew` (fresh 16-byte object holding `root_node`, `secured`);
-  - `ro2_mpt_from_witness : RetMptObj` (fresh object satisfying `MptObjOK` in the exit world;
-    `MptObjAt`/`mptObjIn_iff_at` by `Iff.rfl`).
+  Every callee that revision 6 covered by `WritesWithin` at a world-tier site now gets a
+  `WorldKeeps` too (`ww_* → wk_*`, 43 leaves; 2 more at EVM sites become `ek_*`), because `WritesWithin` alone does not give the
+  post-state `WorldOK` when the callee writes a typed record or rebinds a world global
+  (`track_ancestor_access` writes the `bs` record; `bal_init`, `state_fresh_tx` and `main`'s 12
+  `*_init` assign world globals). `WritesWithin` stays only in the `ArenaReady` tier (5 leaves).
+- **(a′) `mk_mpt_set`, `mk_mpt_root : MptKeeps R gw keep g`**: `MptObjStep`, the trie-object
+  analogue. For every typing `(S, Nd)` and every node set `Nm` of the object `m`
+  (`MptObjInWith s S Nm m`, `MptObjIn` with `Nm` and `m` exposed), the object stays typed in the
+  exit world `S'`, away from the persistent tries, its intervals grow only into fresh heap, and
+  memory outside the world, the object and `R` is unchanged. `compute_state_root` and
+  `build_mpt_indexed` call `mpt_set` in a loop on one object, then `mpt_root` on it.
+- **(b) `ek_g : EvmKeeps P gw g`**: `EvmStep gw`: `EvmInv post`, the heap only grows, the globals
+  outside `gw` are unchanged (`ev`, `cur_cont` are in no `ek` callee's `gw`), and
+  `evmChain post = evmChain s`. `RollbackReady` on `child` comes from the PROVED lemma
+  `rollbackReadyAt_of_evmInv : EvmInv s → RollbackReadyAt s (globN s "ev")` (`RollbackReady` is
+  `RollbackReadyAt` at the local `child`). `finish_child` reads `child := ev`, so after any
+  `ek_*` step (`ev` kept, `EvmInv` again) and after `ev := parent` (memory unchanged) its callee
+  guard follows. A callee writing a caller buffer at an EVM site (`u256_to_be32` into
+  `evm_key_buf`) has pre `EvmAvoids R`.
+- **(c) Return typing** (`rt_*`, `Returns P Q g`: a normal return is a word `w` with `Q s post w`),
+  at every guard-carrying site of an unproved composition:
+  - `rt_alloc`: `FreshBlock s post p n`: aligned, `[p, p + round8 n)` allocated during the
+    call, in-domain words;
+  - `rt_msg_new`: a fresh 176-byte block, zeroed (22 words); `rt_te_new`: likewise, 200 bytes;
+  - `rt_lst_new`: if `esz·cap < 2^64` and `1 ≤ cap`, a fresh 24-byte header, a fresh disjoint
+    `esz·cap`-byte array, length `0`, capacity `cap` (hence `LstOK`);
+  - `rt_htab_copy`: a normal return copied a NONZERO table (`load(t + 80)` errors at `0`), and
+    a copy of a well-formed table is a fresh well-formed table with the same count;
+  - `rt_mpt_new`: a fresh 16-byte block holding `root_node`, `secured`;
+  - `mpt_from_witness`: `wk_mpt_from_witness` with extra `RetMptObj`, a fresh trie object with a
+    fresh node set, `MptObjInWith` in the exit world `S'`, away from its tries.
+- **(d) Init contracts.** `bal_init`, `state_fresh_tx` and `main`'s 12 `*_init` calls get
+  `wk_*`: from `WorldOK`, a `WorldStep`, so `WorldOK` after the call (`WorldStep.worldOK_nil`,
+  proved). The buffer globals they set are fixed objects of the exit typing; `OwnedGrows` puts
+  them in fresh heap, so they are disjoint from everything the caller holds.
 
-  Two post contracts as well: `km_mpt_set : KeepsMptObj`, under which the same trie object stays
-  typed (`compute_state_root` and `build_mpt_indexed` call `mpt_set` repeatedly), and
-  `rq_requests_append : ReqStep` (`bo+64` grows by exactly one).
-- **(d) Typed post-states for world-global setters.** A callee whose closure assigns a world
-  global (`ws`, `bs`, `ts`, `bo`, the journal globals, the BAL roots) or a global-buffer pointer
-  gets `KeepsOn W W` plus its world step, instead of `WritesWithin`. That covers `bal_init`,
-  `state_fresh_tx` and `main`'s 12 `*_init` calls (`blake2_init` … `u256_ws_init`), so the
-  buffer globals can no longer be set to arbitrary pointers.
+Facts each caller needed, and where they now come from:
+- **`process_create_message`, `process_message_call` (`MsgReady`)**: the record is outside the
+  world (`MsgReady`), so `FrameOutside` keeps its words (`msg+152`, `msg+160`, `msg+40`);
+  `S ⊆ S'` keeps the two tables; `OwnedGrows` keeps the disjointness. Revision 7 puts the record
+  in the heap (`Inside … sourceBase heap_ptr`, was `Allocated`, which allowed scratch), so it stays
+  allocated (the heap only grows; `scratch_ptr` is in most callees' `gw`).
+- **`process_transaction`**: `m`, `te`, `sender`, `al_addrs`, `al_keys` are fresh blocks
+  (`rt_*`), `aa`, `ak` fresh tables (`htab_new_spec`); the message gas `m+40 = mgas ≤ 2^24` from
+  the new value contracts `rv_validate_transaction` (`RetIntrinsic`: regular intrinsic `≤ 2^24`,
+  `TxErr 63` otherwise) and `rv_min` (`RetLe`). `index < ntx` is its own guard.
+- **`execute_block`**: `bo ≠ 0` (`bo` in no callee's `gw`); `bo+80 = ntx` and `bo+64 = 0` by
+  `RecordsKept`; the zeroed record by the new `zv_memzero` (`ZeroFills`).
+- **`process_general_purpose_requests`**: `bo+64` by `RecordsKept` across the system
+  transactions and by `ReqCountInc` across `requests_append` (at most 5 appends, `ReqRoom`).
+- **`compute_state_root`**: `cache` (`rt_htab_copy`), `new_roots` (`htab_new_spec`) join `S`;
+  the trie objects by `RetMptObj` / `MptObjStep`; the buffers `vbuf`, `enc`, `root` are fresh,
+  and the new `rv_u256_to_be_min` (`≤ 32`) and `rv_rlp_encode_bytes` (`≤ n + 9`) keep
+  `rlp_encode_bytes`'s region inside `vbuf`.
+- **`payload_header`**: `(wr, 32)` is fresh (`rt_alloc`) and outside the world; `OwnedGrows`
+  across `build_mpt_indexed` and `encode_withdrawal_rlp` keeps it so.
+- **`finish_child`**: `ek_*` keep `ev`, `cur_cont`, `evmChain`; `rollbackReadyAt_of_evmInv`.
 
-How each fact Gemini found lost is now kept:
-- **`process_create_message` / `process_message_call` (`MsgReady`):** the message record is
-  caller-private memory, so the step frame keeps it; `S ⊆ S'` keeps its two tables typed; the heap
-  only grows.
-- **`process_transaction`:** `m`, `aa`, `ak` are fresh blocks (`rb_alloc`, `rb_msg_new`), kept by
-  the frame. `index < ntx`: `bo` is outside every callee's `gw`, and `bo+80` outside its `wf`
-  (only `execute_block` writes it).
-- **`process_general_purpose_requests` (`ReqRoom`):** the system transactions write no `bo`
-  field, and `rq_requests_append` gives `+1`.
-- **`compute_state_root`:** its local tables (`htab_new`/`htab_copy`, kept out of the world's
-  `S`) and its `out` buffer are private, so the frame keeps them. The `mpt` objects are covered by
-  `ro2_mpt_from_witness`, `rm_mpt_new` and `km_mpt_set`.
-- **`execute_block`:** `bo ≠ 0` (global outside `gw`), `bo+80 = ntx` and `bo+64 = 0`
-  (`process_transaction` writes `bo+0/8/16/48`, `requests_append` only `bo+64`).
-- **`payload_header` (`(wr, 32)`):** fresh from `rb_alloc` and private.
-- **`finish_child`:** `es_*` keeps `ev`, `cur_cont`, `evmChain` and `RollbackAt child`.
+**Audit of every `gbody_*` against its hypotheses (revision 7).** Checking the walks
+(§6 "Revision-7 walk check") found six more places where the revision-6 hypotheses did not
+suffice; each is fixed:
+1. **`state_init`** calls `decode_witness_to_mpt` (guard `WorldOK`) after `ws := alloc(40)` and
+   before `ws+24`/`ws+32` are stored: fresh heap can hold anything, so `WorldOK` does not hold
+   there. The decoders `decode_witness_to_mpt`, `_decode_witness_node`,
+   `_decode_witness_node_mpt`, `mpt_from_witness` only need `ArenaReady` (their revision-6 proofs
+   used `WorldOK` only to reach it), so their guard is now `ArenaReady` and their proofs carry over.
+2. **`run_attempt` → `execute_block`**: `BlockReady` needs `16·ntx + 16 < 2^64`, which follows only
+   from `run_attempt`'s own loop (a full cycle of `txs + 16 i + 8 mod 2^64` leaves the memory
+   domain, so the loads error), and `execute_block` re-reads `ntx` through `si+0`, `pl+40`. Those
+   two cells must be outside the world for the steps in between to keep them, and `WorldOK` says
+   nothing about `si`. New guard `InputReady` on `verify_stateless_new_payload`, `attempt_l1..7`,
+   `run_attempt`: `WorldOK` and the input cells allocated words outside the world (`InputAt`).
+   `main` gets them fresh from `decode_host_input` (`RetInput`). The 8 proved attempt bodies are
+   re-proved under `InputReady` with the new PROVED `callEntryOn_inputReady` (a call `f(si)` to
+   a function whose only parameter is `si` keeps the guard; from `callee_param_one`, proved).
+3. **`get_storage`** calls `htab_set(load(ts + 24), …)` and then the guarded `ws_get_storage`;
+   `RootIn` allows the slot to be `0`, where `htab_set_spec` does not apply. New
+   `nz_htab_set : ArgNonNull "t"` (`htab_set` loads `t+0` first). The walk splits on `t = 0`.
+4. **`build_mpt_indexed`**: `rlp_encode_word(mpt_key_scratch, i)` had the extent 33, past the
+   16-byte buffer, so the region could not be shown to avoid the world. It writes `1 + rlp_be_len(w)
+   ≤ 9` bytes (AST 4795): `REGION` extent 9.
+5. **`compute_state_root`**: `rv_u256_to_be_min`, `rv_rlp_encode_bytes` (above).
+6. **`payload_header`, `process_transaction`**: arrays sized by a count read from memory
+   (`alloc(16·nwd + 16)`, `alloc(52·nkeys + 8)`) may wrap; the loops filling them exit normally
+   only when the count is small, which needs `dm_encode_withdrawal_rlp`,
+   `dm_memcpy : ResumesInDomain` (the callee touches its region, so a normal return means it is in
+   the domain). The loop invariant is "no wrap → `WorldOK` and the local facts".
 
-The 16 proved `gbody_*` keep their hypothesis lists. They are proved without the new contracts,
-so their `ww_*`/`wk_*` hypotheses are unchanged. With these hypotheses each unproved `gbody_f` is
-meant to be provable from its own hypotheses, without unfolding a callee: Gemini's criterion, and
-the coordinator's round-5 question.
+**New proved Hoare/glue lemmas:** `worldTyped_iff_with`, `WorldStep.worldOK`,
+`WorldStep.worldOK_nil`, `WorldKeeps.keepsOn` (the revision-6 shape, so the proved compositions
+keep their proofs), `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`,
+`callEntryOn_inputReady`, `inputReady_worldOK`, `localsOnly_inputReady`, `inputAt_with_locals`,
+`KeepsOn.resumeOn` (a `decCall` into a `KeepsOn W W` callee resumes in `W`), `raise_ne_none`,
+`Hoare.ite_raise_skip`. With them `gbody_process_checked_system_transaction` is PROVED
+(`state_fresh_tx`, `ext_code_of`, `alloc` through their world steps, guard clauses, the guarded
+`process_unchecked_system_transaction`).
 
-## 0.2a Changes in revision 7 (since cbe2f1a62)
+## 0.2a Changes since 311d46674 (revision 7)
 
-`sigdiff.py` on `cbe2f1a62` vs `26e8a8484`. These are Gemini's item 1 changes, §0.1.
+`sigdiff.py` on `311d46674` vs the revision-7 file. The parallel commits d589ac3e5..f6d059cd0
+(`ws_*`/`es_*` steps next to `KeepsOn` leaves, 991 sorries) are merged in history (b2ccd7a97) and
+superseded: their Lean and script changes are not in the revision-7 file, only their DESIGN text
+on item 2 and the non-blocking items is kept.
 
-**Changed statements:**
-- 21 `GBody.«f»` (all still `sorry`; new hypotheses only): `build_mpt_indexed`,
-  `compute_state_root`, `execute_block`, `finish_child`, `get_storage`, `main`, `op_sload`,
-  `op_sstore`, `payload_header`, `process_checked_system_transaction`, `process_create_message`,
-  `process_general_purpose_requests`, `process_message_call`, `process_message`,
-  `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`,
-  `run_attempt`, `state_init`, `update_builder_from_tx`;
-- `Primitives` (499 fields).
+**No `fb_*` changed** (727, textually identical). The 14 §7 contract leaves are unchanged, except
+that `mpt_insert_node_spec` gains a docstring.
 
-No `fb_*`, §7 leaf, existing callee contract, `gb_*`, combinator or definition changed.
+**Changed definitions (6):**
+- `balObjects` and `TablesTyped`: the BAL per-slot storage lists (Gemini item 2);
+- `MptObjIn`: now `∃ Nm, MptObjInWith s S Nm (locN s "m")` (the same proposition, node set and
+  object exposed);
+- `RollbackReady`: now `RollbackReadyAt s (locN s "child")` (the same proposition);
+- `MsgReady`: the record lies in the heap (`Inside … sourceBase heap_ptr`, was `Allocated`);
+- `Primitives`: the field list of the new hypotheses.
 
-**Replaced leaves (14):** `ww_bal_init`, `ww_state_fresh_tx` and `main`'s 12 `ww_*_init` by
-`wk_*` (`KeepsOn WorldOK WorldOK`) with their `ws_*` steps (item 1(d)).
+**Changed guards (13 `gb_*` statements):** `ArenaReady` for `decode_witness_to_mpt`,
+`_decode_witness_node`, `_decode_witness_node_mpt`, `mpt_from_witness` (audit 1); `InputReady` for
+`verify_stateless_new_payload`, `attempt_l1..7`, `run_attempt` (audit 2).
 
-**New leaves (75):**
-- 57 `ws_*` and 10 `es_*` steps;
-- the return/post contracts `rb_alloc`, `rb_msg_new`, `rl_lst_new`, `rt_htab_copy`,
-  `rm_mpt_new`, `ro2_mpt_from_witness`, `km_mpt_set`, `rq_requests_append`.
+**Changed `GBody.«f»` (37):** new hypothesis lists. The 17 proved ones keep their callee bounds; the
+contract hypotheses of `get_pre_tx_storage`, `get_storage_original` (`wk_record_pre_state_read`)
+and `ws_storage_trie` are now relational.
 
-**New definitions:** `WorldMutable`, `freeGap`, `WorldStep`, `WorldStepFn`, `RollbackAt`,
-`EvmStep`, `EvmStepFn`, `mptReach`, `mptFuel`, `mptRegion`, `RetBlock`, `RetList`, `RetTable`,
-`RetMptNew`, `MptObjAt`, `MptObjOK`, `RetMptObj`, `KeepsMptObj`, `ReqStep`. **New proved
-theorems:** `rollbackReady_iff_at`, `mptObjIn_iff_at` (both `Iff.rfl`).
+**Changed callee contracts (51):** 41 revision-6 `wk_*` (`KeepsOn … WorldOK`) are now
+`WorldKeeps`; the 10 `ek_*` (`KeepsOn … EvmInv`) are now `EvmKeeps`.
 
-**Census:** 991 leaf sorries:
+**Replaced (47):**
+- `wk_mpt_set`, `wk_mpt_root` → `mk_mpt_set`, `mk_mpt_root` (`MptKeeps`);
+- 45 `ww_*` at world- or EVM-tier sites → 43 `wk_*` and 2 `ek_*` with their regions (`ww_alloc` →
+  `wk_alloc`, `ww_memcpy` → `wk_memcpy`, `ww_bal_init` → `wk_bal_init`, the 12 `ww_*_init` →
+  `wk_*_init`, `ww_state_fresh_tx` → `wk_state_fresh_tx`, `ww_track_ancestor_access` →
+  `wk_track_ancestor_access`, `ww_u256_to_be32` → `ek_u256_to_be32`,
+  `ww_is_warm_storage_key` → `ek_is_warm_storage_key`, …). `wk_rlp_encode_word`'s extent is 9
+  (`ww_rlp_encode_word` had 33).
+
+**New leaves (14):**
+- return typing `rt_alloc`, `rt_msg_new`, `rt_te_new`, `rt_lst_new`, `rt_htab_copy`, `rt_mpt_new`;
+- value contracts `zv_memzero`, `rv_validate_transaction`, `rv_min`, `rv_u256_to_be_min`,
+  `rv_rlp_encode_bytes`, `nz_htab_set`, `dm_memcpy`, `dm_encode_withdrawal_rlp`.
+
+**New definitions:** `WorldTypedWith`, `typedRecords`, `worldTypedIvls`, `worldOwned`,
+`IvlsDisj`, `freeGap`, `heapFree`, `GlobalsKept`, `RecordsKept`, `OwnedGrows`, `NoExtra`,
+`WorldStep`, `WorldKeeps`, `EvmAvoids`, `EvmStep`, `EvmKeeps`, `mptObjIvls`, `MptObjInWith`,
+`MptObjStep`, `MptKeeps`, `FreshBlock`, `RetWord`, `Returns`, `RetMptObj`, `ReqCountInc`,
+`inputCells`, `RetInput`, `InputAt`, `InputReady`, `RollbackReadyAt`, `ArgNonNull`,
+`ResumesInDomain`, `BoListArg`, `ZeroFills`, `RetIntrinsic`.
+
+**New proved theorems:** the lemmas listed under item 1, and `gbody_process_checked_system_transaction`
+(17 proved `gbody_*`, was 16).
+
+**Census:** 929 leaf sorries:
 - 727 `fb_*`;
 - 14 §7 contracts;
-- 219 callee contracts:
-  - `ro_*` 30, `ww_*` 36, `wk_*` 57, `ws_*` 57, `ek_*` 10, `es_*` 10, `ak_*` 1, `fk_frame_open`;
-  - `nf_*` 7, `nk_*` 1, `rv_*` 1;
-  - `rb_*` 2, `rl_*` 1, `rt_*` 1, `rm_*` 1, `ro2_*` 1, `km_*` 1, `rq_*` 1;
-- 31 `gbody_*`.
+- 158 callee contracts: `wk_*` 84, `ek_*` 12, `mk_*` 2, `ro_*` 30, `ww_*` 5, `ak_*` 1,
+  `fk_frame_open`, `nf_*` 7, `nk_*` 1, `rt_*` 6, `rv_*` 5, `zv_*` 1, `nz_*` 1, `dm_*` 2;
+- 30 `gbody_*`.
 
 ## 0.2 Changes since 141ff1f6b (revision 6)
 
@@ -1382,8 +1466,8 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `nodedb_lookup` | 9960 | `fb_nodedb_lookup` (GuestInv) | - | 67 |
 | `_resolve_step` | 10077 | `fb__resolve_step` (GuestInv) | - | 448 |
 | `_decode_witness_node_body` | 10196 | `gb__decode_witness_node_body` (ArenaReady) | #0 d0 GUARD N=2^68: GUARDED (ArenaReady): pushes are scratch_alloc records (<= arena/88), every written object (records, branch nodes, node_new_* results) is a fresh allocation, so the slot counter top+32 < 16 is only written by this loop: <= (pushes + 1) * 64 iterations | 517 |
-| `_decode_witness_node_mpt` | 10311 | `gb__decode_witness_node_mpt` (WorldOK) | - | 517 |
-| `_decode_witness_node` | 10328 | `gb__decode_witness_node` (WorldOK) | - | 517 |
+| `_decode_witness_node_mpt` | 10311 | `gb__decode_witness_node_mpt` (ArenaReady) | - | 517 |
+| `_decode_witness_node` | 10328 | `gb__decode_witness_node` (ArenaReady) | - | 517 |
 | `_delete_ext_finish` | 10727 | `fb__delete_ext_finish` (GuestInv) | - | 66 |
 | `min` | 667 | `fb_min` (GuestInv) | - | 0 |
 | `common_prefix_length` | 9903 | `fb_common_prefix_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
@@ -1496,8 +1580,8 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `cache_get_root` | 32325 | `fb_cache_get_root` (GuestInv) | - | 450 |
 | `encode_account` | 11343 | `fb_encode_account` (GuestInv) | #0 d0 CTR N=32: z < 32, step +1, unconditional | 131 |
 | `htab_copy` | 5354 | `fb_htab_copy` (GuestInv) | - | 67 |
-| `decode_witness_to_mpt` | 10348 | `gb_decode_witness_to_mpt` (WorldOK) | - | 517 |
-| `mpt_from_witness` | 10459 | `gb_mpt_from_witness` (WorldOK) | - | 517 |
+| `decode_witness_to_mpt` | 10348 | `gb_decode_witness_to_mpt` (ArenaReady) | - | 517 |
+| `mpt_from_witness` | 10459 | `gb_mpt_from_witness` (ArenaReady) | - | 517 |
 | `compute_state_root` | 32341 | `gb_compute_state_root` (WorldOK) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d1 CTR N=2^64: pass < 2, step +1, unconditional; #2 d2 CTR N=2^64: j < L:icount, step +1, unconditional; #3 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #4 d0 CTR N=2^64: i < L:acap, step +1, unconditional | 581 |
 | `tx_fixed_bytes` | 11468 | `fb_tx_fixed_bytes` (GuestInv) | - | 448 |
 | `tx_list_item` | 11510 | `fb_tx_list_item` (GuestInv) | - | 448 |
@@ -2059,14 +2143,14 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `hdr_word_field` | 9130 | `fb_hdr_word_field` (GuestInv) | #0 d0 CTR N=2^64: j < rField 1 L:f, step +1, unconditional | 448 |
 | `decode_header` | 9202 | `fb_decode_header` (GuestInv) | - | 452 |
 | `validate_headers` | 9476 | `fb_validate_headers` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 516 |
-| `run_attempt` | 33734 | `gb_run_attempt` (WorldOK) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
-| `attempt_l1` | 33847 | `gb_attempt_l1` (WorldOK) | - | 755 |
-| `attempt_l2` | 33863 | `gb_attempt_l2` (WorldOK) | - | 755 |
-| `attempt_l3` | 33879 | `gb_attempt_l3` (WorldOK) | - | 755 |
-| `attempt_l4` | 33895 | `gb_attempt_l4` (WorldOK) | - | 755 |
-| `attempt_l5` | 33911 | `gb_attempt_l5` (WorldOK) | - | 755 |
-| `attempt_l6` | 33927 | `gb_attempt_l6` (WorldOK) | - | 755 |
-| `attempt_l7` | 33943 | `gb_attempt_l7` (WorldOK) | - | 755 |
+| `run_attempt` | 33734 | `gb_run_attempt` (InputReady) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
+| `attempt_l1` | 33847 | `gb_attempt_l1` (InputReady) | - | 755 |
+| `attempt_l2` | 33863 | `gb_attempt_l2` (InputReady) | - | 755 |
+| `attempt_l3` | 33879 | `gb_attempt_l3` (InputReady) | - | 755 |
+| `attempt_l4` | 33895 | `gb_attempt_l4` (InputReady) | - | 755 |
+| `attempt_l5` | 33911 | `gb_attempt_l5` (InputReady) | - | 755 |
+| `attempt_l6` | 33927 | `gb_attempt_l6` (InputReady) | - | 755 |
+| `attempt_l7` | 33943 | `gb_attempt_l7` (InputReady) | - | 755 |
 | `blake2_init` | 20017 | `fb_blake2_init` (GuestInv) | - | 4 |
 | `bls_consts_init` | 24793 | `fb_bls_consts_init` (GuestInv) | - | 2 |
 | `bls_lib_init` | 30328 | `fb_bls_lib_init` (GuestInv) | - | 3 |
@@ -2119,7 +2203,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `sha256_init` | 2327 | `fb_sha256_init` (GuestInv) | - | 3 |
 | `ssz_init` | 7520 | `fb_ssz_init` (GuestInv) | - | 4 |
 | `u256_ws_init` | 766 | `fb_u256_ws_init` (GuestInv) | - | 2 |
-| `verify_stateless_new_payload` | 33959 | `gb_verify_stateless_new_payload` (WorldOK) | - | 755 |
+| `verify_stateless_new_payload` | 33959 | `gb_verify_stateless_new_payload` (InputReady) | - | 755 |
 | `main` | 33979 | `gb_main` (MainEntry) | - | 755 |
 
 unreachable from main (39): account_exists_and_is_empty, bls_fp_dbl, bn254_pairing, cur_msg, ec_add, ec_mul, ec_on_curve, fn_add, fn_inv_fermat, fn_pow, fp12_sqr, fp2_dbl, fp_inv_fermat, g1_neg, get_transaction_hash, htab_cap, htab_copy_scratch, htr_list_roots, ld_be32, ld_le32, ld_le64, mpt_get, p256_ec_to_affine, p256_fp_inv, recover_sender, rlp_bytes_to_word, rlp_check_uint_bytes, tx_blob_count, tx_data, tx_gas, tx_nonce, tx_r, tx_s, tx_to, tx_value, u256_cmp, u256_low, u256_xor, umod
@@ -2136,14 +2220,15 @@ unreachable from main (39): account_exists_and_is_empty, bls_fp_dbl, bn254_pairi
 | `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
 | `EvmInv` | §5 of the Lean file (revision 4: capacities `≥ 1`, return data owned, `RetWindowsOK`, release lifetime of surviving tables) | `run_frames` |
 | `EvmRun` (revision 5) | `EvmInv` ∧ `¬EvmDone` (the precondition of `op_dispatch_spec`) | `op_dispatch`, `op_sload`, `op_sstore` |
-| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (revision 6: the three allocator pointers 8-byte aligned) | `_decode_witness_node_body` |
+| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (revision 6: the three allocator pointers 8-byte aligned) | `_decode_witness_node_body`; revision 7: `decode_witness_to_mpt`, `_decode_witness_node`, `_decode_witness_node_mpt`, `mpt_from_witness` |
 | `MptReady` | `ArenaReady` ∧ the `node` parameter is rooted in a typed `NodeHeap` (revision 6: paths typed) ∧ `level ≤ klen` ∧ `KeyIn` of the key suffix `(key + level, klen − level)` (revision 6) | `_mpt_insert_node`, `_mpt_delete_node(_body)` |
 | `MptObjReady` (restated in revision 5) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `MptObjIn s S`: trie object `m` allocated and rooted in a typed `NodeHeap`, `m` and every node disjoint from the tables of `S` and the fixed objects | `mpt_set` |
 | `MsgReady` (new) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `msg+152`, `msg+160` ∈ S, the record owned (revision 6: also `AvoidsTries`) | `process_message`, `process_message_call`, `process_create_message` |
 | `TxReady` (new) | `WorldOK` ∧ `index < bo+80` | `process_transaction` |
 | `BlockReady` (revision 5) | `WorldOK` ∧ `16·ntx + 16 < 2^64`, `ntx = (si+0)+40` | `execute_block` |
+| `InputReady` (revision 7) | `InputAt s si`: `ArenaReady` ∧ a typing `(S, Nd)` ∧ the input cells `(si, 8)`, `(pl + 40, 8)` heap words outside `worldOwned` | `verify_stateless_new_payload`, `attempt_l1..7`, `run_attempt` |
 | `ReqsFresh` (new) | `WorldOK` ∧ `bo+64 = 0` | `process_general_purpose_requests` |
-| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records and block-output objects, tries) | the other 28 guarded functions |
+| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records and block-output objects, tries) | the other 15 guarded functions |
 | `MainEntry` | §2 | `main` |
 
 Callee-contract pre-conditions (not bound guards): `ReqRoom` (`requests_append`), `FrameOpenReady`
@@ -2154,6 +2239,74 @@ and `MptObjAvoids R` (`MptObjReady` plus an output region, pre of `wk_mpt_root`)
 
 Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_onLocals`,
 `LocalsOnly.decClock` and `LocalsOnly.setVar` apply inside every guarded body.
+
+### Revision-7 walk check of every `gbody_*` (round-4 Gemini item 1, coordinator note)
+
+A `gbody_f` is a genuine single-function primitive only if its own hypotheses suffice to prove it
+without unfolding a callee. For each of the 30 unproved ones, the walk below names, at every
+guard-carrying call site and loop head, the fact needed and the hypothesis it comes from. The
+walks also use only the following facts about the DEFINITIONS (no callee involved). Where proved,
+this is said; the others are lemmas the prover of the composition states and proves on the way.
+
+- **W1, typed-cell congruence:** `WorldTypedWith s S Nd` reads memory only in
+  `worldTypedIvls s S Nd`, and reads the globals of the roots, buffers, journal and allocator.
+  The allocator pointers enter only monotonically (`Allocated` grows with `heap_ptr`). So a store,
+  or an output region, outside those cells keeps the typing.
+- **W2, table update:** `htab_set/del/truncate_spec` (`HtabExit`) on a table `t ∈ S` keeps the
+  typing with the same `S`, provided the value written is allowed. `S`-tables that are values of
+  `bs+32`/`ts+32` must stay tables. Every world-tier `htab_set` writes `1`, a fresh pointer, or (on
+  a local table) anything.
+- **W3, fresh extension:** a fresh well-formed table (`htab_new_spec`, `rt_htab_copy`) extends
+  `S`. A fresh block bound to a buffer global or to `bo` keeps `FixedTyped` once the typed words
+  it holds are set (`zv_memzero`, then the stores).
+- **W4, freshness:** a `FreshBlock` (or an `OwnedGrows` interval in fresh heap) is disjoint from
+  every interval allocated at the call's entry.
+- **W5, domain cycle:** a loop that has accessed `base + c·i` for every `i < N` (`c > 0`) without
+  error has `c·(N − 1) < 2^64` and `base + c·(N−1) ∈ [sourceBase, heapEnd)`. A count read from
+  memory that sizes an array is therefore small once the loop exits normally.
+- **W6, call parameters:** the callee's parameter holds the argument's value (`callee_param_one`,
+  PROVED for one parameter; `callEntryOn_inputReady` PROVED on top of it). The same
+  `lookupCodeHOLFinite` unfolding gives the multi-parameter case for `MsgReady` (`msg`),
+  `TxReady` (`index ← i`), `MptReady`, `RollbackReady`, `HtabArgWF` and `FrameOpenReady`.
+
+With `WorldStep` the WorldOK-tier walks never re-type the world after a callee: `WorldStep.worldOK`
+(PROVED) gives `WorldOK`. The local facts come from the same `S'` (`S ⊆ S'`), `OwnedGrows` and
+`FrameOutside`. W1–W3 are needed only for the function's OWN stores and global assignments.
+
+| `gbody_*` | guard-carrying sites and loop heads: fact needed ← hypothesis |
+|---|---|
+| `_decode_witness_node_body` | loop head (`GUARD`, revision 6): `ArenaReady` ← `ak__decode_step`, `ww__resolve_step`, `ww_node_new_ext`, `ww_rlp_item` (frames), `ro_mpt_fail`; rank: the scratch stack (DESIGN §3) |
+| `_mpt_delete_node` | `_mpt_delete_node_body`: `MptReady` ← entry, `ro_scratch_mark` (resume), W6 (four same-named arguments) |
+| `_mpt_insert_node`, `_mpt_delete_node_body` | loop heads: `MptReady` ← `nf_*` (`NodeFnExit`: grown node set, kinds kept, paths fresh), `rv_common_prefix_length` (`level ≤ klen`, `pl < sl`), `ro_*`; revision 6 requirement table below |
+| `mpt_set` | `_mpt_insert_node`/`_mpt_delete_node`: `MptReady` with `node := m+0`, `key/klen := nk`, `level = 0` ← `MptObjReady` (typed `Nm`), `ww_mpt_nibble_key` (frame: only global buffers, which `Nm` avoids, and fresh heap), `nk_mpt_nibble_key` (fresh nibbles: `KeyIn` by W4) |
+| `build_mpt_indexed` | `mpt_set`: `MptObjReady` for `m` ← `wk_mpt_new` + `rt_mpt_new` (fresh, `+0 = 0`, so `Nm = []`, W4); loop head: `MptObjReady` ← `wk_rlp_encode_word` (region `(mpt_key_scratch, 9)` inside a content-free buffer, so it avoids the typed cells, and the object is outside world and region), `mk_mpt_set` (`MptObjStep`); `ro_heap_mark` |
+| `compute_state_root` | `htab_set(cache|new_roots)`: `HtabArgWF` ← `rt_htab_copy` (`bs+72 ≠ 0`, so it is in `S`, and the copy is fresh and typed; W3), `htab_new_spec` (W3); `mpt_set(mpt|state_mpt)`: `MptObjReady` ← `wk_mpt_from_witness` (`RetMptObj`); carried across `wk_alloc`/`rt_alloc`, `wk_u256_to_be_min` + `rv_u256_to_be_min` (region `(vbuf+8, 32)` in fresh `vbuf`), `wk_rlp_encode_bytes` + `rv_rlp_encode_bytes` (region `(vbuf+40, n+9)`, `n ≤ 32`, in `vbuf`), `wk_memcpy` (into fresh `enc`), `wk_encode_account` (fresh `enc`), `wk_ws_get_account_optional`, `wk_cache_get_root`, `ro_htab_get/has/item`, `ro_u256_is_zero` by `FrameOutside`/`OwnedGrows`; after `htab_set` by W2 and the `HtabExit` frame; `mk_mpt_set`, `mk_mpt_root` (region `(root, 32)` fresh) keep `cache`, `new_roots` in `S'`; five `CTR` loop heads: the same invariant |
+| `ws_get_storage` | `ws_storage_trie`: `WorldOK` ← `wk_ws_storage_root_of`, `ro_memeq` |
+| `idx_start_storage` | `get_pre_tx_storage`: `WorldOK` ← `wk_st_le64` (region `(bal_key_buf, 8)`), `wk_memcpy` (`(bal_key_buf+8, 20)`, `(bal_key_buf+28, 32)`: inside a content-free buffer, avoiding the typed cells), `ro_htab_get` |
+| `update_builder_from_tx` | `idx_start_account`, `idx_start_storage` (guarded) and three `CTR` loop heads: `WorldOK` ← the `wk_*` steps (`add_*_change`, `bal_remove_change`, `add_storage_write`, `remove_storage_write`, `get_code`, `idx_start_*`), `ro_*`; item 2 makes `wk_add_storage_write`/`wk_remove_storage_write` true |
+| `htab_truncate` | loop head: `HtabArgWF` ← `htab_del_spec`; rank: count `t+24` ← `htab_del_progress_spec` (revision 4) |
+| `rollback_child_access` | 1st `htab_truncate`: ← `RollbackReady`; 2nd: `child+176` unchanged (record outside the first footprint, `HtabExit` frame), its table equal to the first (`HtabExit`) or with a disjoint footprint (unchanged, so `HtabWF` by congruence), allocated (heap grows, `scratch_ptr` unchanged) ← `htab_truncate_spec` |
+| `finish_child` | `rollback_child_access(child)`: `RollbackReadyAt child` ← entry (`FinishReady`, `child = ev`, `rollbackReadyAt_of_evmInv` PROVED), or after the `kind = 2` branch ← `ek_create_finish`, `ek_state_restore`, `ek_refill_frame_state_gas`, `ek_frame_halt` (`ev` kept, `EvmInv`, then the lemma), the handler's two stores into `child+120/128` (outside both footprints, so W1 at the record) and `ev := parent` (memory unchanged); W6 |
+| `get_storage` | `ws_get_storage`: `WorldOK` ← `wk_sk_make`, case `ts+24 = 0` (`nz_htab_set`: no resume) / `≠ 0` (`∈ S`, `htab_set_spec` and W2), `ro_stor_lookup`, `wk_record_pre_state_read` |
+| `op_sload` | `get_storage`: `WorldOK` ← `EvmInv` (`worldOK_of_evmInv`) ← `ek_stack_pop`, `ek_u256_to_be32` (pre `EvmAvoids [(evm_key_buf, 32)]`: a fixed buffer, disjoint from typed cells and frames by `EvmInv`), `ek_is_warm_storage_key`, `ek_charge_gas`, `ek_warm_storage_key` |
+| `op_sstore` | `get_storage_original`, `get_storage`: as `op_sload`, plus `ek_require_not_static`, `ek_check_gas`, `ro_max`, `ek_get_storage_original` |
+| `op_dispatch` | `op_sload`/`op_sstore`: `EvmRun` ← entry (the opcode dispatch does not write) |
+| `run_frames` | the glue `run_frames_step_of_specs` (PROVED) from the four §7 specs; rank `evmPot` |
+| `process_message` | `frame_open`: `FrameOpenReady` ← `MsgReady`, `kind = 0` (W6); `depth0_prepare`: `EvmMsgReady` ← `fk_frame_open`; `frame_start`: `EvmInv` ← `ek_depth0_prepare`, `ro_state_snapshot`, the store `cur_cont+24` (W1 for `EvmInv`: the continuation's `+24` is not read); `run_frames`: ← `ek_frame_start` |
+| `process_create_message` | `process_message`: `MsgReady` ← `wk_destroy_storage`, `wk_mark_account_created`, `wk_increment_nonce` (record outside the world, `FrameOutside`/`OwnedGrows`, `S ⊆ S'`, heap record stays allocated), `ro_state_snapshot` |
+| `process_message_call` | `process_create_message`/`process_message`: `MsgReady` ← `wk_alloc`, `rt_alloc`, `wk_memzero` (region `(out, 96)` fresh), `wk_account_deployable` |
+| `process_unchecked_system_transaction` | `process_message_call`: `MsgReady` for `m` ← `wk_state_fresh_tx`, `wk_ext_code_of`, `wk_te_new`/`rt_te_new` and `wk_msg_new`/`rt_msg_new` (fresh; the own stores into them by W1), `htab_new_spec` ×2 (W3: `aa`, `ak` join `S`), `m+40 = 30000000`; `incorporate_tx_into_block`: `WorldOK` ← `wk_process_message_call` (region `(m, 176)` avoids the typed cells) |
+| `process_general_purpose_requests` | `requests_append` (`ReqRoom`, `bo+64 < 8`) and `process_checked_system_transaction` ×4: `WorldOK` and `bo+64 = k` ← `ReqsFresh`, `wk_alloc`/`rt_alloc`, `wk_memcpy`, `wk_extract_deposit_data` (regions in the fresh `dep` block; `dep_n + 192 ≤ dep_cap` by the code), `ro_memeq`, `wk_process_checked_system_transaction` (`RecordsKept bo/64`), `wk_requests_append` (`ReqCountInc`); at most 5 appends; two `CTR` loop heads: the same invariant |
+| `process_transaction` | `process_message_call`: `MsgReady` for `m` ← the `wk_*` steps, `rt_msg_new`/`rt_te_new`/`rt_alloc` (fresh; own stores by W1; the receipt stores `bo+24/32 + 16·index` stay in the owned arrays since `index < ntx`, so W1), `htab_new_spec` + `htab_set_spec` on `aa`, `ak` (W3, W2), `m+40 = mgas ≤ 2^24` ← `rv_validate_transaction`, `rv_min`; the `al_*` loops (`CTR`): invariant "no wrap → `WorldOK` and the local facts", exit implies no wrap by W5 (own loads of `acc`) and `dm_memcpy`; `incorporate_tx_into_block` and the deletion loop's `clear_account_preserving_balance`: `WorldOK` ← `wk_process_message_call`, `wk_create_ether`, the own stores into `bo+0/8/16/48` (untyped words, W1), `wk_lst_new`/`rt_lst_new` (`8·nl < 2^64` by W5 on the preceding loop's loads of `lp + 8 i`), `wk_lst_push` (`BoListArg`), `wk_encode_receipt`, `ro_htab_item` |
+| `process_withdrawals` | `incorporate_tx_into_block` and the `CTR` loop head: `WorldOK` ← `wk_state_fresh_tx`, `ro_u256_mul`, `wk_create_ether`, `journal_n := 0` (`JournalTyped` trivially) |
+| `execute_block` | `bal_init` and later: `WorldOK` after `bo := alloc(88)` ← `wk_alloc`/`rt_alloc`, `wk_memzero` + `zv_memzero` (zero record), `rt_alloc` (`txs`, `rcs`, `reqs`; `16·ntx + 16 < 2^64` by `BlockReady`), `wk_lst_new`/`rt_lst_new` (`logs`, `rls`: `LstOK`), the own stores and W3; `process_transaction`: `TxReady` (`i < ntx = bo+80`) ← `wk_bal_init`, `process_unchecked_system_transaction` ×2 (`wk_*`), `wk_state_fresh_tx`, `wk_track_ancestor_access`, `wk_decode_transaction`, `wk_process_transaction` (each keeps `bo` and `bo+80`: `GlobalsKept`, `RecordsKept`); `process_general_purpose_requests`: `ReqsFresh` (`bo+64 = 0`) ← `RecordsKept` through the same steps and `wk_process_withdrawals`; `compute_state_root`, `build_mpt_indexed` ×3, `logs_bloom`: `WorldOK` with fresh output regions (`rt_alloc`) ← `wk_build_block_access_list_rlp`, `wk_validate_block_access_list_gas_limit`, `wk_compute_state_root`, `wk_build_mpt_indexed`, `wk_logs_bloom` |
+| `payload_header` | `build_mpt_indexed` ×2: `WorldOK` and the fresh region `(txr|wr, 32)` outside the world ← `wk_alloc`/`rt_alloc`, `wk_memzero`, `wk_keccak256` (`(oh, 32)` fresh), own stores into fresh `h`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wd_rlp_slices := alloc(…)` (not a world global); the `CTR` loop: invariant "no wrap → `WorldOK`", exit implies no wrap by W5 with `dm_encode_withdrawal_rlp`, `wk_encode_withdrawal_rlp` |
+| `state_init` | `decode_witness_to_mpt` (now `ArenaReady`): ← `wk_alloc` from the `WorldOK` entry (`ArenaReady` after `ws := alloc(40)` and the stores; audit 1); `htab_new_spec`: `HtabNewReady` (literal key lengths) ← `ArenaReady` |
+| `run_attempt` | `state_init`, `payload_header` and the `CTR` loop: `WorldOK` and the input cells outside the world ← `InputReady`, `wk_validate_headers`, `ro_check_gas_limit`, `wk_nodedb_build` ×2 (the assignments to `block_hashes(_n)` are not world globals); `execute_block`: `BlockReady` ← the loop (W5: `16·ntx + 16 < 2^64`) and the cells `si+0`, `pl+40` kept by `wk_state_init`, `wk_payload_header`, `wk_alloc`, `wk_header_hash`, `ro_memeq`, `wk_is_valid_versioned_hashes`, `wk_validate_header`, `wk_memzero` (`(be, 120)`, a content-free buffer); `be := alloc(120)` rebinds a fixed buffer (W3) |
+| `main` | `mem_init_world` (`WorldOK`); the 12 `wk_*_init` (item 1(d)); `wk_alloc`/`rt_alloc`, `wk_memzero`; `verify_stateless_new_payload`: `InputReady` ← `wk_decode_host_input` (`RetInput`: fresh input cells), `wk_htr_new_payload_request` (`(root, 32)` fresh), W6 |
+
+The two compositions above whose walk has the most bookkeeping, `process_transaction` and
+`execute_block`, need no fact beyond these hypotheses and W1–W6.
 
 ### NodeFn requirements (revision 6, round-4 Astra items 5 and 6)
 
@@ -2239,22 +2392,22 @@ What each composition must show, beyond the combinator walk:
 The guard-carrying callees of every guarded function (generated, `out/contracts.txt`):
 
 ```
-_decode_witness_node [WorldOK]: scratch_mark
+_decode_witness_node [ArenaReady]: scratch_mark
 _decode_witness_node_body [ArenaReady]: _decode_step _resolve_step mpt_fail node_new_ext rlp_item
-_decode_witness_node_mpt [WorldOK]: 
+_decode_witness_node_mpt [ArenaReady]: 
 _mpt_delete_node [MptReady]: scratch_mark
 _mpt_delete_node_body [MptReady]: _collapse_branch _delete_ext_finish common_prefix_length memeq mpt_fail node_invalidate scratch_alloc
 _mpt_insert_node [MptReady]: _insert_into_leaf _split_extension common_prefix_length mpt_fail node_invalidate node_new_ext node_new_leaf
-attempt_l1 [WorldOK]: 
-attempt_l2 [WorldOK]: 
-attempt_l3 [WorldOK]: 
-attempt_l4 [WorldOK]: 
-attempt_l5 [WorldOK]: 
-attempt_l6 [WorldOK]: 
-attempt_l7 [WorldOK]: 
+attempt_l1 [InputReady]: 
+attempt_l2 [InputReady]: 
+attempt_l3 [InputReady]: 
+attempt_l4 [InputReady]: 
+attempt_l5 [InputReady]: 
+attempt_l6 [InputReady]: 
+attempt_l7 [InputReady]: 
 build_mpt_indexed [WorldOK]: heap_mark mpt_new mpt_set rlp_encode_word
 compute_state_root [WorldOK]: alloc cache_get_root encode_account htab_copy htab_get htab_has htab_item htab_new htab_set memcpy mpt_from_witness mpt_root mpt_set rlp_encode_bytes u256_is_zero u256_to_be_min ws_get_account_optional ws_storage_root_of
-decode_witness_to_mpt [WorldOK]: memeq mpt_fail nodedb_lookup
+decode_witness_to_mpt [ArenaReady]: memeq mpt_fail nodedb_lookup
 execute_block [BlockReady]: alloc bal_init build_block_access_list_rlp build_mpt_indexed compute_state_root decode_transaction logs_bloom lst_new memzero process_general_purpose_requests process_transaction process_unchecked_system_transaction process_withdrawals state_fresh_tx track_ancestor_access validate_block_access_list_gas_limit
 finish_child [FinishReady]: create_finish frame_halt refill_frame_state_gas state_restore
 get_pre_tx_storage [WorldOK]: record_pre_state_read stor_lookup
@@ -2264,7 +2417,7 @@ htab_truncate [HtabArgWF]: htab_del
 idx_start_storage [WorldOK]: htab_get memcpy st_le64
 incorporate_tx_into_block [WorldOK]: 
 main [MainEntry]: alloc blake2_init bls_precompiles_init bn254_init decode_host_input evm_init fork_init header_init htr_new_payload_request keccak_init mem_init memzero mpt_init ripemd160_init secp256k1_init sha256_init ssz_init u256_ws_init
-mpt_from_witness [WorldOK]: 
+mpt_from_witness [ArenaReady]: 
 mpt_set [MptObjReady]: mpt_nibble_key
 op_dispatch [EvmRun]: 
 op_sload [EvmRun]: charge_gas is_warm_storage_key stack_pop u256_to_be32 warm_storage_key
@@ -2279,11 +2432,11 @@ process_transaction [TxReady]: alloc calculate_blob_gas_price calculate_total_bl
 process_unchecked_system_transaction [WorldOK]: ext_code_of htab_new msg_new process_message_call state_fresh_tx te_new
 process_withdrawals [WorldOK]: create_ether state_fresh_tx u256_mul
 rollback_child_access [RollbackReady]: htab_truncate
-run_attempt [WorldOK]: alloc check_gas_limit header_hash is_valid_versioned_hashes memeq memzero nodedb_build payload_header state_init validate_header validate_headers
+run_attempt [InputReady]: alloc check_gas_limit header_hash is_valid_versioned_hashes memeq memzero nodedb_build payload_header state_init validate_header validate_headers
 run_frames [EvmInv]: finish_child frame_epilogue frame_exception op_dispatch
 state_init [WorldOK]: alloc
 update_builder_from_tx [WorldOK]: add_balance_change add_code_change add_nonce_change add_storage_write bal_remove_change get_code htab_item idx_start_account idx_start_storage memeq remove_storage_write u256_eq
-verify_stateless_new_payload [WorldOK]: 
+verify_stateless_new_payload [InputReady]: 
 ws_get_storage [WorldOK]: memeq ws_storage_root_of
 ws_storage_trie [WorldOK]: htab_get
 ```
@@ -2307,52 +2460,52 @@ transport across calls, loop invariants and the rank/stationary obligations are 
 | `gbody_*` (function) | guard | loops | direct callees = bound hypotheses | contract hypotheses | status |
 |---|---|---|---|---|---|
 | `_decode_witness_node_body` (AST 10196) | `ArenaReady` | #0 GUARD | 5: _decode_step, _resolve_step, mpt_fail, node_new_ext, rlp_item | 5: `ak__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item` | primitive |
-| `_decode_witness_node_mpt` (AST 10311) | `WorldOK` | loop-free | 2: _decode_witness_node_body, scratch_release | 0: — | **proved** |
-| `_decode_witness_node` (AST 10328) | `WorldOK` | loop-free | 3: _decode_witness_node_mpt, scratch_mark, scratch_release | 1: `ro_scratch_mark` | **proved** |
+| `_decode_witness_node_mpt` (AST 10311) | `ArenaReady` | loop-free | 2: _decode_witness_node_body, scratch_release | 0: — | **proved** |
+| `_decode_witness_node` (AST 10328) | `ArenaReady` | loop-free | 3: _decode_witness_node_mpt, scratch_mark, scratch_release | 1: `ro_scratch_mark` | **proved** |
 | `_mpt_delete_node_body` (AST 10758) | `MptReady` | #0 GUARD; #1 GUARD | 7: _collapse_branch, _delete_ext_finish, common_prefix_length, memeq, mpt_fail, node_invalidate, scratch_alloc | 8: `nf__collapse_branch`, `nf__delete_ext_finish`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_memeq`, `ro_mpt_fail`, `nf_node_invalidate`, `ww_scratch_alloc` | primitive |
 | `_mpt_delete_node` (AST 10852) | `MptReady` | loop-free | 3: _mpt_delete_node_body, scratch_mark, scratch_release | 1: `ro_scratch_mark` | primitive |
 | `_mpt_insert_node` (AST 10598) | `MptReady` | #0 GUARD | 7: _insert_into_leaf, _split_extension, common_prefix_length, mpt_fail, node_invalidate, node_new_ext, node_new_leaf | 8: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf` | primitive |
 | `mpt_set` (AST 10872) | `MptObjReady` | loop-free | 3: _mpt_delete_node, _mpt_insert_node, mpt_nibble_key | 2: `ww_mpt_nibble_key`, `nk_mpt_nibble_key` | primitive |
-| `build_mpt_indexed` (AST 11243) | `WorldOK` | #0 CTR | 6: heap_mark, heap_release, mpt_new, mpt_root, mpt_set, rlp_encode_word | 7: `ro_heap_mark`, `ww_mpt_new`, `rm_mpt_new`, `wk_mpt_set`, `ws_mpt_set`, `km_mpt_set`, `ww_rlp_encode_word` | primitive |
-| `decode_witness_to_mpt` (AST 10348) | `WorldOK` | loop-free | 6: _decode_witness_node, alloc, memcpy, memeq, mpt_fail, nodedb_lookup | 3: `ro_memeq`, `ro_mpt_fail`, `ro_nodedb_lookup` | **proved** |
-| `mpt_from_witness` (AST 10459) | `WorldOK` | loop-free | 2: decode_witness_to_mpt, mpt_new | 0: — | **proved** |
-| `compute_state_root` (AST 32341) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR | 18: alloc, cache_get_root, encode_account, htab_copy, htab_get, htab_has, htab_item, htab_new, htab_set, memcpy, mpt_from_witness, mpt_root, mpt_set, rlp_encode_bytes, u256_is_zero, u256_to_be_min, ws_get_account_optional, ws_storage_root_of | 25: `ww_alloc`, `rb_alloc`, `ww_cache_get_root`, `ww_encode_account`, `ww_htab_copy`, `rt_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `ww_memcpy`, `wk_mpt_from_witness`, `ws_mpt_from_witness`, `ro2_mpt_from_witness`, `wk_mpt_root`, `ws_mpt_root`, `wk_mpt_set`, `ws_mpt_set`, `km_mpt_set`, `ww_rlp_encode_bytes`, `ro_u256_is_zero`, `ww_u256_to_be_min`, `ww_ws_get_account_optional`, `ww_ws_storage_root_of` | primitive |
+| `build_mpt_indexed` (AST 11243) | `WorldOK` | #0 CTR | 6: heap_mark, heap_release, mpt_new, mpt_root, mpt_set, rlp_encode_word | 5: `ro_heap_mark`, `wk_mpt_new`, `rt_mpt_new`, `mk_mpt_set`, `wk_rlp_encode_word` | primitive |
+| `decode_witness_to_mpt` (AST 10348) | `ArenaReady` | loop-free | 6: _decode_witness_node, alloc, memcpy, memeq, mpt_fail, nodedb_lookup | 3: `ro_memeq`, `ro_mpt_fail`, `ro_nodedb_lookup` | **proved** |
+| `mpt_from_witness` (AST 10459) | `ArenaReady` | loop-free | 2: decode_witness_to_mpt, mpt_new | 0: — | **proved** |
+| `compute_state_root` (AST 32341) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR | 18: alloc, cache_get_root, encode_account, htab_copy, htab_get, htab_has, htab_item, htab_new, htab_set, memcpy, mpt_from_witness, mpt_root, mpt_set, rlp_encode_bytes, u256_is_zero, u256_to_be_min, ws_get_account_optional, ws_storage_root_of | 22: `wk_alloc`, `rt_alloc`, `wk_cache_get_root`, `wk_encode_account`, `wk_htab_copy`, `rt_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_memcpy`, `wk_mpt_from_witness`, `mk_mpt_root`, `mk_mpt_set`, `wk_rlp_encode_bytes`, `rv_rlp_encode_bytes`, `ro_u256_is_zero`, `wk_u256_to_be_min`, `rv_u256_to_be_min`, `wk_ws_get_account_optional`, `wk_ws_storage_root_of` | primitive |
 | `ws_storage_trie` (AST 13042) | `WorldOK` | loop-free | 3: decode_witness_to_mpt, htab_get, htab_set | 1: `ro_htab_get` | **proved** |
-| `ws_get_storage` (AST 13061) | `WorldOK` | loop-free | 10: alloc, heap_mark, heap_release, keccak256, memeq, rlp_decode_fully, trie_lookup, u256_from_be, ws_storage_root_of, ws_storage_trie | 2: `ro_memeq`, `ww_ws_storage_root_of` | primitive |
+| `ws_get_storage` (AST 13061) | `WorldOK` | loop-free | 10: alloc, heap_mark, heap_release, keccak256, memeq, rlp_decode_fully, trie_lookup, u256_from_be, ws_storage_root_of, ws_storage_trie | 2: `ro_memeq`, `wk_ws_storage_root_of` | primitive |
 | `get_pre_tx_storage` (AST 14069) | `WorldOK` | loop-free | 3: record_pre_state_read, stor_lookup, ws_get_storage | 2: `wk_record_pre_state_read`, `ro_stor_lookup` | **proved** |
-| `idx_start_storage` (AST 14129) | `WorldOK` | loop-free | 6: alloc, get_pre_tx_storage, htab_get, htab_set, memcpy, st_le64 | 3: `ro_htab_get`, `ww_memcpy`, `ww_st_le64` | primitive |
-| `update_builder_from_tx` (AST 14233) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR | 12: add_balance_change, add_code_change, add_nonce_change, add_storage_write, bal_remove_change, get_code, htab_item, idx_start_account, idx_start_storage, memeq, remove_storage_write, u256_eq | 21: `wk_add_balance_change`, `ws_add_balance_change`, `wk_add_code_change`, `ws_add_code_change`, `wk_add_nonce_change`, `ws_add_nonce_change`, `wk_add_storage_write`, `ws_add_storage_write`, `wk_bal_remove_change`, `ws_bal_remove_change`, `wk_get_code`, `ws_get_code`, `ro_htab_item`, `wk_idx_start_account`, `ws_idx_start_account`, `wk_idx_start_storage`, `ws_idx_start_storage`, `ro_memeq`, `wk_remove_storage_write`, `ws_remove_storage_write`, `ro_u256_eq` | primitive |
+| `idx_start_storage` (AST 14129) | `WorldOK` | loop-free | 6: alloc, get_pre_tx_storage, htab_get, htab_set, memcpy, st_le64 | 3: `ro_htab_get`, `wk_memcpy`, `wk_st_le64` | primitive |
+| `update_builder_from_tx` (AST 14233) | `WorldOK` | #0 CTR; #1 CTR; #2 CTR | 12: add_balance_change, add_code_change, add_nonce_change, add_storage_write, bal_remove_change, get_code, htab_item, idx_start_account, idx_start_storage, memeq, remove_storage_write, u256_eq | 12: `wk_add_balance_change`, `wk_add_code_change`, `wk_add_nonce_change`, `wk_add_storage_write`, `wk_bal_remove_change`, `wk_get_code`, `ro_htab_item`, `wk_idx_start_account`, `wk_idx_start_storage`, `ro_memeq`, `wk_remove_storage_write`, `ro_u256_eq` | primitive |
 | `incorporate_tx_into_block` (AST 14313) | `WorldOK` | loop-free | 2: merge_tx_into_block, update_builder_from_tx | 0: — | **proved** |
 | `htab_truncate` (AST 5278) | `HtabArgWF` | #0 WF | 1: htab_del | 2: `htab_del_spec`, `htab_del_progress_spec` | primitive |
 | `rollback_child_access` (AST 18995) | `RollbackReady` | loop-free | 1: htab_truncate | 1: `htab_truncate_spec` | primitive |
-| `finish_child` (AST 18572) | `FinishReady` | loop-free | 16: address_to_u256, create_finish, credit_state_gas_refund, frame_halt, frame_mem_release, incorporate_child_on_error, incorporate_child_on_success, memcpy, min, pc_add, refill_frame_state_gas, rollback_child_access, scratch_release, set_retdata, stack_push, state_restore | 8: `ek_create_finish`, `es_create_finish`, `ek_frame_halt`, `es_frame_halt`, `ek_refill_frame_state_gas`, `es_refill_frame_state_gas`, `ek_state_restore`, `es_state_restore` | primitive |
-| `get_storage` (AST 13249) | `WorldOK` | loop-free | 5: htab_set, record_pre_state_read, sk_make, stor_lookup, ws_get_storage | 5: `htab_set_spec`, `wk_record_pre_state_read`, `ws_record_pre_state_read`, `ww_sk_make`, `ro_stor_lookup` | primitive |
-| `op_sload` (AST 16584) | `EvmRun` | loop-free | 8: charge_gas, get_storage, is_warm_storage_key, pc_add, stack_pop, stack_push, u256_to_be32, warm_storage_key | 8: `ek_charge_gas`, `es_charge_gas`, `ww_is_warm_storage_key`, `ek_stack_pop`, `es_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key`, `es_warm_storage_key` | primitive |
+| `finish_child` (AST 18572) | `FinishReady` | loop-free | 16: address_to_u256, create_finish, credit_state_gas_refund, frame_halt, frame_mem_release, incorporate_child_on_error, incorporate_child_on_success, memcpy, min, pc_add, refill_frame_state_gas, rollback_child_access, scratch_release, set_retdata, stack_push, state_restore | 4: `ek_create_finish`, `ek_frame_halt`, `ek_refill_frame_state_gas`, `ek_state_restore` | primitive |
+| `get_storage` (AST 13249) | `WorldOK` | loop-free | 5: htab_set, record_pre_state_read, sk_make, stor_lookup, ws_get_storage | 5: `htab_set_spec`, `nz_htab_set`, `wk_record_pre_state_read`, `wk_sk_make`, `ro_stor_lookup` | primitive |
+| `op_sload` (AST 16584) | `EvmRun` | loop-free | 8: charge_gas, get_storage, is_warm_storage_key, pc_add, stack_pop, stack_push, u256_to_be32, warm_storage_key | 5: `ek_charge_gas`, `ek_is_warm_storage_key`, `ek_stack_pop`, `ek_u256_to_be32`, `ek_warm_storage_key` | primitive |
 | `get_storage_original` (AST 13276) | `WorldOK` | loop-free | 4: htab_has, record_pre_state_read, stor_lookup, ws_get_storage | 3: `ro_htab_has`, `wk_record_pre_state_read`, `ro_stor_lookup` | **proved** |
-| `op_sstore` (AST 16611) | `EvmRun` | loop-free | 16: charge_gas, charge_state_gas, check_gas, credit_state_gas_refund, get_storage, get_storage_original, is_warm_storage_key, max, pc_add, require_not_static, set_storage, stack_pop, u256_eq, u256_is_zero, u256_to_be32, warm_storage_key | 13: `ek_charge_gas`, `es_charge_gas`, `ro_check_gas`, `ek_get_storage_original`, `es_get_storage_original`, `ww_is_warm_storage_key`, `ro_max`, `ro_require_not_static`, `ek_stack_pop`, `es_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key`, `es_warm_storage_key` | primitive |
+| `op_sstore` (AST 16611) | `EvmRun` | loop-free | 16: charge_gas, charge_state_gas, check_gas, credit_state_gas_refund, get_storage, get_storage_original, is_warm_storage_key, max, pc_add, require_not_static, set_storage, stack_pop, u256_eq, u256_is_zero, u256_to_be32, warm_storage_key | 9: `ek_charge_gas`, `ro_check_gas`, `ek_get_storage_original`, `ek_is_warm_storage_key`, `ro_max`, `ro_require_not_static`, `ek_stack_pop`, `ek_u256_to_be32`, `ek_warm_storage_key` | primitive |
 | `op_dispatch` (AST 17902) | `EvmRun` | loop-free | 87: op_add, op_addmod, op_address, op_and, op_balance, op_basefee, op_blobbasefee, op_blobhash, op_blockhash, op_byte, op_call, op_callcode, op_calldatacopy, op_calldataload, op_calldatasize, op_caller, op_callvalue, op_chainid, op_clz, op_codecopy, op_codesize, op_coinbase, op_create, op_create2, op_delegatecall, op_div, op_dup, op_dupn, op_eq, op_exchange, op_exp, op_extcodecopy, op_extcodehash, op_extcodesize, op_gas, op_gaslimit, op_gasprice, op_gt, op_iszero, op_jump, op_jumpdest, op_jumpi, op_keccak, op_log, op_lt, op_mcopy, op_mload, op_mod, op_msize, op_mstore, op_mstore8, op_mul, op_mulmod, op_not, op_number, op_or, op_origin, op_pc, op_pop, op_prevrandao, op_push, op_return, op_returndatacopy, op_returndatasize, op_revert, op_sar, op_sdiv, op_selfbalance, op_selfdestruct, op_sgt, op_shl, op_shr, op_signextend, op_sload, op_slotnum, op_slt, op_smod, op_sstore, op_staticcall, op_stop, op_sub, op_swap, op_swapn, op_timestamp, op_tload, op_tstore, op_xor | 0: — | primitive |
 | `run_frames` (AST 18663) | `EvmInv` | #0 POT | 4: finish_child, frame_epilogue, frame_exception, op_dispatch | 4: `finish_child_spec`, `frame_epilogue_spec`, `frame_exception_spec`, `op_dispatch_spec` | primitive |
-| `process_message` (AST 18803) | `MsgReady` | loop-free | 10: depth0_prepare, frame_halt, frame_mem_release, frame_open, frame_start, refill_frame_state_gas, run_frames, scratch_release, state_restore, state_snapshot | 6: `ek_depth0_prepare`, `es_depth0_prepare`, `fk_frame_open`, `ek_frame_start`, `es_frame_start`, `ro_state_snapshot` | primitive |
-| `process_create_message` (AST 18899) | `MsgReady` | loop-free | 9: create_finish, destroy_storage, frame_halt, increment_nonce, mark_account_created, process_message, refill_frame_state_gas, state_restore, state_snapshot | 7: `wk_destroy_storage`, `ws_destroy_storage`, `wk_increment_nonce`, `ws_increment_nonce`, `wk_mark_account_created`, `ws_mark_account_created`, `ro_state_snapshot` | primitive |
-| `process_message_call` (AST 19661) | `MsgReady` | loop-free | 6: account_deployable, alloc, frame_state_gas_used, memzero, process_create_message, process_message | 5: `wk_account_deployable`, `ws_account_deployable`, `ww_alloc`, `rb_alloc`, `ww_memzero` | primitive |
-| `process_unchecked_system_transaction` (AST 32851) | `WorldOK` | loop-free | 11: alloc, ext_code_of, frame_mem_release, htab_new, incorporate_tx_into_block, memcpy, msg_new, process_message_call, scratch_release, state_fresh_tx, te_new | 10: `wk_ext_code_of`, `ws_ext_code_of`, `htab_new_spec`, `ww_msg_new`, `rb_msg_new`, `wk_process_message_call`, `ws_process_message_call`, `wk_state_fresh_tx`, `ws_state_fresh_tx`, `ww_te_new` | primitive |
-| `process_checked_system_transaction` (AST 32928) | `WorldOK` | loop-free | 4: alloc, ext_code_of, process_unchecked_system_transaction, state_fresh_tx | 6: `ww_alloc`, `rb_alloc`, `wk_ext_code_of`, `ws_ext_code_of`, `wk_state_fresh_tx`, `ws_state_fresh_tx` | primitive |
-| `process_general_purpose_requests` (AST 33507) | `ReqsFresh` | #0 CTR; #1 CTR | 6: alloc, extract_deposit_data, memcpy, memeq, process_checked_system_transaction, requests_append | 10: `ww_alloc`, `rb_alloc`, `ww_extract_deposit_data`, `ww_memcpy`, `ro_memeq`, `wk_process_checked_system_transaction`, `ws_process_checked_system_transaction`, `wk_requests_append`, `ws_requests_append`, `rq_requests_append` | primitive |
-| `process_transaction` (AST 33103) | `TxReady` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR | 37: alloc, calculate_blob_gas_price, calculate_total_blob_gas, check_transaction, clear_account_preserving_balance, compute_contract_address, create_ether, encode_receipt, encode_transaction, fee_mul, frame_mem_release, get_account, htab_item, htab_new, htab_set, incorporate_tx_into_block, increment_nonce, keccak256, lst_new, lst_push, max, memcpy, min, msg_new, process_message_call, recover_sender_with_chain_id, scratch_release, set_account_balance, state_fresh_tx, te_new, tx_chain_id, tx_has_access_list, tx_is_blob, tx_is_setcode, u256_sub, udiv_small5, validate_transaction | 48: `ww_alloc`, `rb_alloc`, `wk_calculate_blob_gas_price`, `ws_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `ws_check_transaction`, `wk_clear_account_preserving_balance`, `ws_clear_account_preserving_balance`, `ww_compute_contract_address`, `wk_create_ether`, `ws_create_ether`, `wk_encode_receipt`, `ws_encode_receipt`, `wk_encode_transaction`, `ws_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ws_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `ws_increment_nonce`, `ww_keccak256`, `ww_lst_new`, `rl_lst_new`, `ww_lst_push`, `ro_max`, `ww_memcpy`, `ro_min`, `ww_msg_new`, `rb_msg_new`, `wk_process_message_call`, `ws_process_message_call`, `ww_recover_sender_with_chain_id`, `wk_set_account_balance`, `ws_set_account_balance`, `wk_state_fresh_tx`, `ws_state_fresh_tx`, `ww_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction` | primitive |
-| `process_withdrawals` (AST 33458) | `WorldOK` | #0 CTR | 4: create_ether, incorporate_tx_into_block, state_fresh_tx, u256_mul | 5: `wk_create_ether`, `ws_create_ether`, `wk_state_fresh_tx`, `ws_state_fresh_tx`, `ro_u256_mul` | primitive |
-| `execute_block` (AST 33580) | `BlockReady` | #0 CTR | 20: alloc, bal_init, build_block_access_list_rlp, build_mpt_indexed, compute_requests_hash, compute_state_root, decode_transaction, keccak256, logs_bloom, lst_new, max, memeq, memzero, process_general_purpose_requests, process_transaction, process_unchecked_system_transaction, process_withdrawals, state_fresh_tx, track_ancestor_access, validate_block_access_list_gas_limit | 27: `ww_alloc`, `rb_alloc`, `wk_bal_init`, `ws_bal_init`, `wk_build_block_access_list_rlp`, `ws_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `ws_build_mpt_indexed`, `wk_compute_state_root`, `ws_compute_state_root`, `ww_decode_transaction`, `ww_logs_bloom`, `ww_lst_new`, `rl_lst_new`, `ww_memzero`, `wk_process_general_purpose_requests`, `ws_process_general_purpose_requests`, `wk_process_transaction`, `ws_process_transaction`, `wk_process_unchecked_system_transaction`, `ws_process_unchecked_system_transaction`, `wk_process_withdrawals`, `ws_process_withdrawals`, `wk_state_fresh_tx`, `ws_state_fresh_tx`, `ww_track_ancestor_access`, `ro_validate_block_access_list_gas_limit` | primitive |
-| `payload_header` (AST 32645) | `WorldOK` | #0 CTR | 8: alloc, block_rlp_length, build_mpt_indexed, compute_requests_hash, encode_execution_requests, encode_withdrawal_rlp, keccak256, memzero | 10: `ww_alloc`, `rb_alloc`, `wk_block_rlp_length`, `ws_block_rlp_length`, `wk_build_mpt_indexed`, `ws_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `ws_encode_withdrawal_rlp`, `ww_keccak256`, `ww_memzero` | primitive |
-| `state_init` (AST 12708) | `WorldOK` | loop-free | 3: alloc, decode_witness_to_mpt, htab_new | 2: `ww_alloc`, `rb_alloc` | primitive |
-| `run_attempt` (AST 33734) | `WorldOK` | #0 CTR | 12: alloc, check_gas_limit, execute_block, header_hash, is_valid_versioned_hashes, memeq, memzero, nodedb_build, payload_header, state_init, validate_header, validate_headers | 16: `ww_alloc`, `rb_alloc`, `ro_check_gas_limit`, `ww_header_hash`, `ww_is_valid_versioned_hashes`, `ro_memeq`, `ww_memzero`, `wk_nodedb_build`, `ws_nodedb_build`, `wk_payload_header`, `ws_payload_header`, `wk_state_init`, `ws_state_init`, `wk_validate_header`, `ws_validate_header`, `ww_validate_headers` | primitive |
-| `attempt_l1` (AST 33847) | `WorldOK` | loop-free | 1: run_attempt | 0: — | **proved** |
-| `attempt_l2` (AST 33863) | `WorldOK` | loop-free | 1: attempt_l1 | 0: — | **proved** |
-| `attempt_l3` (AST 33879) | `WorldOK` | loop-free | 1: attempt_l2 | 0: — | **proved** |
-| `attempt_l4` (AST 33895) | `WorldOK` | loop-free | 1: attempt_l3 | 0: — | **proved** |
-| `attempt_l5` (AST 33911) | `WorldOK` | loop-free | 1: attempt_l4 | 0: — | **proved** |
-| `attempt_l6` (AST 33927) | `WorldOK` | loop-free | 1: attempt_l5 | 0: — | **proved** |
-| `attempt_l7` (AST 33943) | `WorldOK` | loop-free | 1: attempt_l6 | 0: — | **proved** |
-| `verify_stateless_new_payload` (AST 33959) | `WorldOK` | loop-free | 1: attempt_l7 | 0: — | **proved** |
-| `main` (AST 33979) | `MainEntry` | loop-free | 21: alloc, blake2_init, bls_precompiles_init, bn254_init, decode_host_input, evm_init, fork_init, header_init, htr_new_payload_request, keccak_init, mem_init, memzero, mpt_init, output_write, ripemd160_init, secp256k1_init, serialize_result, sha256_init, ssz_init, u256_ws_init, verify_stateless_new_payload | 32: `ww_alloc`, `rb_alloc`, `wk_blake2_init`, `ws_blake2_init`, `wk_bls_precompiles_init`, `ws_bls_precompiles_init`, `wk_bn254_init`, `ws_bn254_init`, `wk_decode_host_input`, `ws_decode_host_input`, `wk_evm_init`, `ws_evm_init`, `wk_fork_init`, `ws_fork_init`, `wk_header_init`, `ws_header_init`, `ww_htr_new_payload_request`, `wk_keccak_init`, `ws_keccak_init`, `mem_init_world`, `ww_memzero`, `wk_mpt_init`, `ws_mpt_init`, `wk_ripemd160_init`, `ws_ripemd160_init`, `ro_secp256k1_init`, `wk_sha256_init`, `ws_sha256_init`, `wk_ssz_init`, `ws_ssz_init`, `wk_u256_ws_init`, `ws_u256_ws_init` | primitive |
+| `process_message` (AST 18803) | `MsgReady` | loop-free | 10: depth0_prepare, frame_halt, frame_mem_release, frame_open, frame_start, refill_frame_state_gas, run_frames, scratch_release, state_restore, state_snapshot | 4: `ek_depth0_prepare`, `fk_frame_open`, `ek_frame_start`, `ro_state_snapshot` | primitive |
+| `process_create_message` (AST 18899) | `MsgReady` | loop-free | 9: create_finish, destroy_storage, frame_halt, increment_nonce, mark_account_created, process_message, refill_frame_state_gas, state_restore, state_snapshot | 4: `wk_destroy_storage`, `wk_increment_nonce`, `wk_mark_account_created`, `ro_state_snapshot` | primitive |
+| `process_message_call` (AST 19661) | `MsgReady` | loop-free | 6: account_deployable, alloc, frame_state_gas_used, memzero, process_create_message, process_message | 5: `wk_account_deployable`, `wk_alloc`, `rt_alloc`, `wk_memzero`, `zv_memzero` | primitive |
+| `process_unchecked_system_transaction` (AST 32851) | `WorldOK` | loop-free | 11: alloc, ext_code_of, frame_mem_release, htab_new, incorporate_tx_into_block, memcpy, msg_new, process_message_call, scratch_release, state_fresh_tx, te_new | 8: `wk_ext_code_of`, `htab_new_spec`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new` | primitive |
+| `process_checked_system_transaction` (AST 32928) | `WorldOK` | loop-free | 4: alloc, ext_code_of, process_unchecked_system_transaction, state_fresh_tx | 3: `wk_alloc`, `wk_ext_code_of`, `wk_state_fresh_tx` | **proved** |
+| `process_general_purpose_requests` (AST 33507) | `ReqsFresh` | #0 CTR; #1 CTR | 6: alloc, extract_deposit_data, memcpy, memeq, process_checked_system_transaction, requests_append | 7: `wk_alloc`, `rt_alloc`, `wk_extract_deposit_data`, `wk_memcpy`, `ro_memeq`, `wk_process_checked_system_transaction`, `wk_requests_append` | primitive |
+| `process_transaction` (AST 33103) | `TxReady` | #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR | 37: alloc, calculate_blob_gas_price, calculate_total_blob_gas, check_transaction, clear_account_preserving_balance, compute_contract_address, create_ether, encode_receipt, encode_transaction, fee_mul, frame_mem_release, get_account, htab_item, htab_new, htab_set, incorporate_tx_into_block, increment_nonce, keccak256, lst_new, lst_push, max, memcpy, min, msg_new, process_message_call, recover_sender_with_chain_id, scratch_release, set_account_balance, state_fresh_tx, te_new, tx_chain_id, tx_has_access_list, tx_is_blob, tx_is_setcode, u256_sub, udiv_small5, validate_transaction | 41: `wk_alloc`, `rt_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `wk_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `wk_keccak256`, `wk_lst_new`, `rt_lst_new`, `wk_lst_push`, `ro_max`, `wk_memcpy`, `dm_memcpy`, `ro_min`, `rv_min`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_recover_sender_with_chain_id`, `wk_set_account_balance`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction`, `rv_validate_transaction` | primitive |
+| `process_withdrawals` (AST 33458) | `WorldOK` | #0 CTR | 4: create_ether, incorporate_tx_into_block, state_fresh_tx, u256_mul | 3: `wk_create_ether`, `wk_state_fresh_tx`, `ro_u256_mul` | primitive |
+| `execute_block` (AST 33580) | `BlockReady` | #0 CTR | 20: alloc, bal_init, build_block_access_list_rlp, build_mpt_indexed, compute_requests_hash, compute_state_root, decode_transaction, keccak256, logs_bloom, lst_new, max, memeq, memzero, process_general_purpose_requests, process_transaction, process_unchecked_system_transaction, process_withdrawals, state_fresh_tx, track_ancestor_access, validate_block_access_list_gas_limit | 19: `wk_alloc`, `rt_alloc`, `wk_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `wk_decode_transaction`, `wk_logs_bloom`, `wk_lst_new`, `rt_lst_new`, `wk_memzero`, `zv_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `wk_state_fresh_tx`, `wk_track_ancestor_access`, `ro_validate_block_access_list_gas_limit` | primitive |
+| `payload_header` (AST 32645) | `WorldOK` | #0 CTR | 8: alloc, block_rlp_length, build_mpt_indexed, compute_requests_hash, encode_execution_requests, encode_withdrawal_rlp, keccak256, memzero | 9: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `dm_encode_withdrawal_rlp`, `wk_keccak256`, `wk_memzero`, `zv_memzero` | primitive |
+| `state_init` (AST 12708) | `WorldOK` | loop-free | 3: alloc, decode_witness_to_mpt, htab_new | 2: `wk_alloc`, `rt_alloc` | primitive |
+| `run_attempt` (AST 33734) | `InputReady` | #0 CTR | 12: alloc, check_gas_limit, execute_block, header_hash, is_valid_versioned_hashes, memeq, memzero, nodedb_build, payload_header, state_init, validate_header, validate_headers | 13: `wk_alloc`, `rt_alloc`, `ro_check_gas_limit`, `wk_header_hash`, `wk_is_valid_versioned_hashes`, `ro_memeq`, `wk_memzero`, `zv_memzero`, `wk_nodedb_build`, `wk_payload_header`, `wk_state_init`, `wk_validate_header`, `wk_validate_headers` | primitive |
+| `attempt_l1` (AST 33847) | `InputReady` | loop-free | 1: run_attempt | 0: — | **proved** |
+| `attempt_l2` (AST 33863) | `InputReady` | loop-free | 1: attempt_l1 | 0: — | **proved** |
+| `attempt_l3` (AST 33879) | `InputReady` | loop-free | 1: attempt_l2 | 0: — | **proved** |
+| `attempt_l4` (AST 33895) | `InputReady` | loop-free | 1: attempt_l3 | 0: — | **proved** |
+| `attempt_l5` (AST 33911) | `InputReady` | loop-free | 1: attempt_l4 | 0: — | **proved** |
+| `attempt_l6` (AST 33927) | `InputReady` | loop-free | 1: attempt_l5 | 0: — | **proved** |
+| `attempt_l7` (AST 33943) | `InputReady` | loop-free | 1: attempt_l6 | 0: — | **proved** |
+| `verify_stateless_new_payload` (AST 33959) | `InputReady` | loop-free | 1: attempt_l7 | 0: — | **proved** |
+| `main` (AST 33979) | `MainEntry` | loop-free | 21: alloc, blake2_init, bls_precompiles_init, bn254_init, decode_host_input, evm_init, fork_init, header_init, htr_new_payload_request, keccak_init, mem_init, memzero, mpt_init, output_write, ripemd160_init, secp256k1_init, serialize_result, sha256_init, ssz_init, u256_ws_init, verify_stateless_new_payload | 20: `wk_alloc`, `rt_alloc`, `wk_blake2_init`, `wk_bls_precompiles_init`, `wk_bn254_init`, `wk_decode_host_input`, `wk_evm_init`, `wk_fork_init`, `wk_header_init`, `wk_htr_new_payload_request`, `wk_keccak_init`, `mem_init_world`, `wk_memzero`, `zv_memzero`, `wk_mpt_init`, `wk_ripemd160_init`, `ro_secp256k1_init`, `wk_sha256_init`, `wk_ssz_init`, `wk_u256_ws_init` | primitive |
 
 ### Contract leaves (all `sorry`)
 
@@ -2474,28 +2627,26 @@ F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxiom
 lake env lean $S; rm $S
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7, 26e8a8484): no errors;
-991 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 219 generated callee
-contracts, 31 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
-There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
-`#print axioms`, checked on a scratch copy:
+Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7): no errors;
+929 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 158 generated callee
+contracts, 30 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or
+assembly theorem has a `sorry`. There are also style-linter notes about the `__` in generated names
+such as `fb__decode_step`. `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
   - `assembly`, `assembly_main`;
-  - the 16 proved `gbody_*` (revision 6: `gbody_get_pre_tx_storage`, `gbody_get_storage_original`,
-    `gbody_ws_storage_trie`, `gbody_decode_witness_to_mpt`), the revision-6 helpers `seq_hoare`,
-    `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`, and the composition helpers (`seq_guestInv_after`, `of_clock`,
-    `clock_*`, `ReadOnlyFn.resumeOn`, `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
-  - every combinator: the revision-3 ones, plus `callHandle_on`, `while_rank_active`,
-    `while_rank_stationary_active`, `loopActive_decClock`;
-  - `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, every `localsOnly_*`/`localsFree_*` instance
-    (incl. `localsFree_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
-    `localsOnly_htabNewReady`; revision 5: `localsFree_evmRun`, `localsFree_evmMsgReady`,
-    `localsOnly_blockReady`, `localsOnly_mptObjReady`);
-  - revision 5: `evmInv_iff_at`, `evmInv_of_evmMsgReady`;
-  - revision 7: `rollbackReady_iff_at`, `mptObjIn_iff_at`;
-  - revision 6: `cellHits_aligned` and the 47 `«callees_f»` (`decide` on the AST);
-  - the glue `run_frames_step_of_specs`;
-  - the bridge (unchanged).
+  - the 17 proved `gbody_*` (revision 7: `gbody_process_checked_system_transaction`; the 8
+    attempt-chain bodies re-proved under `InputReady`, the 4 decoders under `ArenaReady`);
+  - revision 7: `worldTyped_iff_with`, `WorldStep.worldOK`, `WorldStep.worldOK_nil`,
+    `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`,
+    `callEntryOn_inputReady`, `KeepsOn.resumeOn`, `Hoare.ite_raise_skip`, `raise_ne_none`,
+    `localsOnly_inputReady`, `inputReady_worldOK`;
+  - revision 6: `seq_hoare`, `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`,
+    `cellHits_aligned`, the 47 `«callees_f»` (`decide` on the AST); the composition helpers
+    (`seq_guestInv_after`, `of_clock`, `clock_*`, `ReadOnlyFn.resumeOn`,
+    `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
+  - every combinator, every `localsOnly_*`/`localsFree_*` instance, `evmInv_iff_at`,
+    `evmInv_of_evmMsgReady`, `worldOK_of_evmInv`, `ReadOnlyFn.keepsOn`;
+  - the glue `run_frames_step_of_specs`; the bridge (unchanged).
 - `[propext]`: `K_pan_budget`.
 - also `sorryAx`:
   - `gb_*`, through their `gbody_*`;
@@ -2514,3 +2665,6 @@ argument), the cost formulas and the outputs. The hand-written parts of the Lean
 the script (`parts/`); `assemble.sh` concatenates them with the generated parts. Revision 4 adds
 `compose` to `coverage.py`, which generates the guarded compositions: `needed_calls`,
 `written_params`, `fresh_only`, and the hand tables `REGION`, `KEEP_PRE`, `CALL_STMT`, `CALL_W`.
+Revision 7 adds the relational contract selection (`RREG`, `NO_REGION`, `MPT_KEEPS`, `WQ`, `RT`,
+`XV`/`XV_AT`) and `rec_written`, the field-precise scan of the typed records' stores behind
+`RecordsKept`.

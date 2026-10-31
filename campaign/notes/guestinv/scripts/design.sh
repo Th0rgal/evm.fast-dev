@@ -87,28 +87,26 @@ F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxiom
 lake env lean $S; rm $S
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7, 26e8a8484): no errors;
-991 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 219 generated callee
-contracts, 31 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
-There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
-`#print axioms`, checked on a scratch copy:
+Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7): no errors;
+929 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 158 generated callee
+contracts, 30 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or
+assembly theorem has a `sorry`. There are also style-linter notes about the `__` in generated names
+such as `fb__decode_step`. `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
   - `assembly`, `assembly_main`;
-  - the 16 proved `gbody_*` (revision 6: `gbody_get_pre_tx_storage`, `gbody_get_storage_original`,
-    `gbody_ws_storage_trie`, `gbody_decode_witness_to_mpt`), the revision-6 helpers `seq_hoare`,
-    `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`, and the composition helpers (`seq_guestInv_after`, `of_clock`,
-    `clock_*`, `ReadOnlyFn.resumeOn`, `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
-  - every combinator: the revision-3 ones, plus `callHandle_on`, `while_rank_active`,
-    `while_rank_stationary_active`, `loopActive_decClock`;
-  - `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, every `localsOnly_*`/`localsFree_*` instance
-    (incl. `localsFree_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
-    `localsOnly_htabNewReady`; revision 5: `localsFree_evmRun`, `localsFree_evmMsgReady`,
-    `localsOnly_blockReady`, `localsOnly_mptObjReady`);
-  - revision 5: `evmInv_iff_at`, `evmInv_of_evmMsgReady`;
-  - revision 7: `rollbackReady_iff_at`, `mptObjIn_iff_at`;
-  - revision 6: `cellHits_aligned` and the 47 `«callees_f»` (`decide` on the AST);
-  - the glue `run_frames_step_of_specs`;
-  - the bridge (unchanged).
+  - the 17 proved `gbody_*` (revision 7: `gbody_process_checked_system_transaction`; the 8
+    attempt-chain bodies re-proved under `InputReady`, the 4 decoders under `ArenaReady`);
+  - revision 7: `worldTyped_iff_with`, `WorldStep.worldOK`, `WorldStep.worldOK_nil`,
+    `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`,
+    `callEntryOn_inputReady`, `KeepsOn.resumeOn`, `Hoare.ite_raise_skip`, `raise_ne_none`,
+    `localsOnly_inputReady`, `inputReady_worldOK`;
+  - revision 6: `seq_hoare`, `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`,
+    `cellHits_aligned`, the 47 `«callees_f»` (`decide` on the AST); the composition helpers
+    (`seq_guestInv_after`, `of_clock`, `clock_*`, `ReadOnlyFn.resumeOn`,
+    `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
+  - every combinator, every `localsOnly_*`/`localsFree_*` instance, `evmInv_iff_at`,
+    `evmInv_of_evmMsgReady`, `worldOK_of_evmInv`, `ReadOnlyFn.keepsOn`;
+  - the glue `run_frames_step_of_specs`; the bridge (unchanged).
 - `[propext]`: `K_pan_budget`.
 - also `sorryAx`:
   - `gb_*`, through their `gbody_*`;
@@ -127,6 +125,9 @@ argument), the cost formulas and the outputs. The hand-written parts of the Lean
 the script (`parts/`); `assemble.sh` concatenates them with the generated parts. Revision 4 adds
 `compose` to `coverage.py`, which generates the guarded compositions: `needed_calls`,
 `written_params`, `fresh_only`, and the hand tables `REGION`, `KEEP_PRE`, `CALL_STMT`, `CALL_W`.
+Revision 7 adds the relational contract selection (`RREG`, `NO_REGION`, `MPT_KEEPS`, `WQ`, `RT`,
+`XV`/`XV_AT`) and `rec_written`, the field-precise scan of the typed records' stores behind
+`RecordsKept`.
 EOF
 } > $DEST
 wc -l $DEST
