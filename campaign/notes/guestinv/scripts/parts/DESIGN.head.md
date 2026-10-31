@@ -1,9 +1,10 @@
-# GuestInv revision 4: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 5: a guarded route to `CoveredSourceTicksConsumedBounded`
 
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
-(`guestinv-r2.md`), and revision 4 answers the round-3 quorum (`guestinv-r3.md`: Fable 5.1, Astra
-6, Gemini 4 Carbon and the coordinator's assembly decision), §0.1 and §0.2. All statements are in
+(`guestinv-r2.md`), revision 4 the round-3 quorum (`guestinv-r3.md`, §0.3 and §0.4), and revision
+5 answers the round-4 quorum (`guestinv-r4.md`), §0.1 and §0.2. Revision 5 is a narrow fix round:
+only the statements listed in §0.2 changed. All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -21,15 +22,142 @@ is touched.
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements, textually unchanged) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
-| **new** callee contracts: `ReadOnlyFn` (30), `WritesWithin` (46), `KeepsOn` (59), `NodeFn` (7) | §7 (generated) | `sorry` (141 statements) |
+| callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (55: `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`), `NodeFn` (7) | §7 (generated) | `sorry` (142 statements; revision 5: 4 restated, 4 replaced, §0.2) |
 | **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | 12 **proved** by concrete-body composition, 35 `sorry` |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
-| `LocalsOnly`/`LocalsFree` instances for every guard (now incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`) | §7 | **proved** |
+| `LocalsOnly`/`LocalsFree` instances for every guard (incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`; revision 5: `EvmRun`, `EvmMsgReady`, `BlockReady`, the restated `MptObjReady`) | §7 | **proved** |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | `assembly primitives`; its `sorry` dependencies are exactly the primitive leaves |
 
-## 0.1 Round-3 items and how each is addressed
+## 0.1 Round-4 items and how each is addressed (revision 5)
+
+Round 4 (`campaign/reviews/guestinv-r4.md`) found 6 false `KeepsOn` leaves, plus two
+non-blocking items. Each fix is confined to the listed statements. The rest of the interface,
+judged freezable, is textually unchanged (§0.2).
+
+### Fable 5.1, blocking
+
+**1. `wk_stack_pop`, `wk_charge_gas`, `wk_warm_storage_key` false.** All three write through
+the global `ev` (AST 15046, 14949, 16571): stack, gas, and the frame's access table. `WorldOK`
+does not own those blocks. Fix, as proposed:
+- new guard `EvmRun := EvmInv ∧ ¬EvmDone`, the precondition of `op_dispatch_spec`;
+- `op_dispatch`, `op_sload`, `op_sstore` are bounded under `EvmRun`, so `gb_op_dispatch` (8552),
+  `gb_op_sload` (8404) and `gb_op_sstore` (8456) change;
+- `run_frames` provides `EvmRun` at its `op_dispatch` call: `EvmInv` at the active head, `¬EvmDone`
+  on the dispatch branch, exactly what `run_frames_step_of_specs` already uses;
+- `op_dispatch` makes no guard-carrying call before it dispatches, so it passes `EvmRun` on to
+  `op_sload`/`op_sstore` unchanged.
+
+The callee contracts of `op_sload`/`op_sstore` are now generated against `EvmInv`:
+- `ek_charge_gas`, `ek_stack_pop`, `ek_warm_storage_key : KeepsOn EvmInv EvmInv`;
+- `ek_get_storage_original : KeepsOn EvmInv EvmInv` replaces `wk_get_storage_original`. `op_sstore`
+  was its only user. Its guard `WorldOK` follows from `worldOK_of_evmInv`, and it writes only
+  world tables and fresh memory, which `EvmInv` keeps disjoint from the frame blocks.
+
+The four `wk_*` leaves are removed; `op_sload`/`op_sstore` were their only callers. Re-checked:
+`assembly` and `assembly_main` are still proved, with clean axioms (§9).
+
+**2. `ek_depth0_prepare` false.** The fix guards the contract and leaves `frameObjects` alone.
+Adding `(e+112, 176)` to `frameObjects` would also cover child messages, which `child_message`
+builds with `msg_new_scratch` under the parent's scratch marks. That would change what `MarksOK`
+and every `EvmInv` leaf must preserve. Only depth 0 writes through the message:
+- `depth0_prepare` stores `msg+48` (18772);
+- `prepare_dispatch` stores `msg+112` and `msg+120` (17836); its only call site is
+  `depth0_prepare` (18797).
+
+New definitions:
+- `EvmInvAt s S`: the body of `EvmInv` after `∃ S`, verbatim. `evmInv_iff_at : EvmInv s ↔
+  ArenaReady s ∧ ∃ S, EvmInvAt s S` is proved by `Iff.rfl`, which certifies the copy.
+- `MsgOwned s S m`: `(m, 176)` is allocated words, disjoint from every table of `S`, every fixed
+  object and every frame block of the chain.
+- `EvmMsgReady := ArenaReady ∧ ∃ S, EvmInvAt s S ∧ MsgOwned s S (ev+112)`. The message must be
+  owned for the same `S` that witnesses `EvmInv`; a separate `∃ S` would not protect `EvmInv`'s
+  tables.
+
+Statements:
+- `fk_frame_open : KeepsOn FrameOpenReady EvmMsgReady`. It is true for the same reason as
+  `MsgReady`: `frame_new` stores `msg` into `e+112`, and the new frame's blocks are fresh scratch
+  and frame memory, disjoint from the allocated message.
+- `ek_depth0_prepare : KeepsOn EvmMsgReady EvmInv`.
+- Between the two, `state_snapshot` is read-only, so `ro_state_snapshot` keeps `EvmMsgReady`
+  (`localsFree_evmMsgReady`, proved).
+
+**3. `wk_mpt_root`, `wk_mpt_set` false.** `MptObjReady` is restated through the new
+`MptObjIn s S`:
+- every node of `Nd` is disjoint from every table footprint of `S` and every fixed object, as
+  `TriesTyped` requires;
+- so is the trie object `(m, 16)` itself. `mpt_set` stores `m+0` (10886), so it is the same defect.
+
+`MptObjReady := MptObjAvoids (fun _ => [])`, where
+`MptObjAvoids R := ArenaReady ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ R avoids S and the fixed
+objects`. Again the table set must be the one the post-state `WorldOK` is shown for. The contracts
+are:
+- `wk_mpt_set : KeepsOn MptObjReady WorldOK` (was `WorldOK ∧ MptObjReady`);
+- `wk_mpt_root : KeepsOn (MptObjAvoids [(out, 32)]) WorldOK` (was
+  `WorldAvoids [(out, 32)] ∧ MptObjReady`).
+
+Every trie object comes from `mpt_new` (`build_mpt_indexed` 11251, `mpt_from_witness` 10467): a
+fresh 16-byte heap block, with nodes freshly decoded or built. So the callers
+(`build_mpt_indexed`, `compute_state_root`) meet the stronger entry. `gb_mpt_set`'s guard is the
+restated `MptObjReady`. Its body needs only the node typing, which is unchanged.
+
+### Non-blocking
+
+- **`execute_block` with `ntx ≥ 2^60`.** The guard is bounded, as proposed: new
+  `BlockReady := WorldOK ∧ 16·ntx + 16 < 2^64`, with `ntx = (si+0)+40` read at entry (33588).
+  With it, `alloc(16·ntx + 16)` (33593, 33596) returns exactly the unwrapped `blockOutObjects`
+  length. `fixedObjects` and `TxReady` are unchanged. The wrapped-length alternative would have made
+  `wk_process_transaction` false: `TxReady`'s `index < bo+80` allows slots past a wrapped array.
+  The obligation moves to the caller `gbody_run_attempt` (Q11).
+- **DESIGN counts.** Revision 4's `ww_*`/`wk_*` were 50/47, not 46/51; corrected in §0.4. In
+  revision 5 they are `ww_*` 50, `wk_*` 43, `ek_*` 10 (§6, §7).
+- **Scratch-copy `#print axioms` procedure.** Kept, with the exact commands, in §9.
+
+## 0.2 Changes since 0f8dea8c7 (revision 5)
+
+`sigdiff.py` (§9) on revision 4 (0f8dea8c7) vs revision 5:
+
+**Changed leaf statements (6 restated in place, 4 removed, 4 added; all callee contracts):**
+- `ek_depth0_prepare`: `KeepsOn EvmInv EvmInv` → `KeepsOn EvmMsgReady EvmInv`;
+- `fk_frame_open`: `KeepsOn FrameOpenReady EvmInv` → `KeepsOn FrameOpenReady EvmMsgReady`;
+- `wk_mpt_set`: pre `fun s => WorldOK s ∧ MptObjReady s` → `MptObjReady` (restated);
+- `wk_mpt_root`: pre `fun s => WorldAvoids (fun s => [(locN s "out", 32)]) s ∧ MptObjReady s` →
+  `MptObjAvoids (fun s => [(locN s "out", 32)])`;
+- removed `wk_charge_gas`, `wk_stack_pop`, `wk_warm_storage_key`, `wk_get_storage_original`;
+- added `ek_charge_gas`, `ek_stack_pop`, `ek_warm_storage_key`, `ek_get_storage_original`
+  (`KeepsOn EvmInv EvmInv`).
+
+All 727 `fb_*`, all 14 §7 contract leaves (incl. `op_dispatch_spec`) and the other 134 callee
+contracts are textually unchanged.
+
+**Changed composition obligations (9 `GBody.«f»`, all still `sorry`):**
+- `op_dispatch`, `op_sload`, `op_sstore`: guard `WorldOK` → `EvmRun`; the `op_sload`/`op_sstore`
+  hypotheses use the `ek_*` contracts;
+- `run_frames`: hypothesis `gb_op_dispatch` under `EvmRun`;
+- `process_message`: `fk_frame_open`/`ek_depth0_prepare` as above;
+- `build_mpt_indexed`, `compute_state_root`: hypotheses `gb_mpt_set` (restated guard),
+  `wk_mpt_set`, `wk_mpt_root`;
+- `execute_block`: guard `WorldOK` → `BlockReady`;
+- `run_attempt`: hypothesis `gb_execute_block` under `BlockReady`.
+
+**Changed guarded bounds (4, proved):** `gb_op_dispatch`, `gb_op_sload`, `gb_op_sstore` (guard
+`EvmRun`), `gb_execute_block` (guard `BlockReady`). `Primitives` changes accordingly (field types
+above, the four renamed contracts).
+
+**Changed definitions (1):** `MptObjReady` (now `MptObjAvoids (fun _ => [])`, item 3). The proof of
+`localsOnly_mptObjReady` is adjusted; its statement is unchanged.
+
+**New definitions:** `EvmRun`, `EvmInvAt`, `MsgOwned`, `EvmMsgReady`, `MptObjIn`, `MptObjAvoids`,
+`BlockReady`. **New proved theorems:** `localsFree_evmRun`, `evmInv_iff_at` (`Iff.rfl`),
+`evmInv_of_evmMsgReady`, `localsFree_evmMsgReady`, `localsOnly_blockReady`.
+
+**Unchanged:** `EvmInv`, `frameObjects`, `WorldOK`, `TxReady`, `fixedObjects`,
+`blockOutObjects`, every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
+`run_frames_step_of_specs`, every combinator, and the 12 proved `gbody_*`. The leaf census is
+unchanged at 918: 727 `fb_*`, 14 §7 contracts, 142 callee contracts, 35 `gbody_*`.
+
+## 0.3 Round-3 items and how each was addressed (revision 4)
 
 ### Fable 5.1, blocking
 
@@ -95,7 +223,7 @@ has it:
 - `primitives : Primitives` fills each field with its leaf. The end-to-end theorem is `assembly
   primitives`.
 - Every `gb_f` is now a **proved** theorem: `gbody_f` applied to its callees' `fb_*`/`gb_*` and
-  contracts. Statements are unchanged except five guards (§0.2).
+  contracts. Statements are unchanged except five guards (§0.4).
 
 Each primitive is a statement about one function body:
 - **`gbody_f`**: `GBody.«f»` is `(bound of every direct callee) → (contract of every guard-carrying
@@ -118,7 +246,7 @@ Each primitive is a statement about one function body:
     resuming outcome (return, or an exception other than `TrapErr`) the post-state is the entry state
     up to locals and clock. The proved `ReadOnlyFn.keepsOn` turns it into `KeepsOn W W` for any
     `LocalsFree` guard.
-  - `WritesWithin R gw g` (46): on a resuming outcome, memory changes only inside `R` and inside the
+  - `WritesWithin R gw g` (50): on a resuming outcome, memory changes only inside `R` and inside the
     memory free at entry (above `heap_ptr`, between `frame_mem_ptr` and `scratch_ptr`); only the
     globals `gw` (computed) change; the arenas stay separated and the heap does not shrink. It holds
     for arbitrary states, and the caller shows `R` is unowned:
@@ -194,7 +322,7 @@ potential argument), and `MsgReady` bounds its start (item 2). The copy-back win
   it matters, in their `KeepsOn (WorldAvoids …)` contracts.
 
 **4. Nested objects.**
-- The `bo` objects are `blockOutObjects` (§0.1 below), and `index < ntx` is `TxReady`.
+- The `bo` objects are `blockOutObjects` (§0.3 below), and `index < ntx` is `TxReady`.
 - The BAL account records are new: `balRecords` (the live values of `bal_accounts`) and
   `balObjects` (each 40-byte record, plus the headers and backing arrays of its 40-, 16- and
   24-byte lists). Both are in `fixedObjects`, so they are allocated, pairwise disjoint and disjoint
@@ -238,7 +366,7 @@ global buffer. The message path needs the message's access tables typed when `fr
 them into the outermost frame, hence `MsgReady` for `process_message`, `process_message_call` and
 `process_create_message`.
 
-## 0.2 Changes since 1c54006ca (revision 3)
+## 0.4 Changes in revision 4 (since 1c54006ca, revision 3)
 
 Mechanical statement diff of the two Lean files (`theorem`/`def`/`structure` signatures, comments
 dropped; script in §9).
@@ -309,8 +437,9 @@ whose meaning they change:**
   `balObjects`;
 - the 47 `GBody.«f»`, `Primitives`.
 
-**New leaves (177):** 142 callee contracts (`ro_*` 30, `ww_*` 46, `wk_*` 51, `ek_*` 6, `ak_*` 1,
-`fk_frame_open`, `nf_*` 7) and 35 `gbody_*`.
+**New leaves (177):** 142 callee contracts (`ro_*` 30, `ww_*` 50, `wk_*` 47, `ek_*` 6, `ak_*` 1,
+`fk_frame_open`, `nf_*` 7) and 35 `gbody_*`. (Revision 4 printed 46 and 51 here; the round-4
+review counted 50 and 47. Revision 5 counts are in §0.2.)
 
 **Proved compositions (12):** `gbody_attempt_l1` … `gbody_attempt_l7`,
 `gbody_verify_stateless_new_payload`, `gbody_incorporate_tx_into_block`, `gbody_mpt_from_witness`,
@@ -322,7 +451,7 @@ locals-freeness, by `callEntryOn_of_imp`, and across `scratch_mark` by its `ro_`
 **Unchanged:** every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
 `run_frames_step_of_specs`, every revision-3 combinator statement.
 
-## 0.3 Round-2 items and how each was addressed (revision 3)
+## 0.5 Round-2 items and how each was addressed (revision 3)
 
 ### Fable 5.1
 
@@ -479,7 +608,7 @@ about one function's code. `coveredSourceTicksConsumedBounded_K_pan` applies the
   - the `dec_onLocals` name check;
   - the proved glue itself, which exercises the frame contracts on the real loop body.
 
-## 0.4 Changes in revision 3 (since 7e73988d)
+## 0.6 Changes in revision 3 (since 7e73988d)
 
 Mechanical statement diff of the two Lean files (`theorem`/`def`/`example` signatures, comments
 dropped).
@@ -727,17 +856,22 @@ RLP validation stack 2^253, plus the callee bodies.
 | `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
 | `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
 | `EvmInv` | §5 of the Lean file (revision 4: capacities `≥ 1`, return data owned, `RetWindowsOK`, release lifetime of surviving tables) | `run_frames` |
+| `EvmRun` (revision 5) | `EvmInv` ∧ `¬EvmDone` (the precondition of `op_dispatch_spec`) | `op_dispatch`, `op_sload`, `op_sstore` |
 | `ArenaReady` | `GuestInv` ∧ `ArenaOK` | `_decode_witness_node_body` |
-| `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
+| `MptReady` | `ArenaReady` ∧ the `node` parameter is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)` |
+| `MptObjReady` (restated in revision 5) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `MptObjIn s S`: trie object `m` allocated and rooted in a typed `NodeHeap`, `m` and every node disjoint from the tables of `S` and the fixed objects | `mpt_set` |
 | `MsgReady` (new) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `msg+152`, `msg+160` ∈ S | `process_message`, `process_message_call`, `process_create_message` |
 | `TxReady` (new) | `WorldOK` ∧ `index < bo+80` | `process_transaction` |
+| `BlockReady` (revision 5) | `WorldOK` ∧ `16·ntx + 16 < 2^64`, `ntx = (si+0)+40` | `execute_block` |
 | `ReqsFresh` (new) | `WorldOK` ∧ `bo+64 = 0` | `process_general_purpose_requests` |
-| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records and block-output objects, tries) | the other 32 guarded functions |
+| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records and block-output objects, tries) | the other 28 guarded functions |
 | `MainEntry` | §2 | `main` |
 
 Callee-contract pre-conditions (not bound guards): `ReqRoom` (`requests_append`), `FrameOpenReady`
 (`frame_open` in `process_message`), `WorldAvoids R` (an output region outside every typed table
-and fixed object).
+and fixed object). Revision 5: `EvmMsgReady` (post of `fk_frame_open`, pre of `ek_depth0_prepare`:
+`EvmInv` with the outermost message `ev+112` owned for the same table set, `EvmInvAt`/`MsgOwned`)
+and `MptObjAvoids R` (`MptObjReady` plus an output region, pre of `wk_mpt_root`).
 
 Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_onLocals`,
 `LocalsOnly.decClock` and `LocalsOnly.setVar` apply inside every guarded body.
@@ -759,15 +893,22 @@ What each composition must show, beyond the combinator walk:
   `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`. The step is `run_frames_step_of_specs`
   applied to its four hypotheses `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`,
   `finish_child_spec`. The body bound under `P ∧ go ≠ 0` uses `callHandle_on`:
-  - for `op_dispatch`, `EvmInv ∧ ¬EvmDone → WorldOK`, by `worldOK_of_evmInv`;
+  - for `op_dispatch`, its guard `EvmRun = EvmInv ∧ ¬EvmDone` (revision 5; it was `WorldOK`,
+    from `worldOK_of_evmInv`);
   - for `finish_child`, `FinishReady`.
 - `gbody_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv`, carried across
   `create_finish`, `frame_halt`, `refill_frame_state_gas`, `state_restore` by their `ek_*` contracts.
 - `gbody_htab_truncate`: `while_rank_stationary` with `μ = count (t+24)`, by `htab_del_spec` and
   `htab_del_progress_spec` (revision-3 argument, unchanged).
-- `gbody_process_message`: `MsgReady` at entry. `fk_frame_open` gives `EvmInv`. `ek_depth0_prepare`,
-  `ek_state_snapshot` and `ek_frame_start` carry it, and the inline store `cur_cont+24` writes a
-  non-pointer field of the continuation. That gives `EvmInv` at `run_frames`.
+- `gbody_process_message`: `MsgReady` at entry. `fk_frame_open` gives `EvmMsgReady` (revision 5).
+  `ro_state_snapshot` keeps it (`ReadOnlyFn.keepsOn`, `localsFree_evmMsgReady`).
+  `ek_depth0_prepare` takes it to `EvmInv`, `ek_frame_start` carries `EvmInv`, and the inline store
+  `cur_cont+24` writes a non-pointer field of the continuation. That gives `EvmInv` at `run_frames`.
+- `gbody_op_sload` / `gbody_op_sstore` (revision 5, guard `EvmRun`): `ek_charge_gas`,
+  `ek_stack_pop`, `ek_warm_storage_key` and `ek_get_storage_original` carry `EvmInv`, and
+  `worldOK_of_evmInv` gives the `WorldOK` guard of `get_storage`/`get_storage_original`.
+- `gbody_run_attempt` (revision 5): the call to `execute_block` needs `BlockReady`, i.e. the
+  transaction count of the decoded input satisfies `16·ntx + 16 < 2^64` (Q11).
 - `gbody_process_transaction` / `gbody_execute_block` / … carry `WorldOK` (or `MsgReady`, `TxReady`,
   `ReqsFresh`) to every guarded call with the contracts listed below:
   - fresh tables from `htab_new_spec` extend `S`;

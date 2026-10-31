@@ -7,8 +7,8 @@
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`. The
   assembly uses ten of them directly. `htab_union_into_spec`, `htab_new_scratch_spec` and the two
   MPT specs are the lemmas the frame and table contract proofs are expected to use.
-- Generated callee contracts (142): `ro_*` (30), `ww_*` (46), `wk_*` (51), `ek_*` (6), `ak_*` (1),
-  `fk_frame_open`, `nf_*` (7).
+- Generated callee contracts (142): `ro_*` (30), `ww_*` (50), `wk_*` (43), `ek_*` (10), `ak_*` (1),
+  `fk_frame_open`, `nf_*` (7). (Revision 4: `wk_*` 47, `ek_*` 6.)
 
 ## 7. Every `sorry`
 
@@ -45,7 +45,8 @@ frame contracts.
   - `c+0/+8` chain links, `c+40` message, `c+88` contract address.
 
   The message record is written only by `prepare_dispatch`/`depth0_prepare` (outermost frame,
-  before `run_frames`) and by `child_message` into its own fresh block. Global buffers are fixed
+  before `run_frames`; revision 5: owned there by `EvmMsgReady`, which `fk_frame_open` provides) and
+  by `child_message` into its own fresh block. Global buffers are fixed
   objects. Table values are never written through. The remaining risk is a write through a pointer
   loaded from a table value or from the message, which the syntactic scan treats as unresolved.
   None was reported in the frame cones.
@@ -64,7 +65,8 @@ frame contracts.
   - `gbody_process_transaction` (308 statements, 55 inline stores, 9 loops): inline stores into the
     transaction environment `te` (a fresh `te_new` block) and the `bo` arrays below `bo+80`.
   - `gbody_execute_block`: establishing `TxReady` (`i < ntx = bo+80`) and `ReqsFresh` (`bo` was just
-    zeroed, nothing appended yet).
+    zeroed, nothing appended yet); with `BlockReady` the arrays `alloc(16·ntx + 16)` are exactly
+    the `blockOutObjects` lengths (revision 5).
   - The MPT tier (`_mpt_insert_node`, `_mpt_delete_node_body`): `MptReady` at the loop heads is
     re-established from the `nf_*` contracts (returned node typed, node set extended). The loop
     measures are the revision-3 ones (§3; Q4).
@@ -79,5 +81,14 @@ frame contracts.
     too-small length makes a `ww_*` leaf false, so the leaf provers will notice; the quorum should
     spot-check them.
   - `KeepsOn WorldOK` callees that write through table values or message pointers are true only
-    if those writes never reach an owned object. The world write-root scan (§0.1) found none outside
+    if those writes never reach an owned object. The world write-root scan (§0.3) found none outside
     the typed slots and the `bo` objects.
+- **Q11 (`BlockReady` at `run_attempt`; revision 5).** `gbody_run_attempt` must show
+  `16·ntx + 16 < 2^64` for the decoded input `si` at its `execute_block` call. `ntx` is the length
+  of the SSZ transaction list of the payload (`pl+40`, stored by the payload decoder, AST 8557). It
+  is bounded by the input size, but no guard records that, and `run_attempt`'s guard is `WorldOK`.
+  This is the residual of the round-4 non-blocking item. Without the bound, the guest itself
+  writes past `alloc(16·ntx + 16)` when the size wraps and two transactions decode. The fact must
+  come either from the input decoder (an `fb_*` postcondition, outside the current interface) or
+  from a guard on `run_attempt`/`attempt_l*`. Revision 5 leaves it in `gbody_run_attempt` and flags
+  it for the quorum.

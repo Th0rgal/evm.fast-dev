@@ -55,6 +55,18 @@ sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/Guest
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
+`#print axioms` runs on a scratch copy: the prints go just before the final `end`, the copy sits
+in the same directory so imports resolve, and it is deleted afterwards. The file is never
+committed:
+
+```
+F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxioms_scratch.lean
+{ head -n -1 $F
+  for t in assembly assembly_main K_pan_budget run_frames_step_of_specs; do echo "#print axioms $t"; done
+  tail -n 1 $F; } > $S
+lake env lean $S; rm $S
+```
+
 Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 918 `declaration uses
 'sorry'` warnings, all leaves: 14 §7 contracts, 142 generated callee contracts, 35 `gbody_*`, 727
 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
@@ -68,7 +80,9 @@ There are also style-linter notes about the `__` in generated names such as `fb_
     `while_rank_stationary_active`, `loopActive_decClock`;
   - `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, every `localsOnly_*`/`localsFree_*` instance
     (incl. `localsFree_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
-    `localsOnly_htabNewReady`);
+    `localsOnly_htabNewReady`; revision 5: `localsFree_evmRun`, `localsFree_evmMsgReady`,
+    `localsOnly_blockReady`, `localsOnly_mptObjReady`);
+  - revision 5: `evmInv_iff_at`, `evmInv_of_evmMsgReady`;
   - the glue `run_frames_step_of_specs`;
   - the bridge (unchanged).
 - `[propext]`: `K_pan_budget`.
@@ -77,7 +91,7 @@ There are also style-linter notes about the `__` in generated names such as `fb_
   - `run_frames_step`;
   - `coveredSourceTicksConsumedBounded_K_pan`, through `primitives`.
 
-The statement diff of §0.2 is produced by `sigdiff.py` (in `scripts/`). It compares the
+The statement diffs of §0.2 and §0.4 are produced by `sigdiff.py` (in `scripts/`). It compares the
 `theorem`/`def`/`structure` signatures of two revisions of the Lean file, with comments removed.
 
 `K_pan.log2 = 754` (`#eval`).
