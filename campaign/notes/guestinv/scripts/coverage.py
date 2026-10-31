@@ -714,6 +714,39 @@ EXTRA = {
     'mpt_nibble_key': ('nk_mpt_nibble_key', 'RetNibbles (ofString "mpt_nibble_key")',
                        'returns a fresh heap nibble array (value contract)', ('mpt_set',)),
 }
+# revision 7 (round-4 Gemini item 1): relational callee contracts.
+# Write regions (besides world-owned memory and fresh memory) of the KeepsOn callees that write
+# through a parameter; every other written parameter is an index into world-owned memory
+# (`WORLD_PARAM`). `coverage.py` asserts the two tables cover every written parameter.
+KEEP_REGION = {
+    'build_mpt_indexed': '[(locN s "out", 32)]', 'compute_state_root': '[(locN s "out", 32)]',
+    'mpt_root': '(locN s "out", 32) :: mptRegion s', 'mpt_set': 'mptRegion s',
+    'process_message_call': '[(locN s "msg", 176)]',
+}
+WORLD_PARAM = {('process_transaction', 'index'), ('bal_remove_change', 'esz'),
+               ('bal_remove_change', 'which')}
+# return / post contracts used at every guard-carrying call site of an unproved composition
+EXTRA2 = {
+    'alloc': [('rb_alloc', 'RetBlock (fun s => locN s "n") false (ofString "alloc")',
+               'returns a fresh aligned heap block of `n` bytes')],
+    'msg_new': [('rb_msg_new', 'RetBlock (fun _ => 176) true (ofString "msg_new")',
+                 'returns a fresh zeroed 176-byte block')],
+    'lst_new': [('rl_lst_new', 'RetList (ofString "lst_new")', 'returns a fresh empty list')],
+    'htab_copy': [('rt_htab_copy', 'RetTable (ofString "htab_copy")',
+                   'returns a fresh well-formed table')],
+    'mpt_new': [('rm_mpt_new', 'RetMptNew (ofString "mpt_new")',
+                 'returns a fresh trie object holding its arguments')],
+    'mpt_from_witness': [('ro2_mpt_from_witness', 'RetMptObj (ofString "mpt_from_witness")',
+                          'returns a fresh typed trie object')],
+    'mpt_set': [('km_mpt_set', 'KeepsMptObj (ofString "mpt_set")', 'keeps its trie object typed')],
+    'requests_append': [('rq_requests_append', 'ReqStep (ofString "requests_append")',
+                         '`bo+64` grows by one')],
+}
+# world globals: a callee that assigns one of them gets a KeepsOn contract (typed post-state)
+# instead of a WritesWithin one (round-4 Gemini item 1(d))
+WORLD_GLOBALS = {'ws', 'bs', 'ts', 'bo', 'journal', 'journal_cap', 'journal_n', 'bal_accounts',
+                 'bal_idx_accts', 'bal_idx_stor', 'bal_index'}
+
 # guarded bodies proved by concrete composition (revision 4: shrinking the primitive list); the
 # placeholders {LOOKUP} and {UNFOLD} are filled per function
 WOK = 'LocalsOnly.of_localsFree localsFree_worldOK'
@@ -1043,6 +1076,80 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                         if k == 'global' and n in bufsize:
                             res.add(n)
         return sorted(res)
+    def buffer_fields(g):
+        """(whole, fields): the global buffers g's closure writes, `whole` where some write is not
+        a store at `G:b + const` (or `G:b`), `fields[b]` the constant offsets otherwise."""
+        whole, fields = set(), {}
+        for x in closure(g):
+            decs = {}
+
+            def d(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    decs[strval(y[2][0])] = y[2][2]
+            panast.walk(fns[x], d)
+            direct = list(stores(fns[x]))
+            passed = []
+            for cg, args in calls_of(fns[x]):
+                for i, pn in enumerate(par.get(cg, [])):
+                    if pn in wp.get(cg, ()) and i < len(args):
+                        passed.append(args[i])
+            for a, is_store in [(a, True) for a in direct] + [(a, False) for a in passed]:
+                m = re.match(r'^(?:add\[G:(\w+), (\d+)\]|G:(\w+))$', panast.show(a))
+                if is_store and m:
+                    b = m.group(1) or m.group(3)
+                    if b in bufsize:
+                        fields.setdefault(b, set()).add(int(m.group(2) or 0))
+                    continue
+                # a buffer is written where it is the BASE of the target (not under a load: a
+                # pointer loaded from a record field targets a world object, e.g. the `bo` arrays,
+                # which `WorldMutable` already lists)
+                exprs = [a] + [decs[n] for n in bare_vars(a, 'local') if n in decs]
+                for e in exprs:
+                    for n in bare_vars(e, 'global'):
+                        if n in bufsize:
+                            whole.add(n)
+        return sorted(whole), {b: sorted(v) for b, v in fields.items() if b not in whole}
+
+    def bare_vars(e, kind):
+        """Variables of `kind` in `e` outside every load."""
+        out = set()
+
+        def go(x):
+            if not isinstance(x, tuple):
+                return
+            if is_app(x) and x[1] in ('Exp.load', 'Exp.loadByte', 'Exp.shMemLoad'):
+                return
+            v = var_name(x)
+            if v and v[0] == kind:
+                out.add(v[1])
+                return
+            for y in x[1:] if x[0] != 'app' else x[2]:
+                if isinstance(y, tuple):
+                    go(y)
+                elif isinstance(y, list):
+                    for z in y:
+                        go(z)
+        go(e)
+        return out
+
+    def step_contract(f, g, W, pre_s):
+        """The relational step contract of a KeepsOn callee (revision 7)."""
+        gws = sorted(gwf(g))
+        wb, wf = buffer_fields(g)
+        for pn in wp.get(g, ()):
+            assert g in KEEP_REGION or (g, pn) in WORLD_PARAM, (g, pn)
+        gw_s = '[%s]' % ', '.join('"%s"' % x for x in gws)
+        wb_s = '[%s]' % ', '.join('"%s"' % x for x in wb)
+        wf_s = '[%s]' % ', '.join('("%s", [%s])' % (b, ', '.join(map(str, ks))) for b, ks in sorted(wf.items()))
+        if W == 'EvmInv':
+            assert g not in KEEP_REGION, g
+            return ('es_' + g, 'EvmStepFn %s\n    %s\n    %s %s (ofString "%s")' % (pre_s, gw_s, wb_s, wf_s, g),
+                    'EVM step: chain, `RollbackAt` facts and unowned memory kept')
+        R = KEEP_REGION.get(g, '[]')
+        return ('ws_' + g, 'WorldStepFn %s\n    %s\n    %s %s\n    (fun s => %s) (ofString "%s")'
+                % (pre_s, gw_s, wb_s, wf_s, R, g),
+                'world step: heap grows, globals outside `gw`, typed sets and unowned memory kept')
+
     def fresh_only(g):
         """Every store in g's closure (contracted callees excluded) lands in a block g's closure
         allocated itself (`alloc`/`scratch_alloc` result, plus offsets) or in a global buffer,
@@ -1104,6 +1211,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
     G = lambda f: guard_of.get(f, 'WorldOK')
     need = {f: needed_calls(fns, f, guarded, f in roots) for f in guarded}
     contracts = {}   # name -> (statement, comment)
+    keeps_info = {}  # KeepsOn contract name -> (callee, a caller, written params, globals, buffers)
     hyps = {}        # f -> list of (type, primitive-or-local name)
     for f in order:
         if f not in guarded:
@@ -1118,6 +1226,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             else:
                 hs.append(('TerminatingFunBoundedOn GuestInv (ofString "%s") K.«%s»' % (g, g), 'fb_' + g))
         for g in need[f]:
+            step_hyp = None
             if g in SPEC_OF:
                 for sp in SPEC_OF[g]:
                     hs.append(('type_of% @' + sp, sp))
@@ -1136,7 +1245,8 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             elif (f, g) in CALL_STMT:
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
-            elif (g in REGION or fresh_only(g)) and not (g in guarded):
+            elif (g in REGION or fresh_only(g)) and not (g in guarded) and not (
+                    f not in GBODY_PROOF and g not in REGION and gwf(g) & WORLD_GLOBALS):
                 name = 'ww_' + g
                 if g not in REGION:
                     parts = ''
@@ -1170,8 +1280,22 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 pre_s = pre if pre.isidentifier() else '(%s)' % pre
                 contracts[name] = ('KeepsOn %s %s (ofString "%s")' % (pre_s, W, g),
                                    'keeps `%s`' % W)
+                keeps_info[name] = (g, f, sorted(wp.get(g, ())), sorted(gwf(g)), sorted(buffers_written(g)))
+                if W in ('WorldOK', 'EvmInv') and f not in GBODY_PROOF:
+                    sn, sst, swhy = step_contract(f, g, W, pre_s)
+                    contracts[sn] = (sst, swhy)
+                    step_hyp = (sst, sn)
+                else:
+                    step_hyp = None
                 W = W0
             hs.append((contracts[name][0], name))
+            if name.startswith(('wk_', 'ek_')) and f not in GBODY_PROOF and step_hyp is not None:
+                hs.append(step_hyp)
+            step_hyp = None
+            if f not in GBODY_PROOF:
+                for xn, xst, xwhy in EXTRA2.get(g, []):
+                    contracts[xn] = (xst, xwhy)
+                    hs.append((xst, xn))
             if g in EXTRA and f in EXTRA[g][3]:
                 xn, xst, xwhy, _fs = EXTRA[g]
                 contracts[xn] = (xst, xwhy)
@@ -1286,6 +1410,10 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 f, ln, g0, note, len(direct), ', '.join(direct) if direct else '—',
                 len(cons), ', '.join('`%s`' % c for c in cons) if cons else '—',
                 '**proved**' if proved else 'primitive'))
+    with open(os.path.join(outdir, 'keeps.txt'), 'w') as o:
+        for n in sorted(keeps_info):
+            g, f, wps, gws, bws = keeps_info[n]
+            o.write('%s callee=%s caller=%s params=%s globals=%s bufs=%s\n' % (n, g, f, wps, gws, bws))
     with open(os.path.join(outdir, 'contracts.txt'), 'w') as o:
         for f in sorted(guarded):
             o.write('%s [%s]: %s\n' % (f, G(f), ' '.join(need[f])))

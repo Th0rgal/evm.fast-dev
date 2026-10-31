@@ -537,6 +537,170 @@ theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
     evmChain_with_locals] at h ⊢
   exact h
 
+/-! ### Relational callee steps and constructor return typing (round-4 Gemini item 1)
+
+`KeepsOn P W g` alone allows any `W → W` transition, so a caller loses every local fact across
+the call: its fresh blocks, `index < ntx`, `bo+64 < 8`, `ev`/`cur_cont`, … . Every `wk_g`/`ek_g`
+contract therefore comes with a generated step contract `ws_g`/`es_g`, a relation between entry
+and resuming exit, read off `g`'s closure by `coverage.py`:
+* the heap only grows, and only the globals in `gw` (the closure's global writes) change;
+* every typed table set of the entry extends to one of the exit (`S ⊆ S'`);
+* memory changes only in what the world owns and `g` may write (`WorldMutable`): the tables of
+  `S`, the trie nodes and paths of `Nd`, the global buffers the closure writes (`wb` whole,
+  `wf` at constant field offsets), the journal array, the block-output and BAL objects; plus
+  `g`'s own write regions `R` (output and message parameters, the trie object under `mpt_set` /
+  `mpt_root`) and the free memory (`FrameOutside`, cell-granular).
+So a block the caller allocated itself, or a field of a global record `g` does not write (`bo+80`,
+`bo+64`), survives the call. The EVM steps (`es_g`) also keep the chain, its frame blocks are
+owned, and every `RollbackAt` fact (`finish_child`'s `child`). -/
+
+/-- The memory a world callee may write: what the typed world `(S, Nd)` owns, restricted for the
+global buffers to those its closure writes (`wb`) and the constant offsets of the others (`wf`). -/
+def WorldMutable {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (wb : List String)
+    (wf : List (String × List Nat)) : List Ivl :=
+  S.flatMap (htabFootprint s) ++ nodeExtents s Nd ++
+    (globalBuffers.filter fun gn => gn.1 ∈ wb).map (fun gn => (globN s gn.1, gn.2)) ++
+    wf.flatMap (fun bk => bk.2.map fun k => (globN s bk.1 + k, 8)) ++
+    [(globN s "journal", 32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
+
+/-- The free memory at `s`: the scratch gap and the heap above `heap_ptr`. -/
+def freeGap {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
+  (globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")
+
+def WorldStep (gw wb : List String) (wf : List (String × List Nat))
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+  (∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+  ∀ S Nd, WorldTyped s S → TriesTypedWith s S Nd →
+    (∃ S', WorldTyped post S' ∧ ∀ t ∈ S, t ∈ S') ∧
+    FrameOutside s post (WorldMutable s S Nd wb wf ++ R s ++ [freeGap s])
+      (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
+
+/-- `ws_g`: from a `P` entry, every resuming outcome is a `WorldStep`. -/
+def WorldStepFn (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (gw wb : List String)
+    (wf : List (String × List Nat)) (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl)
+    (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → WorldStep gw wb wf R s post) fname
+
+/-- `RollbackReady` for an explicit child record `c` (`rollbackReady_iff_at`, by `Iff.rfl`). -/
+def RollbackAt {F : Type} (s : PanSemStateFiniteExact 64 F) (c : Nat) : Prop :=
+  ArenaReady s ∧ Allocated s (c, 280) ∧ WordsOK s (c, 280) ∧
+    (∀ k ∈ [168, 176],
+      HtabWF s (memW s (c + k)) ∧
+      ∀ i ∈ htabFootprint s (memW s (c + k)), Allocated s i ∧ Disj (c, 280) i) ∧
+    (memW s (c + 168) = memW s (c + 176) ∨
+      ∀ i ∈ htabFootprint s (memW s (c + 168)),
+        ∀ j ∈ htabFootprint s (memW s (c + 176)), Disj i j)
+
+theorem rollbackReady_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    RollbackReady s ↔ RollbackAt s (locN s "child") := Iff.rfl
+
+/-- The EVM step: a world step for the table sets of `EvmInv` (frame tables included), the
+chain's frame blocks owned as well; the chain itself, `ev`/`cur_cont` (not in `gw`) and every
+`RollbackAt` fact are kept. -/
+def EvmStep (gw wb : List String) (wf : List (String × List Nat)) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+  (∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+  evmChain post = evmChain s ∧
+  (∀ c, RollbackAt s c → RollbackAt post c) ∧
+  ∀ S Nd, EvmInvAt s S → TriesTypedWith s S Nd →
+    (∃ S', EvmInvAt post S' ∧ ∀ t ∈ S, t ∈ S') ∧
+    FrameOutside s post
+      (WorldMutable s S Nd wb wf ++ (evmChain s).flatMap (frameObjects s) ++ [freeGap s])
+      (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
+
+/-- `es_g`: from a `P` entry, every resuming outcome is an `EvmStep`. -/
+def EvmStepFn (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (gw wb : List String)
+    (wf : List (String × List Nat)) (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → EvmStep gw wb wf s post) fname
+
+/-- The nodes reachable from `n` within `fuel` levels (children `+48` of extensions, `+32 + 8i`
+of branches). With `fuel = mptFuel` this is every reachable node of a `NodeHeap`: its nodes are
+pairwise disjoint heap records of at least 32 bytes, so an acyclic path is shorter. -/
+def mptReach {F : Type} (s : PanSemStateFiniteExact 64 F) : Nat → Nat → List Nat
+  | 0, _ => []
+  | fuel + 1, n =>
+    if n = 0 then [] else
+      n :: (if memW s n = 2 then mptReach s fuel (memW s (n + 48))
+            else if memW s n = 3 then
+              (List.range 16).flatMap fun i => mptReach s fuel (memW s (n + 32 + 8 * i))
+            else [])
+
+def mptFuel : Nat := (heapLimit - sourceBase) / 32 + 1
+
+/-- The write region of `mpt_set(m, …)` / `mpt_root(m, …)` besides fresh memory: the object `m`
+(`+0` root) and the node records reachable from its root (hash caches, rewritten children). -/
+def mptRegion {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  (locN s "m", 16) :: (mptReach s mptFuel (memW s (locN s "m"))).map (nodeIvl s)
+
+/-- Constructor return typing (round-4 Gemini item 1(c)): a normal return is a word `w`, an
+8-aligned block of `len s` bytes (rounded up to words) carved from the heap during the call, of
+in-domain words, zeroed if `zero`. `alloc` (`len = n`), `msg_new` (176, zeroed: `memzero`). -/
+def RetBlock (len : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat) (zero : Bool)
+    (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, (len s + 7) / 8 * 8) (globN s "heap_ptr") (globN post "heap_ptr") ∧
+      WordsOK post (w.toNat, (len s + 7) / 8 * 8) ∧
+      (zero = true → ∀ k, k < (len s + 7) / 8 → memW post (w.toNat + 8 * k) = 0)) fname
+
+/-- `lst_new(esz, cap)` (13820): a fresh 24-byte header `l` (data `+0`, length `+8 = 0`, capacity
+`+16 = cap`) and a fresh backing array of `esz·cap` bytes. -/
+def RetList (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      memW post (w.toNat + 8) = 0 ∧ memW post (w.toNat + 16) = locN s "cap" ∧
+      ∀ o ∈ lstObjects post w.toNat (locN s "esz"),
+        Inside o (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post o) fname
+
+/-- `htab_copy(t)`: a well-formed table whose footprint is fresh heap. -/
+def RetTable (fname : MlS) : Prop :=
+  FunSpec HtabArgWF (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧ HtabWF post w.toNat ∧
+      ∀ i ∈ htabFootprint post w.toNat,
+        Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i) fname
+
+/-- `mpt_new(root_node, secured)` (10446): a fresh 16-byte object holding the two arguments. -/
+def RetMptNew (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Inside (w.toNat, 16) (globN s "heap_ptr") (globN post "heap_ptr") ∧
+      WordsOK post (w.toNat, 16) ∧
+      memW post w.toNat = locN s "root_node" ∧ memW post (w.toNat + 8) = locN s "secured") fname
+
+/-- `MptObjIn` for an explicit object `m` (`mptObjIn_iff_at`, by `Iff.rfl`). -/
+def MptObjAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
+  Allocated s (m, 16) ∧ WordsOK s (m, 16) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 16) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (m, 16) j) ∧
+  ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s m) ∧
+    ∀ o ∈ nodeExtents s Nd, Disj o (m, 16) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧
+      ∀ j ∈ fixedObjects s, Disj o j
+
+theorem mptObjIn_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) :
+    MptObjIn s S ↔ MptObjAt s S (locN s "m") := Iff.rfl
+
+/-- `MptObjReady` for an explicit object: a typed world with the trie object `m` in it, `m`
+avoiding the persistent tries. -/
+def MptObjOK {F : Type} (s : PanSemStateFiniteExact 64 F) (m : Nat) : Prop :=
+  ∃ S, WorldTyped s S ∧ MptObjAt s S m ∧ AvoidsTries s S [(m, 16)]
+
+/-- `mpt_from_witness(db, root_hash, secured)`: `WorldOK` is kept (`wk_mpt_from_witness`) and the
+returned object is a fresh typed trie object of the exit world. -/
+def RetMptObj (fname : MlS) : Prop :=
+  FunSpec WorldOK (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Inside (w.toNat, 16) (globN s "heap_ptr") (globN post "heap_ptr") ∧ MptObjOK post w.toNat)
+    fname
+
+/-- `mpt_set(m, …)` keeps its object typed: after a resuming outcome `m` (the entry argument) is
+again a typed trie object (the caller sets the next key into the same trie). -/
+def KeepsMptObj (fname : MlS) : Prop :=
+  FunSpec MptObjReady (fun s r post => Resumes r → MptObjOK post (locN s "m")) fname
+
 /-- The node parameter `x` is a node of `Nd` of kind `k` (revision 6, round-4 Astra item 6). -/
 def NodeKind {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (x : String) (k : Nat) :
     Prop :=
@@ -604,6 +768,12 @@ def RetNibbles (fname : MlS) : Prop :=
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ memW s (globN s "bo" + 64) < 8
+
+/-- `requests_append` records exactly one request: `bo+64` grows by one (33485). -/
+def ReqStep (fname : MlS) : Prop :=
+  FunSpec ReqRoom (fun s r post => (∃ v, r = some (.returned v)) →
+    globN post "bo" = globN s "bo" ∧
+    memW post (globN post "bo" + 64) = memW s (globN s "bo" + 64) + 1) fname
 
 /-- A read-only callee keeps every guard that ignores locals and the clock (proved). -/
 theorem ReadOnlyFn.keepsOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
