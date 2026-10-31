@@ -629,7 +629,7 @@ def costs(fns, graph, reach, recursive, loops):
 # Guarded compositions (revision 4, round-3 item 5 and the assembly ruling)
 
 GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK',
-           'ReqsFresh': 'WorldOK', 'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv',
+           'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv',
            'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptObjReady': 'ArenaReady',
            'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
 W_PREFIX = {'WorldOK': 'wk', 'EvmInv': 'ek', 'ArenaReady': 'ak'}
@@ -656,6 +656,11 @@ REGION = {
     'lst_push': None,   # header and current backing array, below
 }
 REGION_RAW = {'lst_push': '(locN s "l", 24), (memW s (locN s "l"), locN s "esz" * memW s (locN s "l" + 16))'}
+# call sites whose guard-carrying frame is not the caller's guard: `process_message` builds the
+# outermost frame with `frame_open(msg, 0)`, after which it runs under `EvmInv`
+CALL_STMT = {('process_message', 'frame_open'):
+             ('fk_frame_open', 'KeepsOn FrameOpenReady EvmInv (ofString "frame_open")')}
+CALL_W = {('process_message', g): 'EvmInv' for g in ('depth0_prepare', 'state_snapshot', 'frame_start')}
 # KeepsOn preconditions other than the caller's world guard
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
@@ -811,6 +816,64 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                         if k == 'global' and n in bufsize:
                             res.add(n)
         return sorted(res)
+    def fresh_only(g):
+        """Every store in g's closure (contracted callees excluded) lands in a block g's closure
+        allocated itself (`alloc`/`scratch_alloc` result, plus offsets) or in a global buffer,
+        and no written parameter of a callee receives anything else."""
+        for x in closure(g):
+            if x in ('alloc', 'scratch_alloc', 'trap_with'):
+                continue
+            src = {}
+
+            def d(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    src[strval(y[2][0])] = ('exp', y[2][2])
+                elif is_app(y, 'Prog.decCall'):
+                    src[strval(y[2][0])] = ('call', strval(y[2][2]))
+                elif is_app(y, 'Prog.call'):
+                    opt = y[2][0]
+                    if is_app(opt, 'some'):
+                        dd = opt[2][0][1][0]
+                        if is_app(dd, 'some') and panast.show(dd[2][0][1][0]) == 'local':
+                            src.setdefault(dd[2][0][1][1][1], ('call', strval(y[2][1])))
+                elif is_app(y, 'Prog.assign') and panast.show(y[2][0]) == 'local':
+                    src[y[2][1][1]] = ('bad', None)
+            panast.walk(fns[x], d)
+
+            def classify_var(n, depth):
+                """'root' (fresh block, inner parameter), 'bad' (built from a load) or 'off'."""
+                if x != g and n in par.get(x, []):
+                    return 'root'     # checked at the call site (written-parameter arguments)
+                how = src.get(n, ('off', None))
+                if how[0] == 'call' and how[1] in ('alloc', 'scratch_alloc'):
+                    return 'root'
+                if how[0] == 'exp':
+                    r = ok(how[1], depth + 1)
+                    return 'root' if r == 'root' else ('bad' if r == 'bad' else 'off')
+                return 'off'
+
+            def ok(e, depth=0):
+                """An address is accepted iff it has no loaded component and at least one root
+                (fresh block, global buffer, inner parameter); other locals are offsets."""
+                if depth > 6 or has_load(e):
+                    return 'bad'
+                kinds = set()
+                for (k, n) in free_vars(e):
+                    if k == 'global':
+                        kinds.add('root' if n in bufsize else 'bad')
+                    else:
+                        kinds.add(classify_var(n, depth))
+                if 'bad' in kinds:
+                    return 'bad'
+                return 'root' if 'root' in kinds else 'off'
+            targets = list(stores(fns[x]))
+            for cg, args in calls_of(fns[x]):
+                for i, pn in enumerate(par.get(cg, [])):
+                    if pn in wp.get(cg, ()) and i < len(args):
+                        targets.append(args[i])
+            if not all(ok(a) == 'root' for a in targets):
+                return False
+        return True
     G = lambda f: guard_of.get(f, 'WorldOK')
     need = {f: needed_calls(fns, f, guarded, f in roots) for f in guarded}
     contracts = {}   # name -> (statement, comment)
@@ -835,19 +898,28 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             if g not in impure:
                 name = 'ro_' + g
                 contracts[name] = ('ReadOnlyFn (ofString "%s")' % g, 'read-only')
-            elif g in REGION and not (g in guarded):
+            elif (f, g) in CALL_STMT:
+                name, st = CALL_STMT[(f, g)]
+                contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
+            elif (g in REGION or fresh_only(g)) and not (g in guarded):
                 name = 'ww_' + g
-                parts = REGION_RAW[g] if REGION[g] is None else ', '.join(
-                    '(locN s "%s", %s)' % (pn, ln) for pn, ln in REGION[g])
+                if g not in REGION:
+                    parts = ''
+                else:
+                    parts = REGION_RAW[g] if REGION[g] is None else ', '.join(
+                        '(locN s "%s", %s)' % (pn, ln) for pn, ln in REGION[g])
                 bw = buffers_written(g)
                 if bw:
-                    parts += ', ' + ', '.join('(globN s "%s", %d)' % (b, bufsize[b]) for b in bw)
+                    parts += (', ' if parts else '') + ', '.join('(globN s "%s", %d)' % (b, bufsize[b]) for b in bw)
                 gws = sorted(gwf(g))
                 contracts[name] = ('WritesWithin (fun s => [%s])\n    [%s] (ofString "%s")' % (
                     parts, ', '.join('"%s"' % x for x in gws), g),
-                    'writes its parameter extents' + (' and the buffers ' + ', '.join(bw) if bw else ''))
+                    ('writes its parameter extents' if g in REGION else 'writes only memory it allocates')
+                    + (' and the buffers ' + ', '.join(bw) if bw else ''))
             else:
-                name = '%s_%s' % (W_PREFIX[W], g)
+                Wc = CALL_W.get((f, g), W)
+                name = '%s_%s' % (W_PREFIX[Wc], g)
+                W, W0 = Wc, W
                 if g in KEEP_PRE and W == 'WorldOK':
                     pre = KEEP_PRE[g]
                 elif g in guarded and GUARD_W[G(g)] == W and G(g) != W:
@@ -859,6 +931,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 pre_s = pre if pre.isidentifier() else '(%s)' % pre
                 contracts[name] = ('KeepsOn %s %s (ofString "%s")' % (pre_s, W, g),
                                    'keeps `%s`' % W)
+                W = W0
             hs.append((contracts[name][0], name))
         hyps[f] = hs
     with open(os.path.join(outdir, 'gleaves.lean'), 'w') as o:
@@ -952,7 +1025,9 @@ def main():
         '_decode_witness_node_body': 'ArenaReady', '_mpt_insert_node': 'MptReady',
         '_mpt_delete_node_body': 'MptReady', '_mpt_delete_node': 'MptReady',
         'mpt_set': 'MptObjReady', 'main': 'MainEntry',
-        'process_transaction': 'TxReady', 'process_general_purpose_requests': 'ReqsFresh'}
+        'process_transaction': 'TxReady', 'process_general_purpose_requests': 'ReqsFresh',
+        'process_message': 'MsgReady', 'process_message_call': 'MsgReady',
+        'process_create_message': 'MsgReady'}
     nloops = sum(len(v) for f, v in loops.items())
     with open(os.path.join(outdir, 'coverage.md'), 'w') as o:
         o.write('functions: %d, reachable from main: %d, loops in reachable: %d, recursive: %s\n\n'

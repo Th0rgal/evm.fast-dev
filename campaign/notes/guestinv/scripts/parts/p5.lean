@@ -353,6 +353,39 @@ writes slot `bo+64` of the 8-slot array `bo+56`). -/
 def ReqsFresh : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ memW s (globN s "bo" + 64) = 0
 
+/-- Entry of `process_message_call`, `process_create_message` and `process_message`: the world is
+typed by a set `S` that contains the message's two access tables `msg+152`, `msg+160` (copied into
+the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller builds them with
+`htab_new` just before (`process_transaction` 33343-33346, `process_unchecked_system_transaction`
+32899-32902). -/
+def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
+    memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S
+
+/-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
+holds (closed one-frame chain; its blocks are fresh scratch/frame memory; its tables are the
+message's typed tables and a fresh `htab_new_scratch` table). -/
+def FrameOpenReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MsgReady s ∧ locN s "kind" = 0
+
+theorem msgReady_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F) (h : MsgReady s) :
+    WorldOK s :=
+  ⟨h.1, h.2.elim fun S hS => ⟨S, hS.1⟩⟩
+
+theorem localsOnly_msgReady : LocalsOnly ["msg"] MsgReady := by
+  intro F s locals k hl hP
+  have hm := locN_congr s locals k "msg" (hl "msg" (by simp))
+  simp only [MsgReady, worldTyped_with_locals, arenaReady_with_locals] at hP ⊢
+  rw [hm]
+  exact hP
+
+theorem localsOnly_frameOpenReady : LocalsOnly ["msg", "kind"] FrameOpenReady := by
+  intro F s locals k hl hP
+  have hk := locN_congr s locals k "kind" (hl "kind" (by simp))
+  refine ⟨localsOnly_msgReady s locals k (fun n hn => hl n (by simp at hn ⊢; exact Or.inl hn)) hP.1, ?_⟩
+  show locN { s with locals := locals, clock := k } "kind" = 0
+  rw [hk]; exact hP.2
+
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ memW s (globN s "bo" + 64) < 8
