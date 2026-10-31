@@ -72,3 +72,23 @@ All five round-2 counterexamples are confirmed fixed. Q8 (the log-regrowth / hea
 Fable judged `gb_main` as a leaf acceptable in principle, with `PreservesOn` contracts for the BETWEEN functions. Astra did not. The stricter requirement is adopted for revision 4, because otherwise proving the leaves proves nothing about `main`. There must be a proved assembly theorem
 `(∀ primitive obligation) → CoveredSourceTicksConsumedBounded K_pan`,
 or equivalently every `gb_*` must be proved by composition. The primitive obligations are the `fb_*` leaves, the contract leaves, and the new `PreservesOn` contracts for BETWEEN functions. Each primitive must be a small statement about a single function body.
+
+## Gemini 4 Carbon (mission d05791f6): REQUEST_CHANGES
+
+The full review is verbatim in `guestinv-r3-gemini-full.md`. All nine of Gemini's round-1 counterexamples are confirmed fixed. Lean was not run.
+
+**Blocking:**
+1. **`op_dispatch_spec`.** A gas-cost wrap via `op_extcodecopy` (AST:17000–17005), and the continuation copy-back window `rec+72`/`rec+80` (AST:18650–18653) is unconstrained. The second point is the same as Fable's item 4 and Astra's item 2.
+2. **`evmR` overflow.** Check `evmR s < 2^64 − 1` at `process_transaction` / `gb_process_message` (Spec:6970, 6982).
+3. **Guard gaps.** `WorldOK` does not constrain the pointer parameters of `gb_process_message`, `gb_process_create_message`, `gb_process_message_call`, `gb_state_init` and `gb_mpt_from_witness` (Spec:6934–6990).
+4. **`WorldTyped` omits nested objects** (Spec:1627–1678):
+   - the `bal_accounts` value records (40-byte records with inner tables and lists of element sizes 40, 16 and 24);
+   - the `bo` sub-objects (txs, rcs, the list at +40, reqs with at most 8 entries, the list at +72).
+
+   This affects `gb_incorporate_tx_into_block`, `gb_update_builder_from_tx`, `gb_process_transaction`, `gb_process_unchecked_system_transaction`, `gb_process_withdrawals` and `gb_execute_block`. Fix: define `BalTyped`/`BoTyped`, and guard `gb_process_transaction` with `index < ntx`.
+5. **`mpt_insert_node_spec` and `mpt_delete_node_body_spec` are false** (Spec:5713–5715) for arbitrary `MptReady` states: nibble-segment aliasing and two-node empty-extension cycles. The delete contract fails on every one-level branch or extension deletion. See the full file for the counterexamples.
+
+**Non-blocking:**
+- the `htabCaps` comment (31 literal sites; the 32nd is `nodedb_build`);
+- add `bls_discount`, `bn_gamma`, `bn_expw`, `precompile_addrs` and `zero_hashes` to `globalBuffers`;
+- re-run Lean and `#print axioms` before freezing.
