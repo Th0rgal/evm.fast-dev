@@ -128,6 +128,17 @@ def HtabWF {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : Prop :=
       (nd (nd n 0) 8 = n ∨ nd (nd n 0) 16 = n) ∧ dep (nd n 0) < dep n) ∧
     FreeChain s nodes (hdr s t 9) Fr
 
+/-- Regression (round-2 Astra item 4): no live non-root node is its own parent. Astra's
+counterexample has node `3` with parent `3`, so it no longer satisfies `HtabWF`. -/
+theorem htabWF_no_self_parent {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat)
+    (h : HtabWF s t) : ∃ L I : List Nat, (L.length = hdr s t 3) ∧
+      ∀ n ∈ L ++ I, n ≠ hdr s t 7 → nodeF s (hdr s t 5) n 0 ≠ n := by
+  obtain ⟨-, -, -, -, -, -, -, -, L, I, -, hlen, -, -, -, -, -, -, -, -, -, ⟨dep, hdep⟩, -⟩ := h
+  refine ⟨L, I, hlen, fun n hn hroot heq => ?_⟩
+  have := (hdep n hn hroot).2
+  rw [heq] at this
+  exact Nat.lt_irrefl _ this
+
 /-- Live values of table `t` (the `+8` field of every live leaf). -/
 def HtabValuesIn {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) (S : List Nat) : Prop :=
   ∀ i, i < hdr s t 3 → nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8 ∈ S

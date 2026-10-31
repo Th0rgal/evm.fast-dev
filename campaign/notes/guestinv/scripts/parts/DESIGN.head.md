@@ -18,13 +18,15 @@ is touched.
 | one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
-| contract leaves (tables, MPT, frames, `mem_init`, frame glue) | §7 | `sorry` (15 statements); `run_frames_step` **proved** from them |
+| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements); the frame glue `run_frames_step_of_specs` and `run_frames_step` **proved** |
 | `LocalsOnly` instances for every guard | §7 | **proved** |
 | guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
 
 ## 0.1 Round-2 items and how each is addressed
+
+### Fable 5.1
 
 Fable 5.1's review (`campaign/reviews/guestinv-r2.md`). Every combinator below is proved, and
 `#print axioms` on each gives `[propext, Classical.choice, Quot.sound]` (§9).
@@ -108,49 +110,137 @@ unchanged.
 - *Arithmetic facts behind `taylor_exponential` and `fq12_inv`* are listed as explicit prover
   obligations in §8 (Q6).
 
+### Astra 6 (appended review)
+
+**1. `FrameOutside` forbade every memory change.** It quantified over `a : Nat` and read
+`BitVec.ofNat 64 a`, so `x + 2^64` was an outside alias of every changed `x`. It now quantifies over
+`a : BitVec 64` and tests the intervals with `a.toNat`. The proved regression `example` shows a
+single store inside `fresh` respects the frame.
+
+**2. `HtabNewExit` intersected two frames.** It is now one `FrameOutside` over the union: the fresh
+scratch interval is in `keep`, the fresh heap interval is `fresh`.
+
+**3. Constructor parameter limits.** `HtabNewReady` also requires `cap ∈ htabCaps = [4, 8, 16, 64,
+256]`, the literals of the same 32 call sites (1×4, 8×8, 6×16, 12×64, 4×256, re-counted on the
+AST). `key_len ∈ htabKeyLens` was already required for Fable's item 1. `localsOnly_htabNewReady` now
+reads both locals.
+
+**4. `HtabWF` admitted disconnected cycles.** It now also requires
+`∃ dep : Nat → Nat, ∀ n ∈ L ++ I, n ≠ root → (nd (nd n 0) 8 = n ∨ nd (nd n 0) 16 = n) ∧
+dep (nd n 0) < dep n`. This makes the tree rooted and acyclic: following parents strictly lowers
+`dep`, so it reaches the root, and descent through children reaches a leaf.
+- Astra's counterexample (node 3 is its own parent) is excluded; `htabWF_no_self_parent` proves it.
+- With a genuine tree, `htab_del` of any leaf splices the sibling into the grandparent, which keeps
+  `HtabWF`.
+- The key-bit (search) invariants are not needed for well-formedness or termination: `find_leaf`
+  and the `htab_set` descent are bounded read-only loops, and `htab_truncate` uses
+  `htab_del_progress_spec`.
+
+**5. `EvmInv` missed the logs backing arrays.**
+- `frameObjects` gains `frameLogs` (data `+0`, capacity `+16` of the logs header `e+88`, 8-byte
+  elements), so it is pairwise disjoint from every frame block, table and fixed object. Astra's
+  `data = ev+64` case now violates disjointness.
+- `FrameWF` allows the array in the allocated heap OR scratch: `lst_push` (13842) regrows it on the
+  heap.
+- `MarksOK` constrains only the scratch blocks (`frameScratch`) and requires each ancestor's logs
+  array to be on the heap or above the child's mark.
+
+**6. Assembly not closed.**
+- `callHandle_guestInv` and `while_rank` are proved (above).
+- The `htab_del` count decrease is `htab_del_progress_spec` (above).
+- **`run_frames_step_of_specs` is now PROVED.** A small proved outcome-triple layer (`Hoare` with
+  `skip`, `seq`, condition-aware `ite`, `dec`, `assign`, handler-free `call0` and handler `callH`
+  over `FunSpec` callees) evaluates the concrete `run_frames` loop body. It is read off the
+  installed code by `lookup_run_frames` and the structural translation. The loop tests (`cur_cont+32`,
+  `ev+104`, `pc ≥ ev+56`, `done`, `cur_cont+16`) are decoded by proved evaluation lemmas.
+  `evmPot_lt_bound` turns "`R` not larger, `F` smaller" into a strict decrease under `EvmInv`.
+- `run_frames_step` therefore depends only on the four frame contract leaves.
+
+**`gb_main` stays a leaf, by design.** Every `fb_*`/`gb_*` leaf, `gb_main` included, is a
+*composition leaf*. Its proof is a walk over its own body with the proved §3 combinators, using
+only its callees' leaves, its loops' measures and, in the guarded tier, the §7 contracts, the
+proved `LocalsOnly`/`Hoare` facts and the proved glue. Proving those walks is the leaf provers'
+work; this role does not prove leaves. What is closed now is everything between the leaves and the
+target:
+- every combinator;
+- the glue;
+- the guard-transport lemmas;
+- the bridge;
+- `K_pan_budget`.
+
+The only `sorry`s are leaf statements: 14 contracts, 727 `fb_*` and 47 `gb_*`. Each is a statement
+about one function's code. `coveredSourceTicksConsumedBounded_K_pan` applies the bridge to
+`gb_main`, so the end-to-end theorem's `sorryAx` dependencies are exactly the leaves.
+
+**Non-blocking.**
+- `RO(k)` word sizing and `modinv_bin`: see Fable's non-blocking item above.
+- The tautological `example` (`HtabWF s t → HtabWF s t`) is removed. It is replaced by semantic
+  regressions:
+  - `htabWF_no_self_parent` (item 4);
+  - the `FrameOutside` store `example` (item 1);
+  - the `dec_onLocals` name check;
+  - the proved glue itself, which exercises the frame contracts on the real loop body.
+
 ## 0.2 Changes since 7e73988d (revision 2)
 
 Mechanical statement diff of the two Lean files (`theorem`/`def`/`example` signatures, comments
-dropped):
+dropped).
 
 **Changed leaf statements (2):**
-- `htab_new_spec`: guard `ArenaReady` → `HtabNewReady` (adds `key_len ∈ htabKeyLens`; strictly
-  weaker obligation for the prover).
-- `htab_new_scratch_spec`: same.
+- `htab_new_spec`, `htab_new_scratch_spec`: guard `ArenaReady` → `HtabNewReady` (adds
+  `key_len ∈ htabKeyLens ∧ cap ∈ htabCaps`); the exit `HtabNewExit` frames the union of the fresh
+  heap and scratch.
 
-**Changed definition (1), which changes the meaning of leaves that mention it:**
-- `EvmInv`: new conjunct `∀ ec ∈ ch.tail, FrameRoom s ec`. Leaves affected are those whose
-  statement mentions `EvmInv`, directly or through `FinishReady`:
-  - `op_dispatch_spec`, which must establish it at `op_call`/`op_create`;
-  - `frame_exception_spec`, `frame_epilogue_spec` and `finish_child_spec`, which must preserve it
-    (they touch no suspended frame);
-  - `run_frames_step_of_specs` (glue);
-  - `gb_run_frames` and `gb_finish_child`, whose guards are now stronger, so they are easier;
-  - `gb_process_message`, which establishes `EvmInv` at a one-frame chain whose `tail` is empty,
-    so `FrameRoom` is vacuous there.
+**Changed definitions (7), which change the meaning of the leaves that mention them:**
+- `FrameOutside` (BitVec addresses). Through `HtabExit`, `UnionExit`, `HtabNewExit` and `MptExit` it
+  affects `htab_set_spec`, `htab_del_spec`, `htab_truncate_spec`, `htab_union_into_spec`,
+  `htab_new_spec`, `htab_new_scratch_spec`, `mpt_insert_node_spec` and `mpt_delete_node_body_spec`.
+  Every one of them is now satisfiable by real stores; in revision 2 none could change memory.
+- `HtabNewExit` (one union frame).
+- `HtabWF` (rooted, acyclic). Through `HtabArgWF`, `UnionArgWF`, `RollbackReady`, `TablesTyped`
+  (so `WorldOK`) and `EvmInv` it affects:
+  - the table contracts (stronger pre- and post-condition);
+  - `htab_del_progress_spec`;
+  - every guarded leaf (`gb_*`), whose guard is stronger;
+  - `mem_init_world` and every frame contract.
+- `frameObjects` (adds the logs array), `FrameWF` (logs array on heap or scratch), `MarksOK`
+  (scratch blocks only), `EvmInv` (adds `FrameRoom` for suspended frames). These affect:
+  - `op_dispatch_spec`, which must establish `FrameRoom` at `op_call`/`op_create` and keep the logs
+    array owned;
+  - `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`;
+  - `gb_run_frames`, `gb_finish_child`, `gb_process_message`.
 
 **New leaf (1):** `htab_del_progress_spec`.
+
+**No longer a leaf (1):** `run_frames_step_of_specs` (statement unchanged, now proved).
 
 **Unchanged:**
 - all 727 `fb_*` and 47 `gb_*` statements (textually);
 - every `K.«f»`, `K_pan`;
-- `htab_set/del/truncate/union_into_spec`, `mpt_*_spec`, `mem_init_world`;
-- all bridge theorems;
+- the bridge;
 - `while_rank` and `callHandle_guestInv` (statements kept, now proved).
 
-Docstrings of 7 `fb_*` leaves changed (loop-class label only, e.g. `RO(4)` → `MONO`): `rlp_list_count`, `modinv_bin`, `bls_fp_inv_raw`, `fq12_mul`, `fq12_sqr`, `p256_fp_mul`, `p256_fp_sqr`.
+Docstrings of 7 `fb_*` leaves changed (loop-class label only, e.g. `RO(4)` → `MONO`):
+`rlp_list_count`, `modinv_bin`, `bls_fp_inv_raw`, `fq12_mul`, `fq12_sqr`, `p256_fp_mul`,
+`p256_fp_sqr`. The arithmetic leaf provers (`wave8/leaves-arith-astra`) and the RLP leaf provers
+(`wave8/leaves-rlp-opus55`) prove `fb_*` statements, which are textually and semantically
+unchanged (no `fb_*` mentions a changed definition).
 
 **New proved theorems:**
 - combinators: `tailCall_on`, `tailCall_guestInv`, `while_rank_stationary` (+ `_aux`),
   `dec_onLocals`, `decCall_on`, `ite_cond_on`;
-- helpers: `evaluate_clock_irrelevant`, `evaluate_ne_of_clock_lt`, `while_unfold_continue`;
-- `LocalsOnly.{of_localsFree,decClock,setVar}`;
-- the `LocalsOnly`/`LocalsFree` instances and their congruence lemmas (`freeChain_with_locals`,
-  `htabWF_with_locals`, `tablesTyped_with_locals`, `worldTyped_with_locals`,
-  `arenaReady_with_locals`, `evmChainFrom_with_locals`, `evmChain_with_locals`, `locN_congr`).
+- the `Hoare` layer: `Hoare.{of_false,mono,skip,seq,ite,dec,assign,call0,callH}`,
+  `FunSpec.at_lookup`;
+- the glue and its lemmas: `lookup_run_frames`, the `evalAt_*`/`cond*` evaluation lemmas, and the
+  `evm*`/`evmPot_lt_bound` potential arithmetic;
+- the `LocalsOnly`/`LocalsFree` instances and their congruence lemmas;
+- `htabWF_no_self_parent`.
 
-**New definitions:** `FrameRoom`, `HtabNewReady`, `HtabDelProgress`, `SameHead`, `WhileTimesOut`,
-`Stationary`, `LocalsOnly`, `CondTrue`, `CondFalse`, `DecCallResumeOn`.
+**New definitions:**
+- `FrameRoom`, `frameLogs`, `frameScratch`, `htabCaps`, `HtabNewReady`, `HtabDelProgress`;
+- `SameHead`, `WhileTimesOut`, `Stationary`, `LocalsOnly`, `PostLocalsOnly`, `CondTrue`,
+  `CondFalse`, `DecCallResumeOn`, `Hoare`;
+- `evmFp`, `evmS`, and the glue's assertion predicates `GPre … GPh4`.
 
 ## 1. Round-1 blocking items and how each is addressed
 
@@ -382,13 +472,13 @@ callees' guards hold at their call sites, using the contract leaves:
 
 `htab_set_spec`, `htab_del_spec`, `htab_del_progress_spec`, `htab_truncate_spec`,
 `htab_union_into_spec`, `htab_new_spec`, `htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
-`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`,
-`run_frames_step_of_specs` (glue).
+`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`.
+The glue `run_frames_step_of_specs` is proved (§0.1, Astra item 6).
 
 ## 7. Every `sorry`
 
 - Combinators: none (all proved in revision 3).
-- Contract leaves (15): listed in §6.
+- Contract leaves (14): listed in §6 (the glue `run_frames_step_of_specs` is proved).
 - Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
 - Unguarded bound leaves (727): `fb_*`, listed in §5.
 
@@ -424,6 +514,11 @@ four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan`
   `bls_fp_inv_raw` halving loops at `u = 0` needs: `mod_half`, `mod_sub`, `bls_fp_half_can`,
   `bls_fp_sub` and the `u256_*`/`bls_fp_*_raw` helpers they call always return normally. They are
   straight-line word arithmetic with no load, store or raise (checked on the AST).
+- **Q8 (logs arrays on the heap).** `FrameWF` lets a frame's logs array live on the heap
+  (`lst_push` regrows it there). `op_dispatch_spec` is then true only if no opcode handler
+  `heap_release`s to a mark taken before a `lst_push` regrowth of a live frame's logs array. The
+  `LOG*` handlers take no heap mark, but the quorum should confirm that no handler both regrows logs
+  and releases heap.
 - **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
   pure call composition). A single tactic that walks the body with the combinators should discharge
   all loop-free ones; the loop leaves need their measure.

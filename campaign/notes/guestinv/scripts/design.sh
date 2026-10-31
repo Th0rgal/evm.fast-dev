@@ -50,10 +50,9 @@ sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/Guest
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 789 `declaration uses
-'sorry'` warnings, all leaves: 15 contracts (including the glue `run_frames_step_of_specs` and the
-new `htab_del_progress_spec`), 727 `fb_*` and 47 `gb_*`. No combinator, definition or bridge
-theorem has a `sorry`. There are also style-linter notes about the `__` in generated names such as
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 788 `declaration uses
+'sorry'` warnings, all leaves: 14 contracts (including the new `htab_del_progress_spec`), 727 `fb_*`
+and 47 `gb_*`. No combinator, glue, definition or bridge theorem has a `sorry`. There are also style-linter notes about the `__` in generated names such as
 `fb__decode_step`. `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]`:
   - `guestInv_evaluate`, `preservesOn_guestInv`, `PreservesOn.call_guestInv`;
@@ -61,6 +60,8 @@ theorem has a `sorry`. There are also style-linter notes about the `__` in gener
     `decCall_guestInv`, `decCall_on`, `callHandle_guestInv`, `seq_on`, `seq_guestInv`, `ite_on`,
     `ite_cond_on`, `dec_on`, `dec_onLocals`, `while_rank`, `while_rank_stationary`;
   - `LocalsOnly.setVar`, `LocalsOnly.decClock`, and every `localsOnly_*`/`localsFree_*` instance;
+  - the `Hoare` rules (`Hoare.seq`, `Hoare.ite`, `Hoare.dec`, `Hoare.assign`, `Hoare.call0`,
+    `Hoare.callH`) and the glue `run_frames_step_of_specs`;
   - the bridge: `coveredSourceTicksConsumedBounded_of_terminatingMainOn(Entry)`,
     `coveredTarget_of_terminatingMainOnEntry`;
 - `[propext]`: `K_pan_budget`, `astGlobalNames_eq`;
