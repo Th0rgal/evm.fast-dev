@@ -300,10 +300,14 @@ def WorldOK : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 Frame record `e` (280 B, `frame_new` 15370): `+0` pc, `+8` stack base, `+16` stack height,
 `+24/+32/+40` memory base/length/capacity, `+48/+56` code/length, `+64` gas, `+72` state gas,
-`+88` logs list, `+104` running flag, `+112` message, `+136` deletion table, `+168/+176` access
-tables, `+192` spilled gas, `+232` stack capacity. Continuation record `c` (104 B,
-`frame_open` 18450): `+0` parent frame, `+8` parent continuation, `+16` kind (`0` = outermost),
-`+32` done flag, `+48/+56` scratch / frame-memory marks released by `finish_child`. -/
+`+80` jump-destination bitmap, `+88` logs list, `+104` running flag, `+112` message, `+120/+128`
+output, `+136` deletion table, `+144/+152/+216` return-data buffer/length/capacity, `+160` error,
+`+168/+176` access tables, `+192` spilled gas, `+208/+224` marks, `+232` stack capacity,
+`+264/+272` access counts. Continuation record `c` (104 B, `frame_open` 18450, `start_child`
+18705): `+0` parent frame, `+8` parent continuation, `+16` kind (`0` = outermost), `+24` journal
+snapshot, `+32` done flag, `+40` message, `+48/+56` scratch / frame-memory marks released by
+`finish_child`, `+64` new-account flag, `+72/+80` output window in the PARENT's memory, `+88`
+contract address, `+96` create snapshot. DESIGN.md Q1 audits every pointer field. -/
 
 /-- The active chain `(ev, cur_cont), (parent ev, parent cont), …`, following `c+0`/`c+8` while
 the kind `c+16 ≠ 0` (exactly the `run_frames` / `finish_child` control flow). -/
@@ -326,12 +330,23 @@ scratch and `lst_push` (13842) regrows it on the HEAP (round-2 Astra item 5). -/
 def frameLogs {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Ivl :=
   (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 16))
 
+/-- The return-data buffer of frame `e` (round-3 item 4): pointer `e+144`, capacity `e+216`.
+`set_retdata` (19064) writes `n ≤ cap` bytes at the pointer, and when `cap < n` replaces it by
+`alloc(n + 8)`, a heap block of `round8 (n + 8)` bytes. With capacity `0` nothing is ever written
+through the pointer (`n = 0` returns early, `n > 0` reallocates); it is then `evm_empty`
+(`frame_new` 15431, `set_retdata` 19074) and the block is empty, `(0, 0)`. -/
+def frameRet {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Ivl :=
+  if memW s (ec.1 + 216) = 0 then (0, 0)
+  else (memW s (ec.1 + 144), (memW s (ec.1 + 216) + 15) / 8 * 8)
+
 /-- The memory blocks a frame writes: record, continuation, stack, EVM memory, logs header, logs
-backing array. Index 3 (EVM memory) lives in the frame-memory arena, index 5 (logs array) in the
-heap or scratch, the others in scratch. -/
+backing array, return-data buffer. Index 3 (EVM memory) lives in the frame-memory arena, index 5
+(logs array) in the heap or scratch, index 6 (return data, round-3 item 4) in the heap, the others
+in scratch. -/
 def frameObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
-   (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24), frameLogs s ec]
+   (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24), frameLogs s ec,
+   frameRet s ec]
 
 /-- The scratch-resident blocks of a frame (`frameObjects` without EVM memory and logs array). -/
 def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
@@ -340,21 +355,28 @@ def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List 
 
 /-- One frame: record, continuation, stack and logs header in allocated scratch; EVM memory in
 the frame-memory arena below `frame_mem_ptr`; logs backing array in allocated heap or scratch;
-stack height ≤ capacity ≤ 1024, memory length ≤ capacity, logs length ≤ capacity; its three
-tables are typed. -/
+return-data buffer in allocated heap, or capacity `0` with pointer `evm_empty`;
+`1 ≤` stack capacity (round-3 item 3: `PUSH0` on capacity `0` made `stack_push` allocate a
+0-word stack and store past it), stack height ≤ capacity ≤ 1024, memory length ≤ capacity,
+`1 ≤` logs capacity (round-3 item 3: `lst_push` on capacity `0` regrows to `0` and sets length 1),
+logs length ≤ capacity; its three tables are typed. `frame_new` gives capacities 32 and 4;
+`stack_push` (15080) doubles up to 1024 and `lst_push` (13856) doubles, so both stay `≥ 1`. -/
 def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Ivl) : Prop :=
   let e := ec.1
   (∀ i ∈ [(e, 280), (ec.2, 104), (memW s (e + 8), 32 * memW s (e + 232)), (memW s (e + 88), 24)],
     Inside i (globN s "scratch_ptr") scratchEnd ∧ WordsOK s i) ∧
   Inside (memW s (e + 24), memW s (e + 40)) scratchStart (globN s "frame_mem_ptr") ∧
   WordsOK s (memW s (e + 24), memW s (e + 40)) ∧
-  memW s (e + 16) ≤ memW s (e + 232) ∧ memW s (e + 232) ≤ 1024 ∧
+  1 ≤ memW s (e + 232) ∧ memW s (e + 16) ≤ memW s (e + 232) ∧ memW s (e + 232) ≤ 1024 ∧
   memW s (e + 32) ≤ memW s (e + 40) ∧
   memW s (e + 136) ∈ S ∧ memW s (e + 168) ∈ S ∧ memW s (e + 176) ∈ S ∧
+  1 ≤ memW s (memW s (e + 88) + 16) ∧
   memW s (memW s (e + 88) + 8) ≤ memW s (memW s (e + 88) + 16) ∧
   (Inside (frameLogs s ec) sourceBase (globN s "heap_ptr") ∨
     Inside (frameLogs s ec) (globN s "scratch_ptr") scratchEnd) ∧
-  WordsOK s (frameLogs s ec)
+  WordsOK s (frameLogs s ec) ∧
+  ((memW s (e + 216) = 0 ∧ memW s (e + 144) = globN s "evm_empty") ∨
+    (Inside (frameRet s ec) sourceBase (globN s "heap_ptr") ∧ WordsOK s (frameRet s ec)))
 
 /-- A suspended frame has room for one more stack word (round-2 item 2). `finish_child`
 (`Guest/SoftwareAst.lean:18572`) runs `stack_push` on the parent BEFORE
@@ -365,6 +387,21 @@ suspended by one of the six frame-opening opcodes (`op_call`, `op_callcode`, `op
 those pops, so `op_dispatch_spec` re-establishes it for the new parent. -/
 def FrameRoom {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Prop :=
   memW s (ec.1 + 16) + 1 ≤ memW s (ec.1 + 232)
+
+/-- Output windows of the suspended frames (round-3 item 4). `finish_child` (18650-18652) copies
+`min(c+80, child+128)` bytes to `parent_mem + c+72`, where `c` is the child's continuation and
+`parent_mem`, `parent_mem + capacity` are the parent's `e+24`, `e+40`. So for every chain position
+`i` with a parent, either the window is empty (`c_i+80 = 0`: `op_call` passes
+`sat_word(out_start)`, which is arbitrary when the size is `0`, so the sum need not be in range)
+or it lies inside the parent's EVM memory. `op_call`/`op_callcode`/`op_delegatecall`/
+`op_staticcall` establish it by `extend_memory` on the output window BEFORE `generic_call` →
+`start_child` stores the window (18746-18748); `op_create`/`op_create2` store size `0`. The parent
+is suspended, so nothing changes its memory capacity until `finish_child`. -/
+def RetWindowsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop :=
+  ∀ (i : Nat) (hi : i + 1 < ch.length),
+    memW s ((ch[i]'(by omega)).2 + 80) = 0 ∨
+      memW s ((ch[i]'(by omega)).2 + 72) + memW s ((ch[i]'(by omega)).2 + 80) ≤
+        memW s (ch[i + 1].1 + 40)
 
 /-- Release marks of the child at chain position `i` (whose continuation is `c_i`): releasing
 scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's scratch blocks and keeps
@@ -384,15 +421,16 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop 
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the
 world is typed (one table set `S` covering global AND frame tables), the chain is closed (its
 last continuation has kind `0`) and at most `maxChain` long, every frame is well formed, every
-suspended frame (`ch.tail`) has stack room for the result `finish_child` pushes (`FrameRoom`), all
-frame blocks are pairwise disjoint and disjoint from every table footprint and fixed object, and
-the release marks are valid. There is NO gas conjunct: the potential `evmPot` is bounded for
+suspended frame (`ch.tail`) has stack room for the result `finish_child` pushes (`FrameRoom`), every
+child's output window lies in its parent's EVM memory (`RetWindowsOK`, round-3 item 4), all
+frame blocks (return-data buffers included) are pairwise disjoint and disjoint from every table
+footprint and fixed object, and the release marks are valid. There is NO gas conjunct: the potential `evmPot` is bounded for
 arbitrary gas words. -/
 def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S : List Nat, WorldTyped s S ∧
     let ch := evmChain s
     ch ≠ [] ∧ ch.length ≤ maxChain ∧ (∃ ec ∈ ch.getLast?, memW s (ec.2 + 16) = 0) ∧
-    (∀ ec ∈ ch, FrameWF s S ec) ∧ (∀ ec ∈ ch.tail, FrameRoom s ec) ∧
+    (∀ ec ∈ ch, FrameWF s S ec) ∧ (∀ ec ∈ ch.tail, FrameRoom s ec) ∧ RetWindowsOK s ch ∧
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧

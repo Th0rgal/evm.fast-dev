@@ -108,9 +108,11 @@ def htabKeyLens : List Nat := [20, 28, 32, 52, 60]
 
 theorem htabKeyLens_le : ∀ k ∈ htabKeyLens, k ≤ maxKeyLen := by decide
 
-/-- The capacities of the same 32 call sites: always a literal, 1×4, 8×8, 6×16, 12×64, 4×256
-(round-2 Astra item 3: an unbounded `cap` wraps `(ncap + 1) * stride`). -/
-def htabCaps : List Nat := [4, 8, 16, 64, 256]
+/-- Upper bound on the capacity argument of `htab_new` / `htab_new_scratch` (round-2 Astra item 3:
+an unbounded `cap` wraps `(ncap + 1) * stride`; round-3 non-blocking: a bound, not a list of
+literals, because `nodedb_build` (9948) passes a computed power of two `≥ 2n + 2`). With
+`cap ≤ 2^32` and `stride ≤ 64`, `(max cap 2 + 1) * stride < 2^64`. -/
+def htabCapMax : Nat := 2 ^ 32
 
 /-! ## 2. `GuestInv`: metadata only, preserved by every evaluation
 

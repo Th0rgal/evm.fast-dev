@@ -63,11 +63,12 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
 
 /-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
-arenas, a key length and a capacity from the 32 literal call sites. `htab_new` checks neither:
-`key_len = 0` breaks `1 ≤ klen`, `61` breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the stride;
-`cap = 2^64 - 1` wraps `(ncap + 1) * stride`. -/
+arenas, a key length from the literal call sites and a bounded capacity. `htab_new` checks
+neither: `key_len = 0` breaks `1 ≤ klen`, `61` breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the
+stride; `cap = 2^64 - 1` wraps `(ncap + 1) * stride`. 31 call sites pass a literal capacity
+(≤ 256); `nodedb_build` passes a power of two, which its caller bounds (round-3 non-blocking). -/
 def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ∈ htabCaps
+  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ≤ htabCapMax
 
 theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") := by sorry
 theorem htab_new_scratch_spec :
@@ -232,6 +233,15 @@ theorem localsFree_evmInv : LocalsFree EvmInv := by
   intro F s locals k h
   simp only [EvmInv, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
   exact h
+
+/-- Round-3 non-blocking: `main`'s guard reads neither locals nor the clock. -/
+theorem localsFree_mainEntry : LocalsFree MainEntry := by
+  intro F s locals k h
+  obtain ⟨⟨hg, hc⟩, hm, hz⟩ := h
+  exact ⟨⟨guestInv_with_locals_clock s locals k hg, hc⟩, hm, hz⟩
+
+theorem localsOnly_mainEntry : LocalsOnly [] MainEntry :=
+  LocalsOnly.of_localsFree localsFree_mainEntry
 
 theorem localsFree_finishReady : LocalsFree FinishReady := by
   intro F s locals k h

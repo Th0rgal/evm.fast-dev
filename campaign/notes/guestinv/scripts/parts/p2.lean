@@ -206,16 +206,21 @@ theorem TerminatingProgBoundedOn.decCall_guestInv {fname : MlS} {B Bc : Nat}
             obtain ⟨hs, hk⟩ := bodyClock (by simp)
             exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
 
-/-- Call with an exception handler (e.g. `run_frames` → `op_dispatch` with `EvmErr`):
-the handler runs after the callee raised, on a `GuestInv` state (`guestInv_evaluate`). -/
-theorem TerminatingProgBoundedOn.callHandle_guestInv {fname : MlS} {B Bh : Nat}
-    (hf : TerminatingFunBoundedOn GuestInv fname B)
+/-- Guarded handler call (round-3 item 2): the callee is guarded by `Pc`, discharged at the call
+site by `CallEntryOn P Pc` (e.g. `run_frames` → `op_dispatch` under `EvmInv ∧ ¬ EvmDone` with an
+`EvmErr` handler; `finish_child` likewise). The handler runs on a `GuestInv` state
+(`guestInv_evaluate` from the caller's `GuestInv`, which `hPG` extracts from `P`), so its bound is
+needed only under `GuestInv`. `callHandle_guestInv` is the instance `P = Pc = GuestInv`. -/
+theorem TerminatingProgBoundedOn.callHandle_on
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {fname : MlS} {B Bh : Nat}
+    (hf : TerminatingFunBoundedOn Pc fname B)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
     (destination : Option (VarKind × MlS)) (exn : MlS) (var : MlS) {handler : ProgHOL 64}
-    (hh : TerminatingProgBoundedOn GuestInv handler Bh) (arguments : List (ExpHOL 64)) :
-    TerminatingProgBoundedOn GuestInv
+    (hh : TerminatingProgBoundedOn GuestInv handler Bh) (arguments : List (ExpHOL 64))
+    (hentry : CallEntryOn P Pc fname arguments) :
+    TerminatingProgBoundedOn P
       (.call (some (destination, some (exn, var, handler))) fname arguments) (B + Bh + 1) := by
   obtain ⟨params, body, ret, hlook, hbody⟩ := hf
-  have hentry : CallEntryOn GuestInv GuestInv fname arguments := callEntryOn_guestInv fname arguments
   intro F state hcode hP hnt
   rw [evaluateHOLFiniteState_call] at hnt ⊢
   rcases hargs : evalListHOLFinite state
@@ -235,7 +240,7 @@ theorem TerminatingProgBoundedOn.callHandle_guestInv {fname : MlS} {B Bh : Nat}
         have hmeta := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite state callee)
           body').1
         have hpost := guestInv_evaluate (callEntryStateHOLFinite state callee) body'
-          (guestInv_callEntry state callee hP)
+          (guestInv_callEntry state callee (hPG state hP))
         rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body' with
           ⟨res, post⟩
         simp only [hrun] at hnt hmeta hpost ⊢
@@ -293,6 +298,19 @@ theorem TerminatingProgBoundedOn.callHandle_guestInv {fname : MlS} {B Bh : Nat}
           | _ =>
             obtain ⟨hs, hk⟩ := bodyClock (by simp)
             exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
+
+
+/-- Call with an exception handler (e.g. `run_frames` → `op_dispatch` with `EvmErr`):
+the handler runs after the callee raised, on a `GuestInv` state (`guestInv_evaluate`). Instance
+`P = Pc = GuestInv` of `callHandle_on`. -/
+theorem TerminatingProgBoundedOn.callHandle_guestInv {fname : MlS} {B Bh : Nat}
+    (hf : TerminatingFunBoundedOn GuestInv fname B)
+    (destination : Option (VarKind × MlS)) (exn : MlS) (var : MlS) {handler : ProgHOL 64}
+    (hh : TerminatingProgBoundedOn GuestInv handler Bh) (arguments : List (ExpHOL 64)) :
+    TerminatingProgBoundedOn GuestInv
+      (.call (some (destination, some (exn, var, handler))) fname arguments) (B + Bh + 1) :=
+  TerminatingProgBoundedOn.callHandle_on hf (fun _ h => h) destination exn var hh arguments
+    (callEntryOn_guestInv fname arguments)
 
 /-- Guarded `seq`: the second program starts where the first ended, so it needs preservation. -/
 theorem TerminatingProgBoundedOn.seq_on

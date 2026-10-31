@@ -80,13 +80,14 @@ def Stationary (condition : ExpHOL 64) (body : ProgHOL 64) {F : Type}
     (s t : PanSemStateFiniteExact 64 F) : Prop :=
   SameHead s t ∨ WhileTimesOut condition body t
 
-/-- Induction core of `while_rank_stationary`: `n` bounds `μ + 1` at the active loop head. -/
+/-- Induction core of `while_rank_stationary`: `n` bounds `μ + 1` at the active loop head. The
+body bound is needed only after an ACTIVE `P` loop head (revision 4, round-3 item 1). -/
 theorem while_rank_stationary_aux
     {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {condition : ExpHOL 64}
     {body : ProgHOL 64} {B : Nat}
     (μ : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat)
-    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
-    (hbody : TerminatingProgBoundedOn P body B)
+    (hbody : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      P s → LoopActive condition s → TerminatingRunBounded (decClockHOLFinite s) body B)
     (hstep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
       P s → LoopActive condition s →
       ((evaluateHOLFiniteState (decClockHOLFinite s) body).1 = none ∨
@@ -125,7 +126,7 @@ theorem while_rank_stationary_aux
         · rw [if_neg hclock] at hnt ⊢
           have hact : LoopActive condition state := ⟨word, hword, hzero⟩
           have hμ := hle hact
-          have hb := hbody (decClockHOLFinite state) hcode (hdec state hP)
+          have hb := hbody state hcode hP hact
           have hstep' := hstep state hcode hP hact
           have hunfold := while_unfold_continue condition body state word hword hzero hclock
           have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
@@ -203,8 +204,8 @@ theorem TerminatingProgBoundedOn.while_rank_stationary
           Stationary condition body s (evaluateHOLFiniteState (decClockHOLFinite s) body).2)) :
     TerminatingProgBoundedOn P (.while condition body) ((N + 1) * (B + 1)) :=
   fun state hcode hP =>
-    while_rank_stationary_aux μ hdec hbody hstep (N + 1) state hcode hP
-      (fun hact => by have := hle state hcode hP hact; omega)
+    while_rank_stationary_aux μ (fun s hc hPs _ => hbody (decClockHOLFinite s) hc (hdec s hPs))
+      hstep (N + 1) state hcode hP (fun hact => by have := hle state hcode hP hact; omega)
 
 /-- Ranking rule for `while` (strict decrease on every continuing iteration): the special case of
 `while_rank_stationary` without stationary iterations. It covers the loop classes of DESIGN.md §3:
@@ -229,6 +230,67 @@ theorem TerminatingProgBoundedOn.while_rank
         μ (evaluateHOLFiniteState (decClockHOLFinite s) body).2 < μ s) :
     TerminatingProgBoundedOn P (.while condition body) ((N + 1) * (B + 1)) :=
   TerminatingProgBoundedOn.while_rank_stationary μ hdec hbody hle
+    fun s hcode hP hact hflow =>
+      let h := hstep s hcode hP hact hflow
+      ⟨h.1, Or.inl h.2⟩
+
+/-! ### `while` rules with the body needed only on active loop heads (round-3 item 1)
+
+`gb_run_frames` uses `P = GuestInv ∧ (EvmInv ∨ go = 0)`: the last iteration restores `ev` and
+`cur_cont` and sets `go := 0`, so `P` must admit exit states that are not `EvmInv`, and from those
+the body's guarded callees (`op_dispatch`, `finish_child`, …) have no bound leaf. The body is only
+ever run after an active head, so the rules below ask for its bound under
+`P s ∧ LoopActive condition s` (for `run_frames`: `go ≠ 0`, hence `EvmInv`). Same proof as
+`while_rank_stationary`; the condition is read without the clock, so it survives `decClock`. -/
+
+/-- The loop condition does not read the clock: an active head stays active after `decClock`. -/
+theorem loopActive_decClock {condition : ExpHOL 64} {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : LoopActive condition s) : LoopActive condition (decClockHOLFinite s) := by
+  obtain ⟨w, hw, hne⟩ := h
+  refine ⟨w, ?_, hne⟩
+  rw [← hw]
+  exact @evalHOLFinite_upd_clock_eq 64 F _ s
+    (fun address => Classical.propDecidable (s.memaddrs address)) (s.clock - 1) condition
+
+/-- `while_rank_stationary` with the body bound required only on active `P` heads. -/
+theorem TerminatingProgBoundedOn.while_rank_stationary_active
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {condition : ExpHOL 64}
+    {body : ProgHOL 64} {B N : Nat}
+    (μ : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat)
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : TerminatingProgBoundedOn (fun s => P s ∧ LoopActive condition s) body B)
+    (hle : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      P s → LoopActive condition s → μ s ≤ N)
+    (hstep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      P s → LoopActive condition s →
+      ((evaluateHOLFiniteState (decClockHOLFinite s) body).1 = none ∨
+        (evaluateHOLFiniteState (decClockHOLFinite s) body).1 = some .continue) →
+      P (evaluateHOLFiniteState (decClockHOLFinite s) body).2 ∧
+        (μ (evaluateHOLFiniteState (decClockHOLFinite s) body).2 < μ s ∨
+          Stationary condition body s (evaluateHOLFiniteState (decClockHOLFinite s) body).2)) :
+    TerminatingProgBoundedOn P (.while condition body) ((N + 1) * (B + 1)) :=
+  fun state hcode hP =>
+    while_rank_stationary_aux μ
+      (fun s hc hPs hact => hbody (decClockHOLFinite s) hc ⟨hdec s hPs, loopActive_decClock hact⟩)
+      hstep (N + 1) state hcode hP (fun hact => by have := hle state hcode hP hact; omega)
+
+/-- `while_rank` with the body bound required only on active `P` heads (`gb_run_frames`). -/
+theorem TerminatingProgBoundedOn.while_rank_active
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {condition : ExpHOL 64}
+    {body : ProgHOL 64} {B N : Nat}
+    (μ : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat)
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : TerminatingProgBoundedOn (fun s => P s ∧ LoopActive condition s) body B)
+    (hle : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      P s → LoopActive condition s → μ s ≤ N)
+    (hstep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      P s → LoopActive condition s →
+      ((evaluateHOLFiniteState (decClockHOLFinite s) body).1 = none ∨
+        (evaluateHOLFiniteState (decClockHOLFinite s) body).1 = some .continue) →
+      P (evaluateHOLFiniteState (decClockHOLFinite s) body).2 ∧
+        μ (evaluateHOLFiniteState (decClockHOLFinite s) body).2 < μ s) :
+    TerminatingProgBoundedOn P (.while condition body) ((N + 1) * (B + 1)) :=
+  TerminatingProgBoundedOn.while_rank_stationary_active μ hdec hbody hle
     fun s hcode hP hact hflow =>
       let h := hstep s hcode hP hact hflow
       ⟨h.1, Or.inl h.2⟩
