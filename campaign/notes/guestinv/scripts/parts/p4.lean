@@ -317,6 +317,16 @@ def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Iv
   Inside (memW s (memW s (e + 88)), 8 * memW s (memW s (e + 88) + 16))
     (globN s "scratch_ptr") scratchEnd
 
+/-- A suspended frame has room for one more stack word (round-2 item 2). `finish_child`
+(`Guest/SoftwareAst.lean:18572`) runs `stack_push` on the parent BEFORE
+`scratch_release(child_mark)`; on a full parent `stack_push` would allocate a new 64-slot stack
+below the child's mark, which the release then frees. Every frame below the current one was
+suspended by one of the six frame-opening opcodes (`op_call`, `op_callcode`, `op_delegatecall`,
+`op_staticcall` pop 6 or 7 words and push at most one; `op_create`, `op_create2` pop 3 or 4) after
+those pops, so `op_dispatch_spec` re-establishes it for the new parent. -/
+def FrameRoom {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Prop :=
+  memW s (ec.1 + 16) + 1 ≤ memW s (ec.1 + 232)
+
 /-- Release marks of the child at chain position `i` (whose continuation is `c_i`): releasing
 scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's blocks and keeps every
 ancestor's blocks allocated. -/
@@ -333,7 +343,8 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop 
 
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the
 world is typed (one table set `S` covering global AND frame tables), the chain is closed (its
-last continuation has kind `0`) and at most `maxChain` long, every frame is well formed, all
+last continuation has kind `0`) and at most `maxChain` long, every frame is well formed, every
+suspended frame (`ch.tail`) has stack room for the result `finish_child` pushes (`FrameRoom`), all
 frame blocks are pairwise disjoint and disjoint from every table footprint and fixed object, and
 the release marks are valid. There is NO gas conjunct: the potential `evmPot` is bounded for
 arbitrary gas words. -/
@@ -341,7 +352,7 @@ def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S : List Nat, WorldTyped s S ∧
     let ch := evmChain s
     ch ≠ [] ∧ ch.length ≤ maxChain ∧ (∃ ec ∈ ch.getLast?, memW s (ec.2 + 16) = 0) ∧
-    (∀ ec ∈ ch, FrameWF s S ec) ∧
+    (∀ ec ∈ ch, FrameWF s S ec) ∧ (∀ ec ∈ ch.tail, FrameRoom s ec) ∧
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧

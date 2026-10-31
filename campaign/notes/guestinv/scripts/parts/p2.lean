@@ -71,6 +71,61 @@ theorem TerminatingProgBoundedOn.call_guestInv {fname : MlS} {B : Nat}
       (B + 1) :=
   TerminatingProgBoundedOn.call_on hf destination arguments (callEntryOn_guestInv fname arguments)
 
+/-- Tail call `.call none fname args` (round-2 item 3): the callee's result (return value,
+exception, error) becomes the caller's result, its locals are discarded. Same clock accounting
+as `call_on`: one tick for the call plus the callee's body. -/
+theorem TerminatingProgBoundedOn.tailCall_on
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {fname : MlS} {B : Nat}
+    (hf : TerminatingFunBoundedOn Pc fname B) (arguments : List (ExpHOL 64))
+    (hentry : CallEntryOn P Pc fname arguments) :
+    TerminatingProgBoundedOn P (.call none fname arguments) (B + 1) := by
+  obtain ⟨params, body, ret, hlook, hbody⟩ := hf
+  intro F state hcode hP hnt
+  rw [evaluateHOLFiniteState_call] at hnt ⊢
+  rcases hargs : evalListHOLFinite state
+      (h := fun address => Classical.propDecidable (state.memaddrs address)) arguments with
+    _ | values
+  · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+  · simp only [hargs] at hnt ⊢
+    rcases hl : lookupCodeHOLFinite state.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+    · simp only [hl] at hnt ⊢
+      obtain ⟨_, hrunBound⟩ := callee_body_bound hlook hbody hentry state hcode hP values body'
+        callee ret' hargs hl
+      by_cases hz : state.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt ⊢
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body' with
+          ⟨res, post⟩
+        simp only [hrun] at hnt ⊢
+        have bodyClock (hsafe : res ≠ some .timeOut) :
+            state.clock - 1 ≤ post.clock + B ∧ post.clock ≤ state.clock - 1 := by
+          have hb := hrunBound (by rw [hrun]; exact hsafe)
+          rw [hrun] at hb
+          exact hb
+        cases res with
+        | none =>
+          obtain ⟨hs, hk⟩ := bodyClock (by simp)
+          exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+        | some r =>
+          cases r with
+          | timeOut => simp at hnt
+          | returned value =>
+            obtain ⟨hs, hk⟩ := bodyClock (by simp)
+            dsimp only
+            split
+            · exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
+            · exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+          | _ =>
+            obtain ⟨hs, hk⟩ := bodyClock (by simp)
+            exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
+
+/-- `GuestInv` instance of `tailCall_on`: no call-site obligation. -/
+theorem TerminatingProgBoundedOn.tailCall_guestInv {fname : MlS} {B : Nat}
+    (hf : TerminatingFunBoundedOn GuestInv fname B) (arguments : List (ExpHOL 64)) :
+    TerminatingProgBoundedOn GuestInv (.call none fname arguments) (B + 1) :=
+  TerminatingProgBoundedOn.tailCall_on hf arguments (callEntryOn_guestInv fname arguments)
+
 /-- `decCall`: the continuation runs on `setVar name v {post with locals := caller locals}`;
 `GuestInv` of that state follows from `guestInv_evaluate` (no callee preservation hypothesis). -/
 theorem TerminatingProgBoundedOn.decCall_guestInv {fname : MlS} {B Bc : Nat}
@@ -152,15 +207,92 @@ theorem TerminatingProgBoundedOn.decCall_guestInv {fname : MlS} {B Bc : Nat}
             exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
 
 /-- Call with an exception handler (e.g. `run_frames` → `op_dispatch` with `EvmErr`):
-the handler runs after the callee raised, on a `GuestInv` state. Proposed combinator: the proof
-is the `.exception` case analysis of `decCall_guestInv`. -/
+the handler runs after the callee raised, on a `GuestInv` state (`guestInv_evaluate`). -/
 theorem TerminatingProgBoundedOn.callHandle_guestInv {fname : MlS} {B Bh : Nat}
     (hf : TerminatingFunBoundedOn GuestInv fname B)
     (destination : Option (VarKind × MlS)) (exn : MlS) (var : MlS) {handler : ProgHOL 64}
     (hh : TerminatingProgBoundedOn GuestInv handler Bh) (arguments : List (ExpHOL 64)) :
     TerminatingProgBoundedOn GuestInv
       (.call (some (destination, some (exn, var, handler))) fname arguments) (B + Bh + 1) := by
-  sorry
+  obtain ⟨params, body, ret, hlook, hbody⟩ := hf
+  have hentry : CallEntryOn GuestInv GuestInv fname arguments := callEntryOn_guestInv fname arguments
+  intro F state hcode hP hnt
+  rw [evaluateHOLFiniteState_call] at hnt ⊢
+  rcases hargs : evalListHOLFinite state
+      (h := fun address => Classical.propDecidable (state.memaddrs address)) arguments with
+    _ | values
+  · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+  · simp only [hargs] at hnt ⊢
+    rcases hl : lookupCodeHOLFinite state.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+    · simp only [hl] at hnt ⊢
+      obtain ⟨hbb, hrunBound⟩ := callee_body_bound hlook hbody hentry state hcode hP values body'
+        callee ret' hargs hl
+      subst hbb
+      by_cases hz : state.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt ⊢
+        have hmeta := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite state callee)
+          body').1
+        have hpost := guestInv_evaluate (callEntryStateHOLFinite state callee) body'
+          (guestInv_callEntry state callee hP)
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body' with
+          ⟨res, post⟩
+        simp only [hrun] at hnt hmeta hpost ⊢
+        change post.code = state.code at hmeta
+        have bodyClock (hsafe : res ≠ some .timeOut) :
+            state.clock - 1 ≤ post.clock + B ∧ post.clock ≤ state.clock - 1 := by
+          have hb := hrunBound (by rw [hrun]; exact hsafe)
+          rw [hrun] at hb
+          exact hb
+        cases res with
+        | none =>
+          obtain ⟨hs, hk⟩ := bodyClock (by simp)
+          exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+        | some r =>
+          cases r with
+          | timeOut => simp at hnt
+          | returned value =>
+            obtain ⟨hs, hk⟩ := bodyClock (by simp)
+            dsimp only at hnt ⊢
+            split
+            · rcases destination with _ | ⟨kind, name⟩
+              · exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+              · dsimp only
+                split
+                · cases kind <;>
+                    exact ⟨by simp [setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite]; omega,
+                      by simp [setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite]; omega⟩
+                · exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+            · exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+          | exception eid v =>
+            obtain ⟨hs, hk⟩ := bodyClock (by simp)
+            dsimp only at hnt ⊢
+            by_cases hid : eid = exn
+            · simp only [hid, ↓reduceIte] at hnt ⊢
+              rcases hsh : state.eshapes.lookup exn with _ | shape
+              · dsimp only
+                exact ⟨by omega, by omega⟩
+              · simp only [hsh] at hnt ⊢
+                by_cases hv : (shapeEqHOL (shapeOfHOLExact v) shape &&
+                    isValidValueHOLExact state.toExact .local var v) = true
+                · simp only [hv, ↓reduceIte] at hnt ⊢
+                  set resumed := setVarHOLFinite var v { post with locals := state.locals }
+                  have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+                  have hresInv : GuestInv resumed :=
+                    guestInv_setVar var v _
+                      (guestInv_with_locals_clock post state.locals post.clock hpost)
+                  obtain ⟨hsc, hkc⟩ := hh resumed hresCode hresInv hnt
+                  change post.clock ≤ (evaluateHOLFiniteState resumed handler).2.clock + Bh at hsc
+                  change (evaluateHOLFiniteState resumed handler).2.clock ≤ post.clock at hkc
+                  exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+                · simp only [hv, Bool.false_eq_true, ↓reduceIte]
+                  exact ⟨by (try dsimp only); omega, by (try dsimp only); omega⟩
+            · simp only [hid, ↓reduceIte]
+              exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
+          | _ =>
+            obtain ⟨hs, hk⟩ := bodyClock (by simp)
+            exact ⟨by simp [emptyLocalsHOLFinite]; omega, by simp [emptyLocalsHOLFinite]; omega⟩
 
 /-- Guarded `seq`: the second program starts where the first ended, so it needs preservation. -/
 theorem TerminatingProgBoundedOn.seq_on

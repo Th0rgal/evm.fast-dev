@@ -40,15 +40,19 @@ OVERRIDES = {
     ('merkleize_progressive', 0): ('WALK', W + 64,
         'size := size << 2 is 0 after <= 32 iterations; while size != 0 off strictly grows; '
         'afterwards each iteration writes roots + 32k (k += 1): fresh address, <= W'),
-    ('rlp_list_count', 0): ('RO(2)', 2 ** 128,
-        'read-only on continuing iterations (callees only raise via trap_with); '
-        'no-repeat key (off, count)'),
+    ('rlp_list_count', 0): ('MONO', 2 ** 128,
+        'off < len (unsigned); total = hl + pl from rlp_item_header, which returns '
+        '1 <= hl + pl <= len - off or raises (rlp_fail); the body writes scratch '
+        '(_rlp_validate_items_body), so the measure is len - off < 2^64 on the locals, '
+        'not no-repeat (round 2)'),
     ('sort_elems', 0): ('MONO', 65,
         'width doubles 1,2,..,2^63,0; width = 2^63 exits after one inner pass, width = 0 makes the '
-        'inner loop stationary (timeout); at most 65 iterations'),
+        'inner loop time out (WhileTimesOut, while_rank_stationary); at most 65 iterations'),
     ('sort_elems', 1): ('MONO', 2 ** 64,
         'for 1 <= width < n (signed) mid/right are capped at n with unsigned compares and do not '
-        'wrap, so left strictly increases to n; width = 0 is stationary'),
+        'wrap, so left strictly increases to n (mu = n - left); width = 0 gives mid = right = '
+        'left, the merge loops do not run, left := right: the loop head repeats exactly '
+        '(SameHead, while_rank_stationary)'),
     ('sort_elems', 2): ('MONO', 2 ** 65,
         'each iteration increments exactly one of i < mid, j < right (signed, no overflow): '
         'measure (mid - i) + (right - j)'),
@@ -59,11 +63,15 @@ OVERRIDES = {
         'pc strictly increases by adv in [1, 33] and every iteration loads code + pc: fresh '
         'address in the contiguous ordinaryDomain'),
     ('fq12_inv', 0): ('MONO', 14,
-        'Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the iteration is '
-        'stationary (zero leading inverse, timeout)'),
+        'Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the inner loop #1 '
+        'times out (zero leading inverse), so this iteration times out (WhileTimesOut, '
+        'while_rank_stationary)'),
     ('fq12_inv', 1): ('MONO', 14,
-        'd0 = deg r0 in [-1, 12] strictly decreases (fq_poly_submul cancels the leading '
-        'coefficient), or the iteration is stationary (timeout)'),
+        'mu = 2 (d0 + 1) + [not yet stationary]: d0 = deg r0 in [-1, 12] strictly decreases when '
+        'fq_poly_submul cancels the leading coefficient (needs: fq arithmetic cancels on '
+        'non-canonical inputs, DESIGN 8); with linv = fq_inv(lead) = 0, cf = 0 and the writes '
+        'to q and r0 are idempotent from the second iteration on, which repeats exactly '
+        '(SameHead, while_rank_stationary)'),
     ('_rlp_validate_items_body', 0): ('STACK', (2 ** 61 + 1) * 2 ** 192,
         'each push calls scratch_alloc(24), which strictly lowers scratch_ptr and cannot wrap '
         '(<= 2^61 pushes, arbitrary globals); between pushes the body is read-only, no-repeat '
@@ -77,9 +85,11 @@ OVERRIDES = {
         'object (records, branch nodes, node_new_* results) is a fresh allocation, so the slot '
         'counter top+32 < 16 is only written by this loop: <= (pushes + 1) * 64 iterations'),
     ('_mpt_insert_node', 0): ('GUARD', 2 ** 130,
-        'GUARDED (MptReady): level strictly increases except on empty extension segments; '
-        'writes are confined to typed node fields and are idempotent on such runs, so a '
-        'repeated node is a timeout: <= (klen + 1) * 2^65'),
+        'GUARDED (MptReady): level strictly increases except on empty extension segments '
+        '(pl = sl = 0); on such a segment node := +48 child; on the self-loop (child = node) '
+        'node_invalidate and store(slot, node) are idempotent from the second iteration on, '
+        'which repeats exactly (SameHead, while_rank_stationary with mu = 2 * rank + '
+        '[not yet stationary]); <= (klen + 1) * 2^65'),
     ('_mpt_delete_node_body', 0): ('GUARD', 2 ** 130,
         'GUARDED (MptReady): descent as in _mpt_insert_node, pushing fresh scratch frames'),
     ('_mpt_delete_node_body', 1): ('GUARD', 2 ** 64,
@@ -125,8 +135,45 @@ OVERRIDES = {
         'fresh-address walk: the counter strictly increases by a positive constant and every '
         'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
     ('htab_truncate', 0): ('WF', 2 ** 64,
-        'GUARDED (HtabArgWF): every iteration is a successful htab_del, whose contract lowers '
-        'count t+24 by one and preserves HtabWF'),
+        'GUARDED (HtabArgWF), while_rank_stationary with mu = count t+24 < 2^64: each iteration '
+        'calls htab_del on the key of the last leaf; it either deletes a leaf (count drops by '
+        'one: htab_del_progress_spec; HtabArgWF kept: htab_del_spec) or returns 0 having written '
+        'nothing (find_leaf may reach another leaf and memeq reject it: HtabWF does not '
+        'constrain key bytes), and then the loop head repeats exactly (SameHead)'),
+    # round 2: RO(k) counted locals, not words; these loops carry 4-, 5- or 6-word locals.
+    # Their real measures are tiny; N is kept (it is an upper bound) so K is unchanged.
+    ('modinv_bin', 0): ('MONO', 2 ** 256,
+        'binary gcd: mu = bitlen(odd part of u) + bitlen(odd part of v) <= 512 drops by >= 1 '
+        'per iteration (u, v odd after the halving loops, so u - v (resp. v - u) is even and '
+        'its odd part is < u (resp. v)); u - v = 0 makes the next halving loop time out '
+        '(WhileTimesOut, while_rank_stationary)'),
+    ('modinv_bin', 1): ('MONO', 2 ** 128,
+        'u != 0: mu = trailing zeros of u <= 255 drops by one; u = 0: u stays 0 and the body '
+        '(shifts, mod_half = straight-line u256 arithmetic, always returns) cannot leave the '
+        'loop, so the loop times out (WhileTimesOut, while_rank_stationary)'),
+    ('modinv_bin', 2): ('MONO', 2 ** 128,
+        'as #1 with v, x2'),
+    ('bls_fp_inv_raw', 0): ('MONO', 2 ** 256,
+        'as modinv_bin #0 on 384-bit values: mu <= 768'),
+    ('bls_fp_inv_raw', 1): ('MONO', 2 ** 128,
+        'as modinv_bin #1 on 384-bit values: trailing zeros <= 383, or u = 0 and the loop '
+        'times out (bls_fp_shr1, bls_fp_half_can are straight-line arithmetic)'),
+    ('bls_fp_inv_raw', 2): ('MONO', 2 ** 128,
+        'as #1 with v, x2'),
+    ('fq12_mul', 1): ('CTR', 2 ** 128,
+        'iend >= i (unsigned notLower), i := i + 1 unconditional, iend <= 11 loop-invariant '
+        '(capped before the loop): mu = iend + 1 - i <= 12'),
+    ('fq12_sqr', 1): ('CTR', 2 ** 128,
+        'i < k - i (unsigned), i := i + 1 unconditional, k <= 22 loop-invariant: '
+        'mu = k - 2 i <= 22'),
+    ('p256_fp_mul', 0): ('MONO', 2 ** 128,
+        'c < 0 (signed), r := r + P, c := c + carry: P > 2^255, so of two consecutive '
+        'iterations at least one carries; mu = 2 (-c) + [r < 2^256 - P] <= 2^65'),
+    ('p256_fp_mul', 1): ('MONO', 2 ** 128,
+        '0 < c (signed), c := c - [r < P], r := r - P: r >= P is followed by r - P < P; '
+        'mu = 2 c + [r >= P] <= 2^64'),
+    ('p256_fp_sqr', 0): ('MONO', 2 ** 128, 'as p256_fp_mul #0'),
+    ('p256_fp_sqr', 1): ('MONO', 2 ** 128, 'as p256_fp_mul #1'),
 }
 
 # Functions whose bound is not GuestInv-only (guard and potential in DESIGN.md section 6).
@@ -302,7 +349,7 @@ def loop_decls(body):
     return out
 
 
-def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
+def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset(), words=None):
     if (fname, idx) in OVERRIDES:
         return OVERRIDES[(fname, idx)]
     if (fname, idx) in EVM_POTENTIAL:
@@ -356,18 +403,53 @@ def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
             return (cls, n, ('%s < %s' if want > 0 else '%s > %s (or != 0)') % ((v[1], panast.show(other)) if want > 0 else (v[1], panast.show(other))) + ', step %+d, unconditional' % steps[0])
     # read-only loops: no-repeat on the carried locals
     if not has_store(body) and not global_writes(body) and pure:
-        k = len([v for v in carried if v[0] == 'local'])
+        # the no-repeat key is every WORD of every carried local (a 4-word struct local
+        # contributes 2^256 values, round-2 non-blocking item)
+        k = sum((words or {}).get(n, 1) for (kind, n) in carried if kind == 'local')
         return ('RO(%d)' % k, TWO64 ** max(k, 1),
-                'no-repeat, key = carried locals %s' % sorted(n for _, n in carried))
+                'no-repeat, key = carried locals %s (%d word%s)' % (
+                    sorted(n for _, n in carried), k, '' if k == 1 else 's'))
     return ('MAN', None, 'carried=%s store=%s cond=%s' % (
         sorted(n for _, n in carried), has_store(body), panast.show(cond)))
 
 
-def analyse(path):
+def shape_words(t):
+    """Number of 64-bit words of a Pancake shape (`Shape.one` = 1, `Shape.comb l` = sum)."""
+    if is_app(t, 'Shape.comb'):
+        lst = t[2][0]
+        return sum(shape_words(x) for x in lst[1])
+    return 1
+
+
+def local_words(path, fns):
+    """Per function: words of every parameter and every dec/decCall-declared local."""
+    import re
+    lines = open(path).read().split('\n')
+    out = {}
+    for i, ln in enumerate(lines):
+        m = re.match(r'\s*\{ name := "([^"]+)"', ln)
+        if m and i + 4 < len(lines) and lines[i + 3].strip().startswith('params := '):
+            ws = {}
+            for pm in re.finditer(r'\("([^"]+)", (\(Shape\.comb \[[^]]*\]\)|Shape\.one)\)',
+                                  lines[i + 3]):
+                ws[pm.group(1)] = pm.group(2).count('Shape.one')
+            out[m.group(1)] = ws
+    for f, t in fns.items():
+        ws = out.setdefault(f, {})
+
+        def g(x, _ctx, ws=ws):
+            if is_app(x, 'Prog.dec') or is_app(x, 'Prog.decCall'):
+                ws[strval(x[2][0])] = max(ws.get(strval(x[2][0]), 1), shape_words(x[2][1]))
+        panast.walk(t, g)
+    return out
+
+
+def analyse(path, outdir):
     import time
     t0 = time.time()
     import pickle
-    cache = path + '.parsed.pickle'
+    os.makedirs(outdir, exist_ok=True)
+    cache = os.path.join(outdir, 'parsed.pickle')
     if os.path.exists(cache) and os.path.getmtime(cache) > os.path.getmtime(path):
         with open(cache, 'rb') as fh:
             fns, line_of = pickle.load(fh)
@@ -445,6 +527,7 @@ def analyse(path):
             recursive.update(c)
     print('scc done', time.time() - t0, flush=True)
     # loops
+    words = local_words(path, fns)
     loops = {}
     for f in sorted(reach):
         lst = []
@@ -457,7 +540,7 @@ def analyse(path):
         panast.walk(fns[f], g)
         loops[f] = [(i, c, b, d, classify(
             f, i, c, b, not (callees(b, set()) & impure),
-            frozenset().union(*[gw.get(g, set()) for g in callees(b, set())])))
+            frozenset().union(*[gw.get(g, set()) for g in callees(b, set())]), words.get(f)))
             for i, (c, b, d) in enumerate(lst)]
     return fns, line_of, graph, reach, impure, recursive, loops
 
@@ -543,7 +626,7 @@ def costs(fns, graph, reach, recursive, loops):
 
 def main():
     path, outdir = sys.argv[1], sys.argv[2]
-    fns, line_of, graph, reach, impure, recursive, loops = analyse(path)
+    fns, line_of, graph, reach, impure, recursive, loops = analyse(path, outdir)
     K, formula, order = costs(fns, graph, reach, recursive, loops)
     os.makedirs(outdir, exist_ok=True)
     # guarded tier: functions whose bound needs a memory contract, and all their callers

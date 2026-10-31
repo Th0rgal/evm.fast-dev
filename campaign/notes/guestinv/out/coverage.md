@@ -24,15 +24,15 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `scratch_release` | 186 | `fb_scratch_release` (GuestInv) | - | 0 |
 | `rlp_validate_items` | 4548 | `fb_rlp_validate_items` (GuestInv) | - | 319 |
 | `rlp_item_total` | 4567 | `fb_rlp_item_total` (GuestInv) | - | 319 |
-| `rlp_list_count` | 4582 | `fb_rlp_list_count` (GuestInv) | #0 d0 RO(2) N=2^128: read-only on continuing iterations (callees only raise via trap_with); no-repeat key (off, count) | 447 |
+| `rlp_list_count` | 4582 | `fb_rlp_list_count` (GuestInv) | #0 d0 MONO N=2^128: off < len (unsigned); total = hl + pl from rlp_item_header, which returns 1 <= hl + pl <= len - off or raises (rlp_fail); the body writes scratch (_rlp_validate_items_body), so the measure is len - off < 2^64 on the locals, not no-repeat (round 2) | 447 |
 | `rlp_item` | 4338 | `fb_rlp_item` (GuestInv) | - | 448 |
 | `rlp_decode_fully` | 4417 | `fb_rlp_decode_fully` (GuestInv) | - | 448 |
 | `rlp_item_total_unchecked` | 4600 | `fb_rlp_item_total_unchecked` (GuestInv) | - | 66 |
 | `rlp_list_to_slices` | 4631 | `fb_rlp_list_to_slices` (GuestInv) | #0 d0 CTR N=2^64: i < L:count, step +1, unconditional | 447 |
 | `_decode_step` | 10110 | `fb__decode_step` (GuestInv) | - | 449 |
 | `node_new_hashed` | 9975 | `fb_node_new_hashed` (GuestInv) | - | 2 |
-| `htab_find_leaf` | 4976 | `fb_htab_find_leaf` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['n'] | 65 |
-| `memeq` | 304 | `fb_memeq` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #1 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #2 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #3 d0 CTR N=2^64: i < L:n, step +1, unconditional | 67 |
+| `htab_find_leaf` | 4976 | `fb_htab_find_leaf` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['n'] (1 word) | 65 |
+| `memeq` | 304 | `fb_memeq` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i'] (1 word); #1 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i'] (1 word); #2 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i'] (1 word); #3 d0 CTR N=2^64: i < L:n, step +1, unconditional | 67 |
 | `htab_get` | 4999 | `fb_htab_get` (GuestInv) | - | 67 |
 | `nodedb_lookup` | 9960 | `fb_nodedb_lookup` (GuestInv) | - | 67 |
 | `_resolve_step` | 10077 | `fb__resolve_step` (GuestInv) | - | 448 |
@@ -47,10 +47,10 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `_mpt_delete_node_body` | 10758 | `gb__mpt_delete_node_body` (MptReady) | #0 d0 GUARD N=2^130: GUARDED (MptReady): descent as in _mpt_insert_node, pushing fresh scratch frames; #1 d0 GUARD N=2^64: GUARDED (MptReady): unwinds the scratch frames pushed by loop #0; frame links are fresh scratch objects disjoint from typed nodes, so each pop strictly shortens the chain | 197 |
 | `_mpt_delete_node` | 10852 | `gb__mpt_delete_node` (MptReady) | - | 197 |
 | `_split_extension` | 10561 | `fb__split_extension` (GuestInv) | - | 65 |
-| `_mpt_insert_node` | 10598 | `gb__mpt_insert_node` (MptReady) | #0 d0 GUARD N=2^130: GUARDED (MptReady): level strictly increases except on empty extension segments; writes are confined to typed node fields and are idempotent on such runs, so a repeated node is a timeout: <= (klen + 1) * 2^65 | 197 |
+| `_mpt_insert_node` | 10598 | `gb__mpt_insert_node` (MptReady) | #0 d0 GUARD N=2^130: GUARDED (MptReady): level strictly increases except on empty extension segments (pl = sl = 0); on such a segment node := +48 child; on the self-loop (child = node) node_invalidate and store(slot, node) are idempotent from the second iteration on, which repeats exactly (SameHead, while_rank_stationary with mu = 2 * rank + [not yet stationary]); <= (klen + 1) * 2^65 | 197 |
 | `_node_needs_rlp` | 10989 | `fb__node_needs_rlp` (GuestInv) | - | 0 |
 | `nibble_list_to_compact` | 9877 | `fb_nibble_list_to_compact` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 35 |
-| `rlp_be_len` | 4698 | `fb_rlp_be_len` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'v'] | 129 |
+| `rlp_be_len` | 4698 | `fb_rlp_be_len` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'v'] (2 words) | 129 |
 | `rlp_header_len` | 4753 | `fb_rlp_header_len` (GuestInv) | - | 129 |
 | `rlp_bytes_encoded_len` | 4827 | `fb_rlp_bytes_encoded_len` (GuestInv) | - | 129 |
 | `rlp_value_encoded_len` | 11095 | `fb_rlp_value_encoded_len` (GuestInv) | - | 129 |
@@ -67,7 +67,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `rlp_encode_list_header` | 4817 | `fb_rlp_encode_list_header` (GuestInv) | - | 129 |
 | `rlp_list_header_len` | 4842 | `fb_rlp_list_header_len` (GuestInv) | - | 129 |
 | `_node_rlp_finish` | 10930 | `fb__node_rlp_finish` (GuestInv) | #0 d0 CTR N=2^64: i < 16, step +1, unconditional; #1 d0 CTR N=2^64: j < 16, step +1, unconditional | 164 |
-| `_node_rlp_fill` | 11011 | `fb__node_rlp_fill` (GuestInv) | #0 d0 ALLOC N=2^62: every iteration either pushes (scratch_alloc(48): scratch_ptr strictly lower) or runs _node_rlp_finish, which allocates its encoding (alloc(n >= 1): heap_ptr strictly higher); callees release only to marks they took themselves; <= 2^64/48 + 2^64/8; #1 d1 RO(3) N=2^192: no-repeat, key = carried locals ['child', 'found', 'i'] | 256 |
+| `_node_rlp_fill` | 11011 | `fb__node_rlp_fill` (GuestInv) | #0 d0 ALLOC N=2^62: every iteration either pushes (scratch_alloc(48): scratch_ptr strictly lower) or runs _node_rlp_finish, which allocates its encoding (alloc(n >= 1): heap_ptr strictly higher); callees release only to marks they took themselves; <= 2^64/48 + 2^64/8; #1 d1 RO(3) N=2^192: no-repeat, key = carried locals ['child', 'found', 'i'] (3 words) | 256 |
 | `htab_has` | 5022 | `fb_htab_has` (GuestInv) | - | 67 |
 | `is_warm_address` | 15473 | `fb_is_warm_address` (GuestInv) | - | 67 |
 | `access_gas_cost` | 15496 | `fb_access_gas_cost` (GuestInv) | - | 67 |
@@ -77,12 +77,12 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `htab_new_node` | 5041 | `fb_htab_new_node` (GuestInv) | - | 66 |
 | `htab_new_internal` | 5097 | `fb_htab_new_internal` (GuestInv) | - | 66 |
 | `htab_new_leaf` | 5068 | `fb_htab_new_leaf` (GuestInv) | - | 67 |
-| `htab_set` | 5149 | `fb_htab_set` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'p'] | 130 |
+| `htab_set` | 5149 | `fb_htab_set` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'p'] (2 words) | 130 |
 | `record_pre_state_read` | 12980 | `fb_record_pre_state_read` (GuestInv) | - | 130 |
 | `decode_account_from_leaf` | 11266 | `fb_decode_account_from_leaf` (GuestInv) | #0 d0 CTR N=2^64: i < rField 2 L:f0, step +1, unconditional; #1 d0 CTR N=2^64: i < rField 2 L:f1, step +1, unconditional | 450 |
 | `heap_mark` | 88 | `fb_heap_mark` (GuestInv) | - | 0 |
 | `heap_release` | 98 | `fb_heap_release` (GuestInv) | - | 0 |
-| `trie_walk` | 10376 | `fb_trie_walk` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['node', 'pos'] | 196 |
+| `trie_walk` | 10376 | `fb_trie_walk` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['node', 'pos'] (2 words) | 196 |
 | `trie_lookup` | 10432 | `fb_trie_lookup` (GuestInv) | - | 196 |
 | `ws_account_leaf` | 12992 | `fb_ws_account_leaf` (GuestInv) | - | 196 |
 | `ws_get_account_optional` | 13009 | `fb_ws_get_account_optional` (GuestInv) | - | 450 |
@@ -131,7 +131,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `u256_to_be_min` | 2302 | `fb_u256_to_be_min` (GuestInv) | #0 d0 CTR N=2^64: i < L:len, step +1, unconditional | 66 |
 | `rlp_put_u256` | 9334 | `fb_rlp_put_u256` (GuestInv) | - | 129 |
 | `bal_sort_gt` | 14327 | `fb_bal_sort_gt` (GuestInv) | #0 d0 CTR N=2^64: k < L:len, step +1, unconditional | 65 |
-| `sort_elems` | 14364 | `fb_sort_elems` (GuestInv) | #0 d0 MONO N=65: width doubles 1,2,..,2^63,0; width = 2^63 exits after one inner pass, width = 0 makes the inner loop stationary (timeout); at most 65 iterations; #1 d1 MONO N=2^64: for 1 <= width < n (signed) mid/right are capped at n with unsigned compares and do not wrap, so left strictly increases to n; width = 0 is stationary; #2 d2 MONO N=2^65: each iteration increments exactly one of i < mid, j < right (signed, no overflow): measure (mid - i) + (right - j); #3 d2 CTR N=2^64: i < L:mid, step +1, unconditional; #4 d2 CTR N=2^64: j < L:right, step +1, unconditional | 201 |
+| `sort_elems` | 14364 | `fb_sort_elems` (GuestInv) | #0 d0 MONO N=65: width doubles 1,2,..,2^63,0; width = 2^63 exits after one inner pass, width = 0 makes the inner loop time out (WhileTimesOut, while_rank_stationary); at most 65 iterations; #1 d1 MONO N=2^64: for 1 <= width < n (signed) mid/right are capped at n with unsigned compares and do not wrap, so left strictly increases to n (mu = n - left); width = 0 gives mid = right = left, the merge loops do not run, left := right: the loop head repeats exactly (SameHead, while_rank_stationary); #2 d2 MONO N=2^65: each iteration increments exactly one of i < mid, j < right (signed, no overflow): measure (mid - i) + (right - j); #3 d2 CTR N=2^64: i < L:mid, step +1, unconditional; #4 d2 CTR N=2^64: j < L:right, step +1, unconditional | 201 |
 | `sorted_keys32` | 14442 | `fb_sorted_keys32` (GuestInv) | - | 201 |
 | `bal_encode_account` | 14455 | `fb_bal_encode_account` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:slots, step +1, unconditional; #1 d1 CTR N=2^64: j < L:n, step +1, unconditional; #2 d0 CTR N=2^64: i < rField 1 L:rk, step +1, unconditional; #3 d0 CTR N=2^64: i < L:kept, step +1, unconditional; #4 d0 CTR N=2^64: i < L:n2, step +1, unconditional; #5 d0 CTR N=2^64: i < L:n3, step +1, unconditional; #6 d0 CTR N=2^64: i < L:n4, step +1, unconditional | 265 |
 | `htab_item` | 5314 | `fb_htab_item` (GuestInv) | - | 0 |
@@ -234,7 +234,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `ec_is_infinity` | 7016 | `fb_ec_is_infinity` (GuestInv) | - | 1 |
 | `mod_half` | 6866 | `fb_mod_half` (GuestInv) | - | 1 |
 | `mod_sub` | 6881 | `fb_mod_sub` (GuestInv) | - | 2 |
-| `modinv_bin` | 6815 | `fb_modinv_bin` (GuestInv) | #0 d0 RO(4) N=2^256: no-repeat, key = carried locals ['u', 'v', 'x1', 'x2']; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['u', 'x1']; #2 d1 RO(2) N=2^128: no-repeat, key = carried locals ['v', 'x2'] | 387 |
+| `modinv_bin` | 6815 | `fb_modinv_bin` (GuestInv) | #0 d0 MONO N=2^256: binary gcd: mu = bitlen(odd part of u) + bitlen(odd part of v) <= 512 drops by >= 1 per iteration (u, v odd after the halving loops, so u - v (resp. v - u) is even and its odd part is < u (resp. v)); u - v = 0 makes the next halving loop time out (WhileTimesOut, while_rank_stationary); #1 d1 MONO N=2^128: u != 0: mu = trailing zeros of u <= 255 drops by one; u = 0: u stays 0 and the body (shifts, mod_half = straight-line u256 arithmetic, always returns) cannot leave the loop, so the loop times out (WhileTimesOut, while_rank_stationary); #2 d1 MONO N=2^128: as #1 with v, x2 | 387 |
 | `fp_inv` | 6897 | `fb_fp_inv` (GuestInv) | - | 387 |
 | `ec_to_affine` | 7308 | `fb_ec_to_affine` (GuestInv) | - | 387 |
 | `u256_bit` | 854 | `fb_u256_bit` (GuestInv) | - | 1 |
@@ -244,7 +244,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `digits_to_u256` | 1556 | `fb_digits_to_u256` (GuestInv) | - | 0 |
 | `div64by32` | 1506 | `fb_div64by32` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 65 |
 | `nlz32` | 1467 | `fb_nlz32` (GuestInv) | - | 0 |
-| `divmnu` | 1583 | `fb_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat']; #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
+| `divmnu` | 1583 | `fb_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat'] (3 words); #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
 | `u256_to_digits` | 1530 | `fb_u256_to_digits` (GuestInv) | - | 0 |
 | `digits_divmod` | 1718 | `fb_digits_divmod` (GuestInv) | #0 d0 CTR N=16: i < 16, step +1, unconditional; #1 d0 CTR N=8: i < 8, step +1, unconditional | 257 |
 | `mul64x64` | 1127 | `fb_mul64x64` (GuestInv) | - | 0 |
@@ -291,11 +291,11 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `fq_mul_small` | 23341 | `fb_fq_mul_small` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 68 |
 | `fq_sub` | 22307 | `fb_fq_sub` (GuestInv) | - | 2 |
 | `fq12_reduce` | 23386 | `fb_fq12_reduce` (GuestInv) | #0 d0 CTR N=2^64: e > 0 (or != 0), step -1, unconditional | 133 |
-| `fq12_mul` | 23413 | `fb_fq12_mul` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['acc', 'i'] | 136 |
+| `fq12_mul` | 23413 | `fb_fq12_mul` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 CTR N=2^128: iend >= i (unsigned notLower), i := i + 1 unconditional, iend <= 11 loop-invariant (capped before the loop): mu = iend + 1 - i <= 12 | 136 |
 | `fq2_mul` | 23362 | `fb_fq2_mul` (GuestInv) | - | 5 |
 | `fe_mul` | 23502 | `fb_fe_mul` (GuestInv) | - | 136 |
 | `fe_mul_small` | 23603 | `fb_fe_mul_small` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 132 |
-| `fq12_sqr` | 23456 | `fb_fq12_sqr` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['acc', 'i'] | 136 |
+| `fq12_sqr` | 23456 | `fb_fq12_sqr` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 CTR N=2^128: i < k - i (unsigned), i := i + 1 unconditional, k <= 22 loop-invariant: mu = k - 2 i <= 22 | 136 |
 | `fe_sqr` | 23529 | `fb_fe_sqr` (GuestInv) | - | 137 |
 | `fe_sub` | 23566 | `fb_fe_sub` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 67 |
 | `ecp_double` | 23694 | `fb_ecp_double` (GuestInv) | - | 140 |
@@ -320,7 +320,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `fq12_cast` | 24033 | `fb_fq12_cast` (GuestInv) | - | 65 |
 | `fq_poly_deg` | 24084 | `fb_fq_poly_deg` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 129 |
 | `fq_poly_submul` | 24103 | `fb_fq_poly_submul` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 38 |
-| `fq12_inv` | 24124 | `fb_fq12_inv` (GuestInv) | #0 d0 MONO N=14: Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the iteration is stationary (zero leading inverse, timeout); #1 d1 MONO N=14: d0 = deg r0 in [-1, 12] strictly decreases (fq_poly_submul cancels the leading coefficient), or the iteration is stationary (timeout); #2 d1 CTR N=13: j < 13, step +1, unconditional; #3 d0 CTR N=12: i < 12, step +1, unconditional | 391 |
+| `fq12_inv` | 24124 | `fb_fq12_inv` (GuestInv) | #0 d0 MONO N=14: Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the inner loop #1 times out (zero leading inverse), so this iteration times out (WhileTimesOut, while_rank_stationary); #1 d1 MONO N=14: mu = 2 (d0 + 1) + [not yet stationary]: d0 = deg r0 in [-1, 12] strictly decreases when fq_poly_submul cancels the leading coefficient (needs: fq arithmetic cancels on non-canonical inputs, DESIGN 8); with linv = fq_inv(lead) = 0, cf = 0 and the writes to q and r0 are idempotent from the second iteration on, which repeats exactly (SameHead, while_rank_stationary); #2 d1 CTR N=13: j < 13, step +1, unconditional; #3 d0 CTR N=12: i < 12, step +1, unconditional | 391 |
 | `fq12_pow_words` | 24225 | `fb_fq12_pow_words` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 201 |
 | `fq12_twist` | 23999 | `fb_fq12_twist` (GuestInv) | #0 d0 CTR N=3: j < 3, step +1, unconditional | 70 |
 | `bn254_pairing_check` | 24600 | `fb_bn254_pairing_check` (GuestInv) | #0 d0 CTR N=2^64: i < L:n_pairs, step +1, unconditional | 391 |
@@ -351,7 +351,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `bls_fp_encode64` | 27775 | `fb_bls_fp_encode64` (GuestInv) | - | 65 |
 | `bls_fp_shr1` | 27580 | `fb_bls_fp_shr1` (GuestInv) | - | 0 |
 | `bls_fp_half_can` | 27590 | `fb_bls_fp_half_can` (GuestInv) | - | 2 |
-| `bls_fp_inv_raw` | 27605 | `fb_bls_fp_inv_raw` (GuestInv) | #0 d0 RO(4) N=2^256: no-repeat, key = carried locals ['u', 'v', 'x1', 'x2']; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['u', 'x1']; #2 d1 RO(2) N=2^128: no-repeat, key = carried locals ['v', 'x2'] | 388 |
+| `bls_fp_inv_raw` | 27605 | `fb_bls_fp_inv_raw` (GuestInv) | #0 d0 MONO N=2^256: as modinv_bin #0 on 384-bit values: mu <= 768; #1 d1 MONO N=2^128: as modinv_bin #1 on 384-bit values: trailing zeros <= 383, or u = 0 and the loop times out (bls_fp_shr1, bls_fp_half_can are straight-line arithmetic); #2 d1 MONO N=2^128: as #1 with v, x2 | 388 |
 | `bls_fp_inv` | 27658 | `fb_bls_fp_inv` (GuestInv) | - | 388 |
 | `g1_normalize` | 28861 | `fb_g1_normalize` (GuestInv) | - | 388 |
 | `g1_encode` | 28933 | `fb_g1_encode` (GuestInv) | - | 388 |
@@ -452,7 +452,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `pre_kzg_point_evaluation` | 31454 | `fb_pre_kzg_point_evaluation` (GuestInv) | - | 390 |
 | `be_top_bit` | 20407 | `fb_be_top_bit` (GuestInv) | #0 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 66 |
 | `bn_from_be` | 20170 | `fb_bn_from_be` (GuestInv) | #0 d0 CTR N=2^64: i < L:nd, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 66 |
-| `bn_divmnu` | 20253 | `fb_bn_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat']; #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
+| `bn_divmnu` | 20253 | `fb_bn_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat'] (3 words); #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
 | `bn_mod` | 20386 | `fb_bn_mod` (GuestInv) | - | 257 |
 | `bn_mul` | 20218 | `fb_bn_mul` (GuestInv) | #0 d0 CTR N=2^64: i < add[L:na, L:nb], step +1, unconditional; #1 d0 CTR N=2^64: i < L:na, step +1, unconditional; #2 d1 CTR N=2^64: j < L:nb, step +1, unconditional | 129 |
 | `bn_to_be` | 20196 | `fb_bn_to_be` (GuestInv) | #0 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 65 |
@@ -462,8 +462,8 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `pre_modexp` | 31725 | `fb_pre_modexp` (GuestInv) | - | 322 |
 | `p256_fp_add` | 20490 | `fb_p256_fp_add` (GuestInv) | - | 3 |
 | `p256_fp_reduce` | 20527 | `fb_p256_fp_reduce` (GuestInv) | - | 2 |
-| `p256_fp_mul` | 20542 | `fb_p256_fp_mul` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r']; #1 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r'] | 131 |
-| `p256_fp_sqr` | 21184 | `fb_p256_fp_sqr` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r']; #1 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r'] | 131 |
+| `p256_fp_mul` | 20542 | `fb_p256_fp_mul` (GuestInv) | #0 d0 MONO N=2^128: c < 0 (signed), r := r + P, c := c + carry: P > 2^255, so of two consecutive iterations at least one carries; mu = 2 (-c) + [r < 2^256 - P] <= 2^65; #1 d0 MONO N=2^128: 0 < c (signed), c := c - [r < P], r := r - P: r >= P is followed by r - P < P; mu = 2 c + [r >= P] <= 2^64 | 131 |
+| `p256_fp_sqr` | 21184 | `fb_p256_fp_sqr` (GuestInv) | #0 d0 MONO N=2^128: as p256_fp_mul #0; #1 d0 MONO N=2^128: as p256_fp_mul #1 | 131 |
 | `p256_fp_sub` | 20511 | `fb_p256_fp_sub` (GuestInv) | - | 2 |
 | `p256_set_infinity` | 21782 | `fb_p256_set_infinity` (GuestInv) | - | 0 |
 | `p256_ec_double` | 21814 | `fb_p256_ec_double` (GuestInv) | - | 134 |
@@ -487,7 +487,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `incorporate_child_on_error` | 18941 | `fb_incorporate_child_on_error` (GuestInv) | - | 0 |
 | `incorporate_child_on_success` | 18957 | `fb_incorporate_child_on_success` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
 | `pc_add` | 15437 | `fb_pc_add` (GuestInv) | - | 0 |
-| `htab_truncate` | 5278 | `gb_htab_truncate` (HtabArgWF) | #0 d0 WF N=2^64: GUARDED (HtabArgWF): every iteration is a successful htab_del, whose contract lowers count t+24 by one and preserves HtabWF | 131 |
+| `htab_truncate` | 5278 | `gb_htab_truncate` (HtabArgWF) | #0 d0 WF N=2^64: GUARDED (HtabArgWF), while_rank_stationary with mu = count t+24 < 2^64: each iteration calls htab_del on the key of the last leaf; it either deletes a leaf (count drops by one: htab_del_progress_spec; HtabArgWF kept: htab_del_spec) or returns 0 having written nothing (find_leaf may reach another leaf and memeq reject it: HtabWF does not constrain key bytes), and then the loop head repeats exactly (SameHead) | 131 |
 | `rollback_child_access` | 18995 | `gb_rollback_child_access` (RollbackReady) | - | 132 |
 | `set_retdata` | 19064 | `fb_set_retdata` (GuestInv) | - | 65 |
 | `stack_push` | 15065 | `fb_stack_push` (GuestInv) | - | 65 |
@@ -697,7 +697,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `encode_header` | 9350 | `fb_encode_header` (GuestInv) | - | 133 |
 | `header_hash` | 9460 | `fb_header_hash` (GuestInv) | - | 133 |
 | `is_valid_versioned_hashes` | 32794 | `fb_is_valid_versioned_hashes` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nb, step +1, unconditional | 640 |
-| `nodedb_build` | 9937 | `fb_nodedb_build` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['cap']; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
+| `nodedb_build` | 9937 | `fb_nodedb_build` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['cap'] (1 word); #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
 | `withdrawal_rlp_len` | 32099 | `fb_withdrawal_rlp_len` (GuestInv) | - | 131 |
 | `block_rlp_length` | 32586 | `fb_block_rlp_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 195 |
 | `encode_execution_requests` | 32142 | `fb_encode_execution_requests` (GuestInv) | #0 d0 CTR N=2^64: i < 5, step +1, unconditional | 129 |
@@ -726,7 +726,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `bls_consts_init` | 24793 | `fb_bls_consts_init` (GuestInv) | - | 2 |
 | `bls_lib_init` | 30328 | `fb_bls_lib_init` (GuestInv) | - | 3 |
 | `bls_precompiles_init` | 30678 | `fb_bls_precompiles_init` (GuestInv) | - | 4 |
-| `ceil_log2` | 749 | `fb_ceil_log2` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['d'] | 65 |
+| `ceil_log2` | 749 | `fb_ceil_log2` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['d'] (1 word) | 65 |
 | `ssz_fail` | 8285 | `fb_ssz_fail` (GuestInv) | - | 0 |
 | `ssz_split_var_list` | 8447 | `fb_ssz_split_var_list` (GuestInv) | #0 d0 CTR N=2^64: i < L:count, step +1, unconditional | 66 |
 | `decode_bytes_list` | 8637 | `fb_decode_bytes_list` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:r, step +1, unconditional | 67 |

@@ -28,6 +28,19 @@ def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFin
 
 theorem htab_set_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_set") := by sorry
 theorem htab_del_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_del") := by sorry
+
+/-- Progress of `htab_del` (round-2 item 3, `htab_truncate`): a normal return either deleted a
+leaf, so the count `t+24` dropped by one, or wrote nothing at all (`htab_find_leaf` found no leaf
+or `memeq` rejected its key; `HtabWF` does not constrain key bytes, so the key of the last leaf
+need not lead back to that leaf). In the second case memory, globals and the FFI state are those of
+the entry state: the caller's loop head repeats exactly (`SameHead`). -/
+def HtabDelProgress : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F →
+    Prop :=
+  fun s post => hdr post (locN s "t") 3 + 1 = hdr s (locN s "t") 3 ∨
+    post = { s with locals := post.locals, clock := post.clock }
+
+theorem htab_del_progress_spec :
+    FunSpec HtabArgWF (OnReturn HtabDelProgress) (ofString "htab_del") := by sorry
 theorem htab_truncate_spec :
     FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_truncate") := by sorry
 theorem htab_union_into_spec :
@@ -45,9 +58,15 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     FrameOutside s post [] (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
     FrameOutside s post [] (globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")
 
-theorem htab_new_spec : FunSpec ArenaReady HtabNewExit (ofString "htab_new") := by sorry
+/-- Entry of `htab_new` / `htab_new_scratch` (round-2 item 1): separated arenas and a key length
+from the 32 literal call sites. `htab_new` never checks `key_len`: `0` breaks `1 ≤ klen`, `61`
+breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the stride. -/
+def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens
+
+theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") := by sorry
 theorem htab_new_scratch_spec :
-    FunSpec ArenaReady HtabNewExit (ofString "htab_new_scratch") := by sorry
+    FunSpec HtabNewReady HtabNewExit (ofString "htab_new_scratch") := by sorry
 
 /-! ### MPT update contracts (`_mpt_insert_node`, `_mpt_delete_node_body`) -/
 
@@ -184,3 +203,121 @@ def RollbackReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∀ k ∈ [168, 176],
     HtabWF s (memW s (locN s "child" + k)) ∧
     ∀ i ∈ htabFootprint s (memW s (locN s "child" + k)), Allocated s i
+
+/-! ### Every guard reads at most one local (`dec_onLocals`, round-2 item 3) -/
+
+theorem freeChain_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k nodes : Nat) :
+    ∀ (Fr : List Nat) (head : Nat),
+      FreeChain { s with locals := locals, clock := k } nodes head Fr ↔ FreeChain s nodes head Fr
+  | [], _ => Iff.rfl
+  | f :: rest, head => by
+    simp only [FreeChain]
+    exact and_congr Iff.rfl (freeChain_with_locals s locals k nodes rest _)
+
+theorem htabWF_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k t : Nat) :
+    HtabWF { s with locals := locals, clock := k } t ↔ HtabWF s t := by
+  simp only [HtabWF, freeChain_with_locals]
+  exact Iff.rfl
+
+theorem tablesTyped_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (S : List Nat) :
+    TablesTyped { s with locals := locals, clock := k } S ↔ TablesTyped s S := by
+  simp only [TablesTyped, htabWF_with_locals]
+  exact Iff.rfl
+
+theorem worldTyped_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (S : List Nat) :
+    WorldTyped { s with locals := locals, clock := k } S ↔ WorldTyped s S := by
+  simp only [WorldTyped, tablesTyped_with_locals]
+  exact Iff.rfl
+
+theorem locN_congr {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (n : String)
+    (h : locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    locN { s with locals := locals, clock := k } n = locN s n := by
+  simp only [locN, h]
+
+theorem arenaReady_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    ArenaReady { s with locals := locals, clock := k } ↔ ArenaReady s :=
+  ⟨fun h => ⟨guestInv_congr (s := { s with locals := locals, clock := k }) rfl rfl rfl rfl h.1, h.2⟩,
+   fun h => ⟨guestInv_with_locals_clock s locals k h.1, h.2⟩⟩
+
+theorem evmChainFrom_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    ∀ (fuel e c : Nat),
+      evmChainFrom { s with locals := locals, clock := k } fuel e c = evmChainFrom s fuel e c
+  | 0, _, _ => rfl
+  | fuel + 1, e, c => by
+    simp only [evmChainFrom, evmChainFrom_with_locals s locals k fuel]
+    rfl
+
+theorem evmChain_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    evmChain { s with locals := locals, clock := k } = evmChain s :=
+  evmChainFrom_with_locals s locals k _ _ _
+
+theorem localsFree_arenaReady : LocalsFree ArenaReady :=
+  fun s locals k h => (arenaReady_with_locals s locals k).2 h
+
+theorem localsFree_worldOK : LocalsFree WorldOK := by
+  intro F s locals k h
+  simp only [WorldOK, worldTyped_with_locals, arenaReady_with_locals] at h ⊢
+  exact h
+
+theorem localsFree_evmInv : LocalsFree EvmInv := by
+  intro F s locals k h
+  simp only [EvmInv, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
+  exact h
+
+theorem localsFree_finishReady : LocalsFree FinishReady := by
+  intro F s locals k h
+  exact ⟨localsFree_evmInv s locals k h.1, h.2⟩
+
+theorem localsOnly_htabArgWF : LocalsOnly ["t"] HtabArgWF := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "t" (hl "t" (by simp))
+  simp only [HtabArgWF, htabWF_with_locals, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+theorem localsOnly_unionArgWF : LocalsOnly ["dst"] UnionArgWF := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "dst" (hl "dst" (by simp))
+  simp only [UnionArgWF, htabWF_with_locals, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+theorem localsOnly_mptReady : LocalsOnly ["node"] MptReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "node" (hl "node" (by simp))
+  simp only [MptReady, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+theorem localsOnly_mptObjReady : LocalsOnly ["m"] MptObjReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "m" (hl "m" (by simp))
+  simp only [MptObjReady, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+theorem localsOnly_rollbackReady : LocalsOnly ["child"] RollbackReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "child" (hl "child" (by simp))
+  simp only [RollbackReady, htabWF_with_locals, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+theorem localsOnly_htabNewReady : LocalsOnly ["key_len"] HtabNewReady := by
+  intro F s locals k hl hP
+  have ht := locN_congr s locals k "key_len" (hl "key_len" (by simp))
+  simp only [HtabNewReady, arenaReady_with_locals] at hP ⊢
+  rw [ht]
+  exact hP
+
+/-- Regression for `dec_onLocals`: `htab_truncate`'s body declares `stride`, `pos`, `leaf`, never
+`t`, so `HtabArgWF` passes every `dec` of the body. -/
+example : ∀ n ∈ ["t"], ofString n ≠ ofString "pos" := by decide
