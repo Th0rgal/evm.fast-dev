@@ -859,11 +859,11 @@ theorem coveredTarget_of_terminatingMainOnEntry {K : Nat}
 Everything in this section is used only by the guarded tier (§7). The unguarded tier (§6) never
 looks at memory contents. -/
 
-/-- The word stored at the (aligned) address `a`, or `0` if the cell holds a label. -/
+/-- The word stored at the (aligned) address `a` (`HolWordLab` has the single constructor
+`.word`). -/
 def memW {F : Type} (s : PanSemStateFiniteExact 64 F) (a : Nat) : Nat :=
   match s.memory (BitVec.ofNat 64 a) with
   | .word w => w.toNat
-  | _ => 0
 
 /-- `a` is an in-domain cell holding a word (what a successful `load` needs). -/
 def WordAt {F : Type} (s : PanSemStateFiniteExact 64 F) (a : Nat) : Prop :=

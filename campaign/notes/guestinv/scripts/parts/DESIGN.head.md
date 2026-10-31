@@ -17,7 +17,7 @@ is touched.
 | one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
-| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (15 statements); `run_frames_step` **proved** from them |
+| contract leaves (tables, MPT, frames, `mem_init`, frame glue) | §7 | `sorry` (14 statements); `run_frames_step` **proved** from them |
 | guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
@@ -118,10 +118,9 @@ Replaced by `EvmInv` and the gas-value-free potential `evmPot` (§5, §6 here):
   their class, `N` and leaf. The 39 unreachable functions are listed too.
 - **Top obligation**: made explicit (§2 below). It is `gb_main : TerminatingFunBoundedOn MainEntry
   "main" K.«main»`, a generated guarded leaf decomposed like every other leaf.
-- **`K_run_attempt`**: the constant is generated from the AST, so it counts exactly the
-  `process_message` calls that occur. `execute_block` makes 2 system calls before the tx loop, 1 per
-  transaction, and 4 more in `process_general_purpose_requests`/`process_withdrawals`, i.e. 6 outside
-  the loop plus the loop.
+- **`K_run_attempt`**: there is no hand-written `K_run_attempt` any more. `K.«run_attempt»` is
+  generated from the AST, so it counts every `process_message` call site reachable from
+  `execute_block` (round 1 budgeted 4, the reviewers counted 6) with its loop multiplicity.
 
 ### Non-blocking items
 
@@ -192,8 +191,10 @@ constants. There is no recursion on `main`'s call graph (the script computes the
 definitions are well-founded and every leaf's proof uses only its callees' leaves.
 
 The nesting product along the deepest chain (`out/chain.txt`, §5) dominates `K.«main»`.
-`K_pan_budget` checks the whole sum by `decide`. `log2 K_pan` is reported in §8 of the Lean file and
-in §5 here; the budget `(10^299−1)/10^4 / 32` is `≈ 2^973`.
+`K_pan_budget` checks the whole sum by `decide`. `K_pan.log2 = 754`, so `K_pan < 2^755 ≈ 10^227`,
+against the budget `(10^299 − 1)/10^4/32 ≈ 2^973`: a slack of 2^218. The dominant chain (§5) runs
+tx loop 2^64 → `run_frames` potential 2^172 → witness decoder 2^68 → `rlp_list_count` 2^128 →
+RLP validation stack 2^253, plus the callee bodies.
 
 ## 6. Guarded tier
 

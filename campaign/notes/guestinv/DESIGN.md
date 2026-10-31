@@ -17,7 +17,7 @@ is touched.
 | one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
-| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (15 statements); `run_frames_step` **proved** from them |
+| contract leaves (tables, MPT, frames, `mem_init`, frame glue) | §7 | `sorry` (14 statements); `run_frames_step` **proved** from them |
 | guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
@@ -118,10 +118,9 @@ Replaced by `EvmInv` and the gas-value-free potential `evmPot` (§5, §6 here):
   their class, `N` and leaf. The 39 unreachable functions are listed too.
 - **Top obligation**: made explicit (§2 below). It is `gb_main : TerminatingFunBoundedOn MainEntry
   "main" K.«main»`, a generated guarded leaf decomposed like every other leaf.
-- **`K_run_attempt`**: the constant is generated from the AST, so it counts exactly the
-  `process_message` calls that occur. `execute_block` makes 2 system calls before the tx loop, 1 per
-  transaction, and 4 more in `process_general_purpose_requests`/`process_withdrawals`, i.e. 6 outside
-  the loop plus the loop.
+- **`K_run_attempt`**: there is no hand-written `K_run_attempt` any more. `K.«run_attempt»` is
+  generated from the AST, so it counts every `process_message` call site reachable from
+  `execute_block` (round 1 budgeted 4, the reviewers counted 6) with its loop multiplicity.
 
 ### Non-blocking items
 
@@ -192,88 +191,11 @@ constants. There is no recursion on `main`'s call graph (the script computes the
 definitions are well-founded and every leaf's proof uses only its callees' leaves.
 
 The nesting product along the deepest chain (`out/chain.txt`, §5) dominates `K.«main»`.
-`K_pan_budget` checks the whole sum by `decide`. `log2 K_pan` is reported in §8 of the Lean file and
-in §5 here; the budget `(10^299−1)/10^4 / 32` is `≈ 2^973`.
+`K_pan_budget` checks the whole sum by `decide`. `K_pan.log2 = 754`, so `K_pan < 2^755 ≈ 10^227`,
+against the budget `(10^299 − 1)/10^4/32 ≈ 2^973`: a slack of 2^218. The dominant chain (§5) runs
+tx loop 2^64 → `run_frames` potential 2^172 → witness decoder 2^68 → `rlp_list_count` 2^128 →
+RLP validation stack 2^253, plus the callee bodies.
 
-## 6. Guarded tier
-
-### Guards
-
-| Guard | Definition | Leaves |
-|---|---|---|
-| `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec` |
-| `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
-| `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
-| `EvmInv` | §5 of the Lean file (item 5) | `run_frames` |
-| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (heap ⊆ `[sourceBase, 0xb0000000]`, frame memory below scratch inside `[0xb0000000, 0xb0bee000]`) | `_decode_witness_node_body` |
-| `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
-| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records, tries) | the other 37 guarded functions |
-| `MainEntry` | §2 | `main` |
-
-`WorldOK` holds right after `mem_init`: every root is 0, so `S = []` works (`mem_init_world`).
-`EvmInv → WorldOK`. Inside `run_frames` every frame-level callee (`op_dispatch`, `op_sload`,
-`op_sstore`, …) is called from an `EvmInv` state.
-
-### What each guarded leaf must establish at its guarded call sites
-
-The guarded leaves are "big" leaves. Besides composing callee bounds, each proves that its guarded
-callees' guards hold at their call sites, using the contract leaves:
-
-- `gb_run_frames` uses `while_rank` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,
-  `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`, and `run_frames_step`, which is proved
-  from `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec` and the
-  glue `run_frames_step_of_specs`. The body's time bound comes from the callees' leaves; `finish_child`
-  is called under `FinishReady`, which `EvmInv ∧ EvmDone ∧ kind ≠ 0` gives directly.
-- `gb_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv` (the child's tables are
-  in `S`).
-- `gb_rollback_child_access` → `htab_truncate`: `HtabArgWF` directly.
-- `gb_htab_truncate`: each iteration calls `htab_del` on the last key. Under `HtabWF` it succeeds and
-  lowers `count` by one (`htab_del_spec`); `count < 2^64`.
-- `gb_process_message`: establishes `EvmInv` at the `run_frames` call from `WorldOK`, using the fresh
-  `frame_open` record and continuation, the marks just taken, tables in `S`, and the `htab_new_scratch`
-  contract for `e+136`.
-- `gb_process_transaction` / `gb_execute_block` / `gb_run_attempt` / … establish `WorldOK` at every
-  guarded call site. They use the contract leaves for table and trie mutations, and the frame
-  `FrameOutside` facts for everything else. The functions called in between are the `BETWEEN` list of
-  §5.
-
-### Contract leaves (all `sorry`)
-
-`htab_set_spec`, `htab_del_spec`, `htab_truncate_spec`, `htab_union_into_spec`, `htab_new_spec`,
-`htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
-`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`,
-`run_frames_step_of_specs` (glue).
-
-## 7. Every `sorry`
-
-- Combinators (2): `TerminatingProgBoundedOn.callHandle_guestInv`, `TerminatingProgBoundedOn.while_rank`.
-- Contract leaves (14): listed in §6.
-- Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
-- Unguarded bound leaves (727): `fb_*`, listed in §5.
-
-No definition contains `sorry`. Proved terms that depend on a `sorry` are `run_frames_step` (on the
-four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan` (on `gb_main`).
-
-## 8. Open questions and known risks (for the quorum)
-
-- **Q1 (`EvmInv` completeness).** `op_dispatch_spec` is true only if every write an opcode performs
-  lands in its frame's blocks, a typed table (through the table contracts), a fixed global buffer or
-  fresh memory. The 44 global buffers (`keccak_st`, `u256_ws`, …; `globalBuffers`, generated from
-  the literal-size `alloc` calls that assign a global) are in `fixedObjects`: allocated, pairwise
-  disjoint, and disjoint from every table, node and frame block. The remaining risk is a buffer
-  allocated with a non-literal size and written during EVM execution. The script lists only
-  literal-size allocations, so the quorum should check `out/tiers.txt` against the `*_init`
-  functions.
-- **Q2 (`finish_child` on `EvmErr`).** `finish_child_spec` assumes that an `EvmErr` escaping
-  `finish_child` is raised after the pop (by `stack_push` in the parent). `create_finish` has its own
-  handler, so this looks right.
-- **Q3 (`TriesTyped`).** Storage tries are typed through the `ws+32` cache only. If
-  `compute_state_root` mutates tries reached through account records, those roots must be added.
-- **Q4 (MPT descent).** `_mpt_insert_node`'s measure relies on writes during empty-extension runs
-  being idempotent; this holds for typed nodes (`NodeHeap`), which is why it is guarded.
-- **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
-  pure call composition). A single tactic that walks the body with the combinators should discharge
-  all loop-free ones; the loop leaves need their measure.
 
 ## 5. Coverage table (GENERATED by `coverage.py`; one row per function on `main`'s call graph)
 
@@ -1198,6 +1120,86 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 
 unreachable from main (39): account_exists_and_is_empty, bls_fp_dbl, bn254_pairing, cur_msg, ec_add, ec_mul, ec_on_curve, fn_add, fn_inv_fermat, fn_pow, fp12_sqr, fp2_dbl, fp_inv_fermat, g1_neg, get_transaction_hash, htab_cap, htab_copy_scratch, htr_list_roots, ld_be32, ld_le32, ld_le64, mpt_get, p256_ec_to_affine, p256_fp_inv, recover_sender, rlp_bytes_to_word, rlp_check_uint_bytes, tx_blob_count, tx_data, tx_gas, tx_nonce, tx_r, tx_s, tx_to, tx_value, u256_cmp, u256_low, u256_xor, umod
 
+## 6. Guarded tier
+
+### Guards
+
+| Guard | Definition | Leaves |
+|---|---|---|
+| `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec` |
+| `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
+| `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
+| `EvmInv` | §5 of the Lean file (item 5) | `run_frames` |
+| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (heap ⊆ `[sourceBase, 0xb0000000]`, frame memory below scratch inside `[0xb0000000, 0xb0bee000]`) | `_decode_witness_node_body` |
+| `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
+| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records, tries) | the other 37 guarded functions |
+| `MainEntry` | §2 | `main` |
+
+`WorldOK` holds right after `mem_init`: every root is 0, so `S = []` works (`mem_init_world`).
+`EvmInv → WorldOK`. Inside `run_frames` every frame-level callee (`op_dispatch`, `op_sload`,
+`op_sstore`, …) is called from an `EvmInv` state.
+
+### What each guarded leaf must establish at its guarded call sites
+
+The guarded leaves are "big" leaves. Besides composing callee bounds, each proves that its guarded
+callees' guards hold at their call sites, using the contract leaves:
+
+- `gb_run_frames` uses `while_rank` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,
+  `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`, and `run_frames_step`, which is proved
+  from `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec` and the
+  glue `run_frames_step_of_specs`. The body's time bound comes from the callees' leaves; `finish_child`
+  is called under `FinishReady`, which `EvmInv ∧ EvmDone ∧ kind ≠ 0` gives directly.
+- `gb_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv` (the child's tables are
+  in `S`).
+- `gb_rollback_child_access` → `htab_truncate`: `HtabArgWF` directly.
+- `gb_htab_truncate`: each iteration calls `htab_del` on the last key. Under `HtabWF` it succeeds and
+  lowers `count` by one (`htab_del_spec`); `count < 2^64`.
+- `gb_process_message`: establishes `EvmInv` at the `run_frames` call from `WorldOK`, using the fresh
+  `frame_open` record and continuation, the marks just taken, tables in `S`, and the `htab_new_scratch`
+  contract for `e+136`.
+- `gb_process_transaction` / `gb_execute_block` / `gb_run_attempt` / … establish `WorldOK` at every
+  guarded call site. They use the contract leaves for table and trie mutations, and the frame
+  `FrameOutside` facts for everything else. The functions called in between are the `BETWEEN` list of
+  §5.
+
+### Contract leaves (all `sorry`)
+
+`htab_set_spec`, `htab_del_spec`, `htab_truncate_spec`, `htab_union_into_spec`, `htab_new_spec`,
+`htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
+`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`,
+`run_frames_step_of_specs` (glue).
+
+## 7. Every `sorry`
+
+- Combinators (2): `TerminatingProgBoundedOn.callHandle_guestInv`, `TerminatingProgBoundedOn.while_rank`.
+- Contract leaves (14): listed in §6.
+- Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
+- Unguarded bound leaves (727): `fb_*`, listed in §5.
+
+No definition contains `sorry`. Proved terms that depend on a `sorry` are `run_frames_step` (on the
+four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan` (on `gb_main`).
+
+## 8. Open questions and known risks (for the quorum)
+
+- **Q1 (`EvmInv` completeness).** `op_dispatch_spec` is true only if every write an opcode performs
+  lands in its frame's blocks, a typed table (through the table contracts), a fixed global buffer or
+  fresh memory. The 44 global buffers (`keccak_st`, `u256_ws`, …; `globalBuffers`, generated from
+  the literal-size `alloc` calls that assign a global) are in `fixedObjects`: allocated, pairwise
+  disjoint, and disjoint from every table, node and frame block. The remaining risk is a buffer
+  allocated with a non-literal size and written during EVM execution. The script lists only
+  literal-size allocations, so the quorum should check `out/tiers.txt` against the `*_init`
+  functions.
+- **Q2 (`finish_child` on `EvmErr`).** `finish_child_spec` assumes that an `EvmErr` escaping
+  `finish_child` is raised after the pop (by `stack_push` in the parent). `create_finish` has its own
+  handler, so this looks right.
+- **Q3 (`TriesTyped`).** Storage tries are typed through the `ws+32` cache only. If
+  `compute_state_root` mutates tries reached through account records, those roots must be added.
+- **Q4 (MPT descent).** `_mpt_insert_node`'s measure relies on writes during empty-extension runs
+  being idempotent; this holds for typed nodes (`NodeHeap`), which is why it is guarded.
+- **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
+  pure call composition). A single tactic that walks the body with the combinators should discharge
+  all loop-free ones; the loop leaves need their measure.
+
 ## 9. How this was produced and checked
 
 ```
@@ -1207,6 +1209,20 @@ python3 -I campaign/notes/guestinv/scripts/coverage.py Guest/SoftwareAst.lean OU
 sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/GuestInv.lean
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
+
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 790 `declaration uses
+'sorry'` warnings (2 combinators, 14 contracts, 727 `fb_*`, 47 `gb_*`), plus style-linter notes
+about the `__` in generated names such as `fb__decode_step`. `#print axioms`, checked on a scratch
+copy:
+- `[propext, Classical.choice, Quot.sound]`: `guestInv_evaluate`, `preservesOn_guestInv`,
+  `PreservesOn.call_guestInv`, `TerminatingProgBoundedOn.decCall_guestInv`, `seq_guestInv`,
+  `coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry`,
+  `coveredTarget_of_terminatingMainOnEntry`;
+- `[propext]`: `K_pan_budget`, `astGlobalNames_eq`;
+- also `sorryAx`: `run_frames_step` (through the four frame contracts and the glue) and
+  `coveredSourceTicksConsumedBounded_K_pan` (through the leaves).
+
+`K_pan.log2 = 754` (`#eval`).
 
 The script uses only the Python standard library. `panast.py` parses the generated AST file
 line-record by line-record into a term tree; `coverage.py` computes the call graph, purity and
