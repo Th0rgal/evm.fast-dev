@@ -70,3 +70,50 @@ Counterexamples were replayed on an AST interpreter with executable precondition
 Fable found the assembly genuinely closed: every `gb_*` is a proved application of its `gbody_*` to listed hypotheses. Astra does not accept the `gbody_*` as primitives. Each `gbody_f` states that the body of the single function `f` satisfies its bound and guard-preservation obligations, given its callees' contracts as hypotheses. That is the same shape as each `fb_*` leaf. Round 5 will ask each reviewer to rule explicitly on whether that shape meets the round-3 boundary.
 
 For the round-5 vote, the writer must make each `gbody_*` statement visibly single-function: its hypotheses are exactly its callees' contracts, and nothing else is assumed.
+
+## Gemini 4 Carbon (mission 0f735595, reviewing 0f8dea8c7): REQUEST_CHANGES
+
+Gemini independently confirmed:
+- Lean 4.33.1 gives 0 errors and 918 sorries;
+- `assembly`, `assembly_main`, `run_frames_step_of_specs`, the new combinators and the 12 proved `gbody_*` use only `[propext, Classical.choice, Quot.sound]`; `K_pan_budget` uses only `[propext]`;
+- regeneration is byte-for-byte;
+- all five round-3 Gemini items are fixed (`op_extcodecopy` cannot wrap, the `evmR` bound, `MsgReady`, the MPT node sizes, nibble aliasing);
+- the two-node empty-extension cycle reaches `WhileTimesOut` within the 2^130 bound.
+
+**Blocking:**
+
+1. **The `GBody` callee contracts are too forgetful, so several `gbody_f` cannot be proved from their own hypotheses** (Spec:6135–6156, 7426–9207, coverage.py). `KeepsOn WorldOK WorldOK` allows any `WorldOK→WorldOK` transition. A caller that holds local state across such a call loses it:
+   - `process_create_message` and `process_message_call` lose `MsgReady` across `destroy_storage`, `mark_account_created`, `increment_nonce` and `account_deployable`;
+   - `process_transaction` loses `index < ntx` and its freshly allocated `m`, `aa`, `ak` (allocated before `get_account`);
+   - `process_general_purpose_requests` loses `ReqRoom` (`bo+64 < 8`) across `requests_append` and the system transactions;
+   - `compute_state_root` loses its local tables `cache` and `new_roots` and the `out`/`mpt` objects;
+   - `execute_block` loses `bo ≠ 0`, `bo+80 = ntx` and `bo+64 = 0`;
+   - `payload_header` loses `(wr, 32)` disjointness;
+   - `finish_child`'s `ek_*` callees may change `ev` and `cur_cont`, which decouples them from the local `child`/`rec` (`RollbackReady`).
+
+   **Fix (Option A):**
+   - (a) Make the `wk_*` contracts relational (`WorldStep s post`):
+     - `S ⊆ S'`;
+     - `heap_ptr` only grows;
+     - memory below `s.heap_ptr` outside the world-owned intervals is unchanged;
+     - globals outside the callee's write set `gw` (already computed in coverage.py) are unchanged;
+     - for `requests_append`, `bo+64` goes up by exactly 1.
+   - (b) Make the `ek_*` contracts preserve `ev`, `cur_cont`, `evmChain`, and `RollbackReady` on `child`.
+   - (c) Give return-value typing to the constructors whose results feed guards:
+     - `alloc`: fresh, allocated, `WordsOK`;
+     - `msg_new`: fresh zeroed 176-byte block;
+     - `lst_new`: fresh `LstOK`;
+     - `htab_copy`: fresh `HtabWF`;
+     - `mpt_new`: fresh 16-byte block with `+0 = root`;
+     - `mpt_from_witness`: `WorldOK` kept and a fresh `MptObjReady`.
+   - (d) Switch `bal_init`, `state_fresh_tx` and `main`'s 12 `*_init` calls from `ww_*` to contracts that give post-state `WorldOK` and fresh-buffer typing. Plain `WritesWithin` lets the buffer globals be set to arbitrary pointers.
+
+2. **`balObjects` and `TablesTyped` omit the per-slot storage lists** (Spec:1736–1765). The live leaf `+8` values `l` of `memW s ad` (the account's storage table) are 40-byte-element lists. They are neither owned nor `LstOK`, so `add_storage_write` (`lst_upsert_idx(l, 40, idx)`), `remove_storage_write` and `build_block_access_list_rlp` (an in-place `sort_elems`) can write through `l` into `ws` or `S`. This makes `wk_add_storage_write`, `wk_remove_storage_write`, `wk_build_block_access_list_rlp` and `gb_update_builder_from_tx` false. Fix: add `htabValues s (memW s ad)` lists to `balObjects` (allocated and disjoint) and to `TablesTyped` (`LstOK`).
+
+**Non-blocking:**
+- the header comment says "revision 3";
+- the `_mpt_insert_node` docstring should mention `WhileTimesOut` on `sl=0` cycles.
+
+## Coordinator note for round 5
+
+Gemini's item 1 also settles the boundary question: a `gbody_f` is a genuine single-function primitive only if its hypotheses suffice to prove it without unfolding callees. Revision 7 must make that so, through relational callee contracts and constructor return typing. Round 5 then votes on revision 7.
