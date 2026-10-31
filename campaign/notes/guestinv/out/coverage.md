@@ -37,8 +37,8 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `nodedb_lookup` | 9960 | `fb_nodedb_lookup` (GuestInv) | - | 67 |
 | `_resolve_step` | 10077 | `fb__resolve_step` (GuestInv) | - | 448 |
 | `_decode_witness_node_body` | 10196 | `gb__decode_witness_node_body` (ArenaReady) | #0 d0 GUARD N=2^68: GUARDED (ArenaReady): pushes are scratch_alloc records (<= arena/88), every written object (records, branch nodes, node_new_* results) is a fresh allocation, so the slot counter top+32 < 16 is only written by this loop: <= (pushes + 1) * 64 iterations | 517 |
-| `_decode_witness_node_mpt` | 10311 | `gb__decode_witness_node_mpt` (WorldOK) | - | 517 |
-| `_decode_witness_node` | 10328 | `gb__decode_witness_node` (WorldOK) | - | 517 |
+| `_decode_witness_node_mpt` | 10311 | `gb__decode_witness_node_mpt` (ArenaReady) | - | 517 |
+| `_decode_witness_node` | 10328 | `gb__decode_witness_node` (ArenaReady) | - | 517 |
 | `_delete_ext_finish` | 10727 | `fb__delete_ext_finish` (GuestInv) | - | 66 |
 | `min` | 667 | `fb_min` (GuestInv) | - | 0 |
 | `common_prefix_length` | 9903 | `fb_common_prefix_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
@@ -151,8 +151,8 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `cache_get_root` | 32325 | `fb_cache_get_root` (GuestInv) | - | 450 |
 | `encode_account` | 11343 | `fb_encode_account` (GuestInv) | #0 d0 CTR N=32: z < 32, step +1, unconditional | 131 |
 | `htab_copy` | 5354 | `fb_htab_copy` (GuestInv) | - | 67 |
-| `decode_witness_to_mpt` | 10348 | `gb_decode_witness_to_mpt` (WorldOK) | - | 517 |
-| `mpt_from_witness` | 10459 | `gb_mpt_from_witness` (WorldOK) | - | 517 |
+| `decode_witness_to_mpt` | 10348 | `gb_decode_witness_to_mpt` (ArenaReady) | - | 517 |
+| `mpt_from_witness` | 10459 | `gb_mpt_from_witness` (ArenaReady) | - | 517 |
 | `compute_state_root` | 32341 | `gb_compute_state_root` (WorldOK) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d1 CTR N=2^64: pass < 2, step +1, unconditional; #2 d2 CTR N=2^64: j < L:icount, step +1, unconditional; #3 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #4 d0 CTR N=2^64: i < L:acap, step +1, unconditional | 581 |
 | `tx_fixed_bytes` | 11468 | `fb_tx_fixed_bytes` (GuestInv) | - | 448 |
 | `tx_list_item` | 11510 | `fb_tx_list_item` (GuestInv) | - | 448 |
@@ -320,7 +320,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `fq12_cast` | 24033 | `fb_fq12_cast` (GuestInv) | - | 65 |
 | `fq_poly_deg` | 24084 | `fb_fq_poly_deg` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 129 |
 | `fq_poly_submul` | 24103 | `fb_fq_poly_submul` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 38 |
-| `fq12_inv` | 24124 | `fb_fq12_inv` (GuestInv) | #0 d0 MONO N=14: Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the inner loop #1 times out (zero leading inverse), so this iteration times out (WhileTimesOut, while_rank_stationary); #1 d1 MONO N=14: mu = 2 (d0 + 1) + [not yet stationary]: d0 = deg r0 in [-1, 12] strictly decreases when fq_poly_submul cancels the leading coefficient (needs: fq arithmetic cancels on non-canonical inputs, DESIGN 8); with linv = fq_inv(lead) = 0, cf = 0 and the writes to q and r0 are idempotent from the second iteration on, which repeats exactly (SameHead, while_rank_stationary); #2 d1 CTR N=13: j < 13, step +1, unconditional; #3 d0 CTR N=12: i < 12, step +1, unconditional | 391 |
+| `fq12_inv` | 24124 | `fb_fq12_inv` (GuestInv) | #0 d0 MONO N=14: Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the inner loop #1 times out (zero leading inverse), so this iteration times out (WhileTimesOut, while_rank_stationary); #1 d1 MONO N=14: while_rank_stationary with mu = (if linv = 0 then 0 else d0 - d1) + phase at the active inner head (d0 = deg r0, d1 = deg r1 >= 1 inside the outer loop, so d0 - d1 <= 11); phase = 2 if r0[d0] < p or r0[d0] mod p != 0, 1 if r0[d0] >= p, r0[d0] mod p = 0 and q[d0 - d1] != 0, 0 otherwise. fq_mul always returns < p and fq_mul(k p, linv) = 0 for 1 <= k <= 5, so every continuing iteration strictly lowers mu or is an exact repeat (SameHead: noncanonical lead r + p, period-1 state, ISSUES.md on wave8/leaves-arith-astra), and an inner SameHead makes the outer iteration WhileTimesOut; mu <= 11 + 2 = 13 <= 14; #2 d1 CTR N=13: j < 13, step +1, unconditional; #3 d0 CTR N=12: i < 12, step +1, unconditional | 391 |
 | `fq12_pow_words` | 24225 | `fb_fq12_pow_words` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 201 |
 | `fq12_twist` | 23999 | `fb_fq12_twist` (GuestInv) | #0 d0 CTR N=3: j < 3, step +1, unconditional | 70 |
 | `bn254_pairing_check` | 24600 | `fb_bn254_pairing_check` (GuestInv) | #0 d0 CTR N=2^64: i < L:n_pairs, step +1, unconditional | 391 |
@@ -618,7 +618,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `get_storage` | 13249 | `gb_get_storage` (WorldOK) | - | 517 |
 | `is_warm_storage_key` | 16559 | `fb_is_warm_storage_key` (GuestInv) | - | 67 |
 | `warm_storage_key` | 16571 | `fb_warm_storage_key` (GuestInv) | - | 130 |
-| `op_sload` | 16584 | `gb_op_sload` (WorldOK) | - | 517 |
+| `op_sload` | 16584 | `gb_op_sload` (EvmRun) | - | 517 |
 | `op_slotnum` | 17324 | `fb_op_slotnum` (GuestInv) | - | 65 |
 | `op_slt` | 15776 | `fb_op_slt` (GuestInv) | - | 65 |
 | `u256_smod` | 1840 | `fb_u256_smod` (GuestInv) | - | 257 |
@@ -626,7 +626,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `check_gas` | 14935 | `fb_check_gas` (GuestInv) | - | 0 |
 | `get_storage_original` | 13276 | `gb_get_storage_original` (WorldOK) | - | 517 |
 | `set_storage` | 13451 | `fb_set_storage` (GuestInv) | - | 450 |
-| `op_sstore` | 16611 | `gb_op_sstore` (WorldOK) | - | 518 |
+| `op_sstore` | 16611 | `gb_op_sstore` (EvmRun) | - | 518 |
 | `op_staticcall` | 19600 | `fb_op_staticcall` (GuestInv) | - | 454 |
 | `op_stop` | 16052 | `fb_op_stop` (GuestInv) | - | 1 |
 | `op_sub` | 15563 | `fb_op_sub` (GuestInv) | - | 65 |
@@ -638,17 +638,17 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `set_transient_storage` | 13574 | `fb_set_transient_storage` (GuestInv) | - | 130 |
 | `op_tstore` | 16710 | `fb_op_tstore` (GuestInv) | - | 130 |
 | `op_xor` | 15887 | `fb_op_xor` (GuestInv) | - | 65 |
-| `op_dispatch` | 17902 | `gb_op_dispatch` (WorldOK) | - | 519 |
+| `op_dispatch` | 17902 | `gb_op_dispatch` (EvmRun) | - | 519 |
 | `run_frames` | 18663 | `gb_run_frames` (EvmInv) | #0 d0 POT N=2^172: EVM frame potential evmPot < N_POT under EvmInv (section 6) | 691 |
-| `process_message` | 18803 | `gb_process_message` (WorldOK) | - | 691 |
-| `process_create_message` | 18899 | `gb_process_create_message` (WorldOK) | - | 691 |
-| `process_message_call` | 19661 | `gb_process_message_call` (WorldOK) | - | 691 |
+| `process_message` | 18803 | `gb_process_message` (MsgReady) | - | 691 |
+| `process_create_message` | 18899 | `gb_process_create_message` (MsgReady) | - | 691 |
+| `process_message_call` | 19661 | `gb_process_message_call` (MsgReady) | - | 691 |
 | `state_fresh_tx` | 12778 | `fb_state_fresh_tx` (GuestInv) | - | 7 |
 | `te_new` | 32838 | `fb_te_new` (GuestInv) | - | 65 |
 | `process_unchecked_system_transaction` | 32851 | `gb_process_unchecked_system_transaction` (WorldOK) | - | 691 |
 | `process_checked_system_transaction` | 32928 | `gb_process_checked_system_transaction` (WorldOK) | - | 691 |
 | `requests_append` | 33485 | `fb_requests_append` (GuestInv) | - | 65 |
-| `process_general_purpose_requests` | 33507 | `gb_process_general_purpose_requests` (WorldOK) | #0 d0 CTR N=2^64: i < L:nr, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nl, step +1, unconditional | 693 |
+| `process_general_purpose_requests` | 33507 | `gb_process_general_purpose_requests` (ReqsFresh) | #0 d0 CTR N=2^64: i < L:nr, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nl, step +1, unconditional | 693 |
 | `calculate_total_blob_gas` | 11914 | `fb_calculate_total_blob_gas` (GuestInv) | - | 0 |
 | `fee_mul` | 32778 | `fb_fee_mul` (GuestInv) | - | 5 |
 | `check_transaction` | 32951 | `fb_check_transaction` (GuestInv) | #0 d0 CTR N=2^64: j < L:nb, step +1, unconditional | 450 |
@@ -690,10 +690,10 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `count_tokens_in_data` | 12562 | `fb_count_tokens_in_data` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
 | `calculate_intrinsic_cost` | 12581 | `fb_calculate_intrinsic_cost` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 67 |
 | `validate_transaction` | 12639 | `fb_validate_transaction` (GuestInv) | - | 67 |
-| `process_transaction` | 33103 | `gb_process_transaction` (WorldOK) | #0 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #2 d1 CTR N=2^64: j < L:ns, step +1, unconditional; #3 d0 CTR N=2^64: i < 18, step +1, unconditional; #4 d0 CTR N=2^64: i < add[L:nal, 1], step +1, unconditional; #5 d0 CTR N=2^64: i < L:nkeys, step +1, unconditional; #6 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #7 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #8 d0 CTR N=2^64: i < L:dcap, step +1, unconditional | 691 |
+| `process_transaction` | 33103 | `gb_process_transaction` (TxReady) | #0 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #2 d1 CTR N=2^64: j < L:ns, step +1, unconditional; #3 d0 CTR N=2^64: i < 18, step +1, unconditional; #4 d0 CTR N=2^64: i < add[L:nal, 1], step +1, unconditional; #5 d0 CTR N=2^64: i < L:nkeys, step +1, unconditional; #6 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #7 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #8 d0 CTR N=2^64: i < L:dcap, step +1, unconditional | 691 |
 | `process_withdrawals` | 33458 | `gb_process_withdrawals` (WorldOK) | #0 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 645 |
 | `validate_block_access_list_gas_limit` | 14776 | `fb_validate_block_access_list_gas_limit` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d1 CTR N=2^64: j < L:rcap, step +1, unconditional | 195 |
-| `execute_block` | 33580 | `gb_execute_block` (WorldOK) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
+| `execute_block` | 33580 | `gb_execute_block` (BlockReady) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
 | `encode_header` | 9350 | `fb_encode_header` (GuestInv) | - | 133 |
 | `header_hash` | 9460 | `fb_header_hash` (GuestInv) | - | 133 |
 | `is_valid_versioned_hashes` | 32794 | `fb_is_valid_versioned_hashes` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nb, step +1, unconditional | 640 |
@@ -714,14 +714,14 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `hdr_word_field` | 9130 | `fb_hdr_word_field` (GuestInv) | #0 d0 CTR N=2^64: j < rField 1 L:f, step +1, unconditional | 448 |
 | `decode_header` | 9202 | `fb_decode_header` (GuestInv) | - | 452 |
 | `validate_headers` | 9476 | `fb_validate_headers` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 516 |
-| `run_attempt` | 33734 | `gb_run_attempt` (WorldOK) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
-| `attempt_l1` | 33847 | `gb_attempt_l1` (WorldOK) | - | 755 |
-| `attempt_l2` | 33863 | `gb_attempt_l2` (WorldOK) | - | 755 |
-| `attempt_l3` | 33879 | `gb_attempt_l3` (WorldOK) | - | 755 |
-| `attempt_l4` | 33895 | `gb_attempt_l4` (WorldOK) | - | 755 |
-| `attempt_l5` | 33911 | `gb_attempt_l5` (WorldOK) | - | 755 |
-| `attempt_l6` | 33927 | `gb_attempt_l6` (WorldOK) | - | 755 |
-| `attempt_l7` | 33943 | `gb_attempt_l7` (WorldOK) | - | 755 |
+| `run_attempt` | 33734 | `gb_run_attempt` (InputReady) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
+| `attempt_l1` | 33847 | `gb_attempt_l1` (InputReady) | - | 755 |
+| `attempt_l2` | 33863 | `gb_attempt_l2` (InputReady) | - | 755 |
+| `attempt_l3` | 33879 | `gb_attempt_l3` (InputReady) | - | 755 |
+| `attempt_l4` | 33895 | `gb_attempt_l4` (InputReady) | - | 755 |
+| `attempt_l5` | 33911 | `gb_attempt_l5` (InputReady) | - | 755 |
+| `attempt_l6` | 33927 | `gb_attempt_l6` (InputReady) | - | 755 |
+| `attempt_l7` | 33943 | `gb_attempt_l7` (InputReady) | - | 755 |
 | `blake2_init` | 20017 | `fb_blake2_init` (GuestInv) | - | 4 |
 | `bls_consts_init` | 24793 | `fb_bls_consts_init` (GuestInv) | - | 2 |
 | `bls_lib_init` | 30328 | `fb_bls_lib_init` (GuestInv) | - | 3 |
@@ -774,7 +774,7 @@ functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
 | `sha256_init` | 2327 | `fb_sha256_init` (GuestInv) | - | 3 |
 | `ssz_init` | 7520 | `fb_ssz_init` (GuestInv) | - | 4 |
 | `u256_ws_init` | 766 | `fb_u256_ws_init` (GuestInv) | - | 2 |
-| `verify_stateless_new_payload` | 33959 | `gb_verify_stateless_new_payload` (WorldOK) | - | 755 |
+| `verify_stateless_new_payload` | 33959 | `gb_verify_stateless_new_payload` (InputReady) | - | 755 |
 | `main` | 33979 | `gb_main` (MainEntry) | - | 755 |
 
 unreachable from main (39): account_exists_and_is_empty, bls_fp_dbl, bn254_pairing, cur_msg, ec_add, ec_mul, ec_on_curve, fn_add, fn_inv_fermat, fn_pow, fp12_sqr, fp2_dbl, fp_inv_fermat, g1_neg, get_transaction_hash, htab_cap, htab_copy_scratch, htr_list_roots, ld_be32, ld_le32, ld_le64, mpt_get, p256_ec_to_affine, p256_fp_inv, recover_sender, rlp_bytes_to_word, rlp_check_uint_bytes, tx_blob_count, tx_data, tx_gas, tx_nonce, tx_r, tx_s, tx_to, tx_value, u256_cmp, u256_low, u256_xor, umod

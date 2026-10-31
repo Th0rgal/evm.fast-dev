@@ -1,7 +1,9 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 7
-(round-4 fixes; the per-revision change lists are in `campaign/notes/guestinv/DESIGN.md` §0).
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 8
+(round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
+results, guarded-loop progress contracts; the per-revision change lists are in
+`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; no `fb_*` changed).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
@@ -1805,8 +1807,107 @@ def fixedObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
 
 def RootIn (S : List Nat) (v : Nat) : Prop := v = 0 ∨ v ∈ S
 
+/-! ### Table roles (revision 8, round-5 Astra item 1, Gemini items 1 and 2)
+
+Revision 7 typed the world by one undifferentiated table set `S`. Two logical slots could then
+name the same table although their callers write values of different kinds into it: `ts+32 = ts+56`
+let `mark_account_created` write `1` into a table of tables; `bal_accounts = ts+16` let
+`set_account_balance` put an account record among the BAL records; `ad+0 = ad+8` let
+`add_storage_read` put `1` among the storage lists; `ws+32 = ts+48` let `set_code` put a code slice
+into the trie cache; a frame's `e+176 = bal_accounts` let `warm_storage_key` write `1` into it; and a
+journal record `(t, key, 1, 1)` on the table of tables `ts+32` made `state_restore` write `1` there.
+
+Every logical slot now carries a ROLE (the slot it is read off: `"ts+56"`, `"bal.stor"`, …) with a
+pinned key length (`tableRoles`, read off `state_init` 12708, `state_fresh_tx` 12778, `bal_init` 13863,
+`bal_ensure_account` 13883, `set_storage` 13451, `merge_tx_into_block` 13731, `frame_new` 15370,
+`process_transaction` 33103, AST). `RolesOK`: every slot's table is in `S` and has
+its role's key length (Gemini item 2: `build_block_access_list_rlp` sizes `htab_keys` by the key
+length of `bal_accounts`), and two slot occurrences naming the SAME table have the same role, which
+must be one of the `sharedRoles`. So distinct logical slots hold pairwise distinct tables, except:
+- `"frame.addr"`/`"frame.key"`: a child frame's `e+168`/`e+176` are its parent's (`frame_new` copies
+  `msg+152`/`msg+160`, which the opcode passes on); `"frame.del"`: `DelExclusive` already allows a
+  deletion table shared by deletion slots only;
+- `"ts.inner"`/`"bs.inner"`: the per-account storage tables (values of `ts+32`/`bs+32`). Their
+  values are untyped words (`set_storage`'s 32-byte value blocks, read only), no object of the world
+  is derived from them, and `state_restore` re-inserts a saved inner table that the journal still
+  names (so `Nodup` of the live inner tables would not be an invariant of the journal); two outer
+  keys naming one inner table therefore cannot break any typing. Inner tables of DIFFERENT outer
+  roles (`ts.inner` vs `bs.inner`, which `merge_tx_into_block` unions into each other) and inner
+  tables vs every other slot are distinct.
+The journal (`jset` 12825, `jdel` 12857; `state_restore` 12903) records tables of the roles
+`ts+16`, `ts+32`, `ts+48`, `ts+64`, `ts.inner` only (`journalRole`; a table outside those slots is
+an inner table, possibly deleted from `ts+32` but still named by the journal), and a saved present
+value of a `ts+32` record is an inner table (`journalRoleSlots`). These occurrences may repeat, so
+they are checked for role CONSISTENCY against every slot rather than for distinctness. -/
+
+/-- Every table role with its key length. -/
+def tableRoles : List (String × Nat) :=
+  [("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
+   ("bs+48", 32), ("bs+72", 20), ("ts+8", 20), ("ts+16", 20), ("ts+24", 52), ("ts+32", 20),
+   ("ts+40", 52), ("ts+48", 32), ("ts+56", 20), ("ts+64", 52), ("bal_accounts", 20),
+   ("bal_idx_accts", 28), ("bal_idx_stor", 60), ("bs.inner", 32), ("ts.inner", 32),
+   ("bal.stor", 32), ("bal.reads", 32), ("frame.del", 20), ("frame.addr", 20), ("frame.key", 52)]
+
+def roleKeyLen (r : String) : Nat := (tableRoles.lookup r).getD 0
+
+/-- The roles whose distinct slot occurrences may name one table (see the section header). -/
+def sharedRoles : List String := ["bs.inner", "ts.inner", "frame.del", "frame.addr", "frame.key"]
+
+/-- The slots `ks` (offset, role) of the global record `g` (none while `g = 0`). -/
+def recRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g : String) (ks : List (Nat × String)) :
+    List (Nat × String) :=
+  if globN s g = 0 then [] else ks.map fun k => (memW s (globN s g + k.1), k.2)
+
+/-- The live values of the table of tables at `g+32`, with role `r`. -/
+def nestRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g r : String) : List (Nat × String) :=
+  if globN s g = 0 then [] else if memW s (globN s g + 32) = 0 then [] else
+    (htabValues s (memW s (globN s g + 32))).map fun v => (v, r)
+
+/-- Every logical world table slot outside the frames, with its role; `0` slots dropped. -/
+def worldRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
+  (recRoles s "ws" [(32, "ws+32")] ++
+    recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"), (40, "bs+40"),
+      (48, "bs+48"), (72, "bs+72")] ++
+    recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"), (40, "ts+40"),
+      (48, "ts+48"), (56, "ts+56"), (64, "ts+64")] ++
+    [(globN s "bal_accounts", "bal_accounts"), (globN s "bal_idx_accts", "bal_idx_accts"),
+      (globN s "bal_idx_stor", "bal_idx_stor")] ++
+    nestRoles s "bs" "bs.inner" ++ nestRoles s "ts" "ts.inner" ++
+    (balRecords s).flatMap fun ad => [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")]).filter
+    fun a => a.1 != 0
+
+/-- The role of a journal record's table `t`: one of the journaled `ts` slots, else an inner
+storage table. -/
+def journalRole {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : String :=
+  if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 16) then "ts+16"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 32) then "ts+32"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 48) then "ts+48"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 64) then "ts+64"
+  else "ts.inner"
+
+/-- The tables the journal names (record `i` at `journal + 32 i`: table `+0`, present flag `+16`,
+saved value `+24`), with their roles: the record's table, and the saved value of a present `ts+32`
+record (an inner table, which `state_restore` puts back). -/
+def journalRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
+  (List.range (globN s "journal_n")).flatMap fun i =>
+    let j := globN s "journal" + 32 * i
+    (memW s j, journalRole s (memW s j)) ::
+      (if memW s (j + 16) ≠ 0 ∧ journalRole s (memW s j) = "ts+32" then
+        [(memW s (j + 24), "ts.inner")] else [])
+
+/-- Role typing of the slot occurrences `sl` (pairwise: distinct tables, or one shared role) and of
+the repeatable occurrences `jr` (role-consistent with every occurrence): every named table is in
+`S` and has its role's key length. -/
+def RolesOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (sl jr : List (Nat × String)) : Prop :=
+  (∀ a ∈ sl ++ jr, a.1 ∈ S ∧ hdr s a.1 0 = roleKeyLen a.2) ∧
+  sl.Pairwise (fun a b => a.1 = b.1 → a.2 = b.2 ∧ a.2 ∈ sharedRoles) ∧
+  ∀ a ∈ jr, ∀ b ∈ sl ++ jr, a.1 = b.1 → a.2 = b.2
+
 /-- `S` is a set of well-formed, allocated tables with pairwise disjoint footprints, disjoint
-from the fixed objects; it contains every root and is closed under the two nested roots. -/
+from the fixed objects; it contains every root and is closed under the two nested roots. Revision 8
+(round-5 Astra item 1, Gemini items 1 and 2): the slots and the journal's tables are role-typed
+(`RolesOK`, last conjunct). -/
 def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   S.Nodup ∧
   (∀ t ∈ S, HtabWF s t ∧ ∀ i ∈ htabFootprint s t, Allocated s i ∧
@@ -1821,10 +1922,13 @@ def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Pr
   (∀ ad ∈ balRecords s, memW s ad ∈ S ∧ memW s (ad + 8) ∈ S ∧
     (∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
     ∀ l ∈ htabValues s (memW s ad), LstOK s l) ∧
-  (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k)))
+  (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k))) ∧
+  RolesOK s S (worldRoleSlots s) (journalRoleSlots s)
 
 /-- The journal: `journal_n ≤ journal_cap ≤ 2^19`, the array is allocated, and every record's
-table (`+0`) is a typed table (`state_restore` calls `htab_set`/`htab_del` on it). -/
+table (`+0`) is a typed table (`state_restore` calls `htab_set`/`htab_del` on it). Revision 8
+(round-5 Astra item 1): the record's table has a journaled role and a present saved value of a
+`ts+32` record is an inner storage table (`journalRoleSlots`, checked by `TablesTyped`'s `RolesOK`). -/
 def JournalTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   globN s "journal_n" ≤ globN s "journal_cap" ∧ globN s "journal_cap" ≤ journalCapMax ∧
   (globN s "journal_cap" = 0 ∨ (Allocated s (globN s "journal", 32 * globN s "journal_cap") ∧
@@ -2091,6 +2195,16 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : Li
       ∀ o ∈ htabFootprint s t, Inside o sourceBase heapLimit ∨ Inside o m scratchEnd) ∧
     (∀ o ∈ fixedObjects s, o.2 = 0 ∨ Inside o sourceBase heapLimit ∨ Inside o m scratchEnd)
 
+/-- The access tables of the chain's frames with their roles (revision 8, round-5 Gemini item 1):
+deletion table `e+136`, accessed addresses `e+168`, accessed storage keys `e+176`. `EvmInv` role-types
+them together with the world slots (`RolesOK`): a frame table is no world table (`e+176 =
+bal_accounts` made `warm_storage_key` write `1` among the BAL records; `child+168 = bal_accounts`
+made `finish_child`'s rollback truncate it), and the three tables of a frame are distinct. -/
+def frameRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) :
+    List (Nat × String) :=
+  ch.flatMap fun ec => [(memW s (ec.1 + 136), "frame.del"), (memW s (ec.1 + 168), "frame.addr"),
+    (memW s (ec.1 + 176), "frame.key")]
+
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the
 world is typed (one table set `S` covering global AND frame tables), the chain is closed (its
 last continuation has kind `0`) and at most `maxChain` long, every frame is well formed, every
@@ -2115,6 +2229,7 @@ def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
     AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
+    RolesOK s S (worldRoleSlots s ++ frameRoleSlots s ch) (journalRoleSlots s) ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
 /-! Round-1 item 5 regressions, by construction of `EvmInv`/`evmPot`:
@@ -5998,11 +6113,14 @@ theorem htab_union_into_spec :
 /-- `htab_new` / `htab_new_scratch` return a well-formed empty table whose footprint is freshly
 allocated (heap resp. scratch); nothing outside the UNION of the fresh heap and the fresh scratch
 changes (round-2 Astra item 2: revision 2 intersected the two frames), and no global but the two
-allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). -/
+allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). Revision 8
+(round-5 Gemini item 2): the new table has the requested key length (`htab_new` stores `key_len` at
+`t+0`), which the callers need for the role key lengths of `RolesOK`. -/
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
     ArenaReady post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
+    hdr post w.toNat 0 = locN s "key_len" ∧
     (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
       (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
         Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
@@ -6067,12 +6185,16 @@ def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
 /-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
 `R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
 buffer, as in `WorldAvoids`). Revision 6 (round-4 Astra item 2): the object `m` and the regions
-avoid the persistent tries (`AvoidsTries`, same `S`). -/
+avoid the persistent tries (`AvoidsTries`, same `S`). Revision 8 (round-5 Fable non-blocking): one
+typing `(Nm, Nd)` has the object's node extents disjoint from the persistent tries' too, as
+`RetMptObj` and `MptObjStep` state. -/
 def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ (∀ i ∈ R s,
     (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
-    AvoidsTries s S ((locN s "m", 16) :: R s)
+    AvoidsTries s S ((locN s "m", 16) :: R s) ∧
+    ∃ Nm Nd, MptObjInWith s S Nm (locN s "m") ∧ TriesTypedWith s S Nd ∧
+      ∀ o ∈ (locN s "m", 16) :: R s ++ nodeExtents s Nm, ∀ j ∈ nodeExtents s Nd, Disj o j
 
 /-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
 revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
@@ -6389,11 +6511,15 @@ def KeepsOn (P W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (fname 
   FunSpec P (fun _ r post => Resumes r → W post) fname
 
 /-- Write frame: on every resuming outcome the arenas stay separated and only grow, memory changes
-only inside `R s` and the memory free at entry, and only the globals in `gw` change. -/
+only inside `R s` and the memory free at entry, and only the globals in `gw` change. Revision 8
+(round-5 Astra item 7): the scratch arena only grows too (`scratch_ptr` never rises: every writer
+in this tier releases scratch only to marks it took itself), so a caller's scratch records stay
+allocated and a loop pushing scratch records has a strictly decreasing `scratch_ptr`. -/
 def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => Resumes r →
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr" ∧
     FrameOutside s post
       (R s ++ [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
       (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
@@ -6410,9 +6536,15 @@ def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     AvoidsTries s S (R s)
 
 /-- `process_transaction(tx, index)` writes the receipt slots `bo+24`/`bo+32` at `16·index`
-(33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop). -/
+(33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop).
+Revision 8 (round-5 Fable item 2): `bo` and the two arrays are non-null. `blockOutObjects` reads a
+null array as an empty object, so with `bo+24 = 0` the stores went to `16·index`, which a suitable
+index puts on a typed table's header. `execute_block` stores the two `alloc` results (nonzero heap
+blocks) before its loop, and every callee in between keeps `bo` and the words `bo+24`, `bo+32`
+(`GlobalsKept`, `RecordsKept`). -/
 def TxReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => WorldOK s ∧ locN s "index" < memW s (globN s "bo" + 80)
+  fun s => WorldOK s ∧ globN s "bo" ≠ 0 ∧ memW s (globN s "bo" + 24) ≠ 0 ∧
+    memW s (globN s "bo" + 32) ≠ 0 ∧ locN s "index" < memW s (globN s "bo" + 80)
 
 /-- `execute_block(si, hdr)` (revision 5, round-4 non-blocking): the transaction count
 `ntx = (si+0)+40` (33588) sizes the arrays `alloc(16·ntx + 16)` (33593, 33596) without wrapping,
@@ -6444,7 +6576,9 @@ cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` afte
 Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
 every caller passes a fresh `msg_new` block. Revision 7: the record is in the HEAP (`msg_new` uses
 `alloc`), so it stays allocated across every world step (the heap only grows; `scratch_ptr` is in
-most callees' write set). -/
+most callees' write set). Revision 8 (round-5 Gemini item 1): the two tables have the frame roles
+`frame.addr`/`frame.key` (`RolesOK`), so they are distinct from each other and from every world
+slot (`frame_new` makes them the outermost frame's `e+168`/`e+176`). -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
@@ -6452,7 +6586,10 @@ def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
     AvoidsTries s S [(locN s "msg", 176)] ∧
-    memW s (locN s "msg" + 40) < 2 ^ 63
+    memW s (locN s "msg" + 40) < 2 ^ 63 ∧
+    RolesOK s S (worldRoleSlots s ++
+      [(memW s (locN s "msg" + 152), "frame.addr"), (memW s (locN s "msg" + 160), "frame.key")])
+      (journalRoleSlots s)
 
 /-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
 holds (closed one-frame chain; its blocks are fresh scratch/frame memory; its tables are the
@@ -6490,6 +6627,7 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
     AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
+    RolesOK s S (worldRoleSlots s ++ frameRoleSlots s ch) (journalRoleSlots s) ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
 theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
@@ -6701,6 +6839,63 @@ def WorldKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
       PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) (fname : MlS) : Prop :=
   FunSpec P (fun s r post => Resumes r → WorldStep R gw keep Q s r post) fname
 
+/-- Revision 8 (round-5 Fable item 1): `WorldStep` quantified only over the entry typings whose
+table set contains the tables `T s` the caller's guard owns. `MsgReady` makes the message's access
+tables `msg+152`, `msg+160` typed in SOME `S`; `process_message_call` writes them (`frame_new`
+copies them into the outermost frame, `warm_address`/`warm_storage_key` `htab_set` into them), so
+for a typing `S₀` without them (still a typing) the write lay outside `worldOwned s S₀ Nd` and
+`FrameOutside` failed. -/
+def WorldStepIn (T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post =>
+    ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    GlobalsKept gw s post ∧ RecordsKept R keep s post ∧
+    ∀ S Nd, WorldTypedWith s S Nd → (∀ t ∈ T s, t ∈ S) → IvlsDisj (R s) (worldTypedIvls s S Nd) →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+        FrameOutside s post (worldOwned s S Nd ++ R s ++ [freeGap s]) (heapFree s) ∧
+        Q s r post S' Nd'
+
+/-- From a `P` entry, every resuming outcome is a `WorldStepIn T`. -/
+def WorldKeepsIn (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → WorldStepIn T R gw keep Q s r post) fname
+
+/-- A step over the typings containing `T s` ends in `WorldOK` (proved). -/
+theorem WorldStepIn.worldOK {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStepIn T R gw keep Q s r post)
+    (hs : ∃ S Nd, WorldTypedWith s S Nd ∧ (∀ t ∈ T s, t ∈ S) ∧ IvlsDisj (R s) (worldTypedIvls s S Nd)) :
+    WorldOK post := by
+  obtain ⟨hA, -, -, -, hW⟩ := h
+  obtain ⟨S, Nd, hT, hTS, hD⟩ := hs
+  obtain ⟨S', Nd', -, hT', -⟩ := hW S Nd hT hTS hD
+  exact ⟨hA, S', (worldTyped_iff_with post S').2 ⟨Nd', hT'⟩⟩
+
+/-- Every `WorldStep` is a `WorldStepIn T` for any `T` (proved). -/
+theorem WorldStep.stepIn {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStep R gw keep Q s r post) : WorldStepIn T R gw keep Q s r post := by
+  obtain ⟨hA, hH, hG, hK, hW⟩ := h
+  exact ⟨hA, hH, hG, hK, fun S Nd hT _ hD => hW S Nd hT hD⟩
+
 /-- A world step from a state typed with `R` avoided ends in `WorldOK` (proved). -/
 theorem WorldStep.worldOK {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
     {gw : List String} {keep : List (String × List Nat)}
@@ -6770,7 +6965,8 @@ def mptObjIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (Nm : List Nat) (m :
 clauses, and in addition the trie object `m` stays typed in the SAME world `S' ⊇ S`, away from the
 persistent tries, its intervals grow only into fresh heap, and its records may change (they are the
 function's work). The callers `build_mpt_indexed`, `compute_state_root` call `mpt_set` in a loop on
-one object and `mpt_root` on it afterwards. -/
+one object and `mpt_root` on it afterwards. Revision 8 (round-5 Fable non-blocking): the object's
+node extents are disjoint from the persistent tries' at entry and exit. -/
 def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (keep : List (String × List Nat)) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop :=
@@ -6778,10 +6974,11 @@ def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (g
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     GlobalsKept gw s post ∧ RecordsKept R keep s post ∧
     ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm (locN s "m") →
-      IvlsDisj ((locN s "m", 16) :: R s) (nodeExtents s Nd) →
+      IvlsDisj ((locN s "m", 16) :: R s ++ nodeExtents s Nm) (nodeExtents s Nd) →
       IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")) →
       ∃ S' Nd' Nm', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
-        MptObjInWith post S' Nm' (locN s "m") ∧ IvlsDisj [(locN s "m", 16)] (nodeExtents post Nd') ∧
+        MptObjInWith post S' Nm' (locN s "m") ∧
+        IvlsDisj ((locN s "m", 16) :: nodeExtents post Nm') (nodeExtents post Nd') ∧
         OwnedGrows s post (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
           (worldOwned post S' Nd' ++ mptObjIvls post Nm' (locN s "m")) ∧
         FrameOutside s post
@@ -6819,6 +7016,80 @@ def RetMptObj : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemRe
       ∀ o ∈ mptObjIvls post Nm w.toNat, o = (0, 0) ∨
         Inside o (globN s "heap_ptr") (globN post "heap_ptr")
 
+/-- A constructor's extra (revision 8, round-5 Astra item 4, Gemini suggestion): the returned
+object's intervals `B s post w` are disjoint from the EXIT world `worldOwned post S' Nd'`. Fresh heap
+alone does not give this: `OwnedGrows` lets the world grow into the heap allocated during the call,
+so a constructor could attach its fresh block to a trie node (`n+32 := p`) and return it, and the
+caller's own stores into the block (`te+0 := sender`) then overwrote the world. -/
+def RetAvoids (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
+    List Ivl) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    IvlsDisj (B s post w.toNat) (worldOwned post S' Nd')
+
+/-- `RetAvoids` when the entry satisfies `C` (revision 8): `lst_new` with a non-wrapping element
+array, `htab_copy` of a well-formed allocated table (a garbage header gives a meaningless
+footprint). -/
+def RetAvoidsIf (C : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
+      List Ivl) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => C s → RetAvoids B s r post S' Nd'
+
+/-- `lst_push(l, 8)`'s extra (revision 8, round-5 Astra item 6): the returned element slot is an
+aligned word inside the list's backing array at exit (`lst_push` 13840 returns
+`load(l) + 8·n` after raising the length to `n + 1 ≤ capacity`). The backing array of `bo+40`/`bo+72`
+is a fixed object (`blockOutObjects`) whose contents `WorldTyped` does not read, so the caller's store
+of a log pointer through the slot keeps the typing, and the slot is disjoint from every table, trie
+node and other fixed object. An identity transition returning an existing table header satisfied
+the revision-7 contract. -/
+def RetListSlot : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    w.toNat % 8 = 0 ∧ Inside (w.toNat, 8) (memW post (locN s "l"))
+      (memW post (locN s "l") + 8 * memW post (locN s "l" + 16))
+
+/-- `bal_remove_change(addr, which, esz, idx)` entry (revision 8, round-5 Astra item 2): the list
+selector and element size are one of the three BAL change lists (`update_builder_from_tx` passes
+`(16, 40)`, `(24, 16)`, `(32, 24)`, AST 14270-14280). With `which = 40` it read the unowned word
+`ad+40` as a list and removed an element through it. -/
+def BalChangeArg : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ ((locN s "which" = 16 ∧ locN s "esz" = 40) ∨
+    (locN s "which" = 24 ∧ locN s "esz" = 16) ∨ (locN s "which" = 32 ∧ locN s "esz" = 24))
+
+/-- `[p, p + round8 n)` is scratch allocated between `s` and `post` (revision 8): aligned, above
+the frame-memory pointer, inside `[scratch_ptr post, scratch_ptr s)`, all words. -/
+def FreshScratch {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) : Prop :=
+  p % 8 = 0 ∧ globN s "frame_mem_ptr" ≤ p ∧
+    Inside (p, (n + 7) / 8 * 8) (globN post "scratch_ptr") (globN s "scratch_ptr") ∧
+    WordsOK post (p, (n + 7) / 8 * 8)
+
+/-- `_decode_step(db, p, n)` (revision 8, round-5 Astra item 7, Gemini suggestion): a normal return
+`<1, rec>` pushed a fresh 88-byte scratch record (`scratch_alloc(88)`, AST 10110) tagged `1`
+(extension) or `2` (branch, slot counter `+32` and occupancy `+40` zero). With the write frame
+`ww__decode_step` (memory free at entry only; `scratch_ptr` never rises), the records already on
+`_decode_witness_node_body`'s stack, their links and counters, are untouched, and each push lowers
+`scratch_ptr` by at least 88: the revision-7 `KeepsOn ArenaReady ArenaReady` allowed returning the
+same record repeatedly and overwriting the saved links. -/
+def PushesFrame (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧ (a.toNat ≠ 0 →
+      FreshScratch s post b.toNat 88 ∧ (memW post (b.toNat + 8) = 1 ∨
+        (memW post (b.toNat + 8) = 2 ∧ memW post (b.toNat + 32) = 0 ∧
+          memW post (b.toNat + 40) = 0)))) fname
+
+/-- `node_invalidate(nd)` (revision 8, round-5 Astra item 7, Gemini suggestion; AST 10061): on a
+typed node (or `0`, which errors) it zeroes the three cache words `nd+8`, `nd+16`, `nd+24` and
+changes nothing else (globals, other memory). So a second call on the same node is the identity,
+which `_mpt_insert_node`'s stationary argument on a self-looping empty extension needs; the
+`NodeFn` contract alone allowed changes across node records and the free scratch gap. -/
+def InvalidatesCache (fname : MlS) : Prop :=
+  FunSpec (NodeArgs ["nd"] (fun _ _ => True)) (fun s r post => Resumes r →
+    post = { s with
+      memory := fun a => if a = BitVec.ofNat 64 (locN s "nd" + 8) ∨ a = BitVec.ofNat 64 (locN s "nd" + 16) ∨
+          a = BitVec.ofNat 64 (locN s "nd" + 24) then HolWordLab.word 0 else s.memory a,
+      locals := post.locals, clock := post.clock }) fname
+
 /-- `requests_append`'s extra (revision 7, round-4 Gemini item 1(a)): the request count `bo+64`
 goes up by exactly one. -/
 def ReqCountInc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
@@ -6831,12 +7102,18 @@ def inputCells {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : List Iv
   [(si, 8), (memW s si + 40, 8)]
 
 /-- `decode_host_input`'s extra (revision 7): the returned input record and its payload record are
-fresh heap words, so they are outside the world. -/
+fresh heap words. Revision 8 (round-5 Astra items 4 and 8, Gemini suggestion): they are disjoint
+from the EXIT world `worldOwned post S' Nd'` (fresh heap alone does not say so, since `OwnedGrows`
+lets the world grow into fresh heap), and the transaction count `pl+40` is below `2^63`
+(`decode_payload`'s `ssz_split_var_list` bounds it; `run_attempt` compares it with SIGNED `<`, so
+`ntx = 2^63` ran zero iterations and left `16·ntx + 16` wrapping). -/
 def RetInput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
-  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
-    ∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
-      Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    (∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i) ∧
+    IvlsDisj (inputCells post w.toNat) (worldOwned post S' Nd') ∧
+    memW post (memW post w.toNat + 40) < 2 ^ 63
 
 /-- Guard of `verify_stateless_new_payload`, `attempt_l*`, `run_attempt` (revision 7): `WorldOK`,
 and the input cells are allocated words outside the world, for one typing. `run_attempt` checks
@@ -6844,11 +7121,14 @@ every transaction slot `txs + 16 i + 8, i < ntx` by a `load` (33778), which erro
 `16·ntx + 16 < 2^64` (a full cycle of `16 i mod 2^64` leaves the memory domain), and
 `execute_block`'s guard `BlockReady` needs that bound; it reads `ntx` again through `si+0`, `pl+40`
 at `execute_block`'s entry, so those two cells must survive the calls in between (`payload_header`,
-`header_hash`, `validate_header`, …), which `WorldStep` guarantees for memory outside the world. -/
+`header_hash`, `validate_header`, …), which `WorldStep` guarantees for memory outside the world.
+Revision 8 (round-5 Astra item 8): `ntx < 2^63`, so `run_attempt`'s signed loop test `i < ntx`
+counts `ntx` iterations (with `ntx = 2^63` it ran none and `BlockReady` failed). -/
 def InputAt {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
   ArenaReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
     (∀ i ∈ inputCells s si, Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
-    IvlsDisj (inputCells s si) (worldOwned s S Nd)
+    IvlsDisj (inputCells s si) (worldOwned s S Nd) ∧
+    memW s (memW s si + 40) < 2 ^ 63
 
 def InputReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => InputAt s (locN s "si")
@@ -6989,9 +7269,9 @@ theorem worldOK_of_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmI
 theorem localsOnly_txReady : LocalsOnly ["index"] TxReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "index" (hl "index" (by simp))
-  refine ⟨localsFree_worldOK s locals k hP.1, ?_⟩
+  refine ⟨localsFree_worldOK s locals k hP.1, hP.2.1, hP.2.2.1, hP.2.2.2.1, ?_⟩
   show locN { s with locals := locals, clock := k } "index" < memW s (globN s "bo" + 80)
-  rw [ht]; exact hP.2
+  rw [ht]; exact hP.2.2.2.2
 
 theorem localsFree_reqsFresh : LocalsFree ReqsFresh :=
   fun s locals k h => ⟨localsFree_worldOK s locals k h.1, h.2⟩
@@ -8287,9 +8567,6 @@ theorem Hoare.ite_raise_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F �
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
 
-/-- `_decode_step` (AST line 10110): keeps `ArenaReady`. -/
-theorem «ak__decode_step» :
-    KeepsOn ArenaReady ArenaReady (ofString "_decode_step") := by sorry
 /-- `encode_withdrawal_rlp` (AST line 32114): resumes only on an in-domain record (`loadByte(wd)`, AST 32123). -/
 theorem «dm_encode_withdrawal_rlp» :
     ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp") := by sorry
@@ -8347,6 +8624,9 @@ theorem «ek_warm_storage_key» :
 /-- `frame_open` (AST line 18450): carries the frame built by `frame_open` (hand-written). -/
 theorem «fk_frame_open» :
     KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open") := by sorry
+/-- `node_invalidate` (AST line 10061): zeroes the cache words `nd+8/+16/+24` and nothing else (exact effect). -/
+theorem «iz_node_invalidate» :
+    InvalidatesCache (ofString "node_invalidate") := by sorry
 /-- `mpt_root` (AST line 11223): trie-object step: the object `m` stays typed in the grown world. -/
 theorem «mk_mpt_root» :
     MptKeeps (fun s => [(locN s "out", 32)]) ["heap_ptr", "scratch_ptr"]
@@ -8497,10 +8777,11 @@ theorem «ro_validate_transaction» :
 theorem «rt_alloc» :
     Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc") := by sorry
-/-- `htab_copy` (AST line 5354): a normal return copied a nonzero table (`load(t + 80)` errors at `0`); a copy of a well-formed table is a fresh well-formed table. -/
+/-- `htab_copy` (AST line 5354): a normal return copied a nonzero table (`load(t + 80)` errors at `0`); a copy of a well-formed allocated table is a fresh well-formed table. -/
 theorem «rt_htab_copy» :
     Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧
-      (HtabWF s (locN s "t") → HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
+      (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
+        HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
     (ofString "htab_copy") := by sorry
 /-- `lst_new` (AST line 13804): returns a fresh empty list (`LstOK`): header and backing array fresh and disjoint. -/
@@ -8521,6 +8802,11 @@ theorem «rt_msg_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new") := by sorry
+/-- `scratch_alloc` (AST line 154): returns a fresh aligned scratch block of `n` bytes and lowers `scratch_ptr` to it. -/
+theorem «rt_scratch_alloc» :
+    Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧
+      globN post "scratch_ptr" = p)
+    (ofString "scratch_alloc") := by sorry
 /-- `te_new` (AST line 32838): returns a fresh zeroed 200-byte transaction environment. -/
 theorem «rt_te_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧
@@ -8541,6 +8827,9 @@ theorem «rv_u256_to_be_min» :
 /-- `validate_transaction` (AST line 12639): returns an intrinsic cost with regular part at most `2^24` (value contract, checks 12667). -/
 theorem «rv_validate_transaction» :
     RetIntrinsic (ofString "validate_transaction") := by sorry
+/-- `_decode_step` (AST line 10110): a pushed record is a fresh 88-byte scratch block tagged 1 or 2 (value contract). -/
+theorem «sp__decode_step» :
+    PushesFrame (ofString "_decode_step") := by sorry
 /-- `account_deployable` (AST line 13358): relational world step. -/
 theorem «wk_account_deployable» :
     WorldKeeps WorldOK (fun _ => [])
@@ -8571,12 +8860,12 @@ theorem «wk_add_storage_write» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "add_storage_write") := by sorry
-/-- `alloc` (AST line 66): relational world step. -/
+/-- `alloc` (AST line 66): relational world step and extra `(RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)]))`. -/
 theorem «wk_alloc» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc") := by sorry
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc") := by sorry
 /-- `bal_init` (AST line 13863): relational world step. -/
 theorem «wk_bal_init» :
     WorldKeeps WorldOK (fun _ => [])
@@ -8585,7 +8874,7 @@ theorem «wk_bal_init» :
     NoExtra (ofString "bal_init") := by sorry
 /-- `bal_remove_change` (AST line 14189): relational world step. -/
 theorem «wk_bal_remove_change» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps BalChangeArg (fun _ => [])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bal_remove_change") := by sorry
@@ -8757,12 +9046,16 @@ theorem «wk_header_init» :
     ["hdr_zero8", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_init") := by sorry
-/-- `htab_copy` (AST line 5354): relational world step. -/
+/-- `htab_copy` (AST line 5354): relational world step and extra `(RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+      (fun _ post w => htabFootprint post w))`. -/
 theorem «wk_htab_copy» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "htab_copy") := by sorry
+    (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+      (fun _ post w => htabFootprint post w)) (ofString "htab_copy") := by sorry
 /-- `htr_new_payload_request` (AST line 9053): relational world step with output region. -/
 theorem «wk_htr_new_payload_request» :
     WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
@@ -8811,18 +9104,20 @@ theorem «wk_logs_bloom» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "logs_bloom") := by sorry
-/-- `lst_new` (AST line 13804): relational world step. -/
+/-- `lst_new` (AST line 13804): relational world step and extra `(RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")]))`. -/
 theorem «wk_lst_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "lst_new") := by sorry
-/-- `lst_push` (AST line 13840): relational world step. -/
+    (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new") := by sorry
+/-- `lst_push` (AST line 13840): relational world step and extra `RetListSlot`. -/
 theorem «wk_lst_push» :
     WorldKeeps BoListArg (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "lst_push") := by sorry
+    RetListSlot (ofString "lst_push") := by sorry
 /-- `mark_account_created` (AST line 13562): relational world step. -/
 theorem «wk_mark_account_created» :
     WorldKeeps WorldOK (fun _ => [])
@@ -8853,18 +9148,18 @@ theorem «wk_mpt_init» :
     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "mpt_init") := by sorry
-/-- `mpt_new` (AST line 10444): relational world step. -/
+/-- `mpt_new` (AST line 10444): relational world step and extra `(RetAvoids (fun _ _ w => [(w, 16)]))`. -/
 theorem «wk_mpt_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "mpt_new") := by sorry
-/-- `msg_new` (AST line 15344): relational world step. -/
+    (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new") := by sorry
+/-- `msg_new` (AST line 15344): relational world step and extra `(RetAvoids (fun _ _ w => [(w, 176)]))`. -/
 theorem «wk_msg_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "msg_new") := by sorry
+    (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new") := by sorry
 /-- `nodedb_build` (AST line 9937): relational world step. -/
 theorem «wk_nodedb_build» :
     WorldKeeps WorldOK (fun _ => [])
@@ -8891,7 +9186,7 @@ theorem «wk_process_general_purpose_requests» :
     NoExtra (ofString "process_general_purpose_requests") := by sorry
 /-- `process_message_call` (AST line 19661): relational world step with output region. -/
 theorem «wk_process_message_call» :
-    WorldKeeps MsgReady (fun s => [(locN s "msg", 176)])
+    WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_message_call") := by sorry
@@ -8997,12 +9292,12 @@ theorem «wk_state_init» :
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "state_init") := by sorry
-/-- `te_new` (AST line 32838): relational world step. -/
+/-- `te_new` (AST line 32838): relational world step and extra `(RetAvoids (fun _ _ w => [(w, 200)]))`. -/
 theorem «wk_te_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "te_new") := by sorry
+    (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new") := by sorry
 /-- `track_ancestor_access` (AST line 13771): relational world step. -/
 theorem «wk_track_ancestor_access» :
     WorldKeeps WorldOK (fun _ => [])
@@ -9045,10 +9340,18 @@ theorem «wk_ws_storage_root_of» :
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_storage_root_of") := by sorry
+/-- `_decode_step` (AST line 10110): writes only memory it allocates. -/
+theorem «ww__decode_step» :
+    WritesWithin (fun s => [])
+    ["heap_ptr", "scratch_ptr"] (ofString "_decode_step") := by sorry
 /-- `_resolve_step` (AST line 10077): writes only memory it allocates. -/
 theorem «ww__resolve_step» :
     WritesWithin (fun s => [])
     ["heap_ptr", "scratch_ptr"] (ofString "_resolve_step") := by sorry
+/-- `memzero` (AST line 251): writes its parameter extent (`ArenaReady` tier, at `execute_block`). -/
+theorem «ww_memzero» :
+    WritesWithin (fun s => [(locN s "dst", locN s "n")])
+    [] (ofString "memzero") := by sorry
 /-- `mpt_nibble_key` (AST line 10470): writes only memory it allocates and the buffers keccak_pad, keccak_st, mpt_hash_scratch. -/
 theorem «ww_mpt_nibble_key» :
     WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
@@ -9078,14 +9381,16 @@ primitive; `gb_f` is PROVED from it. -/
 /-- The body of `_decode_witness_node_body` alone (AST line 10196, guard `ArenaReady`, #0 GUARD). Its direct callees are
 exactly `_decode_step`, `_resolve_step`, `mpt_fail`, `node_new_ext`, `rlp_item` (`«callees__decode_witness_node_body»`, checked against the AST). Hypotheses: the bound
 of each of these 5 callees, then the contract of each callee at a guard-carrying
-call site (5: `ak__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item`). Nothing else is assumed. -/
+call site (6: `ww__decode_step`, `sp__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item`). Nothing else is assumed. -/
 def GBody.«_decode_witness_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_decode_step") K.«_decode_step») →
   (TerminatingFunBoundedOn GuestInv (ofString "_resolve_step") K.«_resolve_step») →
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_ext") K.«node_new_ext») →
   (TerminatingFunBoundedOn GuestInv (ofString "rlp_item") K.«rlp_item») →
-  (KeepsOn ArenaReady ArenaReady (ofString "_decode_step")) →
+  (WritesWithin (fun s => [])
+    ["heap_ptr", "scratch_ptr"] (ofString "_decode_step")) →
+  (PushesFrame (ofString "_decode_step")) →
   (WritesWithin (fun s => [])
     ["heap_ptr", "scratch_ptr"] (ofString "_resolve_step")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
@@ -9102,7 +9407,7 @@ theorem «callees__decode_witness_node_body» : sameNames (progCallees (fnBody G
 theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» := by sorry
 
 theorem «gb__decode_witness_node_body» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body» :=
-  «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ak__decode_step» «ww__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «ww_rlp_item»
+  «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ww__decode_step» «sp__decode_step» «ww__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «ww_rlp_item»
 
 /-- The body of `_decode_witness_node_mpt` alone (AST line 10311, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `_decode_witness_node_body`, `scratch_release` (`«callees__decode_witness_node_mpt»`, checked against the AST). Hypotheses: the bound
@@ -9183,7 +9488,7 @@ theorem «gb__decode_witness_node» : TerminatingFunBoundedOn ArenaReady (ofStri
 /-- The body of `_mpt_delete_node_body` alone (AST line 10758, guard `MptReady`, #0 GUARD; #1 GUARD). Its direct callees are
 exactly `_collapse_branch`, `_delete_ext_finish`, `common_prefix_length`, `memeq`, `mpt_fail`, `node_invalidate`, `scratch_alloc` (`«callees__mpt_delete_node_body»`, checked against the AST). Hypotheses: the bound
 of each of these 7 callees, then the contract of each callee at a guard-carrying
-call site (8: `nf__collapse_branch`, `nf__delete_ext_finish`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_memeq`, `ro_mpt_fail`, `nf_node_invalidate`, `ww_scratch_alloc`). Nothing else is assumed. -/
+call site (10: `nf__collapse_branch`, `nf__delete_ext_finish`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_memeq`, `ro_mpt_fail`, `nf_node_invalidate`, `iz_node_invalidate`, `ww_scratch_alloc`, `rt_scratch_alloc`). Nothing else is assumed. -/
 def GBody.«_mpt_delete_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_collapse_branch") K.«_collapse_branch») →
   (TerminatingFunBoundedOn GuestInv (ofString "_delete_ext_finish") K.«_delete_ext_finish») →
@@ -9207,8 +9512,12 @@ def GBody.«_mpt_delete_node_body» : Prop :=
   (NodeFn ["nd"]
     (fun _ _ => True)
     (ofString "node_invalidate")) →
+  (InvalidatesCache (ofString "node_invalidate")) →
   (WritesWithin (fun s => [])
     ["scratch_ptr"] (ofString "scratch_alloc")) →
+  (Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧
+      globN post "scratch_ptr" = p)
+    (ofString "scratch_alloc")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body»
 
 /-- The direct callees of `_mpt_delete_node_body`, read off its AST body (revision 6). -/
@@ -9218,7 +9527,7 @@ theorem «callees__mpt_delete_node_body» : sameNames (progCallees (fnBody Guest
 theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by sorry
 
 theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
-  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «rv_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «ww_scratch_alloc»
+  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «rv_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «ww_scratch_alloc» «rt_scratch_alloc»
 
 /-- The body of `_mpt_delete_node` alone (AST line 10852, guard `MptReady`, loop-free). Its direct callees are
 exactly `_mpt_delete_node_body`, `scratch_mark`, `scratch_release` (`«callees__mpt_delete_node»`, checked against the AST). Hypotheses: the bound
@@ -9243,7 +9552,7 @@ theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_m
 /-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptReady`, #0 GUARD). Its direct callees are
 exactly `_insert_into_leaf`, `_split_extension`, `common_prefix_length`, `mpt_fail`, `node_invalidate`, `node_new_ext`, `node_new_leaf` (`«callees__mpt_insert_node»`, checked against the AST). Hypotheses: the bound
 of each of these 7 callees, then the contract of each callee at a guard-carrying
-call site (8: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
+call site (9: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `iz_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
 def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf») →
   (TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension») →
@@ -9267,6 +9576,7 @@ def GBody.«_mpt_insert_node» : Prop :=
   (NodeFn ["nd"]
     (fun _ _ => True)
     (ofString "node_invalidate")) →
+  (InvalidatesCache (ofString "node_invalidate")) →
   (NodeFn ["child"]
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen"))
@@ -9284,7 +9594,7 @@ theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Soft
 theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
 
 theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
-  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
+  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
 
 /-- The body of `mpt_set` alone (AST line 10872, guard `MptObjReady`, loop-free). Its direct callees are
 exactly `_mpt_delete_node`, `_mpt_insert_node`, `mpt_nibble_key` (`«callees_mpt_set»`, checked against the AST). Hypotheses: the bound
@@ -9323,7 +9633,7 @@ def GBody.«build_mpt_indexed» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "mpt_new")) →
+    (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new")) →
   (Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
     (ofString "mpt_new")) →
@@ -9456,7 +9766,7 @@ def GBody.«compute_state_root» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -9470,9 +9780,12 @@ def GBody.«compute_state_root» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "htab_copy")) →
+    (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+      (fun _ post w => htabFootprint post w)) (ofString "htab_copy")) →
   (Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧
-      (HtabWF s (locN s "t") → HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
+      (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
+        HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
     (ofString "htab_copy")) →
   (ReadOnlyFn (ofString "htab_get")) →
@@ -9730,7 +10043,7 @@ def GBody.«update_builder_from_tx» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "add_storage_write")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps BalChangeArg (fun _ => [])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bal_remove_change")) →
@@ -10248,7 +10561,7 @@ def GBody.«process_message_call» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])
@@ -10291,11 +10604,11 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "msg_new")) →
+    (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new")) →
   (Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new")) →
-  (WorldKeeps MsgReady (fun s => [(locN s "msg", 176)])
+  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_message_call")) →
@@ -10306,7 +10619,7 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "te_new")) →
+    (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new")) →
   (Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧
       ∀ k, k < 25 → memW post (m + 8 * k) = 0)
     (ofString "te_new")) →
@@ -10333,7 +10646,7 @@ def GBody.«process_checked_system_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -10390,7 +10703,7 @@ def GBody.«process_general_purpose_requests» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun s => [(locN s "out", 192)])
@@ -10466,7 +10779,7 @@ def GBody.«process_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -10517,7 +10830,8 @@ def GBody.«process_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "lst_new")) →
+    (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")) →
   (Returns ArenaReady (fun s post l =>
       locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →
         FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧
@@ -10527,7 +10841,7 @@ def GBody.«process_transaction» : Prop :=
   (WorldKeeps BoListArg (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "lst_push")) →
+    RetListSlot (ofString "lst_push")) →
   (ReadOnlyFn (ofString "max")) →
   (WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])
     []
@@ -10539,11 +10853,11 @@ def GBody.«process_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "msg_new")) →
+    (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new")) →
   (Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new")) →
-  (WorldKeeps MsgReady (fun s => [(locN s "msg", 176)])
+  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_message_call")) →
@@ -10562,7 +10876,7 @@ def GBody.«process_transaction» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "te_new")) →
+    (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new")) →
   (Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧
       ∀ k, k < 25 → memW post (m + 8 * k) = 0)
     (ofString "te_new")) →
@@ -10617,7 +10931,7 @@ theorem «gb_process_withdrawals» : TerminatingFunBoundedOn WorldOK (ofString "
 /-- The body of `execute_block` alone (AST line 33580, guard `BlockReady`, #0 CTR). Its direct callees are
 exactly `alloc`, `bal_init`, `build_block_access_list_rlp`, `build_mpt_indexed`, `compute_requests_hash`, `compute_state_root`, `decode_transaction`, `keccak256`, `logs_bloom`, `lst_new`, `max`, `memeq`, `memzero`, `process_general_purpose_requests`, `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`, `state_fresh_tx`, `track_ancestor_access`, `validate_block_access_list_gas_limit` (`«callees_execute_block»`, checked against the AST). Hypotheses: the bound
 of each of these 20 callees, then the contract of each callee at a guard-carrying
-call site (19: `wk_alloc`, `rt_alloc`, `wk_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `wk_decode_transaction`, `wk_logs_bloom`, `wk_lst_new`, `rt_lst_new`, `wk_memzero`, `zv_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `wk_state_fresh_tx`, `wk_track_ancestor_access`, `ro_validate_block_access_list_gas_limit`). Nothing else is assumed. -/
+call site (20: `wk_alloc`, `rt_alloc`, `wk_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `wk_decode_transaction`, `wk_logs_bloom`, `wk_lst_new`, `rt_lst_new`, `wk_memzero`, `ww_memzero`, `zv_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `wk_state_fresh_tx`, `wk_track_ancestor_access`, `ro_validate_block_access_list_gas_limit`). Nothing else is assumed. -/
 def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "bal_init") K.«bal_init») →
@@ -10642,7 +10956,7 @@ def GBody.«execute_block» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -10672,7 +10986,8 @@ def GBody.«execute_block» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "lst_new")) →
+    (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")) →
   (Returns ArenaReady (fun s post l =>
       locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →
         FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧
@@ -10683,6 +10998,8 @@ def GBody.«execute_block» : Prop :=
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memzero")) →
+  (WritesWithin (fun s => [(locN s "dst", locN s "n")])
+    [] (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
   (WorldKeeps ReqsFresh (fun _ => [])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
@@ -10718,7 +11035,7 @@ theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Softwar
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
 theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block» :=
-  «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «wk_alloc» «rt_alloc» «wk_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «wk_decode_transaction» «wk_logs_bloom» «wk_lst_new» «rt_lst_new» «wk_memzero» «zv_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «wk_state_fresh_tx» «wk_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
+  «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «wk_alloc» «rt_alloc» «wk_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «wk_decode_transaction» «wk_logs_bloom» «wk_lst_new» «rt_lst_new» «wk_memzero» «ww_memzero» «zv_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «wk_state_fresh_tx» «wk_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
 
 /-- The body of `payload_header` alone (AST line 32645, guard `WorldOK`, #0 CTR). Its direct callees are
 exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
@@ -10736,7 +11053,7 @@ def GBody.«payload_header» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -10783,7 +11100,7 @@ def GBody.«state_init» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»
@@ -10817,7 +11134,7 @@ def GBody.«run_attempt» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (ReadOnlyFn (ofString "check_gas_limit")) →
@@ -11183,7 +11500,7 @@ def GBody.«main» : Prop :=
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "alloc")) →
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -11271,7 +11588,8 @@ structure Primitives : Prop where
   «fb_mpt_fail» : TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail»
   «fb_node_new_ext» : TerminatingFunBoundedOn GuestInv (ofString "node_new_ext") K.«node_new_ext»
   «fb_rlp_item» : TerminatingFunBoundedOn GuestInv (ofString "rlp_item") K.«rlp_item»
-  «ak__decode_step» : KeepsOn ArenaReady ArenaReady (ofString "_decode_step")
+  «ww__decode_step» : WritesWithin (fun s => [])     ["heap_ptr", "scratch_ptr"] (ofString "_decode_step")
+  «sp__decode_step» : PushesFrame (ofString "_decode_step")
   «ww__resolve_step» : WritesWithin (fun s => [])     ["heap_ptr", "scratch_ptr"] (ofString "_resolve_step")
   «ro_mpt_fail» : ReadOnlyFn (ofString "mpt_fail")
   «ww_node_new_ext» : WritesWithin (fun s => [])     ["heap_ptr"] (ofString "node_new_ext")
@@ -11292,7 +11610,9 @@ structure Primitives : Prop where
   «rv_common_prefix_length» : RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")
   «ro_memeq» : ReadOnlyFn (ofString "memeq")
   «nf_node_invalidate» : NodeFn ["nd"]     (fun _ _ => True)     (ofString "node_invalidate")
+  «iz_node_invalidate» : InvalidatesCache (ofString "node_invalidate")
   «ww_scratch_alloc» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "scratch_alloc")
+  «rt_scratch_alloc» : Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧       globN post "scratch_ptr" = p)     (ofString "scratch_alloc")
   «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body»
   «gbody__mpt_delete_node» : GBody.«_mpt_delete_node»
   «fb__insert_into_leaf» : TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf»
@@ -11313,7 +11633,7 @@ structure Primitives : Prop where
   «fb_mpt_root» : TerminatingFunBoundedOn GuestInv (ofString "mpt_root") K.«mpt_root»
   «fb_rlp_encode_word» : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»
   «ro_heap_mark» : ReadOnlyFn (ofString "heap_mark")
-  «wk_mpt_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "mpt_new")
+  «wk_mpt_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new")
   «rt_mpt_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")     (ofString "mpt_new")
   «mk_mpt_set» : MptKeeps (fun _ => []) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set")
   «wk_rlp_encode_word» : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "rlp_encode_word")
@@ -11335,12 +11655,12 @@ structure Primitives : Prop where
   «fb_u256_to_be_min» : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min»
   «fb_ws_get_account_optional» : TerminatingFunBoundedOn GuestInv (ofString "ws_get_account_optional") K.«ws_get_account_optional»
   «fb_ws_storage_root_of» : TerminatingFunBoundedOn GuestInv (ofString "ws_storage_root_of") K.«ws_storage_root_of»
-  «wk_alloc» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "alloc")
+  «wk_alloc» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")
   «rt_alloc» : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))     (ofString "alloc")
   «wk_cache_get_root» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "cache_get_root")
   «wk_encode_account» : WorldKeeps WorldOK (fun s => [(locN s "out", 110)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_account")
-  «wk_htab_copy» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "htab_copy")
-  «rt_htab_copy» : Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧       (HtabWF s (locN s "t") → HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))     (ofString "htab_copy")
+  «wk_htab_copy» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧         ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)       (fun _ post w => htabFootprint post w)) (ofString "htab_copy")
+  «rt_htab_copy» : Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧       (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →         HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))     (ofString "htab_copy")
   «ro_htab_get» : ReadOnlyFn (ofString "htab_get")
   «ro_htab_has» : ReadOnlyFn (ofString "htab_has")
   «ro_htab_item» : ReadOnlyFn (ofString "htab_item")
@@ -11381,7 +11701,7 @@ structure Primitives : Prop where
   «wk_add_code_change» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "add_code_change")
   «wk_add_nonce_change» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "add_nonce_change")
   «wk_add_storage_write» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "add_storage_write")
-  «wk_bal_remove_change» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bal_remove_change")
+  «wk_bal_remove_change» : WorldKeeps BalChangeArg (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bal_remove_change")
   «wk_get_code» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_code")
   «wk_idx_start_account» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_account")
   «wk_idx_start_storage» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_storage")
@@ -11559,11 +11879,11 @@ structure Primitives : Prop where
   «fb_state_fresh_tx» : TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx»
   «fb_te_new» : TerminatingFunBoundedOn GuestInv (ofString "te_new") K.«te_new»
   «wk_ext_code_of» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ext_code_of")
-  «wk_msg_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "msg_new")
+  «wk_msg_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new")
   «rt_msg_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧       ∀ k, k < 22 → memW post (m + 8 * k) = 0)     (ofString "msg_new")
-  «wk_process_message_call» : WorldKeeps MsgReady (fun s => [(locN s "msg", 176)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_message_call")
+  «wk_process_message_call» : WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_message_call")
   «wk_state_fresh_tx» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "state_fresh_tx")
-  «wk_te_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "te_new")
+  «wk_te_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new")
   «rt_te_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧       ∀ k, k < 25 → memW post (m + 8 * k) = 0)     (ofString "te_new")
   «gbody_process_unchecked_system_transaction» : GBody.«process_unchecked_system_transaction»
   «fb_extract_deposit_data» : TerminatingFunBoundedOn GuestInv (ofString "extract_deposit_data") K.«extract_deposit_data»
@@ -11604,9 +11924,9 @@ structure Primitives : Prop where
   «ro_fee_mul» : ReadOnlyFn (ofString "fee_mul")
   «wk_get_account» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_account")
   «wk_keccak256» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "keccak256")
-  «wk_lst_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "lst_new")
+  «wk_lst_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)       (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")
   «rt_lst_new» : Returns ArenaReady (fun s post l =>       locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →         FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧         Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧         memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")     (ofString "lst_new")
-  «wk_lst_push» : WorldKeeps BoListArg (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "lst_push")
+  «wk_lst_push» : WorldKeeps BoListArg (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetListSlot (ofString "lst_push")
   «dm_memcpy» : ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")
   «ro_min» : ReadOnlyFn (ofString "min")
   «rv_min» : RetLe (fun s => locN s "a") (ofString "min")
@@ -11637,6 +11957,7 @@ structure Primitives : Prop where
   «wk_compute_state_root» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "compute_state_root")
   «wk_decode_transaction» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "decode_transaction")
   «wk_logs_bloom» : WorldKeeps WorldOK (fun s => [(locN s "out", 256)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "logs_bloom")
+  «ww_memzero» : WritesWithin (fun s => [(locN s "dst", locN s "n")])     [] (ofString "memzero")
   «wk_process_general_purpose_requests» : WorldKeeps ReqsFresh (fun _ => [])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]     NoExtra (ofString "process_general_purpose_requests")
   «wk_process_transaction» : WorldKeeps TxReady (fun _ => [])     ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]     NoExtra (ofString "process_transaction")
   «wk_process_unchecked_system_transaction» : WorldKeeps WorldOK (fun _ => [])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_unchecked_system_transaction")
@@ -11705,12 +12026,12 @@ structure Primitives : Prop where
 
 theorem assembly_main (P : Primitives) :
     TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» := by
-  have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ak__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
+  have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ww__decode_step» P.«sp__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
   have «g__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
   have «g__decode_witness_node» := «gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«ww_scratch_alloc»
+  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«ww_scratch_alloc» P.«rt_scratch_alloc»
   have «g__mpt_delete_node» := P.«gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
+  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
   have «g_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
@@ -11739,7 +12060,7 @@ theorem assembly_main (P : Primitives) :
   have «g_process_general_purpose_requests» := P.«gbody_process_general_purpose_requests» P.«fb_alloc» P.«fb_extract_deposit_data» P.«fb_memcpy» P.«fb_memeq» «g_process_checked_system_transaction» P.«fb_requests_append» P.«wk_alloc» P.«rt_alloc» P.«wk_extract_deposit_data» P.«wk_memcpy» P.«ro_memeq» P.«wk_process_checked_system_transaction» P.«wk_requests_append»
   have «g_process_transaction» := P.«gbody_process_transaction» P.«fb_alloc» P.«fb_calculate_blob_gas_price» P.«fb_calculate_total_blob_gas» P.«fb_check_transaction» P.«fb_clear_account_preserving_balance» P.«fb_compute_contract_address» P.«fb_create_ether» P.«fb_encode_receipt» P.«fb_encode_transaction» P.«fb_fee_mul» P.«fb_frame_mem_release» P.«fb_get_account» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» «g_incorporate_tx_into_block» P.«fb_increment_nonce» P.«fb_keccak256» P.«fb_lst_new» P.«fb_lst_push» P.«fb_max» P.«fb_memcpy» P.«fb_min» P.«fb_msg_new» «g_process_message_call» P.«fb_recover_sender_with_chain_id» P.«fb_scratch_release» P.«fb_set_account_balance» P.«fb_state_fresh_tx» P.«fb_te_new» P.«fb_tx_chain_id» P.«fb_tx_has_access_list» P.«fb_tx_is_blob» P.«fb_tx_is_setcode» P.«fb_u256_sub» P.«fb_udiv_small5» P.«fb_validate_transaction» P.«wk_alloc» P.«rt_alloc» P.«wk_calculate_blob_gas_price» P.«ro_calculate_total_blob_gas» P.«wk_check_transaction» P.«wk_clear_account_preserving_balance» P.«wk_compute_contract_address» P.«wk_create_ether» P.«wk_encode_receipt» P.«wk_encode_transaction» P.«ro_fee_mul» P.«wk_get_account» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_increment_nonce» P.«wk_keccak256» P.«wk_lst_new» P.«rt_lst_new» P.«wk_lst_push» P.«ro_max» P.«wk_memcpy» P.«dm_memcpy» P.«ro_min» P.«rv_min» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_recover_sender_with_chain_id» P.«wk_set_account_balance» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new» P.«ro_tx_chain_id» P.«ro_tx_has_access_list» P.«ro_tx_is_blob» P.«ro_tx_is_setcode» P.«ro_u256_sub» P.«ro_udiv_small5» P.«ro_validate_transaction» P.«rv_validate_transaction»
   have «g_process_withdrawals» := P.«gbody_process_withdrawals» P.«fb_create_ether» «g_incorporate_tx_into_block» P.«fb_state_fresh_tx» P.«fb_u256_mul» P.«wk_create_ether» P.«wk_state_fresh_tx» P.«ro_u256_mul»
-  have «g_execute_block» := P.«gbody_execute_block» P.«fb_alloc» P.«fb_bal_init» P.«fb_build_block_access_list_rlp» «g_build_mpt_indexed» P.«fb_compute_requests_hash» «g_compute_state_root» P.«fb_decode_transaction» P.«fb_keccak256» P.«fb_logs_bloom» P.«fb_lst_new» P.«fb_max» P.«fb_memeq» P.«fb_memzero» «g_process_general_purpose_requests» «g_process_transaction» «g_process_unchecked_system_transaction» «g_process_withdrawals» P.«fb_state_fresh_tx» P.«fb_track_ancestor_access» P.«fb_validate_block_access_list_gas_limit» P.«wk_alloc» P.«rt_alloc» P.«wk_bal_init» P.«wk_build_block_access_list_rlp» P.«wk_build_mpt_indexed» P.«wk_compute_state_root» P.«wk_decode_transaction» P.«wk_logs_bloom» P.«wk_lst_new» P.«rt_lst_new» P.«wk_memzero» P.«zv_memzero» P.«wk_process_general_purpose_requests» P.«wk_process_transaction» P.«wk_process_unchecked_system_transaction» P.«wk_process_withdrawals» P.«wk_state_fresh_tx» P.«wk_track_ancestor_access» P.«ro_validate_block_access_list_gas_limit»
+  have «g_execute_block» := P.«gbody_execute_block» P.«fb_alloc» P.«fb_bal_init» P.«fb_build_block_access_list_rlp» «g_build_mpt_indexed» P.«fb_compute_requests_hash» «g_compute_state_root» P.«fb_decode_transaction» P.«fb_keccak256» P.«fb_logs_bloom» P.«fb_lst_new» P.«fb_max» P.«fb_memeq» P.«fb_memzero» «g_process_general_purpose_requests» «g_process_transaction» «g_process_unchecked_system_transaction» «g_process_withdrawals» P.«fb_state_fresh_tx» P.«fb_track_ancestor_access» P.«fb_validate_block_access_list_gas_limit» P.«wk_alloc» P.«rt_alloc» P.«wk_bal_init» P.«wk_build_block_access_list_rlp» P.«wk_build_mpt_indexed» P.«wk_compute_state_root» P.«wk_decode_transaction» P.«wk_logs_bloom» P.«wk_lst_new» P.«rt_lst_new» P.«wk_memzero» P.«ww_memzero» P.«zv_memzero» P.«wk_process_general_purpose_requests» P.«wk_process_transaction» P.«wk_process_unchecked_system_transaction» P.«wk_process_withdrawals» P.«wk_state_fresh_tx» P.«wk_track_ancestor_access» P.«ro_validate_block_access_list_gas_limit»
   have «g_payload_header» := P.«gbody_payload_header» P.«fb_alloc» P.«fb_block_rlp_length» «g_build_mpt_indexed» P.«fb_compute_requests_hash» P.«fb_encode_execution_requests» P.«fb_encode_withdrawal_rlp» P.«fb_keccak256» P.«fb_memzero» P.«wk_alloc» P.«rt_alloc» P.«wk_block_rlp_length» P.«wk_build_mpt_indexed» P.«wk_encode_withdrawal_rlp» P.«dm_encode_withdrawal_rlp» P.«wk_keccak256» P.«wk_memzero» P.«zv_memzero»
   have «g_state_init» := P.«gbody_state_init» P.«fb_alloc» «g_decode_witness_to_mpt» P.«fb_htab_new» P.«wk_alloc» P.«rt_alloc»
   have «g_run_attempt» := P.«gbody_run_attempt» P.«fb_alloc» P.«fb_check_gas_limit» «g_execute_block» P.«fb_header_hash» P.«fb_is_valid_versioned_hashes» P.«fb_memeq» P.«fb_memzero» P.«fb_nodedb_build» «g_payload_header» «g_state_init» P.«fb_validate_header» P.«fb_validate_headers» P.«wk_alloc» P.«rt_alloc» P.«ro_check_gas_limit» P.«wk_header_hash» P.«wk_is_valid_versioned_hashes» P.«ro_memeq» P.«wk_memzero» P.«zv_memzero» P.«wk_nodedb_build» P.«wk_payload_header» P.«wk_state_init» P.«wk_validate_header» P.«wk_validate_headers»
@@ -11761,7 +12082,8 @@ theorem primitives : Primitives where
   «fb_mpt_fail» := «fb_mpt_fail»
   «fb_node_new_ext» := «fb_node_new_ext»
   «fb_rlp_item» := «fb_rlp_item»
-  «ak__decode_step» := «ak__decode_step»
+  «ww__decode_step» := «ww__decode_step»
+  «sp__decode_step» := «sp__decode_step»
   «ww__resolve_step» := «ww__resolve_step»
   «ro_mpt_fail» := «ro_mpt_fail»
   «ww_node_new_ext» := «ww_node_new_ext»
@@ -11782,7 +12104,9 @@ theorem primitives : Primitives where
   «rv_common_prefix_length» := «rv_common_prefix_length»
   «ro_memeq» := «ro_memeq»
   «nf_node_invalidate» := «nf_node_invalidate»
+  «iz_node_invalidate» := «iz_node_invalidate»
   «ww_scratch_alloc» := «ww_scratch_alloc»
+  «rt_scratch_alloc» := «rt_scratch_alloc»
   «gbody__mpt_delete_node_body» := «gbody__mpt_delete_node_body»
   «gbody__mpt_delete_node» := «gbody__mpt_delete_node»
   «fb__insert_into_leaf» := «fb__insert_into_leaf»
@@ -12127,6 +12451,7 @@ theorem primitives : Primitives where
   «wk_compute_state_root» := «wk_compute_state_root»
   «wk_decode_transaction» := «wk_decode_transaction»
   «wk_logs_bloom» := «wk_logs_bloom»
+  «ww_memzero» := «ww_memzero»
   «wk_process_general_purpose_requests» := «wk_process_general_purpose_requests»
   «wk_process_transaction» := «wk_process_transaction»
   «wk_process_unchecked_system_transaction» := «wk_process_unchecked_system_transaction»

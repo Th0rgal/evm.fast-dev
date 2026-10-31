@@ -1,7 +1,9 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 7
-(round-4 fixes; the per-revision change lists are in `campaign/notes/guestinv/DESIGN.md` §0).
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 8
+(round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
+results, guarded-loop progress contracts; the per-revision change lists are in
+`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; no `fb_*` changed).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):

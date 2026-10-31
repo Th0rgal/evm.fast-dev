@@ -67,12 +67,15 @@ OVERRIDES = {
         'Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the inner loop #1 '
         'times out (zero leading inverse), so this iteration times out (WhileTimesOut, '
         'while_rank_stationary)'),
+    # revision 8 (coordinator note, Gemini round 5): explicit rank, N and K unchanged
     ('fq12_inv', 1): ('MONO', 14,
-        'mu = 2 (d0 + 1) + [not yet stationary]: d0 = deg r0 in [-1, 12] strictly decreases when '
-        'fq_poly_submul cancels the leading coefficient (needs: fq arithmetic cancels on '
-        'non-canonical inputs, DESIGN 8); with linv = fq_inv(lead) = 0, cf = 0 and the writes '
-        'to q and r0 are idempotent from the second iteration on, which repeats exactly '
-        '(SameHead, while_rank_stationary)'),
+        'while_rank_stationary with mu = (if linv = 0 then 0 else d0 - d1) + phase at the active '
+        'inner head (d0 = deg r0, d1 = deg r1 >= 1 inside the outer loop, so d0 - d1 <= 11); '
+        'phase = 2 if r0[d0] < p or r0[d0] mod p != 0, 1 if r0[d0] >= p, r0[d0] mod p = 0 and '
+        'q[d0 - d1] != 0, 0 otherwise. fq_mul always returns < p and fq_mul(k p, linv) = 0 for '
+        '1 <= k <= 5, so every continuing iteration strictly lowers mu or is an exact repeat '
+        '(SameHead: noncanonical lead r + p, period-1 state, ISSUES.md on wave8/leaves-arith-astra), '
+        'and an inner SameHead makes the outer iteration WhileTimesOut; mu <= 11 + 2 = 13 <= 14'),
     ('_rlp_validate_items_body', 0): ('STACK', (2 ** 61 + 1) * 2 ** 192,
         'each push calls scratch_alloc(24), which strictly lowers scratch_ptr and cannot wrap '
         '(<= 2^61 pushes, arbitrary globals); between pushes the body is read-only, no-repeat '
@@ -716,7 +719,24 @@ EXTRA = {
                              ('_mpt_insert_node', '_mpt_delete_node_body')),
     'mpt_nibble_key': ('nk_mpt_nibble_key', 'RetNibbles (ofString "mpt_nibble_key")',
                        'returns a fresh heap nibble array (value contract)', ('mpt_set',)),
+    # revision 8 (round-5 Astra item 7, Gemini suggestion): the exact effect of node_invalidate
+    # (the stationary argument of the self-looping empty extension), and the fresh scratch record
+    # _decode_step pushes (the scratch-stack rank of _decode_witness_node_body)
+    'node_invalidate': ('iz_node_invalidate', 'InvalidatesCache (ofString "node_invalidate")',
+                        'zeroes the cache words `nd+8/+16/+24` and nothing else (exact effect)',
+                        ('_mpt_insert_node', '_mpt_delete_node_body')),
+    '_decode_step': ('sp__decode_step', 'PushesFrame (ofString "_decode_step")',
+                     'a pushed record is a fresh 88-byte scratch block tagged 1 or 2 (value contract)',
+                     ('_decode_witness_node_body',)),
 }
+# revision 8 (round-5 Astra item 7): `_decode_step` writes only memory free at entry (its stores go
+# to `node_new_leaf`'s fresh node and its own `scratch_alloc` record, which `fresh_only` does not
+# trace through the callee result); it gets the write frame instead of `KeepsOn ArenaReady ArenaReady`
+FORCE_WW = {'_decode_step'}
+# revision 8 (round-5 Fable item 3, Astra item 5): `execute_block` runs `memzero(bo, 88)` right
+# after `bo := alloc(88)`, where `WorldOK` does not hold (the fresh record holds arbitrary words), so
+# that site also gets the `ArenaReady`-tier write frame of `memzero` (revision 6's `ww_memzero`)
+CALL_WW = {('execute_block', 'memzero')}
 UNFOLD_LEMMAS0 = ('sourceFunctionEntry, Guest.Software.guestFn_{F}, '
                  'InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, '
                  'InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, '
@@ -972,7 +992,12 @@ def ast_index(path, fname):
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
     'lst_push': 'BoListArg',
+    # revision 8 (round-5 Astra item 2): the three list selectors only
+    'bal_remove_change': 'BalChangeArg',
 }
+# revision 8 (round-5 Fable item 1): callees whose world step quantifies only over the typings
+# containing the guard's tables (`WorldKeepsIn`)
+KEEP_IN = {'MsgReady': 'fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]'}
 # revision 7: output regions of world-tier callees that write a caller object outside the world
 # (besides the `REGION` parameter extents): the message record, the output buffers
 RREG = {
@@ -986,7 +1011,19 @@ NO_REGION = {'lst_push'}
 MPT_KEEPS = {'mpt_set', 'mpt_root'}
 # callee-specific extras of `WorldStep` (stated for the exit typing `S'`)
 WQ = {'requests_append': 'ReqCountInc', 'mpt_from_witness': 'RetMptObj',
-      'decode_host_input': 'RetInput'}
+      'decode_host_input': 'RetInput',
+      # revision 8 (round-5 Astra item 4): the constructors' results avoid the EXIT world
+      'alloc': '(RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)]))',
+      'msg_new': '(RetAvoids (fun _ _ w => [(w, 176)]))',
+      'te_new': '(RetAvoids (fun _ _ w => [(w, 200)]))',
+      'mpt_new': '(RetAvoids (fun _ _ w => [(w, 16)]))',
+      'lst_new': ('(RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)\n'
+                  '      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")]))'),
+      'htab_copy': ('(RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧\n'
+                    '        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)\n'
+                    '      (fun _ post w => htabFootprint post w))'),
+      # revision 8 (round-5 Astra item 6): the returned element slot
+      'lst_push': 'RetListSlot'}
 # revision 7 (round-4 Gemini item 1(c)): return typing of the constructors whose results feed
 # guards, and value contracts the walks need; one leaf per callee, at every needed call site
 RT = {
@@ -1007,11 +1044,19 @@ RT = {
     'mpt_new': ('Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧\n'
                 '      memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")',
                 'returns a fresh 16-byte trie object with root `root_node`'),
+    # revision 8 (round-5 Astra item 3): only a copy of an ALLOCATED table is well formed
+    # (`htab_copy` allocates the destination at `heap_ptr`, over a source lying in free heap)
     'htab_copy': ('Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧\n'
-                  '      (HtabWF s (locN s "t") → HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧\n'
+                  '      (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →\n'
+                  '        HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧\n'
                   '        ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))',
                   'a normal return copied a nonzero table (`load(t + 80)` errors at `0`); a copy of a '
-                  'well-formed table is a fresh well-formed table'),
+                  'well-formed allocated table is a fresh well-formed table'),
+    # revision 8 (round-5 Astra item 7, Gemini suggestion): the returned block is fresh scratch and
+    # `scratch_ptr` drops to it (`_mpt_delete_node_body` writes its frame fields through it)
+    'scratch_alloc': ('Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧\n'
+                      '      globN post "scratch_ptr" = p)',
+                      'returns a fresh aligned scratch block of `n` bytes and lowers `scratch_ptr` to it'),
 }
 XV = {
     'memzero': ('zv_memzero', 'ZeroFills (ofString "memzero")',
@@ -1322,6 +1367,70 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                         res[k] = res.get(k, set()) | o
         return res
 
+    def record_aliases():
+        """Revision 8 (round-5 Fable non-blocking): `rec_written` follows LOCAL aliases of the four
+        typed records only. Check that their pointers reach memory only through the two known
+        record links (`ts+0 := bs`, `state_fresh_tx`; `bs+0 := ws`, `state_init`), and that no
+        store address or written-parameter argument anywhere on the call graph is computed from a
+        load of such a link (or of any word holding a record pointer). Then no store reaches a
+        typed record through a memory alias, and `rec_written` is complete."""
+        links = set()
+        for x in reach:
+            if x not in fns:
+                continue
+            decs = {}
+
+            def d(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    decs.setdefault(strval(y[2][0]), []).append(y[2][2])
+                elif is_app(y, 'Prog.assign') and panast.show(y[2][0]) == 'local':
+                    decs.setdefault(y[2][1][1], []).append(y[2][2])
+            panast.walk(fns[x], d)
+
+            def st(y, _c):
+                # a stored VALUE that is (an offset of) a record pointer; loaded parts are words
+                # read from memory, not record pointers (`rec_offsets` ignores them)
+                if is_app(y) and y[1] in ('Prog.store', 'Prog.storeByte'):
+                    if rec_offsets(y[2][1], decs):
+                        for k, o in rec_offsets(y[2][0], decs).items():
+                            links.add((x, k, 'ALL' if o == 'ALL' else tuple(sorted(o))))
+            panast.walk(fns[x], st)
+        assert links == {('state_init', 'bs', (0,)), ('state_fresh_tx', 'ts', (0,))}, links
+        for x in reach:
+            if x not in fns:
+                continue
+            decs = {}
+
+            def d2(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    decs.setdefault(strval(y[2][0]), []).append(y[2][2])
+                elif is_app(y, 'Prog.assign') and panast.show(y[2][0]) == 'local':
+                    decs.setdefault(y[2][1][1], []).append(y[2][2])
+            panast.walk(fns[x], d2)
+
+            def loads_link(e, depth=0):
+                """Does `e` contain a load of `ts+0` or `bs+0` (directly or through locals)?"""
+                if depth > 8 or not isinstance(e, tuple):
+                    return False
+                if is_app(e) and e[1] == 'Exp.load':
+                    ro = rec_offsets(e[2][-1], decs)
+                    if any(k in ('ts', 'bs') and (o == 'ALL' or 0 in o) for k, o in ro.items()):
+                        return True
+                v = var_name(e)
+                if v and v[0] == 'local' and v[1] in decs:
+                    return any(loads_link(dv, depth + 1) for dv in decs[v[1]])
+                kids = e[2] if is_app(e) else (e[1] if e[0] in ('tup', 'list') else [])
+                return any(loads_link(c, depth + 1) for c in kids if isinstance(c, tuple))
+            targets = list(stores(fns[x]))
+            for cg, args in calls_of(fns[x]):
+                for i, pn in enumerate(par.get(cg, [])):
+                    if pn in wp.get(cg, ()) and i < len(args):
+                        targets.append(args[i])
+            for a in targets:
+                assert not loads_link(a), ('store through a record link', x)
+        return sorted(links)
+    alias_links = record_aliases()
+
     def keep_lean(g):
         w = rec_written(g)
         items = []
@@ -1366,7 +1475,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             elif (f, g) in CALL_STMT:
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
-            elif W == 'ArenaReady' and (g in REGION or fresh_only(g)) and not (g in guarded):
+            elif W == 'ArenaReady' and (g in REGION or g in FORCE_WW or fresh_only(g)) and not (g in guarded):
                 name = 'ww_' + g
                 if g not in REGION:
                     parts = ''
@@ -1420,8 +1529,10 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                     else:
                         pre = 'WorldOK'
                     pre_s = pre if pre.isidentifier() else '(%s)' % pre
-                    contracts[name] = ('WorldKeeps %s (%s)\n    %s\n    %s\n    %s (ofString "%s")' % (
-                        pre_s, R, gws, keep_lean(g), WQ.get(g, 'NoExtra'), g),
+                    if pre in KEEP_IN:
+                        pre_s = '%s (%s)' % (pre_s, KEEP_IN[pre])
+                    contracts[name] = ('WorldKeeps%s %s (%s)\n    %s\n    %s\n    %s (ofString "%s")' % (
+                        'In' if pre in KEEP_IN else '', pre_s, R, gws, keep_lean(g), WQ.get(g, 'NoExtra'), g),
                         'relational world step' + (
                             ' with output region' if regs else '') + (
                             ' and extra `%s`' % WQ[g] if g in WQ else ''))
@@ -1429,6 +1540,11 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 assert seen_st[name] == contracts[name][0], name
             seen_st[name] = contracts[name][0]
             hs.append((contracts[name][0], name))
+            if (f, g) in CALL_WW:
+                wst = 'WritesWithin (fun s => [(locN s "dst", locN s "n")])\n    [%s] (ofString "%s")' % (
+                    ', '.join('"%s"' % x for x in sorted(gwf(g))), g)
+                contracts['ww_' + g] = (wst, 'writes its parameter extent (`ArenaReady` tier, at `%s`)' % f)
+                hs.append((wst, 'ww_' + g))
             if g in EXTRA and f in EXTRA[g][3]:
                 xn, xst, xwhy, _fs = EXTRA[g]
                 contracts[xn] = (xst, xwhy)

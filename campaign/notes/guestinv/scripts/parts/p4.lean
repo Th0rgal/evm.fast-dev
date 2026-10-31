@@ -338,8 +338,107 @@ def fixedObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
 
 def RootIn (S : List Nat) (v : Nat) : Prop := v = 0 ∨ v ∈ S
 
+/-! ### Table roles (revision 8, round-5 Astra item 1, Gemini items 1 and 2)
+
+Revision 7 typed the world by one undifferentiated table set `S`. Two logical slots could then
+name the same table although their callers write values of different kinds into it: `ts+32 = ts+56`
+let `mark_account_created` write `1` into a table of tables; `bal_accounts = ts+16` let
+`set_account_balance` put an account record among the BAL records; `ad+0 = ad+8` let
+`add_storage_read` put `1` among the storage lists; `ws+32 = ts+48` let `set_code` put a code slice
+into the trie cache; a frame's `e+176 = bal_accounts` let `warm_storage_key` write `1` into it; and a
+journal record `(t, key, 1, 1)` on the table of tables `ts+32` made `state_restore` write `1` there.
+
+Every logical slot now carries a ROLE (the slot it is read off: `"ts+56"`, `"bal.stor"`, …) with a
+pinned key length (`tableRoles`, read off `state_init` 12708, `state_fresh_tx` 12778, `bal_init` 13863,
+`bal_ensure_account` 13883, `set_storage` 13451, `merge_tx_into_block` 13731, `frame_new` 15370,
+`process_transaction` 33103, AST). `RolesOK`: every slot's table is in `S` and has
+its role's key length (Gemini item 2: `build_block_access_list_rlp` sizes `htab_keys` by the key
+length of `bal_accounts`), and two slot occurrences naming the SAME table have the same role, which
+must be one of the `sharedRoles`. So distinct logical slots hold pairwise distinct tables, except:
+- `"frame.addr"`/`"frame.key"`: a child frame's `e+168`/`e+176` are its parent's (`frame_new` copies
+  `msg+152`/`msg+160`, which the opcode passes on); `"frame.del"`: `DelExclusive` already allows a
+  deletion table shared by deletion slots only;
+- `"ts.inner"`/`"bs.inner"`: the per-account storage tables (values of `ts+32`/`bs+32`). Their
+  values are untyped words (`set_storage`'s 32-byte value blocks, read only), no object of the world
+  is derived from them, and `state_restore` re-inserts a saved inner table that the journal still
+  names (so `Nodup` of the live inner tables would not be an invariant of the journal); two outer
+  keys naming one inner table therefore cannot break any typing. Inner tables of DIFFERENT outer
+  roles (`ts.inner` vs `bs.inner`, which `merge_tx_into_block` unions into each other) and inner
+  tables vs every other slot are distinct.
+The journal (`jset` 12825, `jdel` 12857; `state_restore` 12903) records tables of the roles
+`ts+16`, `ts+32`, `ts+48`, `ts+64`, `ts.inner` only (`journalRole`; a table outside those slots is
+an inner table, possibly deleted from `ts+32` but still named by the journal), and a saved present
+value of a `ts+32` record is an inner table (`journalRoleSlots`). These occurrences may repeat, so
+they are checked for role CONSISTENCY against every slot rather than for distinctness. -/
+
+/-- Every table role with its key length. -/
+def tableRoles : List (String × Nat) :=
+  [("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
+   ("bs+48", 32), ("bs+72", 20), ("ts+8", 20), ("ts+16", 20), ("ts+24", 52), ("ts+32", 20),
+   ("ts+40", 52), ("ts+48", 32), ("ts+56", 20), ("ts+64", 52), ("bal_accounts", 20),
+   ("bal_idx_accts", 28), ("bal_idx_stor", 60), ("bs.inner", 32), ("ts.inner", 32),
+   ("bal.stor", 32), ("bal.reads", 32), ("frame.del", 20), ("frame.addr", 20), ("frame.key", 52)]
+
+def roleKeyLen (r : String) : Nat := (tableRoles.lookup r).getD 0
+
+/-- The roles whose distinct slot occurrences may name one table (see the section header). -/
+def sharedRoles : List String := ["bs.inner", "ts.inner", "frame.del", "frame.addr", "frame.key"]
+
+/-- The slots `ks` (offset, role) of the global record `g` (none while `g = 0`). -/
+def recRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g : String) (ks : List (Nat × String)) :
+    List (Nat × String) :=
+  if globN s g = 0 then [] else ks.map fun k => (memW s (globN s g + k.1), k.2)
+
+/-- The live values of the table of tables at `g+32`, with role `r`. -/
+def nestRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g r : String) : List (Nat × String) :=
+  if globN s g = 0 then [] else if memW s (globN s g + 32) = 0 then [] else
+    (htabValues s (memW s (globN s g + 32))).map fun v => (v, r)
+
+/-- Every logical world table slot outside the frames, with its role; `0` slots dropped. -/
+def worldRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
+  (recRoles s "ws" [(32, "ws+32")] ++
+    recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"), (40, "bs+40"),
+      (48, "bs+48"), (72, "bs+72")] ++
+    recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"), (40, "ts+40"),
+      (48, "ts+48"), (56, "ts+56"), (64, "ts+64")] ++
+    [(globN s "bal_accounts", "bal_accounts"), (globN s "bal_idx_accts", "bal_idx_accts"),
+      (globN s "bal_idx_stor", "bal_idx_stor")] ++
+    nestRoles s "bs" "bs.inner" ++ nestRoles s "ts" "ts.inner" ++
+    (balRecords s).flatMap fun ad => [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")]).filter
+    fun a => a.1 != 0
+
+/-- The role of a journal record's table `t`: one of the journaled `ts` slots, else an inner
+storage table. -/
+def journalRole {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : String :=
+  if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 16) then "ts+16"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 32) then "ts+32"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 48) then "ts+48"
+  else if globN s "ts" ≠ 0 ∧ t = memW s (globN s "ts" + 64) then "ts+64"
+  else "ts.inner"
+
+/-- The tables the journal names (record `i` at `journal + 32 i`: table `+0`, present flag `+16`,
+saved value `+24`), with their roles: the record's table, and the saved value of a present `ts+32`
+record (an inner table, which `state_restore` puts back). -/
+def journalRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
+  (List.range (globN s "journal_n")).flatMap fun i =>
+    let j := globN s "journal" + 32 * i
+    (memW s j, journalRole s (memW s j)) ::
+      (if memW s (j + 16) ≠ 0 ∧ journalRole s (memW s j) = "ts+32" then
+        [(memW s (j + 24), "ts.inner")] else [])
+
+/-- Role typing of the slot occurrences `sl` (pairwise: distinct tables, or one shared role) and of
+the repeatable occurrences `jr` (role-consistent with every occurrence): every named table is in
+`S` and has its role's key length. -/
+def RolesOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (sl jr : List (Nat × String)) : Prop :=
+  (∀ a ∈ sl ++ jr, a.1 ∈ S ∧ hdr s a.1 0 = roleKeyLen a.2) ∧
+  sl.Pairwise (fun a b => a.1 = b.1 → a.2 = b.2 ∧ a.2 ∈ sharedRoles) ∧
+  ∀ a ∈ jr, ∀ b ∈ sl ++ jr, a.1 = b.1 → a.2 = b.2
+
 /-- `S` is a set of well-formed, allocated tables with pairwise disjoint footprints, disjoint
-from the fixed objects; it contains every root and is closed under the two nested roots. -/
+from the fixed objects; it contains every root and is closed under the two nested roots. Revision 8
+(round-5 Astra item 1, Gemini items 1 and 2): the slots and the journal's tables are role-typed
+(`RolesOK`, last conjunct). -/
 def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   S.Nodup ∧
   (∀ t ∈ S, HtabWF s t ∧ ∀ i ∈ htabFootprint s t, Allocated s i ∧
@@ -354,10 +453,13 @@ def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Pr
   (∀ ad ∈ balRecords s, memW s ad ∈ S ∧ memW s (ad + 8) ∈ S ∧
     (∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
     ∀ l ∈ htabValues s (memW s ad), LstOK s l) ∧
-  (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k)))
+  (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k))) ∧
+  RolesOK s S (worldRoleSlots s) (journalRoleSlots s)
 
 /-- The journal: `journal_n ≤ journal_cap ≤ 2^19`, the array is allocated, and every record's
-table (`+0`) is a typed table (`state_restore` calls `htab_set`/`htab_del` on it). -/
+table (`+0`) is a typed table (`state_restore` calls `htab_set`/`htab_del` on it). Revision 8
+(round-5 Astra item 1): the record's table has a journaled role and a present saved value of a
+`ts+32` record is an inner storage table (`journalRoleSlots`, checked by `TablesTyped`'s `RolesOK`). -/
 def JournalTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   globN s "journal_n" ≤ globN s "journal_cap" ∧ globN s "journal_cap" ≤ journalCapMax ∧
   (globN s "journal_cap" = 0 ∨ (Allocated s (globN s "journal", 32 * globN s "journal_cap") ∧
@@ -624,6 +726,16 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : Li
       ∀ o ∈ htabFootprint s t, Inside o sourceBase heapLimit ∨ Inside o m scratchEnd) ∧
     (∀ o ∈ fixedObjects s, o.2 = 0 ∨ Inside o sourceBase heapLimit ∨ Inside o m scratchEnd)
 
+/-- The access tables of the chain's frames with their roles (revision 8, round-5 Gemini item 1):
+deletion table `e+136`, accessed addresses `e+168`, accessed storage keys `e+176`. `EvmInv` role-types
+them together with the world slots (`RolesOK`): a frame table is no world table (`e+176 =
+bal_accounts` made `warm_storage_key` write `1` among the BAL records; `child+168 = bal_accounts`
+made `finish_child`'s rollback truncate it), and the three tables of a frame are distinct. -/
+def frameRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) :
+    List (Nat × String) :=
+  ch.flatMap fun ec => [(memW s (ec.1 + 136), "frame.del"), (memW s (ec.1 + 168), "frame.addr"),
+    (memW s (ec.1 + 176), "frame.key")]
+
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the
 world is typed (one table set `S` covering global AND frame tables), the chain is closed (its
 last continuation has kind `0`) and at most `maxChain` long, every frame is well formed, every
@@ -648,6 +760,7 @@ def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
     AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
+    RolesOK s S (worldRoleSlots s ++ frameRoleSlots s ch) (journalRoleSlots s) ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
 /-! Round-1 item 5 regressions, by construction of `EvmInv`/`evmPot`:

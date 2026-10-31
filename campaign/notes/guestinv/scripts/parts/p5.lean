@@ -51,11 +51,14 @@ theorem htab_union_into_spec :
 /-- `htab_new` / `htab_new_scratch` return a well-formed empty table whose footprint is freshly
 allocated (heap resp. scratch); nothing outside the UNION of the fresh heap and the fresh scratch
 changes (round-2 Astra item 2: revision 2 intersected the two frames), and no global but the two
-allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). -/
+allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). Revision 8
+(round-5 Gemini item 2): the new table has the requested key length (`htab_new` stores `key_len` at
+`t+0`), which the callers need for the role key lengths of `RolesOK`. -/
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
     ArenaReady post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
+    hdr post w.toNat 0 = locN s "key_len" ∧
     (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
       (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
         Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
@@ -120,12 +123,16 @@ def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
 /-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
 `R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
 buffer, as in `WorldAvoids`). Revision 6 (round-4 Astra item 2): the object `m` and the regions
-avoid the persistent tries (`AvoidsTries`, same `S`). -/
+avoid the persistent tries (`AvoidsTries`, same `S`). Revision 8 (round-5 Fable non-blocking): one
+typing `(Nm, Nd)` has the object's node extents disjoint from the persistent tries' too, as
+`RetMptObj` and `MptObjStep` state. -/
 def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ (∀ i ∈ R s,
     (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
-    AvoidsTries s S ((locN s "m", 16) :: R s)
+    AvoidsTries s S ((locN s "m", 16) :: R s) ∧
+    ∃ Nm Nd, MptObjInWith s S Nm (locN s "m") ∧ TriesTypedWith s S Nd ∧
+      ∀ o ∈ (locN s "m", 16) :: R s ++ nodeExtents s Nm, ∀ j ∈ nodeExtents s Nd, Disj o j
 
 /-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
 revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
@@ -442,11 +449,15 @@ def KeepsOn (P W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (fname 
   FunSpec P (fun _ r post => Resumes r → W post) fname
 
 /-- Write frame: on every resuming outcome the arenas stay separated and only grow, memory changes
-only inside `R s` and the memory free at entry, and only the globals in `gw` change. -/
+only inside `R s` and the memory free at entry, and only the globals in `gw` change. Revision 8
+(round-5 Astra item 7): the scratch arena only grows too (`scratch_ptr` never rises: every writer
+in this tier releases scratch only to marks it took itself), so a caller's scratch records stay
+allocated and a loop pushing scratch records has a strictly decreasing `scratch_ptr`. -/
 def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => Resumes r →
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr" ∧
     FrameOutside s post
       (R s ++ [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
       (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
@@ -463,9 +474,15 @@ def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     AvoidsTries s S (R s)
 
 /-- `process_transaction(tx, index)` writes the receipt slots `bo+24`/`bo+32` at `16·index`
-(33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop). -/
+(33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop).
+Revision 8 (round-5 Fable item 2): `bo` and the two arrays are non-null. `blockOutObjects` reads a
+null array as an empty object, so with `bo+24 = 0` the stores went to `16·index`, which a suitable
+index puts on a typed table's header. `execute_block` stores the two `alloc` results (nonzero heap
+blocks) before its loop, and every callee in between keeps `bo` and the words `bo+24`, `bo+32`
+(`GlobalsKept`, `RecordsKept`). -/
 def TxReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => WorldOK s ∧ locN s "index" < memW s (globN s "bo" + 80)
+  fun s => WorldOK s ∧ globN s "bo" ≠ 0 ∧ memW s (globN s "bo" + 24) ≠ 0 ∧
+    memW s (globN s "bo" + 32) ≠ 0 ∧ locN s "index" < memW s (globN s "bo" + 80)
 
 /-- `execute_block(si, hdr)` (revision 5, round-4 non-blocking): the transaction count
 `ntx = (si+0)+40` (33588) sizes the arrays `alloc(16·ntx + 16)` (33593, 33596) without wrapping,
@@ -497,7 +514,9 @@ cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` afte
 Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
 every caller passes a fresh `msg_new` block. Revision 7: the record is in the HEAP (`msg_new` uses
 `alloc`), so it stays allocated across every world step (the heap only grows; `scratch_ptr` is in
-most callees' write set). -/
+most callees' write set). Revision 8 (round-5 Gemini item 1): the two tables have the frame roles
+`frame.addr`/`frame.key` (`RolesOK`), so they are distinct from each other and from every world
+slot (`frame_new` makes them the outermost frame's `e+168`/`e+176`). -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
@@ -505,7 +524,10 @@ def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
     AvoidsTries s S [(locN s "msg", 176)] ∧
-    memW s (locN s "msg" + 40) < 2 ^ 63
+    memW s (locN s "msg" + 40) < 2 ^ 63 ∧
+    RolesOK s S (worldRoleSlots s ++
+      [(memW s (locN s "msg" + 152), "frame.addr"), (memW s (locN s "msg" + 160), "frame.key")])
+      (journalRoleSlots s)
 
 /-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
 holds (closed one-frame chain; its blocks are fresh scratch/frame memory; its tables are the
@@ -543,6 +565,7 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
     AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
+    RolesOK s S (worldRoleSlots s ++ frameRoleSlots s ch) (journalRoleSlots s) ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
 theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
@@ -754,6 +777,63 @@ def WorldKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
       PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) (fname : MlS) : Prop :=
   FunSpec P (fun s r post => Resumes r → WorldStep R gw keep Q s r post) fname
 
+/-- Revision 8 (round-5 Fable item 1): `WorldStep` quantified only over the entry typings whose
+table set contains the tables `T s` the caller's guard owns. `MsgReady` makes the message's access
+tables `msg+152`, `msg+160` typed in SOME `S`; `process_message_call` writes them (`frame_new`
+copies them into the outermost frame, `warm_address`/`warm_storage_key` `htab_set` into them), so
+for a typing `S₀` without them (still a typing) the write lay outside `worldOwned s S₀ Nd` and
+`FrameOutside` failed. -/
+def WorldStepIn (T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post =>
+    ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    GlobalsKept gw s post ∧ RecordsKept R keep s post ∧
+    ∀ S Nd, WorldTypedWith s S Nd → (∀ t ∈ T s, t ∈ S) → IvlsDisj (R s) (worldTypedIvls s S Nd) →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+        FrameOutside s post (worldOwned s S Nd ++ R s ++ [freeGap s]) (heapFree s) ∧
+        Q s r post S' Nd'
+
+/-- From a `P` entry, every resuming outcome is a `WorldStepIn T`. -/
+def WorldKeepsIn (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → WorldStepIn T R gw keep Q s r post) fname
+
+/-- A step over the typings containing `T s` ends in `WorldOK` (proved). -/
+theorem WorldStepIn.worldOK {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStepIn T R gw keep Q s r post)
+    (hs : ∃ S Nd, WorldTypedWith s S Nd ∧ (∀ t ∈ T s, t ∈ S) ∧ IvlsDisj (R s) (worldTypedIvls s S Nd)) :
+    WorldOK post := by
+  obtain ⟨hA, -, -, -, hW⟩ := h
+  obtain ⟨S, Nd, hT, hTS, hD⟩ := hs
+  obtain ⟨S', Nd', -, hT', -⟩ := hW S Nd hT hTS hD
+  exact ⟨hA, S', (worldTyped_iff_with post S').2 ⟨Nd', hT'⟩⟩
+
+/-- Every `WorldStep` is a `WorldStepIn T` for any `T` (proved). -/
+theorem WorldStep.stepIn {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStep R gw keep Q s r post) : WorldStepIn T R gw keep Q s r post := by
+  obtain ⟨hA, hH, hG, hK, hW⟩ := h
+  exact ⟨hA, hH, hG, hK, fun S Nd hT _ hD => hW S Nd hT hD⟩
+
 /-- A world step from a state typed with `R` avoided ends in `WorldOK` (proved). -/
 theorem WorldStep.worldOK {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
     {gw : List String} {keep : List (String × List Nat)}
@@ -823,7 +903,8 @@ def mptObjIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (Nm : List Nat) (m :
 clauses, and in addition the trie object `m` stays typed in the SAME world `S' ⊇ S`, away from the
 persistent tries, its intervals grow only into fresh heap, and its records may change (they are the
 function's work). The callers `build_mpt_indexed`, `compute_state_root` call `mpt_set` in a loop on
-one object and `mpt_root` on it afterwards. -/
+one object and `mpt_root` on it afterwards. Revision 8 (round-5 Fable non-blocking): the object's
+node extents are disjoint from the persistent tries' at entry and exit. -/
 def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (keep : List (String × List Nat)) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop :=
@@ -831,10 +912,11 @@ def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (g
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     GlobalsKept gw s post ∧ RecordsKept R keep s post ∧
     ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm (locN s "m") →
-      IvlsDisj ((locN s "m", 16) :: R s) (nodeExtents s Nd) →
+      IvlsDisj ((locN s "m", 16) :: R s ++ nodeExtents s Nm) (nodeExtents s Nd) →
       IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")) →
       ∃ S' Nd' Nm', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
-        MptObjInWith post S' Nm' (locN s "m") ∧ IvlsDisj [(locN s "m", 16)] (nodeExtents post Nd') ∧
+        MptObjInWith post S' Nm' (locN s "m") ∧
+        IvlsDisj ((locN s "m", 16) :: nodeExtents post Nm') (nodeExtents post Nd') ∧
         OwnedGrows s post (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
           (worldOwned post S' Nd' ++ mptObjIvls post Nm' (locN s "m")) ∧
         FrameOutside s post
@@ -872,6 +954,80 @@ def RetMptObj : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemRe
       ∀ o ∈ mptObjIvls post Nm w.toNat, o = (0, 0) ∨
         Inside o (globN s "heap_ptr") (globN post "heap_ptr")
 
+/-- A constructor's extra (revision 8, round-5 Astra item 4, Gemini suggestion): the returned
+object's intervals `B s post w` are disjoint from the EXIT world `worldOwned post S' Nd'`. Fresh heap
+alone does not give this: `OwnedGrows` lets the world grow into the heap allocated during the call,
+so a constructor could attach its fresh block to a trie node (`n+32 := p`) and return it, and the
+caller's own stores into the block (`te+0 := sender`) then overwrote the world. -/
+def RetAvoids (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
+    List Ivl) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    IvlsDisj (B s post w.toNat) (worldOwned post S' Nd')
+
+/-- `RetAvoids` when the entry satisfies `C` (revision 8): `lst_new` with a non-wrapping element
+array, `htab_copy` of a well-formed allocated table (a garbage header gives a meaningless
+footprint). -/
+def RetAvoidsIf (C : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
+      List Ivl) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => C s → RetAvoids B s r post S' Nd'
+
+/-- `lst_push(l, 8)`'s extra (revision 8, round-5 Astra item 6): the returned element slot is an
+aligned word inside the list's backing array at exit (`lst_push` 13840 returns
+`load(l) + 8·n` after raising the length to `n + 1 ≤ capacity`). The backing array of `bo+40`/`bo+72`
+is a fixed object (`blockOutObjects`) whose contents `WorldTyped` does not read, so the caller's store
+of a log pointer through the slot keeps the typing, and the slot is disjoint from every table, trie
+node and other fixed object. An identity transition returning an existing table header satisfied
+the revision-7 contract. -/
+def RetListSlot : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    w.toNat % 8 = 0 ∧ Inside (w.toNat, 8) (memW post (locN s "l"))
+      (memW post (locN s "l") + 8 * memW post (locN s "l" + 16))
+
+/-- `bal_remove_change(addr, which, esz, idx)` entry (revision 8, round-5 Astra item 2): the list
+selector and element size are one of the three BAL change lists (`update_builder_from_tx` passes
+`(16, 40)`, `(24, 16)`, `(32, 24)`, AST 14270-14280). With `which = 40` it read the unowned word
+`ad+40` as a list and removed an element through it. -/
+def BalChangeArg : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ ((locN s "which" = 16 ∧ locN s "esz" = 40) ∨
+    (locN s "which" = 24 ∧ locN s "esz" = 16) ∨ (locN s "which" = 32 ∧ locN s "esz" = 24))
+
+/-- `[p, p + round8 n)` is scratch allocated between `s` and `post` (revision 8): aligned, above
+the frame-memory pointer, inside `[scratch_ptr post, scratch_ptr s)`, all words. -/
+def FreshScratch {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) : Prop :=
+  p % 8 = 0 ∧ globN s "frame_mem_ptr" ≤ p ∧
+    Inside (p, (n + 7) / 8 * 8) (globN post "scratch_ptr") (globN s "scratch_ptr") ∧
+    WordsOK post (p, (n + 7) / 8 * 8)
+
+/-- `_decode_step(db, p, n)` (revision 8, round-5 Astra item 7, Gemini suggestion): a normal return
+`<1, rec>` pushed a fresh 88-byte scratch record (`scratch_alloc(88)`, AST 10110) tagged `1`
+(extension) or `2` (branch, slot counter `+32` and occupancy `+40` zero). With the write frame
+`ww__decode_step` (memory free at entry only; `scratch_ptr` never rises), the records already on
+`_decode_witness_node_body`'s stack, their links and counters, are untouched, and each push lowers
+`scratch_ptr` by at least 88: the revision-7 `KeepsOn ArenaReady ArenaReady` allowed returning the
+same record repeatedly and overwriting the saved links. -/
+def PushesFrame (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧ (a.toNat ≠ 0 →
+      FreshScratch s post b.toNat 88 ∧ (memW post (b.toNat + 8) = 1 ∨
+        (memW post (b.toNat + 8) = 2 ∧ memW post (b.toNat + 32) = 0 ∧
+          memW post (b.toNat + 40) = 0)))) fname
+
+/-- `node_invalidate(nd)` (revision 8, round-5 Astra item 7, Gemini suggestion; AST 10061): on a
+typed node (or `0`, which errors) it zeroes the three cache words `nd+8`, `nd+16`, `nd+24` and
+changes nothing else (globals, other memory). So a second call on the same node is the identity,
+which `_mpt_insert_node`'s stationary argument on a self-looping empty extension needs; the
+`NodeFn` contract alone allowed changes across node records and the free scratch gap. -/
+def InvalidatesCache (fname : MlS) : Prop :=
+  FunSpec (NodeArgs ["nd"] (fun _ _ => True)) (fun s r post => Resumes r →
+    post = { s with
+      memory := fun a => if a = BitVec.ofNat 64 (locN s "nd" + 8) ∨ a = BitVec.ofNat 64 (locN s "nd" + 16) ∨
+          a = BitVec.ofNat 64 (locN s "nd" + 24) then HolWordLab.word 0 else s.memory a,
+      locals := post.locals, clock := post.clock }) fname
+
 /-- `requests_append`'s extra (revision 7, round-4 Gemini item 1(a)): the request count `bo+64`
 goes up by exactly one. -/
 def ReqCountInc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
@@ -884,12 +1040,18 @@ def inputCells {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : List Iv
   [(si, 8), (memW s si + 40, 8)]
 
 /-- `decode_host_input`'s extra (revision 7): the returned input record and its payload record are
-fresh heap words, so they are outside the world. -/
+fresh heap words. Revision 8 (round-5 Astra items 4 and 8, Gemini suggestion): they are disjoint
+from the EXIT world `worldOwned post S' Nd'` (fresh heap alone does not say so, since `OwnedGrows`
+lets the world grow into fresh heap), and the transaction count `pl+40` is below `2^63`
+(`decode_payload`'s `ssz_split_var_list` bounds it; `run_attempt` compares it with SIGNED `<`, so
+`ntx = 2^63` ran zero iterations and left `16·ntx + 16` wrapping). -/
 def RetInput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
-  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
-    ∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
-      Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    (∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
+      Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i) ∧
+    IvlsDisj (inputCells post w.toNat) (worldOwned post S' Nd') ∧
+    memW post (memW post w.toNat + 40) < 2 ^ 63
 
 /-- Guard of `verify_stateless_new_payload`, `attempt_l*`, `run_attempt` (revision 7): `WorldOK`,
 and the input cells are allocated words outside the world, for one typing. `run_attempt` checks
@@ -897,11 +1059,14 @@ every transaction slot `txs + 16 i + 8, i < ntx` by a `load` (33778), which erro
 `16·ntx + 16 < 2^64` (a full cycle of `16 i mod 2^64` leaves the memory domain), and
 `execute_block`'s guard `BlockReady` needs that bound; it reads `ntx` again through `si+0`, `pl+40`
 at `execute_block`'s entry, so those two cells must survive the calls in between (`payload_header`,
-`header_hash`, `validate_header`, …), which `WorldStep` guarantees for memory outside the world. -/
+`header_hash`, `validate_header`, …), which `WorldStep` guarantees for memory outside the world.
+Revision 8 (round-5 Astra item 8): `ntx < 2^63`, so `run_attempt`'s signed loop test `i < ntx`
+counts `ntx` iterations (with `ntx = 2^63` it ran none and `BlockReady` failed). -/
 def InputAt {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
   ArenaReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
     (∀ i ∈ inputCells s si, Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
-    IvlsDisj (inputCells s si) (worldOwned s S Nd)
+    IvlsDisj (inputCells s si) (worldOwned s S Nd) ∧
+    memW s (memW s si + 40) < 2 ^ 63
 
 def InputReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => InputAt s (locN s "si")
@@ -1042,9 +1207,9 @@ theorem worldOK_of_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmI
 theorem localsOnly_txReady : LocalsOnly ["index"] TxReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "index" (hl "index" (by simp))
-  refine ⟨localsFree_worldOK s locals k hP.1, ?_⟩
+  refine ⟨localsFree_worldOK s locals k hP.1, hP.2.1, hP.2.2.1, hP.2.2.2.1, ?_⟩
   show locN { s with locals := locals, clock := k } "index" < memW s (globN s "bo" + 80)
-  rw [ht]; exact hP.2
+  rw [ht]; exact hP.2.2.2.2
 
 theorem localsFree_reqsFresh : LocalsFree ReqsFresh :=
   fun s locals k h => ⟨localsFree_worldOK s locals k h.1, h.2⟩

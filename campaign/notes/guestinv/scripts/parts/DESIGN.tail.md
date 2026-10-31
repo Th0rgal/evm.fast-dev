@@ -7,21 +7,21 @@
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`. The
   assembly uses ten of them directly. `htab_union_into_spec`, `htab_new_scratch_spec` and the two
   MPT specs are the lemmas the frame and table contract proofs are expected to use.
-- Generated callee contracts (219, revision 7): `ro_*` (30), `ww_*` (36), `wk_*` (57), `ws_*`
-  (57), `ek_*` (10), `es_*` (10), `ak_*` (1), `fk_frame_open`, `nf_*` (7), `nk_*`, `rv_*`, `rb_*` (2),
-  `rl_*`, `rt_*`, `rm_*`, `ro2_*`, `km_*`, `rq_*`. (Revision 4: 142; revision 6: 144.)
-  with `wk_*` 47, `ek_*` 6.)
+- Generated callee contracts (162, revision 8): `wk_*` 84, `ek_*` 12, `mk_*` 2, `ro_*` 30, `ww_*` 7,
+  `fk_frame_open`, `nf_*` 7, `nk_*` 1, `rt_*` 7, `rv_*` 5, `zv_*` 1, `nz_*` 1, `dm_*` 2, `sp_*` 1,
+  `iz_*` 1. (Revision 4: 142; revision 6: 144; revision 7: 158.)
 
-## 7. Every `sorry`
+## 7. Every `sorry` (revision 8)
 
-- Combinators, glue, bridge, assembly: none.
+- Combinators, glue, bridge, assembly, the revision-7/8 lemmas: none.
 - §7 contract leaves (14).
-- Generated callee contracts (219).
-- Composition obligations `gbody_*` (31; the other 16 are proved, 4 of them new in revision 6).
+- Generated callee contracts (162; §0.2c).
+- Composition obligations `gbody_*` (29; the other 18 are proved).
 - Unguarded bound leaves `fb_*` (727).
 
-991 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
-`assembly_main` are `sorry`-free. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
+932 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
+`assembly_main` are `sorry`-free (`#print axioms`: `propext`, `Classical.choice`, `Quot.sound`);
+`K_pan_budget` uses `propext` only. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
 depends on `sorryAx` only through the `Primitives` fields. `run_frames_step` depends on the four
 frame contracts.
 
