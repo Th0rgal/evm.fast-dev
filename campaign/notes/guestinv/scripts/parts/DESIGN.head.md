@@ -3,9 +3,10 @@
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
 (`guestinv-r2.md`), revision 4 the round-3 quorum (`guestinv-r3.md`, §0.3 and §0.4), and revision
-5 (Fable's items) and revision 6 (Astra's items, commit d16ff8bc0) answer the round-4 quorum
-(`guestinv-r4.md`), §0.1 and §0.2. Both are narrow fix rounds: only the statements listed in §0.2
-changed. All statements are in
+5 (Fable's items) and revision 6 (Astra's items, commit d16ff8bc0; Gemini's item 2 and
+non-blocking items on top) answer the round-4 quorum (`guestinv-r4.md`), §0.1 and §0.2. These are
+narrow fix rounds: only the statements listed in §0.2 (and, for Gemini, in §0.1) changed. Gemini's
+item 1 is the revision-7 redesign (§0.1). All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -257,6 +258,48 @@ leaves would not change `assembly` or its axioms.
 - the two tables equal, or with disjoint footprints.
 
 `finish_child` gets these from `EvmInv`.
+
+### Gemini 4 Carbon (review of 0f8dea8c7; answered on top of revision 6)
+
+**Item 2 (fixed): per-slot storage lists of the block access list.** The storage table `+0` of
+every BAL account record has live values `l` that are lists of 40-byte elements:
+- created in `add_storage_write` (13944) by `lst_new(40, 2)`;
+- updated by `lst_upsert_idx(l, 40, idx)`;
+- written through by `remove_storage_write` and by the in-place `sort_elems` of
+  `build_block_access_list_rlp`.
+
+Changes:
+- `balObjects` now owns `lstObjects s l 40` for every `l ∈ htabValues s (memW s ad)`, so the
+  lists are fixed objects: allocated words, pairwise disjoint (`FixedTyped`) and disjoint from
+  every table, frame block and trie node (the existing conjuncts over `fixedObjects`);
+- `TablesTyped` requires `LstOK s l` for each of them;
+- `htabValues` moves up next to `HtabValuesIn` (same definition).
+
+This makes `wk_add_storage_write`, `wk_remove_storage_write`, `wk_build_block_access_list_rlp`
+and `gb_update_builder_from_tx` (via its composition) true against Gemini's witness. Their
+statements are textually unchanged, and only the two definitions change (`sigdiff.py`:
+`TablesTyped`, `balObjects`).
+
+**Non-blocking (fixed):**
+- the Lean header now says revision 6;
+- `mpt_insert_node_spec` has a docstring: a cycle of empty extension segments never returns and
+  reaches `WhileTimesOut` within the `2^130` bound, so the spec is vacuous on such runs.
+
+**Item 1 (open; the revision-7 redesign of the coordinator's round-5 note).** The callee
+contracts are forgetful. `KeepsOn W W` allows any `W → W` transition, so a caller loses local
+facts across the call: a fresh allocation, `index < ntx`, `bo+64 < 8`, `ev`/`cur_cont` for
+`finish_child`, … . So several `gbody_f` cannot be proved from their own hypotheses. Gemini's
+Option A:
+- relational `wk_*` contracts (`S ⊆ S'`, heap only grows, unowned memory below the heap and the
+  globals outside `gw` unchanged, `bo+64` up by one for `requests_append`);
+- `ek_*` contracts that keep `ev`, `cur_cont` and `evmChain`;
+- return typing for `alloc`, `msg_new`, `lst_new`, `htab_copy`, `mpt_new`, `mpt_from_witness`;
+- typed post-states for `bal_init`, `state_fresh_tx` and `main`'s `*_init` calls.
+
+This changes the shape of all 55 `KeepsOn` contracts, part of the `WritesWithin` ones, and every
+`GBody` that uses them. It is not part of this fix round. The coordinator has scheduled it as
+revision 7, which round 5 votes on. The 31 unproved `gbody_*` should be read as possibly not
+provable from their own hypotheses until then.
 
 ## 0.2 Changes since 141ff1f6b (revision 6)
 

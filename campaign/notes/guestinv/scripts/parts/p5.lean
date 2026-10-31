@@ -146,6 +146,11 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
           [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
         (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
 
+/-- `_mpt_insert_node` under `MptReady`. `MptExit` constrains normal returns only. On a cycle of
+empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions pointing at each other;
+`NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
+`2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
+this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
 theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry

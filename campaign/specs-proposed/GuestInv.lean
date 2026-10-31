@@ -1,6 +1,7 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 3.
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 6
+(round-4 fixes; the per-revision change lists are in `campaign/notes/guestinv/DESIGN.md` §0).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
@@ -1616,6 +1617,10 @@ theorem htabWF_no_self_parent {F : Type} (s : PanSemStateFiniteExact 64 F) (t : 
   rw [heq] at this
   exact Nat.lt_irrefl _ this
 
+/-- The live values of table `t` (the `+8` field of every live leaf). -/
+def htabValues {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : List Nat :=
+  (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
+
 /-- Live values of table `t` (the `+8` field of every live leaf). -/
 def HtabValuesIn {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) (S : List Nat) : Prop :=
   ∀ i, i < hdr s t 3 → nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8 ∈ S
@@ -1773,7 +1778,11 @@ def LstOK {F : Type} (s : PanSemStateFiniteExact 64 F) (l : Nat) : Prop :=
 /-- The live account records of the block access list (round-3 Gemini item 4): the values of the
 table `bal_accounts` (`bal_ensure_account` 13883-13917), 40-byte records with two tables (`+0`,
 `+8`, `htab_new(32, 8)`) and three lists of 40-, 16- and 24-byte elements (`+16`, `+24`, `+32`),
-written through by `add_*_change`, `bal_remove_change`, `lst_upsert_idx`, `lst_push`. -/
+written through by `add_*_change`, `bal_remove_change`, `lst_upsert_idx`, `lst_push`. Round-4
+Gemini item 2: the live values of the storage table `+0` are per-slot lists of 40-byte elements
+(`add_storage_write` 13944: `lst_new(40, 2)`, `lst_upsert_idx(l, 40, idx)`), written through by
+`add_storage_write`, `remove_storage_write` and the in-place `sort_elems` of
+`build_block_access_list_rlp`; `balObjects` owns them and `TablesTyped` requires `LstOK`. -/
 def balRecords {F : Type} (s : PanSemStateFiniteExact 64 F) : List Nat :=
   let t := globN s "bal_accounts"
   if t = 0 then [] else
@@ -1782,7 +1791,8 @@ def balRecords {F : Type} (s : PanSemStateFiniteExact 64 F) : List Nat :=
 def balObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   (balRecords s).flatMap fun ad =>
     (ad, 40) :: lstObjects s (memW s (ad + 16)) 40 ++ lstObjects s (memW s (ad + 24)) 16 ++
-      lstObjects s (memW s (ad + 32)) 24
+      lstObjects s (memW s (ad + 32)) 24 ++
+      (htabValues s (memW s ad)).flatMap fun l => lstObjects s l 40
 
 /-- The fixed objects: every global buffer (empty while its global is still `0`), the journal
 array, the block-output objects (round-3 item 5) and the block-access-list account records with
@@ -1807,7 +1817,8 @@ def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Pr
   (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ∈ S → HtabValuesIn s (memW s (globN s "bs" + 32)) S) ∧
   (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ∈ S → HtabValuesIn s (memW s (globN s "ts" + 32)) S) ∧
   (∀ ad ∈ balRecords s, memW s ad ∈ S ∧ memW s (ad + 8) ∈ S ∧
-    ∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
+    (∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
+    ∀ l ∈ htabValues s (memW s ad), LstOK s l) ∧
   (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k)))
 
 /-- The journal: `journal_n ≤ journal_cap ≤ 2^19`, the array is allocated, and every record's
@@ -2018,10 +2029,6 @@ def RetWindowsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : 
     memW s ((ch[i]'(by omega)).2 + 80) = 0 ∨
       memW s ((ch[i]'(by omega)).2 + 72) + memW s ((ch[i]'(by omega)).2 + 80) ≤
         memW s (ch[i + 1].1 + 40)
-
-/-- The live values of table `t` (the `+8` field of every live leaf). -/
-def htabValues {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : List Nat :=
-  (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
 
 /-- The table slots `ks` of the global record `g` (none while `g = 0`). -/
 def recordSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (g : String) (ks : List Nat) :
@@ -6084,6 +6091,11 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
           [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
         (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
 
+/-- `_mpt_insert_node` under `MptReady`. `MptExit` constrains normal returns only. On a cycle of
+empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions pointing at each other;
+`NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
+`2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
+this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
 theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry
