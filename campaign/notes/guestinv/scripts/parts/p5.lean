@@ -50,7 +50,8 @@ theorem htab_union_into_spec :
 
 /-- `htab_new` / `htab_new_scratch` return a well-formed empty table whose footprint is freshly
 allocated (heap resp. scratch); nothing outside the UNION of the fresh heap and the fresh scratch
-changes (round-2 Astra item 2: revision 2 intersected the two frames). -/
+changes (round-2 Astra item 2: revision 2 intersected the two frames), and no global but the two
+allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). -/
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
@@ -60,7 +61,9 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
         Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
     FrameOutside s post
       [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
-      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
+    ∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
 
 /-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
 arenas, a key length from the literal call sites and a bounded capacity. `htab_new` checks
@@ -86,18 +89,27 @@ and its root is typed. -/
 def MptObjReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
     ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
-      ∀ n ∈ Nd, Disj (n, 176) (locN s "m", 16)
+      ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16)
 
 /-- Exit: the returned root is typed in the new node heap, which extends the old one by fresh
-heap records; old memory outside the old nodes and fresh heap/scratch is unchanged. -/
+heap records; old memory outside the old nodes (sized by kind), the heap free at entry and the
+scratch free at entry is unchanged, and only `heap_ptr`/`scratch_ptr` among the globals change.
+Round-3 Gemini item 5: nodes are sized by kind (`nodeIvl`), and `_mpt_delete_node_body` leaves
+40-byte `scratch_alloc` frames below the entry `scratch_ptr` (its caller releases them), so the
+free scratch gap `[frame_mem_ptr, scratch_ptr)` at entry is in the frame; the globals frame was
+missing. -/
 def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
     ∃ Nd Nd', NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧ NodeHeap post Nd' ∧
       RootIn Nd' w.toNat ∧
-      FrameOutside s post (Nd.map fun n => (n, 176))
-        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
+      FrameOutside s post
+        ((Nd.map fun n => nodeIvl s n) ++
+          [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
+        (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
 
 theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
@@ -357,10 +369,17 @@ def ReqsFresh : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 typed by a set `S` that contains the message's two access tables `msg+152`, `msg+160` (copied into
 the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller builds them with
 `htab_new` just before (`process_transaction` 33343-33346, `process_unchecked_system_transaction`
-32899-32902). -/
+32899-32902). Round-3 Gemini item 3: the 176-byte message record (`msg_new`) is owned, so the stores
+`depth0_prepare`/`prepare_dispatch` make through it (`msg+48`, `+104`, `+112`, `+120`, `+168`)
+cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` after
+`validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`. -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
-    memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S
+    memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
+    Allocated s (locN s "msg", 176) ∧ WordsOK s (locN s "msg", 176) ∧
+    (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
+    (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
+    memW s (locN s "msg" + 40) < 2 ^ 63
 
 /-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
 holds (closed one-frame chain; its blocks are fresh scratch/frame memory; its tables are the
@@ -401,8 +420,12 @@ def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64
   fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) →
       ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
-        FrameOutside s post (Nd.map fun n => (n, 176))
+        FrameOutside s post
+          ((Nd.map fun n => nodeIvl s n) ++
+            [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
           (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
+        (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
+          s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
         ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
 
 def NodeFn (names : List String) (fname : MlS) : Prop :=

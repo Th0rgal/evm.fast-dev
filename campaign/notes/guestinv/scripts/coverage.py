@@ -215,6 +215,27 @@ def call_parts(t):
     return None
 
 
+def const_value(e):
+    """Value of a literal or a `*`/`+` of literals (e.g. `alloc(256 * 8)`), else None (round-3
+    Gemini non-blocking: `bls_discount`, `bn_gamma`, `bn_expw`, `precompile_addrs`,
+    `zero_hashes` are allocated with constant products)."""
+    if is_app(e, 'Exp.const'):
+        return int(panast.show(e))
+    if is_app(e, 'Exp.panOp') or is_app(e, 'Exp.op'):
+        op = panast.show(e[2][0])
+        vals = [const_value(x) for x in e[2][1][1]]
+        if any(v is None for v in vals):
+            return None
+        if op.endswith('mul'):
+            r = 1
+            for v in vals:
+                r *= v
+            return r
+        if op.endswith('add'):
+            return sum(vals)
+    return None
+
+
 def callees(t, out):
     def f(x, _ctx):
         cp = call_parts(x)
@@ -1109,8 +1130,8 @@ def main():
             if callee in ('alloc', 'scratch_alloc') and is_app(opt, 'some'):
                 d = opt[2][0][1][0]
                 if is_app(d, 'some') and panast.show(d[2][0][1][0]) == 'global' and args \
-                        and is_app(args[0], 'Exp.const'):
-                    bufs.setdefault(d[2][0][1][1][1], set()).add((callee, int(panast.show(args[0]))))
+                        and const_value(args[0]) is not None:
+                    bufs.setdefault(d[2][0][1][1][1], set()).add((callee, const_value(args[0])))
     for f in sorted(reach):
         panast.walk(fns[f], scan)
     with open(os.path.join(outdir, 'tiers.txt'), 'w') as o:
