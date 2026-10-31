@@ -42,3 +42,54 @@ Fable could not run Lean, so the coordinator must confirm elaboration, the `deci
 - Read-only loops with struct-shaped keys are mis-sized: `RO(k)` gives `2^(64k)`, but `modinv_bin`, `bls_fp_inv_raw`, `fq12_mul`, `fq12_sqr`, `p256_fp_mul` and `p256_fp_sqr` carry 4- or 6-word locals. The bounds are still true because the real measures are tiny. `fq12_mul` loop 1 is a plain counter if `classify` accepts `notLower`.
 - The `rlp_list_count` justification is wrong (the body is not read-only; `_rlp_validate_items_body` writes scratch records), but the bound is true via the measure `len − off`.
 - The `taylor_exponential` and `fq12_inv` measures rest on two arithmetic facts the provers must establish: `u256_divmod` returns zero on a zero divisor (AST:1754, confirmed), and field cancellation on non-canonical inputs (not traced).
+
+## Astra 6 (mission 0bb32836): REQUEST_CHANGES
+
+**Checked and fine:**
+- The global-destination counterexample is fixed.
+- The revised constants dominate the round-1 numerical counterexamples.
+- Regeneration is byte-for-byte: 813 functions, 774 reachable, 249 loops, no recursion.
+- There are 790 `sorry`s, all in theorems.
+- The bridge is proved.
+- The budget inequality was checked independently (`K_pan` has 755 bits).
+
+The counterexamples below come from executable AST probes. Lean was not run.
+
+**Blocking:**
+
+1. **`FrameOutside` forbids every memory change** (Spec:989). It quantifies over `a : Nat`, tests the intervals before truncating, then reads memory at `BitVec.ofNat 64 a`. For any changed address x, `a = x + k·2^64` lies outside every interval, so x must stay unchanged. Concrete case: updating a singleton table value 7 → 9 changes `0xa1100098`. Fix: quantify over `BitVec 64` and test intervals with `toNat`, or restrict to canonical word addresses.
+
+2. **The constructor exit contract intersects where it should take a union** (Spec:5077). `HtabNewExit` requires memory to be unchanged outside the fresh heap AND outside the fresh scratch. `htab_new(20, 2)` writes the header 0 → 20 in the heap without moving scratch, so the scratch clause forbids that write. `htab_new_scratch` fails the same way. Fix: one frame over the union.
+
+3. **Constructor guards omit the parameter limits** (Spec:5080). Counterexamples:
+   - `htab_new(0, 2)` violates `1 ≤ key_len`;
+   - `htab_new(61, 2)` violates `key_len ≤ 60`;
+   - `htab_new(20, 2^64−1)` wraps `ncap+1` in the allocation products.
+
+   Fix: add explicit parameter contracts, including a bounded `cap`, and establish them at callers. This extends Fable's item 1.
+
+4. **`HtabWF` admits disconnected cycles, so `htab_del_spec` is false** (Spec:953, Spec:5062). Counterexample:
+   - parameters: `key_len=1`, `stride=8`, `count=2`, `ncap=3`, `next=4`, `root=1`;
+   - lists: `L=[1,2]`, `I=[3]`, `Fr=[]`, `order=[1,2]`;
+   - nodes as (parent, +8, +16, crit): `1=(0,7,0,8)`, `2=(3,9,1,8)`, `3=(3,2,3,0)`.
+
+   Deleting leaf 1 returns 1 and sets `count=1`, `root=0`, which breaks `HtabWF`. Fix: require rooted connectivity and acyclicity, plus the search invariants that delete and truncate rely on.
+
+5. **`EvmInv` misses log backing arrays** (Spec:1155, Spec:1172; `op_dispatch_spec` at Spec:5132). Two concrete failures:
+   - **Gas overwrite:** take a logs header `(data=ev+64, len=0, cap=1)`. That array is not in `frameObjects`, so the guard holds. `LOG0` then writes the new log pointer into `ev+64`, raising gas from 1000 to 2702180640, so `evmPot` increases.
+   - **Normal growth:** with `len=cap=4`, `lst_push` reallocates the array on the HEAP, which violates the scratch-only clause at Spec:1172.
+
+   Fix: include backing arrays in ownership and disjointness, and allow the allocator transitions the code actually performs.
+
+6. **Assembly is not closed** (Spec:415, 517, 5166, 5315):
+   - `callHandle_guestInv` and `while_rank` are still admitted (sorry);
+   - `run_frames_step_of_specs` is admitted glue;
+   - **`gb_main` itself is `by sorry`**, and the final theorem applies the bridge directly to `gb_main` rather than composing the lower leaves;
+   - `htab_del_spec`/`HtabExit` has no count-decrease conclusion.
+
+   Round-1 item 6 is still open. Every combinator and glue lemma, and the composition from leaves up to `main`, must be proved, so that only true leaf statements remain `sorry`.
+
+**Non-blocking:**
+- coverage.py:359 counts each carried local as one 64-bit word; `modinv_bin` carries four 256-bit structures, so its `RO(4)` argument is invalid. A real measure is needed.
+- Spec:986 is the tautology `HtabWF s t → HtabWF s t`.
+- The examples at Spec:5333 onward only compare constants. Add semantic regression tests.
