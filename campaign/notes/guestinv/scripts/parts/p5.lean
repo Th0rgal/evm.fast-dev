@@ -152,6 +152,11 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
           [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
         (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
 
+/-- `_mpt_insert_node` under `MptReady`. `MptExit` constrains normal returns only. On a cycle of
+empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions pointing at each other;
+`NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
+`2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
+this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
 theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry
@@ -974,6 +979,13 @@ theorem callEntryOn_inputReady {fname : MlS} {e : List (MlS × ShapeHOL) × Prog
   show InputAt (callEntryStateHOLFinite state callee) (locN (callEntryStateHOLFinite state callee) "si")
   rw [hsi]
   exact (inputAt_with_locals state callee (state.clock - 1) _).2 hP
+
+/-- Value contract (revision 7): the function resumes its caller only if its table parameter `x` is
+nonzero (its first action loads through it, and address `0` is outside the memory domain).
+`get_storage` calls `htab_set(load(ts + 24), …)` and then the guarded `ws_get_storage`; `RootIn`
+allows the slot to be `0`, where `htab_set_spec` does not apply. -/
+def ArgNonNull (x : String) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => Resumes r → locN s x ≠ 0) fname
 
 /-- `lst_push(l, esz)` at a world-tier site (revision 7): `process_transaction` pushes onto the
 block's log list `bo+40` and receipt-log list `bo+72` (33398, 33418), world objects
@@ -2282,3 +2294,34 @@ theorem clock_store {F : Type} (s : PanSemStateFiniteExact 64 F) (a v : ExpHOL 6
   rw [evaluateHOLFiniteState_store]
   repeat' split
   all_goals (try dsimp only)
+
+/-! ### World steps in the Hoare layer (revision 7) -/
+
+/-- A `decCall` to a callee keeping the locals-free guard `W` resumes in `W` (proved). -/
+theorem KeepsOn.resumeOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (h : KeepsOn W W fname) (name : MlS)
+    (arguments : List (ExpHOL 64)) : DecCallResumeOn W W name fname arguments := by
+  obtain ⟨params, body', ret', hlook, hb⟩ := h
+  intro F state values body callee ret value post hcode hP _ hl hrun
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
+    ret' ret values callee (by rw [hcode]; exact hlook) hl
+  subst hsame
+  have hq := hb (callEntryStateHOLFinite state callee) hcode (hW state _ _ hP)
+    (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+  rw [hrun] at hq
+  have := hW post (state.locals.update (name, value)) post.clock hq
+  simpa [setVarHOLFinite] using this
+
+theorem raise_ne_none {F : Type} (s : PanSemStateFiniteExact 64 F) (n : MlS) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.raise n e)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_raise]
+  repeat' split
+  all_goals (try simp)
+  all_goals (split_ifs <;> simp)
+
+/-- A guard clause `if c then raise …` falls through only from the unchanged state (proved). -/
+theorem Hoare.ite_raise_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (cond : ExpHOL 64) (n : MlS) (e : ExpHOL 64) :
+    Hoare P (.ite cond (.raise n e) .skip) (fun r t => r = none → P t) :=
+  Hoare.ite ⟨fun s _ _ _ h => absurd h (raise_ne_none s n e)⟩ (Hoare.skip fun _ h _ => h.1)
+    (fun _ _ h => absurd h (by simp))

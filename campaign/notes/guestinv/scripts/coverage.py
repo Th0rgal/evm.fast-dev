@@ -900,6 +900,29 @@ GBODY_PROOF['decode_witness_to_mpt'] = """  intro hdw hal hmc hme hmf hnl hrme h
   omega
 """ % (FBE, ROR.replace('{H}', 'hrme'), ITE_RET, FBE, ROR.replace('{H}', 'hrnl'), FBE, SKIP0, CALLWOK, SKIP0, RET0)
 
+# revision 7: a world-step callee carries `WorldOK` (`WorldKeeps.keepsOn`), also through a
+# `decCall` (`KeepsOn.resumeOn`); guard clauses `if c then raise …` (`Hoare.ite_raise_skip`)
+ITE_RAISE = ('(TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))\n'
+             '        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))')
+WRES = '(KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn %s) _ _)'
+GBODY_PROOF['process_checked_system_transaction'] = """  intro hal hext hpu hsf wal wext wsf
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hsf _ _ (%s))
+      (Hoare.call_keeps localsFree_worldOK (WorldKeeps.keepsOn wsf) _)
+      (TerminatingProgBoundedOn.decCall_on hext _ _ _ (%s) %s
+        (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_raise_skip _ _ _)
+          (TerminatingProgBoundedOn.decCall_on hal _ _ _ (%s) %s
+            (TerminatingProgBoundedOn.decCall_on hpu _ _ _ (%s)
+              (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+              (TerminatingProgBoundedOn.seq_guestInv %s %s)))))) ?_
+  unfold K.«process_checked_system_transaction»
+  try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
+""" % (FBE, FBE, WRES % 'wext', ITE_RAISE, FBE, WRES % 'wal', CALLWOK,
+       ITE_RAISE, RET0)
+
 # revision 7: the witness decoders are guarded by `ArenaReady` (`state_init` calls them before the
 # world is typed); their revision-6 proofs carry over with the `ArenaReady` instances
 for _f in ARENA:
@@ -971,7 +994,10 @@ XV = {
                              'checks 12667)'),
     'min': ('rv_min', 'RetLe (fun s => locN s "a") (ofString "min")', 'returns at most `a` (value contract)'),
 }
-XV_AT = {'memzero': None, 'validate_transaction': ('process_transaction',), 'min': ('process_transaction',)}
+XV['htab_set'] = ('nz_htab_set', 'ArgNonNull "t" (ofString "htab_set")',
+                  'resumes only on a nonzero table (`load(t + 0)` errors at `0`, AST 5156)')
+XV_AT = {'memzero': None, 'validate_transaction': ('process_transaction',), 'min': ('process_transaction',),
+         'htab_set': ('get_storage',)}
 
 
 def needed_calls(fns, f, guarded, root_loop):
@@ -1283,6 +1309,10 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             if g in SPEC_OF:
                 for sp in SPEC_OF[g]:
                     hs.append(('type_of% @' + sp, sp))
+                if g in XV and (XV_AT[g] is None or f in XV_AT[g]) and f not in GBODY_PROOF:
+                    xn, xst, xwhy = XV[g]
+                    contracts[xn] = (xst, xwhy)
+                    hs.append((xst, xn))
                 continue
             if g not in impure:
                 name = 'ro_' + g

@@ -1,6 +1,7 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 3.
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 7
+(round-4 fixes; the per-revision change lists are in `campaign/notes/guestinv/DESIGN.md` §0).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):

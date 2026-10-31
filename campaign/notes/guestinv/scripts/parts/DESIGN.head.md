@@ -1,11 +1,11 @@
-# GuestInv revision 6: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 7: a guarded route to `CoveredSourceTicksConsumedBounded`
 
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
 (`guestinv-r2.md`), revision 4 the round-3 quorum (`guestinv-r3.md`, §0.3 and §0.4), and revision
-5 (Fable's items) and revision 6 (Astra's items, commit d16ff8bc0) answer the round-4 quorum
-(`guestinv-r4.md`), §0.1 and §0.2. Both are narrow fix rounds: only the statements listed in §0.2
-changed. All statements are in
+5 (Fable's items), revision 6 (Astra's items, commit d16ff8bc0; Gemini's item 2) and revision 7
+(Gemini's item 1: relational callee contracts) answer the round-4 quorum (`guestinv-r4.md`), §0.1
+and §0.2. Only the statements listed there changed. All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -257,6 +257,143 @@ leaves would not change `assembly` or its axioms.
 - the two tables equal, or with disjoint footprints.
 
 `finish_child` gets these from `EvmInv`.
+
+### Gemini 4 Carbon (review of 0f8dea8c7; revisions 6 and 7)
+
+**Item 2 (fixed): per-slot storage lists of the block access list.** The storage table `+0` of
+every BAL account record has live values `l` that are lists of 40-byte elements:
+- created in `add_storage_write` (13944) by `lst_new(40, 2)`;
+- updated by `lst_upsert_idx(l, 40, idx)`;
+- written through by `remove_storage_write` and by the in-place `sort_elems` of
+  `build_block_access_list_rlp`.
+
+Changes:
+- `balObjects` now owns `lstObjects s l 40` for every `l ∈ htabValues s (memW s ad)`, so the
+  lists are fixed objects: allocated words, pairwise disjoint (`FixedTyped`) and disjoint from
+  every table, frame block and trie node (the existing conjuncts over `fixedObjects`);
+- `TablesTyped` requires `LstOK s l` for each of them;
+- `htabValues` moves up next to `HtabValuesIn` (same definition).
+
+This makes `wk_add_storage_write`, `wk_remove_storage_write`, `wk_build_block_access_list_rlp`
+and `gb_update_builder_from_tx` (via its composition) true against Gemini's witness. Their
+statements are textually unchanged, and only the two definitions change (`sigdiff.py`:
+`TablesTyped`, `balObjects`).
+
+**Non-blocking (fixed):**
+- the Lean header now says revision 6;
+- `mpt_insert_node_spec` has a docstring: a cycle of empty extension segments never returns and
+  reaches `WhileTimesOut` within the `2^130` bound, so the spec is vacuous on such runs.
+
+**Item 1 (fixed in revision 7, commits d589ac3e5 and 26e8a8484): relational callee contracts.**
+`KeepsOn W W` allowed any `W → W` transition, so a caller lost its local facts across the call.
+Revision 7 implements Gemini's Option A mechanically in `coverage.py`. It changes no existing
+statement except the `GBody`s and `Primitives`, which gain hypotheses.
+
+- **(a) World steps `ws_g : WorldStepFn P gw wb wf R g`**, one per `wk_g` with the same entry
+  `P` (45 for the existing `wk_*`, plus 12 for `main`'s inits). A resuming outcome is a
+  `WorldStep`:
+  - `heap_ptr` only grows;
+  - every global outside `gw` (the closure's computed global writes) is unchanged;
+  - every typed table set `S` of the entry extends to one of the exit (`S ⊆ S'`);
+  - memory changes only in `WorldMutable s S Nd wb wf`, in the callee's regions `R`, and in the
+    free memory. `WorldMutable` lists the tables of `S`, the trie nodes and paths of `Nd`, the
+    global buffers the closure writes (`wb` whole), the constant fields of the others it writes
+    (`wf`), the journal array, and the block-output and BAL objects.
+
+  `wb`/`wf` come from a field-precise scan, `buffer_fields`. A buffer counts as written where it
+  is the base of a store target outside any load. A pointer loaded from a record field targets a
+  world object that `WorldMutable` already lists, e.g. the `bo` arrays. `R` is declared for the
+  five parameter writers (`KEEP_REGION`):
+  - `out` (32 bytes) of `build_mpt_indexed`, `compute_state_root`, `mpt_root`;
+  - `msg` (176 bytes) of `process_message_call`;
+  - the trie object and its reachable nodes (`mptRegion`, `mptReach` with fuel
+    `(heapLimit − sourceBase)/32 + 1`) for `mpt_set`/`mpt_root`.
+
+  The other written parameters are indices into world objects (`WORLD_PARAM`). The script asserts
+  the two tables cover every written parameter.
+- **(b) EVM steps `es_g : EvmStepFn P gw wb wf g`**, one per `ek_g` (10). The same frame applies,
+  for the table sets of `EvmInvAt`, and the chain's frame blocks also count as owned. In addition:
+  - `evmChain` is unchanged;
+  - `ev` and `cur_cont` are unchanged (not in any `ek` callee's `gw`);
+  - every `RollbackAt s c → RollbackAt post c`. `RollbackAt` is `RollbackReady` for an explicit
+    record, `rollbackReady_iff_at` by `Iff.rfl`. So `finish_child` keeps `RollbackReady` on its
+    local `child`.
+- **(c) Return typing**, used at every guard-carrying call site of an unproved composition:
+  - `rb_alloc : RetBlock n` (fresh, aligned, in-domain words);
+  - `rb_msg_new : RetBlock 176`, zeroed;
+  - `rl_lst_new : RetList` (fresh header with length 0 and capacity `cap`, fresh array);
+  - `rt_htab_copy : RetTable` (fresh `HtabWF` footprint);
+  - `rm_mpt_new : RetMptNew` (fresh 16-byte object holding `root_node`, `secured`);
+  - `ro2_mpt_from_witness : RetMptObj` (fresh object satisfying `MptObjOK` in the exit world;
+    `MptObjAt`/`mptObjIn_iff_at` by `Iff.rfl`).
+
+  Two post contracts as well: `km_mpt_set : KeepsMptObj`, under which the same trie object stays
+  typed (`compute_state_root` and `build_mpt_indexed` call `mpt_set` repeatedly), and
+  `rq_requests_append : ReqStep` (`bo+64` grows by exactly one).
+- **(d) Typed post-states for world-global setters.** A callee whose closure assigns a world
+  global (`ws`, `bs`, `ts`, `bo`, the journal globals, the BAL roots) or a global-buffer pointer
+  gets `KeepsOn W W` plus its world step, instead of `WritesWithin`. That covers `bal_init`,
+  `state_fresh_tx` and `main`'s 12 `*_init` calls (`blake2_init` … `u256_ws_init`), so the
+  buffer globals can no longer be set to arbitrary pointers.
+
+How each fact Gemini found lost is now kept:
+- **`process_create_message` / `process_message_call` (`MsgReady`):** the message record is
+  caller-private memory, so the step frame keeps it; `S ⊆ S'` keeps its two tables typed; the heap
+  only grows.
+- **`process_transaction`:** `m`, `aa`, `ak` are fresh blocks (`rb_alloc`, `rb_msg_new`), kept by
+  the frame. `index < ntx`: `bo` is outside every callee's `gw`, and `bo+80` outside its `wf`
+  (only `execute_block` writes it).
+- **`process_general_purpose_requests` (`ReqRoom`):** the system transactions write no `bo`
+  field, and `rq_requests_append` gives `+1`.
+- **`compute_state_root`:** its local tables (`htab_new`/`htab_copy`, kept out of the world's
+  `S`) and its `out` buffer are private, so the frame keeps them. The `mpt` objects are covered by
+  `ro2_mpt_from_witness`, `rm_mpt_new` and `km_mpt_set`.
+- **`execute_block`:** `bo ≠ 0` (global outside `gw`), `bo+80 = ntx` and `bo+64 = 0`
+  (`process_transaction` writes `bo+0/8/16/48`, `requests_append` only `bo+64`).
+- **`payload_header` (`(wr, 32)`):** fresh from `rb_alloc` and private.
+- **`finish_child`:** `es_*` keeps `ev`, `cur_cont`, `evmChain` and `RollbackAt child`.
+
+The 16 proved `gbody_*` keep their hypothesis lists. They are proved without the new contracts,
+so their `ww_*`/`wk_*` hypotheses are unchanged. With these hypotheses each unproved `gbody_f` is
+meant to be provable from its own hypotheses, without unfolding a callee: Gemini's criterion, and
+the coordinator's round-5 question.
+
+## 0.2a Changes in revision 7 (since cbe2f1a62)
+
+`sigdiff.py` on `cbe2f1a62` vs `26e8a8484`. These are Gemini's item 1 changes, §0.1.
+
+**Changed statements:**
+- 21 `GBody.«f»` (all still `sorry`; new hypotheses only): `build_mpt_indexed`,
+  `compute_state_root`, `execute_block`, `finish_child`, `get_storage`, `main`, `op_sload`,
+  `op_sstore`, `payload_header`, `process_checked_system_transaction`, `process_create_message`,
+  `process_general_purpose_requests`, `process_message_call`, `process_message`,
+  `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`,
+  `run_attempt`, `state_init`, `update_builder_from_tx`;
+- `Primitives` (499 fields).
+
+No `fb_*`, §7 leaf, existing callee contract, `gb_*`, combinator or definition changed.
+
+**Replaced leaves (14):** `ww_bal_init`, `ww_state_fresh_tx` and `main`'s 12 `ww_*_init` by
+`wk_*` (`KeepsOn WorldOK WorldOK`) with their `ws_*` steps (item 1(d)).
+
+**New leaves (75):**
+- 57 `ws_*` and 10 `es_*` steps;
+- the return/post contracts `rb_alloc`, `rb_msg_new`, `rl_lst_new`, `rt_htab_copy`,
+  `rm_mpt_new`, `ro2_mpt_from_witness`, `km_mpt_set`, `rq_requests_append`.
+
+**New definitions:** `WorldMutable`, `freeGap`, `WorldStep`, `WorldStepFn`, `RollbackAt`,
+`EvmStep`, `EvmStepFn`, `mptReach`, `mptFuel`, `mptRegion`, `RetBlock`, `RetList`, `RetTable`,
+`RetMptNew`, `MptObjAt`, `MptObjOK`, `RetMptObj`, `KeepsMptObj`, `ReqStep`. **New proved
+theorems:** `rollbackReady_iff_at`, `mptObjIn_iff_at` (both `Iff.rfl`).
+
+**Census:** 991 leaf sorries:
+- 727 `fb_*`;
+- 14 §7 contracts;
+- 219 callee contracts:
+  - `ro_*` 30, `ww_*` 36, `wk_*` 57, `ws_*` 57, `ek_*` 10, `es_*` 10, `ak_*` 1, `fk_frame_open`;
+  - `nf_*` 7, `nk_*` 1, `rv_*` 1;
+  - `rb_*` 2, `rl_*` 1, `rt_*` 1, `rm_*` 1, `ro2_*` 1, `km_*` 1, `rq_*` 1;
+- 31 `gbody_*`.
 
 ## 0.2 Changes since 141ff1f6b (revision 6)
 

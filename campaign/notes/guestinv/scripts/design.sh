@@ -87,8 +87,8 @@ F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxiom
 lake env lean $S; rm $S
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 6, fcb670d84): no errors;
-916 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 144 generated callee
+Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7, 26e8a8484): no errors;
+991 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 219 generated callee
 contracts, 31 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
 There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
 `#print axioms`, checked on a scratch copy:
@@ -105,6 +105,7 @@ There are also style-linter notes about the `__` in generated names such as `fb_
     `localsOnly_htabNewReady`; revision 5: `localsFree_evmRun`, `localsFree_evmMsgReady`,
     `localsOnly_blockReady`, `localsOnly_mptObjReady`);
   - revision 5: `evmInv_iff_at`, `evmInv_of_evmMsgReady`;
+  - revision 7: `rollbackReady_iff_at`, `mptObjIn_iff_at`;
   - revision 6: `cellHits_aligned` and the 47 `«callees_f»` (`decide` on the AST);
   - the glue `run_frames_step_of_specs`;
   - the bridge (unchanged).

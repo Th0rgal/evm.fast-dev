@@ -1,6 +1,7 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 3.
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 7
+(round-4 fixes; the per-revision change lists are in `campaign/notes/guestinv/DESIGN.md` §0).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
@@ -6098,6 +6099,11 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
           [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
         (globN s "heap_ptr", heapLimit - globN s "heap_ptr")
 
+/-- `_mpt_insert_node` under `MptReady`. `MptExit` constrains normal returns only. On a cycle of
+empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions pointing at each other;
+`NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
+`2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
+this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
 theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry
@@ -6920,6 +6926,13 @@ theorem callEntryOn_inputReady {fname : MlS} {e : List (MlS × ShapeHOL) × Prog
   show InputAt (callEntryStateHOLFinite state callee) (locN (callEntryStateHOLFinite state callee) "si")
   rw [hsi]
   exact (inputAt_with_locals state callee (state.clock - 1) _).2 hP
+
+/-- Value contract (revision 7): the function resumes its caller only if its table parameter `x` is
+nonzero (its first action loads through it, and address `0` is outside the memory domain).
+`get_storage` calls `htab_set(load(ts + 24), …)` and then the guarded `ws_get_storage`; `RootIn`
+allows the slot to be `0`, where `htab_set_spec` does not apply. -/
+def ArgNonNull (x : String) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => Resumes r → locN s x ≠ 0) fname
 
 /-- `lst_push(l, esz)` at a world-tier site (revision 7): `process_transaction` pushes onto the
 block's log list `bo+40` and receipt-log list `bo+72` (33398, 33418), world objects
@@ -8229,6 +8242,37 @@ theorem clock_store {F : Type} (s : PanSemStateFiniteExact 64 F) (a v : ExpHOL 6
   repeat' split
   all_goals (try dsimp only)
 
+/-! ### World steps in the Hoare layer (revision 7) -/
+
+/-- A `decCall` to a callee keeping the locals-free guard `W` resumes in `W` (proved). -/
+theorem KeepsOn.resumeOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (h : KeepsOn W W fname) (name : MlS)
+    (arguments : List (ExpHOL 64)) : DecCallResumeOn W W name fname arguments := by
+  obtain ⟨params, body', ret', hlook, hb⟩ := h
+  intro F state values body callee ret value post hcode hP _ hl hrun
+  have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
+    ret' ret values callee (by rw [hcode]; exact hlook) hl
+  subst hsame
+  have hq := hb (callEntryStateHOLFinite state callee) hcode (hW state _ _ hP)
+    (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+  rw [hrun] at hq
+  have := hW post (state.locals.update (name, value)) post.clock hq
+  simpa [setVarHOLFinite] using this
+
+theorem raise_ne_none {F : Type} (s : PanSemStateFiniteExact 64 F) (n : MlS) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.raise n e)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_raise]
+  repeat' split
+  all_goals (try simp)
+  all_goals (split_ifs <;> simp)
+
+/-- A guard clause `if c then raise …` falls through only from the unchanged state (proved). -/
+theorem Hoare.ite_raise_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (cond : ExpHOL 64) (n : MlS) (e : ExpHOL 64) :
+    Hoare P (.ite cond (.raise n e) .skip) (fun r t => r = none → P t) :=
+  Hoare.ite ⟨fun s _ _ _ h => absurd h (raise_ne_none s n e)⟩ (Hoare.skip fun _ h _ => h.1)
+    (fun _ _ h => absurd h (by simp))
+
 /-! ### Guarded bound leaves (generated) -/
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
@@ -8340,6 +8384,9 @@ theorem «nf_node_new_leaf» :
 /-- `mpt_nibble_key` (AST line 10470): returns a fresh heap nibble array (value contract). -/
 theorem «nk_mpt_nibble_key» :
     RetNibbles (ofString "mpt_nibble_key") := by sorry
+/-- `htab_set` (AST line 5149): resumes only on a nonzero table (`load(t + 0)` errors at `0`, AST 5156). -/
+theorem «nz_htab_set» :
+    ArgNonNull "t" (ofString "htab_set") := by sorry
 /-- `calculate_total_blob_gas` (AST line 11914): read-only. -/
 theorem «ro_calculate_total_blob_gas» :
     ReadOnlyFn (ofString "calculate_total_blob_gas") := by sorry
@@ -9773,7 +9820,7 @@ theorem «gb_finish_child» : TerminatingFunBoundedOn FinishReady (ofString "fin
 /-- The body of `get_storage` alone (AST line 13249, guard `WorldOK`, loop-free). Its direct callees are
 exactly `htab_set`, `record_pre_state_read`, `sk_make`, `stor_lookup`, `ws_get_storage` (`«callees_get_storage»`, checked against the AST). Hypotheses: the bound
 of each of these 5 callees, then the contract of each callee at a guard-carrying
-call site (4: `htab_set_spec`, `wk_record_pre_state_read`, `wk_sk_make`, `ro_stor_lookup`). Nothing else is assumed. -/
+call site (5: `htab_set_spec`, `nz_htab_set`, `wk_record_pre_state_read`, `wk_sk_make`, `ro_stor_lookup`). Nothing else is assumed. -/
 def GBody.«get_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set») →
   (TerminatingFunBoundedOn GuestInv (ofString "record_pre_state_read") K.«record_pre_state_read») →
@@ -9781,6 +9828,7 @@ def GBody.«get_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "stor_lookup") K.«stor_lookup») →
   (TerminatingFunBoundedOn WorldOK (ofString "ws_get_storage") K.«ws_get_storage») →
   (type_of% @htab_set_spec) →
+  (ArgNonNull "t" (ofString "htab_set")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -9799,7 +9847,7 @@ theorem «callees_get_storage» : sameNames (progCallees (fnBody Guest.Software.
 theorem «gbody_get_storage» : GBody.«get_storage» := by sorry
 
 theorem «gb_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage» :=
-  «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «wk_record_pre_state_read» «wk_sk_make» «ro_stor_lookup»
+  «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «nz_htab_set» «wk_record_pre_state_read» «wk_sk_make» «ro_stor_lookup»
 
 /-- The body of `op_sload` alone (AST line 16584, guard `EvmRun`, loop-free). Its direct callees are
 exactly `charge_gas`, `get_storage`, `is_warm_storage_key`, `pc_add`, `stack_pop`, `stack_push`, `u256_to_be32`, `warm_storage_key` (`«callees_op_sload»`, checked against the AST). Hypotheses: the bound
@@ -10220,7 +10268,7 @@ theorem «gb_process_unchecked_system_transaction» : TerminatingFunBoundedOn Wo
 /-- The body of `process_checked_system_transaction` alone (AST line 32928, guard `WorldOK`, loop-free). Its direct callees are
 exactly `alloc`, `ext_code_of`, `process_unchecked_system_transaction`, `state_fresh_tx` (`«callees_process_checked_system_transaction»`, checked against the AST). Hypotheses: the bound
 of each of these 4 callees, then the contract of each callee at a guard-carrying
-call site (4: `wk_alloc`, `rt_alloc`, `wk_ext_code_of`, `wk_state_fresh_tx`). Nothing else is assumed. -/
+call site (3: `wk_alloc`, `wk_ext_code_of`, `wk_state_fresh_tx`). Nothing else is assumed. -/
 def GBody.«process_checked_system_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "ext_code_of") K.«ext_code_of») →
@@ -10230,8 +10278,6 @@ def GBody.«process_checked_system_transaction» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "alloc")) →
-  (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
-    (ofString "alloc")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -10246,10 +10292,33 @@ def GBody.«process_checked_system_transaction» : Prop :=
 theorem «callees_process_checked_system_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_checked_system_transaction))
     ["alloc", "ext_code_of", "process_unchecked_system_transaction", "state_fresh_tx"] = true := by decide
 
-theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_system_transaction» := by sorry
+theorem «lookup_process_checked_system_transaction» : originalRuntimeCode.lookup (ofString "process_checked_system_transaction") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_process_checked_system_transaction).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 871 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_process_checked_system_transaction) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_system_transaction» := by
+  intro hal hext hpu hsf wal wext wsf
+  refine ⟨_, _, _, «lookup_process_checked_system_transaction», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_process_checked_system_transaction, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hsf _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _))
+      (Hoare.call_keeps localsFree_worldOK (WorldKeeps.keepsOn wsf) _)
+      (TerminatingProgBoundedOn.decCall_on hext _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wext) _ _)
+        (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_raise_skip _ _ _)
+          (TerminatingProgBoundedOn.decCall_on hal _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wal) _ _)
+            (TerminatingProgBoundedOn.decCall_on hpu _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+              (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+              (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))) ?_
+  unfold K.«process_checked_system_transaction»
+  try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
 
 theorem «gb_process_checked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_checked_system_transaction") K.«process_checked_system_transaction» :=
-  «gbody_process_checked_system_transaction» «fb_alloc» «fb_ext_code_of» «gb_process_unchecked_system_transaction» «fb_state_fresh_tx» «wk_alloc» «rt_alloc» «wk_ext_code_of» «wk_state_fresh_tx»
+  «gbody_process_checked_system_transaction» «fb_alloc» «fb_ext_code_of» «gb_process_unchecked_system_transaction» «fb_state_fresh_tx» «wk_alloc» «wk_ext_code_of» «wk_state_fresh_tx»
 
 /-- The body of `process_general_purpose_requests` alone (AST line 33507, guard `ReqsFresh`, #0 CTR; #1 CTR). Its direct callees are
 exactly `alloc`, `extract_deposit_data`, `memcpy`, `memeq`, `process_checked_system_transaction`, `requests_append` (`«callees_process_general_purpose_requests»`, checked against the AST). Hypotheses: the bound
@@ -11286,6 +11355,7 @@ structure Primitives : Prop where
   «ek_state_restore» : EvmKeeps EvmInv     ["heap_ptr", "journal_n"] (ofString "state_restore")
   «gbody_finish_child» : GBody.«finish_child»
   «fb_sk_make» : TerminatingFunBoundedOn GuestInv (ofString "sk_make") K.«sk_make»
+  «nz_htab_set» : ArgNonNull "t" (ofString "htab_set")
   «wk_sk_make» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "sk_make")
   «gbody_get_storage» : GBody.«get_storage»
   «fb_charge_gas» : TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas»
@@ -11437,7 +11507,6 @@ structure Primitives : Prop where
   «wk_te_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "te_new")
   «rt_te_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧       ∀ k, k < 25 → memW post (m + 8 * k) = 0)     (ofString "te_new")
   «gbody_process_unchecked_system_transaction» : GBody.«process_unchecked_system_transaction»
-  «gbody_process_checked_system_transaction» : GBody.«process_checked_system_transaction»
   «fb_extract_deposit_data» : TerminatingFunBoundedOn GuestInv (ofString "extract_deposit_data") K.«extract_deposit_data»
   «fb_requests_append» : TerminatingFunBoundedOn GuestInv (ofString "requests_append") K.«requests_append»
   «wk_extract_deposit_data» : WorldKeeps WorldOK (fun s => [(locN s "out", 192)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "extract_deposit_data")
@@ -11595,7 +11664,7 @@ theorem assembly_main (P : Primitives) :
   have «g_htab_truncate» := P.«gbody_htab_truncate» P.«fb_htab_del» P.«htab_del_spec» P.«htab_del_progress_spec»
   have «g_rollback_child_access» := P.«gbody_rollback_child_access» «g_htab_truncate» P.«htab_truncate_spec»
   have «g_finish_child» := P.«gbody_finish_child» P.«fb_address_to_u256» P.«fb_create_finish» P.«fb_credit_state_gas_refund» P.«fb_frame_halt» P.«fb_frame_mem_release» P.«fb_incorporate_child_on_error» P.«fb_incorporate_child_on_success» P.«fb_memcpy» P.«fb_min» P.«fb_pc_add» P.«fb_refill_frame_state_gas» «g_rollback_child_access» P.«fb_scratch_release» P.«fb_set_retdata» P.«fb_stack_push» P.«fb_state_restore» P.«ek_create_finish» P.«ek_frame_halt» P.«ek_refill_frame_state_gas» P.«ek_state_restore»
-  have «g_get_storage» := P.«gbody_get_storage» P.«fb_htab_set» P.«fb_record_pre_state_read» P.«fb_sk_make» P.«fb_stor_lookup» «g_ws_get_storage» P.«htab_set_spec» P.«wk_record_pre_state_read» P.«wk_sk_make» P.«ro_stor_lookup»
+  have «g_get_storage» := P.«gbody_get_storage» P.«fb_htab_set» P.«fb_record_pre_state_read» P.«fb_sk_make» P.«fb_stor_lookup» «g_ws_get_storage» P.«htab_set_spec» P.«nz_htab_set» P.«wk_record_pre_state_read» P.«wk_sk_make» P.«ro_stor_lookup»
   have «g_op_sload» := P.«gbody_op_sload» P.«fb_charge_gas» «g_get_storage» P.«fb_is_warm_storage_key» P.«fb_pc_add» P.«fb_stack_pop» P.«fb_stack_push» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ek_is_warm_storage_key» P.«ek_stack_pop» P.«ek_u256_to_be32» P.«ek_warm_storage_key»
   have «g_get_storage_original» := «gbody_get_storage_original» P.«fb_htab_has» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«ro_htab_has» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
   have «g_op_sstore» := P.«gbody_op_sstore» P.«fb_charge_gas» P.«fb_charge_state_gas» P.«fb_check_gas» P.«fb_credit_state_gas_refund» «g_get_storage» «g_get_storage_original» P.«fb_is_warm_storage_key» P.«fb_max» P.«fb_pc_add» P.«fb_require_not_static» P.«fb_set_storage» P.«fb_stack_pop» P.«fb_u256_eq» P.«fb_u256_is_zero» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ro_check_gas» P.«ek_get_storage_original» P.«ek_is_warm_storage_key» P.«ro_max» P.«ro_require_not_static» P.«ek_stack_pop» P.«ek_u256_to_be32» P.«ek_warm_storage_key»
@@ -11605,7 +11674,7 @@ theorem assembly_main (P : Primitives) :
   have «g_process_create_message» := P.«gbody_process_create_message» P.«fb_create_finish» P.«fb_destroy_storage» P.«fb_frame_halt» P.«fb_increment_nonce» P.«fb_mark_account_created» «g_process_message» P.«fb_refill_frame_state_gas» P.«fb_state_restore» P.«fb_state_snapshot» P.«wk_destroy_storage» P.«wk_increment_nonce» P.«wk_mark_account_created» P.«ro_state_snapshot»
   have «g_process_message_call» := P.«gbody_process_message_call» P.«fb_account_deployable» P.«fb_alloc» P.«fb_frame_state_gas_used» P.«fb_memzero» «g_process_create_message» «g_process_message» P.«wk_account_deployable» P.«wk_alloc» P.«rt_alloc» P.«wk_memzero» P.«zv_memzero»
   have «g_process_unchecked_system_transaction» := P.«gbody_process_unchecked_system_transaction» P.«fb_alloc» P.«fb_ext_code_of» P.«fb_frame_mem_release» P.«fb_htab_new» «g_incorporate_tx_into_block» P.«fb_memcpy» P.«fb_msg_new» «g_process_message_call» P.«fb_scratch_release» P.«fb_state_fresh_tx» P.«fb_te_new» P.«wk_ext_code_of» P.«htab_new_spec» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new»
-  have «g_process_checked_system_transaction» := P.«gbody_process_checked_system_transaction» P.«fb_alloc» P.«fb_ext_code_of» «g_process_unchecked_system_transaction» P.«fb_state_fresh_tx» P.«wk_alloc» P.«rt_alloc» P.«wk_ext_code_of» P.«wk_state_fresh_tx»
+  have «g_process_checked_system_transaction» := «gbody_process_checked_system_transaction» P.«fb_alloc» P.«fb_ext_code_of» «g_process_unchecked_system_transaction» P.«fb_state_fresh_tx» P.«wk_alloc» P.«wk_ext_code_of» P.«wk_state_fresh_tx»
   have «g_process_general_purpose_requests» := P.«gbody_process_general_purpose_requests» P.«fb_alloc» P.«fb_extract_deposit_data» P.«fb_memcpy» P.«fb_memeq» «g_process_checked_system_transaction» P.«fb_requests_append» P.«wk_alloc» P.«rt_alloc» P.«wk_extract_deposit_data» P.«wk_memcpy» P.«ro_memeq» P.«wk_process_checked_system_transaction» P.«wk_requests_append»
   have «g_process_transaction» := P.«gbody_process_transaction» P.«fb_alloc» P.«fb_calculate_blob_gas_price» P.«fb_calculate_total_blob_gas» P.«fb_check_transaction» P.«fb_clear_account_preserving_balance» P.«fb_compute_contract_address» P.«fb_create_ether» P.«fb_encode_receipt» P.«fb_encode_transaction» P.«fb_fee_mul» P.«fb_frame_mem_release» P.«fb_get_account» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» «g_incorporate_tx_into_block» P.«fb_increment_nonce» P.«fb_keccak256» P.«fb_lst_new» P.«fb_lst_push» P.«fb_max» P.«fb_memcpy» P.«fb_min» P.«fb_msg_new» «g_process_message_call» P.«fb_recover_sender_with_chain_id» P.«fb_scratch_release» P.«fb_set_account_balance» P.«fb_state_fresh_tx» P.«fb_te_new» P.«fb_tx_chain_id» P.«fb_tx_has_access_list» P.«fb_tx_is_blob» P.«fb_tx_is_setcode» P.«fb_u256_sub» P.«fb_udiv_small5» P.«fb_validate_transaction» P.«wk_alloc» P.«rt_alloc» P.«wk_calculate_blob_gas_price» P.«ro_calculate_total_blob_gas» P.«wk_check_transaction» P.«wk_clear_account_preserving_balance» P.«wk_compute_contract_address» P.«wk_create_ether» P.«wk_encode_receipt» P.«wk_encode_transaction» P.«ro_fee_mul» P.«wk_get_account» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_increment_nonce» P.«wk_keccak256» P.«wk_lst_new» P.«rt_lst_new» P.«wk_lst_push» P.«ro_max» P.«wk_memcpy» P.«ro_min» P.«rv_min» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_recover_sender_with_chain_id» P.«wk_set_account_balance» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new» P.«ro_tx_chain_id» P.«ro_tx_has_access_list» P.«ro_tx_is_blob» P.«ro_tx_is_setcode» P.«ro_u256_sub» P.«ro_udiv_small5» P.«ro_validate_transaction» P.«rv_validate_transaction»
   have «g_process_withdrawals» := P.«gbody_process_withdrawals» P.«fb_create_ether» «g_incorporate_tx_into_block» P.«fb_state_fresh_tx» P.«fb_u256_mul» P.«wk_create_ether» P.«wk_state_fresh_tx» P.«ro_u256_mul»
@@ -11773,6 +11842,7 @@ theorem primitives : Primitives where
   «ek_state_restore» := «ek_state_restore»
   «gbody_finish_child» := «gbody_finish_child»
   «fb_sk_make» := «fb_sk_make»
+  «nz_htab_set» := «nz_htab_set»
   «wk_sk_make» := «wk_sk_make»
   «gbody_get_storage» := «gbody_get_storage»
   «fb_charge_gas» := «fb_charge_gas»
@@ -11924,7 +11994,6 @@ theorem primitives : Primitives where
   «wk_te_new» := «wk_te_new»
   «rt_te_new» := «rt_te_new»
   «gbody_process_unchecked_system_transaction» := «gbody_process_unchecked_system_transaction»
-  «gbody_process_checked_system_transaction» := «gbody_process_checked_system_transaction»
   «fb_extract_deposit_data» := «fb_extract_deposit_data»
   «fb_requests_append» := «fb_requests_append»
   «wk_extract_deposit_data» := «wk_extract_deposit_data»
