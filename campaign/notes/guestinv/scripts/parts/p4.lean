@@ -304,6 +304,10 @@ length `≤` capacity (`lst_upsert_idx` writes elements below the length). -/
 def LstOK {F : Type} (s : PanSemStateFiniteExact 64 F) (l : Nat) : Prop :=
   1 ≤ memW s (l + 16) ∧ memW s (l + 8) ≤ memW s (l + 16)
 
+/-- The live values of table `t` (the `+8` field of every live leaf). -/
+def htabValues {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : List Nat :=
+  (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
+
 /-- The live account records of the block access list (round-3 Gemini item 4): the values of the
 table `bal_accounts` (`bal_ensure_account` 13883-13917), 40-byte records with two tables (`+0`,
 `+8`, `htab_new(32, 8)`) and three lists of 40-, 16- and 24-byte elements (`+16`, `+24`, `+32`),
@@ -313,10 +317,17 @@ def balRecords {F : Type} (s : PanSemStateFiniteExact 64 F) : List Nat :=
   if t = 0 then [] else
     (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
 
+/-- The objects of the BAL account records: each 40-byte record, its three lists, and (revision 7,
+round-4 Gemini item 2) the per-slot storage lists, the live values `l` of the record's storage table
+`ad+0` (`add_storage_write` 13956: `lst_new(40, 2)`, written by `lst_upsert_idx(l, 40, idx)` and
+`bal_list_remove_idx`, sorted in place by `build_block_access_list_rlp`). Before, these lists were
+neither owned nor `LstOK`, so a value `l` inside `ws` or a typed table let `add_storage_write` write
+through it into the world. -/
 def balObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   (balRecords s).flatMap fun ad =>
     (ad, 40) :: lstObjects s (memW s (ad + 16)) 40 ++ lstObjects s (memW s (ad + 24)) 16 ++
-      lstObjects s (memW s (ad + 32)) 24
+      lstObjects s (memW s (ad + 32)) 24 ++
+      (htabValues s (memW s ad)).flatMap fun l => lstObjects s l 40
 
 /-- The fixed objects: every global buffer (empty while its global is still `0`), the journal
 array, the block-output objects (round-3 item 5) and the block-access-list account records with
@@ -341,7 +352,8 @@ def TablesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Pr
   (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ∈ S → HtabValuesIn s (memW s (globN s "bs" + 32)) S) ∧
   (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ∈ S → HtabValuesIn s (memW s (globN s "ts" + 32)) S) ∧
   (∀ ad ∈ balRecords s, memW s ad ∈ S ∧ memW s (ad + 8) ∈ S ∧
-    ∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
+    (∀ k ∈ [16, 24, 32], LstOK s (memW s (ad + k))) ∧
+    ∀ l ∈ htabValues s (memW s ad), LstOK s l) ∧
   (globN s "bo" ≠ 0 → ∀ k ∈ [40, 72], memW s (globN s "bo" + k) ≠ 0 → LstOK s (memW s (globN s "bo" + k)))
 
 /-- The journal: `journal_n ≤ journal_cap ≤ 2^19`, the array is allocated, and every record's
@@ -552,10 +564,6 @@ def RetWindowsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : 
     memW s ((ch[i]'(by omega)).2 + 80) = 0 ∨
       memW s ((ch[i]'(by omega)).2 + 72) + memW s ((ch[i]'(by omega)).2 + 80) ≤
         memW s (ch[i + 1].1 + 40)
-
-/-- The live values of table `t` (the `+8` field of every live leaf). -/
-def htabValues {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : List Nat :=
-  (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
 
 /-- The table slots `ks` of the global record `g` (none while `g = 0`). -/
 def recordSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (g : String) (ks : List Nat) :

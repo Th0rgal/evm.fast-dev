@@ -651,6 +651,7 @@ def costs(fns, graph, reach, recursive, loops):
 
 GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK',
            'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'BlockReady': 'WorldOK',
+           'InputReady': 'WorldOK',
            'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv', 'EvmRun': 'EvmInv',
            'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptObjReady': 'ArenaReady',
            'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
@@ -669,10 +670,12 @@ REGION = {
     'memcpy': [('dst', 'locN s "n"')], 'memzero': [('dst', 'locN s "n"')],
     'st_le64': [('p', '8')], 'u256_to_be32': [('out', '32')], 'u256_to_be_min': [('out', '32')],
     'keccak256': [('out', '32')], 'header_hash': [('out', '32')],
-    'rlp_encode_word': [('dst', '33')], 'rlp_encode_bytes': [('dst', 'locN s "n" + 9')],
+    'rlp_encode_word': [('dst', '9')], 'rlp_encode_bytes': [('dst', 'locN s "n" + 9')],
     'encode_account': [('out', '110')], 'logs_bloom': [('out', '256')],
     'compute_contract_address': [('out', '20')], 'recover_sender_with_chain_id': [('out20', '20')],
     'extract_deposit_data': [('out', '192')], 'htr_new_payload_request': [('out', '32')],
+    # revision 7: rlp_encode_word(dst, w) writes 1 + rlp_be_len(w) <= 9 bytes (AST 4795); the
+    # revision-6 extent 33 overran the 16-byte `mpt_key_scratch` of `build_mpt_indexed`
     'node_invalidate': [('nd', '32')], '_delete_ext_finish': [('node', '176')],
     '_insert_into_leaf': [('node', '176')],
     'lst_push': None,   # header and current backing array, below
@@ -714,6 +717,18 @@ EXTRA = {
     'mpt_nibble_key': ('nk_mpt_nibble_key', 'RetNibbles (ofString "mpt_nibble_key")',
                        'returns a fresh heap nibble array (value contract)', ('mpt_set',)),
 }
+UNFOLD_LEMMAS0 = ('sourceFunctionEntry, Guest.Software.guestFn_{F}, '
+                 'InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, '
+                 'InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, '
+                 'Option.map_none, Option.map_some, List.map_cons, List.map_nil')
+
+
+UNFOLD_LEMMAS = UNFOLD_LEMMAS0
+
 # guarded bodies proved by concrete composition (revision 4: shrinking the primitive list); the
 # placeholders {LOOKUP} and {UNFOLD} are filled per function
 WOK = 'LocalsOnly.of_localsFree localsFree_worldOK'
@@ -723,33 +738,47 @@ HANDLER_SHM = ('(TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_sh
 RET0 = '(TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))'
 
 
-def attempt_proof(f):
+# revision 7: the attempt chain runs under `InputReady` (`si`-dependent); a call passing `L:"si"` to
+# a callee whose only parameter is `si` keeps it (`callEntryOn_inputReady`, proved)
+IWOK = 'localsOnly_inputReady'
+ICALL = ('callEntryOn_inputReady «lookup_{C}»\n            (by simp only [%s,\n'
+         '              InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural])' %
+         UNFOLD_LEMMAS0.replace('{F}', '{C}'))
+
+
+def attempt_proof(f, callee):
     return """  intro h1
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by decide) _ _
       (TerminatingProgBoundedOn.seq_guestInv_after
-        (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _ %s _ (%s))
-        worldOK_guestInv %s)) ?_
+        (TerminatingProgBoundedOn.callHandle_on h1 inputReady_guestInv _ _ _ %s _
+          (%s))
+        inputReady_guestInv %s)) ?_
   unfold K.«%s»; omega
-""" % (WOK, HANDLER_SHM, CALLWOK, RET0, f)
+""" % (IWOK, HANDLER_SHM, ICALL.replace('{C}', callee), RET0, f)
 
 
-GBODY_PROOF = {'attempt_l%d' % k: attempt_proof('attempt_l%d' % k) for k in range(1, 8)}
+GBODY_PROOF = {'attempt_l%d' % k: attempt_proof('attempt_l%d' % k,
+                                                'run_attempt' if k == 1 else 'attempt_l%d' % (k - 1))
+               for k in range(1, 8)}
 GBODY_PROOF['verify_stateless_new_payload'] = """  intro h1
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
-      (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by decide) _ _
+      (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by decide) _ _
         (TerminatingProgBoundedOn.seq_guestInv_after
-          (TerminatingProgBoundedOn.callHandle_on h1 worldOK_guestInv _ _ _
+          (TerminatingProgBoundedOn.callHandle_on h1 inputReady_guestInv _ _ _
             (TerminatingProgBoundedOn.of_clock (seq_clock (fun s => clock_assign s _ _ _)
-              (fun s => clock_assign s _ _ _))) _ (%s))
-          worldOK_guestInv %s))) ?_
+              (fun s => clock_assign s _ _ _))) _
+            (%s))
+          inputReady_guestInv %s))) ?_
   unfold K.«verify_stateless_new_payload»; omega
-""" % (WOK, WOK, CALLWOK, RET0)
+""" % (IWOK, IWOK, ICALL.replace('{C}', 'attempt_l7'), RET0)
+# functions whose `lookup_` theorem is needed besides the proved ones (callees of proved bodies)
+LOOKUP_EXTRA = {'run_attempt'}
 GBODY_PROOF['incorporate_tx_into_block'] = """  intro hm hu
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
@@ -759,6 +788,7 @@ GBODY_PROOF['incorporate_tx_into_block'] = """  intro hm hu
       (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _) %s)) ?_
   unfold K.«incorporate_tx_into_block»; omega
 """ % (CALLWOK, RET0)
+ARENA = ('decode_witness_to_mpt', '_decode_witness_node', '_decode_witness_node_mpt', 'mpt_from_witness')
 GBODY_PROOF['mpt_from_witness'] = """  intro hd hn
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
@@ -813,7 +843,7 @@ GBODY_PROOF['get_pre_tx_storage'] = """  intro hrec hsl hws hk hro
     (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (%s) %s
       (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
         (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (%s))
-          (Hoare.call_keeps localsFree_worldOK hk _)
+          (Hoare.call_keeps localsFree_worldOK (WorldKeeps.keepsOn hk) _)
           (TerminatingProgBoundedOn.decCall_on hws _ _ _ (%s)
             (decCallResumeOn_guestInv worldOK_guestInv _ _ _) %s)))) ?_
   unfold K.«get_pre_tx_storage»; omega
@@ -827,7 +857,7 @@ GBODY_PROOF['get_storage_original'] = """  intro hhas hrec hsl hws hrh hk hrs
         (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (%s) %s
           (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
             (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (%s))
-              (Hoare.call_keeps localsFree_worldOK hk _)
+              (Hoare.call_keeps localsFree_worldOK (WorldKeeps.keepsOn hk) _)
               (TerminatingProgBoundedOn.decCall_on hws _ _ _ (%s)
                 (decCallResumeOn_guestInv worldOK_guestInv _ _ _) %s)))))) ?_
   unfold K.«get_storage_original»; omega
@@ -844,7 +874,8 @@ GBODY_PROOF['ws_storage_trie'] = """  intro hdw hget hset hro
             (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hset _ _)
               %s))))) ?_
   unfold K.«ws_storage_trie»; omega
-""" % (WOK, FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, RET0)
+""" % (WOK, FBE, ROR.replace('{H}', 'hro'), ITE_RET,
+       'callEntryOn_of_imp localsFree_arenaReady (fun s h => h.1) _ _', RET0)
 GBODY_PROOF['decode_witness_to_mpt'] = """  intro hdw hal hmc hme hmf hnl hrme hrmf hrnl
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
@@ -869,14 +900,11 @@ GBODY_PROOF['decode_witness_to_mpt'] = """  intro hdw hal hmc hme hmf hnl hrme h
   omega
 """ % (FBE, ROR.replace('{H}', 'hrme'), ITE_RET, FBE, ROR.replace('{H}', 'hrnl'), FBE, SKIP0, CALLWOK, SKIP0, RET0)
 
-UNFOLD_LEMMAS = ('sourceFunctionEntry, Guest.Software.guestFn_{F}, '
-                 'InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, '
-                 'InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, '
-                 'InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, '
-                 'InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, '
-                 'InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, '
-                 'InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, '
-                 'Option.map_none, Option.map_some, List.map_cons, List.map_nil')
+# revision 7: the witness decoders are guarded by `ArenaReady` (`state_init` calls them before the
+# world is typed); their revision-6 proofs carry over with the `ArenaReady` instances
+for _f in ARENA:
+    GBODY_PROOF[_f] = GBODY_PROOF[_f].replace('(fun s h => h.1)', '(fun s h => h)').replace(
+        'localsFree_worldOK', 'localsFree_arenaReady').replace('worldOK_guestInv', 'arenaReady_guestInv')
 
 
 def ast_index(path, fname):
@@ -888,14 +916,62 @@ def ast_index(path, fname):
     raise KeyError(fname)
 
 
-# KeepsOn preconditions other than the caller's world guard
+# Preconditions of the relational contracts other than the caller's world guard (revision 7: the
+# output buffers of `compute_state_root`/`build_mpt_indexed`/`mpt_root` are the region `R` of the
+# step, whose avoidance is a hypothesis of `WorldStep`, so their revision-6 `WorldAvoids` pre went)
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
-    'mpt_root': 'MptObjAvoids (fun s => [(locN s "out", 32)])',
-    'compute_state_root': 'WorldAvoids (fun s => [(locN s "out", 32)])',
-    'build_mpt_indexed': 'WorldAvoids (fun s => [(locN s "out", 32)])',
-    'mpt_set': 'MptObjReady',
+    'lst_push': 'BoListArg',
 }
+# revision 7: output regions of world-tier callees that write a caller object outside the world
+# (besides the `REGION` parameter extents): the message record, the output buffers
+RREG = {
+    'process_message_call': [('msg', '176')],
+    'compute_state_root': [('out', '32')], 'build_mpt_indexed': [('out', '32')],
+    'mpt_root': [('out', '32')],
+}
+# world-tier callees whose written list is a world object (`lst_push(bo+40|bo+72, 8)`): no region
+NO_REGION = {'lst_push'}
+# trie-object callees (`MptKeeps`: the object `m` and its nodes are carried)
+MPT_KEEPS = {'mpt_set', 'mpt_root'}
+# callee-specific extras of `WorldStep` (stated for the exit typing `S'`)
+WQ = {'requests_append': 'ReqCountInc', 'mpt_from_witness': 'RetMptObj',
+      'decode_host_input': 'RetInput'}
+# revision 7 (round-4 Gemini item 1(c)): return typing of the constructors whose results feed
+# guards, and value contracts the walks need; one leaf per callee, at every needed call site
+RT = {
+    'alloc': ('Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))',
+              'returns a fresh aligned heap block of `n` bytes'),
+    'msg_new': ('Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧\n'
+                '      ∀ k, k < 22 → memW post (m + 8 * k) = 0)',
+                'returns a fresh zeroed 176-byte message record (`alloc(176)`, `memzero`)'),
+    'te_new': ('Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧\n'
+               '      ∀ k, k < 25 → memW post (m + 8 * k) = 0)',
+               'returns a fresh zeroed 200-byte transaction environment'),
+    'lst_new': ('Returns ArenaReady (fun s post l =>\n'
+                '      locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →\n'
+                '        FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧\n'
+                '        Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧\n'
+                '        memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")',
+                'returns a fresh empty list (`LstOK`): header and backing array fresh and disjoint'),
+    'mpt_new': ('Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧\n'
+                '      memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")',
+                'returns a fresh 16-byte trie object with root `root_node`'),
+    'htab_copy': ('Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧\n'
+                  '      (HtabWF s (locN s "t") → HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧\n'
+                  '        ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))',
+                  'a normal return copied a nonzero table (`load(t + 80)` errors at `0`); a copy of a '
+                  'well-formed table is a fresh well-formed table'),
+}
+XV = {
+    'memzero': ('zv_memzero', 'ZeroFills (ofString "memzero")',
+                'zero-fills `[dst, dst + n)` (value contract)'),
+    'validate_transaction': ('rv_validate_transaction', 'RetIntrinsic (ofString "validate_transaction")',
+                             'returns an intrinsic cost with regular part at most `2^24` (value contract, '
+                             'checks 12667)'),
+    'min': ('rv_min', 'RetLe (fun s => locN s "a") (ofString "min")', 'returns at most `a` (value contract)'),
+}
+XV_AT = {'memzero': None, 'validate_transaction': ('process_transaction',), 'min': ('process_transaction',)}
 
 
 def needed_calls(fns, f, guarded, root_loop):
@@ -1105,6 +1181,92 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
     need = {f: needed_calls(fns, f, guarded, f in roots) for f in guarded}
     contracts = {}   # name -> (statement, comment)
     hyps = {}        # f -> list of (type, primitive-or-local name)
+    seen_st = {}
+    full = {}
+
+    def full_closure(g):
+        """Every function reachable from `g` (contracted callees included)."""
+        if g not in full:
+            seen, st = set(), [g]
+            while st:
+                x = st.pop()
+                if x in seen or x not in fns:
+                    continue
+                seen.add(x)
+                st.extend(graph[x])
+            full[g] = seen
+        return full[g]
+    rec_size = {'ws': 40, 'bs': 80, 'ts': 72, 'bo': 88}
+
+    def rec_offsets(e, decs, depth=0):
+        """{record: set of offsets or 'ALL'} for an address expression, ignoring loaded parts."""
+        out = {}
+        if depth > 8 or not isinstance(e, tuple):
+            return out
+        if is_app(e) and e[1] in ('Exp.load', 'Exp.loadByte', 'Exp.shMemLoad'):
+            return out
+        v = var_name(e)
+        if v and v[0] == 'global' and v[1] in rec_size:
+            return {v[1]: {0}}
+        if v and v[0] == 'local' and v[1] in decs:
+            r = {}
+            for d in decs[v[1]]:
+                for k, o in rec_offsets(d, decs, depth + 1).items():
+                    r[k] = 'ALL' if (r.get(k) == 'ALL' or o == 'ALL' or (k in r and r[k] != o)) else o
+            return r
+        if is_app(e, 'Exp.op') and panast.show(e[2][0]) == 'add':
+            terms = e[2][1][1]
+            subs = [rec_offsets(x, decs, depth + 1) for x in terms]
+            consts = [const_value(x) for x in terms]
+            for i, sub in enumerate(subs):
+                for k, o in sub.items():
+                    others = [c for j, c in enumerate(consts) if j != i]
+                    if o == 'ALL' or any(c is None for c in others):
+                        out[k] = 'ALL'
+                    else:
+                        out[k] = 'ALL' if out.get(k) == 'ALL' else (out.get(k, set()) | {x + sum(others) for x in o})
+            return out
+        for x in (e[2] if is_app(e) else e[1] if e[0] in ('tup', 'list') else []):
+            for k, o in rec_offsets(x, decs, depth + 1).items():
+                out[k] = 'ALL'
+        return out
+
+    def rec_written(g):
+        """Offsets of the typed records `ws`, `bs`, `ts`, `bo` that `g`'s closure may store to."""
+        res = {}
+        for x in full_closure(g):
+            decs = {}
+
+            def d(y, _c):
+                if is_app(y, 'Prog.dec'):
+                    decs.setdefault(strval(y[2][0]), []).append(y[2][2])
+                elif is_app(y, 'Prog.assign') and panast.show(y[2][0]) == 'local':
+                    decs.setdefault(y[2][1][1], []).append(y[2][2])
+            panast.walk(fns[x], d)
+            hits = []
+            for a in stores(fns[x]):
+                hits.append((a, False))
+            for cg, args in calls_of(fns[x]):
+                for i, pn in enumerate(par.get(cg, [])):
+                    if pn in wp.get(cg, ()) and i < len(args):
+                        hits.append((args[i], True))
+            for a, whole in hits:
+                for k, o in rec_offsets(a, decs).items():
+                    if whole or o == 'ALL' or res.get(k) == 'ALL':
+                        res[k] = 'ALL'
+                    else:
+                        res[k] = res.get(k, set()) | o
+        return res
+
+    def keep_lean(g):
+        w = rec_written(g)
+        items = []
+        for r in ('ws', 'bs', 'ts', 'bo'):
+            if w.get(r) == 'ALL':
+                continue
+            ks = [k for k in range(0, rec_size[r], 8) if k not in w.get(r, set())]
+            items.append('("%s", [%s])' % (r, ', '.join(str(k) for k in ks)))
+        return '[%s]' % ', '.join(items)
     for f in order:
         if f not in guarded:
             continue
@@ -1136,7 +1298,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             elif (f, g) in CALL_STMT:
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
-            elif (g in REGION or fresh_only(g)) and not (g in guarded):
+            elif W == 'ArenaReady' and (g in REGION or fresh_only(g)) and not (g in guarded):
                 name = 'ww_' + g
                 if g not in REGION:
                     parts = ''
@@ -1151,29 +1313,64 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                     parts, ', '.join('"%s"' % x for x in gws), g),
                     ('writes its parameter extents' if g in REGION else 'writes only memory it allocates')
                     + (' and the buffers ' + ', '.join(bw) if bw else ''))
+            elif W == 'ArenaReady':
+                name = 'ak_' + g
+                contracts[name] = ('KeepsOn ArenaReady ArenaReady (ofString "%s")' % g, 'keeps `ArenaReady`')
             else:
+                # revision 7 (round-4 Gemini item 1): relational contracts in the world and EVM tiers
                 Wc = CALL_W.get((f, g), W)
-                name = '%s_%s' % (W_PREFIX[Wc], g)
-                W, W0 = Wc, W
-                if (f, g) in CALL_PRE:
-                    pre = CALL_PRE[(f, g)]
-                elif g in KEEP_PRE and W == 'WorldOK':
-                    pre = KEEP_PRE[g]
-                elif g in guarded and W == 'EvmInv' and G(g) == 'WorldOK':
-                    pre = 'EvmInv'   # `worldOK_of_evmInv` (revision 5: `op_sstore`)
-                elif g in guarded and GUARD_W[G(g)] == W and G(g) != W:
-                    pre = G(g)
-                elif g in guarded and G(g) != W:
-                    pre = 'fun s => %s s ∧ %s s' % (W, G(g))
+                gws = '[%s]' % ', '.join('"%s"' % x for x in sorted(gwf(g)))
+                regs = [] if g in NO_REGION else (
+                    [('locN s "%s"' % pn, ln) for pn, ln in (REGION.get(g) or [])] +
+                    [('locN s "%s"' % pn, ln) for pn, ln in RREG.get(g, [])])
+                R = 'fun s => [%s]' % ', '.join('(%s, %s)' % r for r in regs) if regs else 'fun _ => []'
+                if Wc == 'EvmInv':
+                    name = 'ek_' + g
+                    if (f, g) in CALL_PRE:
+                        pre = CALL_PRE[(f, g)]
+                    elif regs:
+                        pre = 'EvmAvoids (%s)' % R
+                    else:
+                        pre = 'EvmInv'
+                    pre_s = pre if pre.isidentifier() else '(%s)' % pre
+                    contracts[name] = ('EvmKeeps %s\n    %s (ofString "%s")' % (pre_s, gws, g),
+                                       'EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the '
+                                       'frame chain kept')
+                elif g in MPT_KEEPS:
+                    name = 'mk_' + g
+                    contracts[name] = ('MptKeeps (%s) %s\n    %s (ofString "%s")' % (
+                        R, gws, keep_lean(g), g),
+                        'trie-object step: the object `m` stays typed in the grown world')
                 else:
-                    pre = W
-                pre_s = pre if pre.isidentifier() else '(%s)' % pre
-                contracts[name] = ('KeepsOn %s %s (ofString "%s")' % (pre_s, W, g),
-                                   'keeps `%s`' % W)
-                W = W0
+                    name = 'wk_' + g
+                    if (f, g) in CALL_PRE:
+                        pre = CALL_PRE[(f, g)]
+                    elif g in KEEP_PRE:
+                        pre = KEEP_PRE[g]
+                    elif g in guarded and GUARD_W[G(g)] == 'WorldOK':
+                        pre = G(g)
+                    else:
+                        pre = 'WorldOK'
+                    pre_s = pre if pre.isidentifier() else '(%s)' % pre
+                    contracts[name] = ('WorldKeeps %s (%s)\n    %s\n    %s\n    %s (ofString "%s")' % (
+                        pre_s, R, gws, keep_lean(g), WQ.get(g, 'NoExtra'), g),
+                        'relational world step' + (
+                            ' with output region' if regs else '') + (
+                            ' and extra `%s`' % WQ[g] if g in WQ else ''))
+            if name in seen_st:
+                assert seen_st[name] == contracts[name][0], name
+            seen_st[name] = contracts[name][0]
             hs.append((contracts[name][0], name))
             if g in EXTRA and f in EXTRA[g][3]:
                 xn, xst, xwhy, _fs = EXTRA[g]
+                contracts[xn] = (xst, xwhy)
+                hs.append((xst, xn))
+            if g in RT and f not in GBODY_PROOF:
+                rst = '%s\n    (ofString "%s")' % (RT[g][0], g)
+                contracts['rt_' + g] = (rst, RT[g][1])
+                hs.append((rst, 'rt_' + g))
+            if g in XV and (XV_AT[g] is None or f in XV_AT[g]) and f not in GBODY_PROOF:
+                xn, xst, xwhy = XV[g]
                 contracts[xn] = (xst, xwhy)
                 hs.append((xst, xn))
         hyps[f] = hs
@@ -1225,12 +1422,13 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                     'theorem «callees_%s» : sameNames (progCallees (fnBody Guest.Software.guestFn_%s))\n'
                     '    [%s] = true := by decide\n\n' % (
                         f, f, f, ', '.join('"%s"' % g for g in direct)))
-            if f in GBODY_PROOF:
+            if f in GBODY_PROOF or f in LOOKUP_EXTRA:
                 idx = ast_index(path, f)
                 o.write('theorem «lookup_%s» : originalRuntimeCode.lookup (ofString "%s") =\n'
                         '    some ((sourceFunctionEntry Guest.Software.guestFn_%s).2) :=\n'
                         '  originalRuntimeCode_lookup_of_guestAst_getElem %d (by rw [guestAst_len]; decide)\n'
                         '    (extractFn Guest.Software.guestFn_%s) rfl\n\n' % (f, f, f, idx, f))
+            if f in GBODY_PROOF:
                 o.write('/-- PROVED by concrete-body composition (no longer a primitive). -/\n'
                         'theorem «gbody_%s» : GBody.«%s» := by\n' % (f, f))
                 o.write(GBODY_PROOF[f].replace('{LOOKUP}', '«lookup_%s»' % f).replace(
@@ -1319,7 +1517,15 @@ def main():
         'process_create_message': 'MsgReady',
         # revision 5 (round-4 Fable item 1 and non-blocking item)
         'op_dispatch': 'EvmRun', 'op_sload': 'EvmRun', 'op_sstore': 'EvmRun',
-        'execute_block': 'BlockReady'}
+        'execute_block': 'BlockReady',
+        # revision 7: the witness decoders run inside `state_init` after `ws := alloc(40)` and
+        # before `ws+24`/`ws+32` are stored, where `WorldOK` does not hold; their bodies only
+        # need separated arenas (the revision-6 proofs used `WorldOK` only to reach `ArenaReady`)
+        'decode_witness_to_mpt': 'ArenaReady', '_decode_witness_node': 'ArenaReady',
+        '_decode_witness_node_mpt': 'ArenaReady', 'mpt_from_witness': 'ArenaReady',
+        # revision 7: the input cells `run_attempt` reads `ntx` through are outside the world
+        'verify_stateless_new_payload': 'InputReady', 'run_attempt': 'InputReady'}
+    guard_of.update({'attempt_l%d' % k: 'InputReady' for k in range(1, 8)})
     nloops = sum(len(v) for f, v in loops.items())
     with open(os.path.join(outdir, 'coverage.md'), 'w') as o:
         o.write('functions: %d, reachable from main: %d, loops in reachable: %d, recursive: %s\n\n'
