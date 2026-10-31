@@ -690,6 +690,30 @@ CALL_PRE = {('process_message', 'depth0_prepare'): 'EvmMsgReady'}
 NODE_FN = {'_insert_into_leaf': ['node'], '_split_extension': ['node'], '_collapse_branch': ['node'],
            '_delete_ext_finish': ['node', 'nc'], 'node_new_ext': ['child'], 'node_new_leaf': [],
            'node_invalidate': ['nd']}
+# revision 6 (round-4 Astra items 5 and 6): each node function's own requirement `req s Nd`, read
+# off its body (DESIGN.md §6 "NodeFn requirements"): the kinds of the nodes it reads/writes at fixed
+# offsets, the nibble arrays it indexes a branch by or copies into a new node's path, and the
+# bounds that keep those indices inside the arrays
+NODE_REQ = {
+    'node_new_leaf': 'KeyIn s Nd (locN s "nib") (locN s "nlen")',
+    'node_new_ext': 'KeyIn s Nd (locN s "nib") (locN s "nlen")',
+    'node_invalidate': 'True',
+    '_insert_into_leaf': 'NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl")',
+    '_split_extension': ('NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧\n'
+                         '      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"'),
+    '_collapse_branch': 'NodeKind s Nd "node" 3',
+    '_delete_ext_finish': 'NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl")',
+}
+# revision 6: value contracts the MPT compositions need besides the uniform shapes (one extra
+# leaf per callee, at the listed call sites)
+EXTRA = {
+    'common_prefix_length': ('rv_common_prefix_length',
+                             'RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")',
+                             'returns at most `min(al, bl)` (value contract)',
+                             ('_mpt_insert_node', '_mpt_delete_node_body')),
+    'mpt_nibble_key': ('nk_mpt_nibble_key', 'RetNibbles (ofString "mpt_nibble_key")',
+                       'returns a fresh heap nibble array (value contract)', ('mpt_set',)),
+}
 # guarded bodies proved by concrete composition (revision 4: shrinking the primitive list); the
 # placeholders {LOOKUP} and {UNFOLD} are filled per function
 WOK = 'LocalsOnly.of_localsFree localsFree_worldOK'
@@ -1033,9 +1057,12 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 contracts[name] = ('ReadOnlyFn (ofString "%s")' % g, 'read-only')
             elif G(f) in ('MptReady', 'MptObjReady') and g in NODE_FN:
                 name = 'nf_' + g
-                contracts[name] = ('NodeFn [%s] (ofString "%s")' % (
-                    ', '.join('"%s"' % n for n in NODE_FN[g]), g),
-                    'typed nodes in, typed nodes out (MPT tier)')
+                req = NODE_REQ[g]
+                req_s = 'fun _ _ => True' if req == 'True' else 'fun s Nd =>\n      ' + req
+                contracts[name] = ('NodeFn [%s]\n    (%s)\n    (ofString "%s")' % (
+                    ', '.join('"%s"' % n for n in NODE_FN[g]), req_s, g),
+                    'typed nodes in, typed nodes out (MPT tier); requirement: %s' % (
+                        'none' if req == 'True' else '`' + ' '.join(req.split()) + '`'))
             elif (f, g) in CALL_STMT:
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
@@ -1075,6 +1102,10 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                                    'keeps `%s`' % W)
                 W = W0
             hs.append((contracts[name][0], name))
+            if g in EXTRA and f in EXTRA[g][3]:
+                xn, xst, xwhy, _fs = EXTRA[g]
+                contracts[xn] = (xst, xwhy)
+                hs.append((xst, xn))
         hyps[f] = hs
     with open(os.path.join(outdir, 'gleaves.lean'), 'w') as o:
         o.write('/-! #### Callee contracts (generated; one leaf per callee and world guard) -/\n\n')
@@ -1087,18 +1118,43 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 '`GBody.«f»`: from the bounds of `f`\'s direct callees and the contracts of the callees at\n'
                 'its guard-carrying call sites, `f`\'s body is bounded under its guard. `gbody_f` is the\n'
                 'primitive; `gb_f` is PROVED from it. -/\n\n')
+        table = []
         for f in order:
             if f not in guarded:
                 continue
             g0 = G(f)
             ls = loops[f]
             note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
-            o.write('/-- `%s` (AST line %d, guard `%s`): %s; %d callees, %d guard-carrying. -/\n'
-                    'def GBody.«%s» : Prop :=\n' % (f, line_of[f], g0, note, len(graph[f] & reach),
-                                                   len(need[f]), f))
+            direct = sorted(graph[f] & reach)
+            # revision 6 (round-4 Astra item 8): every hypothesis names a direct callee of f, and
+            # every direct callee has its bound among the hypotheses
+            named = [re.findall(r'ofString "([^"]+)"', t) for t, _n in hyps[f]]
+            spec_callee = {sp: g for g, sps in SPEC_OF.items() for sp in sps}
+            for (t, n), ns in zip(hyps[f], named):
+                if n in spec_callee:
+                    ns = [spec_callee[n]]
+                assert len(set(ns)) == 1 and ns[0] in direct, (f, n, ns)
+            bounds = [n for _t, n in hyps[f] if n.startswith(('fb_', 'gb_'))]
+            assert sorted(b[3:] for b in bounds) == direct, f
+            cons = [(n, t) for t, n in hyps[f] if not n.startswith(('fb_', 'gb_'))]
+            table.append((f, line_of[f], g0, note, direct, bounds, [n for n, _t in cons],
+                          f in GBODY_PROOF))
+            o.write('/-- The body of `%s` alone (AST line %d, guard `%s`, %s). Its direct callees are\n'
+                    'exactly %s (`«callees_%s»`, checked against the AST). Hypotheses: the bound\n'
+                    'of each of these %d callees, then the contract of each callee at a guard-carrying\n'
+                    'call site (%d: %s). Nothing else is assumed. -/\n'
+                    'def GBody.«%s» : Prop :=\n' % (
+                        f, line_of[f], g0, note,
+                        ', '.join('`%s`' % g for g in direct) if direct else 'none', f,
+                        len(direct), len(cons),
+                        ', '.join('`%s`' % n for n, _t in cons) if cons else 'none', f))
             for t, _n in hyps[f]:
                 o.write('  (%s) →\n' % t)
             o.write('  TerminatingFunBoundedOn %s (ofString "%s") K.«%s»\n\n' % (g0, f, f))
+            o.write('/-- The direct callees of `%s`, read off its AST body (revision 6). -/\n'
+                    'theorem «callees_%s» : sameNames (progCallees (fnBody Guest.Software.guestFn_%s))\n'
+                    '    [%s] = true := by decide\n\n' % (
+                        f, f, f, ', '.join('"%s"' % g for g in direct)))
             if f in GBODY_PROOF:
                 idx = ast_index(path, f)
                 o.write('theorem «lookup_%s» : originalRuntimeCode.lookup (ofString "%s") =\n'
@@ -1152,6 +1208,14 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
         for n, _t in prims:
             o.write('  «%s» := «%s»\n' % (n, n))
         o.write('\n')
+    with open(os.path.join(outdir, 'gbody.md'), 'w') as o:
+        o.write('| `gbody_*` (function) | guard | loops | direct callees = bound hypotheses | '
+                'contract hypotheses | status |\n|---|---|---|---|---|---|\n')
+        for f, ln, g0, note, direct, bounds, cons, proved in table:
+            o.write('| `%s` (AST %d) | `%s` | %s | %d: %s | %d: %s | %s |\n' % (
+                f, ln, g0, note, len(direct), ', '.join(direct) if direct else '—',
+                len(cons), ', '.join('`%s`' % c for c in cons) if cons else '—',
+                '**proved**' if proved else 'primitive'))
     with open(os.path.join(outdir, 'contracts.txt'), 'w') as o:
         for f in sorted(guarded):
             o.write('%s [%s]: %s\n' % (f, G(f), ' '.join(need[f])))

@@ -79,33 +79,47 @@ theorem htab_new_scratch_spec :
 
 /-! ### MPT update contracts (`_mpt_insert_node`, `_mpt_delete_node_body`) -/
 
-/-- Entry of the two MPT update functions: separated arenas and a typed trie below the `node`
-parameter. -/
+/-- Entry of the two MPT update functions `_mpt_insert_node`/`_mpt_delete_node(_body)(node, key,
+klen, level, …)`: separated arenas and a typed trie below the `node` parameter. Revision 6
+(round-4 Astra item 5): `level ≤ klen` and the unread key `(key + level, klen − level)` is a
+nibble array next to the trie (`KeyIn`: nibbles, allocated heap, disjoint from every node record).
+Both loops read `loadByte(key + level)` as a branch index and store through `node + 32 + 8·idx`
+(insert) or push it into a scratch frame that later stores `fnode + 32 + 8·idx` (delete). A key
+byte `18` indexed `n + 176`, past the 176-byte branch. `level` grows by `1` at a branch (only when
+`level ≠ klen`) and by an extension's path length when `common_prefix_length` matched all of it
+(`≤ klen − level`), so `level ≤ klen` and the key's suffix are loop invariants; the writes go to
+node records, fresh heap and the free scratch gap, which `KeyIn` keeps away from the key. -/
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
+  fun s => ArenaReady s ∧ locN s "level" ≤ locN s "klen" ∧ ∃ Nd, NodeHeap s Nd ∧
+    RootIn Nd (locN s "node") ∧
+    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level")
 
 /-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
 relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
 every node of `Nd` are disjoint from every table footprint of `S` and every fixed object, as
 `TriesTyped` requires of the world tries. `mpt_set` stores `m+0` (10886) and rewrites node records;
 `mpt_root` stores hash pointers into the node caches (`+8/+16`). A node at `nodes + 8` of a table
-in `S` made `mpt_root` overwrite that table's root. -/
+in `S` made `mpt_root` overwrite that table's root. Revision 6: the node paths too
+(`nodeExtents`, round-4 Astra item 5), and `m` avoids the persistent tries (`AvoidsTries`, item
+2: `mpt_set`'s store `m+0` must not hit a world node). -/
 def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
   (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "m", 16) i) ∧
   (∀ j ∈ fixedObjects s, Disj (locN s "m", 16) j) ∧
   ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
-    ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16) ∧
-      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (nodeIvl s n) i) ∧
-      ∀ j ∈ fixedObjects s, Disj (nodeIvl s n) j
+    ∀ o ∈ nodeExtents s Nd, Disj o (locN s "m", 16) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧
+      ∀ j ∈ fixedObjects s, Disj o j
 
 /-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
 `R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
-buffer, as in `WorldAvoids`). -/
+buffer, as in `WorldAvoids`). Revision 6 (round-4 Astra item 2): the object `m` and the regions
+avoid the persistent tries (`AvoidsTries`, same `S`). -/
 def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ ∀ i ∈ R s,
-    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ (∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
+    AvoidsTries s S ((locN s "m", 16) :: R s)
 
 /-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
 revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
@@ -200,11 +214,23 @@ def EvmRun : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 def FinishReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => EvmInv s ∧ EvmDone s ∧ memW s (globN s "cur_cont" + 16) ≠ 0
 
-/-- `rollback_child_access(child)`: the child's two access tables are typed. -/
+/-- `rollback_child_access(child)`: the child's two access tables are typed. Revision 6 (found
+while auditing the `gbody_*` hypotheses, round-4 Astra item 8): the body truncates `child+168`,
+then RELOADS `child+176` and `child+272` and truncates that table, so its composition needs the
+child record outside both footprints, allocated words, and the two tables equal or with disjoint
+footprints (`htab_truncate_spec` frames only the first table's footprint). `finish_child` calls it
+after `ev := parent`, from facts it read off `EvmInv` while `child` was the current frame (record
+and tables of a chain frame: `FrameWF`, frame objects disjoint from table footprints, tables of `S`
+pairwise disjoint). -/
 def RollbackReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∀ k ∈ [168, 176],
-    HtabWF s (memW s (locN s "child" + k)) ∧
-    ∀ i ∈ htabFootprint s (memW s (locN s "child" + k)), Allocated s i
+  fun s => ArenaReady s ∧ Allocated s (locN s "child", 280) ∧ WordsOK s (locN s "child", 280) ∧
+    (∀ k ∈ [168, 176],
+      HtabWF s (memW s (locN s "child" + k)) ∧
+      ∀ i ∈ htabFootprint s (memW s (locN s "child" + k)), Allocated s i ∧
+        Disj (locN s "child", 280) i) ∧
+    (memW s (locN s "child" + 168) = memW s (locN s "child" + 176) ∨
+      ∀ i ∈ htabFootprint s (memW s (locN s "child" + 168)),
+        ∀ j ∈ htabFootprint s (memW s (locN s "child" + 176)), Disj i j)
 
 /-! ### Every guard reads at most one local (`dec_onLocals`, round-2 item 3) -/
 
@@ -305,11 +331,14 @@ theorem localsOnly_unionArgWF : LocalsOnly ["dst"] UnionArgWF := by
   rw [ht]
   exact hP
 
-theorem localsOnly_mptReady : LocalsOnly ["node"] MptReady := by
+theorem localsOnly_mptReady : LocalsOnly ["node", "key", "klen", "level"] MptReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
+  have hk := locN_congr s locals k "key" (hl "key" (by simp))
+  have hn := locN_congr s locals k "klen" (hl "klen" (by simp))
+  have hv := locN_congr s locals k "level" (hl "level" (by simp))
   simp only [MptReady, arenaReady_with_locals] at hP ⊢
-  rw [ht]
+  rw [ht, hk, hn, hv]
   exact hP
 
 theorem localsOnly_mptObjReady : LocalsOnly ["m"] MptObjReady := by
@@ -381,11 +410,14 @@ def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) 
     ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     fname
 
-/-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object. -/
+/-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object and
+(revision 6, round-4 Astra item 2) from the persistent tries (`AvoidsTries`, same `S`): the output
+buffers of `compute_state_root`/`build_mpt_indexed` must not overwrite a trie node or path. -/
 def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ ∀ i ∈ R s,
-    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ (∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
+    AvoidsTries s S (R s)
 
 /-- `process_transaction(tx, index)` writes the receipt slots `bo+24`/`bo+32` at `16·index`
 (33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop). -/
@@ -418,13 +450,16 @@ the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller 
 32899-32902). Round-3 Gemini item 3: the 176-byte message record (`msg_new`) is owned, so the stores
 `depth0_prepare`/`prepare_dispatch` make through it (`msg+48`, `+104`, `+112`, `+120`, `+168`)
 cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` after
-`validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`. -/
+`validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`.
+Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
+every caller passes a fresh `msg_new` block. -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
     Allocated s (locN s "msg", 176) ∧ WordsOK s (locN s "msg", 176) ∧
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
+    AvoidsTries s S [(locN s "msg", 176)] ∧
     memW s (locN s "msg" + 40) < 2 ^ 63
 
 /-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
@@ -461,6 +496,7 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
+    AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
@@ -468,12 +504,14 @@ theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
     EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
 
 /-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
-from every table footprint of `S`, every fixed object and every frame block of the chain. -/
+from every table footprint of `S`, every fixed object, every frame block of the chain and
+(revision 6, round-4 Astra item 2) the persistent tries. -/
 def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
   Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
   (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
   (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
-  ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o
+  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
+  AvoidsTries s S [(m, 176)]
 
 /-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
 and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
@@ -494,21 +532,38 @@ theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
     evmChain_with_locals] at h ⊢
   exact h
 
-/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
-parameters are rooted in a typed node heap. -/
-def NodeArgs (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ ∀ n ∈ names, RootIn Nd (locN s n)
+/-- The node parameter `x` is a node of `Nd` of kind `k` (revision 6, round-4 Astra item 6). -/
+def NodeKind {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (x : String) (k : Nat) :
+    Prop :=
+  locN s x ∈ Nd ∧ memW s (locN s x) = k
 
-/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set rooting the node parameters
-extends to a typed node set of the post-state; memory changes only inside those node records and
-the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
+/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, the listed node
+parameters are rooted in a typed node heap `Nd`, and the function's own requirement `req s Nd`
+(revision 6, round-4 Astra items 5 and 6): the node kinds it reads and writes (`NodeKind`), and
+the nibble arrays it indexes or copies into a node path (`KeyIn`). -/
+def NodeArgs (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ (∀ n ∈ names, RootIn Nd (locN s n)) ∧ req s Nd
+
+/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set satisfying the entry extends to a
+typed node set of the post-state; memory changes only inside those node records, the free scratch
+gap and the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
 `_mpt_delete_node_body` need to re-establish `MptReady` at their loop heads). The node functions
-write no global buffer (checked on their closures). -/
-def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+write no global buffer (checked on their closures). Revision 6: the old nodes keep their kinds and
+every new node of `Nd'` is a fresh heap record (all seven functions write node fields `+8` and
+beyond, and build nodes only with `alloc`). The callers' loop invariants need both: a saved
+extension stays an extension until `_delete_ext_finish`, and a key or saved path stays disjoint
+from the grown node set. -/
+def NodeFnExit (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
-    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) →
+    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) → req s Nd →
       ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
+        (∀ n ∈ Nd, memW post n = memW s n) ∧
+        (∀ n ∈ Nd', n ∈ Nd ∨ Inside (nodeIvl post n) (globN s "heap_ptr") (globN post "heap_ptr")) ∧
         FrameOutside s post
           ((Nd.map fun n => nodeIvl s n) ++
             [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
@@ -517,8 +572,29 @@ def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64
           s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
         ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
 
-def NodeFn (names : List String) (fname : MlS) : Prop :=
-  FunSpec (NodeArgs names) (NodeFnExit names) fname
+/-- `NodeFn names req g`: from a typed node heap rooting `names` and meeting `g`'s requirement
+`req` (node kinds, key arrays; DESIGN.md §6 "NodeFn requirements"), `g` ends in a typed node heap. -/
+def NodeFn (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) (fname : MlS) : Prop :=
+  FunSpec (NodeArgs names req) (NodeFnExit names req) fname
+
+/-- Value contract (revision 6): a normal return is a word at most `B` of the entry state.
+`common_prefix_length(a, al, b, bl)` returns `i < min(al, bl)` or `min(al, bl)` (AST 10512); the
+MPT loops need `pl ≤ sl` and `pl ≤ klen − level` to keep `level ≤ klen` and to meet
+`_split_extension`'s requirement `pl < sl`. -/
+def RetLe (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat ≤ B s) fname
+
+/-- Value contract (revision 6): a normal return is a pair `(p, l)` of a nibble array allocated
+fresh on the heap during the call. `mpt_nibble_key` (AST 10470) returns `alloc(64)` filled by
+`key_to_nibbles` from the 32-byte hash, or `alloc(2·klen)` filled from the key: the key
+`_mpt_insert_node`/`_mpt_delete_node` receive from `mpt_set` (`MptReady`'s `KeyIn`). -/
+def RetNibbles (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ p l : BitVec 64, v = .rStruct [.val (.word p), .val (.word l)] ∧
+      NibblesOK post p.toNat l.toNat ∧
+      Inside (p.toNat, l.toNat) (globN s "heap_ptr") (globN post "heap_ptr")) fname
 
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -1707,3 +1783,28 @@ theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     rw [hro]; rfl
   rw [heq]
   exact hP.setVar hname value _ (hP state state.locals post.clock (fun _ _ => rfl) hPs)
+
+/-! ### Direct callees, read off the AST (revision 6, round-4 Astra item 8)
+
+Each `GBody.«f»` below is an obligation about the body of the single function `f`. Its
+hypotheses are the bound of each direct callee of `f` and the contract of each callee at a
+guard-carrying call site; `«callees_f»` checks, by `decide` on the literal AST, that the direct
+callees of `f` are exactly the functions whose bounds are listed. -/
+
+/-- Every function named by a `call` or `decCall` in a body (exception handlers included). -/
+def progCallees : Prog (BitVec 64) → List String
+  | .dec _ _ _ b => progCallees b
+  | .seq a b => progCallees a ++ progCallees b
+  | .ite _ a b => progCallees a ++ progCallees b
+  | .while _ b => progCallees b
+  | .call (some (_, some (_, _, h))) g _ => g :: progCallees h
+  | .call _ g _ => [g]
+  | .decCall _ _ g _ b => g :: progCallees b
+  | _ => []
+
+def fnBody : Decl (BitVec 64) → Prog (BitVec 64)
+  | .function fd => fd.body
+  | _ => .skip
+
+/-- The two lists name the same set of functions. -/
+def sameNames (l m : List String) : Bool := l.all (· ∈ m) && m.all (· ∈ l)

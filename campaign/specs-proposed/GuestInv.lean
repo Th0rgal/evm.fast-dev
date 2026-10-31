@@ -1512,11 +1512,22 @@ def WordsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (i : Ivl) : Prop :=
 `frame_mem_ptr`, scratch growing down from `0xb0bee000` to `scratch_ptr`. Holds after `mem_init`
 (`mem_init_arenaReady`); `alloc`/`scratch_alloc`/`frame_mem_alloc` preserve it by their own
 checks; `heap_release`/`scratch_release`/`frame_mem_release` preserve it when their argument is a
-mark taken by the same activation (the contract of every caller, §7). -/
+mark taken by the same activation (the contract of every caller, §7).
+
+Revision 6 (round-4 Astra item 7): the three pointers are 8-byte aligned. `mem_init` sets them to
+`sourceBase`, `0xb0bee000`, `0xb0000000` (all aligned). `alloc` and `frame_mem_alloc` return the
+OLD pointer `p` and set the new one to `(p + n + 7) & -8`; `scratch_alloc` sets and returns
+`(p - n) & -8` (AST 66, 110, 154). So with aligned pointers every allocation returns an aligned
+block and leaves the pointers aligned. The release marks are earlier pointer values (`heap_mark`,
+`scratch_mark`, and the continuation marks, aligned by `MarksOK`). Without alignment,
+`frame_mem_ptr = 0xb0000001` made `frame_open`'s `frame_mem_alloc(1024)` return an unaligned EVM
+memory, which `WordsOK` (in `FrameWF`) rejects. Every contract that ends in `ArenaReady` (all of
+§7) now also re-establishes alignment. -/
 def ArenaOK {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   sourceBase ≤ globN s "heap_ptr" ∧ globN s "heap_ptr" ≤ heapLimit ∧
   scratchStart ≤ globN s "frame_mem_ptr" ∧ globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" ∧
-  globN s "scratch_ptr" ≤ scratchEnd
+  globN s "scratch_ptr" ≤ scratchEnd ∧
+  globN s "heap_ptr" % 8 = 0 ∧ globN s "frame_mem_ptr" % 8 = 0 ∧ globN s "scratch_ptr" % 8 = 0
 
 def ArenaReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => GuestInv s ∧ ArenaOK s
@@ -1609,12 +1620,29 @@ theorem htabWF_no_self_parent {F : Type} (s : PanSemStateFiniteExact 64 F) (t : 
 def HtabValuesIn {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) (S : List Nat) : Prop :=
   ∀ i, i < hdr s t 3 → nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8 ∈ S
 
+/-- The 8-byte memory cell at address `a` meets the byte interval `i` (revision 6, round-4 Astra
+item 4). Memory is a map from cell addresses to words; a byte store changes the whole aligned cell
+holding the byte. For an aligned `a` and a word-aligned `i` (base and length multiples of 8) this is
+exactly `InIvl a i`. -/
+def CellHits (a : Nat) (i : Ivl) : Prop := i.1 < a + 8 ∧ a < i.1 + i.2
+
 /-- Memory outside `keep ∪ fresh` is unchanged from `s` to `post`. Addresses are the 64-bit
 words themselves, tested through `toNat` (round-2 Astra item 1: quantifying over `a : Nat` and
-reading `BitVec.ofNat 64 a` made `x + 2^64` an outside alias of every changed `x`). -/
+reading `BitVec.ofNat 64 a` made `x + 2^64` an outside alias of every changed `x`).
+
+Revision 6 (round-4 Astra item 4): the frame is at cell granularity. A cell may change iff it
+MEETS a kept region or the fresh region (`CellHits`), not only if its address lies inside one. So a
+byte region `(a + 1, 1)` declares the whole cell `a`. Before, `memzero(a + 1, 1)` changed the word
+at `a`, outside `[a + 1, a + 2)`, and every byte-writing contract (`ww_memcpy`, `ww_memzero`,
+`ww_rlp_encode_bytes`, `ww_rlp_encode_word`, `ww_compute_contract_address`,
+`ww_recover_sender_with_chain_id`, the `KeepsOn`/`NodeFn` contracts of byte writers, …) was false
+for unaligned regions. The change is in this one definition, so every frame (`WritesWithin`,
+`HtabExit`, `UnionExit`, `HtabNewExit`, `MptExit`, `NodeFnExit`) uses it. An owned object is
+word-aligned (`WordsOK`); if it is byte-disjoint from every kept region, none of its cells is hit,
+so the frame still protects it exactly as before. -/
 def FrameOutside {F : Type} (s post : PanSemStateFiniteExact 64 F) (keep : List Ivl)
     (fresh : Ivl) : Prop :=
-  ∀ a : BitVec 64, (∀ i ∈ keep, ¬ InIvl a.toNat i) → ¬ InIvl a.toNat fresh →
+  ∀ a : BitVec 64, (∀ i ∈ keep, ¬ CellHits a.toNat i) → ¬ CellHits a.toNat fresh →
     post.memory a = s.memory a
 
 /-- Regression (round-2 Astra item 1): a single store inside `fresh` respects the frame. -/
@@ -1623,8 +1651,26 @@ example {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64) (w : HolWor
   intro a _ hout
   have hne : a ≠ x := by
     rintro rfl
-    exact hout ⟨Nat.le_refl _, by omega⟩
+    exact hout ⟨by omega, by omega⟩
   simp [hne]
+
+/-- Regression (revision 6, round-4 Astra item 4): writing the cell `x` for a byte store at
+`x + 1` respects the frame of the one-byte region `(x + 1, 1)`. -/
+example {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64) (w : HolWordLab 64) :
+    FrameOutside s { s with memory := fun b => if b = x then w else s.memory b }
+      [(x.toNat + 1, 1)] (0, 0) := by
+  intro a hkeep _
+  have hne : a ≠ x := by
+    rintro rfl
+    exact hkeep _ (List.mem_singleton.2 rfl) ⟨by omega, by omega⟩
+  simp [hne]
+
+/-- Regression (revision 6): an aligned cell outside an aligned region is not hit, so for
+word-aligned objects the cell frame is the old address frame. -/
+theorem cellHits_aligned {a : Nat} {i : Ivl} (ha : a % 8 = 0) (hi1 : i.1 % 8 = 0)
+    (h : CellHits a i) : InIvl a i := by
+  obtain ⟨h1, h2⟩ := h
+  exact ⟨by omega, h2⟩
 
 /-- Normal return of a function body from an entry state (callee-entry formulation). -/
 def FunEnsures (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
@@ -1789,25 +1835,75 @@ def nodeSize (kind : Nat) : Nat :=
 `node_new_leaf` 64 B, `node_new_ext` 56 B, `node_new_branch` 176 B, AST 9975-10060). -/
 def nodeIvl {F : Type} (s : PanSemStateFiniteExact 64 F) (n : Nat) : Ivl := (n, nodeSize (memW s n))
 
+/-- The byte at address `a`, as `loadByte` reads it when its cell is in the domain: byte
+`a % 8` (by the state's endianness) of the word in the aligned cell `a / 8 * 8` (Flapjack
+`panMemLoadByteHOL`, without the domain test). -/
+def memB {F : Type} (s : PanSemStateFiniteExact 64 F) (a : Nat) : Nat :=
+  match s.memory (panByteAlignHOL (BitVec.ofNat 64 a)) with
+  | .word v => (panGetByteHOL (BitVec.ofNat 64 a) v s.be).toNat
+
+/-- The `len` bytes at `p` are nibbles (revision 6, round-4 Astra item 5): `key_to_nibbles` and
+`compact_to_nibbles` (AST 9807, 9849) store `b >> 4` and `b & 15` only. -/
+def NibblesOK {F : Type} (s : PanSemStateFiniteExact 64 F) (p len : Nat) : Prop :=
+  ∀ k, k < len → memB s (p + k) < 16
+
+/-- A nibble array `(p, len)` usable as an MPT key or node path next to the node set `Nd`
+(revision 6, round-4 Astra item 5): empty, or nibbles in allocated heap, byte-disjoint from every
+node record of `Nd`. The MPT functions write only node records, fresh heap and the free scratch
+gap, so such an array survives them (with aligned allocator pointers, `ArenaOK`, no cell of it is
+written). `_mpt_insert_node` indexes `node + 32 + 8·b` for a key byte `b` and stores a pointer
+there; a byte `18` hit `node + 176`, past the 176-byte branch. -/
+def KeyIn {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (p len : Nat) : Prop :=
+  len = 0 ∨ (NibblesOK s p len ∧ Allocated s (p, len) ∧ Inside (p, len) sourceBase heapLimit ∧
+    ∀ n ∈ Nd, Disj (p, len) (nodeIvl s n))
+
+/-- The path of a leaf (`1`) or extension (`2`) node: pointer `+32`, length `+40`
+(`node_new_leaf` 9994, `node_new_ext` 10021); `(0, 0)` for other kinds and empty paths. -/
+def nodePath {F : Type} (s : PanSemStateFiniteExact 64 F) (n : Nat) : Ivl :=
+  if (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0 then (memW s (n + 32), memW s (n + 40))
+  else (0, 0)
+
+/-- Revision 6 (round-4 Astra item 5): a leaf's or extension's path is a nibble array in the
+sense of `KeyIn`. `_split_extension` and `_create_branch_from_two_leaves` index a fresh branch by a
+path byte, `_insert_into_leaf`/`_delete_ext_finish`/`_collapse_branch` copy paths into new nodes. -/
 def NodeHeap {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop :=
   (∀ n ∈ Nd, memW s n ≤ 3 ∧ Allocated s (nodeIvl s n) ∧ Inside (nodeIvl s n) sourceBase heapLimit ∧
     WordsOK s (nodeIvl s n) ∧
     (memW s n = 2 → RootIn Nd (memW s (n + 48))) ∧
-    (memW s n = 3 → ∀ i, i < 16 → RootIn Nd (memW s (n + 32 + 8 * i)))) ∧
+    (memW s n = 3 → ∀ i, i < 16 → RootIn Nd (memW s (n + 32 + 8 * i))) ∧
+    ((memW s n = 1 ∨ memW s n = 2) → KeyIn s Nd (memW s (n + 32)) (memW s (n + 40)))) ∧
   (∀ n ∈ Nd, ∀ m ∈ Nd, n ≠ m → Disj (nodeIvl s n) (nodeIvl s m))
 
-/-- The persistent tries: the witness state trie `ws+24` and the cached storage tries (live
-values `v` of table `ws+32` are root nodes tagged `+1`, `ws_storage_trie` 13042) are typed node
-heaps, disjoint from every typed table and fixed object (`compute_state_root` mutates them through
+/-- Everything a typed node set occupies: the node records and their paths (revision 6). Writing
+any of it can break `NodeHeap`, so owned objects and output regions avoid all of it. -/
+def nodeExtents {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : List Ivl :=
+  Nd.flatMap fun n => [nodeIvl s n, nodePath s n]
+
+/-- The persistent tries with their node set exposed (revision 6, round-4 Astra item 2): the
+witness state trie `ws+24` and the cached storage tries (live values `v` of table `ws+32` are root
+nodes tagged `+1`, `ws_storage_trie` 13042) are typed node heaps whose records and paths are
+disjoint from every typed table and fixed object (`compute_state_root` mutates them through
 `mpt_set`). -/
-def TriesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
-  ∃ Nd : List Nat, NodeHeap s Nd ∧
-    (∀ n ∈ Nd, (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (nodeIvl s n) i) ∧
-      ∀ j ∈ fixedObjects s, Disj (nodeIvl s n) j) ∧
+def TriesTypedWith {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+  NodeHeap s Nd ∧
+    (∀ o ∈ nodeExtents s Nd, (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧
+      ∀ j ∈ fixedObjects s, Disj o j) ∧
     (globN s "ws" ≠ 0 → RootIn Nd (memW s (globN s "ws" + 24)) ∧
       (memW s (globN s "ws" + 32) ∈ S → ∀ i, i < hdr s (memW s (globN s "ws" + 32)) 3 →
         RootIn Nd (nodeF s (hdr s (memW s (globN s "ws" + 32)) 5)
           (memW s (hdr s (memW s (globN s "ws" + 32)) 6 + 8 * i)) 8 - 1)))
+
+def TriesTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
+  ∃ Nd : List Nat, TriesTypedWith s S Nd
+
+/-- The regions `os` avoid the persistent tries (revision 6, round-4 Astra item 2): some typed
+node set of the tries (`TriesTypedWith`, the same `S`) has records and paths disjoint from every
+region. A frame object (return data in particular), the message record, or an output buffer over a
+trie node made `set_retdata` (kind `4` into a hashed node), `depth0_prepare` or the output writer
+break `NodeHeap`. -/
+def AvoidsTries {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (os : List Ivl) :
+    Prop :=
+  ∃ Nd : List Nat, TriesTypedWith s S Nd ∧ ∀ o ∈ os, ∀ j ∈ nodeExtents s Nd, Disj o j
 
 /-- The global invariant of the guarded tier between EVM frames. -/
 def WorldTyped {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
@@ -1923,6 +2019,37 @@ def RetWindowsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : 
       memW s ((ch[i]'(by omega)).2 + 72) + memW s ((ch[i]'(by omega)).2 + 80) ≤
         memW s (ch[i + 1].1 + 40)
 
+/-- The live values of table `t` (the `+8` field of every live leaf). -/
+def htabValues {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : List Nat :=
+  (List.range (hdr s t 3)).map fun i => nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8
+
+/-- The table slots `ks` of the global record `g` (none while `g = 0`). -/
+def recordSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (g : String) (ks : List Nat) :
+    List Nat :=
+  if globN s g = 0 then [] else ks.map fun k => memW s (globN s g + k)
+
+/-- Every table pointer the world state holds outside the frames (revision 6, round-4 Astra item
+1), read off `TablesTyped`/`JournalTyped`: the record slots of `ws`, `bs`, `ts`, the global roots,
+the live values of the tables of tables `bs+32`, `ts+32` (when typed), the two tables of every BAL
+account record, and the table of every journal record. -/
+def worldTableRefs {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : List Nat :=
+  let nest (g : String) : List Nat :=
+    if globN s g ≠ 0 ∧ memW s (globN s g + 32) ∈ S then htabValues s (memW s (globN s g + 32))
+    else []
+  recordSlots s "ws" wsTableSlots ++ recordSlots s "bs" bsTableSlots ++
+    recordSlots s "ts" tsTableSlots ++ globalTableRoots.map (globN s) ++ nest "bs" ++ nest "ts" ++
+    (balRecords s).flatMap (fun ad => [memW s ad, memW s (ad + 8)]) ++
+    (List.range (globN s "journal_n")).map (fun k => memW s (globN s "journal" + 32 * k))
+
+/-- The table `t` released with the child at chain position `i` is referenced only as the deletion
+table of frames `0..i` (the child and its descendants), all of which die with the child (revision
+6, round-4 Astra item 1): no world reference (`worldTableRefs`), and every frame slot `+136`,
+`+168`, `+176` of the chain holding `t` is a deletion slot `+136` at a position `j ≤ i`. -/
+def DelExclusive {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : List Ivl)
+    (i t : Nat) : Prop :=
+  t ∉ worldTableRefs s S ∧
+  ∀ (j : Nat) (hj : j < ch.length), ∀ k ∈ [136, 168, 176], memW s (ch[j].1 + k) = t → k = 136 ∧ j ≤ i
+
 /-- Release marks of the child at chain position `i` (whose continuation is `c_i`): releasing
 scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's scratch blocks and keeps
 every ancestor's blocks allocated (an ancestor's logs array is on the heap or above the mark).
@@ -1931,19 +2058,27 @@ allocated. The only table ever built in scratch is a frame's deletion table `e+1
 (`frame_new` → `htab_new_scratch`, its only caller; `htab_copy_scratch` is unreachable), so every
 table of `S` other than the deletion tables of frames `0..i` lies in the heap or above the mark,
 and so does every non-empty fixed object. Astra's witness (a shared `htab_new_scratch` table at
-`0xb0bdffa8` below the child's mark `0xb0be8000`) violates this. -/
+`0xb0bdffa8` below the child's mark `0xb0be8000`) violates this.
+
+Revision 6 (round-4 Astra item 1): the exemption is EXCLUSIVE. A table of `S` may lie below the
+mark only if it is the deletion table of a frame `j ≤ i` AND `DelExclusive`: no world root, nested
+root or journal record names it, and no frame slot other than a deletion slot `e_j+136` with
+`j ≤ i` does. Astra's witness (`parent+136 = bal_idx_accts = child+136 = 0xb0bed2f8`, mark
+`0xb0bed8a8`) has the child's deletion table named by the parent and by a global root, so it must
+lie in the heap or above the mark, and the child-error release no longer frees it. The marks are
+8-byte aligned (revision 6, round-4 Astra item 7: `finish_child` releases to them, `ArenaOK`). -/
 def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : List Ivl) : Prop :=
   ∀ (i : Nat) (hi : i + 1 < ch.length),
     let m := memW s ((ch[i]'(by omega)).2 + 48)
     let mm := memW s ((ch[i]'(by omega)).2 + 56)
-    m ≤ scratchEnd ∧ scratchStart ≤ mm ∧
+    m ≤ scratchEnd ∧ scratchStart ≤ mm ∧ m % 8 = 0 ∧ mm % 8 = 0 ∧
     (∀ j (hj : j < ch.length), i < j →
       (∀ o ∈ frameScratch s ch[j], Inside o m scratchEnd) ∧
       Inside (frameObjects s ch[j])[3]! scratchStart mm ∧
       (Inside (frameLogs s ch[j]) sourceBase heapLimit ∨ Inside (frameLogs s ch[j]) m scratchEnd)) ∧
     (∀ o ∈ frameScratch s (ch[i]'(by omega)), o.1 + o.2 ≤ m) ∧
     mm ≤ memW s ((ch[i]'(by omega)).1 + 24) ∧
-    (∀ t ∈ S, t ∉ (ch.take (i + 1)).map (fun ec => memW s (ec.1 + 136)) →
+    (∀ t ∈ S, (t ∈ (ch.take (i + 1)).map (fun ec => memW s (ec.1 + 136)) ∧ DelExclusive s S ch i t) ∨
       ∀ o ∈ htabFootprint s t, Inside o sourceBase heapLimit ∨ Inside o m scratchEnd) ∧
     (∀ o ∈ fixedObjects s, o.2 = 0 ∨ Inside o sourceBase heapLimit ∨ Inside o m scratchEnd)
 
@@ -1953,7 +2088,9 @@ last continuation has kind `0`) and at most `maxChain` long, every frame is well
 suspended frame (`ch.tail`) has stack room for the result `finish_child` pushes (`FrameRoom`), every
 child's output window lies in its parent's EVM memory (`RetWindowsOK`, round-3 item 4), all
 frame blocks (return-data buffers included) are pairwise disjoint and disjoint from every table
-footprint and fixed object, the release marks are valid, and the regular gas `R` (gas plus
+footprint and fixed object, disjoint from the persistent tries (revision 6, round-4 Astra item 2:
+`AvoidsTries`; a parent return-data pointer `ws+24 = n` on a hashed node made `set_retdata` write
+kind `4` into it), the release marks are valid, and the regular gas `R` (gas plus
 spilled gas over the chain) is below `2^64 − 1` (round-3 Gemini items 1-2: with a frame's gas at
 `2^64 − 1`, `charge_gas` accepts the saturated out-of-gas sentinel of `extend_memory_cost1/2`, and
 `op_mstore`/`op_extcodecopy`/… then write outside EVM memory; `R` never grows along `run_frames`,
@@ -1967,6 +2104,7 @@ def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
+    AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
@@ -5879,33 +6017,47 @@ theorem htab_new_scratch_spec :
 
 /-! ### MPT update contracts (`_mpt_insert_node`, `_mpt_delete_node_body`) -/
 
-/-- Entry of the two MPT update functions: separated arenas and a typed trie below the `node`
-parameter. -/
+/-- Entry of the two MPT update functions `_mpt_insert_node`/`_mpt_delete_node(_body)(node, key,
+klen, level, …)`: separated arenas and a typed trie below the `node` parameter. Revision 6
+(round-4 Astra item 5): `level ≤ klen` and the unread key `(key + level, klen − level)` is a
+nibble array next to the trie (`KeyIn`: nibbles, allocated heap, disjoint from every node record).
+Both loops read `loadByte(key + level)` as a branch index and store through `node + 32 + 8·idx`
+(insert) or push it into a scratch frame that later stores `fnode + 32 + 8·idx` (delete). A key
+byte `18` indexed `n + 176`, past the 176-byte branch. `level` grows by `1` at a branch (only when
+`level ≠ klen`) and by an extension's path length when `common_prefix_length` matched all of it
+(`≤ klen − level`), so `level ≤ klen` and the key's suffix are loop invariants; the writes go to
+node records, fresh heap and the free scratch gap, which `KeyIn` keeps away from the key. -/
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
+  fun s => ArenaReady s ∧ locN s "level" ≤ locN s "klen" ∧ ∃ Nd, NodeHeap s Nd ∧
+    RootIn Nd (locN s "node") ∧
+    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level")
 
 /-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
 relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
 every node of `Nd` are disjoint from every table footprint of `S` and every fixed object, as
 `TriesTyped` requires of the world tries. `mpt_set` stores `m+0` (10886) and rewrites node records;
 `mpt_root` stores hash pointers into the node caches (`+8/+16`). A node at `nodes + 8` of a table
-in `S` made `mpt_root` overwrite that table's root. -/
+in `S` made `mpt_root` overwrite that table's root. Revision 6: the node paths too
+(`nodeExtents`, round-4 Astra item 5), and `m` avoids the persistent tries (`AvoidsTries`, item
+2: `mpt_set`'s store `m+0` must not hit a world node). -/
 def MptObjIn {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop :=
   Allocated s (locN s "m", 16) ∧ WordsOK s (locN s "m", 16) ∧
   (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "m", 16) i) ∧
   (∀ j ∈ fixedObjects s, Disj (locN s "m", 16) j) ∧
   ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (memW s (locN s "m")) ∧
-    ∀ n ∈ Nd, Disj (nodeIvl s n) (locN s "m", 16) ∧
-      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (nodeIvl s n) i) ∧
-      ∀ j ∈ fixedObjects s, Disj (nodeIvl s n) j
+    ∀ o ∈ nodeExtents s Nd, Disj o (locN s "m", 16) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧
+      ∀ j ∈ fixedObjects s, Disj o j
 
 /-- A typed world `S` with a typed trie object `m` in it (`MptObjIn`, the same `S`), and regions
 `R s` disjoint from every table footprint of `S` and every fixed object (`mpt_root`'s output
-buffer, as in `WorldAvoids`). -/
+buffer, as in `WorldAvoids`). Revision 6 (round-4 Astra item 2): the object `m` and the regions
+avoid the persistent tries (`AvoidsTries`, same `S`). -/
 def MptObjAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ ∀ i ∈ R s,
-    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ MptObjIn s S ∧ (∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
+    AvoidsTries s S ((locN s "m", 16) :: R s)
 
 /-- `mpt_set(m, …)`: a typed world with the trie object `m` in it (revision 5: `MptObjIn`; the
 revision-4 guard did not relate `m` and its nodes to the typed tables and fixed objects). -/
@@ -6000,11 +6152,23 @@ def EvmRun : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 def FinishReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => EvmInv s ∧ EvmDone s ∧ memW s (globN s "cur_cont" + 16) ≠ 0
 
-/-- `rollback_child_access(child)`: the child's two access tables are typed. -/
+/-- `rollback_child_access(child)`: the child's two access tables are typed. Revision 6 (found
+while auditing the `gbody_*` hypotheses, round-4 Astra item 8): the body truncates `child+168`,
+then RELOADS `child+176` and `child+272` and truncates that table, so its composition needs the
+child record outside both footprints, allocated words, and the two tables equal or with disjoint
+footprints (`htab_truncate_spec` frames only the first table's footprint). `finish_child` calls it
+after `ev := parent`, from facts it read off `EvmInv` while `child` was the current frame (record
+and tables of a chain frame: `FrameWF`, frame objects disjoint from table footprints, tables of `S`
+pairwise disjoint). -/
 def RollbackReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∀ k ∈ [168, 176],
-    HtabWF s (memW s (locN s "child" + k)) ∧
-    ∀ i ∈ htabFootprint s (memW s (locN s "child" + k)), Allocated s i
+  fun s => ArenaReady s ∧ Allocated s (locN s "child", 280) ∧ WordsOK s (locN s "child", 280) ∧
+    (∀ k ∈ [168, 176],
+      HtabWF s (memW s (locN s "child" + k)) ∧
+      ∀ i ∈ htabFootprint s (memW s (locN s "child" + k)), Allocated s i ∧
+        Disj (locN s "child", 280) i) ∧
+    (memW s (locN s "child" + 168) = memW s (locN s "child" + 176) ∨
+      ∀ i ∈ htabFootprint s (memW s (locN s "child" + 168)),
+        ∀ j ∈ htabFootprint s (memW s (locN s "child" + 176)), Disj i j)
 
 /-! ### Every guard reads at most one local (`dec_onLocals`, round-2 item 3) -/
 
@@ -6105,11 +6269,14 @@ theorem localsOnly_unionArgWF : LocalsOnly ["dst"] UnionArgWF := by
   rw [ht]
   exact hP
 
-theorem localsOnly_mptReady : LocalsOnly ["node"] MptReady := by
+theorem localsOnly_mptReady : LocalsOnly ["node", "key", "klen", "level"] MptReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
+  have hk := locN_congr s locals k "key" (hl "key" (by simp))
+  have hn := locN_congr s locals k "klen" (hl "klen" (by simp))
+  have hv := locN_congr s locals k "level" (hl "level" (by simp))
   simp only [MptReady, arenaReady_with_locals] at hP ⊢
-  rw [ht]
+  rw [ht, hk, hn, hv]
   exact hP
 
 theorem localsOnly_mptObjReady : LocalsOnly ["m"] MptObjReady := by
@@ -6181,11 +6348,14 @@ def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) 
     ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     fname
 
-/-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object. -/
+/-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object and
+(revision 6, round-4 Astra item 2) from the persistent tries (`AvoidsTries`, same `S`): the output
+buffers of `compute_state_root`/`build_mpt_indexed` must not overwrite a trie node or path. -/
 def WorldAvoids (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) :
     ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ ∀ i ∈ R s,
-    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j
+  fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧ (∀ i ∈ R s,
+    (∀ t ∈ S, ∀ j ∈ htabFootprint s t, Disj i j) ∧ ∀ j ∈ fixedObjects s, Disj i j) ∧
+    AvoidsTries s S (R s)
 
 /-- `process_transaction(tx, index)` writes the receipt slots `bo+24`/`bo+32` at `16·index`
 (33368-33374): the index is below the block's transaction count `bo+80` (`execute_block`'s loop). -/
@@ -6218,13 +6388,16 @@ the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller 
 32899-32902). Round-3 Gemini item 3: the 176-byte message record (`msg_new`) is owned, so the stores
 `depth0_prepare`/`prepare_dispatch` make through it (`msg+48`, `+104`, `+112`, `+120`, `+168`)
 cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` after
-`validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`. -/
+`validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`.
+Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
+every caller passes a fresh `msg_new` block. -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
     Allocated s (locN s "msg", 176) ∧ WordsOK s (locN s "msg", 176) ∧
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
+    AvoidsTries s S [(locN s "msg", 176)] ∧
     memW s (locN s "msg" + 40) < 2 ^ 63
 
 /-- `frame_open(msg, 0)` in `process_message`: builds the outermost frame, after which `EvmInv`
@@ -6261,6 +6434,7 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
+    AvoidsTries s S (ch.map (frameObjects s)).flatten ∧
     MarksOK s S ch ∧
     (ch.map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum + 1 < 2 ^ 64
 
@@ -6268,12 +6442,14 @@ theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
     EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
 
 /-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
-from every table footprint of `S`, every fixed object and every frame block of the chain. -/
+from every table footprint of `S`, every fixed object, every frame block of the chain and
+(revision 6, round-4 Astra item 2) the persistent tries. -/
 def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
   Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
   (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
   (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
-  ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o
+  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
+  AvoidsTries s S [(m, 176)]
 
 /-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
 and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
@@ -6294,21 +6470,38 @@ theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
     evmChain_with_locals] at h ⊢
   exact h
 
-/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
-parameters are rooted in a typed node heap. -/
-def NodeArgs (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ ∀ n ∈ names, RootIn Nd (locN s n)
+/-- The node parameter `x` is a node of `Nd` of kind `k` (revision 6, round-4 Astra item 6). -/
+def NodeKind {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (x : String) (k : Nat) :
+    Prop :=
+  locN s x ∈ Nd ∧ memW s (locN s x) = k
 
-/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set rooting the node parameters
-extends to a typed node set of the post-state; memory changes only inside those node records and
-the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
+/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, the listed node
+parameters are rooted in a typed node heap `Nd`, and the function's own requirement `req s Nd`
+(revision 6, round-4 Astra items 5 and 6): the node kinds it reads and writes (`NodeKind`), and
+the nibble arrays it indexes or copies into a node path (`KeyIn`). -/
+def NodeArgs (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ (∀ n ∈ names, RootIn Nd (locN s n)) ∧ req s Nd
+
+/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set satisfying the entry extends to a
+typed node set of the post-state; memory changes only inside those node records, the free scratch
+gap and the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
 `_mpt_delete_node_body` need to re-establish `MptReady` at their loop heads). The node functions
-write no global buffer (checked on their closures). -/
-def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+write no global buffer (checked on their closures). Revision 6: the old nodes keep their kinds and
+every new node of `Nd'` is a fresh heap record (all seven functions write node fields `+8` and
+beyond, and build nodes only with `alloc`). The callers' loop invariants need both: a saved
+extension stays an extension until `_delete_ext_finish`, and a key or saved path stays disjoint
+from the grown node set. -/
+def NodeFnExit (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
-    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) →
+    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) → req s Nd →
       ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
+        (∀ n ∈ Nd, memW post n = memW s n) ∧
+        (∀ n ∈ Nd', n ∈ Nd ∨ Inside (nodeIvl post n) (globN s "heap_ptr") (globN post "heap_ptr")) ∧
         FrameOutside s post
           ((Nd.map fun n => nodeIvl s n) ++
             [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
@@ -6317,8 +6510,29 @@ def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64
           s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
         ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
 
-def NodeFn (names : List String) (fname : MlS) : Prop :=
-  FunSpec (NodeArgs names) (NodeFnExit names) fname
+/-- `NodeFn names req g`: from a typed node heap rooting `names` and meeting `g`'s requirement
+`req` (node kinds, key arrays; DESIGN.md §6 "NodeFn requirements"), `g` ends in a typed node heap. -/
+def NodeFn (names : List String)
+    (req : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat → Prop) (fname : MlS) : Prop :=
+  FunSpec (NodeArgs names req) (NodeFnExit names req) fname
+
+/-- Value contract (revision 6): a normal return is a word at most `B` of the entry state.
+`common_prefix_length(a, al, b, bl)` returns `i < min(al, bl)` or `min(al, bl)` (AST 10512); the
+MPT loops need `pl ≤ sl` and `pl ≤ klen − level` to keep `level ≤ klen` and to meet
+`_split_extension`'s requirement `pl < sl`. -/
+def RetLe (B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Nat) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => ∀ v, r = some (.returned v) →
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat ≤ B s) fname
+
+/-- Value contract (revision 6): a normal return is a pair `(p, l)` of a nibble array allocated
+fresh on the heap during the call. `mpt_nibble_key` (AST 10470) returns `alloc(64)` filled by
+`key_to_nibbles` from the 32-byte hash, or `alloc(2·klen)` filled from the key: the key
+`_mpt_insert_node`/`_mpt_delete_node` receive from `mpt_set` (`MptReady`'s `KeyIn`). -/
+def RetNibbles (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
+    ∃ p l : BitVec 64, v = .rStruct [.val (.word p), .val (.word l)] ∧
+      NibblesOK post p.toNat l.toNat ∧
+      Inside (p.toNat, l.toNat) (globN s "heap_ptr") (globN post "heap_ptr")) fname
 
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -7508,6 +7722,31 @@ theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
   rw [heq]
   exact hP.setVar hname value _ (hP state state.locals post.clock (fun _ _ => rfl) hPs)
 
+/-! ### Direct callees, read off the AST (revision 6, round-4 Astra item 8)
+
+Each `GBody.«f»` below is an obligation about the body of the single function `f`. Its
+hypotheses are the bound of each direct callee of `f` and the contract of each callee at a
+guard-carrying call site; `«callees_f»` checks, by `decide` on the literal AST, that the direct
+callees of `f` are exactly the functions whose bounds are listed. -/
+
+/-- Every function named by a `call` or `decCall` in a body (exception handlers included). -/
+def progCallees : Prog (BitVec 64) → List String
+  | .dec _ _ _ b => progCallees b
+  | .seq a b => progCallees a ++ progCallees b
+  | .ite _ a b => progCallees a ++ progCallees b
+  | .while _ b => progCallees b
+  | .call (some (_, some (_, _, h))) g _ => g :: progCallees h
+  | .call _ g _ => [g]
+  | .decCall _ _ g _ b => g :: progCallees b
+  | _ => []
+
+def fnBody : Decl (BitVec 64) → Prog (BitVec 64)
+  | .function fd => fd.body
+  | _ => .skip
+
+/-- The two lists name the same set of functions. -/
+def sameNames (l m : List String) : Bool := l.all (· ∈ m) && m.all (· ∈ l)
+
 /-! ### Guarded bound leaves (generated) -/
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
@@ -7548,27 +7787,51 @@ theorem «ek_warm_storage_key» :
 /-- `frame_open` (AST line 18450): carries the frame built by `frame_open` (hand-written). -/
 theorem «fk_frame_open» :
     KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open") := by sorry
-/-- `_collapse_branch` (AST line 10674): typed nodes in, typed nodes out (MPT tier). -/
+/-- `_collapse_branch` (AST line 10674): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 3`. -/
 theorem «nf__collapse_branch» :
-    NodeFn ["node"] (ofString "_collapse_branch") := by sorry
-/-- `_delete_ext_finish` (AST line 10727): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 3)
+    (ofString "_collapse_branch") := by sorry
+/-- `_delete_ext_finish` (AST line 10727): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl")`. -/
 theorem «nf__delete_ext_finish» :
-    NodeFn ["node", "nc"] (ofString "_delete_ext_finish") := by sorry
-/-- `_insert_into_leaf` (AST line 10532): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["node", "nc"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl"))
+    (ofString "_delete_ext_finish") := by sorry
+/-- `_insert_into_leaf` (AST line 10532): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl")`. -/
 theorem «nf__insert_into_leaf» :
-    NodeFn ["node"] (ofString "_insert_into_leaf") := by sorry
-/-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))
+    (ofString "_insert_into_leaf") := by sorry
+/-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"`. -/
 theorem «nf__split_extension» :
-    NodeFn ["node"] (ofString "_split_extension") := by sorry
-/-- `node_invalidate` (AST line 10061): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
+      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
+    (ofString "_split_extension") := by sorry
+/-- `node_invalidate` (AST line 10061): typed nodes in, typed nodes out (MPT tier); requirement: none. -/
 theorem «nf_node_invalidate» :
-    NodeFn ["nd"] (ofString "node_invalidate") := by sorry
-/-- `node_new_ext` (AST line 10021): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["nd"]
+    (fun _ _ => True)
+    (ofString "node_invalidate") := by sorry
+/-- `node_new_ext` (AST line 10021): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen")`. -/
 theorem «nf_node_new_ext» :
-    NodeFn ["child"] (ofString "node_new_ext") := by sorry
-/-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier). -/
+    NodeFn ["child"]
+    (fun s Nd =>
+      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+    (ofString "node_new_ext") := by sorry
+/-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen")`. -/
 theorem «nf_node_new_leaf» :
-    NodeFn [] (ofString "node_new_leaf") := by sorry
+    NodeFn []
+    (fun s Nd =>
+      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+    (ofString "node_new_leaf") := by sorry
+/-- `mpt_nibble_key` (AST line 10470): returns a fresh heap nibble array (value contract). -/
+theorem «nk_mpt_nibble_key» :
+    RetNibbles (ofString "mpt_nibble_key") := by sorry
 /-- `calculate_total_blob_gas` (AST line 11914): read-only. -/
 theorem «ro_calculate_total_blob_gas» :
     ReadOnlyFn (ofString "calculate_total_blob_gas") := by sorry
@@ -7659,6 +7922,9 @@ theorem «ro_validate_block_access_list_gas_limit» :
 /-- `validate_transaction` (AST line 12639): read-only. -/
 theorem «ro_validate_transaction» :
     ReadOnlyFn (ofString "validate_transaction") := by sorry
+/-- `common_prefix_length` (AST line 9903): returns at most `min(al, bl)` (value contract). -/
+theorem «rv_common_prefix_length» :
+    RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length") := by sorry
 /-- `account_deployable` (AST line 13358): keeps `WorldOK`. -/
 theorem «wk_account_deployable» :
     KeepsOn WorldOK WorldOK (ofString "account_deployable") := by sorry
@@ -7995,7 +8261,10 @@ theorem «ww_ws_storage_root_of» :
 its guard-carrying call sites, `f`'s body is bounded under its guard. `gbody_f` is the
 primitive; `gb_f` is PROVED from it. -/
 
-/-- `_decode_witness_node_body` (AST line 10196, guard `ArenaReady`): #0 GUARD; 5 callees, 5 guard-carrying. -/
+/-- The body of `_decode_witness_node_body` alone (AST line 10196, guard `ArenaReady`, #0 GUARD). Its direct callees are
+exactly `_decode_step`, `_resolve_step`, `mpt_fail`, `node_new_ext`, `rlp_item` (`«callees__decode_witness_node_body»`, checked against the AST). Hypotheses: the bound
+of each of these 5 callees, then the contract of each callee at a guard-carrying
+call site (5: `ak__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item`). Nothing else is assumed. -/
 def GBody.«_decode_witness_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_decode_step") K.«_decode_step») →
   (TerminatingFunBoundedOn GuestInv (ofString "_resolve_step") K.«_resolve_step») →
@@ -8012,16 +8281,27 @@ def GBody.«_decode_witness_node_body» : Prop :=
     ["scratch_ptr"] (ofString "rlp_item")) →
   TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body»
 
+/-- The direct callees of `_decode_witness_node_body`, read off its AST body (revision 6). -/
+theorem «callees__decode_witness_node_body» : sameNames (progCallees (fnBody Guest.Software.guestFn__decode_witness_node_body))
+    ["_decode_step", "_resolve_step", "mpt_fail", "node_new_ext", "rlp_item"] = true := by decide
+
 theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» := by sorry
 
 theorem «gb__decode_witness_node_body» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body» :=
   «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ak__decode_step» «ww__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «ww_rlp_item»
 
-/-- `_decode_witness_node_mpt` (AST line 10311, guard `WorldOK`): loop-free; 2 callees, 0 guard-carrying. -/
+/-- The body of `_decode_witness_node_mpt` alone (AST line 10311, guard `WorldOK`, loop-free). Its direct callees are
+exactly `_decode_witness_node_body`, `scratch_release` (`«callees__decode_witness_node_mpt»`, checked against the AST). Hypotheses: the bound
+of each of these 2 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«_decode_witness_node_mpt» : Prop :=
   (TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
   TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt»
+
+/-- The direct callees of `_decode_witness_node_mpt`, read off its AST body (revision 6). -/
+theorem «callees__decode_witness_node_mpt» : sameNames (progCallees (fnBody Guest.Software.guestFn__decode_witness_node_mpt))
+    ["_decode_witness_node_body", "scratch_release"] = true := by decide
 
 theorem «lookup__decode_witness_node_mpt» : originalRuntimeCode.lookup (ofString "_decode_witness_node_mpt") =
     some ((sourceFunctionEntry Guest.Software.guestFn__decode_witness_node_mpt).2) :=
@@ -8045,13 +8325,20 @@ theorem «gbody__decode_witness_node_mpt» : GBody.«_decode_witness_node_mpt» 
 theorem «gb__decode_witness_node_mpt» : TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt» :=
   «gbody__decode_witness_node_mpt» «gb__decode_witness_node_body» «fb_scratch_release»
 
-/-- `_decode_witness_node` (AST line 10328, guard `WorldOK`): loop-free; 3 callees, 1 guard-carrying. -/
+/-- The body of `_decode_witness_node` alone (AST line 10328, guard `WorldOK`, loop-free). Its direct callees are
+exactly `_decode_witness_node_mpt`, `scratch_mark`, `scratch_release` (`«callees__decode_witness_node»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (1: `ro_scratch_mark`). Nothing else is assumed. -/
 def GBody.«_decode_witness_node» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_mark") K.«scratch_mark») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
   (ReadOnlyFn (ofString "scratch_mark")) →
   TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node") K.«_decode_witness_node»
+
+/-- The direct callees of `_decode_witness_node`, read off its AST body (revision 6). -/
+theorem «callees__decode_witness_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__decode_witness_node))
+    ["_decode_witness_node_mpt", "scratch_mark", "scratch_release"] = true := by decide
 
 theorem «lookup__decode_witness_node» : originalRuntimeCode.lookup (ofString "_decode_witness_node") =
     some ((sourceFunctionEntry Guest.Software.guestFn__decode_witness_node).2) :=
@@ -8079,7 +8366,10 @@ theorem «gbody__decode_witness_node» : GBody.«_decode_witness_node» := by
 theorem «gb__decode_witness_node» : TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node") K.«_decode_witness_node» :=
   «gbody__decode_witness_node» «gb__decode_witness_node_mpt» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
 
-/-- `_mpt_delete_node_body` (AST line 10758, guard `MptReady`): #0 GUARD; #1 GUARD; 7 callees, 7 guard-carrying. -/
+/-- The body of `_mpt_delete_node_body` alone (AST line 10758, guard `MptReady`, #0 GUARD; #1 GUARD). Its direct callees are
+exactly `_collapse_branch`, `_delete_ext_finish`, `common_prefix_length`, `memeq`, `mpt_fail`, `node_invalidate`, `scratch_alloc` (`«callees__mpt_delete_node_body»`, checked against the AST). Hypotheses: the bound
+of each of these 7 callees, then the contract of each callee at a guard-carrying
+call site (8: `nf__collapse_branch`, `nf__delete_ext_finish`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_memeq`, `ro_mpt_fail`, `nf_node_invalidate`, `ww_scratch_alloc`). Nothing else is assumed. -/
 def GBody.«_mpt_delete_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_collapse_branch") K.«_collapse_branch») →
   (TerminatingFunBoundedOn GuestInv (ofString "_delete_ext_finish") K.«_delete_ext_finish») →
@@ -8088,22 +8378,38 @@ def GBody.«_mpt_delete_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc») →
-  (NodeFn ["node"] (ofString "_collapse_branch")) →
-  (NodeFn ["node", "nc"] (ofString "_delete_ext_finish")) →
+  (NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 3)
+    (ofString "_collapse_branch")) →
+  (NodeFn ["node", "nc"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl"))
+    (ofString "_delete_ext_finish")) →
   (ReadOnlyFn (ofString "common_prefix_length")) →
+  (RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")) →
   (ReadOnlyFn (ofString "memeq")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
-  (NodeFn ["nd"] (ofString "node_invalidate")) →
+  (NodeFn ["nd"]
+    (fun _ _ => True)
+    (ofString "node_invalidate")) →
   (WritesWithin (fun s => [])
     ["scratch_ptr"] (ofString "scratch_alloc")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body»
 
+/-- The direct callees of `_mpt_delete_node_body`, read off its AST body (revision 6). -/
+theorem «callees__mpt_delete_node_body» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_delete_node_body))
+    ["_collapse_branch", "_delete_ext_finish", "common_prefix_length", "memeq", "mpt_fail", "node_invalidate", "scratch_alloc"] = true := by decide
+
 theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by sorry
 
 theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
-  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «ww_scratch_alloc»
+  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «rv_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «ww_scratch_alloc»
 
-/-- `_mpt_delete_node` (AST line 10852, guard `MptReady`): loop-free; 3 callees, 1 guard-carrying. -/
+/-- The body of `_mpt_delete_node` alone (AST line 10852, guard `MptReady`, loop-free). Its direct callees are
+exactly `_mpt_delete_node_body`, `scratch_mark`, `scratch_release` (`«callees__mpt_delete_node»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (1: `ro_scratch_mark`). Nothing else is assumed. -/
 def GBody.«_mpt_delete_node» : Prop :=
   (TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_mark") K.«scratch_mark») →
@@ -8111,12 +8417,19 @@ def GBody.«_mpt_delete_node» : Prop :=
   (ReadOnlyFn (ofString "scratch_mark")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node»
 
+/-- The direct callees of `_mpt_delete_node`, read off its AST body (revision 6). -/
+theorem «callees__mpt_delete_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_delete_node))
+    ["_mpt_delete_node_body", "scratch_mark", "scratch_release"] = true := by decide
+
 theorem «gbody__mpt_delete_node» : GBody.«_mpt_delete_node» := by sorry
 
 theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node» :=
   «gbody__mpt_delete_node» «gb__mpt_delete_node_body» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
 
-/-- `_mpt_insert_node` (AST line 10598, guard `MptReady`): #0 GUARD; 7 callees, 7 guard-carrying. -/
+/-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptReady`, #0 GUARD). Its direct callees are
+exactly `_insert_into_leaf`, `_split_extension`, `common_prefix_length`, `mpt_fail`, `node_invalidate`, `node_new_ext`, `node_new_leaf` (`«callees__mpt_insert_node»`, checked against the AST). Hypotheses: the bound
+of each of these 7 callees, then the contract of each callee at a guard-carrying
+call site (8: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
 def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf») →
   (TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension») →
@@ -8125,35 +8438,66 @@ def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_ext") K.«node_new_ext») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf») →
-  (NodeFn ["node"] (ofString "_insert_into_leaf")) →
-  (NodeFn ["node"] (ofString "_split_extension")) →
+  (NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))
+    (ofString "_insert_into_leaf")) →
+  (NodeFn ["node"]
+    (fun s Nd =>
+      NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
+      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
+    (ofString "_split_extension")) →
   (ReadOnlyFn (ofString "common_prefix_length")) →
+  (RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
-  (NodeFn ["nd"] (ofString "node_invalidate")) →
-  (NodeFn ["child"] (ofString "node_new_ext")) →
-  (NodeFn [] (ofString "node_new_leaf")) →
+  (NodeFn ["nd"]
+    (fun _ _ => True)
+    (ofString "node_invalidate")) →
+  (NodeFn ["child"]
+    (fun s Nd =>
+      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+    (ofString "node_new_ext")) →
+  (NodeFn []
+    (fun s Nd =>
+      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+    (ofString "node_new_leaf")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node»
+
+/-- The direct callees of `_mpt_insert_node`, read off its AST body (revision 6). -/
+theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_insert_node))
+    ["_insert_into_leaf", "_split_extension", "common_prefix_length", "mpt_fail", "node_invalidate", "node_new_ext", "node_new_leaf"] = true := by decide
 
 theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
 
 theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
-  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
+  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
 
-/-- `mpt_set` (AST line 10872, guard `MptObjReady`): loop-free; 3 callees, 1 guard-carrying. -/
+/-- The body of `mpt_set` alone (AST line 10872, guard `MptObjReady`, loop-free). Its direct callees are
+exactly `_mpt_delete_node`, `_mpt_insert_node`, `mpt_nibble_key` (`«callees_mpt_set»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (2: `ww_mpt_nibble_key`, `nk_mpt_nibble_key`). Nothing else is assumed. -/
 def GBody.«mpt_set» : Prop :=
   (TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node») →
   (TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node») →
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key») →
   (WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
     ["heap_ptr"] (ofString "mpt_nibble_key")) →
+  (RetNibbles (ofString "mpt_nibble_key")) →
   TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set»
+
+/-- The direct callees of `mpt_set`, read off its AST body (revision 6). -/
+theorem «callees_mpt_set» : sameNames (progCallees (fnBody Guest.Software.guestFn_mpt_set))
+    ["_mpt_delete_node", "_mpt_insert_node", "mpt_nibble_key"] = true := by decide
 
 theorem «gbody_mpt_set» : GBody.«mpt_set» := by sorry
 
 theorem «gb_mpt_set» : TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set» :=
-  «gbody_mpt_set» «gb__mpt_delete_node» «gb__mpt_insert_node» «fb_mpt_nibble_key» «ww_mpt_nibble_key»
+  «gbody_mpt_set» «gb__mpt_delete_node» «gb__mpt_insert_node» «fb_mpt_nibble_key» «ww_mpt_nibble_key» «nk_mpt_nibble_key»
 
-/-- `build_mpt_indexed` (AST line 11243, guard `WorldOK`): #0 CTR; 6 callees, 4 guard-carrying. -/
+/-- The body of `build_mpt_indexed` alone (AST line 11243, guard `WorldOK`, #0 CTR). Its direct callees are
+exactly `heap_mark`, `heap_release`, `mpt_new`, `mpt_root`, `mpt_set`, `rlp_encode_word` (`«callees_build_mpt_indexed»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (4: `ro_heap_mark`, `ww_mpt_new`, `wk_mpt_set`, `ww_rlp_encode_word`). Nothing else is assumed. -/
 def GBody.«build_mpt_indexed» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark») →
   (TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release») →
@@ -8169,12 +8513,19 @@ def GBody.«build_mpt_indexed» : Prop :=
     [] (ofString "rlp_encode_word")) →
   TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed»
 
+/-- The direct callees of `build_mpt_indexed`, read off its AST body (revision 6). -/
+theorem «callees_build_mpt_indexed» : sameNames (progCallees (fnBody Guest.Software.guestFn_build_mpt_indexed))
+    ["heap_mark", "heap_release", "mpt_new", "mpt_root", "mpt_set", "rlp_encode_word"] = true := by decide
+
 theorem «gbody_build_mpt_indexed» : GBody.«build_mpt_indexed» := by sorry
 
 theorem «gb_build_mpt_indexed» : TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed» :=
   «gbody_build_mpt_indexed» «fb_heap_mark» «fb_heap_release» «fb_mpt_new» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_word» «ro_heap_mark» «ww_mpt_new» «wk_mpt_set» «ww_rlp_encode_word»
 
-/-- `decode_witness_to_mpt` (AST line 10348, guard `WorldOK`): loop-free; 6 callees, 3 guard-carrying. -/
+/-- The body of `decode_witness_to_mpt` alone (AST line 10348, guard `WorldOK`, loop-free). Its direct callees are
+exactly `_decode_witness_node`, `alloc`, `memcpy`, `memeq`, `mpt_fail`, `nodedb_lookup` (`«callees_decode_witness_to_mpt»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (3: `ro_memeq`, `ro_mpt_fail`, `ro_nodedb_lookup`). Nothing else is assumed. -/
 def GBody.«decode_witness_to_mpt» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "_decode_witness_node") K.«_decode_witness_node») →
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
@@ -8187,16 +8538,27 @@ def GBody.«decode_witness_to_mpt» : Prop :=
   (ReadOnlyFn (ofString "nodedb_lookup")) →
   TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt»
 
+/-- The direct callees of `decode_witness_to_mpt`, read off its AST body (revision 6). -/
+theorem «callees_decode_witness_to_mpt» : sameNames (progCallees (fnBody Guest.Software.guestFn_decode_witness_to_mpt))
+    ["_decode_witness_node", "alloc", "memcpy", "memeq", "mpt_fail", "nodedb_lookup"] = true := by decide
+
 theorem «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt» := by sorry
 
 theorem «gb_decode_witness_to_mpt» : TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt» :=
   «gbody_decode_witness_to_mpt» «gb__decode_witness_node» «fb_alloc» «fb_memcpy» «fb_memeq» «fb_mpt_fail» «fb_nodedb_lookup» «ro_memeq» «ro_mpt_fail» «ro_nodedb_lookup»
 
-/-- `mpt_from_witness` (AST line 10459, guard `WorldOK`): loop-free; 2 callees, 0 guard-carrying. -/
+/-- The body of `mpt_from_witness` alone (AST line 10459, guard `WorldOK`, loop-free). Its direct callees are
+exactly `decode_witness_to_mpt`, `mpt_new` (`«callees_mpt_from_witness»`, checked against the AST). Hypotheses: the bound
+of each of these 2 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«mpt_from_witness» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt») →
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new») →
   TerminatingFunBoundedOn WorldOK (ofString "mpt_from_witness") K.«mpt_from_witness»
+
+/-- The direct callees of `mpt_from_witness`, read off its AST body (revision 6). -/
+theorem «callees_mpt_from_witness» : sameNames (progCallees (fnBody Guest.Software.guestFn_mpt_from_witness))
+    ["decode_witness_to_mpt", "mpt_new"] = true := by decide
 
 theorem «lookup_mpt_from_witness» : originalRuntimeCode.lookup (ofString "mpt_from_witness") =
     some ((sourceFunctionEntry Guest.Software.guestFn_mpt_from_witness).2) :=
@@ -8217,7 +8579,10 @@ theorem «gbody_mpt_from_witness» : GBody.«mpt_from_witness» := by
 theorem «gb_mpt_from_witness» : TerminatingFunBoundedOn WorldOK (ofString "mpt_from_witness") K.«mpt_from_witness» :=
   «gbody_mpt_from_witness» «gb_decode_witness_to_mpt» «fb_mpt_new»
 
-/-- `compute_state_root` (AST line 32341, guard `WorldOK`): #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; 18 callees, 18 guard-carrying. -/
+/-- The body of `compute_state_root` alone (AST line 32341, guard `WorldOK`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR). Its direct callees are
+exactly `alloc`, `cache_get_root`, `encode_account`, `htab_copy`, `htab_get`, `htab_has`, `htab_item`, `htab_new`, `htab_set`, `memcpy`, `mpt_from_witness`, `mpt_root`, `mpt_set`, `rlp_encode_bytes`, `u256_is_zero`, `u256_to_be_min`, `ws_get_account_optional`, `ws_storage_root_of` (`«callees_compute_state_root»`, checked against the AST). Hypotheses: the bound
+of each of these 18 callees, then the contract of each callee at a guard-carrying
+call site (18: `ww_alloc`, `ww_cache_get_root`, `ww_encode_account`, `ww_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `ww_memcpy`, `wk_mpt_from_witness`, `wk_mpt_root`, `wk_mpt_set`, `ww_rlp_encode_bytes`, `ro_u256_is_zero`, `ww_u256_to_be_min`, `ww_ws_get_account_optional`, `ww_ws_storage_root_of`). Nothing else is assumed. -/
 def GBody.«compute_state_root» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root») →
@@ -8266,12 +8631,19 @@ def GBody.«compute_state_root» : Prop :=
     ["heap_ptr", "scratch_ptr"] (ofString "ws_storage_root_of")) →
   TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root»
 
+/-- The direct callees of `compute_state_root`, read off its AST body (revision 6). -/
+theorem «callees_compute_state_root» : sameNames (progCallees (fnBody Guest.Software.guestFn_compute_state_root))
+    ["alloc", "cache_get_root", "encode_account", "htab_copy", "htab_get", "htab_has", "htab_item", "htab_new", "htab_set", "memcpy", "mpt_from_witness", "mpt_root", "mpt_set", "rlp_encode_bytes", "u256_is_zero", "u256_to_be_min", "ws_get_account_optional", "ws_storage_root_of"] = true := by decide
+
 theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by sorry
 
 theorem «gb_compute_state_root» : TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root» :=
   «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «ww_alloc» «ww_cache_get_root» «ww_encode_account» «ww_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «ww_memcpy» «wk_mpt_from_witness» «wk_mpt_root» «wk_mpt_set» «ww_rlp_encode_bytes» «ro_u256_is_zero» «ww_u256_to_be_min» «ww_ws_get_account_optional» «ww_ws_storage_root_of»
 
-/-- `ws_storage_trie` (AST line 13042, guard `WorldOK`): loop-free; 3 callees, 1 guard-carrying. -/
+/-- The body of `ws_storage_trie` alone (AST line 13042, guard `WorldOK`, loop-free). Its direct callees are
+exactly `decode_witness_to_mpt`, `htab_get`, `htab_set` (`«callees_ws_storage_trie»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (1: `ro_htab_get`). Nothing else is assumed. -/
 def GBody.«ws_storage_trie» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt») →
   (TerminatingFunBoundedOn GuestInv (ofString "htab_get") K.«htab_get») →
@@ -8279,12 +8651,19 @@ def GBody.«ws_storage_trie» : Prop :=
   (ReadOnlyFn (ofString "htab_get")) →
   TerminatingFunBoundedOn WorldOK (ofString "ws_storage_trie") K.«ws_storage_trie»
 
+/-- The direct callees of `ws_storage_trie`, read off its AST body (revision 6). -/
+theorem «callees_ws_storage_trie» : sameNames (progCallees (fnBody Guest.Software.guestFn_ws_storage_trie))
+    ["decode_witness_to_mpt", "htab_get", "htab_set"] = true := by decide
+
 theorem «gbody_ws_storage_trie» : GBody.«ws_storage_trie» := by sorry
 
 theorem «gb_ws_storage_trie» : TerminatingFunBoundedOn WorldOK (ofString "ws_storage_trie") K.«ws_storage_trie» :=
   «gbody_ws_storage_trie» «gb_decode_witness_to_mpt» «fb_htab_get» «fb_htab_set» «ro_htab_get»
 
-/-- `ws_get_storage` (AST line 13061, guard `WorldOK`): loop-free; 10 callees, 2 guard-carrying. -/
+/-- The body of `ws_get_storage` alone (AST line 13061, guard `WorldOK`, loop-free). Its direct callees are
+exactly `alloc`, `heap_mark`, `heap_release`, `keccak256`, `memeq`, `rlp_decode_fully`, `trie_lookup`, `u256_from_be`, `ws_storage_root_of`, `ws_storage_trie` (`«callees_ws_get_storage»`, checked against the AST). Hypotheses: the bound
+of each of these 10 callees, then the contract of each callee at a guard-carrying
+call site (2: `ro_memeq`, `ww_ws_storage_root_of`). Nothing else is assumed. -/
 def GBody.«ws_get_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark») →
@@ -8301,12 +8680,19 @@ def GBody.«ws_get_storage» : Prop :=
     ["heap_ptr", "scratch_ptr"] (ofString "ws_storage_root_of")) →
   TerminatingFunBoundedOn WorldOK (ofString "ws_get_storage") K.«ws_get_storage»
 
+/-- The direct callees of `ws_get_storage`, read off its AST body (revision 6). -/
+theorem «callees_ws_get_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_ws_get_storage))
+    ["alloc", "heap_mark", "heap_release", "keccak256", "memeq", "rlp_decode_fully", "trie_lookup", "u256_from_be", "ws_storage_root_of", "ws_storage_trie"] = true := by decide
+
 theorem «gbody_ws_get_storage» : GBody.«ws_get_storage» := by sorry
 
 theorem «gb_ws_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "ws_get_storage") K.«ws_get_storage» :=
   «gbody_ws_get_storage» «fb_alloc» «fb_heap_mark» «fb_heap_release» «fb_keccak256» «fb_memeq» «fb_rlp_decode_fully» «fb_trie_lookup» «fb_u256_from_be» «fb_ws_storage_root_of» «gb_ws_storage_trie» «ro_memeq» «ww_ws_storage_root_of»
 
-/-- `get_pre_tx_storage` (AST line 14069, guard `WorldOK`): loop-free; 3 callees, 2 guard-carrying. -/
+/-- The body of `get_pre_tx_storage` alone (AST line 14069, guard `WorldOK`, loop-free). Its direct callees are
+exactly `record_pre_state_read`, `stor_lookup`, `ws_get_storage` (`«callees_get_pre_tx_storage»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (2: `wk_record_pre_state_read`, `ro_stor_lookup`). Nothing else is assumed. -/
 def GBody.«get_pre_tx_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "record_pre_state_read") K.«record_pre_state_read») →
   (TerminatingFunBoundedOn GuestInv (ofString "stor_lookup") K.«stor_lookup») →
@@ -8315,12 +8701,19 @@ def GBody.«get_pre_tx_storage» : Prop :=
   (ReadOnlyFn (ofString "stor_lookup")) →
   TerminatingFunBoundedOn WorldOK (ofString "get_pre_tx_storage") K.«get_pre_tx_storage»
 
+/-- The direct callees of `get_pre_tx_storage`, read off its AST body (revision 6). -/
+theorem «callees_get_pre_tx_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_pre_tx_storage))
+    ["record_pre_state_read", "stor_lookup", "ws_get_storage"] = true := by decide
+
 theorem «gbody_get_pre_tx_storage» : GBody.«get_pre_tx_storage» := by sorry
 
 theorem «gb_get_pre_tx_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_pre_tx_storage") K.«get_pre_tx_storage» :=
   «gbody_get_pre_tx_storage» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «wk_record_pre_state_read» «ro_stor_lookup»
 
-/-- `idx_start_storage` (AST line 14129, guard `WorldOK`): loop-free; 6 callees, 3 guard-carrying. -/
+/-- The body of `idx_start_storage` alone (AST line 14129, guard `WorldOK`, loop-free). Its direct callees are
+exactly `alloc`, `get_pre_tx_storage`, `htab_get`, `htab_set`, `memcpy`, `st_le64` (`«callees_idx_start_storage»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (3: `ro_htab_get`, `ww_memcpy`, `ww_st_le64`). Nothing else is assumed. -/
 def GBody.«idx_start_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn WorldOK (ofString "get_pre_tx_storage") K.«get_pre_tx_storage») →
@@ -8335,12 +8728,19 @@ def GBody.«idx_start_storage» : Prop :=
     [] (ofString "st_le64")) →
   TerminatingFunBoundedOn WorldOK (ofString "idx_start_storage") K.«idx_start_storage»
 
+/-- The direct callees of `idx_start_storage`, read off its AST body (revision 6). -/
+theorem «callees_idx_start_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_idx_start_storage))
+    ["alloc", "get_pre_tx_storage", "htab_get", "htab_set", "memcpy", "st_le64"] = true := by decide
+
 theorem «gbody_idx_start_storage» : GBody.«idx_start_storage» := by sorry
 
 theorem «gb_idx_start_storage» : TerminatingFunBoundedOn WorldOK (ofString "idx_start_storage") K.«idx_start_storage» :=
   «gbody_idx_start_storage» «fb_alloc» «gb_get_pre_tx_storage» «fb_htab_get» «fb_htab_set» «fb_memcpy» «fb_st_le64» «ro_htab_get» «ww_memcpy» «ww_st_le64»
 
-/-- `update_builder_from_tx` (AST line 14233, guard `WorldOK`): #0 CTR; #1 CTR; #2 CTR; 12 callees, 12 guard-carrying. -/
+/-- The body of `update_builder_from_tx` alone (AST line 14233, guard `WorldOK`, #0 CTR; #1 CTR; #2 CTR). Its direct callees are
+exactly `add_balance_change`, `add_code_change`, `add_nonce_change`, `add_storage_write`, `bal_remove_change`, `get_code`, `htab_item`, `idx_start_account`, `idx_start_storage`, `memeq`, `remove_storage_write`, `u256_eq` (`«callees_update_builder_from_tx»`, checked against the AST). Hypotheses: the bound
+of each of these 12 callees, then the contract of each callee at a guard-carrying
+call site (12: `wk_add_balance_change`, `wk_add_code_change`, `wk_add_nonce_change`, `wk_add_storage_write`, `wk_bal_remove_change`, `wk_get_code`, `ro_htab_item`, `wk_idx_start_account`, `wk_idx_start_storage`, `ro_memeq`, `wk_remove_storage_write`, `ro_u256_eq`). Nothing else is assumed. -/
 def GBody.«update_builder_from_tx» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "add_balance_change") K.«add_balance_change») →
   (TerminatingFunBoundedOn GuestInv (ofString "add_code_change") K.«add_code_change») →
@@ -8368,16 +8768,27 @@ def GBody.«update_builder_from_tx» : Prop :=
   (ReadOnlyFn (ofString "u256_eq")) →
   TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx»
 
+/-- The direct callees of `update_builder_from_tx`, read off its AST body (revision 6). -/
+theorem «callees_update_builder_from_tx» : sameNames (progCallees (fnBody Guest.Software.guestFn_update_builder_from_tx))
+    ["add_balance_change", "add_code_change", "add_nonce_change", "add_storage_write", "bal_remove_change", "get_code", "htab_item", "idx_start_account", "idx_start_storage", "memeq", "remove_storage_write", "u256_eq"] = true := by decide
+
 theorem «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx» := by sorry
 
 theorem «gb_update_builder_from_tx» : TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx» :=
   «gbody_update_builder_from_tx» «fb_add_balance_change» «fb_add_code_change» «fb_add_nonce_change» «fb_add_storage_write» «fb_bal_remove_change» «fb_get_code» «fb_htab_item» «fb_idx_start_account» «gb_idx_start_storage» «fb_memeq» «fb_remove_storage_write» «fb_u256_eq» «wk_add_balance_change» «wk_add_code_change» «wk_add_nonce_change» «wk_add_storage_write» «wk_bal_remove_change» «wk_get_code» «ro_htab_item» «wk_idx_start_account» «wk_idx_start_storage» «ro_memeq» «wk_remove_storage_write» «ro_u256_eq»
 
-/-- `incorporate_tx_into_block` (AST line 14313, guard `WorldOK`): loop-free; 2 callees, 0 guard-carrying. -/
+/-- The body of `incorporate_tx_into_block` alone (AST line 14313, guard `WorldOK`, loop-free). Its direct callees are
+exactly `merge_tx_into_block`, `update_builder_from_tx` (`«callees_incorporate_tx_into_block»`, checked against the AST). Hypotheses: the bound
+of each of these 2 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«incorporate_tx_into_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "merge_tx_into_block") K.«merge_tx_into_block») →
   (TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx») →
   TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block»
+
+/-- The direct callees of `incorporate_tx_into_block`, read off its AST body (revision 6). -/
+theorem «callees_incorporate_tx_into_block» : sameNames (progCallees (fnBody Guest.Software.guestFn_incorporate_tx_into_block))
+    ["merge_tx_into_block", "update_builder_from_tx"] = true := by decide
 
 theorem «lookup_incorporate_tx_into_block» : originalRuntimeCode.lookup (ofString "incorporate_tx_into_block") =
     some ((sourceFunctionEntry Guest.Software.guestFn_incorporate_tx_into_block).2) :=
@@ -8398,30 +8809,47 @@ theorem «gbody_incorporate_tx_into_block» : GBody.«incorporate_tx_into_block�
 theorem «gb_incorporate_tx_into_block» : TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block» :=
   «gbody_incorporate_tx_into_block» «fb_merge_tx_into_block» «gb_update_builder_from_tx»
 
-/-- `htab_truncate` (AST line 5278, guard `HtabArgWF`): #0 WF; 1 callees, 1 guard-carrying. -/
+/-- The body of `htab_truncate` alone (AST line 5278, guard `HtabArgWF`, #0 WF). Its direct callees are
+exactly `htab_del` (`«callees_htab_truncate»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (2: `htab_del_spec`, `htab_del_progress_spec`). Nothing else is assumed. -/
 def GBody.«htab_truncate» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "htab_del") K.«htab_del») →
   (type_of% @htab_del_spec) →
   (type_of% @htab_del_progress_spec) →
   TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") K.«htab_truncate»
 
+/-- The direct callees of `htab_truncate`, read off its AST body (revision 6). -/
+theorem «callees_htab_truncate» : sameNames (progCallees (fnBody Guest.Software.guestFn_htab_truncate))
+    ["htab_del"] = true := by decide
+
 theorem «gbody_htab_truncate» : GBody.«htab_truncate» := by sorry
 
 theorem «gb_htab_truncate» : TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") K.«htab_truncate» :=
   «gbody_htab_truncate» «fb_htab_del» «htab_del_spec» «htab_del_progress_spec»
 
-/-- `rollback_child_access` (AST line 18995, guard `RollbackReady`): loop-free; 1 callees, 1 guard-carrying. -/
+/-- The body of `rollback_child_access` alone (AST line 18995, guard `RollbackReady`, loop-free). Its direct callees are
+exactly `htab_truncate` (`«callees_rollback_child_access»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (1: `htab_truncate_spec`). Nothing else is assumed. -/
 def GBody.«rollback_child_access» : Prop :=
   (TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") K.«htab_truncate») →
   (type_of% @htab_truncate_spec) →
   TerminatingFunBoundedOn RollbackReady (ofString "rollback_child_access") K.«rollback_child_access»
+
+/-- The direct callees of `rollback_child_access`, read off its AST body (revision 6). -/
+theorem «callees_rollback_child_access» : sameNames (progCallees (fnBody Guest.Software.guestFn_rollback_child_access))
+    ["htab_truncate"] = true := by decide
 
 theorem «gbody_rollback_child_access» : GBody.«rollback_child_access» := by sorry
 
 theorem «gb_rollback_child_access» : TerminatingFunBoundedOn RollbackReady (ofString "rollback_child_access") K.«rollback_child_access» :=
   «gbody_rollback_child_access» «gb_htab_truncate» «htab_truncate_spec»
 
-/-- `finish_child` (AST line 18572, guard `FinishReady`): loop-free; 16 callees, 4 guard-carrying. -/
+/-- The body of `finish_child` alone (AST line 18572, guard `FinishReady`, loop-free). Its direct callees are
+exactly `address_to_u256`, `create_finish`, `credit_state_gas_refund`, `frame_halt`, `frame_mem_release`, `incorporate_child_on_error`, `incorporate_child_on_success`, `memcpy`, `min`, `pc_add`, `refill_frame_state_gas`, `rollback_child_access`, `scratch_release`, `set_retdata`, `stack_push`, `state_restore` (`«callees_finish_child»`, checked against the AST). Hypotheses: the bound
+of each of these 16 callees, then the contract of each callee at a guard-carrying
+call site (4: `ek_create_finish`, `ek_frame_halt`, `ek_refill_frame_state_gas`, `ek_state_restore`). Nothing else is assumed. -/
 def GBody.«finish_child» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "address_to_u256") K.«address_to_u256») →
   (TerminatingFunBoundedOn GuestInv (ofString "create_finish") K.«create_finish») →
@@ -8445,12 +8873,19 @@ def GBody.«finish_child» : Prop :=
   (KeepsOn EvmInv EvmInv (ofString "state_restore")) →
   TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child»
 
+/-- The direct callees of `finish_child`, read off its AST body (revision 6). -/
+theorem «callees_finish_child» : sameNames (progCallees (fnBody Guest.Software.guestFn_finish_child))
+    ["address_to_u256", "create_finish", "credit_state_gas_refund", "frame_halt", "frame_mem_release", "incorporate_child_on_error", "incorporate_child_on_success", "memcpy", "min", "pc_add", "refill_frame_state_gas", "rollback_child_access", "scratch_release", "set_retdata", "stack_push", "state_restore"] = true := by decide
+
 theorem «gbody_finish_child» : GBody.«finish_child» := by sorry
 
 theorem «gb_finish_child» : TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child» :=
   «gbody_finish_child» «fb_address_to_u256» «fb_create_finish» «fb_credit_state_gas_refund» «fb_frame_halt» «fb_frame_mem_release» «fb_incorporate_child_on_error» «fb_incorporate_child_on_success» «fb_memcpy» «fb_min» «fb_pc_add» «fb_refill_frame_state_gas» «gb_rollback_child_access» «fb_scratch_release» «fb_set_retdata» «fb_stack_push» «fb_state_restore» «ek_create_finish» «ek_frame_halt» «ek_refill_frame_state_gas» «ek_state_restore»
 
-/-- `get_storage` (AST line 13249, guard `WorldOK`): loop-free; 5 callees, 4 guard-carrying. -/
+/-- The body of `get_storage` alone (AST line 13249, guard `WorldOK`, loop-free). Its direct callees are
+exactly `htab_set`, `record_pre_state_read`, `sk_make`, `stor_lookup`, `ws_get_storage` (`«callees_get_storage»`, checked against the AST). Hypotheses: the bound
+of each of these 5 callees, then the contract of each callee at a guard-carrying
+call site (4: `htab_set_spec`, `wk_record_pre_state_read`, `ww_sk_make`, `ro_stor_lookup`). Nothing else is assumed. -/
 def GBody.«get_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set») →
   (TerminatingFunBoundedOn GuestInv (ofString "record_pre_state_read") K.«record_pre_state_read») →
@@ -8464,12 +8899,19 @@ def GBody.«get_storage» : Prop :=
   (ReadOnlyFn (ofString "stor_lookup")) →
   TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage»
 
+/-- The direct callees of `get_storage`, read off its AST body (revision 6). -/
+theorem «callees_get_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_storage))
+    ["htab_set", "record_pre_state_read", "sk_make", "stor_lookup", "ws_get_storage"] = true := by decide
+
 theorem «gbody_get_storage» : GBody.«get_storage» := by sorry
 
 theorem «gb_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage» :=
   «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «wk_record_pre_state_read» «ww_sk_make» «ro_stor_lookup»
 
-/-- `op_sload` (AST line 16584, guard `EvmRun`): loop-free; 8 callees, 5 guard-carrying. -/
+/-- The body of `op_sload` alone (AST line 16584, guard `EvmRun`, loop-free). Its direct callees are
+exactly `charge_gas`, `get_storage`, `is_warm_storage_key`, `pc_add`, `stack_pop`, `stack_push`, `u256_to_be32`, `warm_storage_key` (`«callees_op_sload»`, checked against the AST). Hypotheses: the bound
+of each of these 8 callees, then the contract of each callee at a guard-carrying
+call site (5: `ek_charge_gas`, `ww_is_warm_storage_key`, `ek_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key`). Nothing else is assumed. -/
 def GBody.«op_sload» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas») →
   (TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage») →
@@ -8488,12 +8930,19 @@ def GBody.«op_sload» : Prop :=
   (KeepsOn EvmInv EvmInv (ofString "warm_storage_key")) →
   TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload»
 
+/-- The direct callees of `op_sload`, read off its AST body (revision 6). -/
+theorem «callees_op_sload» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_sload))
+    ["charge_gas", "get_storage", "is_warm_storage_key", "pc_add", "stack_pop", "stack_push", "u256_to_be32", "warm_storage_key"] = true := by decide
+
 theorem «gbody_op_sload» : GBody.«op_sload» := by sorry
 
 theorem «gb_op_sload» : TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload» :=
   «gbody_op_sload» «fb_charge_gas» «gb_get_storage» «fb_is_warm_storage_key» «fb_pc_add» «fb_stack_pop» «fb_stack_push» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ww_is_warm_storage_key» «ek_stack_pop» «ww_u256_to_be32» «ek_warm_storage_key»
 
-/-- `get_storage_original` (AST line 13276, guard `WorldOK`): loop-free; 4 callees, 3 guard-carrying. -/
+/-- The body of `get_storage_original` alone (AST line 13276, guard `WorldOK`, loop-free). Its direct callees are
+exactly `htab_has`, `record_pre_state_read`, `stor_lookup`, `ws_get_storage` (`«callees_get_storage_original»`, checked against the AST). Hypotheses: the bound
+of each of these 4 callees, then the contract of each callee at a guard-carrying
+call site (3: `ro_htab_has`, `wk_record_pre_state_read`, `ro_stor_lookup`). Nothing else is assumed. -/
 def GBody.«get_storage_original» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "htab_has") K.«htab_has») →
   (TerminatingFunBoundedOn GuestInv (ofString "record_pre_state_read") K.«record_pre_state_read») →
@@ -8504,12 +8953,19 @@ def GBody.«get_storage_original» : Prop :=
   (ReadOnlyFn (ofString "stor_lookup")) →
   TerminatingFunBoundedOn WorldOK (ofString "get_storage_original") K.«get_storage_original»
 
+/-- The direct callees of `get_storage_original`, read off its AST body (revision 6). -/
+theorem «callees_get_storage_original» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_storage_original))
+    ["htab_has", "record_pre_state_read", "stor_lookup", "ws_get_storage"] = true := by decide
+
 theorem «gbody_get_storage_original» : GBody.«get_storage_original» := by sorry
 
 theorem «gb_get_storage_original» : TerminatingFunBoundedOn WorldOK (ofString "get_storage_original") K.«get_storage_original» :=
   «gbody_get_storage_original» «fb_htab_has» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «ro_htab_has» «wk_record_pre_state_read» «ro_stor_lookup»
 
-/-- `op_sstore` (AST line 16611, guard `EvmRun`): loop-free; 16 callees, 9 guard-carrying. -/
+/-- The body of `op_sstore` alone (AST line 16611, guard `EvmRun`, loop-free). Its direct callees are
+exactly `charge_gas`, `charge_state_gas`, `check_gas`, `credit_state_gas_refund`, `get_storage`, `get_storage_original`, `is_warm_storage_key`, `max`, `pc_add`, `require_not_static`, `set_storage`, `stack_pop`, `u256_eq`, `u256_is_zero`, `u256_to_be32`, `warm_storage_key` (`«callees_op_sstore»`, checked against the AST). Hypotheses: the bound
+of each of these 16 callees, then the contract of each callee at a guard-carrying
+call site (9: `ek_charge_gas`, `ro_check_gas`, `ek_get_storage_original`, `ww_is_warm_storage_key`, `ro_max`, `ro_require_not_static`, `ek_stack_pop`, `ww_u256_to_be32`, `ek_warm_storage_key`). Nothing else is assumed. -/
 def GBody.«op_sstore» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas») →
   (TerminatingFunBoundedOn GuestInv (ofString "charge_state_gas") K.«charge_state_gas») →
@@ -8540,12 +8996,19 @@ def GBody.«op_sstore» : Prop :=
   (KeepsOn EvmInv EvmInv (ofString "warm_storage_key")) →
   TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore»
 
+/-- The direct callees of `op_sstore`, read off its AST body (revision 6). -/
+theorem «callees_op_sstore» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_sstore))
+    ["charge_gas", "charge_state_gas", "check_gas", "credit_state_gas_refund", "get_storage", "get_storage_original", "is_warm_storage_key", "max", "pc_add", "require_not_static", "set_storage", "stack_pop", "u256_eq", "u256_is_zero", "u256_to_be32", "warm_storage_key"] = true := by decide
+
 theorem «gbody_op_sstore» : GBody.«op_sstore» := by sorry
 
 theorem «gb_op_sstore» : TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore» :=
   «gbody_op_sstore» «fb_charge_gas» «fb_charge_state_gas» «fb_check_gas» «fb_credit_state_gas_refund» «gb_get_storage» «gb_get_storage_original» «fb_is_warm_storage_key» «fb_max» «fb_pc_add» «fb_require_not_static» «fb_set_storage» «fb_stack_pop» «fb_u256_eq» «fb_u256_is_zero» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ro_check_gas» «ek_get_storage_original» «ww_is_warm_storage_key» «ro_max» «ro_require_not_static» «ek_stack_pop» «ww_u256_to_be32» «ek_warm_storage_key»
 
-/-- `op_dispatch` (AST line 17902, guard `EvmRun`): loop-free; 87 callees, 0 guard-carrying. -/
+/-- The body of `op_dispatch` alone (AST line 17902, guard `EvmRun`, loop-free). Its direct callees are
+exactly `op_add`, `op_addmod`, `op_address`, `op_and`, `op_balance`, `op_basefee`, `op_blobbasefee`, `op_blobhash`, `op_blockhash`, `op_byte`, `op_call`, `op_callcode`, `op_calldatacopy`, `op_calldataload`, `op_calldatasize`, `op_caller`, `op_callvalue`, `op_chainid`, `op_clz`, `op_codecopy`, `op_codesize`, `op_coinbase`, `op_create`, `op_create2`, `op_delegatecall`, `op_div`, `op_dup`, `op_dupn`, `op_eq`, `op_exchange`, `op_exp`, `op_extcodecopy`, `op_extcodehash`, `op_extcodesize`, `op_gas`, `op_gaslimit`, `op_gasprice`, `op_gt`, `op_iszero`, `op_jump`, `op_jumpdest`, `op_jumpi`, `op_keccak`, `op_log`, `op_lt`, `op_mcopy`, `op_mload`, `op_mod`, `op_msize`, `op_mstore`, `op_mstore8`, `op_mul`, `op_mulmod`, `op_not`, `op_number`, `op_or`, `op_origin`, `op_pc`, `op_pop`, `op_prevrandao`, `op_push`, `op_return`, `op_returndatacopy`, `op_returndatasize`, `op_revert`, `op_sar`, `op_sdiv`, `op_selfbalance`, `op_selfdestruct`, `op_sgt`, `op_shl`, `op_shr`, `op_signextend`, `op_sload`, `op_slotnum`, `op_slt`, `op_smod`, `op_sstore`, `op_staticcall`, `op_stop`, `op_sub`, `op_swap`, `op_swapn`, `op_timestamp`, `op_tload`, `op_tstore`, `op_xor` (`«callees_op_dispatch»`, checked against the AST). Hypotheses: the bound
+of each of these 87 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«op_dispatch» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "op_add") K.«op_add») →
   (TerminatingFunBoundedOn GuestInv (ofString "op_addmod") K.«op_addmod») →
@@ -8636,12 +9099,19 @@ def GBody.«op_dispatch» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "op_xor") K.«op_xor») →
   TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch»
 
+/-- The direct callees of `op_dispatch`, read off its AST body (revision 6). -/
+theorem «callees_op_dispatch» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_dispatch))
+    ["op_add", "op_addmod", "op_address", "op_and", "op_balance", "op_basefee", "op_blobbasefee", "op_blobhash", "op_blockhash", "op_byte", "op_call", "op_callcode", "op_calldatacopy", "op_calldataload", "op_calldatasize", "op_caller", "op_callvalue", "op_chainid", "op_clz", "op_codecopy", "op_codesize", "op_coinbase", "op_create", "op_create2", "op_delegatecall", "op_div", "op_dup", "op_dupn", "op_eq", "op_exchange", "op_exp", "op_extcodecopy", "op_extcodehash", "op_extcodesize", "op_gas", "op_gaslimit", "op_gasprice", "op_gt", "op_iszero", "op_jump", "op_jumpdest", "op_jumpi", "op_keccak", "op_log", "op_lt", "op_mcopy", "op_mload", "op_mod", "op_msize", "op_mstore", "op_mstore8", "op_mul", "op_mulmod", "op_not", "op_number", "op_or", "op_origin", "op_pc", "op_pop", "op_prevrandao", "op_push", "op_return", "op_returndatacopy", "op_returndatasize", "op_revert", "op_sar", "op_sdiv", "op_selfbalance", "op_selfdestruct", "op_sgt", "op_shl", "op_shr", "op_signextend", "op_sload", "op_slotnum", "op_slt", "op_smod", "op_sstore", "op_staticcall", "op_stop", "op_sub", "op_swap", "op_swapn", "op_timestamp", "op_tload", "op_tstore", "op_xor"] = true := by decide
+
 theorem «gbody_op_dispatch» : GBody.«op_dispatch» := by sorry
 
 theorem «gb_op_dispatch» : TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch» :=
   «gbody_op_dispatch» «fb_op_add» «fb_op_addmod» «fb_op_address» «fb_op_and» «fb_op_balance» «fb_op_basefee» «fb_op_blobbasefee» «fb_op_blobhash» «fb_op_blockhash» «fb_op_byte» «fb_op_call» «fb_op_callcode» «fb_op_calldatacopy» «fb_op_calldataload» «fb_op_calldatasize» «fb_op_caller» «fb_op_callvalue» «fb_op_chainid» «fb_op_clz» «fb_op_codecopy» «fb_op_codesize» «fb_op_coinbase» «fb_op_create» «fb_op_create2» «fb_op_delegatecall» «fb_op_div» «fb_op_dup» «fb_op_dupn» «fb_op_eq» «fb_op_exchange» «fb_op_exp» «fb_op_extcodecopy» «fb_op_extcodehash» «fb_op_extcodesize» «fb_op_gas» «fb_op_gaslimit» «fb_op_gasprice» «fb_op_gt» «fb_op_iszero» «fb_op_jump» «fb_op_jumpdest» «fb_op_jumpi» «fb_op_keccak» «fb_op_log» «fb_op_lt» «fb_op_mcopy» «fb_op_mload» «fb_op_mod» «fb_op_msize» «fb_op_mstore» «fb_op_mstore8» «fb_op_mul» «fb_op_mulmod» «fb_op_not» «fb_op_number» «fb_op_or» «fb_op_origin» «fb_op_pc» «fb_op_pop» «fb_op_prevrandao» «fb_op_push» «fb_op_return» «fb_op_returndatacopy» «fb_op_returndatasize» «fb_op_revert» «fb_op_sar» «fb_op_sdiv» «fb_op_selfbalance» «fb_op_selfdestruct» «fb_op_sgt» «fb_op_shl» «fb_op_shr» «fb_op_signextend» «gb_op_sload» «fb_op_slotnum» «fb_op_slt» «fb_op_smod» «gb_op_sstore» «fb_op_staticcall» «fb_op_stop» «fb_op_sub» «fb_op_swap» «fb_op_swapn» «fb_op_timestamp» «fb_op_tload» «fb_op_tstore» «fb_op_xor»
 
-/-- `run_frames` (AST line 18663, guard `EvmInv`): #0 POT; 4 callees, 4 guard-carrying. -/
+/-- The body of `run_frames` alone (AST line 18663, guard `EvmInv`, #0 POT). Its direct callees are
+exactly `finish_child`, `frame_epilogue`, `frame_exception`, `op_dispatch` (`«callees_run_frames»`, checked against the AST). Hypotheses: the bound
+of each of these 4 callees, then the contract of each callee at a guard-carrying
+call site (4: `finish_child_spec`, `frame_epilogue_spec`, `frame_exception_spec`, `op_dispatch_spec`). Nothing else is assumed. -/
 def GBody.«run_frames» : Prop :=
   (TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child») →
   (TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue») →
@@ -8653,12 +9123,19 @@ def GBody.«run_frames» : Prop :=
   (type_of% @op_dispatch_spec) →
   TerminatingFunBoundedOn EvmInv (ofString "run_frames") K.«run_frames»
 
+/-- The direct callees of `run_frames`, read off its AST body (revision 6). -/
+theorem «callees_run_frames» : sameNames (progCallees (fnBody Guest.Software.guestFn_run_frames))
+    ["finish_child", "frame_epilogue", "frame_exception", "op_dispatch"] = true := by decide
+
 theorem «gbody_run_frames» : GBody.«run_frames» := by sorry
 
 theorem «gb_run_frames» : TerminatingFunBoundedOn EvmInv (ofString "run_frames") K.«run_frames» :=
   «gbody_run_frames» «gb_finish_child» «fb_frame_epilogue» «fb_frame_exception» «gb_op_dispatch» «finish_child_spec» «frame_epilogue_spec» «frame_exception_spec» «op_dispatch_spec»
 
-/-- `process_message` (AST line 18803, guard `MsgReady`): loop-free; 10 callees, 4 guard-carrying. -/
+/-- The body of `process_message` alone (AST line 18803, guard `MsgReady`, loop-free). Its direct callees are
+exactly `depth0_prepare`, `frame_halt`, `frame_mem_release`, `frame_open`, `frame_start`, `refill_frame_state_gas`, `run_frames`, `scratch_release`, `state_restore`, `state_snapshot` (`«callees_process_message»`, checked against the AST). Hypotheses: the bound
+of each of these 10 callees, then the contract of each callee at a guard-carrying
+call site (4: `ek_depth0_prepare`, `fk_frame_open`, `ek_frame_start`, `ro_state_snapshot`). Nothing else is assumed. -/
 def GBody.«process_message» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "depth0_prepare") K.«depth0_prepare») →
   (TerminatingFunBoundedOn GuestInv (ofString "frame_halt") K.«frame_halt») →
@@ -8676,12 +9153,19 @@ def GBody.«process_message» : Prop :=
   (ReadOnlyFn (ofString "state_snapshot")) →
   TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message»
 
+/-- The direct callees of `process_message`, read off its AST body (revision 6). -/
+theorem «callees_process_message» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_message))
+    ["depth0_prepare", "frame_halt", "frame_mem_release", "frame_open", "frame_start", "refill_frame_state_gas", "run_frames", "scratch_release", "state_restore", "state_snapshot"] = true := by decide
+
 theorem «gbody_process_message» : GBody.«process_message» := by sorry
 
 theorem «gb_process_message» : TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message» :=
   «gbody_process_message» «fb_depth0_prepare» «fb_frame_halt» «fb_frame_mem_release» «fb_frame_open» «fb_frame_start» «fb_refill_frame_state_gas» «gb_run_frames» «fb_scratch_release» «fb_state_restore» «fb_state_snapshot» «ek_depth0_prepare» «fk_frame_open» «ek_frame_start» «ro_state_snapshot»
 
-/-- `process_create_message` (AST line 18899, guard `MsgReady`): loop-free; 9 callees, 4 guard-carrying. -/
+/-- The body of `process_create_message` alone (AST line 18899, guard `MsgReady`, loop-free). Its direct callees are
+exactly `create_finish`, `destroy_storage`, `frame_halt`, `increment_nonce`, `mark_account_created`, `process_message`, `refill_frame_state_gas`, `state_restore`, `state_snapshot` (`«callees_process_create_message»`, checked against the AST). Hypotheses: the bound
+of each of these 9 callees, then the contract of each callee at a guard-carrying
+call site (4: `wk_destroy_storage`, `wk_increment_nonce`, `wk_mark_account_created`, `ro_state_snapshot`). Nothing else is assumed. -/
 def GBody.«process_create_message» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "create_finish") K.«create_finish») →
   (TerminatingFunBoundedOn GuestInv (ofString "destroy_storage") K.«destroy_storage») →
@@ -8698,12 +9182,19 @@ def GBody.«process_create_message» : Prop :=
   (ReadOnlyFn (ofString "state_snapshot")) →
   TerminatingFunBoundedOn MsgReady (ofString "process_create_message") K.«process_create_message»
 
+/-- The direct callees of `process_create_message`, read off its AST body (revision 6). -/
+theorem «callees_process_create_message» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_create_message))
+    ["create_finish", "destroy_storage", "frame_halt", "increment_nonce", "mark_account_created", "process_message", "refill_frame_state_gas", "state_restore", "state_snapshot"] = true := by decide
+
 theorem «gbody_process_create_message» : GBody.«process_create_message» := by sorry
 
 theorem «gb_process_create_message» : TerminatingFunBoundedOn MsgReady (ofString "process_create_message") K.«process_create_message» :=
   «gbody_process_create_message» «fb_create_finish» «fb_destroy_storage» «fb_frame_halt» «fb_increment_nonce» «fb_mark_account_created» «gb_process_message» «fb_refill_frame_state_gas» «fb_state_restore» «fb_state_snapshot» «wk_destroy_storage» «wk_increment_nonce» «wk_mark_account_created» «ro_state_snapshot»
 
-/-- `process_message_call` (AST line 19661, guard `MsgReady`): loop-free; 6 callees, 3 guard-carrying. -/
+/-- The body of `process_message_call` alone (AST line 19661, guard `MsgReady`, loop-free). Its direct callees are
+exactly `account_deployable`, `alloc`, `frame_state_gas_used`, `memzero`, `process_create_message`, `process_message` (`«callees_process_message_call»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (3: `wk_account_deployable`, `ww_alloc`, `ww_memzero`). Nothing else is assumed. -/
 def GBody.«process_message_call» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "account_deployable") K.«account_deployable») →
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
@@ -8718,12 +9209,19 @@ def GBody.«process_message_call» : Prop :=
     [] (ofString "memzero")) →
   TerminatingFunBoundedOn MsgReady (ofString "process_message_call") K.«process_message_call»
 
+/-- The direct callees of `process_message_call`, read off its AST body (revision 6). -/
+theorem «callees_process_message_call» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_message_call))
+    ["account_deployable", "alloc", "frame_state_gas_used", "memzero", "process_create_message", "process_message"] = true := by decide
+
 theorem «gbody_process_message_call» : GBody.«process_message_call» := by sorry
 
 theorem «gb_process_message_call» : TerminatingFunBoundedOn MsgReady (ofString "process_message_call") K.«process_message_call» :=
   «gbody_process_message_call» «fb_account_deployable» «fb_alloc» «fb_frame_state_gas_used» «fb_memzero» «gb_process_create_message» «gb_process_message» «wk_account_deployable» «ww_alloc» «ww_memzero»
 
-/-- `process_unchecked_system_transaction` (AST line 32851, guard `WorldOK`): loop-free; 11 callees, 6 guard-carrying. -/
+/-- The body of `process_unchecked_system_transaction` alone (AST line 32851, guard `WorldOK`, loop-free). Its direct callees are
+exactly `alloc`, `ext_code_of`, `frame_mem_release`, `htab_new`, `incorporate_tx_into_block`, `memcpy`, `msg_new`, `process_message_call`, `scratch_release`, `state_fresh_tx`, `te_new` (`«callees_process_unchecked_system_transaction»`, checked against the AST). Hypotheses: the bound
+of each of these 11 callees, then the contract of each callee at a guard-carrying
+call site (6: `wk_ext_code_of`, `htab_new_spec`, `ww_msg_new`, `wk_process_message_call`, `ww_state_fresh_tx`, `ww_te_new`). Nothing else is assumed. -/
 def GBody.«process_unchecked_system_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "ext_code_of") K.«ext_code_of») →
@@ -8747,12 +9245,19 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
     ["heap_ptr"] (ofString "te_new")) →
   TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction»
 
+/-- The direct callees of `process_unchecked_system_transaction`, read off its AST body (revision 6). -/
+theorem «callees_process_unchecked_system_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_unchecked_system_transaction))
+    ["alloc", "ext_code_of", "frame_mem_release", "htab_new", "incorporate_tx_into_block", "memcpy", "msg_new", "process_message_call", "scratch_release", "state_fresh_tx", "te_new"] = true := by decide
+
 theorem «gbody_process_unchecked_system_transaction» : GBody.«process_unchecked_system_transaction» := by sorry
 
 theorem «gb_process_unchecked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction» :=
   «gbody_process_unchecked_system_transaction» «fb_alloc» «fb_ext_code_of» «fb_frame_mem_release» «fb_htab_new» «gb_incorporate_tx_into_block» «fb_memcpy» «fb_msg_new» «gb_process_message_call» «fb_scratch_release» «fb_state_fresh_tx» «fb_te_new» «wk_ext_code_of» «htab_new_spec» «ww_msg_new» «wk_process_message_call» «ww_state_fresh_tx» «ww_te_new»
 
-/-- `process_checked_system_transaction` (AST line 32928, guard `WorldOK`): loop-free; 4 callees, 3 guard-carrying. -/
+/-- The body of `process_checked_system_transaction` alone (AST line 32928, guard `WorldOK`, loop-free). Its direct callees are
+exactly `alloc`, `ext_code_of`, `process_unchecked_system_transaction`, `state_fresh_tx` (`«callees_process_checked_system_transaction»`, checked against the AST). Hypotheses: the bound
+of each of these 4 callees, then the contract of each callee at a guard-carrying
+call site (3: `ww_alloc`, `wk_ext_code_of`, `ww_state_fresh_tx`). Nothing else is assumed. -/
 def GBody.«process_checked_system_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "ext_code_of") K.«ext_code_of») →
@@ -8765,12 +9270,19 @@ def GBody.«process_checked_system_transaction» : Prop :=
     ["heap_ptr", "journal_n", "ts"] (ofString "state_fresh_tx")) →
   TerminatingFunBoundedOn WorldOK (ofString "process_checked_system_transaction") K.«process_checked_system_transaction»
 
+/-- The direct callees of `process_checked_system_transaction`, read off its AST body (revision 6). -/
+theorem «callees_process_checked_system_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_checked_system_transaction))
+    ["alloc", "ext_code_of", "process_unchecked_system_transaction", "state_fresh_tx"] = true := by decide
+
 theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_system_transaction» := by sorry
 
 theorem «gb_process_checked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_checked_system_transaction") K.«process_checked_system_transaction» :=
   «gbody_process_checked_system_transaction» «fb_alloc» «fb_ext_code_of» «gb_process_unchecked_system_transaction» «fb_state_fresh_tx» «ww_alloc» «wk_ext_code_of» «ww_state_fresh_tx»
 
-/-- `process_general_purpose_requests` (AST line 33507, guard `ReqsFresh`): #0 CTR; #1 CTR; 6 callees, 6 guard-carrying. -/
+/-- The body of `process_general_purpose_requests` alone (AST line 33507, guard `ReqsFresh`, #0 CTR; #1 CTR). Its direct callees are
+exactly `alloc`, `extract_deposit_data`, `memcpy`, `memeq`, `process_checked_system_transaction`, `requests_append` (`«callees_process_general_purpose_requests»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (6: `ww_alloc`, `ww_extract_deposit_data`, `ww_memcpy`, `ro_memeq`, `wk_process_checked_system_transaction`, `wk_requests_append`). Nothing else is assumed. -/
 def GBody.«process_general_purpose_requests» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "extract_deposit_data") K.«extract_deposit_data») →
@@ -8789,12 +9301,19 @@ def GBody.«process_general_purpose_requests» : Prop :=
   (KeepsOn ReqRoom WorldOK (ofString "requests_append")) →
   TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests»
 
+/-- The direct callees of `process_general_purpose_requests`, read off its AST body (revision 6). -/
+theorem «callees_process_general_purpose_requests» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_general_purpose_requests))
+    ["alloc", "extract_deposit_data", "memcpy", "memeq", "process_checked_system_transaction", "requests_append"] = true := by decide
+
 theorem «gbody_process_general_purpose_requests» : GBody.«process_general_purpose_requests» := by sorry
 
 theorem «gb_process_general_purpose_requests» : TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests» :=
   «gbody_process_general_purpose_requests» «fb_alloc» «fb_extract_deposit_data» «fb_memcpy» «fb_memeq» «gb_process_checked_system_transaction» «fb_requests_append» «ww_alloc» «ww_extract_deposit_data» «ww_memcpy» «ro_memeq» «wk_process_checked_system_transaction» «wk_requests_append»
 
-/-- `process_transaction` (AST line 33103, guard `TxReady`): #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR; 37 callees, 34 guard-carrying. -/
+/-- The body of `process_transaction` alone (AST line 33103, guard `TxReady`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR). Its direct callees are
+exactly `alloc`, `calculate_blob_gas_price`, `calculate_total_blob_gas`, `check_transaction`, `clear_account_preserving_balance`, `compute_contract_address`, `create_ether`, `encode_receipt`, `encode_transaction`, `fee_mul`, `frame_mem_release`, `get_account`, `htab_item`, `htab_new`, `htab_set`, `incorporate_tx_into_block`, `increment_nonce`, `keccak256`, `lst_new`, `lst_push`, `max`, `memcpy`, `min`, `msg_new`, `process_message_call`, `recover_sender_with_chain_id`, `scratch_release`, `set_account_balance`, `state_fresh_tx`, `te_new`, `tx_chain_id`, `tx_has_access_list`, `tx_is_blob`, `tx_is_setcode`, `u256_sub`, `udiv_small5`, `validate_transaction` (`«callees_process_transaction»`, checked against the AST). Hypotheses: the bound
+of each of these 37 callees, then the contract of each callee at a guard-carrying
+call site (34: `ww_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `ww_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `ww_keccak256`, `ww_lst_new`, `ww_lst_push`, `ro_max`, `ww_memcpy`, `ro_min`, `ww_msg_new`, `wk_process_message_call`, `ww_recover_sender_with_chain_id`, `wk_set_account_balance`, `ww_state_fresh_tx`, `ww_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction`). Nothing else is assumed. -/
 def GBody.«process_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "calculate_blob_gas_price") K.«calculate_blob_gas_price») →
@@ -8879,12 +9398,19 @@ def GBody.«process_transaction» : Prop :=
   (ReadOnlyFn (ofString "validate_transaction")) →
   TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction»
 
+/-- The direct callees of `process_transaction`, read off its AST body (revision 6). -/
+theorem «callees_process_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_transaction))
+    ["alloc", "calculate_blob_gas_price", "calculate_total_blob_gas", "check_transaction", "clear_account_preserving_balance", "compute_contract_address", "create_ether", "encode_receipt", "encode_transaction", "fee_mul", "frame_mem_release", "get_account", "htab_item", "htab_new", "htab_set", "incorporate_tx_into_block", "increment_nonce", "keccak256", "lst_new", "lst_push", "max", "memcpy", "min", "msg_new", "process_message_call", "recover_sender_with_chain_id", "scratch_release", "set_account_balance", "state_fresh_tx", "te_new", "tx_chain_id", "tx_has_access_list", "tx_is_blob", "tx_is_setcode", "u256_sub", "udiv_small5", "validate_transaction"] = true := by decide
+
 theorem «gbody_process_transaction» : GBody.«process_transaction» := by sorry
 
 theorem «gb_process_transaction» : TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction» :=
   «gbody_process_transaction» «fb_alloc» «fb_calculate_blob_gas_price» «fb_calculate_total_blob_gas» «fb_check_transaction» «fb_clear_account_preserving_balance» «fb_compute_contract_address» «fb_create_ether» «fb_encode_receipt» «fb_encode_transaction» «fb_fee_mul» «fb_frame_mem_release» «fb_get_account» «fb_htab_item» «fb_htab_new» «fb_htab_set» «gb_incorporate_tx_into_block» «fb_increment_nonce» «fb_keccak256» «fb_lst_new» «fb_lst_push» «fb_max» «fb_memcpy» «fb_min» «fb_msg_new» «gb_process_message_call» «fb_recover_sender_with_chain_id» «fb_scratch_release» «fb_set_account_balance» «fb_state_fresh_tx» «fb_te_new» «fb_tx_chain_id» «fb_tx_has_access_list» «fb_tx_is_blob» «fb_tx_is_setcode» «fb_u256_sub» «fb_udiv_small5» «fb_validate_transaction» «ww_alloc» «wk_calculate_blob_gas_price» «ro_calculate_total_blob_gas» «wk_check_transaction» «wk_clear_account_preserving_balance» «ww_compute_contract_address» «wk_create_ether» «wk_encode_receipt» «wk_encode_transaction» «ro_fee_mul» «wk_get_account» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_increment_nonce» «ww_keccak256» «ww_lst_new» «ww_lst_push» «ro_max» «ww_memcpy» «ro_min» «ww_msg_new» «wk_process_message_call» «ww_recover_sender_with_chain_id» «wk_set_account_balance» «ww_state_fresh_tx» «ww_te_new» «ro_tx_chain_id» «ro_tx_has_access_list» «ro_tx_is_blob» «ro_tx_is_setcode» «ro_u256_sub» «ro_udiv_small5» «ro_validate_transaction»
 
-/-- `process_withdrawals` (AST line 33458, guard `WorldOK`): #0 CTR; 4 callees, 3 guard-carrying. -/
+/-- The body of `process_withdrawals` alone (AST line 33458, guard `WorldOK`, #0 CTR). Its direct callees are
+exactly `create_ether`, `incorporate_tx_into_block`, `state_fresh_tx`, `u256_mul` (`«callees_process_withdrawals»`, checked against the AST). Hypotheses: the bound
+of each of these 4 callees, then the contract of each callee at a guard-carrying
+call site (3: `wk_create_ether`, `ww_state_fresh_tx`, `ro_u256_mul`). Nothing else is assumed. -/
 def GBody.«process_withdrawals» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "create_ether") K.«create_ether») →
   (TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block») →
@@ -8896,12 +9422,19 @@ def GBody.«process_withdrawals» : Prop :=
   (ReadOnlyFn (ofString "u256_mul")) →
   TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals»
 
+/-- The direct callees of `process_withdrawals`, read off its AST body (revision 6). -/
+theorem «callees_process_withdrawals» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_withdrawals))
+    ["create_ether", "incorporate_tx_into_block", "state_fresh_tx", "u256_mul"] = true := by decide
+
 theorem «gbody_process_withdrawals» : GBody.«process_withdrawals» := by sorry
 
 theorem «gb_process_withdrawals» : TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals» :=
   «gbody_process_withdrawals» «fb_create_ether» «gb_incorporate_tx_into_block» «fb_state_fresh_tx» «fb_u256_mul» «wk_create_ether» «ww_state_fresh_tx» «ro_u256_mul»
 
-/-- `execute_block` (AST line 33580, guard `BlockReady`): #0 CTR; 20 callees, 16 guard-carrying. -/
+/-- The body of `execute_block` alone (AST line 33580, guard `BlockReady`, #0 CTR). Its direct callees are
+exactly `alloc`, `bal_init`, `build_block_access_list_rlp`, `build_mpt_indexed`, `compute_requests_hash`, `compute_state_root`, `decode_transaction`, `keccak256`, `logs_bloom`, `lst_new`, `max`, `memeq`, `memzero`, `process_general_purpose_requests`, `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`, `state_fresh_tx`, `track_ancestor_access`, `validate_block_access_list_gas_limit` (`«callees_execute_block»`, checked against the AST). Hypotheses: the bound
+of each of these 20 callees, then the contract of each callee at a guard-carrying
+call site (16: `ww_alloc`, `ww_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `ww_decode_transaction`, `ww_logs_bloom`, `ww_lst_new`, `ww_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `ww_state_fresh_tx`, `ww_track_ancestor_access`, `ro_validate_block_access_list_gas_limit`). Nothing else is assumed. -/
 def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "bal_init") K.«bal_init») →
@@ -8949,12 +9482,19 @@ def GBody.«execute_block» : Prop :=
   (ReadOnlyFn (ofString "validate_block_access_list_gas_limit")) →
   TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block»
 
+/-- The direct callees of `execute_block`, read off its AST body (revision 6). -/
+theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Software.guestFn_execute_block))
+    ["alloc", "bal_init", "build_block_access_list_rlp", "build_mpt_indexed", "compute_requests_hash", "compute_state_root", "decode_transaction", "keccak256", "logs_bloom", "lst_new", "max", "memeq", "memzero", "process_general_purpose_requests", "process_transaction", "process_unchecked_system_transaction", "process_withdrawals", "state_fresh_tx", "track_ancestor_access", "validate_block_access_list_gas_limit"] = true := by decide
+
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
 theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block» :=
   «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «ww_alloc» «ww_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «ww_decode_transaction» «ww_logs_bloom» «ww_lst_new» «ww_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «ww_state_fresh_tx» «ww_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
 
-/-- `payload_header` (AST line 32645, guard `WorldOK`): #0 CTR; 8 callees, 6 guard-carrying. -/
+/-- The body of `payload_header` alone (AST line 32645, guard `WorldOK`, #0 CTR). Its direct callees are
+exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
+of each of these 8 callees, then the contract of each callee at a guard-carrying
+call site (6: `ww_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `ww_keccak256`, `ww_memzero`). Nothing else is assumed. -/
 def GBody.«payload_header» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "block_rlp_length") K.«block_rlp_length») →
@@ -8975,12 +9515,19 @@ def GBody.«payload_header» : Prop :=
     [] (ofString "memzero")) →
   TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header»
 
+/-- The direct callees of `payload_header`, read off its AST body (revision 6). -/
+theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Software.guestFn_payload_header))
+    ["alloc", "block_rlp_length", "build_mpt_indexed", "compute_requests_hash", "encode_execution_requests", "encode_withdrawal_rlp", "keccak256", "memzero"] = true := by decide
+
 theorem «gbody_payload_header» : GBody.«payload_header» := by sorry
 
 theorem «gb_payload_header» : TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header» :=
   «gbody_payload_header» «fb_alloc» «fb_block_rlp_length» «gb_build_mpt_indexed» «fb_compute_requests_hash» «fb_encode_execution_requests» «fb_encode_withdrawal_rlp» «fb_keccak256» «fb_memzero» «ww_alloc» «wk_block_rlp_length» «wk_build_mpt_indexed» «wk_encode_withdrawal_rlp» «ww_keccak256» «ww_memzero»
 
-/-- `state_init` (AST line 12708, guard `WorldOK`): loop-free; 3 callees, 1 guard-carrying. -/
+/-- The body of `state_init` alone (AST line 12708, guard `WorldOK`, loop-free). Its direct callees are
+exactly `alloc`, `decode_witness_to_mpt`, `htab_new` (`«callees_state_init»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (1: `ww_alloc`). Nothing else is assumed. -/
 def GBody.«state_init» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt») →
@@ -8989,12 +9536,19 @@ def GBody.«state_init» : Prop :=
     ["heap_ptr"] (ofString "alloc")) →
   TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»
 
+/-- The direct callees of `state_init`, read off its AST body (revision 6). -/
+theorem «callees_state_init» : sameNames (progCallees (fnBody Guest.Software.guestFn_state_init))
+    ["alloc", "decode_witness_to_mpt", "htab_new"] = true := by decide
+
 theorem «gbody_state_init» : GBody.«state_init» := by sorry
 
 theorem «gb_state_init» : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init» :=
   «gbody_state_init» «fb_alloc» «gb_decode_witness_to_mpt» «fb_htab_new» «ww_alloc»
 
-/-- `run_attempt` (AST line 33734, guard `WorldOK`): #0 CTR; 12 callees, 11 guard-carrying. -/
+/-- The body of `run_attempt` alone (AST line 33734, guard `WorldOK`, #0 CTR). Its direct callees are
+exactly `alloc`, `check_gas_limit`, `execute_block`, `header_hash`, `is_valid_versioned_hashes`, `memeq`, `memzero`, `nodedb_build`, `payload_header`, `state_init`, `validate_header`, `validate_headers` (`«callees_run_attempt»`, checked against the AST). Hypotheses: the bound
+of each of these 12 callees, then the contract of each callee at a guard-carrying
+call site (11: `ww_alloc`, `ro_check_gas_limit`, `ww_header_hash`, `ww_is_valid_versioned_hashes`, `ro_memeq`, `ww_memzero`, `wk_nodedb_build`, `wk_payload_header`, `wk_state_init`, `wk_validate_header`, `ww_validate_headers`). Nothing else is assumed. -/
 def GBody.«run_attempt» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit») →
@@ -9026,15 +9580,26 @@ def GBody.«run_attempt» : Prop :=
     ["heap_ptr", "scratch_ptr"] (ofString "validate_headers")) →
   TerminatingFunBoundedOn WorldOK (ofString "run_attempt") K.«run_attempt»
 
+/-- The direct callees of `run_attempt`, read off its AST body (revision 6). -/
+theorem «callees_run_attempt» : sameNames (progCallees (fnBody Guest.Software.guestFn_run_attempt))
+    ["alloc", "check_gas_limit", "execute_block", "header_hash", "is_valid_versioned_hashes", "memeq", "memzero", "nodedb_build", "payload_header", "state_init", "validate_header", "validate_headers"] = true := by decide
+
 theorem «gbody_run_attempt» : GBody.«run_attempt» := by sorry
 
 theorem «gb_run_attempt» : TerminatingFunBoundedOn WorldOK (ofString "run_attempt") K.«run_attempt» :=
   «gbody_run_attempt» «fb_alloc» «fb_check_gas_limit» «gb_execute_block» «fb_header_hash» «fb_is_valid_versioned_hashes» «fb_memeq» «fb_memzero» «fb_nodedb_build» «gb_payload_header» «gb_state_init» «fb_validate_header» «fb_validate_headers» «ww_alloc» «ro_check_gas_limit» «ww_header_hash» «ww_is_valid_versioned_hashes» «ro_memeq» «ww_memzero» «wk_nodedb_build» «wk_payload_header» «wk_state_init» «wk_validate_header» «ww_validate_headers»
 
-/-- `attempt_l1` (AST line 33847, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l1` alone (AST line 33847, guard `WorldOK`, loop-free). Its direct callees are
+exactly `run_attempt` (`«callees_attempt_l1»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l1» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "run_attempt") K.«run_attempt») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1»
+
+/-- The direct callees of `attempt_l1`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l1» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l1))
+    ["run_attempt"] = true := by decide
 
 theorem «lookup_attempt_l1» : originalRuntimeCode.lookup (ofString "attempt_l1") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l1).2) :=
@@ -9056,10 +9621,17 @@ theorem «gbody_attempt_l1» : GBody.«attempt_l1» := by
 theorem «gb_attempt_l1» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1» :=
   «gbody_attempt_l1» «gb_run_attempt»
 
-/-- `attempt_l2` (AST line 33863, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l2` alone (AST line 33863, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l1` (`«callees_attempt_l2»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l2» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l1") K.«attempt_l1») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2»
+
+/-- The direct callees of `attempt_l2`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l2» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l2))
+    ["attempt_l1"] = true := by decide
 
 theorem «lookup_attempt_l2» : originalRuntimeCode.lookup (ofString "attempt_l2") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l2).2) :=
@@ -9081,10 +9653,17 @@ theorem «gbody_attempt_l2» : GBody.«attempt_l2» := by
 theorem «gb_attempt_l2» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2» :=
   «gbody_attempt_l2» «gb_attempt_l1»
 
-/-- `attempt_l3` (AST line 33879, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l3` alone (AST line 33879, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l2` (`«callees_attempt_l3»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l3» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l2") K.«attempt_l2») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3»
+
+/-- The direct callees of `attempt_l3`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l3» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l3))
+    ["attempt_l2"] = true := by decide
 
 theorem «lookup_attempt_l3» : originalRuntimeCode.lookup (ofString "attempt_l3") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l3).2) :=
@@ -9106,10 +9685,17 @@ theorem «gbody_attempt_l3» : GBody.«attempt_l3» := by
 theorem «gb_attempt_l3» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3» :=
   «gbody_attempt_l3» «gb_attempt_l2»
 
-/-- `attempt_l4` (AST line 33895, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l4` alone (AST line 33895, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l3` (`«callees_attempt_l4»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l4» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l3") K.«attempt_l3») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4»
+
+/-- The direct callees of `attempt_l4`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l4» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l4))
+    ["attempt_l3"] = true := by decide
 
 theorem «lookup_attempt_l4» : originalRuntimeCode.lookup (ofString "attempt_l4") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l4).2) :=
@@ -9131,10 +9717,17 @@ theorem «gbody_attempt_l4» : GBody.«attempt_l4» := by
 theorem «gb_attempt_l4» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4» :=
   «gbody_attempt_l4» «gb_attempt_l3»
 
-/-- `attempt_l5` (AST line 33911, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l5` alone (AST line 33911, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l4` (`«callees_attempt_l5»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l5» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l4") K.«attempt_l4») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5»
+
+/-- The direct callees of `attempt_l5`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l5» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l5))
+    ["attempt_l4"] = true := by decide
 
 theorem «lookup_attempt_l5» : originalRuntimeCode.lookup (ofString "attempt_l5") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l5).2) :=
@@ -9156,10 +9749,17 @@ theorem «gbody_attempt_l5» : GBody.«attempt_l5» := by
 theorem «gb_attempt_l5» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5» :=
   «gbody_attempt_l5» «gb_attempt_l4»
 
-/-- `attempt_l6` (AST line 33927, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l6` alone (AST line 33927, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l5` (`«callees_attempt_l6»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l6» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l5") K.«attempt_l5») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6»
+
+/-- The direct callees of `attempt_l6`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l6» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l6))
+    ["attempt_l5"] = true := by decide
 
 theorem «lookup_attempt_l6» : originalRuntimeCode.lookup (ofString "attempt_l6") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l6).2) :=
@@ -9181,10 +9781,17 @@ theorem «gbody_attempt_l6» : GBody.«attempt_l6» := by
 theorem «gb_attempt_l6» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6» :=
   «gbody_attempt_l6» «gb_attempt_l5»
 
-/-- `attempt_l7` (AST line 33943, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `attempt_l7` alone (AST line 33943, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l6` (`«callees_attempt_l7»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«attempt_l7» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l6") K.«attempt_l6») →
   TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7»
+
+/-- The direct callees of `attempt_l7`, read off its AST body (revision 6). -/
+theorem «callees_attempt_l7» : sameNames (progCallees (fnBody Guest.Software.guestFn_attempt_l7))
+    ["attempt_l6"] = true := by decide
 
 theorem «lookup_attempt_l7» : originalRuntimeCode.lookup (ofString "attempt_l7") =
     some ((sourceFunctionEntry Guest.Software.guestFn_attempt_l7).2) :=
@@ -9206,10 +9813,17 @@ theorem «gbody_attempt_l7» : GBody.«attempt_l7» := by
 theorem «gb_attempt_l7» : TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7» :=
   «gbody_attempt_l7» «gb_attempt_l6»
 
-/-- `verify_stateless_new_payload` (AST line 33959, guard `WorldOK`): loop-free; 1 callees, 0 guard-carrying. -/
+/-- The body of `verify_stateless_new_payload` alone (AST line 33959, guard `WorldOK`, loop-free). Its direct callees are
+exactly `attempt_l7` (`«callees_verify_stateless_new_payload»`, checked against the AST). Hypotheses: the bound
+of each of these 1 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
 def GBody.«verify_stateless_new_payload» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "attempt_l7") K.«attempt_l7») →
   TerminatingFunBoundedOn WorldOK (ofString "verify_stateless_new_payload") K.«verify_stateless_new_payload»
+
+/-- The direct callees of `verify_stateless_new_payload`, read off its AST body (revision 6). -/
+theorem «callees_verify_stateless_new_payload» : sameNames (progCallees (fnBody Guest.Software.guestFn_verify_stateless_new_payload))
+    ["attempt_l7"] = true := by decide
 
 theorem «lookup_verify_stateless_new_payload» : originalRuntimeCode.lookup (ofString "verify_stateless_new_payload") =
     some ((sourceFunctionEntry Guest.Software.guestFn_verify_stateless_new_payload).2) :=
@@ -9234,7 +9848,10 @@ theorem «gbody_verify_stateless_new_payload» : GBody.«verify_stateless_new_pa
 theorem «gb_verify_stateless_new_payload» : TerminatingFunBoundedOn WorldOK (ofString "verify_stateless_new_payload") K.«verify_stateless_new_payload» :=
   «gbody_verify_stateless_new_payload» «gb_attempt_l7»
 
-/-- `main` (AST line 33979, guard `MainEntry`): loop-free; 21 callees, 18 guard-carrying. -/
+/-- The body of `main` alone (AST line 33979, guard `MainEntry`, loop-free). Its direct callees are
+exactly `alloc`, `blake2_init`, `bls_precompiles_init`, `bn254_init`, `decode_host_input`, `evm_init`, `fork_init`, `header_init`, `htr_new_payload_request`, `keccak_init`, `mem_init`, `memzero`, `mpt_init`, `output_write`, `ripemd160_init`, `secp256k1_init`, `serialize_result`, `sha256_init`, `ssz_init`, `u256_ws_init`, `verify_stateless_new_payload` (`«callees_main»`, checked against the AST). Hypotheses: the bound
+of each of these 21 callees, then the contract of each callee at a guard-carrying
+call site (18: `ww_alloc`, `ww_blake2_init`, `ww_bls_precompiles_init`, `ww_bn254_init`, `wk_decode_host_input`, `ww_evm_init`, `ww_fork_init`, `ww_header_init`, `ww_htr_new_payload_request`, `ww_keccak_init`, `mem_init_world`, `ww_memzero`, `ww_mpt_init`, `ww_ripemd160_init`, `ro_secp256k1_init`, `ww_sha256_init`, `ww_ssz_init`, `ww_u256_ws_init`). Nothing else is assumed. -/
 def GBody.«main» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "blake2_init") K.«blake2_init») →
@@ -9292,6 +9909,10 @@ def GBody.«main» : Prop :=
     ["heap_ptr", "u256_ws"] (ofString "u256_ws_init")) →
   TerminatingFunBoundedOn MainEntry (ofString "main") K.«main»
 
+/-- The direct callees of `main`, read off its AST body (revision 6). -/
+theorem «callees_main» : sameNames (progCallees (fnBody Guest.Software.guestFn_main))
+    ["alloc", "blake2_init", "bls_precompiles_init", "bn254_init", "decode_host_input", "evm_init", "fork_init", "header_init", "htr_new_payload_request", "keccak_init", "mem_init", "memzero", "mpt_init", "output_write", "ripemd160_init", "secp256k1_init", "serialize_result", "sha256_init", "ssz_init", "u256_ws_init", "verify_stateless_new_payload"] = true := by decide
+
 theorem «gbody_main» : GBody.«main» := by sorry
 
 theorem «gb_main» : TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» :=
@@ -9323,24 +9944,26 @@ structure Primitives : Prop where
   «fb_memeq» : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»
   «fb_node_invalidate» : TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate»
   «fb_scratch_alloc» : TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc»
-  «nf__collapse_branch» : NodeFn ["node"] (ofString "_collapse_branch")
-  «nf__delete_ext_finish» : NodeFn ["node", "nc"] (ofString "_delete_ext_finish")
+  «nf__collapse_branch» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 3)     (ofString "_collapse_branch")
+  «nf__delete_ext_finish» : NodeFn ["node", "nc"]     (fun s Nd =>       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl"))     (ofString "_delete_ext_finish")
   «ro_common_prefix_length» : ReadOnlyFn (ofString "common_prefix_length")
+  «rv_common_prefix_length» : RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")
   «ro_memeq» : ReadOnlyFn (ofString "memeq")
-  «nf_node_invalidate» : NodeFn ["nd"] (ofString "node_invalidate")
+  «nf_node_invalidate» : NodeFn ["nd"]     (fun _ _ => True)     (ofString "node_invalidate")
   «ww_scratch_alloc» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "scratch_alloc")
   «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body»
   «gbody__mpt_delete_node» : GBody.«_mpt_delete_node»
   «fb__insert_into_leaf» : TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf»
   «fb__split_extension» : TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension»
   «fb_node_new_leaf» : TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf»
-  «nf__insert_into_leaf» : NodeFn ["node"] (ofString "_insert_into_leaf")
-  «nf__split_extension» : NodeFn ["node"] (ofString "_split_extension")
-  «nf_node_new_ext» : NodeFn ["child"] (ofString "node_new_ext")
-  «nf_node_new_leaf» : NodeFn [] (ofString "node_new_leaf")
+  «nf__insert_into_leaf» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))     (ofString "_insert_into_leaf")
+  «nf__split_extension» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧       locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")     (ofString "_split_extension")
+  «nf_node_new_ext» : NodeFn ["child"]     (fun s Nd =>       KeyIn s Nd (locN s "nib") (locN s "nlen"))     (ofString "node_new_ext")
+  «nf_node_new_leaf» : NodeFn []     (fun s Nd =>       KeyIn s Nd (locN s "nib") (locN s "nlen"))     (ofString "node_new_leaf")
   «gbody__mpt_insert_node» : GBody.«_mpt_insert_node»
   «fb_mpt_nibble_key» : TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key»
   «ww_mpt_nibble_key» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])     ["heap_ptr"] (ofString "mpt_nibble_key")
+  «nk_mpt_nibble_key» : RetNibbles (ofString "mpt_nibble_key")
   «gbody_mpt_set» : GBody.«mpt_set»
   «fb_heap_mark» : TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark»
   «fb_heap_release» : TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release»
@@ -9735,10 +10358,10 @@ theorem assembly_main (P : Primitives) :
   have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ak__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
   have «g__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
   have «g__decode_witness_node» := «gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«ww_scratch_alloc»
+  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«ww_scratch_alloc»
   have «g__mpt_delete_node» := P.«gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
-  have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key»
+  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
+  have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«ww_mpt_new» P.«wk_mpt_set» P.«ww_rlp_encode_word»
   have «g_decode_witness_to_mpt» := P.«gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
   have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
@@ -9806,6 +10429,7 @@ theorem primitives : Primitives where
   «nf__collapse_branch» := «nf__collapse_branch»
   «nf__delete_ext_finish» := «nf__delete_ext_finish»
   «ro_common_prefix_length» := «ro_common_prefix_length»
+  «rv_common_prefix_length» := «rv_common_prefix_length»
   «ro_memeq» := «ro_memeq»
   «nf_node_invalidate» := «nf_node_invalidate»
   «ww_scratch_alloc» := «ww_scratch_alloc»
@@ -9821,6 +10445,7 @@ theorem primitives : Primitives where
   «gbody__mpt_insert_node» := «gbody__mpt_insert_node»
   «fb_mpt_nibble_key» := «fb_mpt_nibble_key»
   «ww_mpt_nibble_key» := «ww_mpt_nibble_key»
+  «nk_mpt_nibble_key» := «nk_mpt_nibble_key»
   «gbody_mpt_set» := «gbody_mpt_set»
   «fb_heap_mark» := «fb_heap_mark»
   «fb_heap_release» := «fb_heap_release»
