@@ -1,9 +1,11 @@
-# GuestInv revision 3: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 4: a guarded route to `CoveredSourceTicksConsumedBounded`
 
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
-answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`, Astra 6 and Gemini 4 Carbon);
-revision 3 answers the round-2 quorum (`campaign/reviews/guestinv-r2.md`), §0.1 and §0.2. All statements are in `campaign/specs-proposed/GuestInv.lean`. The generated parts of
-that file, the per-loop table (§4) and the coverage table (§5) come from
+answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
+(`guestinv-r2.md`), and revision 4 answers the round-3 quorum (`guestinv-r3.md`: Fable 5.1, Astra
+6 and the coordinator's assembly decision), §0.1 and §0.2. All statements are in
+`campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
+the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
 is touched.
 
@@ -13,18 +15,224 @@ is touched.
 |---|---|---|
 | `GuestInv` = code ∧ memaddrs ∧ shMemaddrs ∧ baseAddr | §2 of the Lean file | definition; `guestInv_evaluate`: **every** evaluation preserves it (**proved**) |
 | guarded `call`/`decCall`/`seq`/`ite`/`dec` rules, no preservation side conditions | §3 | **proved** |
-| tail call, handler call, stationary `while`, `while_rank`, `dec` for local-reading guards, guarded `decCall`, condition-aware `ite` | §3 | **proved** (revision 3; no combinator has a `sorry`) |
-| bridge `TerminatingFunBoundedOn MainEntry "main" K → CoveredSourceTicksConsumedBounded (K+1)` | §4 | **proved** (unchanged proof, `MainEntry` gains the proved `GlobalsZero`) |
-| one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
-| unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
-| memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
-| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements); the frame glue `run_frames_step_of_specs` and `run_frames_step` **proved** |
-| `LocalsOnly` instances for every guard | §7 | **proved** |
-| guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
+| tail call, handler calls (`callHandle_guestInv`, **new** guarded `callHandle_on`), stationary `while`, `while_rank`, **new** active-head `while_rank_active` / `while_rank_stationary_active`, `dec` for local-reading guards, guarded `decCall`, condition-aware `ite` | §3 | **proved** (no combinator has a `sorry`) |
+| bridge `TerminatingFunBoundedOn MainEntry "main" K → CoveredSourceTicksConsumedBounded (K+1)` | §4 | **proved** (unchanged) |
+| one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions (unchanged) |
+| unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements, textually unchanged) |
+| memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
+| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
+| **new** callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (61) | §7 (generated) | `sorry` (141 statements) |
+| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | `sorry` (47 statements) |
+| guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
+| **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
+| `LocalsOnly`/`LocalsFree` instances for every guard (now incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`) | §7 | **proved** |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
-| end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
+| end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | `assembly primitives`; its `sorry` dependencies are exactly the primitive leaves |
 
-## 0.1 Round-2 items and how each is addressed
+## 0.1 Round-3 items and how each is addressed
+
+### Fable 5.1, blocking
+
+**1. `while_rank` could not assemble `gb_run_frames`.** New corollaries with the same proof:
+`TerminatingProgBoundedOn.while_rank_active` and `while_rank_stationary_active`, whose body bound is
+`TerminatingProgBoundedOn (fun s => P s ∧ LoopActive condition s) body B`. The induction core
+`while_rank_stationary_aux` now takes the body bound only at active `P` heads (it is a proved
+helper; `while_rank` and `while_rank_stationary` are restated through it with unchanged
+statements). `LoopActive` survives the clock step by the proved `loopActive_decClock`
+(`evalHOLFinite_upd_clock_eq`). For `run_frames`, `P = GuestInv ∧ (EvmInv ∨ go = 0)`, and the active
+head (`go ≠ 0`) gives `EvmInv`, so the guarded callees' guards hold.
+
+**2. No handler-call rule for guarded callees.** `TerminatingProgBoundedOn.callHandle_on` (proved):
+callee bound under `Pc`, call site discharged by `CallEntryOn P Pc`, handler bounded under
+`GuestInv` (from `hPG : P s → GuestInv s` and `guestInv_evaluate`). `callHandle_guestInv` is now its
+instance `P = Pc = GuestInv` (statement unchanged).
+
+**3. `op_dispatch_spec` false at capacity 0.** `FrameWF` requires `1 ≤ e+232` (stack capacity) and
+`1 ≤` the logs capacity `(e+88)+16`. `frame_new` gives 32 (15388) and 4 (15407, `lst_new_scratch(8,
+4)`). `stack_push` regrows to `min(2·cap, 1024)` (15080-15083) and `lst_push` to `2·cap` (13856), so
+both growth paths keep `≥ 1`. Astra's item 1 is the same defect and is closed by this change.
+
+**4. `finish_child_spec` false.**
+- *Output window* (AST 18650-18652): new `RetWindowsOK s ch` in `EvmInv`. For every chain position
+  `i` with a parent: `c_i+80 = 0 ∨ c_i+72 + c_i+80 ≤ e_{i+1}+40` (parent memory capacity). The
+  disjunct `c_i+80 = 0` is necessary, and the reviewer's unconditional form would be false: `op_call`
+  passes `os = sat_word(out_start)` (19447), which is arbitrary when the size is 0, and
+  `finish_child` only copies `min(out_size, …) ≠ 0` bytes. `extend_memory` on the output window
+  establishes it before `generic_call` → `start_child` stores the window (18746-18748). The
+  suspended parent's capacity does not change until `finish_child`.
+- *Return-data buffer* (`set_retdata` 19064): new `frameRet s ec`, index 6 of `frameObjects`. It is
+  `(e+144, round8(e+216 + 8))` (the block `alloc(n + 8)` returns), or `(0, 0)` when the capacity
+  `e+216` is 0. `FrameWF` requires `e+216 = 0 ∧ e+144 = evm_empty`, or the block allocated on the
+  heap with words. So it is pairwise disjoint from every frame block, table and fixed object.
+  Astra's witness (`parent+144 = parent+64`, capacity 8) violates that disjointness.
+- *Field audit (DESIGN Q1)*: §8 Q1 has the field-by-field table for the frame record (AST 15370) and
+  the continuation (AST 18450/18705). It is generated by a write-root scan over the `op_dispatch`,
+  `finish_child`, `frame_exception` and `frame_epilogue` cones: every store and every argument
+  passed to a written parameter, with locals resolved to their definitions. Every pointer field
+  written through is owned:
+  - `+8`: stack;
+  - `+24`: memory; the `+32`/`+40` hits are offsets into it;
+  - `+88`: logs header and array;
+  - `+136/+168/+176`: tables;
+  - `+144`: return data;
+  - `c+72`: output window.
+
+### Fable 5.1, assembly ruling, recommendation adopted (item 5); Astra 6, assembly ruling
+
+The coordinator required a proved assembly theorem `(∀ primitive obligation) → target`. Revision 4
+has it:
+- `structure Primitives : Prop` (generated, 437 fields) lists every obligation the guarded tier uses:
+  - the `fb_*` bounds of the 239 unguarded callees of guarded functions;
+  - the 10 §7 contract leaves those compositions use;
+  - the 141 new callee contracts;
+  - the 47 composition obligations `gbody_f`.
+- `assembly_main : Primitives → TerminatingFunBoundedOn MainEntry "main" K.«main»` is **proved**
+  (generated `have` chain in callee-first order). So is `assembly : Primitives →
+  CoveredSourceTicksConsumedBounded K_pan`. `#print axioms assembly` gives `[propext,
+  Classical.choice, Quot.sound]`, with no `sorryAx`.
+- `primitives : Primitives` fills each field with its leaf. The end-to-end theorem is `assembly
+  primitives`.
+- Every `gb_f` is now a **proved** theorem: `gbody_f` applied to its callees' `fb_*`/`gb_*` and
+  contracts. Statements are unchanged except five guards (§0.2).
+
+Each primitive is a statement about one function body:
+- **`gbody_f`**: `GBody.«f»` is `(bound of every direct callee) → (contract of every guard-carrying
+  callee) → TerminatingFunBoundedOn Guard_f f K.«f»`. Its proof is a walk over `f`'s body with the
+  §3 combinators, using **only** the listed hypotheses. Guard establishment and transport at the
+  guarded calls, the loop invariants and the rank/stationary obligations (§3 table) are part of that
+  walk. A `gbody_f` that needs a fact absent from its hypotheses is unprovable, so the interface is
+  explicit and checked by Lean (see §8 Q9 for where the walk is expected to be hardest).
+- **Guard-carrying call sites** are computed by `coverage.py` (`needed_calls`): a call site counts
+  when a guarded call or a guarded loop head is reachable after it inside the body. `return` and
+  `raise` end a path, and a tail call flows only into its callee. 150 callees (133 of the 239
+  BETWEEN functions plus 17 guarded callees) need a contract. Nine of them are covered by the
+  existing §7 leaves (`htab_set/del/truncate/new`, `mem_init`, `op_dispatch`, `frame_exception`,
+  `frame_epilogue`, `finish_child`), which leaves 141 new contracts. The other 106 BETWEEN
+  functions are only ever followed by unguarded code and need none. That includes all 85 `op_*`
+  called from `op_dispatch`, because each dispatch branch returns.
+- **Callee contracts**, three uniform shapes (§7 of the Lean file), chosen mechanically:
+  - `ReadOnlyFn g` (30): `g` (transitively) has no store, no global assignment and no FFI call. On a
+    resuming outcome (return, or an exception other than `TrapErr`) the post-state is the entry state
+    up to locals and clock. The proved `ReadOnlyFn.keepsOn` turns it into `KeepsOn W W` for any
+    `LocalsFree` guard.
+  - `WritesWithin R gw g` (50): on a resuming outcome, memory changes only inside `R` and inside the
+    memory free at entry (above `heap_ptr`, between `frame_mem_ptr` and `scratch_ptr`); only the
+    globals `gw` (computed) change; the arenas stay separated and the heap does not shrink. It holds
+    for arbitrary states, and the caller shows `R` is unowned:
+    - `R` is the parameter extents for the 19 pointer-parameter writers (hand-checked table
+      `REGION` in `coverage.py`: `memcpy (dst, n)`, `memzero (dst, n)`, `rlp_encode_bytes (dst, n +
+      9)`, `lst_push` header and array, …), plus the global buffers the closure writes (computed,
+      e.g. `keccak_pad`, `keccak_st` for `keccak256`);
+    - `R` is just the global buffers for the 31 callees whose every store lands in a block their
+      own closure allocated or in a global buffer (computed, `fresh_only`).
+  - `KeepsOn P W g` (61): the reviewers' `PreservesOn WorldOK WorldOK` restricted to resuming
+    outcomes. `W` is the caller's world guard: `WorldOK`; `EvmInv` inside `finish_child` and after
+    `frame_open` in `process_message`; `ArenaReady` in the decoder and MPT tier. `P = W` except:
+    - guarded callees, where `P` is their own guard (`TxReady`, `ReqsFresh`, `MsgReady`, …);
+    - `requests_append` (`ReqRoom`);
+    - `mpt_set`, `mpt_root`, `compute_state_root`, `build_mpt_indexed` (output region outside the
+      world, typed trie object);
+    - `frame_open` in `process_message`: `KeepsOn FrameOpenReady EvmInv`, because it builds the
+      outermost frame.
+- **The bound** of each contract callee is its `fb_*`/`gb_*` leaf, also a hypothesis of
+  `GBody.«f»`.
+
+### Astra 6, blocking
+
+**1. Zero-capacity logs.** Fable item 3 above (`1 ≤` capacity for stack and logs).
+
+**2. Unowned return-data buffers.** Fable item 4 above (`frameRet` owned, disjoint; output windows
+`RetWindowsOK`).
+
+**3. Release marks did not protect surviving tables.** `MarksOK` now takes the table set `S`. For
+each child position `i` (mark `m_i = c_i+48`), every table of `S` that is not the deletion table
+`e_j+136` of a frame `j ≤ i` has its whole footprint in the heap or in `[m_i, scratchEnd)`. Likewise
+every non-empty fixed object. The only table ever built in scratch is a frame's deletion table:
+`htab_new_scratch` has the single caller `frame_new`, and `htab_copy_scratch` is unreachable.
+Astra's witness (a shared `htab_new_scratch` table below the child's mark) violates the new
+conjunct.
+
+### Non-blocking (both reviewers)
+
+- *`cap` bound*: `HtabNewReady` requires `cap ≤ htabCapMax = 2^32` instead of membership in a
+  literal list. `nodedb_build` (9948) passes a computed power of two; `htabCaps` is removed.
+- *`MainEntry`*: `localsFree_mainEntry` and `localsOnly_mainEntry` (proved).
+
+### What the composition analysis found (new, round-3 item 5)
+
+The write-root scan over the guarded bodies and the guard-carrying callees found writes through
+pointer fields of the global record `bo` that `WorldOK` did not own:
+- the transaction and receipt arrays `bo+24`, `bo+32` (`process_transaction` 33368-33374);
+- the request array `bo+56` (`requests_append`);
+- the logs and requests lists `bo+40`, `bo+72` (`lst_push` from `process_transaction`).
+
+With those unowned, `KeepsOn WorldOK WorldOK process_transaction` would be false: `bo+24` could
+alias a table. The new `blockOutObjects` (in `fixedObjects`) owns them. Their index bounds become
+guards:
+- `TxReady` for `process_transaction` (`index < bo+80`);
+- `ReqsFresh` for `process_general_purpose_requests` (`bo+64 = 0`: no request recorded yet);
+- `ReqRoom` for `requests_append`.
+
+Every other world write goes through a typed table slot (`ws+32`, `bs+8…+72`, `ts+8…+64`) or a
+global buffer. The message path needs the message's access tables typed when `frame_open` copies
+them into the outermost frame, hence `MsgReady` for `process_message`, `process_message_call` and
+`process_create_message`.
+
+## 0.2 Changes since 1c54006ca (revision 3)
+
+Mechanical statement diff of the two Lean files (`theorem`/`def`/`structure` signatures, comments
+dropped; script in §9).
+
+**Changed leaf statements: none.** All 727 `fb_*` and all 14 §7 contract leaves are textually
+unchanged. So the speculative provers' `fb_*` targets (arith, rlp, htab) are stable.
+
+**Changed guarded bounds (5), now proved theorems rather than leaves:**
+- `gb_process_transaction`: guard `WorldOK` → `TxReady`;
+- `gb_process_general_purpose_requests`: guard `WorldOK` → `ReqsFresh`;
+- `gb_process_message`, `gb_process_message_call`, `gb_process_create_message`: guard `WorldOK` →
+  `MsgReady`.
+
+The other 42 `gb_*` statements are unchanged and now proved.
+
+**Changed definitions (7), and the leaves whose meaning they change:**
+- `FrameWF`: `1 ≤` stack and logs capacity; return-data buffer owned. This affects `EvmInv`, hence
+  `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec` and `finish_child_spec`.
+- `frameObjects`: adds `frameRet`, with the same effect.
+- `EvmInv`: adds `RetWindowsOK`, with the same effect.
+- `MarksOK`: takes `S`, and keeps surviving tables and fixed objects outside the child's scratch.
+  Same effect.
+- `fixedObjects`: adds `blockOutObjects`. Through `TablesTyped`, `FixedTyped`, `TriesTyped`,
+  `WorldOK`, `EvmInv` it affects:
+  - every §7 contract leaf that mentions `WorldOK`/`EvmInv`: `mem_init_world` and the four frame
+    contracts;
+  - every new `KeepsOn` contract.
+- `HtabNewReady`: `cap ≤ htabCapMax` (was `cap ∈ htabCaps`). It affects `htab_new_spec` and
+  `htab_new_scratch_spec`, whose pre-condition is now weaker, so the leaves are stronger.
+- `while_rank_stationary_aux` (proved helper): body bound required only at active heads.
+
+**Removed:** `htabCaps`.
+
+**New proved theorems:**
+- `callHandle_on`, `while_rank_active`, `while_rank_stationary_active`, `loopActive_decClock`;
+- `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, `msgReady_worldOK`, `worldOK_guestInv`,
+  `evmInv_guestInv`;
+- `localsFree_mainEntry`, `localsOnly_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
+  `localsOnly_msgReady`, `localsOnly_frameOpenReady`;
+- the 47 `gb_*`, `assembly_main`, `assembly`, `primitives`.
+
+**New definitions:**
+- `frameRet`, `RetWindowsOK`, `blockOutObjects`, `htabCapMax`;
+- `Resumes`, `ReadOnlyFn`, `KeepsOn`, `WritesWithin`, `WorldAvoids`;
+- `TxReady`, `ReqsFresh`, `ReqRoom`, `MsgReady`, `FrameOpenReady`;
+- the 47 `GBody.«f»`, `Primitives`.
+
+**New leaves (188):** 141 callee contracts (`ro_*` 30, `ww_*` 50, `wk_*` 51, `ek_*` 6, `ak_*` 3,
+`fk_frame_open`) and 47 `gbody_*`.
+
+**Unchanged:** every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
+`run_frames_step_of_specs`, every revision-3 combinator statement.
+
+## 0.3 Round-2 items and how each was addressed (revision 3)
 
 ### Fable 5.1
 
@@ -156,7 +364,7 @@ dep (nd n 0) < dep n`. This makes the tree rooted and acyclic: following parents
   `evmPot_lt_bound` turns "`R` not larger, `F` smaller" into a strict decrease under `EvmInv`.
 - `run_frames_step` therefore depends only on the four frame contract leaves.
 
-**`gb_main` stays a leaf, by design.** Every `fb_*`/`gb_*` leaf, `gb_main` included, is a
+**`gb_main` stays a leaf, by design.** *(Superseded in revision 4: the round-3 assembly ruling made every `gb_*` a proved theorem over the `gbody_*` primitives, §0.1.)* Every `fb_*`/`gb_*` leaf, `gb_main` included, is a
 *composition leaf*. Its proof is a walk over its own body with the proved §3 combinators, using
 only its callees' leaves, its loops' measures and, in the guarded tier, the §7 contracts, the
 proved `LocalsOnly`/`Hoare` facts and the proved glue. Proving those walks is the leaf provers'
@@ -181,7 +389,7 @@ about one function's code. `coveredSourceTicksConsumedBounded_K_pan` applies the
   - the `dec_onLocals` name check;
   - the proved glue itself, which exercises the frame contracts on the real loop body.
 
-## 0.2 Changes since 7e73988d (revision 2)
+## 0.4 Changes in revision 3 (since 7e73988d)
 
 Mechanical statement diff of the two Lean files (`theorem`/`def`/`example` signatures, comments
 dropped).
@@ -425,100 +633,63 @@ RLP validation stack 2^253, plus the callee bodies.
 | Guard | Definition | Leaves |
 |---|---|---|
 | `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec`, `htab_del_progress_spec` |
-| `HtabNewReady` | `ArenaReady` ∧ `key_len ∈ htabKeyLens` | `htab_new_spec`, `htab_new_scratch_spec` |
+| `HtabNewReady` | `ArenaReady` ∧ `key_len ∈ htabKeyLens` ∧ `cap ≤ 2^32` | `htab_new_spec`, `htab_new_scratch_spec` |
 | `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
 | `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
-| `EvmInv` | §5 of the Lean file (item 5; revision 3 adds `FrameRoom` for suspended frames) | `run_frames` |
-| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (heap ⊆ `[sourceBase, 0xb0000000]`, frame memory below scratch inside `[0xb0000000, 0xb0bee000]`) | `_decode_witness_node_body` |
+| `EvmInv` | §5 of the Lean file (revision 4: capacities `≥ 1`, return data owned, `RetWindowsOK`, release lifetime of surviving tables) | `run_frames` |
+| `ArenaReady` | `GuestInv` ∧ `ArenaOK` | `_decode_witness_node_body` |
 | `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
-| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records, tries) | the other 37 guarded functions |
+| `MsgReady` (new) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `msg+152`, `msg+160` ∈ S | `process_message`, `process_message_call`, `process_create_message` |
+| `TxReady` (new) | `WorldOK` ∧ `index < bo+80` | `process_transaction` |
+| `ReqsFresh` (new) | `WorldOK` ∧ `bo+64 = 0` | `process_general_purpose_requests` |
+| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records and block-output objects, tries) | the other 32 guarded functions |
 | `MainEntry` | §2 | `main` |
+
+Callee-contract pre-conditions (not bound guards): `ReqRoom` (`requests_append`), `FrameOpenReady`
+(`frame_open` in `process_message`), `WorldAvoids R` (an output region outside every typed table
+and fixed object).
 
 Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_onLocals`,
 `LocalsOnly.decClock` and `LocalsOnly.setVar` apply inside every guarded body.
 
-`WorldOK` holds right after `mem_init`: every root is 0, so `S = []` works (`mem_init_world`).
-`EvmInv → WorldOK`. Inside `run_frames` every frame-level callee (`op_dispatch`, `op_sload`,
-`op_sstore`, …) is called from an `EvmInv` state.
+### Compositions (revision 4)
 
-### What each guarded leaf must establish at its guarded call sites
+`gb_f` is proved as `gbody_f` applied to the callee facts. `GBody.«f»`'s hypotheses are, in order:
+- the bound of every direct callee: `fb_g` (under `GuestInv`) or `gb_g` (under its guard);
+- at every guard-carrying call site, the callee's contract:
+  - a §7 leaf;
+  - `ro_g : ReadOnlyFn g`;
+  - `ww_g : WritesWithin R gw g`;
+  - `wk_g`/`ek_g`/`ak_g : KeepsOn P W g` for `W` = `WorldOK`/`EvmInv`/`ArenaReady`;
+  - `fk_frame_open`.
 
-The guarded leaves are "big" leaves. Besides composing callee bounds, each proves that its guarded
-callees' guards hold at their call sites, using the contract leaves:
+What each composition must show, beyond the combinator walk:
+- `gbody_run_frames`: `while_rank_active` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,
+  `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`. The step is `run_frames_step_of_specs`
+  applied to its four hypotheses `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`,
+  `finish_child_spec`. The body bound under `P ∧ go ≠ 0` uses `callHandle_on`:
+  - for `op_dispatch`, `EvmInv ∧ ¬EvmDone → WorldOK`, by `worldOK_of_evmInv`;
+  - for `finish_child`, `FinishReady`.
+- `gbody_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv`, carried across
+  `create_finish`, `frame_halt`, `refill_frame_state_gas`, `state_restore` by their `ek_*` contracts.
+- `gbody_htab_truncate`: `while_rank_stationary` with `μ = count (t+24)`, by `htab_del_spec` and
+  `htab_del_progress_spec` (revision-3 argument, unchanged).
+- `gbody_process_message`: `MsgReady` at entry. `fk_frame_open` gives `EvmInv`. `ek_depth0_prepare`,
+  `ek_state_snapshot` and `ek_frame_start` carry it, and the inline store `cur_cont+24` writes a
+  non-pointer field of the continuation. That gives `EvmInv` at `run_frames`.
+- `gbody_process_transaction` / `gbody_execute_block` / … carry `WorldOK` (or `MsgReady`, `TxReady`,
+  `ReqsFresh`) to every guarded call with the contracts listed below:
+  - fresh tables from `htab_new_spec` extend `S`;
+  - `WritesWithin` regions are fresh blocks or outputs the body allocated;
+  - inline stores land in owned objects (`bo` arrays below `bo+80`, frame records) or in fresh
+    memory.
+- `gbody_main`: `mem_init_world` at the first call. `WorldOK` is then carried through:
+  - the `*_init` functions: `WritesWithin` for those whose stores all land in buffers they
+    allocate, `KeepsOn WorldOK` for `bls_precompiles_init`, `bn254_init`, `fork_init`, `ssz_init`,
+    and `ReadOnlyFn` for `secp256k1_init`. A changed buffer global is a fresh allocation, so
+    `FixedTyped` follows from the frame;
+  - `decode_host_input` (`KeepsOn WorldOK`);
+  - `htr_new_payload_request` (`WritesWithin (out, 32)`).
 
-- `gb_run_frames` uses `while_rank` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,
-  `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`, and `run_frames_step`, which is proved
-  from `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec` and the
-  glue `run_frames_step_of_specs`. The body's time bound comes from the callees' leaves; `finish_child`
-  is called under `FinishReady`, which `EvmInv ∧ EvmDone ∧ kind ≠ 0` gives directly.
-- `gb_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv` (the child's tables are
-  in `S`).
-- `gb_rollback_child_access` → `htab_truncate`: `HtabArgWF` directly.
-- `gb_htab_truncate`: `while_rank_stationary` with `P = HtabArgWF`, `μ = count (t+24) < 2^64`. Each
-  iteration calls `htab_del` on the key of the last leaf. It either deletes a leaf (count drops by
-  one: `htab_del_progress_spec`; `HtabArgWF` kept: `htab_del_spec` and `localsOnly_htabArgWF`) or
-  returns 0 having written nothing. In the latter case the caller's `dec`s restore `pos`/`leaf`, so
-  the loop head is `SameHead`. (Round 2: "every iteration is a successful `htab_del`" was wrong,
-  because `HtabWF` does not constrain key bytes.)
-- `gb_process_message`: establishes `EvmInv` at the `run_frames` call from `WorldOK`, using the fresh
-  `frame_open` record and continuation, the marks just taken, tables in `S`, and the `htab_new_scratch`
-  contract for `e+136`.
-- `gb_process_transaction` / `gb_execute_block` / `gb_run_attempt` / … establish `WorldOK` at every
-  guarded call site. They use the contract leaves for table and trie mutations, and the frame
-  `FrameOutside` facts for everything else. The functions called in between are the `BETWEEN` list of
-  §5.
+The guard-carrying callees of every guarded function (generated, `out/contracts.txt`):
 
-### Contract leaves (all `sorry`)
-
-`htab_set_spec`, `htab_del_spec`, `htab_del_progress_spec`, `htab_truncate_spec`,
-`htab_union_into_spec`, `htab_new_spec`, `htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
-`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`.
-The glue `run_frames_step_of_specs` is proved (§0.1, Astra item 6).
-
-## 7. Every `sorry`
-
-- Combinators: none (all proved in revision 3).
-- Contract leaves (14): listed in §6 (the glue `run_frames_step_of_specs` is proved).
-- Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
-- Unguarded bound leaves (727): `fb_*`, listed in §5.
-
-No definition contains `sorry`. Proved terms that depend on a `sorry` are `run_frames_step` (on the
-four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan` (on `gb_main`).
-
-## 8. Open questions and known risks (for the quorum)
-
-- **Q1 (`EvmInv` completeness).** `op_dispatch_spec` is true only if every write an opcode performs
-  lands in its frame's blocks, a typed table (through the table contracts), a fixed global buffer or
-  fresh memory. The 44 global buffers (`keccak_st`, `u256_ws`, …; `globalBuffers`, generated from
-  the literal-size `alloc` calls that assign a global) are in `fixedObjects`: allocated, pairwise
-  disjoint, and disjoint from every table, node and frame block. The remaining risk is a buffer
-  allocated with a non-literal size and written during EVM execution. The script lists only
-  literal-size allocations, so the quorum should check `out/tiers.txt` against the `*_init`
-  functions.
-- **Q2 (`finish_child` on `EvmErr`).** `finish_child_spec` assumes that an `EvmErr` escaping
-  `finish_child` is raised after the pop (by `stack_push` in the parent). `create_finish` has its own
-  handler, so this looks right.
-- **Q3 (`TriesTyped`).** Storage tries are typed through the `ws+32` cache only. If
-  `compute_state_root` mutates tries reached through account records, those roots must be added.
-- **Q4 (MPT descent).** `_mpt_insert_node`'s measure relies on writes during empty-extension runs
-  being idempotent; this holds for typed nodes (`NodeHeap`), which is why it is guarded.
-- **Q6 (arithmetic facts behind two `MONO` measures; round-2 non-blocking).** The provers of
-  `fb_taylor_exponential` and `fb_fq12_inv` must establish:
-  - (a) `u256_divmod` returns quotient 0 on a zero divisor (`Guest/SoftwareAst.lean:1754`;
-    Fable confirmed it), so `taylor_exponential` exits when `i` wraps to 0;
-  - (b) `fq_poly_submul` with `cf = fq_mul(top, fq_inv(lead))` makes `r0[d0]` the literal word 0
-    when `lead` is invertible mod p, even on non-canonical inputs (not traced). If (b) fails for
-    some non-canonical input, the iteration is not stationary either, and `N = 14` would need a
-    no-repeat argument instead.
-- **Q7 (divergence obligations).** The `WhileTimesOut` alternative of the `modinv_bin` /
-  `bls_fp_inv_raw` halving loops at `u = 0` needs: `mod_half`, `mod_sub`, `bls_fp_half_can`,
-  `bls_fp_sub` and the `u256_*`/`bls_fp_*_raw` helpers they call always return normally. They are
-  straight-line word arithmetic with no load, store or raise (checked on the AST).
-- **Q8 (logs arrays on the heap).** `FrameWF` lets a frame's logs array live on the heap
-  (`lst_push` regrows it there). `op_dispatch_spec` is then true only if no opcode handler
-  `heap_release`s to a mark taken before a `lst_push` regrowth of a live frame's logs array. The
-  `LOG*` handlers take no heap mark, but the quorum should confirm that no handler both regrows logs
-  and releases heap.
-- **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
-  pure call composition). A single tactic that walks the body with the combinators should discharge
-  all loop-free ones; the loop leaves need their measure.

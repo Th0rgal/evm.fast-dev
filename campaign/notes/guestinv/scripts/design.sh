@@ -37,36 +37,46 @@ EOF
   cat $OUT/coverage.md
   echo
   sed -n '/^## 6\. Guarded tier/,$p' $N/DESIGN.head.md
+  echo '```'
+  cat $OUT/contracts.txt
+  echo '```'
+  cat $N/DESIGN.tail.md
   cat <<'EOF'
 
 ## 9. How this was produced and checked
 
 ```
 python3 -I campaign/notes/guestinv/scripts/coverage.py Guest/SoftwareAst.lean OUT
-#   -> OUT/coverage.md, OUT/kgen.lean, OUT/leaves.lean, OUT/gleaves.lean, OUT/tiers.txt,
+#   -> OUT/coverage.md, OUT/kgen.lean, OUT/leaves.lean, OUT/gleaves.lean (callee contracts,
+#      GBody/gbody/gb, Primitives, assembly_main, primitives), OUT/contracts.txt, OUT/tiers.txt,
 #      OUT/chain.txt, OUT/manual.txt (must be empty: every loop classified),
 #      OUT/parsed.pickle (parse cache)
 sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/GuestInv.lean
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 788 `declaration uses
-'sorry'` warnings, all leaves: 14 contracts (including the new `htab_del_progress_spec`), 727 `fb_*`
-and 47 `gb_*`. No combinator, glue, definition or bridge theorem has a `sorry`. There are also style-linter notes about the `__` in generated names such as
-`fb__decode_step`. `#print axioms`, checked on a scratch copy:
-- `[propext, Classical.choice, Quot.sound]`:
-  - `guestInv_evaluate`, `preservesOn_guestInv`, `PreservesOn.call_guestInv`;
-  - every combinator: `call_on`, `call_guestInv`, `tailCall_on`, `tailCall_guestInv`,
-    `decCall_guestInv`, `decCall_on`, `callHandle_guestInv`, `seq_on`, `seq_guestInv`, `ite_on`,
-    `ite_cond_on`, `dec_on`, `dec_onLocals`, `while_rank`, `while_rank_stationary`;
-  - `LocalsOnly.setVar`, `LocalsOnly.decClock`, and every `localsOnly_*`/`localsFree_*` instance;
-  - the `Hoare` rules (`Hoare.seq`, `Hoare.ite`, `Hoare.dec`, `Hoare.assign`, `Hoare.call0`,
-    `Hoare.callH`) and the glue `run_frames_step_of_specs`;
-  - the bridge: `coveredSourceTicksConsumedBounded_of_terminatingMainOn(Entry)`,
-    `coveredTarget_of_terminatingMainOnEntry`;
-- `[propext]`: `K_pan_budget`, `astGlobalNames_eq`;
-- also `sorryAx`: `run_frames_step` (through the four frame contracts and the glue) and
-  `coveredSourceTicksConsumedBounded_K_pan` (through the leaves).
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 929 `declaration uses
+'sorry'` warnings, all leaves: 14 §7 contracts, 141 generated callee contracts, 47 `gbody_*`, 727
+`fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
+There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
+`#print axioms`, checked on a scratch copy:
+- `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
+  - `assembly`, `assembly_main`;
+  - every combinator: the revision-3 ones, plus `callHandle_on`, `while_rank_active`,
+    `while_rank_stationary_active`, `loopActive_decClock`;
+  - `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, every `localsOnly_*`/`localsFree_*` instance
+    (incl. `localsFree_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
+    `localsOnly_htabNewReady`);
+  - the glue `run_frames_step_of_specs`;
+  - the bridge (unchanged).
+- `[propext]`: `K_pan_budget`.
+- also `sorryAx`:
+  - `gb_*`, through their `gbody_*`;
+  - `run_frames_step`;
+  - `coveredSourceTicksConsumedBounded_K_pan`, through `primitives`.
+
+The statement diff of §0.2 is produced by `sigdiff.py` (in `scripts/`). It compares the
+`theorem`/`def`/`structure` signatures of two revisions of the Lean file, with comments removed.
 
 `K_pan.log2 = 754` (`#eval`).
 
@@ -74,7 +84,9 @@ The script uses only the Python standard library. `panast.py` parses the generat
 line-record by line-record into a term tree; `coverage.py` computes the call graph, purity and
 transitive global writes, the loop classes (`OVERRIDES` holds the hand-checked loops with their
 argument), the cost formulas and the outputs. The hand-written parts of the Lean file live next to
-the script (`parts/`); `assemble.sh` concatenates them with the generated parts.
+the script (`parts/`); `assemble.sh` concatenates them with the generated parts. Revision 4 adds
+`compose` to `coverage.py`, which generates the guarded compositions: `needed_calls`,
+`written_params`, `fresh_only`, and the hand tables `REGION`, `KEEP_PRE`, `CALL_STMT`, `CALL_W`.
 EOF
 } > $DEST
 wc -l $DEST
