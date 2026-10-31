@@ -495,11 +495,13 @@ the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller 
 cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` after
 `validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`.
 Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
-every caller passes a fresh `msg_new` block. -/
+every caller passes a fresh `msg_new` block. Revision 7: the record is in the HEAP (`msg_new` uses
+`alloc`), so it stays allocated across every world step (the heap only grows; `scratch_ptr` is in
+most callees' write set). -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
-    Allocated s (locN s "msg", 176) ∧ WordsOK s (locN s "msg", 176) ∧
+    Inside (locN s "msg", 176) sourceBase (globN s "heap_ptr") ∧ WordsOK s (locN s "msg", 176) ∧
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
     AvoidsTries s S [(locN s "msg", 176)] ∧
@@ -986,6 +988,14 @@ nonzero (its first action loads through it, and address `0` is outside the memor
 allows the slot to be `0`, where `htab_set_spec` does not apply. -/
 def ArgNonNull (x : String) (fname : MlS) : Prop :=
   FunSpec GuestInv (fun s r _ => Resumes r → locN s x ≠ 0) fname
+
+/-- Value contract (revision 7): the function resumes its caller only if the region `R s` (when
+non-empty) lies in the memory domain: it loads or stores through all of it, and an access outside
+`[sourceBase, heapEnd)` errors. The walks of `process_transaction` (`memcpy` into `al_keys`) and
+`payload_header` (`encode_withdrawal_rlp(wd + 44 i)`) use it to show that a loop whose count was read
+from memory exits normally only when the count is small, so the arrays sized by it did not wrap. -/
+def ResumesInDomain (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Ivl) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => Resumes r → 0 < (R s).2 → Inside (R s) sourceBase heapEnd) fname
 
 /-- `lst_push(l, esz)` at a world-tier site (revision 7): `process_transaction` pushes onto the
 block's log list `bo+40` and receipt-log list `bo+72` (33398, 33418), world objects

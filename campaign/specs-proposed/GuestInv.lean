@@ -6442,11 +6442,13 @@ the outermost frame's `e+168`/`e+176` by `frame_new` 15418-15420). Every caller 
 cannot reach a table or fixed object; its gas `msg+40` (`mgas ≤ 16777216` after
 `validate_transaction`, `30000000` for system calls) bounds the initial `R` of `EvmInv`.
 Revision 6 (round-4 Astra item 2): the record also avoids the persistent tries (`AvoidsTries`);
-every caller passes a fresh `msg_new` block. -/
+every caller passes a fresh `msg_new` block. Revision 7: the record is in the HEAP (`msg_new` uses
+`alloc`), so it stays allocated across every world step (the heap only grows; `scratch_ptr` is in
+most callees' write set). -/
 def MsgReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ ∃ S, WorldTyped s S ∧
     memW s (locN s "msg" + 152) ∈ S ∧ memW s (locN s "msg" + 160) ∈ S ∧
-    Allocated s (locN s "msg", 176) ∧ WordsOK s (locN s "msg", 176) ∧
+    Inside (locN s "msg", 176) sourceBase (globN s "heap_ptr") ∧ WordsOK s (locN s "msg", 176) ∧
     (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (locN s "msg", 176) i) ∧
     (∀ j ∈ fixedObjects s, Disj (locN s "msg", 176) j) ∧
     AvoidsTries s S [(locN s "msg", 176)] ∧
@@ -6933,6 +6935,14 @@ nonzero (its first action loads through it, and address `0` is outside the memor
 allows the slot to be `0`, where `htab_set_spec` does not apply. -/
 def ArgNonNull (x : String) (fname : MlS) : Prop :=
   FunSpec GuestInv (fun s r _ => Resumes r → locN s x ≠ 0) fname
+
+/-- Value contract (revision 7): the function resumes its caller only if the region `R s` (when
+non-empty) lies in the memory domain: it loads or stores through all of it, and an access outside
+`[sourceBase, heapEnd)` errors. The walks of `process_transaction` (`memcpy` into `al_keys`) and
+`payload_header` (`encode_withdrawal_rlp(wd + 44 i)`) use it to show that a loop whose count was read
+from memory exits normally only when the count is small, so the arrays sized by it did not wrap. -/
+def ResumesInDomain (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Ivl) (fname : MlS) : Prop :=
+  FunSpec GuestInv (fun s r _ => Resumes r → 0 < (R s).2 → Inside (R s) sourceBase heapEnd) fname
 
 /-- `lst_push(l, esz)` at a world-tier site (revision 7): `process_transaction` pushes onto the
 block's log list `bo+40` and receipt-log list `bo+72` (33398, 33418), world objects
@@ -8280,6 +8290,12 @@ theorem Hoare.ite_raise_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F �
 /-- `_decode_step` (AST line 10110): keeps `ArenaReady`. -/
 theorem «ak__decode_step» :
     KeepsOn ArenaReady ArenaReady (ofString "_decode_step") := by sorry
+/-- `encode_withdrawal_rlp` (AST line 32114): resumes only on an in-domain record (`loadByte(wd)`, AST 32123). -/
+theorem «dm_encode_withdrawal_rlp» :
+    ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp") := by sorry
+/-- `memcpy` (AST line 198): resumes only if its destination is in the memory domain (it stores every byte). -/
+theorem «dm_memcpy» :
+    ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy") := by sorry
 /-- `charge_gas` (AST line 14949): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_charge_gas» :
     EvmKeeps EvmInv
@@ -8516,6 +8532,12 @@ theorem «rv_common_prefix_length» :
 /-- `min` (AST line 667): returns at most `a` (value contract). -/
 theorem «rv_min» :
     RetLe (fun s => locN s "a") (ofString "min") := by sorry
+/-- `rlp_encode_bytes` (AST line 4768): returns at most `n + 9` (header and payload; value contract). -/
+theorem «rv_rlp_encode_bytes» :
+    RetLe (fun s => locN s "n" + 9) (ofString "rlp_encode_bytes") := by sorry
+/-- `u256_to_be_min` (AST line 2302): returns its byte count, at most 32 (value contract). -/
+theorem «rv_u256_to_be_min» :
+    RetLe (fun _ => 32) (ofString "u256_to_be_min") := by sorry
 /-- `validate_transaction` (AST line 12639): returns an intrinsic cost with regular part at most `2^24` (value contract, checks 12667). -/
 theorem «rv_validate_transaction» :
     RetIntrinsic (ofString "validate_transaction") := by sorry
@@ -9411,7 +9433,7 @@ theorem «gb_mpt_from_witness» : TerminatingFunBoundedOn ArenaReady (ofString "
 /-- The body of `compute_state_root` alone (AST line 32341, guard `WorldOK`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR). Its direct callees are
 exactly `alloc`, `cache_get_root`, `encode_account`, `htab_copy`, `htab_get`, `htab_has`, `htab_item`, `htab_new`, `htab_set`, `memcpy`, `mpt_from_witness`, `mpt_root`, `mpt_set`, `rlp_encode_bytes`, `u256_is_zero`, `u256_to_be_min`, `ws_get_account_optional`, `ws_storage_root_of` (`«callees_compute_state_root»`, checked against the AST). Hypotheses: the bound
 of each of these 18 callees, then the contract of each callee at a guard-carrying
-call site (20: `wk_alloc`, `rt_alloc`, `wk_cache_get_root`, `wk_encode_account`, `wk_htab_copy`, `rt_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_memcpy`, `wk_mpt_from_witness`, `mk_mpt_root`, `mk_mpt_set`, `wk_rlp_encode_bytes`, `ro_u256_is_zero`, `wk_u256_to_be_min`, `wk_ws_get_account_optional`, `wk_ws_storage_root_of`). Nothing else is assumed. -/
+call site (22: `wk_alloc`, `rt_alloc`, `wk_cache_get_root`, `wk_encode_account`, `wk_htab_copy`, `rt_htab_copy`, `ro_htab_get`, `ro_htab_has`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_memcpy`, `wk_mpt_from_witness`, `mk_mpt_root`, `mk_mpt_set`, `wk_rlp_encode_bytes`, `rv_rlp_encode_bytes`, `ro_u256_is_zero`, `wk_u256_to_be_min`, `rv_u256_to_be_min`, `wk_ws_get_account_optional`, `wk_ws_storage_root_of`). Nothing else is assumed. -/
 def GBody.«compute_state_root» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root») →
@@ -9474,11 +9496,13 @@ def GBody.«compute_state_root» : Prop :=
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "rlp_encode_bytes")) →
+  (RetLe (fun s => locN s "n" + 9) (ofString "rlp_encode_bytes")) →
   (ReadOnlyFn (ofString "u256_is_zero")) →
   (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "u256_to_be_min")) →
+  (RetLe (fun _ => 32) (ofString "u256_to_be_min")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -9496,7 +9520,7 @@ theorem «callees_compute_state_root» : sameNames (progCallees (fnBody Guest.So
 theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by sorry
 
 theorem «gb_compute_state_root» : TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root» :=
-  «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «wk_alloc» «rt_alloc» «wk_cache_get_root» «wk_encode_account» «wk_htab_copy» «rt_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_memcpy» «wk_mpt_from_witness» «mk_mpt_root» «mk_mpt_set» «wk_rlp_encode_bytes» «ro_u256_is_zero» «wk_u256_to_be_min» «wk_ws_get_account_optional» «wk_ws_storage_root_of»
+  «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «wk_alloc» «rt_alloc» «wk_cache_get_root» «wk_encode_account» «wk_htab_copy» «rt_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_memcpy» «wk_mpt_from_witness» «mk_mpt_root» «mk_mpt_set» «wk_rlp_encode_bytes» «rv_rlp_encode_bytes» «ro_u256_is_zero» «wk_u256_to_be_min» «rv_u256_to_be_min» «wk_ws_get_account_optional» «wk_ws_storage_root_of»
 
 /-- The body of `ws_storage_trie` alone (AST line 13042, guard `WorldOK`, loop-free). Its direct callees are
 exactly `decode_witness_to_mpt`, `htab_get`, `htab_set` (`«callees_ws_storage_trie»`, checked against the AST). Hypotheses: the bound
@@ -10368,7 +10392,7 @@ theorem «gb_process_general_purpose_requests» : TerminatingFunBoundedOn ReqsFr
 /-- The body of `process_transaction` alone (AST line 33103, guard `TxReady`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR). Its direct callees are
 exactly `alloc`, `calculate_blob_gas_price`, `calculate_total_blob_gas`, `check_transaction`, `clear_account_preserving_balance`, `compute_contract_address`, `create_ether`, `encode_receipt`, `encode_transaction`, `fee_mul`, `frame_mem_release`, `get_account`, `htab_item`, `htab_new`, `htab_set`, `incorporate_tx_into_block`, `increment_nonce`, `keccak256`, `lst_new`, `lst_push`, `max`, `memcpy`, `min`, `msg_new`, `process_message_call`, `recover_sender_with_chain_id`, `scratch_release`, `set_account_balance`, `state_fresh_tx`, `te_new`, `tx_chain_id`, `tx_has_access_list`, `tx_is_blob`, `tx_is_setcode`, `u256_sub`, `udiv_small5`, `validate_transaction` (`«callees_process_transaction»`, checked against the AST). Hypotheses: the bound
 of each of these 37 callees, then the contract of each callee at a guard-carrying
-call site (40: `wk_alloc`, `rt_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `wk_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `wk_keccak256`, `wk_lst_new`, `rt_lst_new`, `wk_lst_push`, `ro_max`, `wk_memcpy`, `ro_min`, `rv_min`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_recover_sender_with_chain_id`, `wk_set_account_balance`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction`, `rv_validate_transaction`). Nothing else is assumed. -/
+call site (41: `wk_alloc`, `rt_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `wk_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `wk_keccak256`, `wk_lst_new`, `rt_lst_new`, `wk_lst_push`, `ro_max`, `wk_memcpy`, `dm_memcpy`, `ro_min`, `rv_min`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_recover_sender_with_chain_id`, `wk_set_account_balance`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction`, `rv_validate_transaction`). Nothing else is assumed. -/
 def GBody.«process_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "calculate_blob_gas_price") K.«calculate_blob_gas_price») →
@@ -10477,6 +10501,7 @@ def GBody.«process_transaction» : Prop :=
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memcpy")) →
+  (ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")) →
   (ReadOnlyFn (ofString "min")) →
   (RetLe (fun s => locN s "a") (ofString "min")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -10526,7 +10551,7 @@ theorem «callees_process_transaction» : sameNames (progCallees (fnBody Guest.S
 theorem «gbody_process_transaction» : GBody.«process_transaction» := by sorry
 
 theorem «gb_process_transaction» : TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction» :=
-  «gbody_process_transaction» «fb_alloc» «fb_calculate_blob_gas_price» «fb_calculate_total_blob_gas» «fb_check_transaction» «fb_clear_account_preserving_balance» «fb_compute_contract_address» «fb_create_ether» «fb_encode_receipt» «fb_encode_transaction» «fb_fee_mul» «fb_frame_mem_release» «fb_get_account» «fb_htab_item» «fb_htab_new» «fb_htab_set» «gb_incorporate_tx_into_block» «fb_increment_nonce» «fb_keccak256» «fb_lst_new» «fb_lst_push» «fb_max» «fb_memcpy» «fb_min» «fb_msg_new» «gb_process_message_call» «fb_recover_sender_with_chain_id» «fb_scratch_release» «fb_set_account_balance» «fb_state_fresh_tx» «fb_te_new» «fb_tx_chain_id» «fb_tx_has_access_list» «fb_tx_is_blob» «fb_tx_is_setcode» «fb_u256_sub» «fb_udiv_small5» «fb_validate_transaction» «wk_alloc» «rt_alloc» «wk_calculate_blob_gas_price» «ro_calculate_total_blob_gas» «wk_check_transaction» «wk_clear_account_preserving_balance» «wk_compute_contract_address» «wk_create_ether» «wk_encode_receipt» «wk_encode_transaction» «ro_fee_mul» «wk_get_account» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_increment_nonce» «wk_keccak256» «wk_lst_new» «rt_lst_new» «wk_lst_push» «ro_max» «wk_memcpy» «ro_min» «rv_min» «wk_msg_new» «rt_msg_new» «wk_process_message_call» «wk_recover_sender_with_chain_id» «wk_set_account_balance» «wk_state_fresh_tx» «wk_te_new» «rt_te_new» «ro_tx_chain_id» «ro_tx_has_access_list» «ro_tx_is_blob» «ro_tx_is_setcode» «ro_u256_sub» «ro_udiv_small5» «ro_validate_transaction» «rv_validate_transaction»
+  «gbody_process_transaction» «fb_alloc» «fb_calculate_blob_gas_price» «fb_calculate_total_blob_gas» «fb_check_transaction» «fb_clear_account_preserving_balance» «fb_compute_contract_address» «fb_create_ether» «fb_encode_receipt» «fb_encode_transaction» «fb_fee_mul» «fb_frame_mem_release» «fb_get_account» «fb_htab_item» «fb_htab_new» «fb_htab_set» «gb_incorporate_tx_into_block» «fb_increment_nonce» «fb_keccak256» «fb_lst_new» «fb_lst_push» «fb_max» «fb_memcpy» «fb_min» «fb_msg_new» «gb_process_message_call» «fb_recover_sender_with_chain_id» «fb_scratch_release» «fb_set_account_balance» «fb_state_fresh_tx» «fb_te_new» «fb_tx_chain_id» «fb_tx_has_access_list» «fb_tx_is_blob» «fb_tx_is_setcode» «fb_u256_sub» «fb_udiv_small5» «fb_validate_transaction» «wk_alloc» «rt_alloc» «wk_calculate_blob_gas_price» «ro_calculate_total_blob_gas» «wk_check_transaction» «wk_clear_account_preserving_balance» «wk_compute_contract_address» «wk_create_ether» «wk_encode_receipt» «wk_encode_transaction» «ro_fee_mul» «wk_get_account» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_increment_nonce» «wk_keccak256» «wk_lst_new» «rt_lst_new» «wk_lst_push» «ro_max» «wk_memcpy» «dm_memcpy» «ro_min» «rv_min» «wk_msg_new» «rt_msg_new» «wk_process_message_call» «wk_recover_sender_with_chain_id» «wk_set_account_balance» «wk_state_fresh_tx» «wk_te_new» «rt_te_new» «ro_tx_chain_id» «ro_tx_has_access_list» «ro_tx_is_blob» «ro_tx_is_setcode» «ro_u256_sub» «ro_udiv_small5» «ro_validate_transaction» «rv_validate_transaction»
 
 /-- The body of `process_withdrawals` alone (AST line 33458, guard `WorldOK`, #0 CTR). Its direct callees are
 exactly `create_ether`, `incorporate_tx_into_block`, `state_fresh_tx`, `u256_mul` (`«callees_process_withdrawals»`, checked against the AST). Hypotheses: the bound
@@ -10666,7 +10691,7 @@ theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReady (ofString "exe
 /-- The body of `payload_header` alone (AST line 32645, guard `WorldOK`, #0 CTR). Its direct callees are
 exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
 of each of these 8 callees, then the contract of each callee at a guard-carrying
-call site (8: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `wk_keccak256`, `wk_memzero`, `zv_memzero`). Nothing else is assumed. -/
+call site (9: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `dm_encode_withdrawal_rlp`, `wk_keccak256`, `wk_memzero`, `zv_memzero`). Nothing else is assumed. -/
 def GBody.«payload_header» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "block_rlp_length") K.«block_rlp_length») →
@@ -10694,6 +10719,7 @@ def GBody.«payload_header» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_withdrawal_rlp")) →
+  (ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp")) →
   (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -10712,7 +10738,7 @@ theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Softwa
 theorem «gbody_payload_header» : GBody.«payload_header» := by sorry
 
 theorem «gb_payload_header» : TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header» :=
-  «gbody_payload_header» «fb_alloc» «fb_block_rlp_length» «gb_build_mpt_indexed» «fb_compute_requests_hash» «fb_encode_execution_requests» «fb_encode_withdrawal_rlp» «fb_keccak256» «fb_memzero» «wk_alloc» «rt_alloc» «wk_block_rlp_length» «wk_build_mpt_indexed» «wk_encode_withdrawal_rlp» «wk_keccak256» «wk_memzero» «zv_memzero»
+  «gbody_payload_header» «fb_alloc» «fb_block_rlp_length» «gb_build_mpt_indexed» «fb_compute_requests_hash» «fb_encode_execution_requests» «fb_encode_withdrawal_rlp» «fb_keccak256» «fb_memzero» «wk_alloc» «rt_alloc» «wk_block_rlp_length» «wk_build_mpt_indexed» «wk_encode_withdrawal_rlp» «dm_encode_withdrawal_rlp» «wk_keccak256» «wk_memzero» «zv_memzero»
 
 /-- The body of `state_init` alone (AST line 12708, guard `WorldOK`, loop-free). Its direct callees are
 exactly `alloc`, `decode_witness_to_mpt`, `htab_new` (`«callees_state_init»`, checked against the AST). Hypotheses: the bound
@@ -11292,8 +11318,10 @@ structure Primitives : Prop where
   «wk_mpt_from_witness» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetMptObj (ofString "mpt_from_witness")
   «mk_mpt_root» : MptKeeps (fun s => [(locN s "out", 32)]) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_root")
   «wk_rlp_encode_bytes» : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n" + 9)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "rlp_encode_bytes")
+  «rv_rlp_encode_bytes» : RetLe (fun s => locN s "n" + 9) (ofString "rlp_encode_bytes")
   «ro_u256_is_zero» : ReadOnlyFn (ofString "u256_is_zero")
   «wk_u256_to_be_min» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "u256_to_be_min")
+  «rv_u256_to_be_min» : RetLe (fun _ => 32) (ofString "u256_to_be_min")
   «wk_ws_get_account_optional» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_get_account_optional")
   «wk_ws_storage_root_of» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_storage_root_of")
   «gbody_compute_state_root» : GBody.«compute_state_root»
@@ -11548,6 +11576,7 @@ structure Primitives : Prop where
   «wk_lst_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "lst_new")
   «rt_lst_new» : Returns ArenaReady (fun s post l =>       locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →         FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧         Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧         memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")     (ofString "lst_new")
   «wk_lst_push» : WorldKeeps BoListArg (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "lst_push")
+  «dm_memcpy» : ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")
   «ro_min» : ReadOnlyFn (ofString "min")
   «rv_min» : RetLe (fun s => locN s "a") (ofString "min")
   «wk_recover_sender_with_chain_id» : WorldKeeps WorldOK (fun s => [(locN s "out20", 20)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "recover_sender_with_chain_id")
@@ -11589,6 +11618,7 @@ structure Primitives : Prop where
   «fb_encode_withdrawal_rlp» : TerminatingFunBoundedOn GuestInv (ofString "encode_withdrawal_rlp") K.«encode_withdrawal_rlp»
   «wk_block_rlp_length» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "block_rlp_length")
   «wk_encode_withdrawal_rlp» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_withdrawal_rlp")
+  «dm_encode_withdrawal_rlp» : ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp")
   «gbody_payload_header» : GBody.«payload_header»
   «gbody_state_init» : GBody.«state_init»
   «fb_check_gas_limit» : TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit»
@@ -11654,7 +11684,7 @@ theorem assembly_main (P : Primitives) :
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
   have «g_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
   have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
-  have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«wk_alloc» P.«rt_alloc» P.«wk_cache_get_root» P.«wk_encode_account» P.«wk_htab_copy» P.«rt_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_memcpy» P.«wk_mpt_from_witness» P.«mk_mpt_root» P.«mk_mpt_set» P.«wk_rlp_encode_bytes» P.«ro_u256_is_zero» P.«wk_u256_to_be_min» P.«wk_ws_get_account_optional» P.«wk_ws_storage_root_of»
+  have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«wk_alloc» P.«rt_alloc» P.«wk_cache_get_root» P.«wk_encode_account» P.«wk_htab_copy» P.«rt_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_memcpy» P.«wk_mpt_from_witness» P.«mk_mpt_root» P.«mk_mpt_set» P.«wk_rlp_encode_bytes» P.«rv_rlp_encode_bytes» P.«ro_u256_is_zero» P.«wk_u256_to_be_min» P.«rv_u256_to_be_min» P.«wk_ws_get_account_optional» P.«wk_ws_storage_root_of»
   have «g_ws_storage_trie» := «gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
   have «g_ws_get_storage» := P.«gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«wk_ws_storage_root_of»
   have «g_get_pre_tx_storage» := «gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
@@ -11676,10 +11706,10 @@ theorem assembly_main (P : Primitives) :
   have «g_process_unchecked_system_transaction» := P.«gbody_process_unchecked_system_transaction» P.«fb_alloc» P.«fb_ext_code_of» P.«fb_frame_mem_release» P.«fb_htab_new» «g_incorporate_tx_into_block» P.«fb_memcpy» P.«fb_msg_new» «g_process_message_call» P.«fb_scratch_release» P.«fb_state_fresh_tx» P.«fb_te_new» P.«wk_ext_code_of» P.«htab_new_spec» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new»
   have «g_process_checked_system_transaction» := «gbody_process_checked_system_transaction» P.«fb_alloc» P.«fb_ext_code_of» «g_process_unchecked_system_transaction» P.«fb_state_fresh_tx» P.«wk_alloc» P.«wk_ext_code_of» P.«wk_state_fresh_tx»
   have «g_process_general_purpose_requests» := P.«gbody_process_general_purpose_requests» P.«fb_alloc» P.«fb_extract_deposit_data» P.«fb_memcpy» P.«fb_memeq» «g_process_checked_system_transaction» P.«fb_requests_append» P.«wk_alloc» P.«rt_alloc» P.«wk_extract_deposit_data» P.«wk_memcpy» P.«ro_memeq» P.«wk_process_checked_system_transaction» P.«wk_requests_append»
-  have «g_process_transaction» := P.«gbody_process_transaction» P.«fb_alloc» P.«fb_calculate_blob_gas_price» P.«fb_calculate_total_blob_gas» P.«fb_check_transaction» P.«fb_clear_account_preserving_balance» P.«fb_compute_contract_address» P.«fb_create_ether» P.«fb_encode_receipt» P.«fb_encode_transaction» P.«fb_fee_mul» P.«fb_frame_mem_release» P.«fb_get_account» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» «g_incorporate_tx_into_block» P.«fb_increment_nonce» P.«fb_keccak256» P.«fb_lst_new» P.«fb_lst_push» P.«fb_max» P.«fb_memcpy» P.«fb_min» P.«fb_msg_new» «g_process_message_call» P.«fb_recover_sender_with_chain_id» P.«fb_scratch_release» P.«fb_set_account_balance» P.«fb_state_fresh_tx» P.«fb_te_new» P.«fb_tx_chain_id» P.«fb_tx_has_access_list» P.«fb_tx_is_blob» P.«fb_tx_is_setcode» P.«fb_u256_sub» P.«fb_udiv_small5» P.«fb_validate_transaction» P.«wk_alloc» P.«rt_alloc» P.«wk_calculate_blob_gas_price» P.«ro_calculate_total_blob_gas» P.«wk_check_transaction» P.«wk_clear_account_preserving_balance» P.«wk_compute_contract_address» P.«wk_create_ether» P.«wk_encode_receipt» P.«wk_encode_transaction» P.«ro_fee_mul» P.«wk_get_account» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_increment_nonce» P.«wk_keccak256» P.«wk_lst_new» P.«rt_lst_new» P.«wk_lst_push» P.«ro_max» P.«wk_memcpy» P.«ro_min» P.«rv_min» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_recover_sender_with_chain_id» P.«wk_set_account_balance» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new» P.«ro_tx_chain_id» P.«ro_tx_has_access_list» P.«ro_tx_is_blob» P.«ro_tx_is_setcode» P.«ro_u256_sub» P.«ro_udiv_small5» P.«ro_validate_transaction» P.«rv_validate_transaction»
+  have «g_process_transaction» := P.«gbody_process_transaction» P.«fb_alloc» P.«fb_calculate_blob_gas_price» P.«fb_calculate_total_blob_gas» P.«fb_check_transaction» P.«fb_clear_account_preserving_balance» P.«fb_compute_contract_address» P.«fb_create_ether» P.«fb_encode_receipt» P.«fb_encode_transaction» P.«fb_fee_mul» P.«fb_frame_mem_release» P.«fb_get_account» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» «g_incorporate_tx_into_block» P.«fb_increment_nonce» P.«fb_keccak256» P.«fb_lst_new» P.«fb_lst_push» P.«fb_max» P.«fb_memcpy» P.«fb_min» P.«fb_msg_new» «g_process_message_call» P.«fb_recover_sender_with_chain_id» P.«fb_scratch_release» P.«fb_set_account_balance» P.«fb_state_fresh_tx» P.«fb_te_new» P.«fb_tx_chain_id» P.«fb_tx_has_access_list» P.«fb_tx_is_blob» P.«fb_tx_is_setcode» P.«fb_u256_sub» P.«fb_udiv_small5» P.«fb_validate_transaction» P.«wk_alloc» P.«rt_alloc» P.«wk_calculate_blob_gas_price» P.«ro_calculate_total_blob_gas» P.«wk_check_transaction» P.«wk_clear_account_preserving_balance» P.«wk_compute_contract_address» P.«wk_create_ether» P.«wk_encode_receipt» P.«wk_encode_transaction» P.«ro_fee_mul» P.«wk_get_account» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_increment_nonce» P.«wk_keccak256» P.«wk_lst_new» P.«rt_lst_new» P.«wk_lst_push» P.«ro_max» P.«wk_memcpy» P.«dm_memcpy» P.«ro_min» P.«rv_min» P.«wk_msg_new» P.«rt_msg_new» P.«wk_process_message_call» P.«wk_recover_sender_with_chain_id» P.«wk_set_account_balance» P.«wk_state_fresh_tx» P.«wk_te_new» P.«rt_te_new» P.«ro_tx_chain_id» P.«ro_tx_has_access_list» P.«ro_tx_is_blob» P.«ro_tx_is_setcode» P.«ro_u256_sub» P.«ro_udiv_small5» P.«ro_validate_transaction» P.«rv_validate_transaction»
   have «g_process_withdrawals» := P.«gbody_process_withdrawals» P.«fb_create_ether» «g_incorporate_tx_into_block» P.«fb_state_fresh_tx» P.«fb_u256_mul» P.«wk_create_ether» P.«wk_state_fresh_tx» P.«ro_u256_mul»
   have «g_execute_block» := P.«gbody_execute_block» P.«fb_alloc» P.«fb_bal_init» P.«fb_build_block_access_list_rlp» «g_build_mpt_indexed» P.«fb_compute_requests_hash» «g_compute_state_root» P.«fb_decode_transaction» P.«fb_keccak256» P.«fb_logs_bloom» P.«fb_lst_new» P.«fb_max» P.«fb_memeq» P.«fb_memzero» «g_process_general_purpose_requests» «g_process_transaction» «g_process_unchecked_system_transaction» «g_process_withdrawals» P.«fb_state_fresh_tx» P.«fb_track_ancestor_access» P.«fb_validate_block_access_list_gas_limit» P.«wk_alloc» P.«rt_alloc» P.«wk_bal_init» P.«wk_build_block_access_list_rlp» P.«wk_build_mpt_indexed» P.«wk_compute_state_root» P.«wk_decode_transaction» P.«wk_logs_bloom» P.«wk_lst_new» P.«rt_lst_new» P.«wk_memzero» P.«zv_memzero» P.«wk_process_general_purpose_requests» P.«wk_process_transaction» P.«wk_process_unchecked_system_transaction» P.«wk_process_withdrawals» P.«wk_state_fresh_tx» P.«wk_track_ancestor_access» P.«ro_validate_block_access_list_gas_limit»
-  have «g_payload_header» := P.«gbody_payload_header» P.«fb_alloc» P.«fb_block_rlp_length» «g_build_mpt_indexed» P.«fb_compute_requests_hash» P.«fb_encode_execution_requests» P.«fb_encode_withdrawal_rlp» P.«fb_keccak256» P.«fb_memzero» P.«wk_alloc» P.«rt_alloc» P.«wk_block_rlp_length» P.«wk_build_mpt_indexed» P.«wk_encode_withdrawal_rlp» P.«wk_keccak256» P.«wk_memzero» P.«zv_memzero»
+  have «g_payload_header» := P.«gbody_payload_header» P.«fb_alloc» P.«fb_block_rlp_length» «g_build_mpt_indexed» P.«fb_compute_requests_hash» P.«fb_encode_execution_requests» P.«fb_encode_withdrawal_rlp» P.«fb_keccak256» P.«fb_memzero» P.«wk_alloc» P.«rt_alloc» P.«wk_block_rlp_length» P.«wk_build_mpt_indexed» P.«wk_encode_withdrawal_rlp» P.«dm_encode_withdrawal_rlp» P.«wk_keccak256» P.«wk_memzero» P.«zv_memzero»
   have «g_state_init» := P.«gbody_state_init» P.«fb_alloc» «g_decode_witness_to_mpt» P.«fb_htab_new» P.«wk_alloc» P.«rt_alloc»
   have «g_run_attempt» := P.«gbody_run_attempt» P.«fb_alloc» P.«fb_check_gas_limit» «g_execute_block» P.«fb_header_hash» P.«fb_is_valid_versioned_hashes» P.«fb_memeq» P.«fb_memzero» P.«fb_nodedb_build» «g_payload_header» «g_state_init» P.«fb_validate_header» P.«fb_validate_headers» P.«wk_alloc» P.«rt_alloc» P.«ro_check_gas_limit» P.«wk_header_hash» P.«wk_is_valid_versioned_hashes» P.«ro_memeq» P.«wk_memzero» P.«zv_memzero» P.«wk_nodedb_build» P.«wk_payload_header» P.«wk_state_init» P.«wk_validate_header» P.«wk_validate_headers»
   have «g_attempt_l1» := «gbody_attempt_l1» «g_run_attempt»
@@ -11779,8 +11809,10 @@ theorem primitives : Primitives where
   «wk_mpt_from_witness» := «wk_mpt_from_witness»
   «mk_mpt_root» := «mk_mpt_root»
   «wk_rlp_encode_bytes» := «wk_rlp_encode_bytes»
+  «rv_rlp_encode_bytes» := «rv_rlp_encode_bytes»
   «ro_u256_is_zero» := «ro_u256_is_zero»
   «wk_u256_to_be_min» := «wk_u256_to_be_min»
+  «rv_u256_to_be_min» := «rv_u256_to_be_min»
   «wk_ws_get_account_optional» := «wk_ws_get_account_optional»
   «wk_ws_storage_root_of» := «wk_ws_storage_root_of»
   «gbody_compute_state_root» := «gbody_compute_state_root»
@@ -12035,6 +12067,7 @@ theorem primitives : Primitives where
   «wk_lst_new» := «wk_lst_new»
   «rt_lst_new» := «rt_lst_new»
   «wk_lst_push» := «wk_lst_push»
+  «dm_memcpy» := «dm_memcpy»
   «ro_min» := «ro_min»
   «rv_min» := «rv_min»
   «wk_recover_sender_with_chain_id» := «wk_recover_sender_with_chain_id»
@@ -12076,6 +12109,7 @@ theorem primitives : Primitives where
   «fb_encode_withdrawal_rlp» := «fb_encode_withdrawal_rlp»
   «wk_block_rlp_length» := «wk_block_rlp_length»
   «wk_encode_withdrawal_rlp» := «wk_encode_withdrawal_rlp»
+  «dm_encode_withdrawal_rlp» := «dm_encode_withdrawal_rlp»
   «gbody_payload_header» := «gbody_payload_header»
   «gbody_state_init» := «gbody_state_init»
   «fb_check_gas_limit» := «fb_check_gas_limit»

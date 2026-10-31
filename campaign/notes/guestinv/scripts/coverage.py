@@ -996,8 +996,19 @@ XV = {
 }
 XV['htab_set'] = ('nz_htab_set', 'ArgNonNull "t" (ofString "htab_set")',
                   'resumes only on a nonzero table (`load(t + 0)` errors at `0`, AST 5156)')
+XV['u256_to_be_min'] = ('rv_u256_to_be_min', 'RetLe (fun _ => 32) (ofString "u256_to_be_min")',
+                        'returns its byte count, at most 32 (value contract)')
+XV['rlp_encode_bytes'] = ('rv_rlp_encode_bytes', 'RetLe (fun s => locN s "n" + 9) (ofString "rlp_encode_bytes")',
+                          'returns at most `n + 9` (header and payload; value contract)')
+XV['encode_withdrawal_rlp'] = ('dm_encode_withdrawal_rlp',
+                               'ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp")',
+                               'resumes only on an in-domain record (`loadByte(wd)`, AST 32123)')
+XV['memcpy'] = ('dm_memcpy', 'ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")',
+                'resumes only if its destination is in the memory domain (it stores every byte)')
 XV_AT = {'memzero': None, 'validate_transaction': ('process_transaction',), 'min': ('process_transaction',),
-         'htab_set': ('get_storage',)}
+         'htab_set': ('get_storage',), 'u256_to_be_min': ('compute_state_root',),
+         'rlp_encode_bytes': ('compute_state_root',), 'encode_withdrawal_rlp': ('payload_header',),
+         'memcpy': ('process_transaction',)}
 
 
 def needed_calls(fns, f, guarded, root_loop):
