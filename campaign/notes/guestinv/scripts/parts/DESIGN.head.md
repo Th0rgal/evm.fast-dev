@@ -27,7 +27,7 @@ is touched.
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`; revision 8: table roles `RolesOK`, `worldRoleSlots`, `journalRoleSlots`, `frameRoleSlots`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
 | callee contracts (revision 7: RELATIONAL in the world and EVM tiers; revision 8: `WorldKeepsIn`, constructor extras `RetAvoids(If)`, `RetListSlot`, `BalChangeArg`, `PushesFrame`, `InvalidatesCache`, `FreshScratch`): `WorldKeeps`/`WorldKeepsIn` (84 `wk_*`), `EvmKeeps` (12 `ek_*`), `MptKeeps` (2 `mk_*`), `ReadOnlyFn` (30), `WritesWithin` (7, `ArenaReady` tier only), `KeepsOn` (`fk_frame_open`), `NodeFn` (7), return typing (7 `rt_*`), value contracts (13: `nk_*`, `rv_*` ×5, `zv_memzero`, `nz_htab_set`, `dm_*` ×2, `sp__decode_step`, `iz_node_invalidate`) | §7 (generated) | `sorry` (162 statements; revision 8, §0.2c) |
-| composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; each checked single-function, `«callees_f»`; revision 7: every walk checked against its hypotheses, §6) | §7 (generated) | 18 **proved** by concrete-body composition (revision 7: +2, `process_checked_system_transaction`, `ws_get_storage`), 29 `sorry` |
+| composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; each checked single-function, `«callees_f»`; every walk re-checked against its revision-8 hypotheses, §6) | §7 (generated) | 19 **proved** by concrete-body composition (revision 8: +1, `_mpt_delete_node`), 28 `sorry` |
 | revision-7 lemmas: `worldTyped_iff_with`, `WorldStep.worldOK(_nil)`, `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`, `callEntryOn_inputReady`, `KeepsOn.resumeOn`, `Hoare.ite_raise_skip`, `localsOnly_inputReady` | §7 | **proved** |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
@@ -586,7 +586,8 @@ tail).
 ## 0.2c Changes since f13145329 (revision 8)
 
 `sigdiff.py f13145329:campaign/specs-proposed/GuestInv.lean campaign/specs-proposed/GuestInv.lean`
-(statements with comments stripped): 38 changed, 1 removed, 26 new.
+(statements with comments stripped): 38 changed, 1 removed, 29 new (`sigdiff.py` also lists the two new `lookup_*` theorems and the proved
+`gbody__mpt_delete_node`, whose statement `GBody.«_mpt_delete_node»` is unchanged).
 
 **No `fb_*` changed** (727, textually identical): `changed 38 fb changed 0`. No `K.«f»` changed, so
 `K_pan` and `K_pan_budget` are unchanged. The 14 §7 contract leaves keep their statements; one of
@@ -641,20 +642,23 @@ their text is unchanged.
 `WorldKeepsIn`, `RetAvoids`, `RetAvoidsIf`, `RetListSlot`, `BalChangeArg`, `FreshScratch`,
 `PushesFrame`, `InvalidatesCache`.
 
-**New proved theorems (2):** `WorldStepIn.worldOK`, `WorldStep.stepIn`.
+**New proved theorems (5):** `WorldStepIn.worldOK`, `WorldStep.stepIn`, `callee_param_four` and
+`callEntryOn_mptReady` (W6 for the four `MptReady` parameters), and **`gbody__mpt_delete_node`**
+(by concrete-body composition: `scratch_mark` read-only, the guarded body under the release-and-rethrow
+handler, release, return; 19 proved `gbody_*`, was 18).
 
 **Scripts:** `coverage.py`: `FORCE_WW`, `CALL_WW`, `KEEP_IN`, `KEEP_PRE['bal_remove_change']`,
 `WQ` (constructors, `lst_push`), `RT` (`scratch_alloc`, `htab_copy`), `EXTRA` (`node_invalidate`,
 `_decode_step`), the `fq12_inv` loop-#1 justification (explicit rank, `N = 14` unchanged), and
 `record_aliases` (the `RecordsKept` memory-alias check, asserted on every run).
 
-**Census:** 932 leaf sorries (was 928):
+**Census:** 931 leaf sorries (was 928):
 - 727 `fb_*`;
 - 14 §7 contracts;
 - 162 callee contracts: `wk_*` 84, `ek_*` 12, `mk_*` 2, `ro_*` 30, `ww_*` 7, `ak_*` 0,
   `fk_frame_open`, `nf_*` 7, `nk_*` 1, `rt_*` 7, `rv_*` 5, `zv_*` 1, `nz_*` 1, `dm_*` 2, `sp_*` 1,
   `iz_*` 1;
-- 29 `gbody_*` (18 proved, unchanged).
+- 28 `gbody_*` (19 are proved, revision 8: `gbody__mpt_delete_node`).
 
 ## 0.2a Changes since 311d46674 (revision 7)
 
@@ -1585,7 +1589,7 @@ With `WorldStep` the WorldOK-tier walks never re-type the world after a callee: 
 | `gbody_*` | guard-carrying sites and loop heads: fact needed ← hypothesis |
 |---|---|
 | `_decode_witness_node_body` | loop head (`GUARD`): `ArenaReady` ← `ww__decode_step`, `ww__resolve_step`, `ww_node_new_ext`, `ww_rlp_item` (revision 8: write frames: memory free at entry only, and `scratch_ptr` never rises), `ro_mpt_fail`; rank (revision 8, round-5 Astra 7): the scratch stack, `sp__decode_step` (a push is a fresh 88-byte scratch record below every live record, tag `1`, or `2` with `+32 = +40 = 0`, so `scratch_ptr` drops ≥ 88 per push); the records, their links `+0` and counters `+32`/`+40` lie in allocated scratch, outside every callee's write frame, so only the loop writes them (DESIGN §3) |
-| `_mpt_delete_node` | `_mpt_delete_node_body`: `MptReady` ← entry, `ro_scratch_mark` (resume), W6 (four same-named arguments) |
+| `_mpt_delete_node` | **PROVED (revision 8)**: `_mpt_delete_node_body`: `MptReady` ← entry, `ro_scratch_mark` (resume), W6 (`callEntryOn_mptReady`: four same-named arguments) |
 | `_mpt_insert_node`, `_mpt_delete_node_body` | loop heads: `MptReady` ← `nf_*` (`NodeFnExit`: grown node set, kinds kept, paths fresh), `rv_common_prefix_length` (`level ≤ klen`, `pl < sl`), `ro_*`; revision 8 (round-5 Astra 7): `iz_node_invalidate` (exact effect: only `nd+8/+16/+24` zeroed, so the self-looping empty extension repeats exactly after one warm-up, `SameHead`); `_mpt_delete_node_body`'s frames ← `rt_scratch_alloc` (fresh scratch, `scratch_ptr` lowered to it: disjoint from every node and from the key, which are heap); revision 6 requirement table below |
 | `mpt_set` | `_mpt_insert_node`/`_mpt_delete_node`: `MptReady` with `node := m+0`, `key/klen := nk`, `level = 0` ← `MptObjReady` (typed `Nm`; revision 8: disjoint from the persistent `Nd`), `ww_mpt_nibble_key` (frame: only global buffers, which `Nm` avoids, and fresh heap), `nk_mpt_nibble_key` (fresh nibbles: `KeyIn` by W4) |
 | `build_mpt_indexed` | `mpt_set`: `MptObjReady` for `m` ← `wk_mpt_new` (revision 8: `RetAvoids`, the object is outside the EXIT world) + `rt_mpt_new` (fresh, `+0 = 0`, so `Nm = []`); loop head: `MptObjReady` ← `wk_rlp_encode_word` (region `(mpt_key_scratch, 9)` inside a content-free buffer, so it avoids the typed cells, and the object is outside world and region), `mk_mpt_set` (`MptObjStep`, revision 8: object nodes stay disjoint from `Nd'`); `ro_heap_mark` |

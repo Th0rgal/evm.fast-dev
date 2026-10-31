@@ -7209,6 +7209,68 @@ theorem callEntryOn_inputReady {fname : MlS} {e : List (MlS × ShapeHOL) × Prog
   rw [hsi]
   exact (inputAt_with_locals state callee (state.clock - 1) _).2 hP
 
+/-- The callee of a four-parameter function called with the caller's locals of the same names sees
+those locals' values (revision 8, proved; W6 for `MptReady`). -/
+theorem callee_param_four {F : Type} (state : PanSemStateFiniteExact 64 F) (fname a b c d : MlS)
+    (sa sb sc sd : ShapeHOL) (body : ProgHOL 64) (ret : ShapeHOL)
+    (hl : state.code.lookup fname = some ([(a, sa), (b, sb), (c, sc), (d, sd)], body, ret))
+    (values : List (ValueHOL 64)) (body' : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL)
+    (hargs : evalListHOLFinite state (h := fun address => Classical.propDecidable (state.memaddrs address))
+      [.var .local a, .var .local b, .var .local c, .var .local d] = some values)
+    (hlook : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ∀ n ∈ [a, b, c, d], callee.lookup n = state.locals.lookup n := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  simp only [evalListHOLExact, evalHOLExact] at hargs
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hlook
+  split at hlook
+  · cases hlook
+  · rename_i exactBody exactLocals exactShape raw
+    have heq := Option.some.inj hlook
+    rcases Prod.mk.inj heq with ⟨rfl, hrest⟩
+    rcases Prod.mk.inj hrest with ⟨rfl, _⟩
+    unfold lookupCodeHOLExact at raw
+    rw [hl] at raw
+    dsimp only at raw
+    rcases hva : state.locals.lookup a with _ | va <;>
+    rcases hvb : state.locals.lookup b with _ | vb <;>
+    rcases hvc : state.locals.lookup c with _ | vc <;>
+    rcases hvd : state.locals.lookup d with _ | vd <;>
+      simp only [hva, hvb, hvc, hvd] at hargs <;> try cases hargs
+    split at raw
+    · rename_i hcond
+      have rawEq := Option.some.inj raw
+      rcases Prod.mk.inj rawEq with ⟨-, hrest2⟩
+      rcases Prod.mk.inj hrest2 with ⟨hloc, -⟩
+      subst hloc
+      obtain ⟨hnd, -, -⟩ := hcond
+      simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+        not_or, List.not_mem_nil] at hnd
+      intro n hn
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl <;>
+        simp_all [List.zip, List.foldl, Ne.symm]
+    · cases raw
+
+/-- A call `f(node, key, klen, level)` to a function with exactly those parameters keeps `MptReady`
+(revision 8, proved): `_mpt_delete_node → _mpt_delete_node_body`. -/
+theorem callEntryOn_mptReady {fname : MlS} {e : List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some e)
+    (hp : e.1 = [(ofString "node", .one), (ofString "key", .one), (ofString "klen", .one),
+      (ofString "level", .one)]) :
+    CallEntryOn MptReady MptReady fname [.var .local (ofString "node"), .var .local (ofString "key"),
+      .var .local (ofString "klen"), .var .local (ofString "level")] := by
+  obtain ⟨ps, b, r⟩ := e
+  dsimp only at hp
+  subst hp
+  intro F state values body' callee ret' hcode hP hargs hlook
+  have hc := callee_param_four state fname _ _ _ _ .one .one .one .one b r (by rw [hcode]; exact hl)
+    values body' callee ret' hargs hlook
+  exact localsOnly_mptReady state callee (state.clock - 1)
+    (fun n hn => hc (ofString n) (by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+      rcases hn with rfl | rfl | rfl | rfl <;> simp)) hP
+
 /-- Value contract (revision 7): the function resumes its caller only if its table parameter `x` is
 nonzero (its first action loads through it, and address `0` is outside the memory domain).
 `get_storage` calls `htab_set(load(ts + 24), …)` and then the guarded `ws_get_storage`; `RootIn`
@@ -9524,6 +9586,11 @@ def GBody.«_mpt_delete_node_body» : Prop :=
 theorem «callees__mpt_delete_node_body» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_delete_node_body))
     ["_collapse_branch", "_delete_ext_finish", "common_prefix_length", "memeq", "mpt_fail", "node_invalidate", "scratch_alloc"] = true := by decide
 
+theorem «lookup__mpt_delete_node_body» : originalRuntimeCode.lookup (ofString "_mpt_delete_node_body") =
+    some ((sourceFunctionEntry Guest.Software.guestFn__mpt_delete_node_body).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 278 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn__mpt_delete_node_body) rfl
+
 theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by sorry
 
 theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
@@ -9544,7 +9611,31 @@ def GBody.«_mpt_delete_node» : Prop :=
 theorem «callees__mpt_delete_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_delete_node))
     ["_mpt_delete_node_body", "scratch_mark", "scratch_release"] = true := by decide
 
-theorem «gbody__mpt_delete_node» : GBody.«_mpt_delete_node» := by sorry
+theorem «lookup__mpt_delete_node» : originalRuntimeCode.lookup (ofString "_mpt_delete_node") =
+    some ((sourceFunctionEntry Guest.Software.guestFn__mpt_delete_node).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 279 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn__mpt_delete_node) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody__mpt_delete_node» : GBody.«_mpt_delete_node» := by
+  intro hb hmk hsr hro
+  refine ⟨_, _, _, «lookup__mpt_delete_node», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn__mpt_delete_node, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hmk _ _ _
+      (callEntryOn_of_imp localsFree_guestInv (fun s h => h.1.1) _ _)
+      (ReadOnlyFn.resumeOn localsOnly_mptReady (fun s h => h.1.1) hro _ (by decide) _)
+      (TerminatingProgBoundedOn.dec_onLocals localsOnly_mptReady _ (by decide) _ _
+        (TerminatingProgBoundedOn.dec_onLocals localsOnly_mptReady _ (by decide) _ _
+          (TerminatingProgBoundedOn.seq_guestInv_after
+            (TerminatingProgBoundedOn.callHandle_on hb (fun s h => h.1.1) _ _ _ (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))) _
+              (callEntryOn_mptReady «lookup__mpt_delete_node_body»
+                (by simp only [sourceFunctionEntry, Guest.Software.guestFn__mpt_delete_node_body, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil,
+                  InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural])))
+            (fun s h => h.1.1)
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _)
+              (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
+  unfold K.«_mpt_delete_node»; omega
 
 theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node» :=
   «gbody__mpt_delete_node» «gb__mpt_delete_node_body» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
@@ -11614,7 +11705,6 @@ structure Primitives : Prop where
   «ww_scratch_alloc» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "scratch_alloc")
   «rt_scratch_alloc» : Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧       globN post "scratch_ptr" = p)     (ofString "scratch_alloc")
   «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body»
-  «gbody__mpt_delete_node» : GBody.«_mpt_delete_node»
   «fb__insert_into_leaf» : TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf»
   «fb__split_extension» : TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension»
   «fb_node_new_leaf» : TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf»
@@ -12030,7 +12120,7 @@ theorem assembly_main (P : Primitives) :
   have «g__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
   have «g__decode_witness_node» := «gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«ww_scratch_alloc» P.«rt_scratch_alloc»
-  have «g__mpt_delete_node» := P.«gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
+  have «g__mpt_delete_node» := «gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
@@ -12108,7 +12198,6 @@ theorem primitives : Primitives where
   «ww_scratch_alloc» := «ww_scratch_alloc»
   «rt_scratch_alloc» := «rt_scratch_alloc»
   «gbody__mpt_delete_node_body» := «gbody__mpt_delete_node_body»
-  «gbody__mpt_delete_node» := «gbody__mpt_delete_node»
   «fb__insert_into_leaf» := «fb__insert_into_leaf»
   «fb__split_extension» := «fb__split_extension»
   «fb_node_new_leaf» := «fb_node_new_leaf»

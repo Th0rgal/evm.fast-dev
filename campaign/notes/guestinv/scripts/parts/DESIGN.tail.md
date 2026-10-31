@@ -16,10 +16,10 @@
 - Combinators, glue, bridge, assembly, the revision-7/8 lemmas: none.
 - §7 contract leaves (14).
 - Generated callee contracts (162; §0.2c).
-- Composition obligations `gbody_*` (29; the other 18 are proved).
+- Composition obligations `gbody_*` (28; the other 19 are proved).
 - Unguarded bound leaves `fb_*` (727).
 
-932 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
+931 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
 `assembly_main` are `sorry`-free (`#print axioms`: `propext`, `Classical.choice`, `Quot.sound`);
 `K_pan_budget` uses `propext` only. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
 depends on `sorryAx` only through the `Primitives` fields. `run_frames_step` depends on the four

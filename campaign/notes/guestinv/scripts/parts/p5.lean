@@ -1147,6 +1147,68 @@ theorem callEntryOn_inputReady {fname : MlS} {e : List (MlS × ShapeHOL) × Prog
   rw [hsi]
   exact (inputAt_with_locals state callee (state.clock - 1) _).2 hP
 
+/-- The callee of a four-parameter function called with the caller's locals of the same names sees
+those locals' values (revision 8, proved; W6 for `MptReady`). -/
+theorem callee_param_four {F : Type} (state : PanSemStateFiniteExact 64 F) (fname a b c d : MlS)
+    (sa sb sc sd : ShapeHOL) (body : ProgHOL 64) (ret : ShapeHOL)
+    (hl : state.code.lookup fname = some ([(a, sa), (b, sb), (c, sc), (d, sd)], body, ret))
+    (values : List (ValueHOL 64)) (body' : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL)
+    (hargs : evalListHOLFinite state (h := fun address => Classical.propDecidable (state.memaddrs address))
+      [.var .local a, .var .local b, .var .local c, .var .local d] = some values)
+    (hlook : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ∀ n ∈ [a, b, c, d], callee.lookup n = state.locals.lookup n := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  simp only [evalListHOLExact, evalHOLExact] at hargs
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hlook
+  split at hlook
+  · cases hlook
+  · rename_i exactBody exactLocals exactShape raw
+    have heq := Option.some.inj hlook
+    rcases Prod.mk.inj heq with ⟨rfl, hrest⟩
+    rcases Prod.mk.inj hrest with ⟨rfl, _⟩
+    unfold lookupCodeHOLExact at raw
+    rw [hl] at raw
+    dsimp only at raw
+    rcases hva : state.locals.lookup a with _ | va <;>
+    rcases hvb : state.locals.lookup b with _ | vb <;>
+    rcases hvc : state.locals.lookup c with _ | vc <;>
+    rcases hvd : state.locals.lookup d with _ | vd <;>
+      simp only [hva, hvb, hvc, hvd] at hargs <;> try cases hargs
+    split at raw
+    · rename_i hcond
+      have rawEq := Option.some.inj raw
+      rcases Prod.mk.inj rawEq with ⟨-, hrest2⟩
+      rcases Prod.mk.inj hrest2 with ⟨hloc, -⟩
+      subst hloc
+      obtain ⟨hnd, -, -⟩ := hcond
+      simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+        not_or, List.not_mem_nil] at hnd
+      intro n hn
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl <;>
+        simp_all [List.zip, List.foldl, Ne.symm]
+    · cases raw
+
+/-- A call `f(node, key, klen, level)` to a function with exactly those parameters keeps `MptReady`
+(revision 8, proved): `_mpt_delete_node → _mpt_delete_node_body`. -/
+theorem callEntryOn_mptReady {fname : MlS} {e : List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some e)
+    (hp : e.1 = [(ofString "node", .one), (ofString "key", .one), (ofString "klen", .one),
+      (ofString "level", .one)]) :
+    CallEntryOn MptReady MptReady fname [.var .local (ofString "node"), .var .local (ofString "key"),
+      .var .local (ofString "klen"), .var .local (ofString "level")] := by
+  obtain ⟨ps, b, r⟩ := e
+  dsimp only at hp
+  subst hp
+  intro F state values body' callee ret' hcode hP hargs hlook
+  have hc := callee_param_four state fname _ _ _ _ .one .one .one .one b r (by rw [hcode]; exact hl)
+    values body' callee ret' hargs hlook
+  exact localsOnly_mptReady state callee (state.clock - 1)
+    (fun n hn => hc (ofString n) (by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+      rcases hn with rfl | rfl | rfl | rfl <;> simp)) hP
+
 /-- Value contract (revision 7): the function resumes its caller only if its table parameter `x` is
 nonzero (its first action loads through it, and address `0` is outside the memory domain).
 `get_storage` calls `htab_set(load(ts + 24), …)` and then the guarded `ws_get_storage`; `RootIn`

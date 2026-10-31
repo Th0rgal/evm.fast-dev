@@ -970,6 +970,32 @@ GBODY_PROOF['ws_get_storage'] = """  intro hal hhm hhr hkc hme hrd htl hub hsr h
 """ % (FBE, WRES % 'wsr', FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, GI_ITE_RET, GI_ITE_RET,
        ITE_RAISE, RET0)
 
+# revision 8: `_mpt_delete_node` (scratch mark, the guarded body under a handler that releases and
+# rethrows, release, return); the body's four parameters are the caller's same-named locals
+# (`callEntryOn_mptReady`, proved)
+MRG = '(fun s h => h.1.1)'
+GBODY_PROOF['_mpt_delete_node'] = """  intro hb hmk hsr hro
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hmk _ _ _
+      (callEntryOn_of_imp localsFree_guestInv %(g)s _ _)
+      (ReadOnlyFn.resumeOn localsOnly_mptReady %(g)s hro _ (by decide) _)
+      (TerminatingProgBoundedOn.dec_onLocals localsOnly_mptReady _ (by decide) _ _
+        (TerminatingProgBoundedOn.dec_onLocals localsOnly_mptReady _ (by decide) _ _
+          (TerminatingProgBoundedOn.seq_guestInv_after
+            (TerminatingProgBoundedOn.callHandle_on hb %(g)s _ _ _ %(h)s _
+              (callEntryOn_mptReady «lookup__mpt_delete_node_body»
+                (by simp only [%(u)s,
+                  InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural])))
+            %(g)s
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hsr _ _)
+              %(r)s))))) ?_
+  unfold K.«_mpt_delete_node»; omega
+""" % {'g': MRG, 'h': HANDLER_REL, 'r': RET0,
+       'u': UNFOLD_LEMMAS0.replace('{F}', '_mpt_delete_node_body')}
+LOOKUP_EXTRA.add('_mpt_delete_node_body')
+
 # revision 7: the witness decoders are guarded by `ArenaReady` (`state_init` calls them before the
 # world is typed); their revision-6 proofs carry over with the `ArenaReady` instances
 for _f in ARENA:
