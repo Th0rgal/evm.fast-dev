@@ -1246,7 +1246,8 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')
             elif (g in REGION or fresh_only(g)) and not (g in guarded) and not (
-                    f not in GBODY_PROOF and g not in REGION and gwf(g) & WORLD_GLOBALS):
+                    f not in GBODY_PROOF and g not in REGION and
+                    gwf(g) & (WORLD_GLOBALS | set(bufsize))):
                 name = 'ww_' + g
                 if g not in REGION:
                     parts = ''

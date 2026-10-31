@@ -8279,9 +8279,18 @@ theorem «wk_bal_init» :
 /-- `bal_remove_change` (AST line 14189): keeps `WorldOK`. -/
 theorem «wk_bal_remove_change» :
     KeepsOn WorldOK WorldOK (ofString "bal_remove_change") := by sorry
+/-- `blake2_init` (AST line 20017): keeps `WorldOK`. -/
+theorem «wk_blake2_init» :
+    KeepsOn WorldOK WorldOK (ofString "blake2_init") := by sorry
 /-- `block_rlp_length` (AST line 32586): keeps `WorldOK`. -/
 theorem «wk_block_rlp_length» :
     KeepsOn WorldOK WorldOK (ofString "block_rlp_length") := by sorry
+/-- `bls_precompiles_init` (AST line 30678): keeps `WorldOK`. -/
+theorem «wk_bls_precompiles_init» :
+    KeepsOn WorldOK WorldOK (ofString "bls_precompiles_init") := by sorry
+/-- `bn254_init` (AST line 22161): keeps `WorldOK`. -/
+theorem «wk_bn254_init» :
+    KeepsOn WorldOK WorldOK (ofString "bn254_init") := by sorry
 /-- `build_block_access_list_rlp` (AST line 14685): keeps `WorldOK`. -/
 theorem «wk_build_block_access_list_rlp» :
     KeepsOn WorldOK WorldOK (ofString "build_block_access_list_rlp") := by sorry
@@ -8318,15 +8327,24 @@ theorem «wk_encode_transaction» :
 /-- `encode_withdrawal_rlp` (AST line 32114): keeps `WorldOK`. -/
 theorem «wk_encode_withdrawal_rlp» :
     KeepsOn WorldOK WorldOK (ofString "encode_withdrawal_rlp") := by sorry
+/-- `evm_init` (AST line 17353): keeps `WorldOK`. -/
+theorem «wk_evm_init» :
+    KeepsOn WorldOK WorldOK (ofString "evm_init") := by sorry
 /-- `ext_code_of` (AST line 16953): keeps `WorldOK`. -/
 theorem «wk_ext_code_of» :
     KeepsOn WorldOK WorldOK (ofString "ext_code_of") := by sorry
+/-- `fork_init` (AST line 32522): keeps `WorldOK`. -/
+theorem «wk_fork_init» :
+    KeepsOn WorldOK WorldOK (ofString "fork_init") := by sorry
 /-- `get_account` (AST line 13188): keeps `WorldOK`. -/
 theorem «wk_get_account» :
     KeepsOn WorldOK WorldOK (ofString "get_account") := by sorry
 /-- `get_code` (AST line 13203): keeps `WorldOK`. -/
 theorem «wk_get_code» :
     KeepsOn WorldOK WorldOK (ofString "get_code") := by sorry
+/-- `header_init` (AST line 9657): keeps `WorldOK`. -/
+theorem «wk_header_init» :
+    KeepsOn WorldOK WorldOK (ofString "header_init") := by sorry
 /-- `idx_start_account` (AST line 14087): keeps `WorldOK`. -/
 theorem «wk_idx_start_account» :
     KeepsOn WorldOK WorldOK (ofString "idx_start_account") := by sorry
@@ -8336,12 +8354,18 @@ theorem «wk_idx_start_storage» :
 /-- `increment_nonce` (AST line 13664): keeps `WorldOK`. -/
 theorem «wk_increment_nonce» :
     KeepsOn WorldOK WorldOK (ofString "increment_nonce") := by sorry
+/-- `keccak_init` (AST line 3974): keeps `WorldOK`. -/
+theorem «wk_keccak_init» :
+    KeepsOn WorldOK WorldOK (ofString "keccak_init") := by sorry
 /-- `mark_account_created` (AST line 13562): keeps `WorldOK`. -/
 theorem «wk_mark_account_created» :
     KeepsOn WorldOK WorldOK (ofString "mark_account_created") := by sorry
 /-- `mpt_from_witness` (AST line 10459): keeps `WorldOK`. -/
 theorem «wk_mpt_from_witness» :
     KeepsOn WorldOK WorldOK (ofString "mpt_from_witness") := by sorry
+/-- `mpt_init` (AST line 9781): keeps `WorldOK`. -/
+theorem «wk_mpt_init» :
+    KeepsOn WorldOK WorldOK (ofString "mpt_init") := by sorry
 /-- `mpt_root` (AST line 11223): keeps `WorldOK`. -/
 theorem «wk_mpt_root» :
     KeepsOn (MptObjAvoids (fun s => [(locN s "out", 32)])) WorldOK (ofString "mpt_root") := by sorry
@@ -8381,15 +8405,27 @@ theorem «wk_remove_storage_write» :
 /-- `requests_append` (AST line 33485): keeps `WorldOK`. -/
 theorem «wk_requests_append» :
     KeepsOn ReqRoom WorldOK (ofString "requests_append") := by sorry
+/-- `ripemd160_init` (AST line 19738): keeps `WorldOK`. -/
+theorem «wk_ripemd160_init» :
+    KeepsOn WorldOK WorldOK (ofString "ripemd160_init") := by sorry
 /-- `set_account_balance` (AST line 13647): keeps `WorldOK`. -/
 theorem «wk_set_account_balance» :
     KeepsOn WorldOK WorldOK (ofString "set_account_balance") := by sorry
+/-- `sha256_init` (AST line 2327): keeps `WorldOK`. -/
+theorem «wk_sha256_init» :
+    KeepsOn WorldOK WorldOK (ofString "sha256_init") := by sorry
+/-- `ssz_init` (AST line 7520): keeps `WorldOK`. -/
+theorem «wk_ssz_init» :
+    KeepsOn WorldOK WorldOK (ofString "ssz_init") := by sorry
 /-- `state_fresh_tx` (AST line 12778): keeps `WorldOK`. -/
 theorem «wk_state_fresh_tx» :
     KeepsOn WorldOK WorldOK (ofString "state_fresh_tx") := by sorry
 /-- `state_init` (AST line 12708): keeps `WorldOK`. -/
 theorem «wk_state_init» :
     KeepsOn WorldOK WorldOK (ofString "state_init") := by sorry
+/-- `u256_ws_init` (AST line 766): keeps `WorldOK`. -/
+theorem «wk_u256_ws_init» :
+    KeepsOn WorldOK WorldOK (ofString "u256_ws_init") := by sorry
 /-- `validate_header` (AST line 9675): keeps `WorldOK`. -/
 theorem «wk_validate_header» :
     KeepsOn WorldOK WorldOK (ofString "validate_header") := by sorry
@@ -8435,12 +8471,30 @@ theorem «ws_bal_remove_change» :
     []
     [] []
     (fun s => []) (ofString "bal_remove_change") := by sorry
+/-- `blake2_init` (AST line 20017): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_blake2_init» :
+    WorldStepFn WorldOK
+    ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]
+    [] [("b2_iv", [0, 8, 16, 24, 32, 40, 48, 56]), ("b2_sigma", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])]
+    (fun s => []) (ofString "blake2_init") := by sorry
 /-- `block_rlp_length` (AST line 32586): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_block_rlp_length» :
     WorldStepFn WorldOK
     ["heap_ptr"]
     [] []
     (fun s => []) (ofString "block_rlp_length") := by sorry
+/-- `bls_precompiles_init` (AST line 30678): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_bls_precompiles_init» :
+    WorldStepFn WorldOK
+    ["bls_c", "bls_discount", "heap_ptr"]
+    [] [("bls_c", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040, 2048, 2056, 2064, 2072, 2080, 2088, 2096, 2104, 2112, 2120, 2128, 2136, 2144, 2152, 2160, 2168, 2176, 2184, 2192, 2200, 2208, 2216, 2224, 2232, 2240, 2248, 2256, 2264, 2272, 2280, 2288, 2296, 2304, 2312, 2320, 2328, 2336, 2344, 2352, 2360, 2368, 2376, 2384, 2392, 2400, 2408, 2416, 2424, 2432, 2440, 2448, 2456, 2464, 2472, 2480, 2488, 2496, 2504, 2512, 2520, 2528, 2536, 2544, 2552, 2560, 2568, 2576, 2584, 2592, 2600, 2608, 2616, 2624, 2632, 2640, 2648, 2656, 2664, 2672, 2680, 2688, 2696, 2704, 2712, 2720, 2728, 2736, 2744, 2752, 2760, 2768, 2776, 2784, 2792, 2800, 2808, 2816, 2824, 2832, 2840, 2848, 2856, 2864, 2872, 2880, 2888, 2896, 2904, 2912, 2920, 2928, 2936, 2944, 2952, 2960, 2968, 2976, 2984, 2992, 3000, 3008, 3016, 3024, 3032, 3040, 3048, 3056, 3064, 3072, 3080, 3088, 3096, 3104, 3112, 3120, 3128, 3136, 3144, 3152, 3160, 3168, 3176, 3184, 3192, 3200, 3208, 3216, 3224, 3232, 3240, 3248, 3256, 3264, 3272, 3280, 3288, 3296, 3304, 3312, 3320, 3328, 3336, 3344, 3352, 3360, 3368, 3376, 3384, 3392, 3400, 3408, 3416, 3424, 3432, 3440, 3448, 3456, 3464, 3472, 3480, 3488, 3496, 3504, 3512, 3520, 3528, 3536, 3544, 3552, 3560, 3568, 3576, 3584, 3592, 3600, 3608, 3616, 3624, 3632, 3640, 3648, 3656, 3664, 3672, 3680, 3688, 3696, 3704, 3712, 3720, 3728, 3736, 3744, 3752, 3760, 3768, 3776, 3784, 3792, 3800, 3808, 3816, 3824, 3832, 3840, 3848, 3856, 3864, 3872, 3880, 3888, 3896, 3904, 3912, 3920, 3928, 3936, 3944, 3952, 3960, 3968, 3976, 3984, 3992, 4000, 4008, 4016, 4024, 4032, 4040, 4048, 4056, 4064, 4072, 4080, 4088, 4096, 4104, 4112, 4120, 4128, 4136, 4144, 4152, 4160, 4168, 4176, 4184, 4192, 4200, 4208, 4216, 4224, 4232, 4240, 4248, 4256, 4264, 4272, 4280, 4288, 4296, 4304, 4312, 4320, 4328, 4336, 4344, 4352, 4360, 4368, 4376, 4384, 4392, 4400, 4408, 4416, 4424, 4432, 4440, 4448, 4456, 4464, 4472, 4480, 4488, 4496, 4504, 4512, 4520, 4528, 4536, 4544, 4552, 4560, 4568, 4576, 4584, 4592, 4600, 4608, 4616, 4624, 4632, 4640, 4648, 4656, 4664, 4672, 4680, 4688, 4696, 4704, 4712, 4720, 4728, 4736, 4744, 4752, 4760, 4768, 4776, 4784, 4792, 4800, 4808, 4816, 4824, 4832, 4840, 4848, 4856, 4864, 4872, 4880, 4888, 4896, 4904, 4912, 4920, 4928, 4936, 4944, 4952, 4960, 4968, 4976, 4984, 4992, 5000, 5008, 5016, 5024, 5032, 5040, 5048, 5056, 5064, 5072, 5080, 5088, 5096, 5104, 5112, 5120, 5128, 5136, 5144, 5152, 5160, 5168, 5176, 5184, 5192, 5200, 5208, 5216, 5224, 5232, 5240, 5248, 5256, 5264, 5272, 5280, 5288, 5296, 5304, 5312, 5320, 5328, 5336, 5344, 5352, 5360, 5368, 5376, 5384, 5392, 5400, 5408, 5416, 5424, 5432, 5440, 5448, 5456, 5464, 5472, 5480, 5488, 5496, 5504, 5512, 5520, 5528, 5536, 5544, 5552, 5560, 5568, 5576, 5584, 5592, 5600, 5608, 5616, 5624, 5632, 5640, 5648, 5656, 5664, 5672, 5680, 5688, 5696, 5704, 5712, 5720, 5728, 5736, 5744, 5752, 5760, 5768, 5776, 5784, 5792, 5800, 5808, 5816, 5824, 5832, 5840, 5848, 5856, 5864, 5872, 5880, 5888, 5896, 5904, 5912, 5920, 5928, 5936, 5944, 5952, 5960, 5968, 5976, 5984, 5992, 6000, 6008, 6016, 6024, 6032, 6040, 6048, 6056, 6064, 6072, 6080, 6088, 6096, 6104, 6112, 6120, 6128, 6136, 6144, 6152, 6160, 6168, 6176, 6184, 6192, 6200, 6208, 6216, 6224, 6232, 6240, 6248, 6256, 6264, 6272, 6280, 6288, 6296, 6304, 6312, 6320, 6328, 6336, 6344, 6352, 6360, 6368, 6376, 6384, 6392, 6400, 6408, 6416, 6424, 6432, 6440, 6448, 6456, 6464, 6472, 6480, 6488, 6496, 6504, 6512, 6520, 6528, 6536, 6544, 6552, 6560, 6568, 6576, 6584, 6592, 6600, 6608, 6616, 6624, 6632, 6640, 6648, 6656, 6664, 6672, 6680, 6688, 6696, 6704, 6712, 6720, 6728, 6736, 6744, 6752, 6760, 6768, 6776, 6784, 6792, 6800, 6808, 6816, 6824, 6832, 6840, 6848, 6856, 6864, 6872, 6880, 6888, 6896, 6904, 6912, 6920, 6928, 6936, 6944, 6952, 6960, 6968, 6976, 6984, 6992, 7000, 7008, 7016, 7024, 7032, 7040, 7048, 7056, 7064, 7072, 7080, 7088, 7096, 7104, 7112, 7120, 7128]), ("bls_discount", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]
+    (fun s => []) (ofString "bls_precompiles_init") := by sorry
+/-- `bn254_init` (AST line 22161): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_bn254_init» :
+    WorldStepFn WorldOK
+    ["bn_expw", "bn_gamma", "heap_ptr"]
+    [] [("bn_expw", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344]), ("bn_gamma", [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352])]
+    (fun s => []) (ofString "bn254_init") := by sorry
 /-- `build_block_access_list_rlp` (AST line 14685): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_build_block_access_list_rlp» :
     WorldStepFn WorldOK
@@ -8513,12 +8567,24 @@ theorem «ws_encode_withdrawal_rlp» :
     ["heap_ptr"]
     [] []
     (fun s => []) (ofString "encode_withdrawal_rlp") := by sorry
+/-- `evm_init` (AST line 17353): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_evm_init» :
+    WorldStepFn WorldOK
+    ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]
+    ["evm_empty", "keccak_pad", "keccak_st", "null_address", "transfer_topic", "vm_system_address"] []
+    (fun s => []) (ofString "evm_init") := by sorry
 /-- `ext_code_of` (AST line 16953): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_ext_code_of» :
     WorldStepFn WorldOK
     ["heap_ptr", "scratch_ptr"]
     ["keccak_pad", "keccak_st", "mpt_nib_scratch", "sk_buf"] []
     (fun s => []) (ofString "ext_code_of") := by sorry
+/-- `fork_init` (AST line 32522): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_fork_init» :
+    WorldStepFn WorldOK
+    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]
+    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] []
+    (fun s => []) (ofString "fork_init") := by sorry
 /-- `get_account` (AST line 13188): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_get_account» :
     WorldStepFn WorldOK
@@ -8531,6 +8597,12 @@ theorem «ws_get_code» :
     ["heap_ptr"]
     ["sk_buf"] []
     (fun s => []) (ofString "get_code") := by sorry
+/-- `header_init` (AST line 9657): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_header_init» :
+    WorldStepFn WorldOK
+    ["hdr_zero8", "heap_ptr"]
+    ["hdr_zero8"] []
+    (fun s => []) (ofString "header_init") := by sorry
 /-- `idx_start_account` (AST line 14087): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_idx_start_account» :
     WorldStepFn WorldOK
@@ -8549,6 +8621,12 @@ theorem «ws_increment_nonce» :
     ["heap_ptr", "journal_n", "scratch_ptr"]
     ["keccak_pad", "keccak_st", "mpt_nib_scratch", "sk_buf"] []
     (fun s => []) (ofString "increment_nonce") := by sorry
+/-- `keccak_init` (AST line 3974): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_keccak_init» :
+    WorldStepFn WorldOK
+    ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]
+    [] [("keccak_rc", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184])]
+    (fun s => []) (ofString "keccak_init") := by sorry
 /-- `mark_account_created` (AST line 13562): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_mark_account_created» :
     WorldStepFn WorldOK
@@ -8561,6 +8639,12 @@ theorem «ws_mpt_from_witness» :
     ["heap_ptr", "scratch_ptr"]
     [] []
     (fun s => []) (ofString "mpt_from_witness") := by sorry
+/-- `mpt_init` (AST line 9781): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_mpt_init» :
+    WorldStepFn WorldOK
+    ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]
+    ["empty_code_hash", "empty_trie_root", "keccak_pad", "keccak_st"] [("mpt_hash_scratch", [0])]
+    (fun s => []) (ofString "mpt_init") := by sorry
 /-- `mpt_root` (AST line 11223): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_mpt_root» :
     WorldStepFn (MptObjAvoids (fun s => [(locN s "out", 32)]))
@@ -8639,12 +8723,30 @@ theorem «ws_requests_append» :
     ["heap_ptr"]
     [] [("bo", [64])]
     (fun s => []) (ofString "requests_append") := by sorry
+/-- `ripemd160_init` (AST line 19738): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_ripemd160_init» :
+    WorldStepFn WorldOK
+    ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]
+    [] [("rmd_tab", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152])]
+    (fun s => []) (ofString "ripemd160_init") := by sorry
 /-- `set_account_balance` (AST line 13647): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_set_account_balance» :
     WorldStepFn WorldOK
     ["heap_ptr", "journal_n", "scratch_ptr"]
     ["keccak_pad", "keccak_st", "mpt_nib_scratch", "sk_buf"] []
     (fun s => []) (ofString "set_account_balance") := by sorry
+/-- `sha256_init` (AST line 2327): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_sha256_init» :
+    WorldStepFn WorldOK
+    ["heap_ptr", "sha_pad", "sha_st"]
+    [] []
+    (fun s => []) (ofString "sha256_init") := by sorry
+/-- `ssz_init` (AST line 7520): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_ssz_init» :
+    WorldStepFn WorldOK
+    ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]
+    [] [("zero_hashes", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]
+    (fun s => []) (ofString "ssz_init") := by sorry
 /-- `state_fresh_tx` (AST line 12778): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_state_fresh_tx» :
     WorldStepFn WorldOK
@@ -8657,6 +8759,12 @@ theorem «ws_state_init» :
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [] [("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ws", [0, 8, 16, 24, 32])]
     (fun s => []) (ofString "state_init") := by sorry
+/-- `u256_ws_init` (AST line 766): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
+theorem «ws_u256_ws_init» :
+    WorldStepFn WorldOK
+    ["heap_ptr", "u256_ws"]
+    [] []
+    (fun s => []) (ofString "u256_ws_init") := by sorry
 /-- `validate_header` (AST line 9675): world step: heap grows, globals outside `gw`, typed sets and unowned memory kept. -/
 theorem «ws_validate_header» :
     WorldStepFn WorldOK
@@ -8671,18 +8779,6 @@ theorem «ww__resolve_step» :
 theorem «ww_alloc» :
     WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "alloc") := by sorry
-/-- `blake2_init` (AST line 20017): writes only memory it allocates and the buffers b2_iv, b2_sigma. -/
-theorem «ww_blake2_init» :
-    WritesWithin (fun s => [(globN s "b2_iv", 64), (globN s "b2_sigma", 80)])
-    ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"] (ofString "blake2_init") := by sorry
-/-- `bls_precompiles_init` (AST line 30678): writes only memory it allocates and the buffers bls_c, bls_discount. -/
-theorem «ww_bls_precompiles_init» :
-    WritesWithin (fun s => [(globN s "bls_c", 7136), (globN s "bls_discount", 2048)])
-    ["bls_c", "bls_discount", "heap_ptr"] (ofString "bls_precompiles_init") := by sorry
-/-- `bn254_init` (AST line 22161): writes only memory it allocates and the buffers bn_expw, bn_gamma. -/
-theorem «ww_bn254_init» :
-    WritesWithin (fun s => [(globN s "bn_expw", 352), (globN s "bn_gamma", 384)])
-    ["bn_expw", "bn_gamma", "heap_ptr"] (ofString "bn254_init") := by sorry
 /-- `cache_get_root` (AST line 32325): writes only memory it allocates and the buffers keccak_pad, keccak_st, mpt_nib_scratch. -/
 theorem «ww_cache_get_root» :
     WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_nib_scratch", 64)])
@@ -8699,26 +8795,14 @@ theorem «ww_decode_transaction» :
 theorem «ww_encode_account» :
     WritesWithin (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", 40)])
     [] (ofString "encode_account") := by sorry
-/-- `evm_init` (AST line 17353): writes only memory it allocates and the buffers evm_empty, keccak_pad, keccak_st, null_address, transfer_topic, vm_system_address. -/
-theorem «ww_evm_init» :
-    WritesWithin (fun s => [(globN s "evm_empty", 8), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "null_address", 24), (globN s "transfer_topic", 32), (globN s "vm_system_address", 24)])
-    ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"] (ofString "evm_init") := by sorry
 /-- `extract_deposit_data` (AST line 32212): writes its parameter extents. -/
 theorem «ww_extract_deposit_data» :
     WritesWithin (fun s => [(locN s "out", 192)])
     ["heap_ptr"] (ofString "extract_deposit_data") := by sorry
-/-- `fork_init` (AST line 32522): writes only memory it allocates and the buffers beacon_roots_address, builder_deposit_address, builder_exit_address, consolidation_request_address, deposit_contract_address, deposit_event_signature_hash, history_storage_address, precompile_addrs, withdrawal_request_address, zero32. -/
-theorem «ww_fork_init» :
-    WritesWithin (fun s => [(globN s "beacon_roots_address", 24), (globN s "builder_deposit_address", 24), (globN s "builder_exit_address", 24), (globN s "consolidation_request_address", 24), (globN s "deposit_contract_address", 24), (globN s "deposit_event_signature_hash", 32), (globN s "history_storage_address", 24), (globN s "precompile_addrs", 360), (globN s "withdrawal_request_address", 24), (globN s "zero32", 32)])
-    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] (ofString "fork_init") := by sorry
 /-- `header_hash` (AST line 9460): writes its parameter extents and the buffers keccak_pad, keccak_st. -/
 theorem «ww_header_hash» :
     WritesWithin (fun s => [(locN s "out", 32), (globN s "keccak_pad", 136), (globN s "keccak_st", 200)])
     ["heap_ptr"] (ofString "header_hash") := by sorry
-/-- `header_init` (AST line 9657): writes only memory it allocates and the buffers hdr_zero8. -/
-theorem «ww_header_init» :
-    WritesWithin (fun s => [(globN s "hdr_zero8", 8)])
-    ["hdr_zero8", "heap_ptr"] (ofString "header_init") := by sorry
 /-- `htab_copy` (AST line 5354): writes only memory it allocates. -/
 theorem «ww_htab_copy» :
     WritesWithin (fun s => [])
@@ -8739,10 +8823,6 @@ theorem «ww_is_warm_storage_key» :
 theorem «ww_keccak256» :
     WritesWithin (fun s => [(locN s "out", 32), (globN s "keccak_pad", 136), (globN s "keccak_st", 200)])
     [] (ofString "keccak256") := by sorry
-/-- `keccak_init` (AST line 3974): writes only memory it allocates and the buffers keccak_rc. -/
-theorem «ww_keccak_init» :
-    WritesWithin (fun s => [(globN s "keccak_rc", 192)])
-    ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"] (ofString "keccak_init") := by sorry
 /-- `logs_bloom` (AST line 31941): writes its parameter extents and the buffers keccak_pad, keccak_st. -/
 theorem «ww_logs_bloom» :
     WritesWithin (fun s => [(locN s "out", 256), (globN s "keccak_pad", 136), (globN s "keccak_st", 200)])
@@ -8763,10 +8843,6 @@ theorem «ww_memcpy» :
 theorem «ww_memzero» :
     WritesWithin (fun s => [(locN s "dst", locN s "n")])
     [] (ofString "memzero") := by sorry
-/-- `mpt_init` (AST line 9781): writes only memory it allocates and the buffers empty_code_hash, empty_trie_root, keccak_pad, keccak_st, mpt_hash_scratch. -/
-theorem «ww_mpt_init» :
-    WritesWithin (fun s => [(globN s "empty_code_hash", 32), (globN s "empty_trie_root", 32), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
-    ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"] (ofString "mpt_init") := by sorry
 /-- `mpt_new` (AST line 10444): writes only memory it allocates. -/
 theorem «ww_mpt_new» :
     WritesWithin (fun s => [])
@@ -8787,10 +8863,6 @@ theorem «ww_node_new_ext» :
 theorem «ww_recover_sender_with_chain_id» :
     WritesWithin (fun s => [(locN s "out20", 20), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "u256_ws", 640)])
     ["heap_ptr"] (ofString "recover_sender_with_chain_id") := by sorry
-/-- `ripemd160_init` (AST line 19738): writes only memory it allocates and the buffers rmd_tab. -/
-theorem «ww_ripemd160_init» :
-    WritesWithin (fun s => [(globN s "rmd_tab", 160)])
-    ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"] (ofString "ripemd160_init") := by sorry
 /-- `rlp_encode_bytes` (AST line 4768): writes its parameter extents. -/
 theorem «ww_rlp_encode_bytes» :
     WritesWithin (fun s => [(locN s "dst", locN s "n" + 9)])
@@ -8807,18 +8879,10 @@ theorem «ww_rlp_item» :
 theorem «ww_scratch_alloc» :
     WritesWithin (fun s => [])
     ["scratch_ptr"] (ofString "scratch_alloc") := by sorry
-/-- `sha256_init` (AST line 2327): writes only memory it allocates. -/
-theorem «ww_sha256_init» :
-    WritesWithin (fun s => [])
-    ["heap_ptr", "sha_pad", "sha_st"] (ofString "sha256_init") := by sorry
 /-- `sk_make` (AST line 12923): writes only memory it allocates and the buffers sk_buf. -/
 theorem «ww_sk_make» :
     WritesWithin (fun s => [(globN s "sk_buf", 64)])
     [] (ofString "sk_make") := by sorry
-/-- `ssz_init` (AST line 7520): writes only memory it allocates and the buffers zero_hashes. -/
-theorem «ww_ssz_init» :
-    WritesWithin (fun s => [(globN s "zero_hashes", 2048)])
-    ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"] (ofString "ssz_init") := by sorry
 /-- `st_le64` (AST line 571): writes its parameter extents. -/
 theorem «ww_st_le64» :
     WritesWithin (fun s => [(locN s "p", 8)])
@@ -8839,10 +8903,6 @@ theorem «ww_u256_to_be32» :
 theorem «ww_u256_to_be_min» :
     WritesWithin (fun s => [(locN s "out", 32)])
     [] (ofString "u256_to_be_min") := by sorry
-/-- `u256_ws_init` (AST line 766): writes only memory it allocates. -/
-theorem «ww_u256_ws_init» :
-    WritesWithin (fun s => [])
-    ["heap_ptr", "u256_ws"] (ofString "u256_ws_init") := by sorry
 /-- `validate_headers` (AST line 9476): writes only memory it allocates and the buffers keccak_pad, keccak_st. -/
 theorem «ww_validate_headers» :
     WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200)])
@@ -10807,7 +10867,7 @@ theorem «gb_verify_stateless_new_payload» : TerminatingFunBoundedOn WorldOK (o
 /-- The body of `main` alone (AST line 33979, guard `MainEntry`, loop-free). Its direct callees are
 exactly `alloc`, `blake2_init`, `bls_precompiles_init`, `bn254_init`, `decode_host_input`, `evm_init`, `fork_init`, `header_init`, `htr_new_payload_request`, `keccak_init`, `mem_init`, `memzero`, `mpt_init`, `output_write`, `ripemd160_init`, `secp256k1_init`, `serialize_result`, `sha256_init`, `ssz_init`, `u256_ws_init`, `verify_stateless_new_payload` (`«callees_main»`, checked against the AST). Hypotheses: the bound
 of each of these 21 callees, then the contract of each callee at a guard-carrying
-call site (20: `ww_alloc`, `rb_alloc`, `ww_blake2_init`, `ww_bls_precompiles_init`, `ww_bn254_init`, `wk_decode_host_input`, `ws_decode_host_input`, `ww_evm_init`, `ww_fork_init`, `ww_header_init`, `ww_htr_new_payload_request`, `ww_keccak_init`, `mem_init_world`, `ww_memzero`, `ww_mpt_init`, `ww_ripemd160_init`, `ro_secp256k1_init`, `ww_sha256_init`, `ww_ssz_init`, `ww_u256_ws_init`). Nothing else is assumed. -/
+call site (32: `ww_alloc`, `rb_alloc`, `wk_blake2_init`, `ws_blake2_init`, `wk_bls_precompiles_init`, `ws_bls_precompiles_init`, `wk_bn254_init`, `ws_bn254_init`, `wk_decode_host_input`, `ws_decode_host_input`, `wk_evm_init`, `ws_evm_init`, `wk_fork_init`, `ws_fork_init`, `wk_header_init`, `ws_header_init`, `ww_htr_new_payload_request`, `wk_keccak_init`, `ws_keccak_init`, `mem_init_world`, `ww_memzero`, `wk_mpt_init`, `ws_mpt_init`, `wk_ripemd160_init`, `ws_ripemd160_init`, `ro_secp256k1_init`, `wk_sha256_init`, `ws_sha256_init`, `wk_ssz_init`, `ws_ssz_init`, `wk_u256_ws_init`, `ws_u256_ws_init`). Nothing else is assumed. -/
 def GBody.«main» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "blake2_init") K.«blake2_init») →
@@ -10833,41 +10893,77 @@ def GBody.«main» : Prop :=
   (WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "alloc")) →
   (RetBlock (fun s => locN s "n") false (ofString "alloc")) →
-  (WritesWithin (fun s => [(globN s "b2_iv", 64), (globN s "b2_sigma", 80)])
-    ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"] (ofString "blake2_init")) →
-  (WritesWithin (fun s => [(globN s "bls_c", 7136), (globN s "bls_discount", 2048)])
-    ["bls_c", "bls_discount", "heap_ptr"] (ofString "bls_precompiles_init")) →
-  (WritesWithin (fun s => [(globN s "bn_expw", 352), (globN s "bn_gamma", 384)])
-    ["bn_expw", "bn_gamma", "heap_ptr"] (ofString "bn254_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "blake2_init")) →
+  (WorldStepFn WorldOK
+    ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]
+    [] [("b2_iv", [0, 8, 16, 24, 32, 40, 48, 56]), ("b2_sigma", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])]
+    (fun s => []) (ofString "blake2_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "bls_precompiles_init")) →
+  (WorldStepFn WorldOK
+    ["bls_c", "bls_discount", "heap_ptr"]
+    [] [("bls_c", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040, 2048, 2056, 2064, 2072, 2080, 2088, 2096, 2104, 2112, 2120, 2128, 2136, 2144, 2152, 2160, 2168, 2176, 2184, 2192, 2200, 2208, 2216, 2224, 2232, 2240, 2248, 2256, 2264, 2272, 2280, 2288, 2296, 2304, 2312, 2320, 2328, 2336, 2344, 2352, 2360, 2368, 2376, 2384, 2392, 2400, 2408, 2416, 2424, 2432, 2440, 2448, 2456, 2464, 2472, 2480, 2488, 2496, 2504, 2512, 2520, 2528, 2536, 2544, 2552, 2560, 2568, 2576, 2584, 2592, 2600, 2608, 2616, 2624, 2632, 2640, 2648, 2656, 2664, 2672, 2680, 2688, 2696, 2704, 2712, 2720, 2728, 2736, 2744, 2752, 2760, 2768, 2776, 2784, 2792, 2800, 2808, 2816, 2824, 2832, 2840, 2848, 2856, 2864, 2872, 2880, 2888, 2896, 2904, 2912, 2920, 2928, 2936, 2944, 2952, 2960, 2968, 2976, 2984, 2992, 3000, 3008, 3016, 3024, 3032, 3040, 3048, 3056, 3064, 3072, 3080, 3088, 3096, 3104, 3112, 3120, 3128, 3136, 3144, 3152, 3160, 3168, 3176, 3184, 3192, 3200, 3208, 3216, 3224, 3232, 3240, 3248, 3256, 3264, 3272, 3280, 3288, 3296, 3304, 3312, 3320, 3328, 3336, 3344, 3352, 3360, 3368, 3376, 3384, 3392, 3400, 3408, 3416, 3424, 3432, 3440, 3448, 3456, 3464, 3472, 3480, 3488, 3496, 3504, 3512, 3520, 3528, 3536, 3544, 3552, 3560, 3568, 3576, 3584, 3592, 3600, 3608, 3616, 3624, 3632, 3640, 3648, 3656, 3664, 3672, 3680, 3688, 3696, 3704, 3712, 3720, 3728, 3736, 3744, 3752, 3760, 3768, 3776, 3784, 3792, 3800, 3808, 3816, 3824, 3832, 3840, 3848, 3856, 3864, 3872, 3880, 3888, 3896, 3904, 3912, 3920, 3928, 3936, 3944, 3952, 3960, 3968, 3976, 3984, 3992, 4000, 4008, 4016, 4024, 4032, 4040, 4048, 4056, 4064, 4072, 4080, 4088, 4096, 4104, 4112, 4120, 4128, 4136, 4144, 4152, 4160, 4168, 4176, 4184, 4192, 4200, 4208, 4216, 4224, 4232, 4240, 4248, 4256, 4264, 4272, 4280, 4288, 4296, 4304, 4312, 4320, 4328, 4336, 4344, 4352, 4360, 4368, 4376, 4384, 4392, 4400, 4408, 4416, 4424, 4432, 4440, 4448, 4456, 4464, 4472, 4480, 4488, 4496, 4504, 4512, 4520, 4528, 4536, 4544, 4552, 4560, 4568, 4576, 4584, 4592, 4600, 4608, 4616, 4624, 4632, 4640, 4648, 4656, 4664, 4672, 4680, 4688, 4696, 4704, 4712, 4720, 4728, 4736, 4744, 4752, 4760, 4768, 4776, 4784, 4792, 4800, 4808, 4816, 4824, 4832, 4840, 4848, 4856, 4864, 4872, 4880, 4888, 4896, 4904, 4912, 4920, 4928, 4936, 4944, 4952, 4960, 4968, 4976, 4984, 4992, 5000, 5008, 5016, 5024, 5032, 5040, 5048, 5056, 5064, 5072, 5080, 5088, 5096, 5104, 5112, 5120, 5128, 5136, 5144, 5152, 5160, 5168, 5176, 5184, 5192, 5200, 5208, 5216, 5224, 5232, 5240, 5248, 5256, 5264, 5272, 5280, 5288, 5296, 5304, 5312, 5320, 5328, 5336, 5344, 5352, 5360, 5368, 5376, 5384, 5392, 5400, 5408, 5416, 5424, 5432, 5440, 5448, 5456, 5464, 5472, 5480, 5488, 5496, 5504, 5512, 5520, 5528, 5536, 5544, 5552, 5560, 5568, 5576, 5584, 5592, 5600, 5608, 5616, 5624, 5632, 5640, 5648, 5656, 5664, 5672, 5680, 5688, 5696, 5704, 5712, 5720, 5728, 5736, 5744, 5752, 5760, 5768, 5776, 5784, 5792, 5800, 5808, 5816, 5824, 5832, 5840, 5848, 5856, 5864, 5872, 5880, 5888, 5896, 5904, 5912, 5920, 5928, 5936, 5944, 5952, 5960, 5968, 5976, 5984, 5992, 6000, 6008, 6016, 6024, 6032, 6040, 6048, 6056, 6064, 6072, 6080, 6088, 6096, 6104, 6112, 6120, 6128, 6136, 6144, 6152, 6160, 6168, 6176, 6184, 6192, 6200, 6208, 6216, 6224, 6232, 6240, 6248, 6256, 6264, 6272, 6280, 6288, 6296, 6304, 6312, 6320, 6328, 6336, 6344, 6352, 6360, 6368, 6376, 6384, 6392, 6400, 6408, 6416, 6424, 6432, 6440, 6448, 6456, 6464, 6472, 6480, 6488, 6496, 6504, 6512, 6520, 6528, 6536, 6544, 6552, 6560, 6568, 6576, 6584, 6592, 6600, 6608, 6616, 6624, 6632, 6640, 6648, 6656, 6664, 6672, 6680, 6688, 6696, 6704, 6712, 6720, 6728, 6736, 6744, 6752, 6760, 6768, 6776, 6784, 6792, 6800, 6808, 6816, 6824, 6832, 6840, 6848, 6856, 6864, 6872, 6880, 6888, 6896, 6904, 6912, 6920, 6928, 6936, 6944, 6952, 6960, 6968, 6976, 6984, 6992, 7000, 7008, 7016, 7024, 7032, 7040, 7048, 7056, 7064, 7072, 7080, 7088, 7096, 7104, 7112, 7120, 7128]), ("bls_discount", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]
+    (fun s => []) (ofString "bls_precompiles_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "bn254_init")) →
+  (WorldStepFn WorldOK
+    ["bn_expw", "bn_gamma", "heap_ptr"]
+    [] [("bn_expw", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344]), ("bn_gamma", [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352])]
+    (fun s => []) (ofString "bn254_init")) →
   (KeepsOn WorldOK WorldOK (ofString "decode_host_input")) →
   (WorldStepFn WorldOK
     ["heap_ptr"]
     ["ssz_offs"] []
     (fun s => []) (ofString "decode_host_input")) →
-  (WritesWithin (fun s => [(globN s "evm_empty", 8), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "null_address", 24), (globN s "transfer_topic", 32), (globN s "vm_system_address", 24)])
-    ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"] (ofString "evm_init")) →
-  (WritesWithin (fun s => [(globN s "beacon_roots_address", 24), (globN s "builder_deposit_address", 24), (globN s "builder_exit_address", 24), (globN s "consolidation_request_address", 24), (globN s "deposit_contract_address", 24), (globN s "deposit_event_signature_hash", 32), (globN s "history_storage_address", 24), (globN s "precompile_addrs", 360), (globN s "withdrawal_request_address", 24), (globN s "zero32", 32)])
-    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] (ofString "fork_init")) →
-  (WritesWithin (fun s => [(globN s "hdr_zero8", 8)])
-    ["hdr_zero8", "heap_ptr"] (ofString "header_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "evm_init")) →
+  (WorldStepFn WorldOK
+    ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]
+    ["evm_empty", "keccak_pad", "keccak_st", "null_address", "transfer_topic", "vm_system_address"] []
+    (fun s => []) (ofString "evm_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "fork_init")) →
+  (WorldStepFn WorldOK
+    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]
+    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] []
+    (fun s => []) (ofString "fork_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "header_init")) →
+  (WorldStepFn WorldOK
+    ["hdr_zero8", "heap_ptr"]
+    ["hdr_zero8"] []
+    (fun s => []) (ofString "header_init")) →
   (WritesWithin (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", 32)])
     ["heap_ptr"] (ofString "htr_new_payload_request")) →
-  (WritesWithin (fun s => [(globN s "keccak_rc", 192)])
-    ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"] (ofString "keccak_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "keccak_init")) →
+  (WorldStepFn WorldOK
+    ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]
+    [] [("keccak_rc", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184])]
+    (fun s => []) (ofString "keccak_init")) →
   (type_of% @mem_init_world) →
   (WritesWithin (fun s => [(locN s "dst", locN s "n")])
     [] (ofString "memzero")) →
-  (WritesWithin (fun s => [(globN s "empty_code_hash", 32), (globN s "empty_trie_root", 32), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
-    ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"] (ofString "mpt_init")) →
-  (WritesWithin (fun s => [(globN s "rmd_tab", 160)])
-    ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"] (ofString "ripemd160_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "mpt_init")) →
+  (WorldStepFn WorldOK
+    ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]
+    ["empty_code_hash", "empty_trie_root", "keccak_pad", "keccak_st"] [("mpt_hash_scratch", [0])]
+    (fun s => []) (ofString "mpt_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "ripemd160_init")) →
+  (WorldStepFn WorldOK
+    ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]
+    [] [("rmd_tab", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152])]
+    (fun s => []) (ofString "ripemd160_init")) →
   (ReadOnlyFn (ofString "secp256k1_init")) →
-  (WritesWithin (fun s => [])
-    ["heap_ptr", "sha_pad", "sha_st"] (ofString "sha256_init")) →
-  (WritesWithin (fun s => [(globN s "zero_hashes", 2048)])
-    ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"] (ofString "ssz_init")) →
-  (WritesWithin (fun s => [])
-    ["heap_ptr", "u256_ws"] (ofString "u256_ws_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "sha256_init")) →
+  (WorldStepFn WorldOK
+    ["heap_ptr", "sha_pad", "sha_st"]
+    [] []
+    (fun s => []) (ofString "sha256_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "ssz_init")) →
+  (WorldStepFn WorldOK
+    ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]
+    [] [("zero_hashes", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]
+    (fun s => []) (ofString "ssz_init")) →
+  (KeepsOn WorldOK WorldOK (ofString "u256_ws_init")) →
+  (WorldStepFn WorldOK
+    ["heap_ptr", "u256_ws"]
+    [] []
+    (fun s => []) (ofString "u256_ws_init")) →
   TerminatingFunBoundedOn MainEntry (ofString "main") K.«main»
 
 /-- The direct callees of `main`, read off its AST body (revision 6). -/
@@ -10877,7 +10973,7 @@ theorem «callees_main» : sameNames (progCallees (fnBody Guest.Software.guestFn
 theorem «gbody_main» : GBody.«main» := by sorry
 
 theorem «gb_main» : TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» :=
-  «gbody_main» «fb_alloc» «fb_blake2_init» «fb_bls_precompiles_init» «fb_bn254_init» «fb_decode_host_input» «fb_evm_init» «fb_fork_init» «fb_header_init» «fb_htr_new_payload_request» «fb_keccak_init» «fb_mem_init» «fb_memzero» «fb_mpt_init» «fb_output_write» «fb_ripemd160_init» «fb_secp256k1_init» «fb_serialize_result» «fb_sha256_init» «fb_ssz_init» «fb_u256_ws_init» «gb_verify_stateless_new_payload» «ww_alloc» «rb_alloc» «ww_blake2_init» «ww_bls_precompiles_init» «ww_bn254_init» «wk_decode_host_input» «ws_decode_host_input» «ww_evm_init» «ww_fork_init» «ww_header_init» «ww_htr_new_payload_request» «ww_keccak_init» «mem_init_world» «ww_memzero» «ww_mpt_init» «ww_ripemd160_init» «ro_secp256k1_init» «ww_sha256_init» «ww_ssz_init» «ww_u256_ws_init»
+  «gbody_main» «fb_alloc» «fb_blake2_init» «fb_bls_precompiles_init» «fb_bn254_init» «fb_decode_host_input» «fb_evm_init» «fb_fork_init» «fb_header_init» «fb_htr_new_payload_request» «fb_keccak_init» «fb_mem_init» «fb_memzero» «fb_mpt_init» «fb_output_write» «fb_ripemd160_init» «fb_secp256k1_init» «fb_serialize_result» «fb_sha256_init» «fb_ssz_init» «fb_u256_ws_init» «gb_verify_stateless_new_payload» «ww_alloc» «rb_alloc» «wk_blake2_init» «ws_blake2_init» «wk_bls_precompiles_init» «ws_bls_precompiles_init» «wk_bn254_init» «ws_bn254_init» «wk_decode_host_input» «ws_decode_host_input» «wk_evm_init» «ws_evm_init» «wk_fork_init» «ws_fork_init» «wk_header_init» «ws_header_init» «ww_htr_new_payload_request» «wk_keccak_init» «ws_keccak_init» «mem_init_world» «ww_memzero» «wk_mpt_init» «ws_mpt_init» «wk_ripemd160_init» «ws_ripemd160_init» «ro_secp256k1_init» «wk_sha256_init» «ws_sha256_init» «wk_ssz_init» «ws_ssz_init» «wk_u256_ws_init» «ws_u256_ws_init»
 
 /-! #### Assembly (PROVED): the primitive obligations imply `main`'s guarded bound -/
 
@@ -11354,23 +11450,35 @@ structure Primitives : Prop where
   «fb_sha256_init» : TerminatingFunBoundedOn GuestInv (ofString "sha256_init") K.«sha256_init»
   «fb_ssz_init» : TerminatingFunBoundedOn GuestInv (ofString "ssz_init") K.«ssz_init»
   «fb_u256_ws_init» : TerminatingFunBoundedOn GuestInv (ofString "u256_ws_init") K.«u256_ws_init»
-  «ww_blake2_init» : WritesWithin (fun s => [(globN s "b2_iv", 64), (globN s "b2_sigma", 80)])     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"] (ofString "blake2_init")
-  «ww_bls_precompiles_init» : WritesWithin (fun s => [(globN s "bls_c", 7136), (globN s "bls_discount", 2048)])     ["bls_c", "bls_discount", "heap_ptr"] (ofString "bls_precompiles_init")
-  «ww_bn254_init» : WritesWithin (fun s => [(globN s "bn_expw", 352), (globN s "bn_gamma", 384)])     ["bn_expw", "bn_gamma", "heap_ptr"] (ofString "bn254_init")
+  «wk_blake2_init» : KeepsOn WorldOK WorldOK (ofString "blake2_init")
+  «ws_blake2_init» : WorldStepFn WorldOK     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]     [] [("b2_iv", [0, 8, 16, 24, 32, 40, 48, 56]), ("b2_sigma", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])]     (fun s => []) (ofString "blake2_init")
+  «wk_bls_precompiles_init» : KeepsOn WorldOK WorldOK (ofString "bls_precompiles_init")
+  «ws_bls_precompiles_init» : WorldStepFn WorldOK     ["bls_c", "bls_discount", "heap_ptr"]     [] [("bls_c", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040, 2048, 2056, 2064, 2072, 2080, 2088, 2096, 2104, 2112, 2120, 2128, 2136, 2144, 2152, 2160, 2168, 2176, 2184, 2192, 2200, 2208, 2216, 2224, 2232, 2240, 2248, 2256, 2264, 2272, 2280, 2288, 2296, 2304, 2312, 2320, 2328, 2336, 2344, 2352, 2360, 2368, 2376, 2384, 2392, 2400, 2408, 2416, 2424, 2432, 2440, 2448, 2456, 2464, 2472, 2480, 2488, 2496, 2504, 2512, 2520, 2528, 2536, 2544, 2552, 2560, 2568, 2576, 2584, 2592, 2600, 2608, 2616, 2624, 2632, 2640, 2648, 2656, 2664, 2672, 2680, 2688, 2696, 2704, 2712, 2720, 2728, 2736, 2744, 2752, 2760, 2768, 2776, 2784, 2792, 2800, 2808, 2816, 2824, 2832, 2840, 2848, 2856, 2864, 2872, 2880, 2888, 2896, 2904, 2912, 2920, 2928, 2936, 2944, 2952, 2960, 2968, 2976, 2984, 2992, 3000, 3008, 3016, 3024, 3032, 3040, 3048, 3056, 3064, 3072, 3080, 3088, 3096, 3104, 3112, 3120, 3128, 3136, 3144, 3152, 3160, 3168, 3176, 3184, 3192, 3200, 3208, 3216, 3224, 3232, 3240, 3248, 3256, 3264, 3272, 3280, 3288, 3296, 3304, 3312, 3320, 3328, 3336, 3344, 3352, 3360, 3368, 3376, 3384, 3392, 3400, 3408, 3416, 3424, 3432, 3440, 3448, 3456, 3464, 3472, 3480, 3488, 3496, 3504, 3512, 3520, 3528, 3536, 3544, 3552, 3560, 3568, 3576, 3584, 3592, 3600, 3608, 3616, 3624, 3632, 3640, 3648, 3656, 3664, 3672, 3680, 3688, 3696, 3704, 3712, 3720, 3728, 3736, 3744, 3752, 3760, 3768, 3776, 3784, 3792, 3800, 3808, 3816, 3824, 3832, 3840, 3848, 3856, 3864, 3872, 3880, 3888, 3896, 3904, 3912, 3920, 3928, 3936, 3944, 3952, 3960, 3968, 3976, 3984, 3992, 4000, 4008, 4016, 4024, 4032, 4040, 4048, 4056, 4064, 4072, 4080, 4088, 4096, 4104, 4112, 4120, 4128, 4136, 4144, 4152, 4160, 4168, 4176, 4184, 4192, 4200, 4208, 4216, 4224, 4232, 4240, 4248, 4256, 4264, 4272, 4280, 4288, 4296, 4304, 4312, 4320, 4328, 4336, 4344, 4352, 4360, 4368, 4376, 4384, 4392, 4400, 4408, 4416, 4424, 4432, 4440, 4448, 4456, 4464, 4472, 4480, 4488, 4496, 4504, 4512, 4520, 4528, 4536, 4544, 4552, 4560, 4568, 4576, 4584, 4592, 4600, 4608, 4616, 4624, 4632, 4640, 4648, 4656, 4664, 4672, 4680, 4688, 4696, 4704, 4712, 4720, 4728, 4736, 4744, 4752, 4760, 4768, 4776, 4784, 4792, 4800, 4808, 4816, 4824, 4832, 4840, 4848, 4856, 4864, 4872, 4880, 4888, 4896, 4904, 4912, 4920, 4928, 4936, 4944, 4952, 4960, 4968, 4976, 4984, 4992, 5000, 5008, 5016, 5024, 5032, 5040, 5048, 5056, 5064, 5072, 5080, 5088, 5096, 5104, 5112, 5120, 5128, 5136, 5144, 5152, 5160, 5168, 5176, 5184, 5192, 5200, 5208, 5216, 5224, 5232, 5240, 5248, 5256, 5264, 5272, 5280, 5288, 5296, 5304, 5312, 5320, 5328, 5336, 5344, 5352, 5360, 5368, 5376, 5384, 5392, 5400, 5408, 5416, 5424, 5432, 5440, 5448, 5456, 5464, 5472, 5480, 5488, 5496, 5504, 5512, 5520, 5528, 5536, 5544, 5552, 5560, 5568, 5576, 5584, 5592, 5600, 5608, 5616, 5624, 5632, 5640, 5648, 5656, 5664, 5672, 5680, 5688, 5696, 5704, 5712, 5720, 5728, 5736, 5744, 5752, 5760, 5768, 5776, 5784, 5792, 5800, 5808, 5816, 5824, 5832, 5840, 5848, 5856, 5864, 5872, 5880, 5888, 5896, 5904, 5912, 5920, 5928, 5936, 5944, 5952, 5960, 5968, 5976, 5984, 5992, 6000, 6008, 6016, 6024, 6032, 6040, 6048, 6056, 6064, 6072, 6080, 6088, 6096, 6104, 6112, 6120, 6128, 6136, 6144, 6152, 6160, 6168, 6176, 6184, 6192, 6200, 6208, 6216, 6224, 6232, 6240, 6248, 6256, 6264, 6272, 6280, 6288, 6296, 6304, 6312, 6320, 6328, 6336, 6344, 6352, 6360, 6368, 6376, 6384, 6392, 6400, 6408, 6416, 6424, 6432, 6440, 6448, 6456, 6464, 6472, 6480, 6488, 6496, 6504, 6512, 6520, 6528, 6536, 6544, 6552, 6560, 6568, 6576, 6584, 6592, 6600, 6608, 6616, 6624, 6632, 6640, 6648, 6656, 6664, 6672, 6680, 6688, 6696, 6704, 6712, 6720, 6728, 6736, 6744, 6752, 6760, 6768, 6776, 6784, 6792, 6800, 6808, 6816, 6824, 6832, 6840, 6848, 6856, 6864, 6872, 6880, 6888, 6896, 6904, 6912, 6920, 6928, 6936, 6944, 6952, 6960, 6968, 6976, 6984, 6992, 7000, 7008, 7016, 7024, 7032, 7040, 7048, 7056, 7064, 7072, 7080, 7088, 7096, 7104, 7112, 7120, 7128]), ("bls_discount", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]     (fun s => []) (ofString "bls_precompiles_init")
+  «wk_bn254_init» : KeepsOn WorldOK WorldOK (ofString "bn254_init")
+  «ws_bn254_init» : WorldStepFn WorldOK     ["bn_expw", "bn_gamma", "heap_ptr"]     [] [("bn_expw", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344]), ("bn_gamma", [0, 32, 64, 96, 128, 160, 192, 224, 256, 288, 320, 352])]     (fun s => []) (ofString "bn254_init")
   «wk_decode_host_input» : KeepsOn WorldOK WorldOK (ofString "decode_host_input")
   «ws_decode_host_input» : WorldStepFn WorldOK     ["heap_ptr"]     ["ssz_offs"] []     (fun s => []) (ofString "decode_host_input")
-  «ww_evm_init» : WritesWithin (fun s => [(globN s "evm_empty", 8), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "null_address", 24), (globN s "transfer_topic", 32), (globN s "vm_system_address", 24)])     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"] (ofString "evm_init")
-  «ww_fork_init» : WritesWithin (fun s => [(globN s "beacon_roots_address", 24), (globN s "builder_deposit_address", 24), (globN s "builder_exit_address", 24), (globN s "consolidation_request_address", 24), (globN s "deposit_contract_address", 24), (globN s "deposit_event_signature_hash", 32), (globN s "history_storage_address", 24), (globN s "precompile_addrs", 360), (globN s "withdrawal_request_address", 24), (globN s "zero32", 32)])     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] (ofString "fork_init")
-  «ww_header_init» : WritesWithin (fun s => [(globN s "hdr_zero8", 8)])     ["hdr_zero8", "heap_ptr"] (ofString "header_init")
+  «wk_evm_init» : KeepsOn WorldOK WorldOK (ofString "evm_init")
+  «ws_evm_init» : WorldStepFn WorldOK     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]     ["evm_empty", "keccak_pad", "keccak_st", "null_address", "transfer_topic", "vm_system_address"] []     (fun s => []) (ofString "evm_init")
+  «wk_fork_init» : KeepsOn WorldOK WorldOK (ofString "fork_init")
+  «ws_fork_init» : WorldStepFn WorldOK     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"] []     (fun s => []) (ofString "fork_init")
+  «wk_header_init» : KeepsOn WorldOK WorldOK (ofString "header_init")
+  «ws_header_init» : WorldStepFn WorldOK     ["hdr_zero8", "heap_ptr"]     ["hdr_zero8"] []     (fun s => []) (ofString "header_init")
   «ww_htr_new_payload_request» : WritesWithin (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", 32)])     ["heap_ptr"] (ofString "htr_new_payload_request")
-  «ww_keccak_init» : WritesWithin (fun s => [(globN s "keccak_rc", 192)])     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"] (ofString "keccak_init")
+  «wk_keccak_init» : KeepsOn WorldOK WorldOK (ofString "keccak_init")
+  «ws_keccak_init» : WorldStepFn WorldOK     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]     [] [("keccak_rc", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184])]     (fun s => []) (ofString "keccak_init")
   «mem_init_world» : type_of% @mem_init_world
-  «ww_mpt_init» : WritesWithin (fun s => [(globN s "empty_code_hash", 32), (globN s "empty_trie_root", 32), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"] (ofString "mpt_init")
-  «ww_ripemd160_init» : WritesWithin (fun s => [(globN s "rmd_tab", 160)])     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"] (ofString "ripemd160_init")
+  «wk_mpt_init» : KeepsOn WorldOK WorldOK (ofString "mpt_init")
+  «ws_mpt_init» : WorldStepFn WorldOK     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]     ["empty_code_hash", "empty_trie_root", "keccak_pad", "keccak_st"] [("mpt_hash_scratch", [0])]     (fun s => []) (ofString "mpt_init")
+  «wk_ripemd160_init» : KeepsOn WorldOK WorldOK (ofString "ripemd160_init")
+  «ws_ripemd160_init» : WorldStepFn WorldOK     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]     [] [("rmd_tab", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152])]     (fun s => []) (ofString "ripemd160_init")
   «ro_secp256k1_init» : ReadOnlyFn (ofString "secp256k1_init")
-  «ww_sha256_init» : WritesWithin (fun s => [])     ["heap_ptr", "sha_pad", "sha_st"] (ofString "sha256_init")
-  «ww_ssz_init» : WritesWithin (fun s => [(globN s "zero_hashes", 2048)])     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"] (ofString "ssz_init")
-  «ww_u256_ws_init» : WritesWithin (fun s => [])     ["heap_ptr", "u256_ws"] (ofString "u256_ws_init")
+  «wk_sha256_init» : KeepsOn WorldOK WorldOK (ofString "sha256_init")
+  «ws_sha256_init» : WorldStepFn WorldOK     ["heap_ptr", "sha_pad", "sha_st"]     [] []     (fun s => []) (ofString "sha256_init")
+  «wk_ssz_init» : KeepsOn WorldOK WorldOK (ofString "ssz_init")
+  «ws_ssz_init» : WorldStepFn WorldOK     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]     [] [("zero_hashes", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96, 104, 112, 120, 128, 136, 144, 152, 160, 168, 176, 184, 192, 200, 208, 216, 224, 232, 240, 248, 256, 264, 272, 280, 288, 296, 304, 312, 320, 328, 336, 344, 352, 360, 368, 376, 384, 392, 400, 408, 416, 424, 432, 440, 448, 456, 464, 472, 480, 488, 496, 504, 512, 520, 528, 536, 544, 552, 560, 568, 576, 584, 592, 600, 608, 616, 624, 632, 640, 648, 656, 664, 672, 680, 688, 696, 704, 712, 720, 728, 736, 744, 752, 760, 768, 776, 784, 792, 800, 808, 816, 824, 832, 840, 848, 856, 864, 872, 880, 888, 896, 904, 912, 920, 928, 936, 944, 952, 960, 968, 976, 984, 992, 1000, 1008, 1016, 1024, 1032, 1040, 1048, 1056, 1064, 1072, 1080, 1088, 1096, 1104, 1112, 1120, 1128, 1136, 1144, 1152, 1160, 1168, 1176, 1184, 1192, 1200, 1208, 1216, 1224, 1232, 1240, 1248, 1256, 1264, 1272, 1280, 1288, 1296, 1304, 1312, 1320, 1328, 1336, 1344, 1352, 1360, 1368, 1376, 1384, 1392, 1400, 1408, 1416, 1424, 1432, 1440, 1448, 1456, 1464, 1472, 1480, 1488, 1496, 1504, 1512, 1520, 1528, 1536, 1544, 1552, 1560, 1568, 1576, 1584, 1592, 1600, 1608, 1616, 1624, 1632, 1640, 1648, 1656, 1664, 1672, 1680, 1688, 1696, 1704, 1712, 1720, 1728, 1736, 1744, 1752, 1760, 1768, 1776, 1784, 1792, 1800, 1808, 1816, 1824, 1832, 1840, 1848, 1856, 1864, 1872, 1880, 1888, 1896, 1904, 1912, 1920, 1928, 1936, 1944, 1952, 1960, 1968, 1976, 1984, 1992, 2000, 2008, 2016, 2024, 2032, 2040])]     (fun s => []) (ofString "ssz_init")
+  «wk_u256_ws_init» : KeepsOn WorldOK WorldOK (ofString "u256_ws_init")
+  «ws_u256_ws_init» : WorldStepFn WorldOK     ["heap_ptr", "u256_ws"]     [] []     (fun s => []) (ofString "u256_ws_init")
   «gbody_main» : GBody.«main»
 
 theorem assembly_main (P : Primitives) :
@@ -11421,7 +11529,7 @@ theorem assembly_main (P : Primitives) :
   have «g_attempt_l6» := «gbody_attempt_l6» «g_attempt_l5»
   have «g_attempt_l7» := «gbody_attempt_l7» «g_attempt_l6»
   have «g_verify_stateless_new_payload» := «gbody_verify_stateless_new_payload» «g_attempt_l7»
-  have «g_main» := P.«gbody_main» P.«fb_alloc» P.«fb_blake2_init» P.«fb_bls_precompiles_init» P.«fb_bn254_init» P.«fb_decode_host_input» P.«fb_evm_init» P.«fb_fork_init» P.«fb_header_init» P.«fb_htr_new_payload_request» P.«fb_keccak_init» P.«fb_mem_init» P.«fb_memzero» P.«fb_mpt_init» P.«fb_output_write» P.«fb_ripemd160_init» P.«fb_secp256k1_init» P.«fb_serialize_result» P.«fb_sha256_init» P.«fb_ssz_init» P.«fb_u256_ws_init» «g_verify_stateless_new_payload» P.«ww_alloc» P.«rb_alloc» P.«ww_blake2_init» P.«ww_bls_precompiles_init» P.«ww_bn254_init» P.«wk_decode_host_input» P.«ws_decode_host_input» P.«ww_evm_init» P.«ww_fork_init» P.«ww_header_init» P.«ww_htr_new_payload_request» P.«ww_keccak_init» P.«mem_init_world» P.«ww_memzero» P.«ww_mpt_init» P.«ww_ripemd160_init» P.«ro_secp256k1_init» P.«ww_sha256_init» P.«ww_ssz_init» P.«ww_u256_ws_init»
+  have «g_main» := P.«gbody_main» P.«fb_alloc» P.«fb_blake2_init» P.«fb_bls_precompiles_init» P.«fb_bn254_init» P.«fb_decode_host_input» P.«fb_evm_init» P.«fb_fork_init» P.«fb_header_init» P.«fb_htr_new_payload_request» P.«fb_keccak_init» P.«fb_mem_init» P.«fb_memzero» P.«fb_mpt_init» P.«fb_output_write» P.«fb_ripemd160_init» P.«fb_secp256k1_init» P.«fb_serialize_result» P.«fb_sha256_init» P.«fb_ssz_init» P.«fb_u256_ws_init» «g_verify_stateless_new_payload» P.«ww_alloc» P.«rb_alloc» P.«wk_blake2_init» P.«ws_blake2_init» P.«wk_bls_precompiles_init» P.«ws_bls_precompiles_init» P.«wk_bn254_init» P.«ws_bn254_init» P.«wk_decode_host_input» P.«ws_decode_host_input» P.«wk_evm_init» P.«ws_evm_init» P.«wk_fork_init» P.«ws_fork_init» P.«wk_header_init» P.«ws_header_init» P.«ww_htr_new_payload_request» P.«wk_keccak_init» P.«ws_keccak_init» P.«mem_init_world» P.«ww_memzero» P.«wk_mpt_init» P.«ws_mpt_init» P.«wk_ripemd160_init» P.«ws_ripemd160_init» P.«ro_secp256k1_init» P.«wk_sha256_init» P.«ws_sha256_init» P.«wk_ssz_init» P.«ws_ssz_init» P.«wk_u256_ws_init» P.«ws_u256_ws_init»
   exact «g_main»
 
 /-- The leaves discharge the primitives (each field is its `sorry` leaf). -/
@@ -11895,23 +12003,35 @@ theorem primitives : Primitives where
   «fb_sha256_init» := «fb_sha256_init»
   «fb_ssz_init» := «fb_ssz_init»
   «fb_u256_ws_init» := «fb_u256_ws_init»
-  «ww_blake2_init» := «ww_blake2_init»
-  «ww_bls_precompiles_init» := «ww_bls_precompiles_init»
-  «ww_bn254_init» := «ww_bn254_init»
+  «wk_blake2_init» := «wk_blake2_init»
+  «ws_blake2_init» := «ws_blake2_init»
+  «wk_bls_precompiles_init» := «wk_bls_precompiles_init»
+  «ws_bls_precompiles_init» := «ws_bls_precompiles_init»
+  «wk_bn254_init» := «wk_bn254_init»
+  «ws_bn254_init» := «ws_bn254_init»
   «wk_decode_host_input» := «wk_decode_host_input»
   «ws_decode_host_input» := «ws_decode_host_input»
-  «ww_evm_init» := «ww_evm_init»
-  «ww_fork_init» := «ww_fork_init»
-  «ww_header_init» := «ww_header_init»
+  «wk_evm_init» := «wk_evm_init»
+  «ws_evm_init» := «ws_evm_init»
+  «wk_fork_init» := «wk_fork_init»
+  «ws_fork_init» := «ws_fork_init»
+  «wk_header_init» := «wk_header_init»
+  «ws_header_init» := «ws_header_init»
   «ww_htr_new_payload_request» := «ww_htr_new_payload_request»
-  «ww_keccak_init» := «ww_keccak_init»
+  «wk_keccak_init» := «wk_keccak_init»
+  «ws_keccak_init» := «ws_keccak_init»
   «mem_init_world» := «mem_init_world»
-  «ww_mpt_init» := «ww_mpt_init»
-  «ww_ripemd160_init» := «ww_ripemd160_init»
+  «wk_mpt_init» := «wk_mpt_init»
+  «ws_mpt_init» := «ws_mpt_init»
+  «wk_ripemd160_init» := «wk_ripemd160_init»
+  «ws_ripemd160_init» := «ws_ripemd160_init»
   «ro_secp256k1_init» := «ro_secp256k1_init»
-  «ww_sha256_init» := «ww_sha256_init»
-  «ww_ssz_init» := «ww_ssz_init»
-  «ww_u256_ws_init» := «ww_u256_ws_init»
+  «wk_sha256_init» := «wk_sha256_init»
+  «ws_sha256_init» := «ws_sha256_init»
+  «wk_ssz_init» := «wk_ssz_init»
+  «ws_ssz_init» := «ws_ssz_init»
+  «wk_u256_ws_init» := «wk_u256_ws_init»
+  «ws_u256_ws_init» := «ws_u256_ws_init»
   «gbody_main» := «gbody_main»
 
 
