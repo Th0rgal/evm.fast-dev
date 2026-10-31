@@ -923,6 +923,33 @@ GBODY_PROOF['process_checked_system_transaction'] = """  intro hal hext hpu hsf 
 """ % (FBE, FBE, WRES % 'wext', ITE_RAISE, FBE, WRES % 'wal', CALLWOK,
        ITE_RAISE, RET0)
 
+GI_ITE_RET = ('(TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))\n'
+              '        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))')
+GBODY_PROOF['ws_get_storage'] = """  intro hal hhm hhr hkc hme hrd htl hub hsr hst hro wsr
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hsr _ _ _ (%s) %s
+      (TerminatingProgBoundedOn.decCall_on hme _ _ _ (%s) %s
+        (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+          (TerminatingProgBoundedOn.decCall_on hst _ _ _ (%s)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+            (TerminatingProgBoundedOn.decCall_guestInv hhm _ _ _
+              (TerminatingProgBoundedOn.decCall_guestInv hal _ _ _
+                (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hkc _ _)
+                  (TerminatingProgBoundedOn.decCall_guestInv htl _ _ _
+                    (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hhr _ _)
+                      (TerminatingProgBoundedOn.seq_guestInv %s
+                        (TerminatingProgBoundedOn.decCall_guestInv hrd _ _ _
+                          (TerminatingProgBoundedOn.seq_guestInv %s
+                            (TerminatingProgBoundedOn.seq_guestInv %s
+                              (TerminatingProgBoundedOn.decCall_guestInv hub _ _ _ %s)))))))))))))) ?_
+  unfold K.«ws_get_storage»
+  try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
+""" % (FBE, WRES % 'wsr', FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, GI_ITE_RET, GI_ITE_RET,
+       ITE_RAISE, RET0)
+
 # revision 7: the witness decoders are guarded by `ArenaReady` (`state_init` calls them before the
 # world is typed); their revision-6 proofs carry over with the `ArenaReady` instances
 for _f in ARENA:

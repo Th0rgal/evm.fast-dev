@@ -9587,7 +9587,39 @@ def GBody.«ws_get_storage» : Prop :=
 theorem «callees_ws_get_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_ws_get_storage))
     ["alloc", "heap_mark", "heap_release", "keccak256", "memeq", "rlp_decode_fully", "trie_lookup", "u256_from_be", "ws_storage_root_of", "ws_storage_trie"] = true := by decide
 
-theorem «gbody_ws_get_storage» : GBody.«ws_get_storage» := by sorry
+theorem «lookup_ws_get_storage» : originalRuntimeCode.lookup (ofString "ws_get_storage") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_ws_get_storage).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 369 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_ws_get_storage) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_ws_get_storage» : GBody.«ws_get_storage» := by
+  intro hal hhm hhr hkc hme hrd htl hub hsr hst hro wsr
+  refine ⟨_, _, _, «lookup_ws_get_storage», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_ws_get_storage, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hsr _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wsr) _ _)
+      (TerminatingProgBoundedOn.decCall_on hme _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hro _ (by simp) _)
+        (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+          (TerminatingProgBoundedOn.decCall_on hst _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+            (TerminatingProgBoundedOn.decCall_guestInv hhm _ _ _
+              (TerminatingProgBoundedOn.decCall_guestInv hal _ _ _
+                (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hkc _ _)
+                  (TerminatingProgBoundedOn.decCall_guestInv htl _ _ _
+                    (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hhr _ _)
+                      (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))
+                        (TerminatingProgBoundedOn.decCall_guestInv hrd _ _ _
+                          (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))
+                            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))
+                              (TerminatingProgBoundedOn.decCall_guestInv hub _ _ _ (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))))))))))) ?_
+  unfold K.«ws_get_storage»
+  try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
 
 theorem «gb_ws_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "ws_get_storage") K.«ws_get_storage» :=
   «gbody_ws_get_storage» «fb_alloc» «fb_heap_mark» «fb_heap_release» «fb_keccak256» «fb_memeq» «fb_rlp_decode_fully» «fb_trie_lookup» «fb_u256_from_be» «fb_ws_storage_root_of» «gb_ws_storage_trie» «ro_memeq» «wk_ws_storage_root_of»
@@ -11329,7 +11361,6 @@ structure Primitives : Prop where
   «fb_rlp_decode_fully» : TerminatingFunBoundedOn GuestInv (ofString "rlp_decode_fully") K.«rlp_decode_fully»
   «fb_trie_lookup» : TerminatingFunBoundedOn GuestInv (ofString "trie_lookup") K.«trie_lookup»
   «fb_u256_from_be» : TerminatingFunBoundedOn GuestInv (ofString "u256_from_be") K.«u256_from_be»
-  «gbody_ws_get_storage» : GBody.«ws_get_storage»
   «fb_record_pre_state_read» : TerminatingFunBoundedOn GuestInv (ofString "record_pre_state_read") K.«record_pre_state_read»
   «fb_stor_lookup» : TerminatingFunBoundedOn GuestInv (ofString "stor_lookup") K.«stor_lookup»
   «wk_record_pre_state_read» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "record_pre_state_read")
@@ -11686,7 +11717,7 @@ theorem assembly_main (P : Primitives) :
   have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
   have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«wk_alloc» P.«rt_alloc» P.«wk_cache_get_root» P.«wk_encode_account» P.«wk_htab_copy» P.«rt_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_memcpy» P.«wk_mpt_from_witness» P.«mk_mpt_root» P.«mk_mpt_set» P.«wk_rlp_encode_bytes» P.«rv_rlp_encode_bytes» P.«ro_u256_is_zero» P.«wk_u256_to_be_min» P.«rv_u256_to_be_min» P.«wk_ws_get_account_optional» P.«wk_ws_storage_root_of»
   have «g_ws_storage_trie» := «gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
-  have «g_ws_get_storage» := P.«gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«wk_ws_storage_root_of»
+  have «g_ws_get_storage» := «gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«wk_ws_storage_root_of»
   have «g_get_pre_tx_storage» := «gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
   have «g_idx_start_storage» := P.«gbody_idx_start_storage» P.«fb_alloc» «g_get_pre_tx_storage» P.«fb_htab_get» P.«fb_htab_set» P.«fb_memcpy» P.«fb_st_le64» P.«ro_htab_get» P.«wk_memcpy» P.«wk_st_le64»
   have «g_update_builder_from_tx» := P.«gbody_update_builder_from_tx» P.«fb_add_balance_change» P.«fb_add_code_change» P.«fb_add_nonce_change» P.«fb_add_storage_write» P.«fb_bal_remove_change» P.«fb_get_code» P.«fb_htab_item» P.«fb_idx_start_account» «g_idx_start_storage» P.«fb_memeq» P.«fb_remove_storage_write» P.«fb_u256_eq» P.«wk_add_balance_change» P.«wk_add_code_change» P.«wk_add_nonce_change» P.«wk_add_storage_write» P.«wk_bal_remove_change» P.«wk_get_code» P.«ro_htab_item» P.«wk_idx_start_account» P.«wk_idx_start_storage» P.«ro_memeq» P.«wk_remove_storage_write» P.«ro_u256_eq»
@@ -11820,7 +11851,6 @@ theorem primitives : Primitives where
   «fb_rlp_decode_fully» := «fb_rlp_decode_fully»
   «fb_trie_lookup» := «fb_trie_lookup»
   «fb_u256_from_be» := «fb_u256_from_be»
-  «gbody_ws_get_storage» := «gbody_ws_get_storage»
   «fb_record_pre_state_read» := «fb_record_pre_state_read»
   «fb_stor_lookup» := «fb_stor_lookup»
   «wk_record_pre_state_read» := «wk_record_pre_state_read»

@@ -88,13 +88,14 @@ lake env lean $S; rm $S
 ```
 
 Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 7): no errors;
-929 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 158 generated callee
-contracts, 30 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or
+928 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 158 generated callee
+contracts, 29 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or
 assembly theorem has a `sorry`. There are also style-linter notes about the `__` in generated names
 such as `fb__decode_step`. `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
   - `assembly`, `assembly_main`;
-  - the 17 proved `gbody_*` (revision 7: `gbody_process_checked_system_transaction`; the 8
+  - the 18 proved `gbody_*` (revision 7: `gbody_process_checked_system_transaction`,
+    `gbody_ws_get_storage`; the 8
     attempt-chain bodies re-proved under `InputReady`, the 4 decoders under `ArenaReady`);
   - revision 7: `worldTyped_iff_with`, `WorldStep.worldOK`, `WorldStep.worldOK_nil`,
     `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`,

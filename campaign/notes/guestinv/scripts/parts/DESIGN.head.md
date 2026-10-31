@@ -25,7 +25,7 @@ is touched.
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
 | callee contracts (revision 7: RELATIONAL in the world and EVM tiers): `WorldKeeps` (84 `wk_*`: `WorldStep` = typing `S ⊆ S'`, `OwnedGrows`, `FrameOutside`, `GlobalsKept`, `RecordsKept`, extra), `EvmKeeps` (12 `ek_*`: `EvmInv`, `ev`/`cur_cont`/`evmChain` kept), `MptKeeps` (2 `mk_*`), `ReadOnlyFn` (30), `WritesWithin` (5, `ArenaReady` tier only), `KeepsOn` (`ak__decode_step`, `fk_frame_open`), `NodeFn` (7), return typing (6 `rt_*`), value contracts (10: `nk_*`, `rv_*` ×5, `zv_memzero`, `nz_htab_set`, `dm_*` ×2) | §7 (generated) | `sorry` (158 statements; revision 7, §0.2a) |
-| composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; each checked single-function, `«callees_f»`; revision 7: every walk checked against its hypotheses, §6) | §7 (generated) | 17 **proved** by concrete-body composition (revision 7: +1, `process_checked_system_transaction`), 30 `sorry` |
+| composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; each checked single-function, `«callees_f»`; revision 7: every walk checked against its hypotheses, §6) | §7 (generated) | 18 **proved** by concrete-body composition (revision 7: +2, `process_checked_system_transaction`, `ws_get_storage`), 29 `sorry` |
 | revision-7 lemmas: `worldTyped_iff_with`, `WorldStep.worldOK(_nil)`, `WorldKeeps.keepsOn`, `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_param_one`, `callEntryOn_inputReady`, `KeepsOn.resumeOn`, `Hoare.ite_raise_skip`, `localsOnly_inputReady` | §7 | **proved** |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
@@ -417,7 +417,9 @@ keep their proofs), `EvmKeeps.keepsOn`, `rollbackReadyAt_of_evmInv`, `callee_par
 `KeepsOn.resumeOn` (a `decCall` into a `KeepsOn W W` callee resumes in `W`), `raise_ne_none`,
 `Hoare.ite_raise_skip`. With them `gbody_process_checked_system_transaction` is PROVED
 (`state_fresh_tx`, `ext_code_of`, `alloc` through their world steps, guard clauses, the guarded
-`process_unchecked_system_transaction`).
+`process_unchecked_system_transaction`), and so is `gbody_ws_get_storage` (`ws_storage_root_of`
+through its world step, `memeq` read-only, the guarded `ws_storage_trie`, then a `GuestInv`
+tail).
 
 ## 0.2a Changes since 311d46674 (revision 7)
 
@@ -441,7 +443,7 @@ that `mpt_insert_node_spec` gains a docstring.
 `_decode_witness_node`, `_decode_witness_node_mpt`, `mpt_from_witness` (audit 1); `InputReady` for
 `verify_stateless_new_payload`, `attempt_l1..7`, `run_attempt` (audit 2).
 
-**Changed `GBody.«f»` (37):** new hypothesis lists. The 17 proved ones keep their callee bounds; the
+**Changed `GBody.«f»` (37):** new hypothesis lists. The 16 revision-6 proved ones keep their callee bounds; the
 contract hypotheses of `get_pre_tx_storage`, `get_storage_original` (`wk_record_pre_state_read`)
 and `ws_storage_trie` are now relational.
 
@@ -469,15 +471,15 @@ and `ws_storage_trie` are now relational.
 `inputCells`, `RetInput`, `InputAt`, `InputReady`, `RollbackReadyAt`, `ArgNonNull`,
 `ResumesInDomain`, `BoListArg`, `ZeroFills`, `RetIntrinsic`.
 
-**New proved theorems:** the lemmas listed under item 1, and `gbody_process_checked_system_transaction`
-(17 proved `gbody_*`, was 16).
+**New proved theorems:** the lemmas listed under item 1, `gbody_process_checked_system_transaction`
+and `gbody_ws_get_storage` (18 proved `gbody_*`, was 16).
 
-**Census:** 929 leaf sorries:
+**Census:** 928 leaf sorries:
 - 727 `fb_*`;
 - 14 §7 contracts;
 - 158 callee contracts: `wk_*` 84, `ek_*` 12, `mk_*` 2, `ro_*` 30, `ww_*` 5, `ak_*` 1,
   `fk_frame_open`, `nf_*` 7, `nk_*` 1, `rt_*` 6, `rv_*` 5, `zv_*` 1, `nz_*` 1, `dm_*` 2;
-- 30 `gbody_*`.
+- 29 `gbody_*`.
 
 ## 0.2 Changes since 141ff1f6b (revision 6)
 
@@ -1314,8 +1316,9 @@ Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_on
 ### Revision-7 walk check of every `gbody_*` (round-4 Gemini item 1, coordinator note)
 
 A `gbody_f` is a genuine single-function primitive only if its own hypotheses suffice to prove it
-without unfolding a callee. For each of the 30 unproved ones, the walk below names, at every
-guard-carrying call site and loop head, the fact needed and the hypothesis it comes from. The
+without unfolding a callee. For each of the 30 revision-7 primitives, the walk below names, at every
+guard-carrying call site and loop head, the fact needed and the hypothesis it comes from (the
+`ws_get_storage` row is now PROVED). The
 walks also use only the following facts about the DEFINITIONS (no callee involved). Where proved,
 this is said; the others are lemmas the prover of the composition states and proves on the way.
 
