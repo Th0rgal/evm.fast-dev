@@ -586,7 +586,7 @@ tail).
 ## 0.2c Changes since f13145329 (revision 8)
 
 `sigdiff.py f13145329:campaign/specs-proposed/GuestInv.lean campaign/specs-proposed/GuestInv.lean`
-(statements with comments stripped): 38 changed, 1 removed, 29 new (`sigdiff.py` also lists the two new `lookup_*` theorems and the proved
+(statements with comments stripped): 38 changed, 1 removed, 30 new (`sigdiff.py` also lists the two new `lookup_*` theorems and the proved
 `gbody__mpt_delete_node`, whose statement `GBody.«_mpt_delete_node»` is unchanged).
 
 **No `fb_*` changed** (727, textually identical): `changed 38 fb changed 0`. No `K.«f»` changed, so
