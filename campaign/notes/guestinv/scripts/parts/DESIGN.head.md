@@ -24,7 +24,7 @@ is touched.
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
 | callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (55: `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`), `NodeFn` (7), value contracts (2: `nk_mpt_nibble_key`, `rv_common_prefix_length`) | §7 (generated) | `sorry` (144 statements; revisions 5-6, §0.2) |
-| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | 12 **proved** by concrete-body composition, 35 `sorry` |
+| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound; revision 6: each checked single-function, `«callees_f»`) | §7 (generated) | 16 **proved** by concrete-body composition (revision 6: +4), 31 `sorry` |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
 | `LocalsOnly`/`LocalsFree` instances for every guard (incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`; revision 5: `EvmRun`, `EvmMsgReady`, `BlockReady`, the restated `MptObjReady`) | §7 | **proved** |
@@ -142,8 +142,19 @@ table or into a table nested in one, never a deletion table. The one copy of `e+
 - the `WorldAvoids` output regions;
 - the trie object `m` and the `MptObjAvoids` regions.
 
-**3.** Fable's item 1, already fixed in revision 5 (`EvmRun`, `ek_*`). Astra's `wk_charge_gas`
-and `wk_stack_pop` no longer exist.
+**3. Verified fixed by revision 5.** This is Fable's item 1, fixed in revision 5 and re-checked
+on revision 6:
+- `wk_charge_gas`, `wk_stack_pop`, `wk_warm_storage_key` and `wk_get_storage_original` no longer
+  occur in the Lean file;
+- their only callers `op_sload`/`op_sstore` use `ek_charge_gas`, `ek_stack_pop`,
+  `ek_warm_storage_key` and `ek_get_storage_original : KeepsOn EvmInv EvmInv`;
+- `op_dispatch`, `op_sload` and `op_sstore` are bounded under `EvmRun = EvmInv ∧ ¬EvmDone`.
+  `GBody.«run_frames»` takes `gb_op_dispatch` under `EvmRun`, the guard `run_frames_step_of_specs`
+  already has on its dispatch branch;
+- `EvmInv` owns the frame blocks those three write through `ev` (stack, gas word, access table:
+  `frameObjects`, `FrameWF`).
+
+Lean accepts the revision-6 file with these statements (0 errors, §9).
 
 **4. Byte-granularity framing.** `FrameOutside` is cell-granular: a cell may change iff it meets a
 kept or fresh region (`CellHits`). Memory maps cells to words, and a byte store rewrites its whole
@@ -184,7 +195,7 @@ both.
 aligned.
 
 **8. Assembly boundary (for the round-5 ruling).** Each `GBody.«f»` is now visibly
-single-function:
+single-function (§6, "The `gbody_*` boundary", has the full per-function list):
 - its docstring lists the direct callees of `f`, then the contract hypotheses;
 - a proved `«callees_f»` checks by `decide` on the literal AST (`progCallees`, `fnBody`,
   `sameNames`) that the direct callees of `f` are exactly the functions whose bounds are
@@ -196,6 +207,50 @@ So `gbody_f` assumes only facts about `f`'s callees and concludes only about `f`
 the shape of an `fb_*` leaf, plus callee hypotheses. Whether it meets the round-3 boundary is the
 quorum's ruling.
 
+Fewer admitted compositions (commit fcb670d84). Four more `gbody_*` are **proved** from the proved
+Hoare layer, so 16 of 47 are proved and 31 remain primitives:
+- `get_pre_tx_storage`;
+- `get_storage_original`;
+- `ws_storage_trie`;
+- `decode_witness_to_mpt`.
+
+The new proved rules are general:
+- `TerminatingProgBoundedOn.seq_hoare`: a guarded `seq` that needs the guard after the first part
+  only on fall-through, given as a `Hoare` triple. `seq_on` needs preservation on every outcome,
+  which a call cannot give, because a trapped callee leaves an arbitrary state;
+- `Hoare.ite_return_skip`: a guard clause `if c then return e` falls through only from the
+  unchanged state (`return_ne_none`);
+- `Hoare.call_keeps`: a call whose callee has `KeepsOn W W` falls through only into `W`, for a
+  locals-free `W` (from `Hoare.call0`);
+- `Hoare.ite_call_keeps`, the conditional form;
+- `clock_skip`, `clock_store`.
+
+Each proof is a combinator term that follows the body exactly, followed by `omega` on `K.«f»`. Every
+hypothesis it uses is one of the listed callee facts. The `Primitives` structure shrinks from 428
+to 424 fields.
+
+**Why most `fb_*` leaves and four §7 leaves are not in `Primitives`.** `Primitives` (generated)
+has exactly the facts `assembly_main` uses, 424 fields:
+- the `fb_*` bounds of the 239 unguarded direct callees of guarded functions;
+- the 10 §7 contract leaves the compositions name;
+- the 144 callee contracts;
+- the 31 unproved `gbody_*`.
+
+The other 488 `fb_*` leaves bound functions that only unguarded functions call. A guarded
+composition needs only its direct callees' bounds. Each of the 239 used `fb_g` is itself a leaf, to
+be proved from the bounds of `g`'s callees, and the 488 are those bounds. So they are decomposition
+targets for proving the 239, not assumptions of the assembly. They stay in the file as stated
+obligations (the coverage table, §5, lists all 774 functions), and the assembly does not depend on
+them.
+
+The four §7 leaves outside `Primitives` are:
+- `htab_union_into_spec`, a lemma for `finish_child_spec` (`incorporate_child_on_success`);
+- `htab_new_scratch_spec`, for `fk_frame_open` (`frame_new`);
+- `mpt_insert_node_spec` and `mpt_delete_node_body_spec`, for `wk_mpt_set`.
+
+No guarded body calls these functions at a guard-carrying site with a §7 contract. Removing all 492
+leaves would not change `assembly` or its axioms.
+
 **Found while auditing the hypotheses: `RollbackReady`.** `rollback_child_access` truncates
 `child+168`, then reloads `child+176` and `child+272`. Its guard therefore also requires:
 - the child record `(child, 280)` allocated words, outside both table footprints;
@@ -203,9 +258,73 @@ quorum's ruling.
 
 `finish_child` gets these from `EvmInv`.
 
-## 0.2 Changes since 0f8dea8c7 (revisions 5 and 6)
+## 0.2 Changes since 141ff1f6b (revision 6)
 
-`sigdiff.py` (§9) on revision 4 (0f8dea8c7) vs revision 6 (d16ff8bc0 + this DESIGN):
+`sigdiff.py` (§9) on revision 5 (`141ff1f6b`) vs revision 6 (`fcb670d84`): 29 changed signatures, 0
+of them `fb_*`, no removals, 79 new names. Every change answers an Astra round-4 item (numbered as
+in §0.1), or the `RollbackReady` audit.
+
+**Changed leaf statements (7, all callee contracts):** `nf__insert_into_leaf`,
+`nf__split_extension`, `nf__collapse_branch`, `nf__delete_ext_finish`, `nf_node_invalidate`,
+`nf_node_new_ext`, `nf_node_new_leaf`: `NodeFn names g` → `NodeFn names req g` (items 5, 6).
+
+**New leaf statements (2):** `nk_mpt_nibble_key : RetNibbles "mpt_nibble_key"`,
+`rv_common_prefix_length : RetLe (min al bl) "common_prefix_length"` (item 5).
+
+All 727 `fb_*`, all 14 §7 leaves and the other 135 callee contracts are textually unchanged. Their
+meaning changes through the definitions below.
+
+**Changed definitions (19):**
+- `ArenaOK`: aligned pointers (7);
+- `FrameOutside`: `CellHits` (4);
+- `NodeHeap`: `KeyIn` paths (5);
+- `TriesTyped`: `∃ Nd, TriesTypedWith` (2);
+- `MarksOK`: `DelExclusive`, aligned marks (1, 7);
+- `EvmInv`, `EvmInvAt`: `AvoidsTries` of the frame blocks (2);
+- `MsgReady`, `MsgOwned`, `WorldAvoids`: `AvoidsTries` (2);
+- `MptObjIn`: `nodeExtents` (2, 5);
+- `MptObjAvoids`: `AvoidsTries` (2);
+- `MptReady`: `level ≤ klen` and `KeyIn` of the key suffix (5);
+- `NodeArgs`, `NodeFnExit`, `NodeFn`: `req`; old kinds kept, new nodes fresh (6);
+- `RollbackReady`: the audit fix;
+- `Primitives`: the field types above, two new contracts, four fewer `gbody_*`.
+
+**Changed proved theorem statement (1):** `localsOnly_mptReady` (`LocalsOnly ["node", "key",
+"klen", "level"]`).
+
+**Changed composition obligations (3, still `sorry`):** `GBody.«mpt_set»` (+`nk_mpt_nibble_key`),
+`GBody.«_mpt_insert_node»` and `GBody.«_mpt_delete_node_body»` (+`rv_common_prefix_length`, new
+`nf_*` types). Every `GBody` docstring is regenerated (item 8). Four `gbody_*` are now proved (their
+statements are unchanged).
+
+**New definitions (21):** `CellHits`, `memB`, `NibblesOK`, `KeyIn`, `nodePath`, `nodeExtents`,
+`TriesTypedWith`, `AvoidsTries`, `htabValues`, `recordSlots`, `worldTableRefs`, `DelExclusive`,
+`NodeKind`, `RetLe`, `RetNibbles`, `progCallees`, `fnBody`, `sameNames` (and the generated
+`lookup_*` of the four new proofs).
+
+**New proved theorems:**
+- `cellHits_aligned`, `return_ne_none`, `clock_skip`, `clock_store`;
+- `TerminatingProgBoundedOn.seq_hoare`, `Hoare.ite_return_skip`, `Hoare.call_keeps`,
+  `Hoare.ite_call_keeps`;
+- the 47 `«callees_f»`;
+- `gbody_get_pre_tx_storage`, `gbody_get_storage_original`, `gbody_ws_storage_trie`,
+  `gbody_decode_witness_to_mpt`.
+
+**Unchanged:** every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
+`run_frames_step_of_specs`, every revision-5 combinator, the 12 previously proved `gbody_*`,
+`frameObjects`, `fixedObjects`, `WorldOK`, `TxReady`, `BlockReady`.
+
+**Census:** 916 leaf sorries:
+- 727 `fb_*`;
+- 14 §7 contracts;
+- 144 callee contracts: `ReadOnlyFn` 30, `WritesWithin` 50, `KeepsOn` 55 (`wk_*` 43, `ek_*` 10,
+  `ak_*` 1, `fk_frame_open`), `NodeFn` 7, value contracts 2;
+- 31 `gbody_*`.
+
+## 0.2b Changes since 0f8dea8c7 (revisions 5 and 6, cumulative)
+
+`sigdiff.py` (§9) on revision 4 (0f8dea8c7) vs revision 6 (d16ff8bc0; fcb670d84 adds only the
+four proofs and their helpers, §0.2):
 
 **Changed leaf statements:**
 - revision 5: `ek_depth0_prepare`, `fk_frame_open`, `wk_mpt_set`, `wk_mpt_root` restated;
@@ -248,12 +367,7 @@ contracts through `EvmInv`/`MarksOK`, the MPT specs through `NodeHeap`/`MptReady
 `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue `run_frames_step_of_specs`, every
 combinator, the 12 proved `gbody_*`.
 
-**Census:** 920 leaf sorries:
-- 727 `fb_*`;
-- 14 §7 contracts;
-- 144 callee contracts: `ro_*` 30, `ww_*` 50, `wk_*` 43, `ek_*` 10, `ak_*` 1, `fk_frame_open`,
-  `nf_*` 7, `nk_*` 1, `rv_*` 1;
-- 35 `gbody_*`.
+**Census:** 916 leaf sorries (§0.2).
 
 ## 0.3 Round-3 items and how each was addressed (revision 4)
 
@@ -354,7 +468,8 @@ Each primitive is a statement about one function body:
       e.g. `keccak_pad`, `keccak_st` for `keccak256`);
     - `R` is just the global buffers for the 30 callees whose every store lands in a block their
       own closure allocated or in a global buffer (computed, `fresh_only`).
-  - `KeepsOn P W g` (59): the reviewers' `PreservesOn WorldOK WorldOK` restricted to resuming
+  - `KeepsOn P W g` (55; revision 4 printed 59, corrected in revision 6 as Astra's round-4
+    non-blocking item asks): the reviewers' `PreservesOn WorldOK WorldOK` restricted to resuming
     outcomes. `W` is the caller's world guard: `WorldOK`; `EvmInv` inside `finish_child` and after
     `frame_open` in `process_message`; `ArenaReady` in the decoder and MPT tier. `P = W` except:
     - guarded callees, where `P` is their own guard (`TxReady`, `ReqsFresh`, `MsgReady`, …);
@@ -951,14 +1066,14 @@ RLP validation stack 2^253, plus the callee bodies.
 |---|---|---|
 | `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec`, `htab_del_progress_spec` |
 | `HtabNewReady` | `ArenaReady` ∧ `key_len ∈ htabKeyLens` ∧ `cap ≤ 2^32` | `htab_new_spec`, `htab_new_scratch_spec` |
-| `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
+| `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated; revision 6: the child record `(child, 280)` allocated words outside both footprints, the two tables equal or disjoint | `rollback_child_access` |
 | `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
 | `EvmInv` | §5 of the Lean file (revision 4: capacities `≥ 1`, return data owned, `RetWindowsOK`, release lifetime of surviving tables) | `run_frames` |
 | `EvmRun` (revision 5) | `EvmInv` ∧ `¬EvmDone` (the precondition of `op_dispatch_spec`) | `op_dispatch`, `op_sload`, `op_sstore` |
-| `ArenaReady` | `GuestInv` ∧ `ArenaOK` | `_decode_witness_node_body` |
-| `MptReady` | `ArenaReady` ∧ the `node` parameter is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)` |
+| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (revision 6: the three allocator pointers 8-byte aligned) | `_decode_witness_node_body` |
+| `MptReady` | `ArenaReady` ∧ the `node` parameter is rooted in a typed `NodeHeap` (revision 6: paths typed) ∧ `level ≤ klen` ∧ `KeyIn` of the key suffix `(key + level, klen − level)` (revision 6) | `_mpt_insert_node`, `_mpt_delete_node(_body)` |
 | `MptObjReady` (restated in revision 5) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `MptObjIn s S`: trie object `m` allocated and rooted in a typed `NodeHeap`, `m` and every node disjoint from the tables of `S` and the fixed objects | `mpt_set` |
-| `MsgReady` (new) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `msg+152`, `msg+160` ∈ S | `process_message`, `process_message_call`, `process_create_message` |
+| `MsgReady` (new) | `ArenaReady` ∧ ∃ S, `WorldTyped s S` ∧ `msg+152`, `msg+160` ∈ S, the record owned (revision 6: also `AvoidsTries`) | `process_message`, `process_message_call`, `process_create_message` |
 | `TxReady` (new) | `WorldOK` ∧ `index < bo+80` | `process_transaction` |
 | `BlockReady` (revision 5) | `WorldOK` ∧ `16·ntx + 16 < 2^64`, `ntx = (si+0)+40` | `execute_block` |
 | `ReqsFresh` (new) | `WorldOK` ∧ `bo+64 = 0` | `process_general_purpose_requests` |
@@ -973,6 +1088,40 @@ and `MptObjAvoids R` (`MptObjReady` plus an output region, pre of `wk_mpt_root`)
 
 Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_onLocals`,
 `LocalsOnly.decClock` and `LocalsOnly.setVar` apply inside every guarded body.
+
+### NodeFn requirements (revision 6, round-4 Astra items 5 and 6)
+
+`NodeFn names req g`. Each function's `req s Nd` is read off its body (`NODE_REQ` in
+`coverage.py`); "rooted" means `RootIn Nd`, i.e. `0` or a node of `Nd`:
+
+| function | node parameters (rooted) | requirement `req` | why (AST) |
+|---|---|---|---|
+| `node_new_leaf(nib, nlen, vptr, vlen)` | — | `KeyIn nib nlen` | the new leaf's path is `(nib, nlen)` (9994) |
+| `node_new_ext(nib, nlen, child)` | `child` | `KeyIn nib nlen` | the new extension's path (10021) |
+| `node_invalidate(nd)` | `nd` | none | stores `nd+8..+24`, inside every node kind (≥ 32 B; `nd = 0` errors) (10061) |
+| `_insert_into_leaf(node, rk, rl, …)` | `node` | `NodeKind node 1`, `KeyIn rk rl` | stores `node+48/+56` (a 56-byte extension has no `+56`); `_create_branch_from_two_leaves` indexes a branch by `ek[pl]`, `rk[pl]` (10532) |
+| `_split_extension(node, rk, rl, …, pl)` | `node` | `NodeKind node 2`, `KeyIn rk rl`, `pl < node+40`, `pl ≤ rl` | reads the child `+48`; indexes the fresh branch by `seg[pl]` and `rk[pl]`; `pl ≥ sl` wrapped `sl − pl` (10561) |
+| `_collapse_branch(node)` | `node` | `NodeKind node 3` | reads the 16 children and `+160/+168`; copies a child path (10674) |
+| `_delete_ext_finish(node, seg, sl, nc)` | `node`, `nc` | `NodeKind node 2`, `KeyIn seg sl` | stores `node+48` (a 32-byte hashed node has none); concatenates `(seg, sl)` with `nc`'s path (10727) |
+
+`NodeFnExit` also gives two facts. The old nodes keep their kinds: all seven functions store at
+offsets ≥ 8 of their node parameters only. Every new node of `Nd'` is a fresh heap record: nodes
+are built only by `alloc`. With them, the callers' loop invariants can be carried:
+- a saved extension (`_mpt_delete_node_body`'s scratch frame `(node, 2, seg, sl)`) is still an
+  extension when `_delete_ext_finish` runs;
+- a key or saved path, allocated before the call, stays disjoint from the grown node set.
+
+The callers meet the requirements as follows.
+- `_mpt_insert_node`: the kind is the loaded `k`. The key is `MptReady`'s suffix. For
+  `_split_extension`, `pl ≠ sl` and `rv_common_prefix_length` (`pl ≤ min(sl, klen − level)`) give
+  `pl < sl` and `pl ≤ rl`. `node_new_ext(seg, pl, br)` gets a prefix of the extension's own typed
+  path.
+- `_mpt_delete_node_body`: the kinds are the loaded `k`, or the frame tag `2` together with
+  `NodeFnExit`'s kept kinds. `(seg, sl)` is the saved path, whose bytes are allocated heap outside
+  every write region.
+
+With aligned pointers, those regions are node records, fresh heap and the free scratch gap, so no
+cell of a `KeyIn` array is written.
 
 ### Compositions (revision 4)
 

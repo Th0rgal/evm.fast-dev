@@ -40,9 +40,25 @@ EOF
   echo '```'
   cat $OUT/contracts.txt
   echo '```'
-  echo
-  echo 'Per-function composition table (revision 6, round-4 Astra item 8; generated, `out/gbody.md`):'
-  echo
+  cat <<'EOF'
+
+### The `gbody_*` boundary (revision 6, round-4 Astra item 8; generated, `out/gbody.md`)
+
+One row per guarded function `f`. `GBody.«f»` is an implication. Its hypotheses are:
+- the bounds of exactly the direct callees of `f` (column 4): `fb_g` under `GuestInv`, or `gb_g`
+  under `g`'s guard. `«callees_f»` checks by `decide` on the literal AST that this set is exactly
+  the set of functions `f`'s body calls;
+- the contracts of the callees at `f`'s guard-carrying call sites (column 5). Each names one direct
+  callee: `coverage.py` asserts it, and the contract's statement mentions only that callee.
+
+The conclusion is `TerminatingFunBoundedOn Guard_f f K.«f»`. `f`'s own guard appears only there.
+Nothing else is assumed: no fact about a non-callee, no invariant of a caller, no global lemma. The
+proof of `gbody_f` must use the §3 combinators and the proved Hoare rules on `f`'s body. Guard
+transport across calls, loop invariants and the rank/stationary obligations are part of that walk
+(§0.1, item 8). "proved" rows are closed in the Lean file; "primitive" rows are fields of
+`Primitives`.
+
+EOF
   cat $OUT/gbody.md
   cat $N/DESIGN.tail.md
   cat <<'EOF'
@@ -71,14 +87,16 @@ F=campaign/specs-proposed/GuestInv.lean; S=campaign/specs-proposed/GuestInvAxiom
 lake env lean $S; rm $S
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 6): no errors; 920
-`declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 144 generated callee contracts,
-35 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
+Result on Lean 4.33.1 with the `wave8-cone-cache` release (revision 6, fcb670d84): no errors;
+916 `declaration uses 'sorry'` warnings, all leaves: 14 §7 contracts, 144 generated callee
+contracts, 31 `gbody_*`, 727 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
 There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
 `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
   - `assembly`, `assembly_main`;
-  - the 12 proved `gbody_*` and the composition helpers (`seq_guestInv_after`, `of_clock`,
+  - the 16 proved `gbody_*` (revision 6: `gbody_get_pre_tx_storage`, `gbody_get_storage_original`,
+    `gbody_ws_storage_trie`, `gbody_decode_witness_to_mpt`), the revision-6 helpers `seq_hoare`,
+    `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`, and the composition helpers (`seq_guestInv_after`, `of_clock`,
     `clock_*`, `ReadOnlyFn.resumeOn`, `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
   - every combinator: the revision-3 ones, plus `callHandle_on`, `while_rank_active`,
     `while_rank_stationary_active`, `loopActive_decClock`;
