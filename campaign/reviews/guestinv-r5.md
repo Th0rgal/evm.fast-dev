@@ -7,7 +7,7 @@ warnings; `assembly`, `assembly_main`: [propext, Classical.choice, Quot.sound]; 
 |---|---|---|
 | Astra 6 (codex) | REQUEST_CHANGES | NOT MET (14 gbody) |
 | Fable 5.1 (claudecode) | REQUEST_CHANGES | NOT MET (execute_block, process_transaction) |
-| Gemini 4 Carbon | interrupted (node job cancelled); resumed, will be appended | — |
+| Gemini 4 Carbon (opencode) | REQUEST_CHANGES | NOT MET (Astra's 14 + idx_start_storage, later retracted) |
 
 ## Astra 6
 
@@ -64,3 +64,22 @@ BOUNDARY: NOT MET (execute_block, process_transaction). Walks completed from own
 
 - `fq12_inv` (campaign/leaves/arith/ISSUES.md on wave8/leaves-arith-astra): noncanonical input `r+p` makes the inner polynomial-division loop reach an exact period-1 state repeat. `fb_fq12_inv` is unguarded and `K.fq12_inv` caps the inner loop at 14. The writer must state explicitly (DESIGN) that this is covered by `while_rank_stationary` (`SameHead` ⇒ timeout) with a rank ≤ 14 on non-stationary iterations, OR guard `fq12_inv` with canonical Fq12 inputs supplied by `bn254_pairing_check` / adjust `K.fq12_inv`. Either way, decide in revision 8, not after the freeze.
 - Astra 8 and Fable's walk of run_attempt disagree; the signed-comparison witness is concrete, so treat it as blocking.
+
+## Gemini 4 Carbon (resumed, 13:57Z)
+
+VERDICT: REQUEST_CHANGES. Agrees with all Astra 1–8 and Fable 1–3 items (confirmed independently). Additions:
+
+1. **Table-role aliasing is broader than Astra 1** (Spec:1810–1825, 2108, 6130–6156, 8551–8573, 8617, 8773, 8779, 8929). Under cross-role aliasing, essentially every table-writing `wk_*`/`ek_*`/§7 contract is false, not only the `1`-writers:
+   - `bal_accounts` = `ts+16` (both key_len 20): `set_account_balance`/`create_ether` insert an `acct_new` record into it, so `TablesTyped` needs `memW a = 0 ∈ S'`. Same for aliasing with ts+8, ts+56, bs+8, bs+16, bs+72, ev+136, ev+168.
+   - `ad+0 = ad+8` on a live BAL record: `add_storage_read` does `htab_set(ad+8, slot, 1)`, so `1` becomes a storage-list value (violates LstOK). Same for ad+0 aliasing ts+48, bs+48, ws+32, inner tables.
+   - `ws+32 = ts+48`: `set_code` puts a code-slice pointer into the trie cache (`sl-1 ∈ Nd'` false); conversely `ws_storage_trie` puts `node+1` into an LstOK table.
+   - Frame tables e+136/e+168/e+176 are only required `∈ S`; `DelExclusive` only covers tables below a child's scratch mark. `ev+176 = bal_accounts` breaks `ek_warm_storage_key`/`op_dispatch_spec`; `child+168 = bal_accounts` breaks `finish_child_spec` via rollback/union.
+   Fix: partition/tag `S` by value schema, require pairwise distinctness (Nodup) of all writable table pointers across distinct logical slots (e+168/e+176 legitimately shared parent/child), and type journal entries by their table's role and key_len.
+2. **Pin key_len per table role** (blocking for `wk_build_block_access_list_rlp`, Spec:8617; AST:14717–14725, 5339): `HtabWF` only gives 1 ≤ klen ≤ 60. `bal_accounts` with klen=8, stride=8, n=3: `htab_keys` allocates 3*8+8 = 32 bytes, then `sort_elems(…, esz=24, …)` writes 72 bytes on pass 2. Pin `hdr s t 0` (20/28/32/52/60) per role in `TablesTyped`.
+3. Retracted: `gbody_idx_start_storage` with `bal_key_buf = 0` is walkable (IvlsDisj holds in both cases).
+4. Checked and fine: `StateErr`/`MptErr`/`RlpErr` escaping `run_frames` (counted by `Resumes`) does not break `WorldStep`: scratch deletion tables never enter world roots, so `OwnedGrows` is not violated.
+5. Specific fix suggestions: Astra 4 — for pure constructors `OwnedGrows` should not grow worldOwned (or state the return block disjoint from `worldOwned post S' Nd'`); `RetInput` should state `IvlsDisj (inputCells post w) (worldOwned post S' Nd')` (then main needs no zero-root facts). Astra 7 — `_decode_step` pushed record fresh scratch + `WritesWithin [] ["heap_ptr","scratch_ptr"]`; `rt_scratch_alloc` (p ≠ 0, aligned, WordsOK, Inside fresh scratch, strict decrease for n > 0); `nf_node_invalidate` = heap/scratch unchanged, only (nd+8, 24) zeroed (SameHead after one warm-up). Astra 8 — record `ntx < 2^63` in RetInput/InputAt (decode_payload's ssz_split_var_list already enforces it).
+
+**fq12_inv: covered, no statement change.** `fb_fq12_inv` with the inner cap N = 14 is TRUE via `while_rank_stationary`. fq_mul always returns < p; fq_mul(k·p, linv) = 0 for 1 ≤ k ≤ 5. Rank at the active inner head: `μ = (if linv = 0 then 0 else d0 − d1) + phase`, where phase = 2 if r0[d0] < p or r0[d0] mod p ≠ 0; 1 if r0[d0] ≥ p, r0[d0] mod p = 0, q[d0−d1] ≠ 0; 0 otherwise (the next step is SameHead). μ ≤ 11 + 2 = 13 ≤ 14 (d1 ≥ 1 inside the outer loop). Every step strictly decreases μ or is SameHead; an inner SameHead makes the outer iteration WhileTimesOut. Record this rank in DESIGN/coverage.py.
+
+Non-blocking: agrees with Fable's MptObjInWith IvlsDisj and RecordsKept alias-check items.
