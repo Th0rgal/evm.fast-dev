@@ -44,19 +44,25 @@ EOF
 ```
 python3 -I campaign/notes/guestinv/scripts/coverage.py Guest/SoftwareAst.lean OUT
 #   -> OUT/coverage.md, OUT/kgen.lean, OUT/leaves.lean, OUT/gleaves.lean, OUT/tiers.txt,
-#      OUT/chain.txt, OUT/manual.txt (must be empty: every loop classified)
+#      OUT/chain.txt, OUT/manual.txt (must be empty: every loop classified),
+#      OUT/parsed.pickle (parse cache)
 sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/GuestInv.lean
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 790 `declaration uses
-'sorry'` warnings (2 combinators, 14 contracts, 727 `fb_*`, 47 `gb_*`), plus style-linter notes
-about the `__` in generated names such as `fb__decode_step`. `#print axioms`, checked on a scratch
-copy:
-- `[propext, Classical.choice, Quot.sound]`: `guestInv_evaluate`, `preservesOn_guestInv`,
-  `PreservesOn.call_guestInv`, `TerminatingProgBoundedOn.decCall_guestInv`, `seq_guestInv`,
-  `coveredSourceTicksConsumedBounded_of_terminatingMainOnEntry`,
-  `coveredTarget_of_terminatingMainOnEntry`;
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 789 `declaration uses
+'sorry'` warnings, all leaves: 15 contracts (including the glue `run_frames_step_of_specs` and the
+new `htab_del_progress_spec`), 727 `fb_*` and 47 `gb_*`. No combinator, definition or bridge
+theorem has a `sorry`. There are also style-linter notes about the `__` in generated names such as
+`fb__decode_step`. `#print axioms`, checked on a scratch copy:
+- `[propext, Classical.choice, Quot.sound]`:
+  - `guestInv_evaluate`, `preservesOn_guestInv`, `PreservesOn.call_guestInv`;
+  - every combinator: `call_on`, `call_guestInv`, `tailCall_on`, `tailCall_guestInv`,
+    `decCall_guestInv`, `decCall_on`, `callHandle_guestInv`, `seq_on`, `seq_guestInv`, `ite_on`,
+    `ite_cond_on`, `dec_on`, `dec_onLocals`, `while_rank`, `while_rank_stationary`;
+  - `LocalsOnly.setVar`, `LocalsOnly.decClock`, and every `localsOnly_*`/`localsFree_*` instance;
+  - the bridge: `coveredSourceTicksConsumedBounded_of_terminatingMainOn(Entry)`,
+    `coveredTarget_of_terminatingMainOnEntry`;
 - `[propext]`: `K_pan_budget`, `astGlobalNames_eq`;
 - also `sorryAx`: `run_frames_step` (through the four frame contracts and the glue) and
   `coveredSourceTicksConsumedBounded_K_pan` (through the leaves).

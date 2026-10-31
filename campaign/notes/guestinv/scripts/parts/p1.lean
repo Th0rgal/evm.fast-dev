@@ -1,30 +1,41 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 2.
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 3.
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
-Revision 2 answers the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
+Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
 
-* `GuestInv` (§2) is now *metadata only* (code, memory domains, base address). Every Pancake
+* `GuestInv` (§2) is *metadata only* (code, memory domains, base address). Every Pancake
   evaluation preserves it (`guestInv_evaluate`, proved), so every call / decCall / handler / seq
-  composition needs no preservation side condition (round-1 items 1 and 6).
+  composition needs no preservation side condition.
 * Every function on `main`'s call graph gets its own bound `K.«f»` (§6, generated mechanically
   from `Guest/SoftwareAst.lean` by `campaign/notes/guestinv/scripts/coverage.py`), equal to the
   sum over the body of `K(callee) + 1` per call and `(N + 1) * (body + 1)` per loop, where `N` is
-  the loop's iteration bound. `N` comes from a measure that holds for ARBITRARY memory and globals
-  (strict local counters `2^64`, no-repeat keys `2^(64k)`, fresh-address walks `W`, monotone
-  measures) wherever one exists (round-1 item 2).
-* Only five loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
+  the loop's iteration bound, from a measure that holds for ARBITRARY memory and globals wherever
+  one exists.
+* Five loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
   (count in memory), `_decode_witness_node_body` (needs heap/scratch separation) and the two MPT
-  update loops (writes through trie nodes). They and their callers form the *guarded tier* (§7),
-  whose leaves carry explicit memory contracts: the structural crit-bit invariant `HtabWF`
-  (item 4), the EVM frame invariant `EvmInv` with a gas-value-free lexicographic potential
-  (item 5), and the global `WorldOK` invariant with its preservation obligations.
-* The bridge (§4) is unchanged and proved; `K_pan_budget` (§8) is proved by `decide`.
+  update loops. They and their callers form the *guarded tier* (§7), whose leaves carry explicit
+  memory contracts (`HtabWF`, `EvmInv` with a gas-value-free potential, `WorldOK`).
 
-Rationale, the per-loop justification table and the list of `sorry`s are in
-`campaign/notes/guestinv/DESIGN.md`. `sorry` appears only in theorem bodies, never in a
-definition.
+Revision 3 answers the round-2 quorum (`campaign/reviews/guestinv-r2.md`):
+
+* `htab_new_spec` / `htab_new_scratch_spec` are guarded by `key_len ∈ htabKeyLens`
+  (`HtabNewReady`, item 1).
+* `EvmInv` requires stack room in every suspended frame (`FrameRoom`), so `finish_child`'s
+  `stack_push` on the parent never allocates below the child's mark (item 2).
+* The combinator set is closed and every combinator is PROVED (item 3): tail call
+  (`tailCall_on`), handler call (`callHandle_guestInv`), the stationary `while` rule
+  (`while_rank_stationary`, with `while_rank` as a corollary), `dec` for guards that read locals
+  (`dec_onLocals` with `LocalsOnly`, instantiated for every guard), and the guarded `decCall_on`
+  and condition-aware `ite_cond_on` that the guarded leaves need. `htab_del_progress_spec` gives
+  `htab_truncate` its count decrement.
+* The bridge (§4) is unchanged and proved; `K_pan_budget` (§8) is proved by `decide`; no `K.«f»`
+  changed.
+
+Rationale, the per-loop justification table, the list of `sorry`s and the list of statements
+changed since revision 2 are in `campaign/notes/guestinv/DESIGN.md`. `sorry` appears only in leaf
+theorem bodies, never in a definition or a combinator.
 -/
 
 set_option autoImplicit false

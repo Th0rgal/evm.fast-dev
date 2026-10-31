@@ -1,8 +1,8 @@
-# GuestInv revision 2: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 3: a guarded route to `CoveredSourceTicksConsumedBounded`
 
-Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. This revision
-answers the round-1 quorum `REQUEST_CHANGES` (`campaign/reviews/guestinv-r1.md`, Astra 6 and Gemini
-4 Carbon). All statements are in `campaign/specs-proposed/GuestInv.lean`. The generated parts of
+Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
+answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`, Astra 6 and Gemini 4 Carbon);
+revision 3 answers the round-2 quorum (`campaign/reviews/guestinv-r2.md`), §0.1 and §0.2. All statements are in `campaign/specs-proposed/GuestInv.lean`. The generated parts of
 that file, the per-loop table (§4) and the coverage table (§5) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
 is touched.
@@ -12,15 +12,145 @@ is touched.
 | Deliverable | Where | Status |
 |---|---|---|
 | `GuestInv` = code ∧ memaddrs ∧ shMemaddrs ∧ baseAddr | §2 of the Lean file | definition; `guestInv_evaluate`: **every** evaluation preserves it (**proved**) |
-| guarded `call`/`decCall`/`seq`/`ite`/`dec` rules, no preservation side conditions | §3 | **proved** (`callHandle_guestInv` and the ranking rule `while_rank` are proposed combinators, `sorry`) |
+| guarded `call`/`decCall`/`seq`/`ite`/`dec` rules, no preservation side conditions | §3 | **proved** |
+| tail call, handler call, stationary `while`, `while_rank`, `dec` for local-reading guards, guarded `decCall`, condition-aware `ite` | §3 | **proved** (revision 3; no combinator has a `sorry`) |
 | bridge `TerminatingFunBoundedOn MainEntry "main" K → CoveredSourceTicksConsumedBounded (K+1)` | §4 | **proved** (unchanged proof, `MainEntry` gains the proved `GlobalsZero`) |
 | one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
-| contract leaves (tables, MPT, frames, `mem_init`, frame glue) | §7 | `sorry` (14 statements); `run_frames_step` **proved** from them |
+| contract leaves (tables, MPT, frames, `mem_init`, frame glue) | §7 | `sorry` (15 statements); `run_frames_step` **proved** from them |
+| `LocalsOnly` instances for every guard | §7 | **proved** |
 | guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
 | `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
 | end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
+
+## 0.1 Round-2 items and how each is addressed
+
+Fable 5.1's review (`campaign/reviews/guestinv-r2.md`). Every combinator below is proved, and
+`#print axioms` on each gives `[propext, Classical.choice, Quot.sound]` (§9).
+
+**Blocking 1: `htab_new_spec` / `htab_new_scratch_spec` false for a wild `key_len`.** Both are now
+guarded by `HtabNewReady = ArenaReady ∧ locN s "key_len" ∈ htabKeyLens`. The 32 call sites all pass
+a literal (15×20, 1×28, 8×32, 7×52, 1×60, re-counted on the AST), so the caller discharges the
+guard by evaluating the argument. `localsOnly_htabNewReady` is proved.
+
+**Blocking 2: `finish_child_spec` false for a full suspended parent.** `EvmInv` gains
+`∀ ec ∈ (evmChain s).tail, FrameRoom s ec`, where `FrameRoom` is `height + 1 ≤ capacity` (`e+16`,
+`e+232`). Only the six frame-opening opcodes make a frame non-current, and each pops before
+`generic_call`/`generic_create`: `op_call`/`op_callcode` pop 7 and push at most 1;
+`op_delegatecall`/`op_staticcall` pop 6; `op_create` pops 3 and `op_create2` pops 4. So
+`op_dispatch_spec`, whose post-state is `EvmInv`, discharges `FrameRoom` for the new parent at
+`op_call`/`op_create`. In `finish_child`, `stack_push` on the parent then never allocates, and
+`scratch_release(child_mark)` keeps the parent's stack. `finish_child_spec`'s pre-state is the
+strengthened `EvmInv`; its post-state needs `FrameRoom` only for the grandparents, which is
+unchanged.
+
+**Blocking 3: the decomposition was not closed by the stated combinators.**
+- *Tail calls* (`Prog.call none`, 88 sites in 75 functions): `TerminatingProgBoundedOn.tailCall_on`
+  (callee guard from `CallEntryOn`) and `tailCall_guestInv` (no call-site obligation), bound
+  `B + 1` like `call_on`.
+- *Stationary iterations*: `TerminatingProgBoundedOn.while_rank_stationary`. Each continuing
+  iteration from an active `P` head either lowers `μ ≤ N` or is `Stationary`: an exact repeat
+  (`SameHead s t`: all fields but the clock agree) or a state from which the loop times out
+  (`WhileTimesOut`). The proof is the `while_noRepeat` induction (`wave8/step0`), with the
+  visited-key count replaced by `μ` and the key collision replaced by `SameHead`. Its three helper
+  lemmas are copied verbatim because that file is not on this branch's cone. `while_rank` is now
+  the corollary without stationary steps; its statement is unchanged.
+  A loop that becomes stationary only after a warm-up iteration uses
+  `μ = 2·rank + [the next iteration is not an exact repeat]`. The per-loop arguments (§4 table) are:
+  - `htab_truncate`: see the next item.
+  - `fq12_inv` #1: `μ = 2(d0+1) + [not yet stationary]`. With `fq_inv(lead) = 0`, `cf = 0` and the
+    writes to `q` and `r0` are idempotent from the second iteration on.
+  - `fq12_inv` #0: an iteration whose inner loop times out times out.
+  - `sort_elems` #1 at width `0`: `mid = right = left` and `left := right`, an exact repeat.
+  - `sort_elems` #0: width `0` makes #1 time out.
+  - `_mpt_insert_node` self-loop: `node_invalidate` and `store(slot, node)` are idempotent from the
+    second iteration on.
+- *`htab_truncate` justification.* "Every iteration is a successful `htab_del`" was wrong:
+  `HtabWF` does not constrain key bytes, so `htab_find_leaf` on the last leaf's key may reach
+  another leaf, and `memeq` may reject it. The corrected argument is
+  `while_rank_stationary` with `μ = count (t+24) < 2^64`. Each iteration either deletes a leaf
+  (count drops by one) or returns 0 having written nothing, and then the loop head repeats exactly.
+  The count decrement is a NEW additive leaf, `htab_del_progress_spec : FunSpec HtabArgWF
+  (OnReturn HtabDelProgress) "htab_del"`. `HtabDelProgress` says the count dropped by one, or the
+  post-state equals the entry state up to locals and clock. `htab_del_spec` is unchanged, so
+  provers building on it are unaffected.
+- *`dec` for guards that read locals*: `LocalsOnly names P` (P reads locals only through `names` and
+  ignores the clock). `TerminatingProgBoundedOn.dec_onLocals` needs the declared name to be outside
+  `names`, which holds for every `dec` in a guarded body. Supporting lemmas:
+  - `LocalsOnly.decClock` discharges `hdec` of both `while` rules;
+  - `LocalsOnly.setVar` handles setting a local the guard does not read;
+  - instances are proved for every guard: `localsOnly_htabArgWF` (`t`), `localsOnly_unionArgWF`
+    (`dst`), `localsOnly_mptReady` (`node`), `localsOnly_mptObjReady` (`m`),
+    `localsOnly_rollbackReady` (`child`), `localsOnly_htabNewReady` (`key_len`), and
+    `localsFree_{arenaReady,worldOK,evmInv,finishReady}`.
+- *Also closed, because the guarded leaves need them*:
+  - `decCall_on`: the continuation guard `Q` comes from `DecCallResumeOn`, i.e. the callee's
+    contract plus `LocalsOnly`;
+  - `ite_cond_on`: each branch may use the outcome of the test (`CondTrue`/`CondFalse`), e.g. the
+    `kind ≠ 0` test before `finish_child`;
+  - `callHandle_guestInv` (proposed in revision 2) is now proved.
+
+**Non-blocking.**
+- *Read-only loops with struct-shaped keys.* `classify` now counts the words of every carried
+  local (`local_words`: parameter and `dec` shapes), so the default `RO(k)` is `2^(64·words)`. The
+  loops this re-sizes are exactly the ones Fable listed: `modinv_bin` #0-2, `bls_fp_inv_raw` #0-2,
+  `fq12_mul` #1, `fq12_sqr` #1, `p256_fp_mul` #0-1, `p256_fp_sqr` #0-1. Each is now an `OVERRIDES`
+  entry with its real measure (§4 table) and its revision-2 `N`, which is an upper bound. So
+  `K.«f»` is unchanged, and the generated `kgen.lean` is byte-identical to revision 2's. The
+  measures:
+  - binary gcd: bit length of the odd parts;
+  - halving loops: trailing zeros, or divergence at `u = 0`;
+  - `fq12_mul`/`fq12_sqr` #1: counters (`iend ≤ 11`, `k ≤ 22`);
+  - `p256` carry loops: `2|c| + [phase]`.
+- *`rlp_list_count`* is reclassified `MONO`: the measure is `len − off`, since `rlp_item_header`
+  returns `1 ≤ hl + pl ≤ len − off` or raises. The body is not read-only, as Fable notes.
+- *Arithmetic facts behind `taylor_exponential` and `fq12_inv`* are listed as explicit prover
+  obligations in §8 (Q6).
+
+## 0.2 Changes since 7e73988d (revision 2)
+
+Mechanical statement diff of the two Lean files (`theorem`/`def`/`example` signatures, comments
+dropped):
+
+**Changed leaf statements (2):**
+- `htab_new_spec`: guard `ArenaReady` → `HtabNewReady` (adds `key_len ∈ htabKeyLens`; strictly
+  weaker obligation for the prover).
+- `htab_new_scratch_spec`: same.
+
+**Changed definition (1), which changes the meaning of leaves that mention it:**
+- `EvmInv`: new conjunct `∀ ec ∈ ch.tail, FrameRoom s ec`. Leaves affected are those whose
+  statement mentions `EvmInv`, directly or through `FinishReady`:
+  - `op_dispatch_spec`, which must establish it at `op_call`/`op_create`;
+  - `frame_exception_spec`, `frame_epilogue_spec` and `finish_child_spec`, which must preserve it
+    (they touch no suspended frame);
+  - `run_frames_step_of_specs` (glue);
+  - `gb_run_frames` and `gb_finish_child`, whose guards are now stronger, so they are easier;
+  - `gb_process_message`, which establishes `EvmInv` at a one-frame chain whose `tail` is empty,
+    so `FrameRoom` is vacuous there.
+
+**New leaf (1):** `htab_del_progress_spec`.
+
+**Unchanged:**
+- all 727 `fb_*` and 47 `gb_*` statements (textually);
+- every `K.«f»`, `K_pan`;
+- `htab_set/del/truncate/union_into_spec`, `mpt_*_spec`, `mem_init_world`;
+- all bridge theorems;
+- `while_rank` and `callHandle_guestInv` (statements kept, now proved).
+
+Docstrings of 7 `fb_*` leaves changed (loop-class label only, e.g. `RO(4)` → `MONO`): `rlp_list_count`, `modinv_bin`, `bls_fp_inv_raw`, `fq12_mul`, `fq12_sqr`, `p256_fp_mul`, `p256_fp_sqr`.
+
+**New proved theorems:**
+- combinators: `tailCall_on`, `tailCall_guestInv`, `while_rank_stationary` (+ `_aux`),
+  `dec_onLocals`, `decCall_on`, `ite_cond_on`;
+- helpers: `evaluate_clock_irrelevant`, `evaluate_ne_of_clock_lt`, `while_unfold_continue`;
+- `LocalsOnly.{of_localsFree,decClock,setVar}`;
+- the `LocalsOnly`/`LocalsFree` instances and their congruence lemmas (`freeChain_with_locals`,
+  `htabWF_with_locals`, `tablesTyped_with_locals`, `worldTyped_with_locals`,
+  `arenaReady_with_locals`, `evmChainFrom_with_locals`, `evmChain_with_locals`, `locN_congr`).
+
+**New definitions:** `FrameRoom`, `HtabNewReady`, `HtabDelProgress`, `SameHead`, `WhileTimesOut`,
+`Stationary`, `LocalsOnly`, `CondTrue`, `CondFalse`, `DecCallResumeOn`.
 
 ## 1. Round-1 blocking items and how each is addressed
 
@@ -156,21 +286,22 @@ round-1 header↔input gas link (Q1) and the `wordGas` fallback are gone.
 
 ## 3. Loop measures (each `N` holds for arbitrary memory unless marked GUARDED)
 
-The ranking rule `TerminatingProgBoundedOn.while_rank` (§3 of the Lean file) turns a measure `μ ≤ N`
-that strictly decreases on every continuing iteration into the bound `(N+1)·(B+1)`. A non-timeout run
-that ends by `error`/`raise`/`return` inside the body is covered as well.
+The ranking rule `TerminatingProgBoundedOn.while_rank_stationary` (§3 of the Lean file, proved)
+turns a measure `μ ≤ N` that strictly decreases on every continuing, non-stationary iteration into
+the bound `(N+1)·(B+1)`; `while_rank` is the special case without stationary iterations. A
+non-timeout run that ends by `error`/`raise`/`return` inside the body is covered as well.
 
 | Class | Rule (checked syntactically by `coverage.py`) | `N` |
 |---|---|---|
 | `CTR` | local `i`, exactly one assignment `i := i ± c` in the body, executed unconditionally (top level of the body's seq/dec chain); test `i < X` (step +1, or any step ≥ 1 when `X` is a literal ≤ 2^62), `X > i`, or `i ≠ 0` / `i > X` (step −1); `X` loop-invariant (its variables are not assigned in the body; loads only in read-only bodies). Then `X − i` (resp. `i`) is a strictly decreasing natural number that never wraps | `2^64`, or `X` for an unsigned literal `X ≤ 2^16` |
 | `GCTR` | same with a global counter that no callee writes (transitive global-write closure); only `state_restore` (`journal_n`) | `2^64` |
-| `RO(k)` | read-only body: no store/storeByte/shMemStore/extCall, no global write, all callees pure (`trap_with` counts as pure: it always raises, so it never continues an iteration). No-repeat (`while_noRepeat`, `wave8/step0`) with key = the `k` loop-carried locals | `2^(64k)` |
+| `RO(k)` | read-only body: no store/storeByte/shMemStore/extCall, no global write, all callees pure (`trap_with` counts as pure: it always raises, so it never continues an iteration). No-repeat (`while_noRepeat`, `wave8/step0`) with key = the loop-carried locals, `k` = their total number of WORDS (a 4-word struct local counts 4) | `2^(64k)` |
 | `WALK` | counter strictly increasing by a positive constant, and every iteration loads/stores `base + counter` (or `base + 32·counter`) in the contiguous `ordinaryDomain` (or the 1 GiB shared input window). The address leaves the domain within `W` iterations, long before any wrap | `W + 1`, `W = 31 104 957 928` |
-| `MONO` | hand-checked strictly monotone measure (halving, doubling width, degree, Taylor index); a non-decreasing iteration, if any, is stationary, i.e. a timeout | per loop |
+| `MONO` | hand-checked strictly monotone measure (halving, doubling width, degree, Taylor index, bit length, carry potential); a non-decreasing iteration, if any, is `Stationary` (an exact repeat, or the rest of the loop times out): `while_rank_stationary` | per loop |
 | `STACK` | explicit stack whose pushes call `scratch_alloc` (`scratch_ptr` strictly decreases, never wraps, never released inside the loop: ≤ 2^61 pushes for arbitrary globals); read-only between pushes (no-repeat) | `(2^61+1)·2^(64k)` |
 | `ALLOC` | every iteration either pushes (`scratch_alloc`) or makes a net heap allocation `alloc(n ≥ 1)` (`heap_ptr` strictly increases; callees release only to marks they took) | `2^62` |
 | `POT` | `run_frames`: `evmPot` under `EvmInv` (GUARDED) | `evmPotMax` |
-| `WF` | `htab_truncate`: count `t+24` strictly decreases under `HtabWF` (GUARDED) | `2^64` |
+| `WF` | `htab_truncate`: count `t+24` drops by one (`htab_del_progress_spec`) or the head repeats exactly (GUARDED, `while_rank_stationary`) | `2^64` |
 | `GUARD` | `_decode_witness_node_body` (`ArenaReady`), `_mpt_insert_node`, `_mpt_delete_node_body` (`MptReady`) | per loop |
 
 Why `CTR` needs the unconditional single update and a strict test: a loop whose exit test never
@@ -185,8 +316,9 @@ argument in the `OVERRIDES` table of the script.
 
 Pancake spends a tick only at a call and at a `while` iteration. So
 `K.«f» = Σ_calls (K.«g» + 1 [+ handler]) + Σ_loops (N + 1)·(body + 1)`. `ite` takes the `max`, and
-straight-line code is free; these are the frozen `ite`/`seq`/`dec`/`call` combinators plus
-`while_rank`. The definitions in the Lean file are these formulas verbatim, symbolic in the callees'
+straight-line code is free; these are the frozen `ite`/`seq`/`dec`/`call` combinators plus the
+§3 rules of the Lean file (`tailCall_on`, `callHandle_guestInv`, `decCall_on`, `dec_onLocals`,
+`ite_cond_on`, `while_rank`, `while_rank_stationary`), all proved. The definitions in the Lean file are these formulas verbatim, symbolic in the callees'
 constants. There is no recursion on `main`'s call graph (the script computes the SCCs: none). So the
 definitions are well-founded and every leaf's proof uses only its callees' leaves.
 
@@ -202,14 +334,18 @@ RLP validation stack 2^253, plus the callee bodies.
 
 | Guard | Definition | Leaves |
 |---|---|---|
-| `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec` |
+| `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec`, `htab_del_progress_spec` |
+| `HtabNewReady` | `ArenaReady` ∧ `key_len ∈ htabKeyLens` | `htab_new_spec`, `htab_new_scratch_spec` |
 | `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
 | `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
-| `EvmInv` | §5 of the Lean file (item 5) | `run_frames` |
+| `EvmInv` | §5 of the Lean file (item 5; revision 3 adds `FrameRoom` for suspended frames) | `run_frames` |
 | `ArenaReady` | `GuestInv` ∧ `ArenaOK` (heap ⊆ `[sourceBase, 0xb0000000]`, frame memory below scratch inside `[0xb0000000, 0xb0bee000]`) | `_decode_witness_node_body` |
 | `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
 | `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records, tries) | the other 37 guarded functions |
 | `MainEntry` | §2 | `main` |
+
+Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_onLocals`,
+`LocalsOnly.decClock` and `LocalsOnly.setVar` apply inside every guarded body.
 
 `WorldOK` holds right after `mem_init`: every root is 0, so `S = []` works (`mem_init_world`).
 `EvmInv → WorldOK`. Inside `run_frames` every frame-level callee (`op_dispatch`, `op_sload`,
@@ -228,8 +364,12 @@ callees' guards hold at their call sites, using the contract leaves:
 - `gb_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv` (the child's tables are
   in `S`).
 - `gb_rollback_child_access` → `htab_truncate`: `HtabArgWF` directly.
-- `gb_htab_truncate`: each iteration calls `htab_del` on the last key. Under `HtabWF` it succeeds and
-  lowers `count` by one (`htab_del_spec`); `count < 2^64`.
+- `gb_htab_truncate`: `while_rank_stationary` with `P = HtabArgWF`, `μ = count (t+24) < 2^64`. Each
+  iteration calls `htab_del` on the key of the last leaf. It either deletes a leaf (count drops by
+  one: `htab_del_progress_spec`; `HtabArgWF` kept: `htab_del_spec` and `localsOnly_htabArgWF`) or
+  returns 0 having written nothing. In the latter case the caller's `dec`s restore `pos`/`leaf`, so
+  the loop head is `SameHead`. (Round 2: "every iteration is a successful `htab_del`" was wrong,
+  because `HtabWF` does not constrain key bytes.)
 - `gb_process_message`: establishes `EvmInv` at the `run_frames` call from `WorldOK`, using the fresh
   `frame_open` record and continuation, the marks just taken, tables in `S`, and the `htab_new_scratch`
   contract for `e+136`.
@@ -240,15 +380,15 @@ callees' guards hold at their call sites, using the contract leaves:
 
 ### Contract leaves (all `sorry`)
 
-`htab_set_spec`, `htab_del_spec`, `htab_truncate_spec`, `htab_union_into_spec`, `htab_new_spec`,
-`htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
+`htab_set_spec`, `htab_del_spec`, `htab_del_progress_spec`, `htab_truncate_spec`,
+`htab_union_into_spec`, `htab_new_spec`, `htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
 `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`,
 `run_frames_step_of_specs` (glue).
 
 ## 7. Every `sorry`
 
-- Combinators (2): `TerminatingProgBoundedOn.callHandle_guestInv`, `TerminatingProgBoundedOn.while_rank`.
-- Contract leaves (14): listed in §6.
+- Combinators: none (all proved in revision 3).
+- Contract leaves (15): listed in §6.
 - Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
 - Unguarded bound leaves (727): `fb_*`, listed in §5.
 
@@ -272,6 +412,18 @@ four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan`
   `compute_state_root` mutates tries reached through account records, those roots must be added.
 - **Q4 (MPT descent).** `_mpt_insert_node`'s measure relies on writes during empty-extension runs
   being idempotent; this holds for typed nodes (`NodeHeap`), which is why it is guarded.
+- **Q6 (arithmetic facts behind two `MONO` measures; round-2 non-blocking).** The provers of
+  `fb_taylor_exponential` and `fb_fq12_inv` must establish:
+  - (a) `u256_divmod` returns quotient 0 on a zero divisor (`Guest/SoftwareAst.lean:1754`;
+    Fable confirmed it), so `taylor_exponential` exits when `i` wraps to 0;
+  - (b) `fq_poly_submul` with `cf = fq_mul(top, fq_inv(lead))` makes `r0[d0]` the literal word 0
+    when `lead` is invertible mod p, even on non-canonical inputs (not traced). If (b) fails for
+    some non-canonical input, the iteration is not stationary either, and `N = 14` would need a
+    no-repeat argument instead.
+- **Q7 (divergence obligations).** The `WhileTimesOut` alternative of the `modinv_bin` /
+  `bls_fp_inv_raw` halving loops at `u = 0` needs: `mod_half`, `mod_sub`, `bls_fp_half_can`,
+  `bls_fp_sub` and the `u256_*`/`bls_fp_*_raw` helpers they call always return normally. They are
+  straight-line word arithmetic with no load, store or raise (checked on the AST).
 - **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
   pure call composition). A single tactic that walks the body with the combinators should discharge
   all loop-free ones; the loop leaves need their measure.

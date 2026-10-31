@@ -4,8 +4,10 @@
 The six loops without an arbitrary-memory measure (`run_frames`, `htab_truncate`,
 `_decode_witness_node_body`, `_mpt_insert_node`, `_mpt_delete_node_body` ×2) and every function
 that (transitively) calls one of them. Each such function has a bound leaf under an explicit
-guard (`guardedLeaves` below and DESIGN.md §6); the memory facts those leaves need at their
-guarded call sites are the contracts of this section, each a separate leaf. -/
+guard (the generated `gb_*` leaves below and DESIGN.md §6); the memory facts those leaves need at
+their guarded call sites are the contracts of this section, each a separate leaf. Every guard is
+`LocalsOnly` (end of this section), so `dec_onLocals`, `LocalsOnly.decClock` (`hdec` of the
+`while` rules) and `decCall_on` apply to it. -/
 
 /-- Outcome specification of a function body from its callee-entry state. -/
 def FunSpec (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
