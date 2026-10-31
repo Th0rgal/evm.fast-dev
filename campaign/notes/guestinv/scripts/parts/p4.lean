@@ -405,8 +405,14 @@ def RetWindowsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : 
 
 /-- Release marks of the child at chain position `i` (whose continuation is `c_i`): releasing
 scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's scratch blocks and keeps
-every ancestor's blocks allocated (an ancestor's logs array is on the heap or above the mark). -/
-def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop :=
+every ancestor's blocks allocated (an ancestor's logs array is on the heap or above the mark).
+Round-3 Astra item 3: the release must also keep every SURVIVING typed table and fixed object
+allocated. The only table ever built in scratch is a frame's deletion table `e+136`
+(`frame_new` → `htab_new_scratch`, its only caller; `htab_copy_scratch` is unreachable), so every
+table of `S` other than the deletion tables of frames `0..i` lies in the heap or above the mark,
+and so does every non-empty fixed object. Astra's witness (a shared `htab_new_scratch` table at
+`0xb0bdffa8` below the child's mark `0xb0be8000`) violates this. -/
+def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : List Ivl) : Prop :=
   ∀ (i : Nat) (hi : i + 1 < ch.length),
     let m := memW s ((ch[i]'(by omega)).2 + 48)
     let mm := memW s ((ch[i]'(by omega)).2 + 56)
@@ -416,7 +422,10 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop 
       Inside (frameObjects s ch[j])[3]! scratchStart mm ∧
       (Inside (frameLogs s ch[j]) sourceBase heapLimit ∨ Inside (frameLogs s ch[j]) m scratchEnd)) ∧
     (∀ o ∈ frameScratch s (ch[i]'(by omega)), o.1 + o.2 ≤ m) ∧
-    mm ≤ memW s ((ch[i]'(by omega)).1 + 24)
+    mm ≤ memW s ((ch[i]'(by omega)).1 + 24) ∧
+    (∀ t ∈ S, t ∉ (ch.take (i + 1)).map (fun ec => memW s (ec.1 + 136)) →
+      ∀ o ∈ htabFootprint s t, Inside o sourceBase heapLimit ∨ Inside o m scratchEnd) ∧
+    (∀ o ∈ fixedObjects s, o.2 = 0 ∨ Inside o sourceBase heapLimit ∨ Inside o m scratchEnd)
 
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the
 world is typed (one table set `S` covering global AND frame tables), the chain is closed (its
@@ -434,7 +443,7 @@ def EvmInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     ((ch.map (frameObjects s)).flatten).Pairwise Disj ∧
     (∀ ec ∈ ch, ∀ o ∈ frameObjects s ec,
       (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j) ∧
-    MarksOK s ch
+    MarksOK s S ch
 
 /-! Round-1 item 5 regressions, by construction of `EvmInv`/`evmPot`:
 * minting gas (`refill_frame_state_gas` with `spilled = 2^62`, `incorporate_child_on_error`) can
