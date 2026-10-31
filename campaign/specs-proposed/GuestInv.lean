@@ -6144,6 +6144,28 @@ theorem localsOnly_frameOpenReady : LocalsOnly ["msg", "kind"] FrameOpenReady :=
   show locN { s with locals := locals, clock := k } "kind" = 0
   rw [hk]; exact hP.2
 
+/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
+parameters are rooted in a typed node heap. -/
+def NodeArgs (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ ∀ n ∈ names, RootIn Nd (locN s n)
+
+/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set rooting the node parameters
+extends to a typed node set of the post-state; memory changes only inside those node records and
+the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
+`_mpt_delete_node_body` need to re-establish `MptReady` at their loop heads). The node functions
+write no global buffer (checked on their closures). -/
+def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) →
+      ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
+        FrameOutside s post (Nd.map fun n => (n, 176))
+          (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
+        ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
+
+def NodeFn (names : List String) (fname : MlS) : Prop :=
+  FunSpec (NodeArgs names) (NodeFnExit names) fname
+
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ memW s (globN s "bo" + 64) < 8
@@ -7198,15 +7220,9 @@ theorem run_frames_step : ∀ c b, runFramesLoop = some (c, b) →
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
 
-/-- `_collapse_branch` (AST line 10674): keeps `ArenaReady`. -/
-theorem «ak__collapse_branch» :
-    KeepsOn ArenaReady ArenaReady (ofString "_collapse_branch") := by sorry
 /-- `_decode_step` (AST line 10110): keeps `ArenaReady`. -/
 theorem «ak__decode_step» :
     KeepsOn ArenaReady ArenaReady (ofString "_decode_step") := by sorry
-/-- `_split_extension` (AST line 10561): keeps `ArenaReady`. -/
-theorem «ak__split_extension» :
-    KeepsOn ArenaReady ArenaReady (ofString "_split_extension") := by sorry
 /-- `create_finish` (AST line 18867): keeps `EvmInv`. -/
 theorem «ek_create_finish» :
     KeepsOn EvmInv EvmInv (ofString "create_finish") := by sorry
@@ -7228,6 +7244,27 @@ theorem «ek_state_restore» :
 /-- `frame_open` (AST line 18450): carries the frame built by `frame_open` (hand-written). -/
 theorem «fk_frame_open» :
     KeepsOn FrameOpenReady EvmInv (ofString "frame_open") := by sorry
+/-- `_collapse_branch` (AST line 10674): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf__collapse_branch» :
+    NodeFn ["node"] (ofString "_collapse_branch") := by sorry
+/-- `_delete_ext_finish` (AST line 10727): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf__delete_ext_finish» :
+    NodeFn ["node", "nc"] (ofString "_delete_ext_finish") := by sorry
+/-- `_insert_into_leaf` (AST line 10532): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf__insert_into_leaf» :
+    NodeFn ["node"] (ofString "_insert_into_leaf") := by sorry
+/-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf__split_extension» :
+    NodeFn ["node"] (ofString "_split_extension") := by sorry
+/-- `node_invalidate` (AST line 10061): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf_node_invalidate» :
+    NodeFn ["nd"] (ofString "node_invalidate") := by sorry
+/-- `node_new_ext` (AST line 10021): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf_node_new_ext» :
+    NodeFn ["child"] (ofString "node_new_ext") := by sorry
+/-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier). -/
+theorem «nf_node_new_leaf» :
+    NodeFn [] (ofString "node_new_leaf") := by sorry
 /-- `calculate_total_blob_gas` (AST line 11914): read-only. -/
 theorem «ro_calculate_total_blob_gas» :
     ReadOnlyFn (ofString "calculate_total_blob_gas") := by sorry
@@ -7471,14 +7508,6 @@ theorem «wk_validate_header» :
 /-- `warm_storage_key` (AST line 16571): keeps `WorldOK`. -/
 theorem «wk_warm_storage_key» :
     KeepsOn WorldOK WorldOK (ofString "warm_storage_key") := by sorry
-/-- `_delete_ext_finish` (AST line 10727): writes its parameter extents. -/
-theorem «ww__delete_ext_finish» :
-    WritesWithin (fun s => [(locN s "node", 176)])
-    ["heap_ptr"] (ofString "_delete_ext_finish") := by sorry
-/-- `_insert_into_leaf` (AST line 10532): writes its parameter extents. -/
-theorem «ww__insert_into_leaf» :
-    WritesWithin (fun s => [(locN s "node", 176)])
-    ["heap_ptr"] (ofString "_insert_into_leaf") := by sorry
 /-- `_resolve_step` (AST line 10077): writes only memory it allocates. -/
 theorem «ww__resolve_step» :
     WritesWithin (fun s => [])
@@ -7587,18 +7616,10 @@ theorem «ww_mpt_nibble_key» :
 theorem «ww_msg_new» :
     WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "msg_new") := by sorry
-/-- `node_invalidate` (AST line 10061): writes its parameter extents. -/
-theorem «ww_node_invalidate» :
-    WritesWithin (fun s => [(locN s "nd", 32)])
-    [] (ofString "node_invalidate") := by sorry
 /-- `node_new_ext` (AST line 10021): writes only memory it allocates. -/
 theorem «ww_node_new_ext» :
     WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "node_new_ext") := by sorry
-/-- `node_new_leaf` (AST line 9994): writes only memory it allocates. -/
-theorem «ww_node_new_leaf» :
-    WritesWithin (fun s => [])
-    ["heap_ptr"] (ofString "node_new_leaf") := by sorry
 /-- `recover_sender_with_chain_id` (AST line 12542): writes its parameter extents and the buffers keccak_pad, keccak_st, u256_ws. -/
 theorem «ww_recover_sender_with_chain_id» :
     WritesWithin (fun s => [(locN s "out20", 20), (globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "u256_ws", 640)])
@@ -7733,14 +7754,12 @@ def GBody.«_mpt_delete_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate») →
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc») →
-  (KeepsOn ArenaReady ArenaReady (ofString "_collapse_branch")) →
-  (WritesWithin (fun s => [(locN s "node", 176)])
-    ["heap_ptr"] (ofString "_delete_ext_finish")) →
+  (NodeFn ["node"] (ofString "_collapse_branch")) →
+  (NodeFn ["node", "nc"] (ofString "_delete_ext_finish")) →
   (ReadOnlyFn (ofString "common_prefix_length")) →
   (ReadOnlyFn (ofString "memeq")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
-  (WritesWithin (fun s => [(locN s "nd", 32)])
-    [] (ofString "node_invalidate")) →
+  (NodeFn ["nd"] (ofString "node_invalidate")) →
   (WritesWithin (fun s => [])
     ["scratch_ptr"] (ofString "scratch_alloc")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body»
@@ -7748,7 +7767,7 @@ def GBody.«_mpt_delete_node_body» : Prop :=
 theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by sorry
 
 theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
-  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «ak__collapse_branch» «ww__delete_ext_finish» «ro_common_prefix_length» «ro_memeq» «ro_mpt_fail» «ww_node_invalidate» «ww_scratch_alloc»
+  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «ww_scratch_alloc»
 
 /-- `_mpt_delete_node` (AST line 10852, guard `MptReady`): loop-free; 3 callees, 1 guard-carrying. -/
 def GBody.«_mpt_delete_node» : Prop :=
@@ -7772,23 +7791,19 @@ def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_ext") K.«node_new_ext») →
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf») →
-  (WritesWithin (fun s => [(locN s "node", 176)])
-    ["heap_ptr"] (ofString "_insert_into_leaf")) →
-  (KeepsOn ArenaReady ArenaReady (ofString "_split_extension")) →
+  (NodeFn ["node"] (ofString "_insert_into_leaf")) →
+  (NodeFn ["node"] (ofString "_split_extension")) →
   (ReadOnlyFn (ofString "common_prefix_length")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
-  (WritesWithin (fun s => [(locN s "nd", 32)])
-    [] (ofString "node_invalidate")) →
-  (WritesWithin (fun s => [])
-    ["heap_ptr"] (ofString "node_new_ext")) →
-  (WritesWithin (fun s => [])
-    ["heap_ptr"] (ofString "node_new_leaf")) →
+  (NodeFn ["nd"] (ofString "node_invalidate")) →
+  (NodeFn ["child"] (ofString "node_new_ext")) →
+  (NodeFn [] (ofString "node_new_leaf")) →
   TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node»
 
 theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
 
 theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
-  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «ww__insert_into_leaf» «ak__split_extension» «ro_common_prefix_length» «ro_mpt_fail» «ww_node_invalidate» «ww_node_new_ext» «ww_node_new_leaf»
+  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
 
 /-- `mpt_set` (AST line 10872, guard `MptObjReady`): loop-free; 3 callees, 1 guard-carrying. -/
 def GBody.«mpt_set» : Prop :=
@@ -8821,20 +8836,21 @@ structure Primitives : Prop where
   «fb_memeq» : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»
   «fb_node_invalidate» : TerminatingFunBoundedOn GuestInv (ofString "node_invalidate") K.«node_invalidate»
   «fb_scratch_alloc» : TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc»
-  «ak__collapse_branch» : KeepsOn ArenaReady ArenaReady (ofString "_collapse_branch")
-  «ww__delete_ext_finish» : WritesWithin (fun s => [(locN s "node", 176)])     ["heap_ptr"] (ofString "_delete_ext_finish")
+  «nf__collapse_branch» : NodeFn ["node"] (ofString "_collapse_branch")
+  «nf__delete_ext_finish» : NodeFn ["node", "nc"] (ofString "_delete_ext_finish")
   «ro_common_prefix_length» : ReadOnlyFn (ofString "common_prefix_length")
   «ro_memeq» : ReadOnlyFn (ofString "memeq")
-  «ww_node_invalidate» : WritesWithin (fun s => [(locN s "nd", 32)])     [] (ofString "node_invalidate")
+  «nf_node_invalidate» : NodeFn ["nd"] (ofString "node_invalidate")
   «ww_scratch_alloc» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "scratch_alloc")
   «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body»
   «gbody__mpt_delete_node» : GBody.«_mpt_delete_node»
   «fb__insert_into_leaf» : TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf»
   «fb__split_extension» : TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension»
   «fb_node_new_leaf» : TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf»
-  «ww__insert_into_leaf» : WritesWithin (fun s => [(locN s "node", 176)])     ["heap_ptr"] (ofString "_insert_into_leaf")
-  «ak__split_extension» : KeepsOn ArenaReady ArenaReady (ofString "_split_extension")
-  «ww_node_new_leaf» : WritesWithin (fun s => [])     ["heap_ptr"] (ofString "node_new_leaf")
+  «nf__insert_into_leaf» : NodeFn ["node"] (ofString "_insert_into_leaf")
+  «nf__split_extension» : NodeFn ["node"] (ofString "_split_extension")
+  «nf_node_new_ext» : NodeFn ["child"] (ofString "node_new_ext")
+  «nf_node_new_leaf» : NodeFn [] (ofString "node_new_leaf")
   «gbody__mpt_insert_node» : GBody.«_mpt_insert_node»
   «fb_mpt_nibble_key» : TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key»
   «ww_mpt_nibble_key» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])     ["heap_ptr"] (ofString "mpt_nibble_key")
@@ -9242,9 +9258,9 @@ theorem assembly_main (P : Primitives) :
   have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ak__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
   have «g__decode_witness_node_mpt» := P.«gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
   have «g__decode_witness_node» := P.«gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«ak__collapse_branch» P.«ww__delete_ext_finish» P.«ro_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«ww_node_invalidate» P.«ww_scratch_alloc»
+  have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«ww_scratch_alloc»
   have «g__mpt_delete_node» := P.«gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«ww__insert_into_leaf» P.«ak__split_extension» P.«ro_common_prefix_length» P.«ro_mpt_fail» P.«ww_node_invalidate» P.«ww_node_new_ext» P.«ww_node_new_leaf»
+  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«ww_mpt_new» P.«wk_mpt_set» P.«ww_rlp_encode_word»
   have «g_decode_witness_to_mpt» := P.«gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
@@ -9312,20 +9328,21 @@ theorem primitives : Primitives where
   «fb_memeq» := «fb_memeq»
   «fb_node_invalidate» := «fb_node_invalidate»
   «fb_scratch_alloc» := «fb_scratch_alloc»
-  «ak__collapse_branch» := «ak__collapse_branch»
-  «ww__delete_ext_finish» := «ww__delete_ext_finish»
+  «nf__collapse_branch» := «nf__collapse_branch»
+  «nf__delete_ext_finish» := «nf__delete_ext_finish»
   «ro_common_prefix_length» := «ro_common_prefix_length»
   «ro_memeq» := «ro_memeq»
-  «ww_node_invalidate» := «ww_node_invalidate»
+  «nf_node_invalidate» := «nf_node_invalidate»
   «ww_scratch_alloc» := «ww_scratch_alloc»
   «gbody__mpt_delete_node_body» := «gbody__mpt_delete_node_body»
   «gbody__mpt_delete_node» := «gbody__mpt_delete_node»
   «fb__insert_into_leaf» := «fb__insert_into_leaf»
   «fb__split_extension» := «fb__split_extension»
   «fb_node_new_leaf» := «fb_node_new_leaf»
-  «ww__insert_into_leaf» := «ww__insert_into_leaf»
-  «ak__split_extension» := «ak__split_extension»
-  «ww_node_new_leaf» := «ww_node_new_leaf»
+  «nf__insert_into_leaf» := «nf__insert_into_leaf»
+  «nf__split_extension» := «nf__split_extension»
+  «nf_node_new_ext» := «nf_node_new_ext»
+  «nf_node_new_leaf» := «nf_node_new_leaf»
   «gbody__mpt_insert_node» := «gbody__mpt_insert_node»
   «fb_mpt_nibble_key» := «fb_mpt_nibble_key»
   «ww_mpt_nibble_key» := «ww_mpt_nibble_key»

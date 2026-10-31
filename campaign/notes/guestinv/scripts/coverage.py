@@ -661,6 +661,10 @@ REGION_RAW = {'lst_push': '(locN s "l", 24), (memW s (locN s "l"), locN s "esz" 
 CALL_STMT = {('process_message', 'frame_open'):
              ('fk_frame_open', 'KeepsOn FrameOpenReady EvmInv (ofString "frame_open")')}
 CALL_W = {('process_message', g): 'EvmInv' for g in ('depth0_prepare', 'state_snapshot', 'frame_start')}
+# node-returning callees of the MPT tier (guards MptReady/MptObjReady) and their node parameters
+NODE_FN = {'_insert_into_leaf': ['node'], '_split_extension': ['node'], '_collapse_branch': ['node'],
+           '_delete_ext_finish': ['node', 'nc'], 'node_new_ext': ['child'], 'node_new_leaf': [],
+           'node_invalidate': ['nd']}
 # KeepsOn preconditions other than the caller's world guard
 KEEP_PRE = {
     'requests_append': 'ReqRoom',
@@ -898,6 +902,11 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             if g not in impure:
                 name = 'ro_' + g
                 contracts[name] = ('ReadOnlyFn (ofString "%s")' % g, 'read-only')
+            elif G(f) in ('MptReady', 'MptObjReady') and g in NODE_FN:
+                name = 'nf_' + g
+                contracts[name] = ('NodeFn [%s] (ofString "%s")' % (
+                    ', '.join('"%s"' % n for n in NODE_FN[g]), g),
+                    'typed nodes in, typed nodes out (MPT tier)')
             elif (f, g) in CALL_STMT:
                 name, st = CALL_STMT[(f, g)]
                 contracts[name] = (st, 'carries the frame built by `frame_open` (hand-written)')

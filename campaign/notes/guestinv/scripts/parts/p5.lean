@@ -386,6 +386,28 @@ theorem localsOnly_frameOpenReady : LocalsOnly ["msg", "kind"] FrameOpenReady :=
   show locN { s with locals := locals, clock := k } "kind" = 0
   rw [hk]; exact hP.2
 
+/-- MPT-tier callee entry (round-3 item 5, DESIGN.md Q9): separated arenas, and the listed node
+parameters are rooted in a typed node heap. -/
+def NodeArgs (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ ∀ n ∈ names, RootIn Nd (locN s n)
+
+/-- MPT-tier callee exit, `MptExit`-shaped: every typed node set rooting the node parameters
+extends to a typed node set of the post-state; memory changes only inside those node records and
+the heap free at entry; the returned word is a typed node or `0` (what `_mpt_insert_node` /
+`_mpt_delete_node_body` need to re-establish `MptReady` at their loop heads). The node functions
+write no global buffer (checked on their closures). -/
+def NodeFnExit (names : List String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) →
+      ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
+        FrameOutside s post (Nd.map fun n => (n, 176))
+          (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
+        ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
+
+def NodeFn (names : List String) (fname : MlS) : Prop :=
+  FunSpec (NodeArgs names) (NodeFnExit names) fname
+
 /-- `requests_append` entry: the next request slot exists. -/
 def ReqRoom : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ memW s (globN s "bo" + 64) < 8

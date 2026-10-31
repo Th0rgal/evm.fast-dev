@@ -21,7 +21,7 @@ is touched.
 | unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements, textually unchanged) |
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
-| **new** callee contracts: `ReadOnlyFn` (30), `WritesWithin` (50), `KeepsOn` (61) | §7 (generated) | `sorry` (141 statements) |
+| **new** callee contracts: `ReadOnlyFn` (30), `WritesWithin` (46), `KeepsOn` (59), `NodeFn` (7) | §7 (generated) | `sorry` (141 statements) |
 | **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | `sorry` (47 statements) |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
@@ -81,10 +81,10 @@ both growth paths keep `≥ 1`. Astra's item 1 is the same defect and is closed 
 
 The coordinator required a proved assembly theorem `(∀ primitive obligation) → target`. Revision 4
 has it:
-- `structure Primitives : Prop` (generated, 437 fields) lists every obligation the guarded tier uses:
+- `structure Primitives : Prop` (generated, 438 fields) lists every obligation the guarded tier uses:
   - the `fb_*` bounds of the 239 unguarded callees of guarded functions;
   - the 10 §7 contract leaves those compositions use;
-  - the 141 new callee contracts;
+  - the 142 new callee contracts;
   - the 47 composition obligations `gbody_f`.
 - `assembly_main : Primitives → TerminatingFunBoundedOn MainEntry "main" K.«main»` is **proved**
   (generated `have` chain in callee-first order). So is `assembly : Primitives →
@@ -107,25 +107,26 @@ Each primitive is a statement about one function body:
   `raise` end a path, and a tail call flows only into its callee. 150 callees (133 of the 239
   BETWEEN functions plus 17 guarded callees) need a contract. Nine of them are covered by the
   existing §7 leaves (`htab_set/del/truncate/new`, `mem_init`, `op_dispatch`, `frame_exception`,
-  `frame_epilogue`, `finish_child`), which leaves 141 new contracts. The other 106 BETWEEN
+  `frame_epilogue`, `finish_child`). The other 141 get 142 new contract leaves:
+  `node_new_ext` is used under two frames and gets one leaf per frame. The other 106 BETWEEN
   functions are only ever followed by unguarded code and need none. That includes all 85 `op_*`
   called from `op_dispatch`, because each dispatch branch returns.
-- **Callee contracts**, three uniform shapes (§7 of the Lean file), chosen mechanically:
+- **Callee contracts**, four uniform shapes (§7 of the Lean file), chosen mechanically:
   - `ReadOnlyFn g` (30): `g` (transitively) has no store, no global assignment and no FFI call. On a
     resuming outcome (return, or an exception other than `TrapErr`) the post-state is the entry state
     up to locals and clock. The proved `ReadOnlyFn.keepsOn` turns it into `KeepsOn W W` for any
     `LocalsFree` guard.
-  - `WritesWithin R gw g` (50): on a resuming outcome, memory changes only inside `R` and inside the
+  - `WritesWithin R gw g` (46): on a resuming outcome, memory changes only inside `R` and inside the
     memory free at entry (above `heap_ptr`, between `frame_mem_ptr` and `scratch_ptr`); only the
     globals `gw` (computed) change; the arenas stay separated and the heap does not shrink. It holds
     for arbitrary states, and the caller shows `R` is unowned:
-    - `R` is the parameter extents for the 19 pointer-parameter writers (hand-checked table
+    - `R` is the parameter extents for the 16 pointer-parameter writers (hand-checked table
       `REGION` in `coverage.py`: `memcpy (dst, n)`, `memzero (dst, n)`, `rlp_encode_bytes (dst, n +
       9)`, `lst_push` header and array, …), plus the global buffers the closure writes (computed,
       e.g. `keccak_pad`, `keccak_st` for `keccak256`);
-    - `R` is just the global buffers for the 31 callees whose every store lands in a block their
+    - `R` is just the global buffers for the 30 callees whose every store lands in a block their
       own closure allocated or in a global buffer (computed, `fresh_only`).
-  - `KeepsOn P W g` (61): the reviewers' `PreservesOn WorldOK WorldOK` restricted to resuming
+  - `KeepsOn P W g` (59): the reviewers' `PreservesOn WorldOK WorldOK` restricted to resuming
     outcomes. `W` is the caller's world guard: `WorldOK`; `EvmInv` inside `finish_child` and after
     `frame_open` in `process_message`; `ArenaReady` in the decoder and MPT tier. `P = W` except:
     - guarded callees, where `P` is their own guard (`TxReady`, `ReqsFresh`, `MsgReady`, …);
@@ -134,6 +135,13 @@ Each primitive is a statement about one function body:
       world, typed trie object);
     - `frame_open` in `process_message`: `KeepsOn FrameOpenReady EvmInv`, because it builds the
       outermost frame.
+  - `NodeFn names g` (7): the node-returning callees of the MPT tier (`node_new_leaf`,
+    `node_new_ext`, `_insert_into_leaf`, `_split_extension`, `_collapse_branch`,
+    `_delete_ext_finish`, `node_invalidate`). It has the `MptExit` shape: every typed node set
+    rooting the node parameters `names` extends to a typed set of the post-state; writes stay
+    inside those node records and the free heap; the returned word is a typed node or `0`. That is
+    what `_mpt_insert_node`/`_mpt_delete_node_body` need to re-establish `MptReady` at their loop
+    heads. None of these functions writes a global buffer (checked on their closures).
 - **The bound** of each contract callee is its `fb_*`/`gb_*` leaf, also a hypothesis of
   `GBody.«f»`.
 
@@ -222,12 +230,13 @@ The other 42 `gb_*` statements are unchanged and now proved.
 
 **New definitions:**
 - `frameRet`, `RetWindowsOK`, `blockOutObjects`, `htabCapMax`;
-- `Resumes`, `ReadOnlyFn`, `KeepsOn`, `WritesWithin`, `WorldAvoids`;
+- `Resumes`, `ReadOnlyFn`, `KeepsOn`, `WritesWithin`, `WorldAvoids`, `NodeArgs`, `NodeFnExit`,
+  `NodeFn`;
 - `TxReady`, `ReqsFresh`, `ReqRoom`, `MsgReady`, `FrameOpenReady`;
 - the 47 `GBody.«f»`, `Primitives`.
 
-**New leaves (188):** 141 callee contracts (`ro_*` 30, `ww_*` 50, `wk_*` 51, `ek_*` 6, `ak_*` 3,
-`fk_frame_open`) and 47 `gbody_*`.
+**New leaves (189):** 142 callee contracts (`ro_*` 30, `ww_*` 46, `wk_*` 51, `ek_*` 6, `ak_*` 1,
+`fk_frame_open`, `nf_*` 7) and 47 `gbody_*`.
 
 **Unchanged:** every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
 `run_frames_step_of_specs`, every revision-3 combinator statement.
@@ -661,7 +670,8 @@ Every guard is `LocalsOnly` (proved instances, §7 of the Lean file), so `dec_on
   - `ro_g : ReadOnlyFn g`;
   - `ww_g : WritesWithin R gw g`;
   - `wk_g`/`ek_g`/`ak_g : KeepsOn P W g` for `W` = `WorldOK`/`EvmInv`/`ArenaReady`;
-  - `fk_frame_open`.
+  - `fk_frame_open`;
+  - `nf_g : NodeFn names g` (MPT tier).
 
 What each composition must show, beyond the combinator walk:
 - `gbody_run_frames`: `while_rank_active` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,

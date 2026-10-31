@@ -7,18 +7,18 @@
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`. The
   assembly uses ten of them directly. `htab_union_into_spec`, `htab_new_scratch_spec` and the two
   MPT specs are the lemmas the frame and table contract proofs are expected to use.
-- Generated callee contracts (141): `ro_*` (30), `ww_*` (50), `wk_*` (51), `ek_*` (6), `ak_*` (3),
-  `fk_frame_open`.
+- Generated callee contracts (142): `ro_*` (30), `ww_*` (46), `wk_*` (51), `ek_*` (6), `ak_*` (1),
+  `fk_frame_open`, `nf_*` (7).
 
 ## 7. Every `sorry`
 
 - Combinators, glue, bridge, assembly: none.
 - §7 contract leaves (14).
-- Generated callee contracts (141).
+- Generated callee contracts (142).
 - Composition obligations `gbody_*` (47).
 - Unguarded bound leaves `fb_*` (727).
 
-929 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
+930 in total. No definition contains `sorry`, and no `gb_*` does (they are proved). `assembly` and
 `assembly_main` are `sorry`-free. `coveredSourceTicksConsumedBounded_K_pan = assembly primitives`
 depends on `sorryAx` only through the `Primitives` fields. `run_frames_step` depends on the four
 frame contracts.
@@ -52,7 +52,7 @@ frame contracts.
 - **Q2 (`finish_child` on `EvmErr`).** Unchanged from revision 3.
 - **Q3 (`TriesTyped`).** Unchanged: storage tries are typed through the `ws+32` cache only.
 - **Q4 (MPT descent).** Unchanged.
-- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 141 contracts, mostly
+- **Q5 (cost of the generated interface).** 727 unguarded leaves plus 142 contracts, mostly
   loop-free.
 - **Q6, Q7.** Unchanged (arithmetic facts behind two `MONO` measures; divergence obligations).
 - **Q8 (heap-resident frame blocks).** Logs arrays and, new in revision 4, return-data buffers live
@@ -65,12 +65,11 @@ frame contracts.
     transaction environment `te` (a fresh `te_new` block) and the `bo` arrays below `bo+80`.
   - `gbody_execute_block`: establishing `TxReady` (`i < ntx = bo+80`) and `ReqsFresh` (`bo` was just
     zeroed, nothing appended yet).
-  - The MPT tier (`_mpt_insert_node`, `_mpt_delete_node_body`, `mpt_set`) carries only
-    `ArenaReady` across its node constructors (`ak_*`, and `ww_*` for the node writers
-    `node_invalidate`, `_insert_into_leaf`, `_delete_ext_finish`). Re-establishing `MptReady` at the
-    loop heads needs the constructors' RETURNED nodes typed, which `KeepsOn ArenaReady` does not
-    state. Richer node contracts (`MptExit`-shaped, with the returned root typed) may be needed
-    there; the quorum may prefer them now.
+  - The MPT tier (`_mpt_insert_node`, `_mpt_delete_node_body`): `MptReady` at the loop heads is
+    re-established from the `nf_*` contracts (returned node typed, node set extended). The loop
+    measures are the revision-3 ones (§3; Q4).
+  - `_decode_witness_node_body` (`ArenaReady`) needs only the arena; its node constructors have
+    `ww_*` contracts there.
 - **Q10 (contract classification is syntactic).**
   - `ReadOnlyFn` uses the transitive purity of `coverage.py`.
   - `WritesWithin` uses `fresh_only`: every store and written argument has a fresh-block,

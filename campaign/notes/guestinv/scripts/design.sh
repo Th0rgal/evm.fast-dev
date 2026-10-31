@@ -55,8 +55,8 @@ sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/Guest
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 929 `declaration uses
-'sorry'` warnings, all leaves: 14 §7 contracts, 141 generated callee contracts, 47 `gbody_*`, 727
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 930 `declaration uses
+'sorry'` warnings, all leaves: 14 §7 contracts, 142 generated callee contracts, 47 `gbody_*`, 727
 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
 There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
 `#print axioms`, checked on a scratch copy:
