@@ -20,8 +20,8 @@ Loop classes (N):
   RO(k)  read-only body (no store, no global write, only pure callees): no-repeat on the k
          loop-carried locals, N = 2^(64k)  (refined keys in OVERRIDES).
   MAN    measure supplied by hand in OVERRIDES (class, N, justification).
-Writes OUTDIR/coverage.md (tables) and OUTDIR/kgen.lean (Lean `def`s with literal values and the
-symbolic formula as a comment).
+Writes OUTDIR/coverage.md (tables) and OUTDIR/kgen.lean (one symbolic Lean `def K.«f»` per function), OUTDIR/leaves.lean and
+OUTDIR/tiers.txt (guarded tier, buffers).
 """
 import os
 import sys
@@ -33,10 +33,108 @@ TWO64 = 2 ** 64
 
 # Hand-supplied loop measures: (function, loop index) -> (class, N, justification).
 # Filled in after inspecting every loop the heuristics leave as MAN.
-OVERRIDES = {}
+W = 31104957928          # domainBytes = heapEnd - sourceBase
+OVERRIDES = {
+    ('merkleize', 0): ('MONO', 64,
+        'cur := cur >> 1 while 1 < cur (signed): cur halves, at most 64 iterations'),
+    ('merkleize_progressive', 0): ('WALK', W + 64,
+        'size := size << 2 is 0 after <= 32 iterations; while size != 0 off strictly grows; '
+        'afterwards each iteration writes roots + 32k (k += 1): fresh address, <= W'),
+    ('rlp_list_count', 0): ('RO(2)', 2 ** 128,
+        'read-only on continuing iterations (callees only raise via trap_with); '
+        'no-repeat key (off, count)'),
+    ('sort_elems', 0): ('MONO', 65,
+        'width doubles 1,2,..,2^63,0; width = 2^63 exits after one inner pass, width = 0 makes the '
+        'inner loop stationary (timeout); at most 65 iterations'),
+    ('sort_elems', 1): ('MONO', 2 ** 64,
+        'for 1 <= width < n (signed) mid/right are capped at n with unsigned compares and do not '
+        'wrap, so left strictly increases to n; width = 0 is stationary'),
+    ('sort_elems', 2): ('MONO', 2 ** 65,
+        'each iteration increments exactly one of i < mid, j < right (signed, no overflow): '
+        'measure (mid - i) + (right - j)'),
+    ('taylor_exponential', 0): ('MONO', 2 ** 64 + 1,
+        'i := i + 1 each iteration from 1; i < 2^64 for the first 2^64 - 1 iterations; when i '
+        'wraps to 0, di = 0 and u256_div(p, 0) = 0 makes acc = 0, so the loop exits'),
+    ('compute_jumpdests', 0): ('WALK', W,
+        'pc strictly increases by adv in [1, 33] and every iteration loads code + pc: fresh '
+        'address in the contiguous ordinaryDomain'),
+    ('fq12_inv', 0): ('MONO', 14,
+        'Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the iteration is '
+        'stationary (zero leading inverse, timeout)'),
+    ('fq12_inv', 1): ('MONO', 14,
+        'd0 = deg r0 in [-1, 12] strictly decreases (fq_poly_submul cancels the leading '
+        'coefficient), or the iteration is stationary (timeout)'),
+    ('_rlp_validate_items_body', 0): ('STACK', (2 ** 61 + 1) * 2 ** 192,
+        'each push calls scratch_alloc(24), which strictly lowers scratch_ptr and cannot wrap '
+        '(<= 2^61 pushes, arbitrary globals); between pushes the body is read-only, no-repeat '
+        'key (pos, end, top)'),
+    ('_node_rlp_fill', 0): ('ALLOC', 2 ** 62,
+        'every iteration either pushes (scratch_alloc(48): scratch_ptr strictly lower) or runs '
+        '_node_rlp_finish, which allocates its encoding (alloc(n >= 1): heap_ptr strictly '
+        'higher); callees release only to marks they took themselves; <= 2^64/48 + 2^64/8'),
+    ('_decode_witness_node_body', 0): ('GUARD', 2 ** 68,
+        'GUARDED (ArenaReady): pushes are scratch_alloc records (<= arena/88), every written '
+        'object (records, branch nodes, node_new_* results) is a fresh allocation, so the slot '
+        'counter top+32 < 16 is only written by this loop: <= (pushes + 1) * 64 iterations'),
+    ('_mpt_insert_node', 0): ('GUARD', 2 ** 130,
+        'GUARDED (MptReady): level strictly increases except on empty extension segments; '
+        'writes are confined to typed node fields and are idempotent on such runs, so a '
+        'repeated node is a timeout: <= (klen + 1) * 2^65'),
+    ('_mpt_delete_node_body', 0): ('GUARD', 2 ** 130,
+        'GUARDED (MptReady): descent as in _mpt_insert_node, pushing fresh scratch frames'),
+    ('_mpt_delete_node_body', 1): ('GUARD', 2 ** 64,
+        'GUARDED (MptReady): unwinds the scratch frames pushed by loop #0; frame links are '
+        'fresh scratch objects disjoint from typed nodes, so each pop strictly shortens the chain'),
+    ('memcpy', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('memcpy', 1): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('memcpy', 2): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('memzero', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('memzero', 1): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('memzero', 2): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('keccak256', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('sha256', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('ripemd160', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('key_to_nibbles', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('fq_poly_submul', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('input_blob', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('nibble_list_to_compact', 0): ('WALK', W + 1,
+        'fresh-address walk: the counter strictly increases by a positive constant and every '
+        'iteration accesses base + counter (or base + 32*counter) in the contiguous domain'),
+    ('htab_truncate', 0): ('WF', 2 ** 64,
+        'GUARDED (HtabArgWF): every iteration is a successful htab_del, whose contract lowers '
+        'count t+24 by one and preserves HtabWF'),
+}
 
 # Functions whose bound is not GuestInv-only (guard and potential in DESIGN.md section 6).
 EVM_POTENTIAL = {('run_frames', 0)}
+MAX_CHAIN = 16384                       # frames: implied by disjoint 1408-byte scratch objects
+POT_BS = MAX_CHAIN * TWO64              # bound of S = sum of state gas words
+POT_BF = 2 * MAX_CHAIN + 2              # bound of F = 2 * depth + running bit
+N_POT = (2 * MAX_CHAIN * TWO64 + 1) * POT_BF * POT_BS   # evmPot < N_POT
 
 
 def is_app(t, head=None):
@@ -208,7 +306,7 @@ def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
     if (fname, idx) in OVERRIDES:
         return OVERRIDES[(fname, idx)]
     if (fname, idx) in EVM_POTENTIAL:
-        return ('POT', None, 'EVM frame potential (EvmInv), section 6')
+        return ('POT', N_POT, 'EVM frame potential evmPot < N_POT under EvmInv (section 6)')
     asg = assigns(body)
     inner = loop_decls(body)
     carried = {v for v in asg if v not in inner}
@@ -234,7 +332,12 @@ def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
                 continue
             exprs = assign_exprs(body, v[0], v[1])
             steps = [step_of(e, v[0], v[1]) for e in exprs]
-            if len(steps) != 1 or steps[0] != want:
+            small_const = (is_app(other, 'Exp.const') and want > 0
+                           and int(panast.show(other)) <= 2 ** 62)
+            # step c >= 1 is also sound against a literal bound X <= 2^62: i < X implies
+            # i + c < 2^63, so X - i still strictly decreases without wrapping
+            if len(steps) != 1 or steps[0] is None or not (
+                    steps[0] == want or (small_const and steps[0] > 0)):
                 continue
             if not unconditional_update(body, v[0], v[1]):
                 continue
@@ -246,11 +349,11 @@ def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
                 continue
             cls = 'GCTR' if v[0] == 'global' else 'CTR'
             n = TWO64
-            if want > 0 and is_app(other, 'Exp.const'):
+            if want > 0 and is_app(other, 'Exp.const') and cmpop == 'lower':
                 c = int(panast.show(other))
                 if c <= 65536:
-                    n = c
-            return (cls, n, '%s %s %s, step %+d' % (v[1], cmpop, panast.show(other), want))
+                    n = c          # unsigned i >= 0: at most X iterations
+            return (cls, n, ('%s < %s' if want > 0 else '%s > %s (or != 0)') % ((v[1], panast.show(other)) if want > 0 else (v[1], panast.show(other))) + ', step %+d, unconditional' % steps[0])
     # read-only loops: no-repeat on the carried locals
     if not has_store(body) and not global_writes(body) and pure:
         k = len([v for v in carried if v[0] == 'local'])
@@ -261,7 +364,18 @@ def classify(fname, idx, cond, body, pure, callee_gwrites=frozenset()):
 
 
 def analyse(path):
-    fns, line_of = panast.parse_functions(path)
+    import time
+    t0 = time.time()
+    import pickle
+    cache = path + '.parsed.pickle'
+    if os.path.exists(cache) and os.path.getmtime(cache) > os.path.getmtime(path):
+        with open(cache, 'rb') as fh:
+            fns, line_of = pickle.load(fh)
+    else:
+        fns, line_of = panast.parse_functions(path)
+        with open(cache, 'wb') as fh:
+            pickle.dump((fns, line_of), fh)
+    print('parsed', time.time() - t0, flush=True)
     graph = {f: callees(t, set()) for f, t in fns.items()}
     # reachable from main
     reach, stack = set(), ['main']
@@ -272,7 +386,10 @@ def analyse(path):
         reach.add(f)
         stack.extend(graph[f])
     # purity: no store, no global write, no extCall, transitively
-    impure = {f for f, t in fns.items() if has_store(t) or global_writes(t)}
+    # trap_with stores to the shared trap area and then always raises TrapErr: it never
+    # continues a loop iteration, so it does not break the read-only (no-repeat) argument.
+    impure = {f for f, t in fns.items()
+              if (has_store(t) or global_writes(t)) and f != 'trap_with'}
     changed = True
     while changed:
         changed = False
@@ -280,15 +397,19 @@ def analyse(path):
             if f not in impure and graph[f] & impure:
                 impure.add(f)
                 changed = True
-    gw = {f: set(global_writes(t)) for f, t in fns.items()}
-    changed = True
-    while changed:
-        changed = False
-        for f in fns:
+    gw = {}
+
+    def gwf(f):
+        if f not in gw:
+            r = set(global_writes(fns[f]))
             for g in graph[f]:
-                if g in gw and not gw[g] <= gw[f]:
-                    gw[f] |= gw[g]
-                    changed = True
+                if g in fns:
+                    r |= gwf(g)
+            gw[f] = r
+        return gw[f]
+    for f in fns:
+        gwf(f)
+    print('gw done', time.time() - t0, flush=True)
     # SCCs (Tarjan, iterative enough for this graph size)
     index, low, onst, st, sccs = {}, {}, set(), [], []
     counter = [0]
@@ -322,6 +443,7 @@ def analyse(path):
     for c in sccs:
         if len(c) > 1 or c[0] in graph[c[0]]:
             recursive.update(c)
+    print('scc done', time.time() - t0, flush=True)
     # loops
     loops = {}
     for f in sorted(reach):
@@ -357,6 +479,30 @@ def costs(fns, graph, reach, recursive, loops):
         visit(f)
     loop_iter = {f: iter(loops[f]) for f in reach}
 
+    def nlit(n):
+        """Loop bound as a readable Lean term."""
+        for e in range(8, 1100):
+            if n == 2 ** e:
+                return '2 ^ %d' % e
+        if n == W + 1:
+            return '(domainBytes + 1)'
+        if n == W + 64:
+            return '(domainBytes + 64)'
+        if n == N_POT:
+            return 'evmPotMax'
+        if n == 2 ** 64 + 1:
+            return '(2 ^ 64 + 1)'
+        if n == (2 ** 61 + 1) * 2 ** 192:
+            return '((2 ^ 61 + 1) * 2 ^ 192)'
+        return str(n)
+
+    def add(x, y):
+        if x == '0':
+            return y
+        if y == '0':
+            return x
+        return '%s + %s' % (x, y)
+
     def cost(t, f):
         if not isinstance(t, tuple) or t[0] != 'app':
             return 0, '0'
@@ -364,30 +510,28 @@ def costs(fns, graph, reach, recursive, loops):
         if h == 'Prog.seq':
             x, fx = cost(a[0], f)
             y, fy = cost(a[1], f)
-            return x + y, '%s + %s' % (fx, fy)
+            return x + y, add(fx, fy)
         if h == 'Prog.ite':
             x, fx = cost(a[1], f)
             y, fy = cost(a[2], f)
-            return max(x, y), 'max (%s) (%s)' % (fx, fy)
+            if fx == '0' and fy == '0':
+                return 0, '0'
+            if fx == fy:
+                return x, fx
+            return max(x, y), 'Nat.max (%s) (%s)' % (fx, fy)
         if h == 'Prog.dec':
             return cost(a[3], f)
         if h in ('Prog.call', 'Prog.decCall'):
             g, handler, cont = call_parts(t)
-            kg = K.get(g)
-            if kg is None:
-                kg, fg = 0, 'K_%s(?)' % g
-            else:
-                fg = 'K_%s' % g
+            kg = K[g]
             hx, hf = cost(handler, f) if handler is not None else (0, '0')
             cx, cf = cost(cont, f) if cont is not None else (0, '0')
-            return kg + 1 + hx + cx, '(%s + 1 + %s + %s)' % (fg, hf, cf)
+            return kg + 1 + hx + cx, add(add('(«%s» + 1)' % g, hf), cf)
         if h == 'Prog.while':
             i, _c, _b, _d, cls = next(loop_iter[f])
             bx, bf = cost(a[1], f)
             n = cls[1]
-            if n is None:
-                return 0, 'UNBOUNDED[%s#%d]' % (f, i)
-            return (n + 1) * (bx + 1), '(N%d + 1) * (%s + 1)' % (i, bf)
+            return (n + 1) * (bx + 1), '(%s + 1) * (%s + 1)' % (nlit(n), '0' if bf == '0' else bf)
         return 0, '0'
     for f in order:
         if f not in reach:
@@ -402,28 +546,123 @@ def main():
     fns, line_of, graph, reach, impure, recursive, loops = analyse(path)
     K, formula, order = costs(fns, graph, reach, recursive, loops)
     os.makedirs(outdir, exist_ok=True)
+    # guarded tier: functions whose bound needs a memory contract, and all their callers
+    roots = {'run_frames', 'htab_truncate', '_decode_witness_node_body', '_mpt_insert_node',
+             '_mpt_delete_node_body'}
+    guarded = set(roots)
+    changed = True
+    while changed:
+        changed = False
+        for f in reach:
+            if f not in guarded and graph[f] & guarded:
+                guarded.add(f)
+                changed = True
+    guard_of = {
+        'htab_truncate': 'HtabArgWF', 'rollback_child_access': 'RollbackReady',
+        'finish_child': 'FinishReady', 'run_frames': 'EvmInv',
+        '_decode_witness_node_body': 'ArenaReady', '_mpt_insert_node': 'MptReady',
+        '_mpt_delete_node_body': 'MptReady', '_mpt_delete_node': 'MptReady',
+        'mpt_set': 'MptObjReady', 'main': 'MainEntry'}
     nloops = sum(len(v) for f, v in loops.items())
     with open(os.path.join(outdir, 'coverage.md'), 'w') as o:
         o.write('functions: %d, reachable from main: %d, loops in reachable: %d, recursive: %s\n\n'
                 % (len(fns), len(reach), nloops, sorted(recursive)))
-        o.write('| function | AST line | loops | class / N | log2 K |\n|---|---|---|---|---|\n')
+        o.write('| function | AST line | leaf (guard) | loops: #index depth class N: justification | log2 K |\n'
+                '|---|---|---|---|---|\n')
         for f in order:
             ls = loops[f]
             desc = '; '.join('#%d d%d %s N=%s: %s' % (
                 i, d, cls[0], ('2^%d' % (cls[1].bit_length() - 1)) if cls[1] and cls[1] >= 2 ** 16
                 else cls[1], cls[2]) for (i, _c, _b, d, cls) in ls) or '-'
-            o.write('| `%s` | %d | %d | %s | %s |\n' % (
-                f, line_of[f], len(ls), desc.replace('|', '\\|'),
+            leaf = ('`gb_%s` (%s)' % (f, guard_of.get(f, 'WorldOK'))) if f in guarded \
+                else '`fb_%s` (GuestInv)' % f
+            o.write('| `%s` | %d | %s | %s | %s |\n' % (
+                f, line_of[f], leaf, desc.replace('|', '\\|'),
                 K[f].bit_length() if K[f] else 0))
         unreach = sorted(set(fns) - reach)
         o.write('\nunreachable from main (%d): %s\n' % (len(unreach), ', '.join(unreach)))
     with open(os.path.join(outdir, 'kgen.lean'), 'w') as o:
         for f in order:
-            o.write('/-- %s -/\ndef K_%s : Nat := %d\n\n' % (formula[f][:3000], f, K[f]))
+            o.write('/-- `%s` (AST line %d), log2 ≈ %d. -/\ndef «%s» : Nat := %s\n\n' % (f, line_of[f], K[f].bit_length(), f, formula[f]))
     print('reach', len(reach), 'loops', nloops, 'main log2', K.get('main', 0).bit_length())
+    # dominant chain: from main, repeatedly descend into the call with the largest
+    # (loop multiplicity) * K(callee) contribution
+    def best_call(f):
+        best = (0, None, 1)
+        it = iter(loops[f])
+
+        def walk(t, mult):
+            nonlocal best
+            if not isinstance(t, tuple) or t[0] != 'app':
+                return
+            h, a = t[1], t[2]
+            if h == 'Prog.while':
+                i, _c, _b, _d, cls = next(it)
+                walk(a[1], mult * (cls[1] + 1))
+                return
+            cp = call_parts(t)
+            if cp and cp[0] in K:
+                v = mult * (K[cp[0]] + 1)
+                if v > best[0]:
+                    best = (v, cp[0], mult)
+            for x in a:
+                if isinstance(x, tuple):
+                    if x[0] == 'app':
+                        walk(x, mult)
+                    elif x[0] in ('tup', 'list'):
+                        for y in x[1]:
+                            walk(y, mult)
+        walk(fns[f], 1)
+        return best
+    with open(os.path.join(outdir, 'chain.txt'), 'w') as o:
+        f = 'main'
+        while f:
+            v, g, mult = best_call(f)
+            o.write('%s  log2K=%d  -> %s  (loop multiplicity log2 %d)\n' % (
+                f, K[f].bit_length(), g, mult.bit_length() - 1))
+            f = g
     man = [(f, i, cls[2]) for f in sorted(reach) for (i, _c, _b, _d, cls) in loops[f]
            if cls[0] == 'MAN']
     print('MAN', len(man))
+    between = sorted({g for f in guarded for g in graph[f] if g in reach and g not in guarded})
+    # global buffers allocated with a literal size
+    bufs = {}
+
+    def scan(x, _ctx):
+        if is_app(x, 'Prog.call'):
+            opt, callee = x[2][0], strval(x[2][1])
+            args = x[2][2][1]
+            if callee in ('alloc', 'scratch_alloc') and is_app(opt, 'some'):
+                d = opt[2][0][1][0]
+                if is_app(d, 'some') and panast.show(d[2][0][1][0]) == 'global' and args \
+                        and is_app(args[0], 'Exp.const'):
+                    bufs.setdefault(d[2][0][1][1][1], set()).add((callee, int(panast.show(args[0]))))
+    for f in sorted(reach):
+        panast.walk(fns[f], scan)
+    with open(os.path.join(outdir, 'tiers.txt'), 'w') as o:
+        o.write('GUARDED %d: %s\n' % (len(guarded), ' '.join(sorted(guarded))))
+        o.write('BETWEEN %d: %s\n' % (len(between), ' '.join(between)))
+        for g, v in sorted(bufs.items()):
+            o.write('BUF %s %s\n' % (g, sorted(v)))
+    with open(os.path.join(outdir, 'leaves.lean'), 'w') as o:
+        for f in order:
+            if f in guarded:
+                continue
+            ls = loops[f]
+            note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
+            o.write('/-- `%s` (AST line %d): %s. -/\ntheorem «fb_%s» : TerminatingFunBoundedOn '
+                    'GuestInv (ofString "%s") K.«%s» := by sorry\n' % (f, line_of[f], note, f, f, f))
+    with open(os.path.join(outdir, 'gleaves.lean'), 'w') as o:
+        for f in order:
+            if f not in guarded:
+                continue
+            g = guard_of.get(f, 'WorldOK')
+            ls = loops[f]
+            note = '; '.join('#%d %s' % (i, cls[0]) for (i, _c, _b, _d, cls) in ls) or 'loop-free'
+            o.write('/-- `%s` (AST line %d, guard `%s`): %s. -/\ntheorem «gb_%s» : '
+                    'TerminatingFunBoundedOn %s (ofString "%s") K.«%s» := by sorry\n'
+                    % (f, line_of[f], g, note, f, g, f, f))
+    print('guarded', len(guarded), 'between', len(between), 'bufs', len(bufs))
     with open(os.path.join(outdir, 'manual.txt'), 'w') as o:
         for f, i, why in man:
             o.write('%s#%d line %d: %s\n' % (f, i, line_of[f], why))

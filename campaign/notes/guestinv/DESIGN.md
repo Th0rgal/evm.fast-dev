@@ -1,270 +1,1215 @@
-# GuestInv: a guarded route to `CoveredSourceTicksConsumedBounded`
+# GuestInv revision 2: a guarded route to `CoveredSourceTicksConsumedBounded`
 
-Track `guestinv-opus55`, mission 9409f9a9 (Wave 8). Branch `wave8/guestinv-opus55` off
-`wave8/base2` (950ac7fda). This is a specification proposal. All proposed statements are in
-`campaign/specs-proposed/GuestInv.lean`, which elaborates with `lake env lean` on Lean 4.33.1
-with no errors. No frozen file is touched.
+Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. This revision
+answers the round-1 quorum `REQUEST_CHANGES` (`campaign/reviews/guestinv-r1.md`, Astra 6 and Gemini
+4 Carbon). All statements are in `campaign/specs-proposed/GuestInv.lean`. The generated parts of
+that file, the per-loop table (§4) and the coverage table (§5) come from
+`campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
+is touched.
 
 ## 0. Summary
 
 | Deliverable | Where | Status |
 |---|---|---|
-| `GuestInv : ∀ {F}, PanSemStateFiniteExact 64 F → Prop` | §2 | definition; locals/clock/memory independence lemmas **proved** |
-| `TerminatingFunBoundedOn`, `PreservesOn`, `FunPreservesOn`, `CallEntryOn` | §3 | definitions |
-| guarded `call` / `decCall` / `seq` / `ite` / `dec` rules | §3 | **proved** (ported from `PanTerminatingCallOn` and the repaired frozen combinators) |
-| handler-call rule, call preservation | §3 | statements, `sorry` |
-| `GuestInv` holds at the covered post-declarations entry | §4 `guestInv_postDecls` | **proved** (including all 67 globals = word 0) |
-| `TerminatingFunBoundedOn GuestInv "main" K → CoveredSourceTicksConsumedBounded (K+1)` | §4 | **proved**, plus covered-input and `MainEntry` variants |
-| restated leaf interface (FALSE and UNCLEAR leaves) | §6 | statements, `sorry` |
-| explicit `K_pan` with `32·K_pan + 23077 ≤ (10^299-1)/10^4` | §6 `K_pan_budget` | **proved** by `decide` |
+| `GuestInv` = code ∧ memaddrs ∧ shMemaddrs ∧ baseAddr | §2 of the Lean file | definition; `guestInv_evaluate`: **every** evaluation preserves it (**proved**) |
+| guarded `call`/`decCall`/`seq`/`ite`/`dec` rules, no preservation side conditions | §3 | **proved** (`callHandle_guestInv` and the ranking rule `while_rank` are proposed combinators, `sorry`) |
+| bridge `TerminatingFunBoundedOn MainEntry "main" K → CoveredSourceTicksConsumedBounded (K+1)` | §4 | **proved** (unchanged proof, `MainEntry` gains the proved `GlobalsZero`) |
+| one bound `K.«f»` per function on `main`'s call graph (774 functions, 249 loops) | §6 (generated) | definitions; formula = Σ calls `K(g)+1` + Σ loops `(N+1)(body+1)` |
+| unguarded leaves `fb_f : TerminatingFunBoundedOn GuestInv f K.«f»` | §6 (generated) | `sorry` (727 statements) |
+| memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions |
+| contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (15 statements); `run_frames_step` **proved** from them |
+| guarded leaves `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | `sorry` (47 statements) |
+| `K_pan = K.«main» + 1`, `32·K_pan + 23077 ≤ (10^299 − 1)/10^4` | §8 | **proved** (`decide`) |
+| end-to-end `CoveredSourceTicksConsumedBounded K_pan` | §8 | proved term; depends only on the leaf `gb_main` |
 
-`#print axioms` for the proved bridge theorems, `guestInv_postDecls` and `callEntryOn_guestInv`
-gives `[propext, Classical.choice, Quot.sound]`. For `K_pan_budget`, `K_pan_wordGas_budget` and
-`astGlobalNames_eq` it gives `[propext]`.
+## 1. Round-1 blocking items and how each is addressed
 
-Values (from `#eval`):
+### Item 1. `PreservesOn.call_guestInv` false for global destinations
 
-- `K_pan = 6327163022056460853946490190703860891670147713` (≈ 6.3·10^45).
-- `K_pan_wordGas = 583577776136387101824429899526330462116047797193810768513` (≈ 5.8·10^56).
+`GuestInv` no longer mentions globals at all (§2). Its four fields are preserved by **every** Pancake
+evaluation: `evaluateHOLFiniteState_metadata` gives code/memaddrs/shMemaddrs, and Flapjack's
+`evaluateInvariantsHOLFinite` gives baseAddr. So `PreservesOn.call_guestInv` is now a proved
+theorem for every destination, including globals. The regression `example`
+`call heap_mark → journal_n` is checked in the file. The round-1 conjuncts it dropped are:
+`heap_ptr ≤ 0xb0000000`, `ArenaOK`, `journal_n ≤ journal_cap`, and globals well-shaped. They were
+never needed by an unguarded bound once bounds use local counters. They come back only inside the
+guarded-tier contracts (`ArenaOK`, `JournalTyped`), with explicit preservation obligations.
 
-The budget is ≈ 10^295, so every constant can be off by a factor of 10^230 without breaking
-the inequality. This matters because the leaf constants are proposals (§6).
+### Item 2. False W-based constants
 
-## 1. Why a guard is needed, and why this one
+Every constant is now **(iteration bound) × (body cost including callees)**, generated mechanically
+(§3, §9) from loop measures that hold for arbitrary memory and globals. The counterexamples no longer
+apply. Each has an `example … ≤ K.«f» := by decide` in §8 of the Lean file:
 
-The audit (`wave8/specfix-astra6`, `SPECFIX.md`) refutes `htab_keys`, `htab_set`,
-`frame_epilogue` and `finish_child` as all-state statements. Every counterexample uses either
-an odd pointer (`memeq(1,1,2^63)`) or a huge walk through arbitrary 64-bit memory. Two
-semantic facts kill all of them once `memaddrs = ordinaryDomain`:
+| Round-1 counterexample | Why it is covered now |
+|---|---|
+| `sort_elems`, `esz = 0`, `n = 2^62` | outer loop ≤ 65 (width doubles), middle ≤ 2^64 (`left` strictly increases, caps are unsigned), merge ≤ 2^65 (measure `(mid−i)+(right−j)`); no memory fact used. `2^62 ≤ K.«sort_elems»` |
+| `htr_payload`, `htr_new_payload_request`, `ntx = 2^59` wrap | all loops are strict counters (2^64 each) times the full callee cost (`htr_pbytes` included). `2.9·10^16 ≤ K` |
+| `_mpt_insert_node` / `trie_walk`, self-looping extension | `trie_walk` is read-only: no-repeat on its carried locals (2^64 per local). `_mpt_insert_node` is in the guarded tier (`MptReady`), bound `2^130 · body` |
+| `tx_scalar_word`, `hdr_word_field`: `rlp_list_count` over `W−10` bytes of `0xc0` | `rlp_list_count` is read-only, with no-repeat key `(off, count)` = 2^128, times its callee costs. `9W ≤ K` |
+| `_decode_witness_node_body`, `klen ≈ W/2` lookups | each `memeq` is a strict counter (2^64), multiplied through; the loop is in the guarded tier (`ArenaReady`) with ≤ 2^68 iterations |
 
-1. **Byte loads check the aligned word.** `memLoadByteAuxHOL` (Flapjack `LoopSem.lean:552`)
-   reads `memory (byteAlign a)` and requires `domain (byteAlign a)`. Pointer `1` aligns to
-   `0`, which is not in `ordinaryDomain = [0xa1000000, heapEnd)`, so `memeq(1,1,·)` returns
-   `.error` on its first load.
-2. **Memory walks are domain-bounded.** A loop that loads or stores a fresh address on each
-   iteration leaves the contiguous domain within `domainBytes = heapEnd − sourceBase =
-   31 104 957 928` steps, and the next access errors. Wrap-around needs more than 2^63 steps.
-   This bounds `memcpy`/`memzero`/`memeq` and every array scan by `W = domainBytes`, for
-   arbitrary memory content, and it never requires a 2^64 counter argument.
+### Item 3. `finish_child` / `htab_union_into` aliasing
 
-`TerminatingProgBoundedOn` already requires `code = originalRuntimeCode`. `GuestInv` adds
-only the non-memory facts below, so it is cheap to thread:
+`htab_union_into` loops on `i < cap` (signed), with `i := i + 1` unconditional and `cap` a local
+cached at entry. That gives a strict counter of ≤ 2^64 iterations, **whatever** `src`/`dst` alias
+(including `src = dst` and `count` zeroed by the first insertion). Its bound is GuestInv-only:
+`K.«htab_union_into» = 1 + (2^64 + 1)·(K.«htab_item» + K.«htab_set» + 3) + …` (generated).
+`merge_tx_into_block`, `incorporate_child_on_success` and every other caller get it by plain call
+composition. `finish_child` is guarded (`FinishReady`) for one reason only: it calls
+`rollback_child_access → htab_truncate`, the one table loop with no arbitrary-memory measure
+(item 4). Its constant includes every callee transitively (`state_restore`, `create_finish`,
+`incorporate_*`, union, truncate, logs). The round-1 example `2^62 ≤ K.«finish_child»` is checked.
 
-- It ignores `locals`, `clock`, `memory` and `ffi`.
-- Call entry, `setVar`, caller-locals restoration and every store preserve it. This is proved
-  as `guestInv_callEntry`, `guestInv_setVar`, `guestInv_with_locals_clock` and
-  `guestInv_with_memory`.
-- Hence `CallEntryOn GuestInv GuestInv f args` holds for every call (`callEntryOn_guestInv`,
-  proved).
+### Item 4. `HtabWF`
 
-## 2. Conjuncts: rationale, which leaves use them, and the preservation obligation
+- **Counter bounds where possible.** `htab_set`, `htab_del`, `htab_find_leaf`, `htab_keys`,
+  `htab_union_into` and `state_restore` are GuestInv-only. `find_leaf` and the descent in `htab_set`
+  are read-only no-repeat loops (key `n`, resp. `(p, n)`). `memeq`, `first_diff` and `memcpy` are
+  counters or walks. `htab_keys` is a counter. `state_restore` decrements the global `journal_n`,
+  which no callee writes (checked by the script's global-write closure).
+- **The real structural invariant** for the one loop that needs it (`htab_truncate`: count `t+24` is
+  re-read from memory and rewritten by `htab_del`). `HtabWF` (§5) is the crit-bit invariant:
+  - the allocated indices `[1, next)` split into live leaves `L` (listed by `order[0..count)`),
+    internal nodes `I` with `|I| + 1 = count`, and the free list `Fr` headed at `t+72`;
+  - parent, child, order-position and root are all constrained;
+  - the leaf value `+8` is **not** constrained (round 1's bug).
 
-| Conjunct | Holds at entry because | Used by | Preserved because / obligation |
-|---|---|---|---|
-| `code = originalRuntimeCode` | `evaluateDecls_meta.code` | every leaf, to resolve callees. It duplicates the `TerminatingProgBoundedOn` hypothesis so that `GuestInv` is self-contained for `PreservesOn` | `evaluateHOLFiniteState_metadata` (code never changes) |
-| `memaddrs = ordinaryDomain` | `evaluateDecls_meta.memaddrs` | **all walk bounds** (`W`). Excludes all four FALSE counterexamples (§3) | metadata lemma (never changes) |
-| `shMemaddrs = sharedDomain` | `evaluateDecls_meta.shMemaddrs` | input/output scans (`input_blob`, `output_write`, RLP decoders over the input window). These are bounded by `inputSize = 2^30` (folded into `W`, since `2^30 < W`) | never changes |
-| `baseAddr = sourceBase` | `evaluateDecls_meta.baseAddr` | `mem_init` sets `heap_ptr := baseAddr`. Without this, `heap_ptr ≤ 0xb0000000` would not survive `mem_init` | never changes |
-| `topAddr = heapEnd` | `evaluateDecls_meta.topAddr` | **no leaf**: `Exp.topAddr` occurs 0 times in the AST. Kept only because the brief lists it as a minimum conjunct. It is free (never changes) and can be dropped | never changes |
-| `GlobalsWellShaped` (all 67 globals hold a word) | `postDecls_globals` (proved: every global decl is `const 0`) | gives meaning to the global conjuncts below. It also lets leaves evaluate `journal_n`, `ev`, `cur_cont`, … as words | Pancake `assign` requires `isValidValueHOLFinite`, i.e. an existing binding of the same shape. Obligation: the same for call-result writes to globals (`some (global, x)`) |
-| `heap_ptr ≤ 0xb0000000` | value 0 | `alloc` never wraps: a successful `alloc(n)` implies `n ≤ 0xb0000000 − heap_ptr`. This drives the `merkleize_progressive` argument in SPECFIX (`alloc(2^33)` traps) and the `htab_keys`/`htab_new` size products | `alloc` (checked, `HeapPotential.alloc_bounds_of_lt_heapEnd`), `mem_init` (needs `baseAddr`). **Obligation:** `heap_release(m)` is called only with `m ≤ 0xb0000000`. Callers obtain `m` from `heap_mark` and keep it in a local, so this is a per-caller local invariant (`CallEntryOn GuestInv (GuestInv ∧ m ≤ cMax)`) |
-| `ArenaOK frame_mem_ptr scratch_ptr` (both 0, or `0xb0000000 ≤ fm ≤ sp ≤ 0xb0bee000`) | both 0 (first branch) | scratch explicit stacks (RLP validation, `trie_walk`): depth ≤ `(0xb0bee000 − 0xb0000000)/24 = 521216`. Frame records and EVM memory live in disjoint halves (used by `EvmFramesWF`). In the 0/0 branch `scratch_alloc` and `frame_mem_alloc` always trap, since `0 − 0 < n` | `mem_init` moves 0/0 to `(0xb0000000, 0xb0bee000)`. `scratch_alloc` keeps `q ≥ fm`; `frame_mem_alloc` keeps `q ≤ sp`. **Obligation:** `scratch_release(m)` / `frame_mem_release(m)` are called with marks taken earlier, in LIFO order (`frame_new`/`frame_epilogue`/`finish_child` discipline). See Q3 |
-| `journal_n ≤ journal_cap ≤ 524288` | both 0 | `state_restore` loop ≤ `journal_cap ≤ 2^19` iterations, which gives `K_state_restore = J·(K_htab_set + K_htab_del + 256) + 8192` | `jset`/`jdel` trap when `journal_n ≥ journal_cap` before `+1`. `state_restore` decrements only while `snap < journal_n`. `state_init` sets `cap := 524288` (old `n ≤` old `cap ≤ 2^19`), then `n := 0`. Line 33478 sets `n := 0`. `htab_*` never write globals |
+  This gives `count ≤ ncap`, and every index the code computes stays in its block.
+- `maxKeyLen = 60` and stride `≤ 64` (`bal_init` uses 28 and 60).
+- Preservation obligations are explicit contract leaves: `htab_set_spec`, `htab_del_spec`,
+  `htab_truncate_spec`, `htab_union_into_spec`, `htab_new_spec` and `htab_new_scratch_spec`. Each
+  exit contract keeps `HtabWF` and states the **write frame**: memory outside the table's old
+  footprint and the freshly allocated heap is unchanged, the new footprint is old ∪ fresh, and no
+  global other than `heap_ptr` changes. The frame is what keeps every *other* table, frame and
+  buffer intact.
 
-`GuestInvReady` (= `GuestInv` ∧ `heap_ptr ≥ sourceBase` ∧ `frame_mem_ptr ≥ 0xb0000000`) is
-the post-`mem_init` form (`mem_init_ready`, `sorry`). `EvmFramesWF`, `MsgGasCapped` and
-`BlockGasCapped` build on it.
+### Item 5. `EvmFramesWF`
 
-Two further guards are used only at the top. They are not part of `GuestInv`:
+Replaced by `EvmInv` and the gas-value-free potential `evmPot` (§5, §6 here):
 
-- `CoveredFfi`: `F = Guest.HostMemory` and the FFI replays the oracle of an input with
-  `declaredGasLimit ≤ 2·10^8`. It is preserved by every evaluation
-  (`B2Oracle.evaluate_consistent`) and holds at entry (`coveredFfi_postDecls`, proved).
-  `GuestInvCovered = GuestInv ∧ CoveredFfi`.
-- `InitialMemory`: `memory = sourceMemory`, i.e. the startup header and zero elsewhere. It
-  holds at entry (`initialMemory_postDecls`, proved). Only `main` gets it
-  (`MainEntry = GuestInvCovered ∧ InitialMemory`): `alloc` never zeroes, so the body of
-  `main` may rely on untouched heap cells being 0. Leaves below `main` do **not** get it.
+- **No gas conjunct.** `evmPot = R·(F_max·S_max) + F·S_max + S` with
+  `R = Σ(gas + spilled)`, `F = 2·depth + [running]`, `S = Σ state gas`. Every word is
+  `< 2^64` and depth ≤ `maxChain`, so `evmPot < evmPotMax ≈ 2^173` for **arbitrary** gas words.
+  Minting through `refill_frame_state_gas` (`gas += spilled; sgas := msg+48; spilled := 0`) keeps
+  `R` and only changes `S`, which is lower priority and is bounded by word size. The round-1
+  `2^62`-mint counterexample is therefore harmless, and no `msg+48` relation is needed.
+- **Stack/frame/continuation aliasing**: all frame blocks (record, continuation, stack, EVM memory,
+  logs header) are pairwise disjoint and disjoint from every typed table and fixed object; the stack
+  satisfies height ≤ capacity ≤ 1024, and memory length ≤ capacity.
+- **Release marks**: `MarksOK` says releasing scratch to `c+48` and frame memory to `c+56` frees
+  exactly the child's blocks and keeps every ancestor's blocks allocated.
+- **Tables `e+136/+168/+176`**: members of the typed table set (`HtabWF`, allocated, disjoint).
+- **The rest of the world**: `WorldTyped` covers the global tables (`ws`/`bs`/`ts` slots, `bal_*`),
+  the two tables of tables (`bs+32`, `ts+32`), the journal (every record's table is typed), the
+  fixed records and the persistent tries.
 
-Why `GuestInv` needs nothing from "what main does first": the arena conjunct admits the
-uninitialised 0/0 state, so `GuestInv` already holds at `main` entry. `mem_init` is the step
-that reaches `GuestInvReady`.
+### Item 6. Closed decomposition
 
-## 3. Why each FALSE counterexample is excluded
+- **Composition.** `GuestInv` preservation is a theorem, so `call`/`decCall`/handler/`seq`
+  composition needs no extra obligation (`decCall_guestInv` no longer takes `FunPreservesOn`).
+  Every function on `main`'s call graph has its own leaf, and its constant is literally the
+  composition of its callees' constants and its loops' measures. A leaf's proof therefore uses only
+  the combinators, its callees' leaves and its loops' measures (§4).
+- **Guards.** `finish_child → rollback_child_access → htab_truncate` now carry guards
+  (`FinishReady` ⊇ `EvmInv` gives the typed child tables; `RollbackReady`, `HtabArgWF`).
+  `incorporate_child_on_success → htab_union_into` needs none (item 3).
+- **Coverage map**: §5, generated from the AST, lists all 774 reachable functions and 249 loops with
+  their class, `N` and leaf. The 39 unreachable functions are listed too.
+- **Top obligation**: made explicit (§2 below). It is `gb_main : TerminatingFunBoundedOn MainEntry
+  "main" K.«main»`, a generated guarded leaf decomposed like every other leaf.
+- **`K_run_attempt`**: the constant is generated from the AST, so it counts exactly the
+  `process_message` calls that occur. `execute_block` makes 2 system calls before the tx loop, 1 per
+  transaction, and 4 more in `process_general_purpose_requests`/`process_withdrawals`, i.e. 6 outside
+  the loop plus the loop.
 
-| Leaf | Counterexample (SPECFIX) | Excluded by |
+### Non-blocking items
+
+- **Qualified name and adapter.** `coveredTarget_of_terminatingMainOnEntry` concludes the fully
+  qualified `InitECandidate.Solver.UniformSourceClock.CoveredSourceTicksConsumedBounded`.
+- **Frozen together.** Guards, contracts and constants are generated together by one script from one
+  AST.
+- **Regression `example`s** for items 1, 2, 3 and 4 are in the Lean file.
+- **Modmul leaves.** `u256_addmod`, `u256_mulmod`, `p256_fp_mul` and `p256_fp_sqr` are ordinary
+  generated leaves (their loops are counters).
+- **`topAddr`** has been dropped from `GuestInv`.
+
+## 2. The top obligation: `MainEntry` vs `GuestInv`
+
+`main` is entered exactly once, from the covered post-declarations state. `MainEntry` records
+everything true there:
+- `GuestInv`;
+- `CoveredFfi` (the input's declared gas ≤ 2·10^8);
+- `InitialMemory` (the bootstrap image; `alloc` never zeroes, so `main` may rely on fresh cells
+  being 0);
+- `GlobalsZero` (all 67 globals = 0).
+
+All four are proved at the entry (`guestInv_postDecls`, `coveredFfi_postDecls`,
+`initialMemory_postDecls`, `postDecls_globals`). The campaign target needs exactly
+`TerminatingFunBoundedOn MainEntry "main" K.«main»`. That is **stronger than needed for any other
+function, and weaker than the round-1 claim** `TerminatingFunBoundedOn GuestInv "main"`, which would
+quantify over arbitrary memory at `main`'s entry. For the covered target this is exactly what is
+required. `gb_main`'s proof establishes `WorldOK` after `mem_init` (`mem_init_world`) and then
+composes its callees.
+
+`CoveredFfi` is no longer used by any bound: the EVM potential does not depend on gas values, so the
+round-1 header↔input gas link (Q1) and the `wordGas` fallback are gone.
+
+## 3. Loop measures (each `N` holds for arbitrary memory unless marked GUARDED)
+
+The ranking rule `TerminatingProgBoundedOn.while_rank` (§3 of the Lean file) turns a measure `μ ≤ N`
+that strictly decreases on every continuing iteration into the bound `(N+1)·(B+1)`. A non-timeout run
+that ends by `error`/`raise`/`return` inside the body is covered as well.
+
+| Class | Rule (checked syntactically by `coverage.py`) | `N` |
 |---|---|---|
-| `frame_epilogue` | 1024 journal records `(T,1,1,0)`; `htab_set` → `memeq(1,1,2^63)` → 2^70 ticks | Pointer `1` aligns to `0 ∉ ordinaryDomain`: the first `memeq` load errors. With in-domain pointers, each scan is ≤ `W` (§1). `journal_n ≤ 2^19`. The missing callee cost is now explicit: `K_frame_epilogue = K_state_restore + 256` |
-| `finish_child` | same restoration run | same, and `K_finish_child` sums all direct callees, including `state_restore` and `create_finish` |
-| `htab_keys` | `n = 2^20`, `stride = 2^63`: `alloc(n·stride+8)` wraps to 8, then 2^20 `memcpy`s of length 2^63 | Each `memcpy` is a domain walk ≤ `W`. The loop loads `order + 8i`, a fresh address each iteration, so it runs ≤ `W/8 + 1` times. With `HtabWF`, `n ≤ ncap ≤ H/32` and `stride ≤ 56` (`htab_keys_on_wf`) |
-| `htab_set` | `key_len = 2^63`, `memeq(1,1,2^63)` | Odd pointer excluded. With in-domain pointers `memeq`/`first_diff` ≤ `W`; `find_leaf`'s `n` must index `nodes + 32n ∈ domain` (≤ 4W distinct values; read-only loop, so no repeats without timeout). With `HtabWF`, key length ≤ 52 and node indices ≤ `ncap` (`htab_set_on_wf`) |
+| `CTR` | local `i`, exactly one assignment `i := i ± c` in the body, executed unconditionally (top level of the body's seq/dec chain); test `i < X` (step +1, or any step ≥ 1 when `X` is a literal ≤ 2^62), `X > i`, or `i ≠ 0` / `i > X` (step −1); `X` loop-invariant (its variables are not assigned in the body; loads only in read-only bodies). Then `X − i` (resp. `i`) is a strictly decreasing natural number that never wraps | `2^64`, or `X` for an unsigned literal `X ≤ 2^16` |
+| `GCTR` | same with a global counter that no callee writes (transitive global-write closure); only `state_restore` (`journal_n`) | `2^64` |
+| `RO(k)` | read-only body: no store/storeByte/shMemStore/extCall, no global write, all callees pure (`trap_with` counts as pure: it always raises, so it never continues an iteration). No-repeat (`while_noRepeat`, `wave8/step0`) with key = the `k` loop-carried locals | `2^(64k)` |
+| `WALK` | counter strictly increasing by a positive constant, and every iteration loads/stores `base + counter` (or `base + 32·counter`) in the contiguous `ordinaryDomain` (or the 1 GiB shared input window). The address leaves the domain within `W` iterations, long before any wrap | `W + 1`, `W = 31 104 957 928` |
+| `MONO` | hand-checked strictly monotone measure (halving, doubling width, degree, Taylor index); a non-decreasing iteration, if any, is stationary, i.e. a timeout | per loop |
+| `STACK` | explicit stack whose pushes call `scratch_alloc` (`scratch_ptr` strictly decreases, never wraps, never released inside the loop: ≤ 2^61 pushes for arbitrary globals); read-only between pushes (no-repeat) | `(2^61+1)·2^(64k)` |
+| `ALLOC` | every iteration either pushes (`scratch_alloc`) or makes a net heap allocation `alloc(n ≥ 1)` (`heap_ptr` strictly increases; callees release only to marks they took) | `2^62` |
+| `POT` | `run_frames`: `evmPot` under `EvmInv` (GUARDED) | `evmPotMax` |
+| `WF` | `htab_truncate`: count `t+24` strictly decreases under `HtabWF` (GUARDED) | `2^64` |
+| `GUARD` | `_decode_witness_node_body` (`ArenaReady`), `_mpt_insert_node`, `_mpt_delete_node_body` (`MptReady`) | per loop |
 
-None of these is a kernel-checked proof of the restated bound. They are the argument each
-leaf prover should formalise.
+Why `CTR` needs the unconditional single update and a strict test: a loop whose exit test never
+becomes false can still end by an error in the body after arbitrarily many iterations, and that is a
+non-timeout run. A "deterministic orbit" argument is therefore **not** enough. Only a strictly
+decreasing natural measure is. For the same reason `n ≥ i + 32` style tests and steps > 1 against a
+non-literal bound are not `CTR`; all such loops in the guest are `WALK`s. The per-loop table in §4
+gives the class, `N` and the justification of each of the 249 loops. Hand-checked loops carry their
+argument in the `OVERRIDES` table of the script.
 
-## 4. Guarded combinators
+## 4. Cost model and nesting product
 
-| Theorem | Status | Notes |
+Pancake spends a tick only at a call and at a `while` iteration. So
+`K.«f» = Σ_calls (K.«g» + 1 [+ handler]) + Σ_loops (N + 1)·(body + 1)`. `ite` takes the `max`, and
+straight-line code is free; these are the frozen `ite`/`seq`/`dec`/`call` combinators plus
+`while_rank`. The definitions in the Lean file are these formulas verbatim, symbolic in the callees'
+constants. There is no recursion on `main`'s call graph (the script computes the SCCs: none). So the
+definitions are well-founded and every leaf's proof uses only its callees' leaves.
+
+The nesting product along the deepest chain (`out/chain.txt`, §5) dominates `K.«main»`.
+`K_pan_budget` checks the whole sum by `decide`. `log2 K_pan` is reported in §8 of the Lean file and
+in §5 here; the budget `(10^299−1)/10^4 / 32` is `≈ 2^973`.
+
+## 6. Guarded tier
+
+### Guards
+
+| Guard | Definition | Leaves |
 |---|---|---|
-| `TerminatingFunBoundedOn.weaken` / `.mono` / `.of_unconditional` | proved | the frozen all-state leaves (e.g. the arithmetic ones) can be reused as-is |
-| `callee_body_bound`, `TerminatingProgBoundedOn.call_on` | proved | verbatim port of Opus's `PanTerminatingCallOn` (`wave8/step0-opus55`) |
-| `call_guestInv` | proved | `call_on` + `callEntryOn_guestInv`; no call-site work |
-| `decCall_guestInv` | proved | Opus's `decCall` with `hresume` replaced by callee preservation (`FunPreservesOn GuestInv GuestInv f`) and `LocalsFree`. Opus's `hresume` quantified over arbitrary `post`, which `GuestInv` cannot satisfy |
-| `seq_on` | proved | needs `PreservesOn P P first` |
-| `ite_on`, `dec_on` | proved | `dec_on` needs `LocalsFree P` |
-| `callHandle_guestInv` | **sorry** | exception-handler calls (`run_frames` → `op_dispatch` with `EvmErr`, `verify_stateless_new_payload`). The proof is the `decCall` case analysis on the `.exception` branch |
-| `PreservesOn.call_guestInv` | **sorry** | preservation through a handler-free call (globals from callee post, caller locals restored) |
+| `HtabArgWF` | `ArenaReady` ∧ `HtabWF` of parameter `t` ∧ footprint allocated | `htab_truncate`, `htab_set/del/truncate_spec` |
+| `RollbackReady` | the child's tables `+168/+176` are `HtabWF` and allocated | `rollback_child_access` |
+| `FinishReady` | `EvmInv` ∧ `EvmDone` ∧ kind ≠ 0 | `finish_child` |
+| `EvmInv` | §5 of the Lean file (item 5) | `run_frames` |
+| `ArenaReady` | `GuestInv` ∧ `ArenaOK` (heap ⊆ `[sourceBase, 0xb0000000]`, frame memory below scratch inside `[0xb0000000, 0xb0bee000]`) | `_decode_witness_node_body` |
+| `MptReady` / `MptObjReady` | `ArenaReady` ∧ the `node` parameter (resp. trie object `m`) is rooted in a typed `NodeHeap` | `_mpt_insert_node`, `_mpt_delete_node(_body)`, `mpt_set` |
+| `WorldOK` | `ArenaReady` ∧ ∃ S, `WorldTyped s S` (tables, journal, fixed records, tries) | the other 37 guarded functions |
+| `MainEntry` | §2 | `main` |
 
-## 5. Bridge
+`WorldOK` holds right after `mem_init`: every root is 0, so `S = []` works (`mem_init_world`).
+`EvmInv → WorldOK`. Inside `run_frames` every frame-level callee (`op_dispatch`, `op_sload`,
+`op_sstore`, …) is called from an `EvmInv` state.
 
-`coveredSourceTicksConsumedBounded_of_terminatingMainOnP` is proved for an arbitrary guard
-`P` that holds at every covered `main` entry state
-`callEntryStateHOLFinite {s_decls with clock := k} callee`. It is the repaired frozen bridge
-proof with the guard threaded in. `main`'s parameter list `[]` comes from `lookup_main`, so
-the old `hmain_zero_args` hypothesis is gone. Instances, all proved:
+### What each guarded leaf must establish at its guarded call sites
 
-- `…_of_terminatingMainOn` (guard `GuestInv`);
-- `…_of_terminatingMainOnCovered` (guard `GuestInvCovered`);
-- `…_of_terminatingMainOnEntry` (guard `MainEntry`, used for `K_pan`) and `…EntryWordGas`.
+The guarded leaves are "big" leaves. Besides composing callee bounds, each proves that its guarded
+callees' guards hold at their call sites, using the contract leaves:
 
-The post-declarations facts are fully proved, with no `sorry`:
+- `gb_run_frames` uses `while_rank` with `P = GuestInv ∧ (EvmInv ∨ go = 0)`,
+  `μ = if go = 0 then 0 else evmPot + 1`, `N = evmPotMax + 1`, and `run_frames_step`, which is proved
+  from `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec` and the
+  glue `run_frames_step_of_specs`. The body's time bound comes from the callees' leaves; `finish_child`
+  is called under `FinishReady`, which `EvmInv ∧ EvmDone ∧ kind ≠ 0` gives directly.
+- `gb_finish_child` → `rollback_child_access`: `RollbackReady` from `EvmInv` (the child's tables are
+  in `S`).
+- `gb_rollback_child_access` → `htab_truncate`: `HtabArgWF` directly.
+- `gb_htab_truncate`: each iteration calls `htab_del` on the last key. Under `HtabWF` it succeeds and
+  lowers `count` by one (`htab_del_spec`); `count < 2^64`.
+- `gb_process_message`: establishes `EvmInv` at the `run_frames` call from `WorldOK`, using the fresh
+  `frame_open` record and continuation, the marks just taken, tables in `S`, and the `htab_new_scratch`
+  contract for `e+136`.
+- `gb_process_transaction` / `gb_execute_block` / `gb_run_attempt` / … establish `WorldOK` at every
+  guarded call site. They use the contract leaves for table and trie mutations, and the frame
+  `FrameOutside` facts for everything else. The functions called in between are the `BETWEEN` list of
+  §5.
 
-- `evaluateDecls_zero_globals`: an induction over `evaluateDeclsHOLFinite` showing every
-  declared global evaluates to word 0;
-- `guestAst_zero`: `decide` on the literal AST that every global decl is `const 0`;
-- `guestGlobalNames_declared` and `astGlobalNames_eq`: the 67-name list matches the AST;
-- `mem_guestAst_of_mem_sourceDeclarations`: `mainFirstHOL` only reorders.
+### Contract leaves (all `sorry`)
 
-`coveredSourceTicksConsumedBounded_K_pan : CoveredSourceTicksConsumedBounded K_pan` is a proved
-term whose only `sorry` dependency is `main_on_entry`. The `wordGas` variant likewise depends
-only on `main_on_entry_wordGas`.
+`htab_set_spec`, `htab_del_spec`, `htab_truncate_spec`, `htab_union_into_spec`, `htab_new_spec`,
+`htab_new_scratch_spec`, `mpt_insert_node_spec`, `mpt_delete_node_body_spec`, `mem_init_world`,
+`op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec`, `finish_child_spec`,
+`run_frames_step_of_specs` (glue).
 
-## 6. Restated leaf interface and K
+## 7. Every `sorry`
 
-Symbols (namespace `R`):
+- Combinators (2): `TerminatingProgBoundedOn.callHandle_guestInv`, `TerminatingProgBoundedOn.while_rank`.
+- Contract leaves (14): listed in §6.
+- Guarded bound leaves (47): `gb_*`, listed in §5 (column "leaf").
+- Unguarded bound leaves (727): `fb_*`, listed in §5.
 
-- `W = domainBytes ≈ 3.1·10^10` (single walk);
-- `H = heapArenaBytes = 251 658 240` (any one heap table);
-- `J = 524288` (journal cap);
-- `D = 1025` (frames);
-- `G = maxCoveredGas = 2·10^8`;
-- `KL = 52` (key length).
+No definition contains `sorry`. Proved terms that depend on a `sorry` are `run_frames_step` (on the
+four frame contracts and the glue) and `coveredSourceTicksConsumedBounded_K_pan` (on `gb_main`).
 
-Every frozen `2^64 − 1` factor is replaced by the bound of the data structure the loop walks:
+## 8. Open questions and known risks (for the quorum)
 
-- `W` for walks over memory, input slices and arrays;
-- `J` for the journal;
-- `2050·Gas + 2·D` for `run_frames` (`evmFramePotential`);
-- `H/32` for table capacities when `HtabWF` is assumed.
+- **Q1 (`EvmInv` completeness).** `op_dispatch_spec` is true only if every write an opcode performs
+  lands in its frame's blocks, a typed table (through the table contracts), a fixed global buffer or
+  fresh memory. The 44 global buffers (`keccak_st`, `u256_ws`, …; `globalBuffers`, generated from
+  the literal-size `alloc` calls that assign a global) are in `fixedObjects`: allocated, pairwise
+  disjoint, and disjoint from every table, node and frame block. The remaining risk is a buffer
+  allocated with a non-literal size and written during EVM execution. The script lists only
+  literal-size allocations, so the quorum should check `out/tiers.txt` against the `*_init`
+  functions.
+- **Q2 (`finish_child` on `EvmErr`).** `finish_child_spec` assumes that an `EvmErr` escaping
+  `finish_child` is raised after the pop (by `stack_push` in the parent). `create_finish` has its own
+  handler, so this looks right.
+- **Q3 (`TriesTyped`).** Storage tries are typed through the `ws+32` cache only. If
+  `compute_state_root` mutates tries reached through account records, those roots must be added.
+- **Q4 (MPT descent).** `_mpt_insert_node`'s measure relies on writes during empty-extension runs
+  being idempotent; this holds for typed nodes (`NodeHeap`), which is why it is guarded.
+- **Q5 (cost of the generated interface).** 727 unguarded leaves are mostly loop-free (their proof is
+  pure call composition). A single tactic that walks the body with the combinators should discharge
+  all loop-free ones; the loop leaves need their measure.
 
-Callee costs omitted from the frozen constants are added: `state_restore` in
-`frame_epilogue`/`finish_child`/`generic_*`; `keccak256` in `op_keccak`/`create`; and
-`create_finish`, `get_account`, `walk` in `finish_child`.
+## 5. Coverage table (GENERATED by `coverage.py`; one row per function on `main`'s call graph)
 
-Guards:
-
-| Family | Guard | Leaves |
-|---|---|---|
-| G (measure in locals/globals; memory walks bounded by `W`) | `GuestInv` | all of §6e, `htab_set/del/find_leaf/keys`, `state_restore`, `get_*`/`set_storage`, `frame_epilogue`, `finish_child` |
-| W (loop measure lives in memory, or is read from memory once at entry) | `HtabArgWF` = `HtabLocalWF "t"`; `HtabLocalWF "src"` | `htab_truncate` (count `t+24` re-read and rewritten by each delete; WF of `t` must be preserved by `htab_del`), `htab_union_into` (trip count `cap := src+24` cached at entry, so WF of `src` at entry suffices and no `dst`/`src` disjointness is needed), refinements `htab_set_on_wf`, `htab_keys_on_wf` |
-| F (EVM frames) | `EvmFramesWF G`, `MsgGasCapped G`, `BlockGasCapped G` | `run_frames`, `process_message`, `process_transaction` |
-| top | `GuestInvCovered` / `MainEntry` | `run_attempt`, `main`; `…_wordGas` fallbacks use plain `GuestInv` / `MainEntryWordGas` with gas `2^64` |
-
-Why family W/F cannot be `GuestInv`-only: with arbitrary memory, an in-loop store can alias
-the loop measure (e.g. EVM memory overlapping `ev+64`, or a node write overlapping `t+24`).
-The only remaining bound is a pigeonhole over the mutable domain, about 2^(2.5·10^11), which is
-far over budget. So these leaves take a memory well-formedness precondition. The offsets come
-from `htab_new` (4869), `htab_grow` (5119), `frame_new` (15372), `charge_gas` (14951),
-`extend_memory` (15208), `run_frames` (18665) and `run_attempt` (33817).
-
-Constants are **proposals with derivation sketches** (comments in the file), not audited tick
-counts. The slack of 10^230 is there so leaf provers can enlarge any constant.
-
-## 7. Every `sorry` (94 theorem bodies; no definition contains `sorry`)
-
-Combinators (2): `TerminatingProgBoundedOn.callHandle_guestInv`, `PreservesOn.call_guestInv`.
-
-FALSE leaves restated (6): `frame_epilogue_on`, `finish_child_on`, `htab_keys_on`,
-`htab_keys_on_wf`, `htab_set_on`, `htab_set_on_wf`.
-
-Journal/state (6): `htab_find_leaf_on`, `htab_del_on`, `state_restore_on`, `get_account_on`,
-`get_storage_on`, `set_storage_on`.
-
-Memory-measure / EVM / top (10): `htab_truncate_on_wf`, `htab_union_into_on_wf`,
-`run_frames_on`, `process_message_on`, `process_transaction_on`, `run_attempt_on`,
-`run_attempt_on_wordGas`, `mem_init_ready`, `main_on_entry`, `main_on_entry_wordGas`.
-
-UNCLEAR leaves restated over `GuestInv` (70): `rlp_validate_items_body_on`,
-`rlp_list_count_on`, `rlp_list_to_slices_on`, `decode_account_from_leaf_on`,
-`tx_scalar_word_on`, `hdr_word_field_on`, `decode_access_list_on`, `decode_authorizations_on`,
-`decode_blob_hashes_on`, `decode_witness_node_body_on`, `trie_walk_on`, `node_rlp_finish_on`,
-`node_rlp_fill_on`, `collapse_branch_on`, `mpt_insert_node_on`, `mpt_delete_node_body_on`,
-`build_mpt_indexed_on`, `nodedb_build_on`, `modinv_bin_on`, `fp_inv_on`, `fn_inv_on`,
-`u256_addmod_on`, `u256_mulmod_on`, `pre_modexp_on`, `p256_fp_mul_on`, `p256_fp_sqr_on`,
-`pre_p256verify_on`, `secp256k1_ecrecover_on`, `pre_ecrecover_on`, `bn_divmnu_on`,
-`fq12_inv_on`, `pre_alt_bn128_add_on`, `pre_alt_bn128_mul_on`,
-`pre_alt_bn128_pairing_check_on`, `bls_fp_inv_raw_on`, `bls_fp_inv_on`, `fp2_inv_on`,
-`fp12_inv_on`, `g1_mul_on`, `g2_mul_on`, `pre_kzg_point_evaluation_on`, `pre_bls_g1_add_on`,
-`pre_bls_g1_msm_on`, `pre_bls_g2_add_on`, `pre_bls_g2_msm_on`, `pre_bls_pairing_on`,
-`pre_bls_map_fp_to_g1_on`, `pre_bls_map_fp2_to_g2_on`, `pack_bytes_on`, `merkleize_on`,
-`merkleize_progressive_on`, `htr_bytes_list_on`, `htr_plist_chunks_on`, `htr_payload_on`,
-`htr_new_payload_request_on`, `sort_elems_on`, `compute_state_root_on`,
-`build_block_access_list_rlp_on`, `compute_jumpdests_on`, `run_precompile_on`, `op_exp_on`,
-`op_keccak_on`, `op_extcodecopy_on`, `op_balance_on`, `op_extcodehash_on`, `op_sstore_on`,
-`generic_call_on`, `generic_create_on`, `op_selfdestruct_on`, `op_dispatch_on`.
-
-Proved terms that depend on a `sorry`: `coveredSourceTicksConsumedBounded_K_pan` (via
-`main_on_entry`) and `coveredSourceTicksConsumedBounded_K_pan_wordGas` (via
-`main_on_entry_wordGas`).
-
-## 8. Open questions
-
-- **Q1 (gas link).** `run_attempt_on`/`main_on_entry` must show that header `+104`, stored to
-  `be+8`, is ≤ `declaredGasLimit input`, i.e. a parsing-correctness fact through the oracle.
-  If this is too costly, use the proved `wordGas` route (`K_pan_wordGas ≈ 5.8·10^56`, also
-  within budget). In that route `process_transaction` takes `BlockGasCapped (2^64)`, which is
-  trivially true.
-- **Q2 (frame potential).** Do `refill_frame_state_gas` and `credit_state_gas_refund`
-  (EIP-8037 state-gas refunds) let the summed chain gas increase? If so, `FrameChainWF`'s
-  budget must count refunds (bounded by `G` per tx). `EvmFramesWF` also does not yet
-  constrain where `cur_cont` records live, or the stack pointer `e+8` / jumpdest map `e+80`.
-  It may be too weak.
-- **Q3 (arena LIFO).** Preservation of `ArenaOK` needs every `scratch_release(m)` /
-  `frame_mem_release(m)` to restore a mark taken in the same activation. In the
-  `finish_child` path, check that the child's marks are released before the parent's
-  scratch allocations resume.
-- **Q4 (resolved, `htab_union_into`).** The parameters are `(dst, src)`. The loop bound is
-  `cap := load(src+24)`, cached in a local, so the guard is `HtabLocalWF "src"`. An earlier
-  draft guarded local `t`, which does not exist in this function and would have made the
-  statement vacuous. **Reviewers:** check every `LocalWord` guard names a real parameter
-  (`t` for `htab_set`/`htab_keys`/`htab_truncate`, `msg` for `process_message`).
-- **Q5 (W-family soundness).** Each §6e statement claims every loop either has a local/global
-  measure or touches a fresh address per iteration. The audit's C-class loops (LOOPS.md) must
-  be re-checked against this: `_rlp_validate_items_body` (go/top), `_mpt_delete_node_body`
-  (level), `sort_elems`. Any loop whose measure lives in memory moves to family W with an
-  explicit WF guard.
-- **Q6 (`topAddr`).** It is unused by the AST; drop it from `GuestInv` if the quorum agrees.
-- **Q7 (heap invariant for the `_wf` refinements).** Using `htab_set_on_wf` instead of
-  `htab_set_on` requires every caller to carry `HtabWF` of its tables, i.e. a heap
-  separation invariant from `state_init`. The composition behind `K_pan` uses only the
-  `GuestInv` versions, so this is optional, except for family W/F, where it is unavoidable.
-
-## 9. How this was checked
+The dominant nesting chain of `K.«main»` (`out/chain.txt`): at each step, the call with the largest
+loop-multiplicity × callee bound, together with the log2 of the loop multiplicity it sits under.
 
 ```
-lake env lean campaign/specs-proposed/GuestInv.lean   # no errors; only "declaration uses sorry" warnings (94)
+main  log2K=755  -> verify_stateless_new_payload  (loop multiplicity log2 0)
+verify_stateless_new_payload  log2K=755  -> attempt_l7  (loop multiplicity log2 0)
+attempt_l7  log2K=755  -> attempt_l6  (loop multiplicity log2 0)
+attempt_l6  log2K=755  -> attempt_l5  (loop multiplicity log2 0)
+attempt_l5  log2K=755  -> attempt_l4  (loop multiplicity log2 0)
+attempt_l4  log2K=755  -> attempt_l3  (loop multiplicity log2 0)
+attempt_l3  log2K=755  -> attempt_l2  (loop multiplicity log2 0)
+attempt_l2  log2K=755  -> attempt_l1  (loop multiplicity log2 0)
+attempt_l1  log2K=755  -> run_attempt  (loop multiplicity log2 0)
+run_attempt  log2K=755  -> execute_block  (loop multiplicity log2 0)
+execute_block  log2K=755  -> process_transaction  (loop multiplicity log2 64)
+process_transaction  log2K=691  -> process_message_call  (loop multiplicity log2 0)
+process_message_call  log2K=691  -> process_create_message  (loop multiplicity log2 0)
+process_create_message  log2K=691  -> process_message  (loop multiplicity log2 0)
+process_message  log2K=691  -> run_frames  (loop multiplicity log2 0)
+run_frames  log2K=691  -> op_dispatch  (loop multiplicity log2 172)
+op_dispatch  log2K=519  -> op_sstore  (loop multiplicity log2 0)
+op_sstore  log2K=518  -> get_storage  (loop multiplicity log2 0)
+get_storage  log2K=517  -> ws_get_storage  (loop multiplicity log2 0)
+ws_get_storage  log2K=517  -> ws_storage_trie  (loop multiplicity log2 0)
+ws_storage_trie  log2K=517  -> decode_witness_to_mpt  (loop multiplicity log2 0)
+decode_witness_to_mpt  log2K=517  -> _decode_witness_node  (loop multiplicity log2 0)
+_decode_witness_node  log2K=517  -> _decode_witness_node_mpt  (loop multiplicity log2 0)
+_decode_witness_node_mpt  log2K=517  -> _decode_witness_node_body  (loop multiplicity log2 0)
+_decode_witness_node_body  log2K=517  -> _decode_step  (loop multiplicity log2 68)
+_decode_step  log2K=449  -> rlp_decode_fully  (loop multiplicity log2 0)
+rlp_decode_fully  log2K=448  -> rlp_item  (loop multiplicity log2 0)
+rlp_item  log2K=448  -> rlp_list_count  (loop multiplicity log2 0)
+rlp_list_count  log2K=447  -> rlp_item_total  (loop multiplicity log2 128)
+rlp_item_total  log2K=319  -> rlp_validate_items  (loop multiplicity log2 0)
+rlp_validate_items  log2K=319  -> _rlp_validate_items_body  (loop multiplicity log2 0)
+_rlp_validate_items_body  log2K=319  -> rlp_item_header  (loop multiplicity log2 253)
+rlp_item_header  log2K=66  -> rlp_read_length  (loop multiplicity log2 0)
+rlp_read_length  log2K=65  -> rlp_fail  (loop multiplicity log2 0)
+rlp_fail  log2K=0  -> None  (loop multiplicity log2 0)
 ```
 
-`#print axioms` was run on a scratch copy with `#print axioms` lines appended.
+Guarded tier, the functions called by guarded functions (`BETWEEN`, all unguarded), and the global
+buffers (`globalBuffers` in the Lean file):
 
-- `[propext, Classical.choice, Quot.sound]`:
-  `coveredSourceTicksConsumedBounded_of_terminatingMainOn{P,,Covered,Entry,EntryWordGas}`,
-  `guestInv_postDecls`, `postDecls_globals`, `coveredFfi_postDecls`,
-  `initialMemory_postDecls`, `TerminatingProgBoundedOn.{call_on,call_guestInv,decCall_guestInv,seq_on,ite_on,dec_on}`.
-- `[propext]`: `K_pan_budget`, `K_pan_wordGas_budget`, `K_pan_lt`, `K_pan_wordGas_lt`.
-- No axioms: `domainBytes_eq`, `heapArenaBytes_eq`.
-- `coveredSourceTicksConsumedBounded_K_pan` additionally shows `sorryAx`, through
-  `main_on_entry` only.
+```
+GUARDED 47: _decode_witness_node _decode_witness_node_body _decode_witness_node_mpt 
+_mpt_delete_node _mpt_delete_node_body _mpt_insert_node attempt_l1 attempt_l2 attempt_l3 attempt_l4 
+attempt_l5 attempt_l6 attempt_l7 build_mpt_indexed compute_state_root decode_witness_to_mpt 
+execute_block finish_child get_pre_tx_storage get_storage get_storage_original htab_truncate 
+idx_start_storage incorporate_tx_into_block main mpt_from_witness mpt_set op_dispatch op_sload 
+op_sstore payload_header process_checked_system_transaction process_create_message 
+process_general_purpose_requests process_message process_message_call process_transaction 
+process_unchecked_system_transaction process_withdrawals rollback_child_access run_attempt 
+run_frames state_init update_builder_from_tx verify_stateless_new_payload ws_get_storage 
+ws_storage_trie
+BETWEEN 239: _collapse_branch _decode_step _delete_ext_finish _insert_into_leaf _resolve_step 
+_split_extension account_deployable add_balance_change add_code_change add_nonce_change 
+add_storage_write address_to_u256 alloc bal_init bal_remove_change blake2_init block_rlp_length 
+bls_precompiles_init bn254_init build_block_access_list_rlp cache_get_root calculate_blob_gas_price 
+calculate_total_blob_gas charge_gas charge_state_gas check_gas check_gas_limit check_transaction 
+clear_account_preserving_balance common_prefix_length compute_contract_address 
+compute_requests_hash create_ether create_finish credit_state_gas_refund decode_host_input 
+decode_transaction depth0_prepare destroy_storage encode_account encode_execution_requests 
+encode_receipt encode_transaction encode_withdrawal_rlp evm_init ext_code_of extract_deposit_data 
+fee_mul fork_init frame_epilogue frame_exception frame_halt frame_mem_release frame_open 
+frame_start frame_state_gas_used get_account get_code header_hash header_init heap_mark 
+heap_release htab_copy htab_del htab_get htab_has htab_item htab_new htab_set 
+htr_new_payload_request idx_start_account incorporate_child_on_error incorporate_child_on_success 
+increment_nonce is_valid_versioned_hashes is_warm_storage_key keccak256 keccak_init logs_bloom 
+lst_new lst_push mark_account_created max mem_init memcpy memeq memzero merge_tx_into_block min 
+mpt_fail mpt_init mpt_new mpt_nibble_key mpt_root msg_new node_invalidate node_new_ext 
+node_new_leaf nodedb_build nodedb_lookup op_add op_addmod op_address op_and op_balance op_basefee 
+op_blobbasefee op_blobhash op_blockhash op_byte op_call op_callcode op_calldatacopy op_calldataload 
+op_calldatasize op_caller op_callvalue op_chainid op_clz op_codecopy op_codesize op_coinbase 
+op_create op_create2 op_delegatecall op_div op_dup op_dupn op_eq op_exchange op_exp op_extcodecopy 
+op_extcodehash op_extcodesize op_gas op_gaslimit op_gasprice op_gt op_iszero op_jump op_jumpdest 
+op_jumpi op_keccak op_log op_lt op_mcopy op_mload op_mod op_msize op_mstore op_mstore8 op_mul 
+op_mulmod op_not op_number op_or op_origin op_pc op_pop op_prevrandao op_push op_return 
+op_returndatacopy op_returndatasize op_revert op_sar op_sdiv op_selfbalance op_selfdestruct op_sgt 
+op_shl op_shr op_signextend op_slotnum op_slt op_smod op_staticcall op_stop op_sub op_swap op_swapn 
+op_timestamp op_tload op_tstore op_xor output_write pc_add record_pre_state_read 
+recover_sender_with_chain_id refill_frame_state_gas remove_storage_write requests_append 
+require_not_static ripemd160_init rlp_decode_fully rlp_encode_bytes rlp_encode_word rlp_item 
+scratch_alloc scratch_mark scratch_release secp256k1_init serialize_result set_account_balance 
+set_retdata set_storage sha256_init sk_make ssz_init st_le64 stack_pop stack_push state_fresh_tx 
+state_restore state_snapshot stor_lookup te_new track_ancestor_access trie_lookup tx_chain_id 
+tx_has_access_list tx_is_blob tx_is_setcode u256_eq u256_from_be u256_is_zero u256_mul u256_sub 
+u256_to_be32 u256_to_be_min u256_ws_init udiv_small5 validate_block_access_list_gas_limit 
+validate_header validate_headers validate_transaction warm_storage_key ws_get_account_optional 
+ws_storage_root_of
+BUF b2_iv [('alloc', 64)]
+BUF b2_sigma [('alloc', 80)]
+BUF b2_v [('alloc', 128)]
+BUF bal_key_buf [('alloc', 64)]
+BUF be [('alloc', 120)]
+BUF beacon_roots_address [('alloc', 24)]
+BUF bls_c [('alloc', 7136)]
+BUF bo [('alloc', 88)]
+BUF bs [('alloc', 80)]
+BUF builder_deposit_address [('alloc', 24)]
+BUF builder_exit_address [('alloc', 24)]
+BUF consolidation_request_address [('alloc', 24)]
+BUF deposit_contract_address [('alloc', 24)]
+BUF deposit_event_signature_hash [('alloc', 32)]
+BUF empty_code_hash [('alloc', 32)]
+BUF empty_trie_root [('alloc', 32)]
+BUF evm_empty [('alloc', 8)]
+BUF evm_key_buf [('alloc', 32)]
+BUF hdr_zero8 [('alloc', 8)]
+BUF history_storage_address [('alloc', 24)]
+BUF keccak_pad [('alloc', 136)]
+BUF keccak_rc [('alloc', 192)]
+BUF keccak_st [('alloc', 200)]
+BUF mpt_hash_scratch [('alloc', 40)]
+BUF mpt_key_scratch [('alloc', 16)]
+BUF mpt_nib_scratch [('alloc', 64)]
+BUF null_address [('alloc', 24)]
+BUF pre_hdr_buf [('alloc', 96)]
+BUF rmd_h [('alloc', 40)]
+BUF rmd_pad [('alloc', 128)]
+BUF rmd_tab [('alloc', 160)]
+BUF rmd_x [('alloc', 128)]
+BUF sha_pad [('alloc', 128)]
+BUF sha_st [('alloc', 64)]
+BUF sk_buf [('alloc', 64)]
+BUF ssz_len_chunk [('alloc', 32)]
+BUF ssz_offs [('alloc', 64)]
+BUF transfer_topic [('alloc', 32)]
+BUF ts [('alloc', 72)]
+BUF u256_ws [('alloc', 640)]
+BUF vm_system_address [('alloc', 24)]
+BUF withdrawal_request_address [('alloc', 24)]
+BUF ws [('alloc', 40)]
+BUF zero32 [('alloc', 32)]
+```
 
-`turbo-lean` was not used: this is a proposal file outside the lake package, so
-`lake env lean <file>` was used as the brief instructs.
+Column "loops": `#i` is the `i`-th `while` of the function in pre-order, `d` its nesting depth,
+then the class (§3), the iteration bound `N`, and the justification. `log2 K` is the bit length of
+`K.«f»`. Every reachable function and every reachable loop appears exactly once.
+
+functions: 813, reachable from main: 774, loops in reachable: 249, recursive: []
+
+| function | AST line | leaf (guard) | loops: #index depth class N: justification | log2 K |
+|---|---|---|---|---|
+| `trap_with` | 26 | `fb_trap_with` (GuestInv) | - | 0 |
+| `alloc` | 66 | `fb_alloc` (GuestInv) | - | 2 |
+| `mpt_fail` | 9769 | `fb_mpt_fail` (GuestInv) | - | 0 |
+| `memcpy` | 198 | `fb_memcpy` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #1 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #2 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #3 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `nibbles_concat` | 9922 | `fb_nibbles_concat` (GuestInv) | - | 66 |
+| `node_new_ext` | 10021 | `fb_node_new_ext` (GuestInv) | - | 2 |
+| `node_new_leaf` | 9994 | `fb_node_new_leaf` (GuestInv) | - | 2 |
+| `_collapse_branch` | 10674 | `fb__collapse_branch` (GuestInv) | #0 d0 CTR N=2^64: i < 16, step +1, unconditional | 66 |
+| `memzero` | 251 | `fb_memzero` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #1 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #2 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #3 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `node_new_branch` | 10046 | `fb_node_new_branch` (GuestInv) | - | 65 |
+| `_create_branch_from_two_leaves` | 10507 | `fb__create_branch_from_two_leaves` (GuestInv) | - | 65 |
+| `key_to_nibbles` | 9807 | `fb_key_to_nibbles` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `compact_to_nibbles` | 9849 | `fb_compact_to_nibbles` (GuestInv) | - | 65 |
+| `rlp_fail` | 4305 | `fb_rlp_fail` (GuestInv) | - | 0 |
+| `rlp_read_length` | 4317 | `fb_rlp_read_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `rlp_item_header` | 4432 | `fb_rlp_item_header` (GuestInv) | - | 66 |
+| `scratch_alloc` | 154 | `fb_scratch_alloc` (GuestInv) | - | 2 |
+| `_rlp_validate_items_body` | 4507 | `fb__rlp_validate_items_body` (GuestInv) | #0 d0 STACK N=2^253: each push calls scratch_alloc(24), which strictly lowers scratch_ptr and cannot wrap (<= 2^61 pushes, arbitrary globals); between pushes the body is read-only, no-repeat key (pos, end, top) | 319 |
+| `scratch_mark` | 176 | `fb_scratch_mark` (GuestInv) | - | 0 |
+| `scratch_release` | 186 | `fb_scratch_release` (GuestInv) | - | 0 |
+| `rlp_validate_items` | 4548 | `fb_rlp_validate_items` (GuestInv) | - | 319 |
+| `rlp_item_total` | 4567 | `fb_rlp_item_total` (GuestInv) | - | 319 |
+| `rlp_list_count` | 4582 | `fb_rlp_list_count` (GuestInv) | #0 d0 RO(2) N=2^128: read-only on continuing iterations (callees only raise via trap_with); no-repeat key (off, count) | 447 |
+| `rlp_item` | 4338 | `fb_rlp_item` (GuestInv) | - | 448 |
+| `rlp_decode_fully` | 4417 | `fb_rlp_decode_fully` (GuestInv) | - | 448 |
+| `rlp_item_total_unchecked` | 4600 | `fb_rlp_item_total_unchecked` (GuestInv) | - | 66 |
+| `rlp_list_to_slices` | 4631 | `fb_rlp_list_to_slices` (GuestInv) | #0 d0 CTR N=2^64: i < L:count, step +1, unconditional | 447 |
+| `_decode_step` | 10110 | `fb__decode_step` (GuestInv) | - | 449 |
+| `node_new_hashed` | 9975 | `fb_node_new_hashed` (GuestInv) | - | 2 |
+| `htab_find_leaf` | 4976 | `fb_htab_find_leaf` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['n'] | 65 |
+| `memeq` | 304 | `fb_memeq` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #1 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #2 d0 RO(1) N=2^64: no-repeat, key = carried locals ['i']; #3 d0 CTR N=2^64: i < L:n, step +1, unconditional | 67 |
+| `htab_get` | 4999 | `fb_htab_get` (GuestInv) | - | 67 |
+| `nodedb_lookup` | 9960 | `fb_nodedb_lookup` (GuestInv) | - | 67 |
+| `_resolve_step` | 10077 | `fb__resolve_step` (GuestInv) | - | 448 |
+| `_decode_witness_node_body` | 10196 | `gb__decode_witness_node_body` (ArenaReady) | #0 d0 GUARD N=2^68: GUARDED (ArenaReady): pushes are scratch_alloc records (<= arena/88), every written object (records, branch nodes, node_new_* results) is a fresh allocation, so the slot counter top+32 < 16 is only written by this loop: <= (pushes + 1) * 64 iterations | 517 |
+| `_decode_witness_node_mpt` | 10311 | `gb__decode_witness_node_mpt` (WorldOK) | - | 517 |
+| `_decode_witness_node` | 10328 | `gb__decode_witness_node` (WorldOK) | - | 517 |
+| `_delete_ext_finish` | 10727 | `fb__delete_ext_finish` (GuestInv) | - | 66 |
+| `min` | 667 | `fb_min` (GuestInv) | - | 0 |
+| `common_prefix_length` | 9903 | `fb_common_prefix_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `_insert_into_leaf` | 10532 | `fb__insert_into_leaf` (GuestInv) | - | 67 |
+| `node_invalidate` | 10061 | `fb_node_invalidate` (GuestInv) | - | 0 |
+| `_mpt_delete_node_body` | 10758 | `gb__mpt_delete_node_body` (MptReady) | #0 d0 GUARD N=2^130: GUARDED (MptReady): descent as in _mpt_insert_node, pushing fresh scratch frames; #1 d0 GUARD N=2^64: GUARDED (MptReady): unwinds the scratch frames pushed by loop #0; frame links are fresh scratch objects disjoint from typed nodes, so each pop strictly shortens the chain | 197 |
+| `_mpt_delete_node` | 10852 | `gb__mpt_delete_node` (MptReady) | - | 197 |
+| `_split_extension` | 10561 | `fb__split_extension` (GuestInv) | - | 65 |
+| `_mpt_insert_node` | 10598 | `gb__mpt_insert_node` (MptReady) | #0 d0 GUARD N=2^130: GUARDED (MptReady): level strictly increases except on empty extension segments; writes are confined to typed node fields and are idempotent on such runs, so a repeated node is a timeout: <= (klen + 1) * 2^65 | 197 |
+| `_node_needs_rlp` | 10989 | `fb__node_needs_rlp` (GuestInv) | - | 0 |
+| `nibble_list_to_compact` | 9877 | `fb_nibble_list_to_compact` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 35 |
+| `rlp_be_len` | 4698 | `fb_rlp_be_len` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'v'] | 129 |
+| `rlp_header_len` | 4753 | `fb_rlp_header_len` (GuestInv) | - | 129 |
+| `rlp_bytes_encoded_len` | 4827 | `fb_rlp_bytes_encoded_len` (GuestInv) | - | 129 |
+| `rlp_value_encoded_len` | 11095 | `fb_rlp_value_encoded_len` (GuestInv) | - | 129 |
+| `_node_rlp_begin` | 10890 | `fb__node_rlp_begin` (GuestInv) | - | 130 |
+| `node_ref_len` | 11110 | `fb_node_ref_len` (GuestInv) | - | 1 |
+| `keccak_f1600` | 4038 | `fb_keccak_f1600` (GuestInv) | #0 d0 CTR N=2^64: r < 24, step +1, unconditional | 65 |
+| `keccak_absorb_block` | 4239 | `fb_keccak_absorb_block` (GuestInv) | #0 d0 CTR N=2^64: i < 136, step +8, unconditional; #1 d0 CTR N=2^64: i < 136, step +8, unconditional | 66 |
+| `keccak256` | 4262 | `fb_keccak256` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 100 |
+| `node_hash_cached` | 11137 | `fb_node_hash_cached` (GuestInv) | - | 100 |
+| `node_write_ref` | 11161 | `fb_node_write_ref` (GuestInv) | - | 100 |
+| `rlp_put_be` | 4714 | `fb_rlp_put_be` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 65 |
+| `rlp_write_header` | 4732 | `fb_rlp_write_header` (GuestInv) | - | 129 |
+| `rlp_encode_bytes` | 4768 | `fb_rlp_encode_bytes` (GuestInv) | - | 129 |
+| `rlp_encode_list_header` | 4817 | `fb_rlp_encode_list_header` (GuestInv) | - | 129 |
+| `rlp_list_header_len` | 4842 | `fb_rlp_list_header_len` (GuestInv) | - | 129 |
+| `_node_rlp_finish` | 10930 | `fb__node_rlp_finish` (GuestInv) | #0 d0 CTR N=2^64: i < 16, step +1, unconditional; #1 d0 CTR N=2^64: j < 16, step +1, unconditional | 164 |
+| `_node_rlp_fill` | 11011 | `fb__node_rlp_fill` (GuestInv) | #0 d0 ALLOC N=2^62: every iteration either pushes (scratch_alloc(48): scratch_ptr strictly lower) or runs _node_rlp_finish, which allocates its encoding (alloc(n >= 1): heap_ptr strictly higher); callees release only to marks they took themselves; <= 2^64/48 + 2^64/8; #1 d1 RO(3) N=2^192: no-repeat, key = carried locals ['child', 'found', 'i'] | 256 |
+| `htab_has` | 5022 | `fb_htab_has` (GuestInv) | - | 67 |
+| `is_warm_address` | 15473 | `fb_is_warm_address` (GuestInv) | - | 67 |
+| `access_gas_cost` | 15496 | `fb_access_gas_cost` (GuestInv) | - | 67 |
+| `access_list_payload_len` | 11977 | `fb_access_list_payload_len` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
+| `htab_first_diff` | 4951 | `fb_htab_first_diff` (GuestInv) | #0 d0 CTR N=2^64: i < L:key_len, step +1, unconditional; #1 d1 CTR N=2^64: j < 8, step +1, unconditional | 129 |
+| `htab_grow` | 5117 | `fb_htab_grow` (GuestInv) | - | 66 |
+| `htab_new_node` | 5041 | `fb_htab_new_node` (GuestInv) | - | 66 |
+| `htab_new_internal` | 5097 | `fb_htab_new_internal` (GuestInv) | - | 66 |
+| `htab_new_leaf` | 5068 | `fb_htab_new_leaf` (GuestInv) | - | 67 |
+| `htab_set` | 5149 | `fb_htab_set` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['n', 'p'] | 130 |
+| `record_pre_state_read` | 12980 | `fb_record_pre_state_read` (GuestInv) | - | 130 |
+| `decode_account_from_leaf` | 11266 | `fb_decode_account_from_leaf` (GuestInv) | #0 d0 CTR N=2^64: i < rField 2 L:f0, step +1, unconditional; #1 d0 CTR N=2^64: i < rField 2 L:f1, step +1, unconditional | 450 |
+| `heap_mark` | 88 | `fb_heap_mark` (GuestInv) | - | 0 |
+| `heap_release` | 98 | `fb_heap_release` (GuestInv) | - | 0 |
+| `trie_walk` | 10376 | `fb_trie_walk` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['node', 'pos'] | 196 |
+| `trie_lookup` | 10432 | `fb_trie_lookup` (GuestInv) | - | 196 |
+| `ws_account_leaf` | 12992 | `fb_ws_account_leaf` (GuestInv) | - | 196 |
+| `ws_get_account_optional` | 13009 | `fb_ws_get_account_optional` (GuestInv) | - | 450 |
+| `ws_storage_root_of` | 13027 | `fb_ws_storage_root_of` (GuestInv) | - | 450 |
+| `ws_account_has_storage` | 13119 | `fb_ws_account_has_storage` (GuestInv) | - | 450 |
+| `account_has_storage` | 13330 | `fb_account_has_storage` (GuestInv) | - | 450 |
+| `acct_new` | 12937 | `fb_acct_new` (GuestInv) | - | 2 |
+| `acct_empty` | 12956 | `fb_acct_empty` (GuestInv) | - | 3 |
+| `get_pre_state_account_optional` | 13135 | `fb_get_pre_state_account_optional` (GuestInv) | - | 450 |
+| `get_account_optional` | 13170 | `fb_get_account_optional` (GuestInv) | - | 450 |
+| `get_account` | 13188 | `fb_get_account` (GuestInv) | - | 450 |
+| `account_deployable` | 13358 | `fb_account_deployable` (GuestInv) | - | 451 |
+| `account_exists` | 13315 | `fb_account_exists` (GuestInv) | - | 450 |
+| `acct_copy` | 12967 | `fb_acct_copy` (GuestInv) | - | 65 |
+| `u256_is_zero` | 814 | `fb_u256_is_zero` (GuestInv) | - | 0 |
+| `acct_is_empty` | 13383 | `fb_acct_is_empty` (GuestInv) | - | 67 |
+| `htab_new` | 4867 | `fb_htab_new` (GuestInv) | - | 4 |
+| `lst_new` | 13804 | `fb_lst_new` (GuestInv) | - | 3 |
+| `bal_ensure_account` | 13883 | `fb_bal_ensure_account` (GuestInv) | - | 130 |
+| `lst_push` | 13840 | `fb_lst_push` (GuestInv) | - | 65 |
+| `lst_upsert_idx` | 13919 | `fb_lst_upsert_idx` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 66 |
+| `add_balance_change` | 13978 | `fb_add_balance_change` (GuestInv) | - | 130 |
+| `add_code_change` | 14023 | `fb_add_code_change` (GuestInv) | - | 130 |
+| `add_nonce_change` | 13992 | `fb_add_nonce_change` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 130 |
+| `add_sat` | 14847 | `fb_add_sat` (GuestInv) | - | 0 |
+| `add_storage_read` | 13965 | `fb_add_storage_read` (GuestInv) | - | 131 |
+| `add_storage_write` | 13942 | `fb_add_storage_write` (GuestInv) | - | 131 |
+| `add_to_bloom` | 31915 | `fb_add_to_bloom` (GuestInv) | #0 d0 CTR N=2^64: idx < 6, step +2, unconditional | 100 |
+| `add_touched_account` | 14039 | `fb_add_touched_account` (GuestInv) | - | 130 |
+| `st_be32` | 585 | `fb_st_be32` (GuestInv) | - | 0 |
+| `bswap64` | 525 | `fb_bswap64` (GuestInv) | - | 0 |
+| `st_be64` | 603 | `fb_st_be64` (GuestInv) | - | 2 |
+| `addr_from_words` | 32506 | `fb_addr_from_words` (GuestInv) | - | 4 |
+| `u256_from_be` | 2213 | `fb_u256_from_be` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `address_to_u256` | 14906 | `fb_address_to_u256` (GuestInv) | - | 65 |
+| `udivmod` | 695 | `fb_udivmod` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 65 |
+| `udiv` | 727 | `fb_udiv` (GuestInv) | - | 65 |
+| `check_gas_limit` | 9590 | `fb_check_gas_limit` (GuestInv) | - | 65 |
+| `bal_init` | 13863 | `fb_bal_init` (GuestInv) | - | 6 |
+| `htab_keys` | 5332 | `fb_htab_keys` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 129 |
+| `rlp_encode_word` | 4790 | `fb_rlp_encode_word` (GuestInv) | - | 129 |
+| `bit_length64` | 1919 | `fb_bit_length64` (GuestInv) | - | 0 |
+| `u256_bit_length` | 1966 | `fb_u256_bit_length` (GuestInv) | - | 3 |
+| `u256_byte_length` | 1991 | `fb_u256_byte_length` (GuestInv) | - | 3 |
+| `u256_limb` | 828 | `fb_u256_limb` (GuestInv) | - | 0 |
+| `u256_to_be_min` | 2302 | `fb_u256_to_be_min` (GuestInv) | #0 d0 CTR N=2^64: i < L:len, step +1, unconditional | 66 |
+| `rlp_put_u256` | 9334 | `fb_rlp_put_u256` (GuestInv) | - | 129 |
+| `bal_sort_gt` | 14327 | `fb_bal_sort_gt` (GuestInv) | #0 d0 CTR N=2^64: k < L:len, step +1, unconditional | 65 |
+| `sort_elems` | 14364 | `fb_sort_elems` (GuestInv) | #0 d0 MONO N=65: width doubles 1,2,..,2^63,0; width = 2^63 exits after one inner pass, width = 0 makes the inner loop stationary (timeout); at most 65 iterations; #1 d1 MONO N=2^64: for 1 <= width < n (signed) mid/right are capped at n with unsigned compares and do not wrap, so left strictly increases to n; width = 0 is stationary; #2 d2 MONO N=2^65: each iteration increments exactly one of i < mid, j < right (signed, no overflow): measure (mid - i) + (right - j); #3 d2 CTR N=2^64: i < L:mid, step +1, unconditional; #4 d2 CTR N=2^64: j < L:right, step +1, unconditional | 201 |
+| `sorted_keys32` | 14442 | `fb_sorted_keys32` (GuestInv) | - | 201 |
+| `bal_encode_account` | 14455 | `fb_bal_encode_account` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:slots, step +1, unconditional; #1 d1 CTR N=2^64: j < L:n, step +1, unconditional; #2 d0 CTR N=2^64: i < rField 1 L:rk, step +1, unconditional; #3 d0 CTR N=2^64: i < L:kept, step +1, unconditional; #4 d0 CTR N=2^64: i < L:n2, step +1, unconditional; #5 d0 CTR N=2^64: i < L:n3, step +1, unconditional; #6 d0 CTR N=2^64: i < L:n4, step +1, unconditional | 265 |
+| `htab_item` | 5314 | `fb_htab_item` (GuestInv) | - | 0 |
+| `build_block_access_list_rlp` | 14685 | `fb_build_block_access_list_rlp` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #2 d0 CTR N=2^64: i < rField 1 L:addrs, step +1, unconditional; #3 d1 CTR N=2^64: j < L:scap, step +1, unconditional; #4 d1 CTR N=2^64: j < L:cn, step +1, unconditional; #5 d0 CTR N=2^64: i < rField 1 L:addrs, step +1, unconditional | 329 |
+| `mpt_new` | 10444 | `fb_mpt_new` (GuestInv) | - | 2 |
+| `node_rlp` | 11074 | `fb_node_rlp` (GuestInv) | - | 256 |
+| `node_hash` | 11202 | `fb_node_hash` (GuestInv) | - | 256 |
+| `mpt_root` | 11223 | `fb_mpt_root` (GuestInv) | - | 256 |
+| `mpt_nibble_key` | 10470 | `fb_mpt_nibble_key` (GuestInv) | - | 100 |
+| `mpt_set` | 10872 | `gb_mpt_set` (MptObjReady) | - | 197 |
+| `build_mpt_indexed` | 11243 | `gb_build_mpt_indexed` (WorldOK) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 261 |
+| `sha256_block` | 2367 | `fb_sha256_block` (GuestInv) | - | 0 |
+| `sha256_finish` | 2898 | `fb_sha256_finish` (GuestInv) | #0 d0 CTR N=2^64: i < 8, step +1, unconditional | 66 |
+| `sha256_state_init` | 2341 | `fb_sha256_state_init` (GuestInv) | - | 0 |
+| `sha256` | 2914 | `fb_sha256` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 67 |
+| `compute_requests_hash` | 32190 | `fb_compute_requests_hash` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 131 |
+| `cache_get_root` | 32325 | `fb_cache_get_root` (GuestInv) | - | 450 |
+| `encode_account` | 11343 | `fb_encode_account` (GuestInv) | #0 d0 CTR N=32: z < 32, step +1, unconditional | 131 |
+| `htab_copy` | 5354 | `fb_htab_copy` (GuestInv) | - | 67 |
+| `decode_witness_to_mpt` | 10348 | `gb_decode_witness_to_mpt` (WorldOK) | - | 517 |
+| `mpt_from_witness` | 10459 | `gb_mpt_from_witness` (WorldOK) | - | 517 |
+| `compute_state_root` | 32341 | `gb_compute_state_root` (WorldOK) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d1 CTR N=2^64: pass < 2, step +1, unconditional; #2 d2 CTR N=2^64: j < L:icount, step +1, unconditional; #3 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #4 d0 CTR N=2^64: i < L:acap, step +1, unconditional | 581 |
+| `tx_fixed_bytes` | 11468 | `fb_tx_fixed_bytes` (GuestInv) | - | 448 |
+| `tx_list_item` | 11510 | `fb_tx_list_item` (GuestInv) | - | 448 |
+| `decode_access_list` | 11525 | `fb_decode_access_list` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:lst, step +1, unconditional; #1 d1 CTR N=2^64: j < rField 1 L:slots, step +1, unconditional | 576 |
+| `tx_scalar_item` | 11389 | `fb_tx_scalar_item` (GuestInv) | - | 448 |
+| `tx_scalar_u256` | 11416 | `fb_tx_scalar_u256` (GuestInv) | - | 448 |
+| `tx_scalar_word` | 11431 | `fb_tx_scalar_word` (GuestInv) | #0 d0 CTR N=2^64: j < rField 1 L:f, step +1, unconditional | 448 |
+| `decode_authorizations` | 11588 | `fb_decode_authorizations` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:lst, step +1, unconditional | 514 |
+| `decode_blob_hashes` | 11569 | `fb_decode_blob_hashes` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:lst, step +1, unconditional | 512 |
+| `tx_bytes_item` | 11453 | `fb_tx_bytes_item` (GuestInv) | - | 448 |
+| `tx_to_item` | 11487 | `fb_tx_to_item` (GuestInv) | - | 448 |
+| `decode_transaction_rlp` | 11634 | `fb_decode_transaction_rlp` (GuestInv) | - | 576 |
+| `decode_transaction` | 11805 | `fb_decode_transaction` (GuestInv) | - | 576 |
+| `logs_bloom` | 31941 | `fb_logs_bloom` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nt, step +1, unconditional | 228 |
+| `max` | 681 | `fb_max` (GuestInv) | - | 0 |
+| `is_zero_bytes` | 477 | `fb_is_zero_bytes` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `ld_be64` | 539 | `fb_ld_be64` (GuestInv) | - | 1 |
+| `extract_deposit_data` | 32212 | `fb_extract_deposit_data` (GuestInv) | - | 69 |
+| `sk_make` | 12923 | `fb_sk_make` (GuestInv) | - | 66 |
+| `ws_get_code` | 13099 | `fb_ws_get_code` (GuestInv) | - | 68 |
+| `get_code` | 13203 | `fb_get_code` (GuestInv) | - | 130 |
+| `ext_code_of` | 16953 | `fb_ext_code_of` (GuestInv) | - | 450 |
+| `frame_mem_release` | 142 | `fb_frame_mem_release` (GuestInv) | - | 0 |
+| `htab_union_into` | 13711 | `fb_htab_union_into` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional | 194 |
+| `merge_tx_into_block` | 13731 | `fb_merge_tx_into_block` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional | 258 |
+| `bal_list_remove_idx` | 14163 | `fb_bal_list_remove_idx` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 129 |
+| `bal_remove_change` | 14189 | `fb_bal_remove_change` (GuestInv) | - | 129 |
+| `get_pre_tx_account` | 14051 | `fb_get_pre_tx_account` (GuestInv) | - | 450 |
+| `st_le32` | 553 | `fb_st_le32` (GuestInv) | - | 0 |
+| `st_le64` | 571 | `fb_st_le64` (GuestInv) | - | 2 |
+| `idx_start_account` | 14087 | `fb_idx_start_account` (GuestInv) | - | 450 |
+| `stor_lookup` | 13233 | `fb_stor_lookup` (GuestInv) | - | 68 |
+| `ws_storage_trie` | 13042 | `gb_ws_storage_trie` (WorldOK) | - | 517 |
+| `ws_get_storage` | 13061 | `gb_ws_get_storage` (WorldOK) | - | 517 |
+| `get_pre_tx_storage` | 14069 | `gb_get_pre_tx_storage` (WorldOK) | - | 517 |
+| `idx_start_storage` | 14129 | `gb_idx_start_storage` (WorldOK) | - | 517 |
+| `htab_del` | 5217 | `fb_htab_del` (GuestInv) | - | 67 |
+| `remove_storage_write` | 14206 | `fb_remove_storage_write` (GuestInv) | - | 129 |
+| `u256_eq` | 869 | `fb_u256_eq` (GuestInv) | - | 0 |
+| `update_builder_from_tx` | 14233 | `gb_update_builder_from_tx` (WorldOK) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #2 d1 CTR N=2^64: j < L:icap, step +1, unconditional | 645 |
+| `incorporate_tx_into_block` | 14313 | `gb_incorporate_tx_into_block` (WorldOK) | - | 645 |
+| `msg_new` | 15344 | `fb_msg_new` (GuestInv) | - | 65 |
+| `frame_state_gas_used` | 15018 | `fb_frame_state_gas_used` (GuestInv) | - | 0 |
+| `charge_gas` | 14949 | `fb_charge_gas` (GuestInv) | - | 0 |
+| `charge_state_gas` | 14968 | `fb_charge_state_gas` (GuestInv) | - | 1 |
+| `jset` | 12825 | `fb_jset` (GuestInv) | - | 130 |
+| `jdel` | 12857 | `fb_jdel` (GuestInv) | - | 68 |
+| `destroy_storage` | 13480 | `fb_destroy_storage` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional | 194 |
+| `set_account` | 13439 | `fb_set_account` (GuestInv) | - | 130 |
+| `destroy_account` | 13510 | `fb_destroy_account` (GuestInv) | - | 194 |
+| `modify_state_commit` | 13524 | `fb_modify_state_commit` (GuestInv) | - | 194 |
+| `set_code` | 13681 | `fb_set_code` (GuestInv) | - | 450 |
+| `ceil32` | 14862 | `fb_ceil32` (GuestInv) | - | 1 |
+| `words_of` | 14878 | `fb_words_of` (GuestInv) | - | 2 |
+| `create_finish` | 18867 | `fb_create_finish` (GuestInv) | - | 450 |
+| `frame_halt` | 18756 | `fb_frame_halt` (GuestInv) | - | 0 |
+| `increment_nonce` | 13664 | `fb_increment_nonce` (GuestInv) | - | 450 |
+| `mark_account_created` | 13562 | `fb_mark_account_created` (GuestInv) | - | 130 |
+| `compute_jumpdests` | 15279 | `fb_compute_jumpdests` (GuestInv) | #0 d0 WALK N=2^34: pc strictly increases by adv in [1, 33] and every iteration loads code + pc: fresh address in the contiguous ordinaryDomain | 65 |
+| `is_valid_delegation` | 14917 | `fb_is_valid_delegation` (GuestInv) | - | 0 |
+| `get_delegated_code_address` | 17610 | `fb_get_delegated_code_address` (GuestInv) | - | 1 |
+| `get_pre_state_account` | 13155 | `fb_get_pre_state_account` (GuestInv) | - | 450 |
+| `is_account_alive` | 13419 | `fb_is_account_alive` (GuestInv) | - | 450 |
+| `warm_address` | 15484 | `fb_warm_address` (GuestInv) | - | 130 |
+| `prepare_dispatch` | 17836 | `fb_prepare_dispatch` (GuestInv) | - | 452 |
+| `ec_set_infinity` | 6984 | `fb_ec_set_infinity` (GuestInv) | - | 0 |
+| `u256_add_carry` | 1039 | `fb_u256_add_carry` (GuestInv) | - | 0 |
+| `u256_lt` | 883 | `fb_u256_lt` (GuestInv) | - | 0 |
+| `u256_sub` | 1083 | `fb_u256_sub` (GuestInv) | - | 0 |
+| `fp_add` | 5427 | `fb_fp_add` (GuestInv) | - | 3 |
+| `fp_reduce` | 5479 | `fb_fp_reduce` (GuestInv) | - | 2 |
+| `u256_add` | 1061 | `fb_u256_add` (GuestInv) | - | 0 |
+| `fp_mul` | 5494 | `fb_fp_mul` (GuestInv) | - | 3 |
+| `fp_sqr` | 6163 | `fb_fp_sqr` (GuestInv) | - | 3 |
+| `fp_sub` | 5448 | `fb_fp_sub` (GuestInv) | - | 2 |
+| `ec_double` | 7027 | `fb_ec_double` (GuestInv) | - | 7 |
+| `ec_set_affine` | 7000 | `fb_ec_set_affine` (GuestInv) | - | 0 |
+| `ec_add_affine` | 7086 | `fb_ec_add_affine` (GuestInv) | - | 8 |
+| `ec_is_infinity` | 7016 | `fb_ec_is_infinity` (GuestInv) | - | 1 |
+| `mod_half` | 6866 | `fb_mod_half` (GuestInv) | - | 1 |
+| `mod_sub` | 6881 | `fb_mod_sub` (GuestInv) | - | 2 |
+| `modinv_bin` | 6815 | `fb_modinv_bin` (GuestInv) | #0 d0 RO(4) N=2^256: no-repeat, key = carried locals ['u', 'v', 'x1', 'x2']; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['u', 'x1']; #2 d1 RO(2) N=2^128: no-repeat, key = carried locals ['v', 'x2'] | 387 |
+| `fp_inv` | 6897 | `fb_fp_inv` (GuestInv) | - | 387 |
+| `ec_to_affine` | 7308 | `fb_ec_to_affine` (GuestInv) | - | 387 |
+| `u256_bit` | 854 | `fb_u256_bit` (GuestInv) | - | 1 |
+| `ec_mul2` | 7257 | `fb_ec_mul2` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 387 |
+| `fn_inv` | 6974 | `fb_fn_inv` (GuestInv) | - | 387 |
+| `digits_len` | 1566 | `fb_digits_len` (GuestInv) | #0 d0 CTR N=2^64: n > 0 (or != 0), step -1, unconditional | 65 |
+| `digits_to_u256` | 1556 | `fb_digits_to_u256` (GuestInv) | - | 0 |
+| `div64by32` | 1506 | `fb_div64by32` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 65 |
+| `nlz32` | 1467 | `fb_nlz32` (GuestInv) | - | 0 |
+| `divmnu` | 1583 | `fb_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat']; #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
+| `u256_to_digits` | 1530 | `fb_u256_to_digits` (GuestInv) | - | 0 |
+| `digits_divmod` | 1718 | `fb_digits_divmod` (GuestInv) | #0 d0 CTR N=16: i < 16, step +1, unconditional; #1 d0 CTR N=8: i < 8, step +1, unconditional | 257 |
+| `mul64x64` | 1127 | `fb_mul64x64` (GuestInv) | - | 0 |
+| `u256_divmod` | 1754 | `fb_u256_divmod` (GuestInv) | - | 257 |
+| `u256_mod` | 1794 | `fb_u256_mod` (GuestInv) | - | 257 |
+| `u256_mul_full` | 1230 | `fb_u256_mul_full` (GuestInv) | - | 5 |
+| `u256_mulmod` | 1888 | `fb_u256_mulmod` (GuestInv) | - | 258 |
+| `fn_mul` | 6917 | `fb_fn_mul` (GuestInv) | - | 258 |
+| `fp_neg` | 5464 | `fb_fp_neg` (GuestInv) | - | 2 |
+| `fp_pow` | 6778 | `fb_fp_pow` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 68 |
+| `fp_sqrt` | 6907 | `fb_fp_sqrt` (GuestInv) | - | 68 |
+| `secp256k1_decompress_r` | 7351 | `fb_secp256k1_decompress_r` (GuestInv) | - | 68 |
+| `u256_to_be32` | 2265 | `fb_u256_to_be32` (GuestInv) | - | 5 |
+| `secp256k1_recover` | 7395 | `fb_secp256k1_recover` (GuestInv) | - | 389 |
+| `u256_gt` | 921 | `fb_u256_gt` (GuestInv) | - | 1 |
+| `recover_authority` | 17625 | `fb_recover_authority` (GuestInv) | - | 389 |
+| `u256_fits_word` | 800 | `fb_u256_fits_word` (GuestInv) | - | 0 |
+| `validate_authorization_checks` | 17717 | `fb_validate_authorization_checks` (GuestInv) | - | 450 |
+| `set_delegation` | 17740 | `fb_set_delegation` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 516 |
+| `depth0_prepare` | 18772 | `fb_depth0_prepare` (GuestInv) | - | 516 |
+| `frame_mem_alloc` | 110 | `fb_frame_mem_alloc` (GuestInv) | - | 2 |
+| `frame_mem_mark` | 132 | `fb_frame_mem_mark` (GuestInv) | - | 0 |
+| `htab_count` | 5294 | `fb_htab_count` (GuestInv) | - | 0 |
+| `htab_new_scratch` | 4909 | `fb_htab_new_scratch` (GuestInv) | - | 4 |
+| `lst_new_scratch` | 13822 | `fb_lst_new_scratch` (GuestInv) | - | 3 |
+| `frame_new` | 15370 | `fb_frame_new` (GuestInv) | - | 66 |
+| `frame_open` | 18450 | `fb_frame_open` (GuestInv) | - | 66 |
+| `refill_frame_state_gas` | 15029 | `fb_refill_frame_state_gas` (GuestInv) | - | 0 |
+| `frame_exception` | 18477 | `fb_frame_exception` (GuestInv) | - | 2 |
+| `log_append` | 16486 | `fb_log_append` (GuestInv) | - | 65 |
+| `emit_transfer_log` | 17459 | `fb_emit_transfer_log` (GuestInv) | - | 67 |
+| `move_ether` | 13597 | `fb_move_ether` (GuestInv) | - | 451 |
+| `precompile_index` | 31482 | `fb_precompile_index` (GuestInv) | - | 65 |
+| `fq_mul` | 22338 | `fb_fq_mul` (GuestInv) | - | 2 |
+| `fq_from_mont` | 23320 | `fb_fq_from_mont` (GuestInv) | - | 2 |
+| `fq_inv` | 23330 | `fb_fq_inv` (GuestInv) | - | 387 |
+| `bn254_g1_to_bytes` | 24508 | `fb_bn254_g1_to_bytes` (GuestInv) | - | 387 |
+| `fe_set_one` | 23653 | `fb_fe_set_one` (GuestInv) | - | 65 |
+| `fe_set_zero` | 23641 | `fb_fe_set_zero` (GuestInv) | - | 65 |
+| `ecp_set_inf` | 23667 | `fb_ecp_set_inf` (GuestInv) | - | 66 |
+| `fq_add` | 22291 | `fb_fq_add` (GuestInv) | - | 2 |
+| `fq_to_mont` | 23310 | `fb_fq_to_mont` (GuestInv) | - | 2 |
+| `bn254_parse_g1` | 24385 | `fb_bn254_parse_g1` (GuestInv) | - | 67 |
+| `fq_mul_small` | 23341 | `fb_fq_mul_small` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 68 |
+| `fq_sub` | 22307 | `fb_fq_sub` (GuestInv) | - | 2 |
+| `fq12_reduce` | 23386 | `fb_fq12_reduce` (GuestInv) | #0 d0 CTR N=2^64: e > 0 (or != 0), step -1, unconditional | 133 |
+| `fq12_mul` | 23413 | `fb_fq12_mul` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['acc', 'i'] | 136 |
+| `fq2_mul` | 23362 | `fb_fq2_mul` (GuestInv) | - | 5 |
+| `fe_mul` | 23502 | `fb_fe_mul` (GuestInv) | - | 136 |
+| `fe_mul_small` | 23603 | `fb_fe_mul_small` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 132 |
+| `fq12_sqr` | 23456 | `fb_fq12_sqr` (GuestInv) | #0 d0 CTR N=23: k < 23, step +1, unconditional; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['acc', 'i'] | 136 |
+| `fe_sqr` | 23529 | `fb_fe_sqr` (GuestInv) | - | 137 |
+| `fe_sub` | 23566 | `fb_fe_sub` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 67 |
+| `ecp_double` | 23694 | `fb_ecp_double` (GuestInv) | - | 140 |
+| `fe_eq` | 23631 | `fb_fe_eq` (GuestInv) | - | 67 |
+| `fe_is_zero` | 23621 | `fb_fe_is_zero` (GuestInv) | - | 65 |
+| `ecp_add` | 23764 | `fb_ecp_add` (GuestInv) | - | 141 |
+| `bn254_g1_add` | 24541 | `fb_bn254_g1_add` (GuestInv) | - | 387 |
+| `buffer_read` | 15256 | `fb_buffer_read` (GuestInv) | - | 66 |
+| `pre_alt_bn128_add` | 24699 | `fb_pre_alt_bn128_add` (GuestInv) | - | 387 |
+| `ecp_mul` | 23874 | `fb_ecp_mul` (GuestInv) | #0 d0 CTR N=2^64: i < L:len, step +1, unconditional | 206 |
+| `bn254_g1_mul` | 24574 | `fb_bn254_g1_mul` (GuestInv) | - | 387 |
+| `pre_alt_bn128_mul` | 24728 | `fb_pre_alt_bn128_mul` (GuestInv) | - | 387 |
+| `bn254_init` | 22161 | `fb_bn254_init` (GuestInv) | - | 3 |
+| `ecp_linefunc` | 23910 | `fb_ecp_linefunc` (GuestInv) | - | 140 |
+| `fq_neg` | 22323 | `fb_fq_neg` (GuestInv) | - | 2 |
+| `fe_neg` | 23585 | `fb_fe_neg` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 67 |
+| `fq12_frob` | 24051 | `fb_fq12_frob` (GuestInv) | #0 d0 CTR N=6: k < 6, step +1, unconditional | 71 |
+| `bn254_miller_raw` | 24253 | `fb_bn254_miller_raw` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 207 |
+| `fe_add` | 23547 | `fb_fe_add` (GuestInv) | #0 d0 CTR N=2^64: i < L:fld, step +1, unconditional | 67 |
+| `bn254_parse_g2` | 24436 | `fb_bn254_parse_g2` (GuestInv) | - | 69 |
+| `ecp_is_inf` | 23684 | `fb_ecp_is_inf` (GuestInv) | - | 65 |
+| `fq12_cast` | 24033 | `fb_fq12_cast` (GuestInv) | - | 65 |
+| `fq_poly_deg` | 24084 | `fb_fq_poly_deg` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 129 |
+| `fq_poly_submul` | 24103 | `fb_fq_poly_submul` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 38 |
+| `fq12_inv` | 24124 | `fb_fq12_inv` (GuestInv) | #0 d0 MONO N=14: Euclid on degree <= 12 polynomials: deg r1 strictly decreases, or the iteration is stationary (zero leading inverse, timeout); #1 d1 MONO N=14: d0 = deg r0 in [-1, 12] strictly decreases (fq_poly_submul cancels the leading coefficient), or the iteration is stationary (timeout); #2 d1 CTR N=13: j < 13, step +1, unconditional; #3 d0 CTR N=12: i < 12, step +1, unconditional | 391 |
+| `fq12_pow_words` | 24225 | `fb_fq12_pow_words` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 201 |
+| `fq12_twist` | 23999 | `fb_fq12_twist` (GuestInv) | #0 d0 CTR N=3: j < 3, step +1, unconditional | 70 |
+| `bn254_pairing_check` | 24600 | `fb_bn254_pairing_check` (GuestInv) | #0 d0 CTR N=2^64: i < L:n_pairs, step +1, unconditional | 391 |
+| `pre_alt_bn128_pairing_check` | 24757 | `fb_pre_alt_bn128_pairing_check` (GuestInv) | - | 391 |
+| `blake2_g` | 20073 | `fb_blake2_g` (GuestInv) | - | 0 |
+| `blake2b_f` | 20115 | `fb_blake2b_f` (GuestInv) | #0 d0 CTR N=2^64: r < L:rounds, step +1, unconditional; #1 d0 CTR N=2^64: i < 8, step +1, unconditional | 68 |
+| `pre_blake2f` | 31632 | `fb_pre_blake2f` (GuestInv) | #0 d0 CTR N=2^64: i < 8, step +1, unconditional; #1 d0 CTR N=2^64: i < 16, step +1, unconditional; #2 d0 CTR N=2^64: i < 8, step +1, unconditional | 69 |
+| `bls_fp_add_raw` | 26675 | `fb_bls_fp_add_raw` (GuestInv) | - | 0 |
+| `bls_fp_sub_raw` | 26703 | `fb_bls_fp_sub_raw` (GuestInv) | - | 0 |
+| `bls_fp_add` | 26731 | `fb_bls_fp_add` (GuestInv) | - | 2 |
+| `bls_fp_eq` | 26607 | `fb_bls_fp_eq` (GuestInv) | - | 0 |
+| `bls_fp_is_zero` | 26593 | `fb_bls_fp_is_zero` (GuestInv) | - | 0 |
+| `bls_fp_mul` | 26791 | `fb_bls_fp_mul` (GuestInv) | - | 7 |
+| `bls_fp_sqr` | 27550 | `fb_bls_fp_sqr` (GuestInv) | - | 7 |
+| `bls_fp_sub` | 26748 | `fb_bls_fp_sub` (GuestInv) | - | 2 |
+| `g1_copy` | 28655 | `fb_g1_copy` (GuestInv) | - | 65 |
+| `g1_double` | 28689 | `fb_g1_double` (GuestInv) | - | 10 |
+| `g1_set_inf` | 28628 | `fb_g1_set_inf` (GuestInv) | - | 0 |
+| `g1_add` | 28747 | `fb_g1_add` (GuestInv) | - | 66 |
+| `bls_fp_from_be48` | 27719 | `fb_bls_fp_from_be48` (GuestInv) | - | 0 |
+| `bls_fp_lt_raw` | 26621 | `fb_bls_fp_lt_raw` (GuestInv) | - | 0 |
+| `bls_fp_to_mont` | 27560 | `fb_bls_fp_to_mont` (GuestInv) | - | 7 |
+| `bls_fp_decode64` | 27751 | `fb_bls_fp_decode64` (GuestInv) | - | 65 |
+| `g1_on_curve` | 28884 | `fb_g1_on_curve` (GuestInv) | - | 8 |
+| `g1_decode` | 28901 | `fb_g1_decode` (GuestInv) | - | 66 |
+| `bls_fp_from_mont` | 27570 | `fb_bls_fp_from_mont` (GuestInv) | - | 7 |
+| `bls_fp_to_be48` | 27729 | `fb_bls_fp_to_be48` (GuestInv) | - | 5 |
+| `bls_fp_encode64` | 27775 | `fb_bls_fp_encode64` (GuestInv) | - | 65 |
+| `bls_fp_shr1` | 27580 | `fb_bls_fp_shr1` (GuestInv) | - | 0 |
+| `bls_fp_half_can` | 27590 | `fb_bls_fp_half_can` (GuestInv) | - | 2 |
+| `bls_fp_inv_raw` | 27605 | `fb_bls_fp_inv_raw` (GuestInv) | #0 d0 RO(4) N=2^256: no-repeat, key = carried locals ['u', 'v', 'x1', 'x2']; #1 d1 RO(2) N=2^128: no-repeat, key = carried locals ['u', 'x1']; #2 d1 RO(2) N=2^128: no-repeat, key = carried locals ['v', 'x2'] | 388 |
+| `bls_fp_inv` | 27658 | `fb_bls_fp_inv` (GuestInv) | - | 388 |
+| `g1_normalize` | 28861 | `fb_g1_normalize` (GuestInv) | - | 388 |
+| `g1_encode` | 28933 | `fb_g1_encode` (GuestInv) | - | 388 |
+| `bls_g1_add_exec` | 30340 | `fb_bls_g1_add_exec` (GuestInv) | - | 388 |
+| `pre_bls_g1_add` | 31236 | `fb_pre_bls_g1_add` (GuestInv) | - | 388 |
+| `bls_g1_msm_discount` | 31208 | `fb_bls_g1_msm_discount` (GuestInv) | - | 0 |
+| `g1_mul` | 28824 | `fb_g1_mul` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 130 |
+| `g1_is_inf` | 28644 | `fb_g1_is_inf` (GuestInv) | - | 1 |
+| `g1_subgroup_check` | 28953 | `fb_g1_subgroup_check` (GuestInv) | - | 130 |
+| `bls_g1_msm_exec` | 30370 | `fb_bls_g1_msm_exec` (GuestInv) | #0 d0 CTR N=2^64: i < L:k, step +1, unconditional | 388 |
+| `pre_bls_g1_msm` | 31264 | `fb_pre_bls_g1_msm` (GuestInv) | - | 388 |
+| `fp2_add` | 27864 | `fb_fp2_add` (GuestInv) | - | 3 |
+| `fp2_copy` | 27791 | `fb_fp2_copy` (GuestInv) | - | 65 |
+| `fp2_eq` | 27845 | `fb_fp2_eq` (GuestInv) | - | 2 |
+| `fp2_mul` | 27949 | `fb_fp2_mul` (GuestInv) | - | 8 |
+| `fp2_sqr` | 27977 | `fb_fp2_sqr` (GuestInv) | - | 8 |
+| `fp2_sub` | 27884 | `fb_fp2_sub` (GuestInv) | - | 3 |
+| `g2_copy` | 28996 | `fb_g2_copy` (GuestInv) | - | 65 |
+| `g2_double` | 29026 | `fb_g2_double` (GuestInv) | - | 66 |
+| `fp2_is_zero` | 27829 | `fb_fp2_is_zero` (GuestInv) | - | 0 |
+| `g2_is_inf` | 28986 | `fb_g2_is_inf` (GuestInv) | - | 1 |
+| `fp2_set_one` | 27815 | `fb_fp2_set_one` (GuestInv) | - | 0 |
+| `fp2_set_zero` | 27803 | `fb_fp2_set_zero` (GuestInv) | - | 65 |
+| `g2_set_inf` | 28970 | `fb_g2_set_inf` (GuestInv) | - | 65 |
+| `g2_add` | 29109 | `fb_g2_add` (GuestInv) | - | 68 |
+| `g2_on_curve` | 29276 | `fb_g2_on_curve` (GuestInv) | - | 10 |
+| `g2_decode` | 29300 | `fb_g2_decode` (GuestInv) | - | 67 |
+| `bls_fp_neg` | 26765 | `fb_bls_fp_neg` (GuestInv) | - | 2 |
+| `fp2_inv` | 28035 | `fb_fp2_inv` (GuestInv) | - | 388 |
+| `g2_normalize` | 29247 | `fb_g2_normalize` (GuestInv) | - | 388 |
+| `g2_encode` | 29343 | `fb_g2_encode` (GuestInv) | - | 388 |
+| `bls_g2_add_exec` | 30416 | `fb_bls_g2_add_exec` (GuestInv) | - | 388 |
+| `pre_bls_g2_add` | 31300 | `fb_pre_bls_g2_add` (GuestInv) | - | 388 |
+| `bls_g2_msm_discount` | 31222 | `fb_bls_g2_msm_discount` (GuestInv) | - | 0 |
+| `g2_mul` | 29213 | `fb_g2_mul` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 132 |
+| `g2_subgroup_check` | 29367 | `fb_g2_subgroup_check` (GuestInv) | - | 132 |
+| `bls_g2_msm_exec` | 30446 | `fb_bls_g2_msm_exec` (GuestInv) | #0 d0 CTR N=2^64: i < L:k, step +1, unconditional | 388 |
+| `pre_bls_g2_msm` | 31328 | `fb_pre_bls_g2_msm` (GuestInv) | - | 388 |
+| `iso_horner_fp2` | 30055 | `fb_iso_horner_fp2` (GuestInv) | #0 d0 CTR N=2^64: j < sub[L:n, 1], step +1, unconditional | 73 |
+| `iso_map_g2` | 30084 | `fb_iso_map_g2` (GuestInv) | - | 75 |
+| `fp2_neg` | 27904 | `fb_fp2_neg` (GuestInv) | - | 3 |
+| `bls_fp_sgn0` | 27696 | `fb_bls_fp_sgn0` (GuestInv) | - | 7 |
+| `fp2_sgn0` | 28096 | `fb_fp2_sgn0` (GuestInv) | - | 8 |
+| `fp2_pow` | 28059 | `fb_fp2_pow` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 73 |
+| `swu_sqrt_division_fp2` | 29879 | `fb_swu_sqrt_division_fp2` (GuestInv) | #0 d0 CTR N=6: i < 6, step +1, unconditional; #1 d0 CTR N=4: i < 4, step +1, unconditional | 73 |
+| `swu_g2` | 29940 | `fb_swu_g2` (GuestInv) | #0 d0 CTR N=4: i < 4, step +1, unconditional | 73 |
+| `map_fp2_to_g2` | 30128 | `fb_map_fp2_to_g2` (GuestInv) | - | 132 |
+| `bls_map_fp2_to_g2_exec` | 30581 | `fb_bls_map_fp2_to_g2_exec` (GuestInv) | - | 388 |
+| `pre_bls_map_fp2_to_g2` | 31426 | `fb_pre_bls_map_fp2_to_g2` (GuestInv) | - | 388 |
+| `iso_horner_fp` | 29789 | `fb_iso_horner_fp` (GuestInv) | #0 d0 CTR N=2^64: j < sub[L:n, 1], step +1, unconditional | 72 |
+| `iso_map_g1` | 29812 | `fb_iso_map_g1` (GuestInv) | #0 d0 CTR N=15: j < 15, step +1, unconditional | 74 |
+| `bls_fp_pow` | 27669 | `fb_bls_fp_pow` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 72 |
+| `swu_sqrt_division_fp` | 29697 | `fb_swu_sqrt_division_fp` (GuestInv) | - | 72 |
+| `swu_g1` | 29719 | `fb_swu_g1` (GuestInv) | - | 72 |
+| `map_fp_to_g1` | 29859 | `fb_map_fp_to_g1` (GuestInv) | - | 130 |
+| `bls_map_fp_to_g1_exec` | 30554 | `fb_bls_map_fp_to_g1_exec` (GuestInv) | - | 388 |
+| `pre_bls_map_fp_to_g1` | 31398 | `fb_pre_bls_map_fp_to_g1` (GuestInv) | - | 388 |
+| `fp6_copy` | 28118 | `fb_fp6_copy` (GuestInv) | - | 65 |
+| `fp6_neg` | 28190 | `fb_fp6_neg` (GuestInv) | - | 5 |
+| `fp12_conj` | 28429 | `fb_fp12_conj` (GuestInv) | - | 65 |
+| `fp12_copy` | 28339 | `fb_fp12_copy` (GuestInv) | - | 65 |
+| `fp6_add` | 28158 | `fb_fp6_add` (GuestInv) | - | 5 |
+| `fp2_mul_xi` | 27999 | `fb_fp2_mul_xi` (GuestInv) | - | 3 |
+| `fp6_mul` | 28206 | `fb_fp6_mul` (GuestInv) | - | 12 |
+| `fp6_mul_v` | 28255 | `fb_fp6_mul_v` (GuestInv) | - | 66 |
+| `fp6_sub` | 28174 | `fb_fp6_sub` (GuestInv) | - | 5 |
+| `fp12_mul` | 28382 | `fb_fp12_mul` (GuestInv) | - | 66 |
+| `fp6_set_one` | 28142 | `fb_fp6_set_one` (GuestInv) | - | 66 |
+| `fp6_set_zero` | 28130 | `fb_fp6_set_zero` (GuestInv) | - | 65 |
+| `fp12_set_one` | 28351 | `fb_fp12_set_one` (GuestInv) | - | 66 |
+| `fp12_pow_absx` | 28508 | `fb_fp12_pow_absx` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 131 |
+| `fp12_exp_x` | 28545 | `fb_fp12_exp_x` (GuestInv) | - | 131 |
+| `fp2_conj` | 27932 | `fb_fp2_conj` (GuestInv) | - | 2 |
+| `fp12_frob` | 28476 | `fb_fp12_frob` (GuestInv) | - | 11 |
+| `fp6_inv` | 28277 | `fb_fp6_inv` (GuestInv) | - | 388 |
+| `fp12_inv` | 28443 | `fb_fp12_inv` (GuestInv) | - | 388 |
+| `fp12_final_exp` | 28559 | `fb_fp12_final_exp` (GuestInv) | - | 388 |
+| `fp12_is_one` | 28365 | `fb_fp12_is_one` (GuestInv) | - | 67 |
+| `pair_addition_step` | 29484 | `fb_pair_addition_step` (GuestInv) | - | 65 |
+| `pair_doubling_step` | 29384 | `fb_pair_doubling_step` (GuestInv) | - | 65 |
+| `fp2_scale` | 28017 | `fb_fp2_scale` (GuestInv) | - | 8 |
+| `pair_ell` | 29595 | `fb_pair_ell` (GuestInv) | - | 67 |
+| `pair_miller_loop` | 29619 | `fb_pair_miller_loop` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 132 |
+| `pair_accumulate` | 29661 | `fb_pair_accumulate` (GuestInv) | - | 389 |
+| `bls_pairing_exec` | 30492 | `fb_bls_pairing_exec` (GuestInv) | #0 d0 CTR N=2^64: i < L:k, step +1, unconditional | 453 |
+| `pre_bls_pairing` | 31364 | `fb_pre_bls_pairing` (GuestInv) | - | 453 |
+| `secp256k1_address_of_point` | 7465 | `fb_secp256k1_address_of_point` (GuestInv) | - | 100 |
+| `secp256k1_ecrecover` | 7483 | `fb_secp256k1_ecrecover` (GuestInv) | - | 389 |
+| `pre_ecrecover` | 31556 | `fb_pre_ecrecover` (GuestInv) | - | 389 |
+| `pre_identity` | 31515 | `fb_pre_identity` (GuestInv) | - | 3 |
+| `bls_fp_is_high` | 27707 | `fb_bls_fp_is_high` (GuestInv) | - | 7 |
+| `kzg_decompress_g1` | 30148 | `fb_kzg_decompress_g1` (GuestInv) | - | 72 |
+| `kzg_load_g1` | 30216 | `fb_kzg_load_g1` (GuestInv) | - | 130 |
+| `g2_neg` | 29008 | `fb_g2_neg` (GuestInv) | - | 66 |
+| `kzg_neg_scalar` | 30245 | `fb_kzg_neg_scalar` (GuestInv) | - | 65 |
+| `kzg_verify` | 30267 | `fb_kzg_verify` (GuestInv) | - | 390 |
+| `kzg_point_evaluation_exec` | 30611 | `fb_kzg_point_evaluation_exec` (GuestInv) | - | 390 |
+| `pre_kzg_point_evaluation` | 31454 | `fb_pre_kzg_point_evaluation` (GuestInv) | - | 390 |
+| `be_top_bit` | 20407 | `fb_be_top_bit` (GuestInv) | #0 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 66 |
+| `bn_from_be` | 20170 | `fb_bn_from_be` (GuestInv) | #0 d0 CTR N=2^64: i < L:nd, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 66 |
+| `bn_divmnu` | 20253 | `fb_bn_divmnu` (GuestInv) | #0 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #1 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #2 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional; #3 d0 CTR N=2^64: j > 0 (or != 0), step -1, unconditional; #4 d1 RO(3) N=2^192: no-repeat, key = carried locals ['again', 'qhat', 'rhat']; #5 d1 CTR N=2^64: i < L:n, step +1, unconditional; #6 d1 CTR N=2^64: i < L:n, step +1, unconditional; #7 d0 CTR N=2^64: j < L:m, step +1, unconditional; #8 d0 CTR N=2^64: i < L:n, step +1, unconditional | 257 |
+| `bn_mod` | 20386 | `fb_bn_mod` (GuestInv) | - | 257 |
+| `bn_mul` | 20218 | `fb_bn_mul` (GuestInv) | #0 d0 CTR N=2^64: i < add[L:na, L:nb], step +1, unconditional; #1 d0 CTR N=2^64: i < L:na, step +1, unconditional; #2 d1 CTR N=2^64: j < L:nb, step +1, unconditional | 129 |
+| `bn_to_be` | 20196 | `fb_bn_to_be` (GuestInv) | #0 d0 CTR N=2^64: i < L:nbytes, step +1, unconditional | 65 |
+| `modexp` | 20427 | `fb_modexp` (GuestInv) | #0 d0 CTR N=2^64: t > 0 (or != 0), step -1, unconditional | 322 |
+| `modexp_gas` | 31689 | `fb_modexp_gas` (GuestInv) | - | 3 |
+| `sat_word` | 14833 | `fb_sat_word` (GuestInv) | - | 0 |
+| `pre_modexp` | 31725 | `fb_pre_modexp` (GuestInv) | - | 322 |
+| `p256_fp_add` | 20490 | `fb_p256_fp_add` (GuestInv) | - | 3 |
+| `p256_fp_reduce` | 20527 | `fb_p256_fp_reduce` (GuestInv) | - | 2 |
+| `p256_fp_mul` | 20542 | `fb_p256_fp_mul` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r']; #1 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r'] | 131 |
+| `p256_fp_sqr` | 21184 | `fb_p256_fp_sqr` (GuestInv) | #0 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r']; #1 d0 RO(2) N=2^128: no-repeat, key = carried locals ['c', 'r'] | 131 |
+| `p256_fp_sub` | 20511 | `fb_p256_fp_sub` (GuestInv) | - | 2 |
+| `p256_set_infinity` | 21782 | `fb_p256_set_infinity` (GuestInv) | - | 0 |
+| `p256_ec_double` | 21814 | `fb_p256_ec_double` (GuestInv) | - | 134 |
+| `p256_set_affine` | 21798 | `fb_p256_set_affine` (GuestInv) | - | 0 |
+| `p256_ec_add_affine` | 21880 | `fb_p256_ec_add_affine` (GuestInv) | - | 135 |
+| `p256_ec_mul2` | 21944 | `fb_p256_ec_mul2` (GuestInv) | #0 d0 CTR N=2^64: i > 0 (or != 0), step -1, unconditional | 200 |
+| `p256_on_curve` | 22001 | `fb_p256_on_curve` (GuestInv) | - | 132 |
+| `p256_verify` | 22022 | `fb_p256_verify` (GuestInv) | - | 387 |
+| `pre_p256verify` | 22115 | `fb_pre_p256verify` (GuestInv) | - | 387 |
+| `rmd_f` | 19800 | `fb_rmd_f` (GuestInv) | - | 0 |
+| `rmd_k` | 19826 | `fb_rmd_k` (GuestInv) | - | 0 |
+| `rmd_kp` | 19852 | `fb_rmd_kp` (GuestInv) | - | 0 |
+| `ripemd160_block` | 19878 | `fb_ripemd160_block` (GuestInv) | #0 d0 CTR N=2^64: i < 16, step +1, unconditional; #1 d0 CTR N=2^64: j < 80, step +1, unconditional | 67 |
+| `ripemd160` | 19955 | `fb_ripemd160` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain; #1 d0 CTR N=2^64: i < 5, step +1, unconditional | 102 |
+| `pre_ripemd160` | 31608 | `fb_pre_ripemd160` (GuestInv) | - | 102 |
+| `pre_sha256` | 31534 | `fb_pre_sha256` (GuestInv) | - | 67 |
+| `run_precompile` | 31795 | `fb_run_precompile` (GuestInv) | - | 453 |
+| `frame_prologue` | 18499 | `fb_frame_prologue` (GuestInv) | - | 453 |
+| `frame_start` | 18539 | `fb_frame_start` (GuestInv) | - | 453 |
+| `credit_state_gas_refund` | 15000 | `fb_credit_state_gas_refund` (GuestInv) | - | 1 |
+| `incorporate_child_on_error` | 18941 | `fb_incorporate_child_on_error` (GuestInv) | - | 0 |
+| `incorporate_child_on_success` | 18957 | `fb_incorporate_child_on_success` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
+| `pc_add` | 15437 | `fb_pc_add` (GuestInv) | - | 0 |
+| `htab_truncate` | 5278 | `gb_htab_truncate` (HtabArgWF) | #0 d0 WF N=2^64: GUARDED (HtabArgWF): every iteration is a successful htab_del, whose contract lowers count t+24 by one and preserves HtabWF | 131 |
+| `rollback_child_access` | 18995 | `gb_rollback_child_access` (RollbackReady) | - | 132 |
+| `set_retdata` | 19064 | `fb_set_retdata` (GuestInv) | - | 65 |
+| `stack_push` | 15065 | `fb_stack_push` (GuestInv) | - | 65 |
+| `state_restore` | 12903 | `fb_state_restore` (GuestInv) | #0 d0 GCTR N=2^64: journal_n > L:snap (or != 0), step -1, unconditional | 194 |
+| `finish_child` | 18572 | `gb_finish_child` (FinishReady) | - | 450 |
+| `frame_epilogue` | 18558 | `fb_frame_epilogue` (GuestInv) | - | 194 |
+| `stack_pop` | 15046 | `fb_stack_pop` (GuestInv) | - | 0 |
+| `op_add` | 15525 | `fb_op_add` (GuestInv) | - | 65 |
+| `u256_addmod` | 1861 | `fb_u256_addmod` (GuestInv) | - | 258 |
+| `op_addmod` | 15658 | `fb_op_addmod` (GuestInv) | - | 258 |
+| `op_address` | 16734 | `fb_op_address` (GuestInv) | - | 66 |
+| `op_and` | 15851 | `fb_op_and` (GuestInv) | - | 65 |
+| `to_address_masked` | 14889 | `fb_to_address_masked` (GuestInv) | - | 4 |
+| `warm_after_charge` | 15511 | `fb_warm_after_charge` (GuestInv) | - | 130 |
+| `op_balance` | 16751 | `fb_op_balance` (GuestInv) | - | 450 |
+| `block_env` | 17115 | `fb_block_env` (GuestInv) | - | 0 |
+| `op_basefee` | 17125 | `fb_op_basefee` (GuestInv) | - | 65 |
+| `u256_div` | 1783 | `fb_u256_div` (GuestInv) | - | 257 |
+| `u256_from_word` | 780 | `fb_u256_from_word` (GuestInv) | - | 0 |
+| `u256_mul` | 1150 | `fb_u256_mul` (GuestInv) | - | 3 |
+| `taylor_exponential` | 9511 | `fb_taylor_exponential` (GuestInv) | #0 d0 MONO N=2^64: i := i + 1 each iteration from 1; i < 2^64 for the first 2^64 - 1 iterations; when i wraps to 0, di = 0 and u256_div(p, 0) = 0 makes acc = 0, so the loop exits | 321 |
+| `calculate_blob_gas_price` | 9550 | `fb_calculate_blob_gas_price` (GuestInv) | - | 321 |
+| `op_blobbasefee` | 17165 | `fb_op_blobbasefee` (GuestInv) | - | 321 |
+| `op_blobhash` | 17142 | `fb_op_blobhash` (GuestInv) | - | 66 |
+| `track_ancestor_access` | 13771 | `fb_track_ancestor_access` (GuestInv) | - | 0 |
+| `op_blockhash` | 17183 | `fb_op_blockhash` (GuestInv) | - | 66 |
+| `stack_push_word` | 15103 | `fb_stack_push_word` (GuestInv) | - | 65 |
+| `u256_byte` | 2197 | `fb_u256_byte` (GuestInv) | - | 1 |
+| `op_byte` | 15922 | `fb_op_byte` (GuestInv) | - | 65 |
+| `calculate_delegation_cost` | 17693 | `fb_calculate_delegation_cost` (GuestInv) | - | 450 |
+| `calculate_message_call_gas` | 19328 | `fb_calculate_message_call_gas` (GuestInv) | - | 3 |
+| `extend_memory` | 15206 | `fb_extend_memory` (GuestInv) | - | 66 |
+| `memory_gas_cost` | 15129 | `fb_memory_gas_cost` (GuestInv) | - | 3 |
+| `extend_memory_cost1` | 15146 | `fb_extend_memory_cost1` (GuestInv) | - | 5 |
+| `extend_memory_cost2` | 15181 | `fb_extend_memory_cost2` (GuestInv) | - | 6 |
+| `msg_new_scratch` | 15357 | `fb_msg_new_scratch` (GuestInv) | - | 65 |
+| `child_message` | 19009 | `fb_child_message` (GuestInv) | - | 65 |
+| `state_snapshot` | 12893 | `fb_state_snapshot` (GuestInv) | - | 0 |
+| `start_child` | 18703 | `fb_start_child` (GuestInv) | - | 453 |
+| `generic_call` | 19294 | `fb_generic_call` (GuestInv) | - | 453 |
+| `op_call` | 19358 | `fb_op_call` (GuestInv) | - | 454 |
+| `op_callcode` | 19457 | `fb_op_callcode` (GuestInv) | - | 454 |
+| `copy_from_buffer` | 16866 | `fb_copy_from_buffer` (GuestInv) | - | 67 |
+| `op_calldatacopy` | 16895 | `fb_op_calldatacopy` (GuestInv) | - | 67 |
+| `op_calldataload` | 16824 | `fb_op_calldataload` (GuestInv) | - | 67 |
+| `op_calldatasize` | 16850 | `fb_op_calldatasize` (GuestInv) | - | 65 |
+| `op_caller` | 16791 | `fb_op_caller` (GuestInv) | - | 66 |
+| `op_callvalue` | 16808 | `fb_op_callvalue` (GuestInv) | - | 65 |
+| `op_chainid` | 17289 | `fb_op_chainid` (GuestInv) | - | 65 |
+| `op_clz` | 16002 | `fb_op_clz` (GuestInv) | - | 65 |
+| `op_codecopy` | 16924 | `fb_op_codecopy` (GuestInv) | - | 67 |
+| `op_codesize` | 16908 | `fb_op_codesize` (GuestInv) | - | 65 |
+| `op_coinbase` | 17220 | `fb_op_coinbase` (GuestInv) | - | 66 |
+| `compute_contract_address` | 19098 | `fb_compute_contract_address` (GuestInv) | - | 131 |
+| `generic_create` | 19156 | `fb_generic_create` (GuestInv) | - | 454 |
+| `require_not_static` | 15459 | `fb_require_not_static` (GuestInv) | - | 0 |
+| `op_create` | 19223 | `fb_op_create` (GuestInv) | - | 454 |
+| `compute_create2_contract_address` | 19129 | `fb_compute_create2_contract_address` (GuestInv) | - | 101 |
+| `op_create2` | 19257 | `fb_op_create2` (GuestInv) | - | 454 |
+| `op_delegatecall` | 19539 | `fb_op_delegatecall` (GuestInv) | - | 454 |
+| `op_div` | 15582 | `fb_op_div` (GuestInv) | - | 257 |
+| `op_dup` | 16308 | `fb_op_dup` (GuestInv) | - | 65 |
+| `code_imm` | 16370 | `fb_code_imm` (GuestInv) | - | 0 |
+| `decode_single` | 16385 | `fb_decode_single` (GuestInv) | - | 0 |
+| `op_dupn` | 16401 | `fb_op_dupn` (GuestInv) | - | 65 |
+| `stack_push_bool` | 15115 | `fb_stack_push_bool` (GuestInv) | - | 65 |
+| `op_eq` | 15814 | `fb_op_eq` (GuestInv) | - | 65 |
+| `stack_swap_positions` | 16330 | `fb_stack_swap_positions` (GuestInv) | - | 0 |
+| `op_exchange` | 16447 | `fb_op_exchange` (GuestInv) | - | 3 |
+| `u256_exp` | 2002 | `fb_u256_exp` (GuestInv) | #0 d0 CTR N=2^64: t < L:len, step +1, unconditional | 69 |
+| `op_exp` | 15698 | `fb_op_exp` (GuestInv) | - | 69 |
+| `op_extcodecopy` | 16987 | `fb_op_extcodecopy` (GuestInv) | - | 450 |
+| `op_extcodehash` | 17072 | `fb_op_extcodehash` (GuestInv) | - | 450 |
+| `op_extcodesize` | 16965 | `fb_op_extcodesize` (GuestInv) | - | 450 |
+| `op_gas` | 16130 | `fb_op_gas` (GuestInv) | - | 65 |
+| `op_gaslimit` | 17272 | `fb_op_gaslimit` (GuestInv) | - | 65 |
+| `op_gasprice` | 16936 | `fb_op_gasprice` (GuestInv) | - | 65 |
+| `op_gt` | 15757 | `fb_op_gt` (GuestInv) | - | 65 |
+| `op_iszero` | 15833 | `fb_op_iszero` (GuestInv) | - | 65 |
+| `is_valid_jumpdest` | 15324 | `fb_is_valid_jumpdest` (GuestInv) | - | 0 |
+| `op_jump` | 16066 | `fb_op_jump` (GuestInv) | - | 2 |
+| `op_jumpdest` | 16146 | `fb_op_jumpdest` (GuestInv) | - | 2 |
+| `op_jumpi` | 16086 | `fb_op_jumpi` (GuestInv) | - | 3 |
+| `op_keccak` | 16020 | `fb_op_keccak` (GuestInv) | - | 100 |
+| `op_log` | 16499 | `fb_op_log` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntopics, step +1, unconditional | 69 |
+| `op_lt` | 15738 | `fb_op_lt` (GuestInv) | - | 65 |
+| `op_mcopy` | 16233 | `fb_op_mcopy` (GuestInv) | - | 67 |
+| `charge_with_memory` | 15240 | `fb_charge_with_memory` (GuestInv) | - | 66 |
+| `op_mload` | 16198 | `fb_op_mload` (GuestInv) | - | 67 |
+| `op_mod` | 15620 | `fb_op_mod` (GuestInv) | - | 257 |
+| `op_msize` | 16217 | `fb_op_msize` (GuestInv) | - | 65 |
+| `op_mstore` | 16160 | `fb_op_mstore` (GuestInv) | - | 66 |
+| `op_mstore8` | 16179 | `fb_op_mstore8` (GuestInv) | - | 66 |
+| `op_mul` | 15544 | `fb_op_mul` (GuestInv) | - | 65 |
+| `op_mulmod` | 15678 | `fb_op_mulmod` (GuestInv) | - | 258 |
+| `op_not` | 15905 | `fb_op_not` (GuestInv) | - | 65 |
+| `op_number` | 17255 | `fb_op_number` (GuestInv) | - | 65 |
+| `op_or` | 15869 | `fb_op_or` (GuestInv) | - | 65 |
+| `op_origin` | 16773 | `fb_op_origin` (GuestInv) | - | 66 |
+| `op_pc` | 16114 | `fb_op_pc` (GuestInv) | - | 65 |
+| `op_pop` | 16268 | `fb_op_pop` (GuestInv) | - | 2 |
+| `op_prevrandao` | 17306 | `fb_op_prevrandao` (GuestInv) | - | 66 |
+| `op_push` | 16283 | `fb_op_push` (GuestInv) | - | 67 |
+| `op_return` | 17501 | `fb_op_return` (GuestInv) | - | 66 |
+| `op_returndatacopy` | 17038 | `fb_op_returndatacopy` (GuestInv) | - | 66 |
+| `op_returndatasize` | 17022 | `fb_op_returndatasize` (GuestInv) | - | 65 |
+| `op_revert` | 17526 | `fb_op_revert` (GuestInv) | - | 66 |
+| `u256_or` | 1019 | `fb_u256_or` (GuestInv) | - | 0 |
+| `u256_shl` | 2028 | `fb_u256_shl` (GuestInv) | - | 0 |
+| `u256_shr` | 2088 | `fb_u256_shr` (GuestInv) | - | 0 |
+| `u256_sar` | 2148 | `fb_u256_sar` (GuestInv) | - | 2 |
+| `op_sar` | 15982 | `fb_op_sar` (GuestInv) | - | 65 |
+| `u256_neg` | 1105 | `fb_u256_neg` (GuestInv) | - | 0 |
+| `u256_abs` | 1805 | `fb_u256_abs` (GuestInv) | - | 1 |
+| `u256_sdiv` | 1819 | `fb_u256_sdiv` (GuestInv) | - | 257 |
+| `op_sdiv` | 15601 | `fb_op_sdiv` (GuestInv) | - | 257 |
+| `op_selfbalance` | 17098 | `fb_op_selfbalance` (GuestInv) | - | 450 |
+| `op_selfdestruct` | 17551 | `fb_op_selfdestruct` (GuestInv) | - | 452 |
+| `u256_slt` | 931 | `fb_u256_slt` (GuestInv) | - | 0 |
+| `u256_sgt` | 969 | `fb_u256_sgt` (GuestInv) | - | 1 |
+| `op_sgt` | 15795 | `fb_op_sgt` (GuestInv) | - | 65 |
+| `op_shl` | 15942 | `fb_op_shl` (GuestInv) | - | 65 |
+| `op_shr` | 15962 | `fb_op_shr` (GuestInv) | - | 65 |
+| `u256_and` | 1009 | `fb_u256_and` (GuestInv) | - | 0 |
+| `u256_not` | 999 | `fb_u256_not` (GuestInv) | - | 0 |
+| `u256_signextend` | 2175 | `fb_u256_signextend` (GuestInv) | - | 3 |
+| `op_signextend` | 15718 | `fb_op_signextend` (GuestInv) | - | 65 |
+| `get_storage` | 13249 | `gb_get_storage` (WorldOK) | - | 517 |
+| `is_warm_storage_key` | 16559 | `fb_is_warm_storage_key` (GuestInv) | - | 67 |
+| `warm_storage_key` | 16571 | `fb_warm_storage_key` (GuestInv) | - | 130 |
+| `op_sload` | 16584 | `gb_op_sload` (WorldOK) | - | 517 |
+| `op_slotnum` | 17324 | `fb_op_slotnum` (GuestInv) | - | 65 |
+| `op_slt` | 15776 | `fb_op_slt` (GuestInv) | - | 65 |
+| `u256_smod` | 1840 | `fb_u256_smod` (GuestInv) | - | 257 |
+| `op_smod` | 15639 | `fb_op_smod` (GuestInv) | - | 257 |
+| `check_gas` | 14935 | `fb_check_gas` (GuestInv) | - | 0 |
+| `get_storage_original` | 13276 | `gb_get_storage_original` (WorldOK) | - | 517 |
+| `set_storage` | 13451 | `fb_set_storage` (GuestInv) | - | 450 |
+| `op_sstore` | 16611 | `gb_op_sstore` (WorldOK) | - | 518 |
+| `op_staticcall` | 19600 | `fb_op_staticcall` (GuestInv) | - | 454 |
+| `op_stop` | 16052 | `fb_op_stop` (GuestInv) | - | 1 |
+| `op_sub` | 15563 | `fb_op_sub` (GuestInv) | - | 65 |
+| `op_swap` | 16350 | `fb_op_swap` (GuestInv) | - | 2 |
+| `op_swapn` | 16425 | `fb_op_swapn` (GuestInv) | - | 3 |
+| `op_timestamp` | 17238 | `fb_op_timestamp` (GuestInv) | - | 65 |
+| `get_transient_storage` | 13299 | `fb_get_transient_storage` (GuestInv) | - | 67 |
+| `op_tload` | 16688 | `fb_op_tload` (GuestInv) | - | 68 |
+| `set_transient_storage` | 13574 | `fb_set_transient_storage` (GuestInv) | - | 130 |
+| `op_tstore` | 16710 | `fb_op_tstore` (GuestInv) | - | 130 |
+| `op_xor` | 15887 | `fb_op_xor` (GuestInv) | - | 65 |
+| `op_dispatch` | 17902 | `gb_op_dispatch` (WorldOK) | - | 519 |
+| `run_frames` | 18663 | `gb_run_frames` (EvmInv) | #0 d0 POT N=2^172: EVM frame potential evmPot < N_POT under EvmInv (section 6) | 691 |
+| `process_message` | 18803 | `gb_process_message` (WorldOK) | - | 691 |
+| `process_create_message` | 18899 | `gb_process_create_message` (WorldOK) | - | 691 |
+| `process_message_call` | 19661 | `gb_process_message_call` (WorldOK) | - | 691 |
+| `state_fresh_tx` | 12778 | `fb_state_fresh_tx` (GuestInv) | - | 7 |
+| `te_new` | 32838 | `fb_te_new` (GuestInv) | - | 65 |
+| `process_unchecked_system_transaction` | 32851 | `gb_process_unchecked_system_transaction` (WorldOK) | - | 691 |
+| `process_checked_system_transaction` | 32928 | `gb_process_checked_system_transaction` (WorldOK) | - | 691 |
+| `requests_append` | 33485 | `fb_requests_append` (GuestInv) | - | 65 |
+| `process_general_purpose_requests` | 33507 | `gb_process_general_purpose_requests` (WorldOK) | #0 d0 CTR N=2^64: i < L:nr, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nl, step +1, unconditional | 693 |
+| `calculate_total_blob_gas` | 11914 | `fb_calculate_total_blob_gas` (GuestInv) | - | 0 |
+| `fee_mul` | 32778 | `fb_fee_mul` (GuestInv) | - | 5 |
+| `check_transaction` | 32951 | `fb_check_transaction` (GuestInv) | #0 d0 CTR N=2^64: j < L:nb, step +1, unconditional | 450 |
+| `clear_account_preserving_balance` | 13541 | `fb_clear_account_preserving_balance` (GuestInv) | - | 450 |
+| `create_ether` | 13629 | `fb_create_ether` (GuestInv) | - | 450 |
+| `rlp_finish_list` | 31969 | `fb_rlp_finish_list` (GuestInv) | - | 130 |
+| `encode_logs` | 32005 | `fb_encode_logs` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nt, step +1, unconditional | 257 |
+| `logs_encoded_bound` | 31985 | `fb_logs_encoded_bound` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `encode_receipt` | 32051 | `fb_encode_receipt` (GuestInv) | - | 257 |
+| `rlp_word_encoded_len` | 4852 | `fb_rlp_word_encoded_len` (GuestInv) | - | 129 |
+| `tx_u256_encoded_len` | 11940 | `fb_tx_u256_encoded_len` (GuestInv) | - | 3 |
+| `auth_payload_len` | 12060 | `fb_auth_payload_len` (GuestInv) | - | 130 |
+| `auth_list_payload_len` | 12075 | `fb_auth_list_payload_len` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
+| `tx_encode_bound` | 12141 | `fb_tx_encode_bound` (GuestInv) | - | 195 |
+| `tx_put_access_list` | 11998 | `fb_tx_put_access_list` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d1 CTR N=2^64: j < L:ns, step +1, unconditional | 257 |
+| `tx_put_u256` | 11924 | `fb_tx_put_u256` (GuestInv) | - | 129 |
+| `tx_put_authorizations` | 12094 | `fb_tx_put_authorizations` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 196 |
+| `tx_put_blob_hashes` | 12040 | `fb_tx_put_blob_hashes` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 193 |
+| `tx_put_to` | 11961 | `fb_tx_put_to` (GuestInv) | - | 129 |
+| `tx_encode_generic` | 12154 | `fb_tx_encode_generic` (GuestInv) | - | 257 |
+| `encode_transaction` | 12267 | `fb_encode_transaction` (GuestInv) | - | 257 |
+| `tx_signing_hash_mode` | 12289 | `fb_tx_signing_hash_mode` (GuestInv) | - | 257 |
+| `signing_hash_155` | 12315 | `fb_signing_hash_155` (GuestInv) | - | 257 |
+| `signing_hash_1559` | 12335 | `fb_signing_hash_1559` (GuestInv) | - | 257 |
+| `signing_hash_2930` | 12325 | `fb_signing_hash_2930` (GuestInv) | - | 257 |
+| `signing_hash_4844` | 12345 | `fb_signing_hash_4844` (GuestInv) | - | 257 |
+| `signing_hash_7702` | 12355 | `fb_signing_hash_7702` (GuestInv) | - | 257 |
+| `signing_hash_pre155` | 12305 | `fb_signing_hash_pre155` (GuestInv) | - | 257 |
+| `signature_recovery_parameters` | 12399 | `fb_signature_recovery_parameters` (GuestInv) | - | 259 |
+| `recover_transaction_public_key` | 12483 | `fb_recover_transaction_public_key` (GuestInv) | - | 389 |
+| `sender_address_from_public_key` | 12503 | `fb_sender_address_from_public_key` (GuestInv) | - | 100 |
+| `recover_sender_with_chain_id` | 12542 | `fb_recover_sender_with_chain_id` (GuestInv) | - | 389 |
+| `set_account_balance` | 13647 | `fb_set_account_balance` (GuestInv) | - | 450 |
+| `tx_chain_id` | 12365 | `fb_tx_chain_id` (GuestInv) | - | 3 |
+| `tx_has_access_list` | 11890 | `fb_tx_has_access_list` (GuestInv) | - | 0 |
+| `tx_is_blob` | 32750 | `fb_tx_is_blob` (GuestInv) | - | 0 |
+| `tx_is_setcode` | 32764 | `fb_tx_is_setcode` (GuestInv) | - | 0 |
+| `udiv_small5` | 33447 | `fb_udiv_small5` (GuestInv) | - | 65 |
+| `count_tokens_in_data` | 12562 | `fb_count_tokens_in_data` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `calculate_intrinsic_cost` | 12581 | `fb_calculate_intrinsic_cost` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 67 |
+| `validate_transaction` | 12639 | `fb_validate_transaction` (GuestInv) | - | 67 |
+| `process_transaction` | 33103 | `gb_process_transaction` (WorldOK) | #0 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nal, step +1, unconditional; #2 d1 CTR N=2^64: j < L:ns, step +1, unconditional; #3 d0 CTR N=2^64: i < 18, step +1, unconditional; #4 d0 CTR N=2^64: i < add[L:nal, 1], step +1, unconditional; #5 d0 CTR N=2^64: i < L:nkeys, step +1, unconditional; #6 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #7 d0 CTR N=2^64: i < L:nl, step +1, unconditional; #8 d0 CTR N=2^64: i < L:dcap, step +1, unconditional | 691 |
+| `process_withdrawals` | 33458 | `gb_process_withdrawals` (WorldOK) | #0 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 645 |
+| `validate_block_access_list_gas_limit` | 14776 | `fb_validate_block_access_list_gas_limit` (GuestInv) | #0 d0 CTR N=2^64: i < L:cap, step +1, unconditional; #1 d1 CTR N=2^64: j < L:rcap, step +1, unconditional | 195 |
+| `execute_block` | 33580 | `gb_execute_block` (WorldOK) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
+| `encode_header` | 9350 | `fb_encode_header` (GuestInv) | - | 133 |
+| `header_hash` | 9460 | `fb_header_hash` (GuestInv) | - | 133 |
+| `is_valid_versioned_hashes` | 32794 | `fb_is_valid_versioned_hashes` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d1 CTR N=2^64: j < L:nb, step +1, unconditional | 640 |
+| `nodedb_build` | 9937 | `fb_nodedb_build` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['cap']; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 194 |
+| `withdrawal_rlp_len` | 32099 | `fb_withdrawal_rlp_len` (GuestInv) | - | 131 |
+| `block_rlp_length` | 32586 | `fb_block_rlp_length` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 195 |
+| `encode_execution_requests` | 32142 | `fb_encode_execution_requests` (GuestInv) | #0 d0 CTR N=2^64: i < 5, step +1, unconditional | 129 |
+| `encode_withdrawal_rlp` | 32114 | `fb_encode_withdrawal_rlp` (GuestInv) | - | 131 |
+| `payload_header` | 32645 | `gb_payload_header` (WorldOK) | #0 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 262 |
+| `state_init` | 12708 | `gb_state_init` (WorldOK) | - | 517 |
+| `calculate_base_fee_per_gas` | 9613 | `fb_calculate_base_fee_per_gas` (GuestInv) | - | 259 |
+| `calculate_excess_blob_gas` | 9561 | `fb_calculate_excess_blob_gas` (GuestInv) | - | 321 |
+| `validate_header` | 9675 | `fb_validate_header` (GuestInv) | - | 321 |
+| `hdr_bytes_field` | 9168 | `fb_hdr_bytes_field` (GuestInv) | - | 448 |
+| `hdr_raw_field` | 9187 | `fb_hdr_raw_field` (GuestInv) | - | 448 |
+| `hdr_uint_field` | 9103 | `fb_hdr_uint_field` (GuestInv) | - | 448 |
+| `hdr_u256_field` | 9152 | `fb_hdr_u256_field` (GuestInv) | - | 448 |
+| `hdr_word_field` | 9130 | `fb_hdr_word_field` (GuestInv) | #0 d0 CTR N=2^64: j < rField 1 L:f, step +1, unconditional | 448 |
+| `decode_header` | 9202 | `fb_decode_header` (GuestInv) | - | 452 |
+| `validate_headers` | 9476 | `fb_validate_headers` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional; #1 d0 CTR N=2^64: i < L:n, step +1, unconditional | 516 |
+| `run_attempt` | 33734 | `gb_run_attempt` (WorldOK) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional | 755 |
+| `attempt_l1` | 33847 | `gb_attempt_l1` (WorldOK) | - | 755 |
+| `attempt_l2` | 33863 | `gb_attempt_l2` (WorldOK) | - | 755 |
+| `attempt_l3` | 33879 | `gb_attempt_l3` (WorldOK) | - | 755 |
+| `attempt_l4` | 33895 | `gb_attempt_l4` (WorldOK) | - | 755 |
+| `attempt_l5` | 33911 | `gb_attempt_l5` (WorldOK) | - | 755 |
+| `attempt_l6` | 33927 | `gb_attempt_l6` (WorldOK) | - | 755 |
+| `attempt_l7` | 33943 | `gb_attempt_l7` (WorldOK) | - | 755 |
+| `blake2_init` | 20017 | `fb_blake2_init` (GuestInv) | - | 4 |
+| `bls_consts_init` | 24793 | `fb_bls_consts_init` (GuestInv) | - | 2 |
+| `bls_lib_init` | 30328 | `fb_bls_lib_init` (GuestInv) | - | 3 |
+| `bls_precompiles_init` | 30678 | `fb_bls_precompiles_init` (GuestInv) | - | 4 |
+| `ceil_log2` | 749 | `fb_ceil_log2` (GuestInv) | #0 d0 RO(1) N=2^64: no-repeat, key = carried locals ['d'] | 65 |
+| `ssz_fail` | 8285 | `fb_ssz_fail` (GuestInv) | - | 0 |
+| `ssz_split_var_list` | 8447 | `fb_ssz_split_var_list` (GuestInv) | #0 d0 CTR N=2^64: i < L:count, step +1, unconditional | 66 |
+| `decode_bytes_list` | 8637 | `fb_decode_bytes_list` (GuestInv) | #0 d0 CTR N=2^64: i < rField 1 L:r, step +1, unconditional | 67 |
+| `ssz_check_offsets` | 8414 | `fb_ssz_check_offsets` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 66 |
+| `ssz_fixed_list_count` | 8496 | `fb_ssz_fixed_list_count` (GuestInv) | - | 65 |
+| `decode_payload` | 8515 | `fb_decode_payload` (GuestInv) | - | 67 |
+| `decode_requests` | 8584 | `fb_decode_requests` (GuestInv) | #0 d0 CTR N=2^64: i < 5, step +1, unconditional | 68 |
+| `decode_stateless_input` | 8656 | `fb_decode_stateless_input` (GuestInv) | #0 d0 CTR N=2^64: i < 3, step +1, unconditional | 70 |
+| `input_blob` | 624 | `fb_input_blob` (GuestInv) | #0 d0 WALK N=2^34: fresh-address walk: the counter strictly increases by a positive constant and every iteration accesses base + counter (or base + 32*counter) in the contiguous domain | 35 |
+| `host_input_byte` | 8297 | `fb_host_input_byte` (GuestInv) | - | 0 |
+| `host_input_le32` | 8310 | `fb_host_input_le32` (GuestInv) | - | 3 |
+| `precheck_host_ssz_header` | 8324 | `fb_precheck_host_ssz_header` (GuestInv) | - | 68 |
+| `decode_host_input` | 8401 | `fb_decode_host_input` (GuestInv) | - | 70 |
+| `evm_init` | 17353 | `fb_evm_init` (GuestInv) | #0 d0 CTR N=2^64: i < 20, step +1, unconditional | 100 |
+| `fork_init` | 32522 | `fb_fork_init` (GuestInv) | #0 d0 CTR N=2^64: i < 17, step +1, unconditional | 66 |
+| `header_init` | 9657 | `fb_header_init` (GuestInv) | - | 65 |
+| `sha256_pair` | 2954 | `fb_sha256_pair` (GuestInv) | - | 0 |
+| `merkleize` | 8052 | `fb_merkleize` (GuestInv) | #0 d0 MONO N=64: cur := cur >> 1 while 1 < cur (signed): cur halves, at most 64 iterations; #1 d1 CTR N=2^64: j < L:half, step +1, unconditional; #2 d0 CTR N=2^64: d < L:target, step +1, unconditional | 72 |
+| `pack_bytes` | 8213 | `fb_pack_bytes` (GuestInv) | - | 66 |
+| `htr_bytes_vector` | 8229 | `fb_htr_bytes_vector` (GuestInv) | - | 72 |
+| `htr_u64_at` | 8271 | `fb_htr_u64_at` (GuestInv) | - | 66 |
+| `htr_bdep` | 8943 | `fb_htr_bdep` (GuestInv) | - | 73 |
+| `htr_bexit` | 8967 | `fb_htr_bexit` (GuestInv) | - | 73 |
+| `mix_in_length` | 8099 | `fb_mix_in_length` (GuestInv) | - | 65 |
+| `htr_bytes_list` | 8253 | `fb_htr_bytes_list` (GuestInv) | - | 72 |
+| `htr_cons` | 8921 | `fb_htr_cons` (GuestInv) | - | 74 |
+| `htr_deposit` | 8873 | `fb_htr_deposit` (GuestInv) | - | 73 |
+| `merkleize_progressive` | 8115 | `fb_merkleize_progressive` (GuestInv) | #0 d0 WALK N=2^34: size := size << 2 is 0 after <= 32 iterations; while size != 0 off strictly grows; afterwards each iteration writes roots + 32k (k += 1): fresh address, <= W; #1 d0 CTR N=2^64: k > 0 (or != 0), step -1, unconditional | 106 |
+| `htr_plist_chunks` | 8156 | `fb_htr_plist_chunks` (GuestInv) | - | 106 |
+| `htr_pbytes` | 8170 | `fb_htr_pbytes` (GuestInv) | - | 106 |
+| `htr_pcontainer` | 8186 | `fb_htr_pcontainer` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 106 |
+| `htr_withdrawal` | 8755 | `fb_htr_withdrawal` (GuestInv) | - | 73 |
+| `htr_payload` | 8793 | `fb_htr_payload` (GuestInv) | #0 d0 CTR N=2^64: i < L:ntx, step +1, unconditional; #1 d0 CTR N=2^64: i < L:nwd, step +1, unconditional | 170 |
+| `htr_wdreq` | 8899 | `fb_htr_wdreq` (GuestInv) | - | 73 |
+| `htr_request_list` | 8987 | `fb_htr_request_list` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 140 |
+| `htr_requests` | 9027 | `fb_htr_requests` (GuestInv) | - | 142 |
+| `htr_new_payload_request` | 9053 | `fb_htr_new_payload_request` (GuestInv) | - | 170 |
+| `keccak_init` | 3974 | `fb_keccak_init` (GuestInv) | - | 4 |
+| `mem_init` | 50 | `fb_mem_init` (GuestInv) | - | 0 |
+| `mpt_init` | 9781 | `fb_mpt_init` (GuestInv) | - | 101 |
+| `output_write` | 651 | `fb_output_write` (GuestInv) | #0 d0 CTR N=2^64: i < L:n, step +1, unconditional | 65 |
+| `ripemd160_init` | 19738 | `fb_ripemd160_init` (GuestInv) | - | 4 |
+| `secp256k1_init` | 5417 | `fb_secp256k1_init` (GuestInv) | - | 0 |
+| `serialize_result` | 9077 | `fb_serialize_result` (GuestInv) | - | 65 |
+| `sha256_init` | 2327 | `fb_sha256_init` (GuestInv) | - | 3 |
+| `ssz_init` | 7520 | `fb_ssz_init` (GuestInv) | - | 4 |
+| `u256_ws_init` | 766 | `fb_u256_ws_init` (GuestInv) | - | 2 |
+| `verify_stateless_new_payload` | 33959 | `gb_verify_stateless_new_payload` (WorldOK) | - | 755 |
+| `main` | 33979 | `gb_main` (MainEntry) | - | 755 |
+
+unreachable from main (39): account_exists_and_is_empty, bls_fp_dbl, bn254_pairing, cur_msg, ec_add, ec_mul, ec_on_curve, fn_add, fn_inv_fermat, fn_pow, fp12_sqr, fp2_dbl, fp_inv_fermat, g1_neg, get_transaction_hash, htab_cap, htab_copy_scratch, htr_list_roots, ld_be32, ld_le32, ld_le64, mpt_get, p256_ec_to_affine, p256_fp_inv, recover_sender, rlp_bytes_to_word, rlp_check_uint_bytes, tx_blob_count, tx_data, tx_gas, tx_nonce, tx_r, tx_s, tx_to, tx_value, u256_cmp, u256_low, u256_xor, umod
+
+## 9. How this was produced and checked
+
+```
+python3 -I campaign/notes/guestinv/scripts/coverage.py Guest/SoftwareAst.lean OUT
+#   -> OUT/coverage.md, OUT/kgen.lean, OUT/leaves.lean, OUT/gleaves.lean, OUT/tiers.txt,
+#      OUT/chain.txt, OUT/manual.txt (must be empty: every loop classified)
+sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/GuestInv.lean
+lake env lean campaign/specs-proposed/GuestInv.lean
+```
+
+The script uses only the Python standard library. `panast.py` parses the generated AST file
+line-record by line-record into a term tree; `coverage.py` computes the call graph, purity and
+transitive global writes, the loop classes (`OVERRIDES` holds the hand-checked loops with their
+argument), the cost formulas and the outputs. The hand-written parts of the Lean file live next to
+the script (`parts/`); `assemble.sh` concatenates them with the generated parts.
