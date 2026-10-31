@@ -728,6 +728,9 @@ EXTRA = {
     '_decode_step': ('sp__decode_step', 'PushesFrame (ofString "_decode_step")',
                      'a pushed record is a fresh 88-byte scratch block tagged 1 or 2 (value contract)',
                      ('_decode_witness_node_body',)),
+    '_resolve_step': ('sp__resolve_step', 'ResolvesNode (ofString "_resolve_step")',
+                     'a completed result is null or a fresh heap node, separated from live scratch',
+                     ('_decode_witness_node_body',)),
 }
 # revision 8 (round-5 Astra item 7): `_decode_step` writes only memory free at entry (its stores go
 # to `node_new_leaf`'s fresh node and its own `scratch_alloc` record, which `fresh_only` does not
@@ -1053,6 +1056,8 @@ WQ = {'requests_append': 'ReqCountInc', 'mpt_from_witness': 'RetMptObj',
 # revision 7 (round-4 Gemini item 1(c)): return typing of the constructors whose results feed
 # guards, and value contracts the walks need; one leaf per callee, at every needed call site
 RT = {
+    'node_new_ext': ('Returns ArenaReady (fun s post p => FreshBlock s post p 56)',
+                     'returns a fresh 56-byte heap node, separated from the decoder scratch stack'),
     'alloc': ('Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))',
               'returns a fresh aligned heap block of `n` bytes'),
     'msg_new': ('Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧\n'

@@ -14,6 +14,53 @@ the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
 is touched.
 
+## Changes since 16aa6f4b0
+
+Revision 9 addresses Astra's four round-6 interface gaps (`guestinv-r6.md`).
+The 727 `fb_*` statements, the whole `K` block and `GuestInv` are frozen.
+
+1. `HtabExit` and `UnionExit` preserve header words 0 and 1 (key length and
+   stride). The mutable header fields (count, capacity, backing arrays, root,
+   next and free) retain their existing update freedom. This strengthens
+   `htab_set_spec`, `htab_del_spec`, `htab_truncate_spec` and
+   `htab_union_into_spec` through their exit definitions; no premise is weakened.
+   In particular the empty `ts+24` table cannot change key length 52 to 51,
+   nor can an access table change 20 to 19, so the pinned `RolesOK` lengths
+   survive W2.
+2. `PushesFrame` now owns each completed non-null result's first 32 bytes as
+   fresh heap, and owns a pushed branch frame's `+16` node as a fresh 176-byte
+   heap block. `sp__resolve_step : ResolvesNode` similarly owns a completed
+   non-null result's first 32 bytes. `rt_node_new_ext` returns a fresh 56-byte
+   heap block. These are all the decoder's inline-store targets apart from
+   its own fresh scratch frames: `result+24`, `ex+8/+16`, and
+   `br+8/+16/+32+8*i/+160/+168`. Every such target is disjoint from the live
+   scratch stack and from future scratch frames. The extension frame's
+   `+48/+56` are values copied into the owned `ex` block, not store targets.
+   Astra's `ex = T-8` is excluded even if those saved values equal `T` and 1.
+3. `NodeFnExit` requires `scratch_ptr post ≤ scratch_ptr entry` on every
+   resuming outcome. This strengthens all seven `nf_*` leaves, including
+   `_delete_ext_finish` and `_collapse_branch` in the deletion unwind. Their
+   existing write frame excludes live scratch records; now those records
+   also remain allocated across arbitrarily many unwind calls.
+4. `AllocatorGrows` records heap and scratch frontier monotonicity.
+   `AllocatorGrows.allocated` proves that every previously allocated interval
+   remains allocated. `HtabNewExit`, all `Returns` constructor contracts
+   (including `scratch_alloc`), and `RetMptObj` now require it. `Returns` also
+   gives `ArenaReady post`. The existing fresh-footprint and write-frame
+   clauses ensure that constructors consume and write only fresh space.
+   The scratch-table witness resetting `heap_ptr` to `sourceBase` is excluded.
+
+New primitive contracts: `sp__resolve_step`, `rt_node_new_ext` (both leaves).
+Existing definitions strengthened: `HtabExit`, `UnionExit`, `HtabNewExit`,
+`NodeFnExit`, `Returns`, `RetMptObj`, `PushesFrame`. New definitions/helpers:
+`AllocatorGrows`, `AllocatorGrows.allocated`, `ResolvesNode`.
+Only the decoder's `GBody` hypothesis list grows (and its `gb_*` application
+and the `Primitives`/assembly wiring follow mechanically). All remaining
+changes to theorem meanings are through the definitions listed above.
+
+Validation and the six boundary re-walks are recorded below when checked.
+Gemini's round-6 result was still pending at the first revision-9 edit.
+
 ## 0. Summary
 
 | Deliverable | Where | Status |

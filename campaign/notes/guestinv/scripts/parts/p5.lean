@@ -57,7 +57,7 @@ allocator pointers changes (round-3 Gemini item 5: the globals frame was missing
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
-    ArenaReady post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
+    ArenaReady post ∧ AllocatorGrows s post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
     hdr post w.toNat 0 = locN s "key_len" ∧
     (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
       (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
@@ -628,6 +628,7 @@ def NodeFnExit (names : List String)
     ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr" ∧
     ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) → req s Nd →
       ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
         (∀ n ∈ Nd, memW post n = memW s n) ∧
@@ -933,6 +934,19 @@ def FreshBlock {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) : P
   p % 8 = 0 ∧ Inside (p, (n + 7) / 8 * 8) (globN s "heap_ptr") (globN post "heap_ptr") ∧
     WordsOK post (p, (n + 7) / 8 * 8)
 
+/-- Constructor ownership separates every returned block from the caller's live objects,
+including scratch frames. This is the separation needed at the decoder's inline stores. -/
+theorem FreshBlock.disj_allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} (h : FreshBlock s post p n) (hs : ArenaOK s) (hp : ArenaOK post)
+    {i : Ivl} (hi : Allocated s i) : Disj (p, (n + 7) / 8 * 8) i := by
+  rcases h with ⟨_, hlo, _⟩
+  rcases hi with hi | hi
+  · exact Or.inr (Nat.le_trans hi.2 hlo.1)
+  · rcases hs with ⟨_, _, hframe, hgap, _, _, _, _⟩
+    have hsep : heapLimit ≤ scratchStart := by decide
+    exact Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
+      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))
+
 /-- A normal return is a word `w` with `Q s post w`. -/
 def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
     Prop) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
@@ -942,7 +956,7 @@ def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFini
 def Returns (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
     (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat → Prop)
     (fname : MlS) : Prop :=
-  FunSpec P (RetWord Q) fname
+  FunSpec P (RetWord (fun s post p => ArenaReady post ∧ AllocatorGrows s post ∧ Q s post p)) fname
 
 /-- `mpt_from_witness`'s extra (revision 7): the returned trie object is a fresh 16-byte block
 with a fresh typed node set, placed in the exit world `S'` (`MptObjInWith`) and away from its
@@ -950,6 +964,7 @@ persistent tries. -/
 def RetMptObj : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    AllocatorGrows s post ∧
     ∃ Nm, MptObjInWith post S' Nm w.toNat ∧ IvlsDisj (mptObjIvls post Nm w.toNat) (nodeExtents post Nd') ∧
       ∀ o ∈ mptObjIvls post Nm w.toNat, o = (0, 0) ∨
         Inside o (globN s "heap_ptr") (globN post "heap_ptr")
@@ -1011,10 +1026,19 @@ def FreshScratch {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) :
 same record repeatedly and overwriting the saved links. -/
 def PushesFrame (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
-    v = .rStruct [.val (.word a), .val (.word b)] ∧ (a.toNat ≠ 0 →
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    (a.toNat = 0 → b.toNat = 0 ∨ FreshBlock s post b.toNat 32) ∧ (a.toNat ≠ 0 →
       FreshScratch s post b.toNat 88 ∧ (memW post (b.toNat + 8) = 1 ∨
         (memW post (b.toNat + 8) = 2 ∧ memW post (b.toNat + 32) = 0 ∧
-          memW post (b.toNat + 40) = 0)))) fname
+          memW post (b.toNat + 40) = 0 ∧
+          FreshBlock s post (memW post (b.toNat + 16)) 176)))) fname
+
+/-- `_resolve_step`'s completed result is null or a fresh 32-byte heap node. The decoder
+stores a hash at `result+24`; that store cannot touch its live scratch records. -/
+def ResolvesNode (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b c d : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] ∧
+    (a.toNat = 0 → b.toNat = 0 ∨ FreshBlock s post b.toNat 32)) fname
 
 /-- `node_invalidate(nd)` (revision 8, round-5 Astra item 7, Gemini suggestion; AST 10061): on a
 typed node (or `0`, which errors) it zeroes the three cache words `nd+8`, `nd+16`, `nd+24` and

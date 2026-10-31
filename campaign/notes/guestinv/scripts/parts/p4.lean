@@ -70,6 +70,18 @@ def ArenaReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 def Allocated {F : Type} (s : PanSemStateFiniteExact 64 F) (i : Ivl) : Prop :=
   Inside i sourceBase (globN s "heap_ptr") ∨ Inside i (globN s "scratch_ptr") scratchEnd
 
+/-- Allocators retain every caller allocation: heap grows upwards and scratch downwards.
+Together with `ArenaReady post`, scratch can consume only the formerly free arena gap. -/
+def AllocatorGrows {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr"
+
+theorem AllocatorGrows.allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : AllocatorGrows s post) {i : Ivl} (hi : Allocated s i) : Allocated post i := by
+  rcases hi with hi | hi
+  · exact Or.inl ⟨hi.1, Nat.le_trans hi.2 h.1⟩
+  · exact Or.inr ⟨Nat.le_trans h.2 hi.1, hi.2⟩
+
 /-! ### Crit-bit tables (round-1 item 4)
 
 Layout (`htab_new`, `Guest/SoftwareAst.lean:4867`): header words at `t + 8k`,
@@ -231,6 +243,7 @@ def HtabExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinite
     let t := locN s "t"
     let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
     ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i ∧
       ((∃ j ∈ htabFootprint s t, Inside i j.1 (j.1 + j.2)) ∨ Inside i fresh.1 (fresh.1 + fresh.2))) ∧
@@ -248,6 +261,7 @@ def UnionExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinit
     let t := locN s "dst"
     let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
     ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
