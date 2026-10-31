@@ -3,7 +3,7 @@
 Track `guestinv-opus55`, mission 9409f9a9 (Wave 8), branch `wave8/guestinv-opus55`. Revision 2
 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`), revision 3 the round-2 quorum
 (`guestinv-r2.md`), and revision 4 answers the round-3 quorum (`guestinv-r3.md`: Fable 5.1, Astra
-6 and the coordinator's assembly decision), §0.1 and §0.2. All statements are in
+6, Gemini 4 Carbon and the coordinator's assembly decision), §0.1 and §0.2. All statements are in
 `campaign/specs-proposed/GuestInv.lean`. The generated parts of that file, the per-loop table (§4),
 the coverage table (§5) and the composition lists (§6) come from
 `campaign/notes/guestinv/scripts/coverage.py` run on `Guest/SoftwareAst.lean` (§9). No frozen file
@@ -22,7 +22,7 @@ is touched.
 | memory contracts: `HtabWF`, `ArenaOK`, `WorldOK`, `NodeHeap`, `EvmInv`, `evmPot` | §5 | definitions (revision 4: `FrameWF`, `frameObjects`, `MarksOK`, `EvmInv`, `fixedObjects`) |
 | contract leaves (tables, MPT, frames, `mem_init`) | §7 | `sorry` (14 statements, unchanged); the frame glue **proved** |
 | **new** callee contracts: `ReadOnlyFn` (30), `WritesWithin` (46), `KeepsOn` (59), `NodeFn` (7) | §7 (generated) | `sorry` (141 statements) |
-| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | `sorry` (47 statements) |
+| **new** composition obligations `gbody_f : GBody.«f»` (callee bounds and contracts → `f`'s bound) | §7 (generated) | 12 **proved** by concrete-body composition, 35 `sorry` |
 | guarded bounds `gb_f : TerminatingFunBoundedOn Guard_f f K.«f»` | §7 (generated) | **proved** (revision 4): `gbody_f` applied to the callees' facts |
 | **new** `assembly : Primitives → CoveredSourceTicksConsumedBounded K_pan` | §7–§8 | **proved, no `sorryAx`** |
 | `LocalsOnly`/`LocalsFree` instances for every guard (now incl. `MainEntry`, `TxReady`, `ReqsFresh`, `MsgReady`, `FrameOpenReady`) | §7 | **proved** |
@@ -81,11 +81,13 @@ both growth paths keep `≥ 1`. Astra's item 1 is the same defect and is closed 
 
 The coordinator required a proved assembly theorem `(∀ primitive obligation) → target`. Revision 4
 has it:
-- `structure Primitives : Prop` (generated, 438 fields) lists every obligation the guarded tier uses:
+- `structure Primitives : Prop` (generated, 426 fields) lists every obligation the guarded tier uses:
   - the `fb_*` bounds of the 239 unguarded callees of guarded functions;
   - the 10 §7 contract leaves those compositions use;
   - the 142 new callee contracts;
-  - the 47 composition obligations `gbody_f`.
+  - the 35 composition obligations `gbody_f` that are not yet proved. The other 12 are proved, so
+    they are no longer primitives; this follows the coordinator's "prove the assembly with an
+    explicit list, then shrink that list".
 - `assembly_main : Primitives → TerminatingFunBoundedOn MainEntry "main" K.«main»` is **proved**
   (generated `have` chain in callee-first order). So is `assembly : Primitives →
   CoveredSourceTicksConsumedBounded K_pan`. `#print axioms assembly` gives `[propext,
@@ -166,6 +168,56 @@ conjunct.
   literal list. `nodedb_build` (9948) passes a computed power of two; `htabCaps` is removed.
 - *`MainEntry`*: `localsFree_mainEntry` and `localsOnly_mainEntry` (proved).
 
+### Gemini 4 Carbon, blocking (review of revision 3)
+
+**1. `op_dispatch_spec` false via the saturated memory-cost sentinel (`op_extcodecopy`,
+`op_mstore`, …).** With a frame's gas at `2^64 − 1`, `charge_gas` accepts the `2^64 − 1` that
+`extend_memory_cost1/2` return on overflow, `extend_memory(0)` does nothing, and the opcode writes
+outside EVM memory. `EvmInv` now requires `R + 1 < 2^64`, where `R = Σ (gas + spilled)` over the
+chain, so every frame's gas is below the sentinel. `R` never grows along `run_frames` (the
+potential argument), and `MsgReady` bounds its start (item 2). The copy-back window is
+`RetWindowsOK` (Fable item 4).
+
+**2. Establishing the gas bound.** `MsgReady` requires `msg+40 < 2^63`. `frame_new` copies it to
+`e+64`, and `e+192` starts at 0 (`memzero`). `process_transaction` gets `mgas ≤ 16777216` after
+`validate_transaction`; system calls use `30000000`.
+
+**3. Unconstrained pointer parameters.**
+- `process_message`, `process_message_call`, `process_create_message` are guarded by `MsgReady`.
+  The 176-byte message record is now owned too: allocated, words, and disjoint from every typed
+  table and fixed object. So `depth0_prepare`'s stores through `msg` cannot reach the world, and
+  the access tables are typed.
+- `state_init`, `mpt_from_witness`, `compute_state_root`, `build_mpt_indexed`: the bound leaves
+  `gb_*` hold for any parameters, because a wild pointer only makes a load fail. The
+  write-parameter scan (`written_params`) shows none of them writes through `nodedb`/`db`/
+  `root_hash`. The `out` buffers of `compute_state_root`/`build_mpt_indexed` are constrained where
+  it matters, in their `KeepsOn (WorldAvoids …)` contracts.
+
+**4. Nested objects.**
+- The `bo` objects are `blockOutObjects` (§0.1 below), and `index < ntx` is `TxReady`.
+- The BAL account records are new: `balRecords` (the live values of `bal_accounts`) and
+  `balObjects` (each 40-byte record, plus the headers and backing arrays of its 40-, 16- and
+  24-byte lists). Both are in `fixedObjects`, so they are allocated, pairwise disjoint and disjoint
+  from every table.
+- `TablesTyped` requires the records' two tables in `S` and every list (BAL and `bo+40/+72`)
+  `LstOK` (`1 ≤ cap`, `len ≤ cap`).
+
+**5. MPT contracts false.**
+- `NodeHeap` hard-coded 176-byte nodes. It now sizes nodes by kind (`nodeSize`: hashed 32, leaf
+  64, extension 56, branch 176; `node_new_*` 9975-10060) and requires `kind ≤ 3`. `TriesTyped`,
+  `MptObjReady`, `MptExit` and `NodeFnExit` use `nodeIvl`.
+- `MptExit` did not frame `_mpt_delete_node_body`'s unreleased 40-byte scratch frames. It now
+  keeps the free scratch gap `[frame_mem_ptr, scratch_ptr)` at entry, and has the missing globals
+  frame. `HtabNewExit` gains the globals frame too.
+- Cycles (5b): Gemini's own trace shows they only lead to timeouts or the `level` bound, which
+  `FunSpec` (non-timeout runs) and `K` already cover. No acyclicity conjunct is added.
+
+**Non-blocking.**
+- `bls_discount`, `bn_gamma`, `bn_expw`, `precompile_addrs` and `zero_hashes` (allocated with
+  constant products) are now in `globalBuffers`: the generator folds `*`/`+` of literals.
+- The `htabCaps` comment is gone with `htabCaps`.
+- Lean and `#print axioms` were re-run (§9).
+
 ### What the composition analysis found (new, round-3 item 5)
 
 The write-root scan over the guarded bodies and the guard-carrying callees found writes through
@@ -202,7 +254,10 @@ unchanged. So the speculative provers' `fb_*` targets (arith, rlp, htab) are sta
 
 The other 42 `gb_*` statements are unchanged and now proved.
 
-**Changed definitions (7), and the leaves whose meaning they change:**
+**Changed definitions (14 by the diff: `EvmInv`, `FrameWF`, `HtabNewExit`, `HtabNewReady`,
+`MarksOK`, `MptExit`, `MptObjReady`, `NodeHeap`, `TablesTyped`, `TriesTyped`, `fixedObjects`,
+`frameObjects`, `globalBuffers`, and the proved helper `while_rank_stationary_aux`), and the leaves
+whose meaning they change:**
 - `FrameWF`: `1 ≤` stack and logs capacity; return-data buffer owned. This affects `EvmInv`, hence
   `op_dispatch_spec`, `frame_exception_spec`, `frame_epilogue_spec` and `finish_child_spec`.
 - `frameObjects`: adds `frameRet`, with the same effect.
@@ -216,6 +271,18 @@ The other 42 `gb_*` statements are unchanged and now proved.
   - every new `KeepsOn` contract.
 - `HtabNewReady`: `cap ≤ htabCapMax` (was `cap ∈ htabCaps`). It affects `htab_new_spec` and
   `htab_new_scratch_spec`, whose pre-condition is now weaker, so the leaves are stronger.
+- Gemini items (also changed definitions; they change the meaning of the leaves that mention
+  them):
+  - `EvmInv`: adds `R + 1 < 2^64`. This affects the four frame contracts.
+  - `NodeHeap`: nodes sized by kind (`nodeIvl`), `kind ≤ 3`. Through `TriesTyped`, `MptReady`,
+    `MptObjReady`, `MptExit` it affects `mpt_insert_node_spec`, `mpt_delete_node_body_spec` and
+    every `WorldOK`/`EvmInv` leaf.
+  - `MptExit`: frames the free scratch gap and the globals. This affects the two MPT specs, which
+    are now true on `_mpt_delete_node_body`'s scratch frames.
+  - `HtabNewExit`: adds a globals frame. This affects `htab_new_spec` and `htab_new_scratch_spec`.
+  - `TablesTyped`: BAL account records' tables typed and lists `LstOK`; `bo` lists `LstOK`.
+  - `fixedObjects`: adds `balObjects`.
+  - `globalBuffers`: +5 buffers.
 - `while_rank_stationary_aux` (proved helper): body bound required only at active heads.
 
 **Removed:** `htabCaps`.
@@ -226,17 +293,31 @@ The other 42 `gb_*` statements are unchanged and now proved.
   `evmInv_guestInv`;
 - `localsFree_mainEntry`, `localsOnly_mainEntry`, `localsOnly_txReady`, `localsFree_reqsFresh`,
   `localsOnly_msgReady`, `localsOnly_frameOpenReady`;
-- the 47 `gb_*`, `assembly_main`, `assembly`, `primitives`.
+- the 47 `gb_*`, `assembly_main`, `assembly`, `primitives`, the 12 concrete `gbody_*` and their
+  `lookup_*`;
+- composition helpers: `TerminatingProgBoundedOn.mono_bound`, `of_clock`, `seq_guestInv_after`,
+  `seq_clock`, `clock_return`, `clock_raise`, `clock_shMemStore`, `clock_assign`,
+  `callEntryOn_of_localsFree`, `callEntryOn_of_imp`, `decCallResumeOn_guestInv`,
+  `ReadOnlyFn.resumeOn`;
 
 **New definitions:**
 - `frameRet`, `RetWindowsOK`, `blockOutObjects`, `htabCapMax`;
 - `Resumes`, `ReadOnlyFn`, `KeepsOn`, `WritesWithin`, `WorldAvoids`, `NodeArgs`, `NodeFnExit`,
   `NodeFn`;
 - `TxReady`, `ReqsFresh`, `ReqRoom`, `MsgReady`, `FrameOpenReady`;
+- `NodeArgs`, `NodeFnExit`, `NodeFn`, `nodeSize`, `nodeIvl`, `lstObjects`, `LstOK`, `balRecords`,
+  `balObjects`;
 - the 47 `GBody.«f»`, `Primitives`.
 
-**New leaves (189):** 142 callee contracts (`ro_*` 30, `ww_*` 46, `wk_*` 51, `ek_*` 6, `ak_*` 1,
-`fk_frame_open`, `nf_*` 7) and 47 `gbody_*`.
+**New leaves (177):** 142 callee contracts (`ro_*` 30, `ww_*` 46, `wk_*` 51, `ek_*` 6, `ak_*` 1,
+`fk_frame_open`, `nf_*` 7) and 35 `gbody_*`.
+
+**Proved compositions (12):** `gbody_attempt_l1` … `gbody_attempt_l7`,
+`gbody_verify_stateless_new_payload`, `gbody_incorporate_tx_into_block`, `gbody_mpt_from_witness`,
+`gbody__decode_witness_node_mpt` and `gbody__decode_witness_node`. Each reads its body off the
+installed code (generated `lookup_f`) and walks it with the §3 combinators. Guards are carried by
+locals-freeness, by `callEntryOn_of_imp`, and across `scratch_mark` by its `ro_` contract
+(`ReadOnlyFn.resumeOn`). The bound closes by `omega` against the generated `K.«f»`.
 
 **Unchanged:** every `K.«f»`, `K_pan`, `K_pan_budget`, the bridge, the glue
 `run_frames_step_of_specs`, every revision-3 combinator statement.

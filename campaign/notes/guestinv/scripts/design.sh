@@ -55,13 +55,15 @@ sh campaign/notes/guestinv/scripts/assemble.sh OUT campaign/specs-proposed/Guest
 lake env lean campaign/specs-proposed/GuestInv.lean
 ```
 
-Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 930 `declaration uses
-'sorry'` warnings, all leaves: 14 §7 contracts, 142 generated callee contracts, 47 `gbody_*`, 727
+Result on Lean 4.33.1 with the `wave8-cone-cache` release: no errors; 918 `declaration uses
+'sorry'` warnings, all leaves: 14 §7 contracts, 142 generated callee contracts, 35 `gbody_*`, 727
 `fb_*`. No combinator, glue, definition, bridge theorem, `gb_*` or assembly theorem has a `sorry`.
 There are also style-linter notes about the `__` in generated names such as `fb__decode_step`.
 `#print axioms`, checked on a scratch copy:
 - `[propext, Classical.choice, Quot.sound]` (no `sorryAx`):
   - `assembly`, `assembly_main`;
+  - the 12 proved `gbody_*` and the composition helpers (`seq_guestInv_after`, `of_clock`,
+    `clock_*`, `ReadOnlyFn.resumeOn`, `decCallResumeOn_guestInv`, `callEntryOn_of_imp`);
   - every combinator: the revision-3 ones, plus `callHandle_on`, `while_rank_active`,
     `while_rank_stationary_active`, `loopActive_decClock`;
   - `ReadOnlyFn.keepsOn`, `worldOK_of_evmInv`, every `localsOnly_*`/`localsFree_*` instance
