@@ -108,6 +108,10 @@ def htabKeyLens : List Nat := [20, 28, 32, 52, 60]
 
 theorem htabKeyLens_le : ∀ k ∈ htabKeyLens, k ≤ maxKeyLen := by decide
 
+/-- The capacities of the same 32 call sites: always a literal, 1×4, 8×8, 6×16, 12×64, 4×256
+(round-2 Astra item 3: an unbounded `cap` wraps `(ncap + 1) * stride`). -/
+def htabCaps : List Nat := [4, 8, 16, 64, 256]
+
 /-! ## 2. `GuestInv`: metadata only, preserved by every evaluation
 
 Round 1 put four global-variable facts into `GuestInv` (`heap_ptr ≤ 0xb0000000`,

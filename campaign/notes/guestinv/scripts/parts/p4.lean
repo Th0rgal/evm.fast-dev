@@ -93,7 +93,12 @@ def FreeChain {F : Type} (s : PanSemStateFiniteExact 64 F) (nodes : Nat) : Nat �
   `+8` is UNCONSTRAINED (round 1 wrongly bounded it, and `htab_set` overwrites it);
 * an internal node has crit bit `< 8·key_len`, two distinct children in `L ∪ I` whose parent
   field `+0` points back to it; the root `t+56` is `0` iff the table is empty, has parent `0`, and
-  is nobody's child; every other live node's parent is an internal node that has it as a child.
+  is nobody's child; every other live node's parent is an internal node that has it as a child;
+* rooted and acyclic (round-2 Astra item 4): some depth `dep` strictly decreases from every
+  non-root live node to its parent, so following parents from any live node reaches the root,
+  and descending through children from the root reaches a leaf. Without it a disconnected cycle
+  (`1=(0,7,0,8)`, `2=(3,9,1,8)`, `3=(3,2,3,0)`, root `1`, count `2`) satisfied `HtabWF`, and
+  `htab_del` of leaf 1 broke it.
 The fields `cap` (`+16`) and the values are free. -/
 def HtabWF {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : Prop :=
   let klen := hdr s t 0
@@ -119,22 +124,30 @@ def HtabWF {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) : Prop :=
     (cnt = 0 → root = 0) ∧ (0 < cnt → root ∈ L ++ I ∧ nd root 0 = 0) ∧
     (∀ n ∈ I, nd n 8 ≠ root ∧ nd n 16 ≠ root) ∧
     (∀ n ∈ L ++ I, n ≠ root → nd n 0 ∈ I) ∧
+    (∃ dep : Nat → Nat, ∀ n ∈ L ++ I, n ≠ root →
+      (nd (nd n 0) 8 = n ∨ nd (nd n 0) 16 = n) ∧ dep (nd n 0) < dep n) ∧
     FreeChain s nodes (hdr s t 9) Fr
 
 /-- Live values of table `t` (the `+8` field of every live leaf). -/
 def HtabValuesIn {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) (S : List Nat) : Prop :=
   ∀ i, i < hdr s t 3 → nodeF s (hdr s t 5) (memW s (hdr s t 6 + 8 * i)) 8 ∈ S
 
-/-- Round-1 item 4 regression: round 1 required leaf `+8 ≤ ncap`; `HtabWF` does not mention the
-value field at all, so `htab_set` on an existing key (which writes the value there) cannot
-break it. -/
-example {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) (h : HtabWF s t) : HtabWF s t := h
-
-/-- Memory outside `keep ∪ fresh` is unchanged from `s` to `post`. -/
+/-- Memory outside `keep ∪ fresh` is unchanged from `s` to `post`. Addresses are the 64-bit
+words themselves, tested through `toNat` (round-2 Astra item 1: quantifying over `a : Nat` and
+reading `BitVec.ofNat 64 a` made `x + 2^64` an outside alias of every changed `x`). -/
 def FrameOutside {F : Type} (s post : PanSemStateFiniteExact 64 F) (keep : List Ivl)
     (fresh : Ivl) : Prop :=
-  ∀ a : Nat, (∀ i ∈ keep, ¬ InIvl a i) → ¬ InIvl a fresh →
-    post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a)
+  ∀ a : BitVec 64, (∀ i ∈ keep, ¬ InIvl a.toNat i) → ¬ InIvl a.toNat fresh →
+    post.memory a = s.memory a
+
+/-- Regression (round-2 Astra item 1): a single store inside `fresh` respects the frame. -/
+example {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64) (w : HolWordLab 64) :
+    FrameOutside s { s with memory := fun b => if b = x then w else s.memory b } [] (x.toNat, 8) := by
+  intro a _ hout
+  have hne : a ≠ x := by
+    rintro rfl
+    exact hout ⟨Nat.le_refl _, by omega⟩
+  simp [hne]
 
 /-- Normal return of a function body from an entry state (callee-entry formulation). -/
 def FunEnsures (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
@@ -296,14 +309,28 @@ abbrev EvmDone {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   memW s (globN s "cur_cont" + 32) ≠ 0 ∨ memW s (globN s "ev" + 104) = 0 ∨
     memW s (globN s "ev" + 56) ≤ memW s (globN s "ev")
 
-/-- The memory blocks a frame writes: record, continuation, stack, EVM memory, logs header. -/
+/-- The logs backing array of frame `e`: header `h = e+88` holds data `+0`, length `+8`, capacity
+`+16`; elements are 8-byte log pointers (`frame_new` 15407: `lst_new_scratch(8, 4)`). It starts in
+scratch and `lst_push` (13842) regrows it on the HEAP (round-2 Astra item 5). -/
+def frameLogs {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Ivl :=
+  (memW s (memW s (ec.1 + 88)), 8 * memW s (memW s (ec.1 + 88) + 16))
+
+/-- The memory blocks a frame writes: record, continuation, stack, EVM memory, logs header, logs
+backing array. Index 3 (EVM memory) lives in the frame-memory arena, index 5 (logs array) in the
+heap or scratch, the others in scratch. -/
 def frameObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
-   (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24)]
+   (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24), frameLogs s ec]
+
+/-- The scratch-resident blocks of a frame (`frameObjects` without EVM memory and logs array). -/
+def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
+  [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
+   (memW s (ec.1 + 88), 24)]
 
 /-- One frame: record, continuation, stack and logs header in allocated scratch; EVM memory in
-the frame-memory arena below `frame_mem_ptr`; stack height ≤ capacity ≤ 1024, memory length ≤
-capacity; its three tables are typed. -/
+the frame-memory arena below `frame_mem_ptr`; logs backing array in allocated heap or scratch;
+stack height ≤ capacity ≤ 1024, memory length ≤ capacity, logs length ≤ capacity; its three
+tables are typed. -/
 def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Ivl) : Prop :=
   let e := ec.1
   (∀ i ∈ [(e, 280), (ec.2, 104), (memW s (e + 8), 32 * memW s (e + 232)), (memW s (e + 88), 24)],
@@ -314,8 +341,9 @@ def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Iv
   memW s (e + 32) ≤ memW s (e + 40) ∧
   memW s (e + 136) ∈ S ∧ memW s (e + 168) ∈ S ∧ memW s (e + 176) ∈ S ∧
   memW s (memW s (e + 88) + 8) ≤ memW s (memW s (e + 88) + 16) ∧
-  Inside (memW s (memW s (e + 88)), 8 * memW s (memW s (e + 88) + 16))
-    (globN s "scratch_ptr") scratchEnd
+  (Inside (frameLogs s ec) sourceBase (globN s "heap_ptr") ∨
+    Inside (frameLogs s ec) (globN s "scratch_ptr") scratchEnd) ∧
+  WordsOK s (frameLogs s ec)
 
 /-- A suspended frame has room for one more stack word (round-2 item 2). `finish_child`
 (`Guest/SoftwareAst.lean:18572`) runs `stack_push` on the parent BEFORE
@@ -328,17 +356,18 @@ def FrameRoom {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Prop :=
   memW s (ec.1 + 16) + 1 ≤ memW s (ec.1 + 232)
 
 /-- Release marks of the child at chain position `i` (whose continuation is `c_i`): releasing
-scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's blocks and keeps every
-ancestor's blocks allocated. -/
+scratch to `c_i+48` and frame memory to `c_i+56` frees exactly the child's scratch blocks and keeps
+every ancestor's blocks allocated (an ancestor's logs array is on the heap or above the mark). -/
 def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (ch : List Ivl) : Prop :=
   ∀ (i : Nat) (hi : i + 1 < ch.length),
     let m := memW s ((ch[i]'(by omega)).2 + 48)
     let mm := memW s ((ch[i]'(by omega)).2 + 56)
     m ≤ scratchEnd ∧ scratchStart ≤ mm ∧
     (∀ j (hj : j < ch.length), i < j →
-      (∀ o ∈ (frameObjects s ch[j]).eraseIdx 3, Inside o m scratchEnd) ∧
-      Inside (frameObjects s ch[j])[3]! scratchStart mm) ∧
-    (∀ o ∈ (frameObjects s (ch[i]'(by omega))).eraseIdx 3, o.1 + o.2 ≤ m) ∧
+      (∀ o ∈ frameScratch s ch[j], Inside o m scratchEnd) ∧
+      Inside (frameObjects s ch[j])[3]! scratchStart mm ∧
+      (Inside (frameLogs s ch[j]) sourceBase heapLimit ∨ Inside (frameLogs s ch[j]) m scratchEnd)) ∧
+    (∀ o ∈ frameScratch s (ch[i]'(by omega)), o.1 + o.2 ≤ m) ∧
     mm ≤ memW s ((ch[i]'(by omega)).1 + 24)
 
 /-- The EVM invariant at every `run_frames` loop head (replaces round 1's `EvmFramesWF`): the

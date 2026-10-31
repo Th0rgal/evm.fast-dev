@@ -49,7 +49,8 @@ theorem htab_union_into_spec :
     FunSpec UnionArgWF (OnReturn UnionExit) (ofString "htab_union_into") := by sorry
 
 /-- `htab_new` / `htab_new_scratch` return a well-formed empty table whose footprint is freshly
-allocated (heap resp. scratch); nothing else in memory changes. -/
+allocated (heap resp. scratch); nothing outside the UNION of the fresh heap and the fresh scratch
+changes (round-2 Astra item 2: revision 2 intersected the two frames). -/
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
@@ -57,14 +58,16 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
       (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
         Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
-    FrameOutside s post [] (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
-    FrameOutside s post [] (globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")
+    FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
 
-/-- Entry of `htab_new` / `htab_new_scratch` (round-2 item 1): separated arenas and a key length
-from the 32 literal call sites. `htab_new` never checks `key_len`: `0` breaks `1 ≤ klen`, `61`
-breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the stride. -/
+/-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
+arenas, a key length and a capacity from the 32 literal call sites. `htab_new` checks neither:
+`key_len = 0` breaks `1 ≤ klen`, `61` breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the stride;
+`cap = 2^64 - 1` wraps `(ncap + 1) * stride`. -/
 def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens
+  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ∈ htabCaps
 
 theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") := by sorry
 theorem htab_new_scratch_spec :
@@ -313,11 +316,12 @@ theorem localsOnly_rollbackReady : LocalsOnly ["child"] RollbackReady := by
   rw [ht]
   exact hP
 
-theorem localsOnly_htabNewReady : LocalsOnly ["key_len"] HtabNewReady := by
+theorem localsOnly_htabNewReady : LocalsOnly ["key_len", "cap"] HtabNewReady := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "key_len" (hl "key_len" (by simp))
+  have hc := locN_congr s locals k "cap" (hl "cap" (by simp))
   simp only [HtabNewReady, arenaReady_with_locals] at hP ⊢
-  rw [ht]
+  rw [ht, hc]
   exact hP
 
 /-- Regression for `dec_onLocals`: `htab_truncate`'s body declares `stride`, `pos`, `leaf`, never
