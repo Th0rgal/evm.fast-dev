@@ -7747,6 +7747,83 @@ def fnBody : Decl (BitVec 64) → Prog (BitVec 64)
 /-- The two lists name the same set of functions. -/
 def sameNames (l m : List String) : Bool := l.all (· ∈ m) && m.all (· ∈ l)
 
+/-! ### Guard-carrying `seq` from the Hoare layer (revision 6, round-4 Astra item 8) -/
+
+/-- Guarded `seq` that needs the guard after the first part only when it falls through (a
+normal `none` result), stated as a Hoare triple. `seq_on` asks for preservation on every outcome,
+which fails for calls (a trapped callee leaves an arbitrary state). -/
+theorem TerminatingProgBoundedOn.seq_hoare
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {first second : ProgHOL 64} {a b : Nat}
+    (h1 : TerminatingProgBoundedOn P first a) (hp : Hoare P first (fun r t => r = none → P t))
+    (h2 : TerminatingProgBoundedOn P second b) :
+    TerminatingProgBoundedOn P (.seq first second) (a + b) := by
+  intro F state hcode hP
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
+  have hmid := hp.run state hcode hP
+  simp only [hr1] at hmeta hnt hmid ⊢
+  cases r1 with
+  | none =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) (hmid (by simp) rfl) hnt
+    exact ⟨by omega, by omega⟩
+  | some r =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    exact ⟨by omega, k1⟩
+
+theorem return_ne_none {F : Type} (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.return e)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_return]
+  split
+  · simp
+  · split <;> simp
+
+theorem clock_skip {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s .skip).2.clock = s.clock := by simp
+
+/-- An early-return guard clause `if c then return e` falls through only from the unchanged
+state. -/
+theorem Hoare.ite_return_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (cond e : ExpHOL 64) : Hoare P (.ite cond (.return e) .skip) (fun r t => r = none → P t) :=
+  Hoare.ite ⟨fun s _ _ _ h => absurd h (return_ne_none s e)⟩ (Hoare.skip fun _ h _ => h.1)
+    (fun _ _ h => absurd h (by simp))
+
+/-- A handler-free call without destination to a callee that keeps the locals-free guard `W`
+falls through only into a `W` state. -/
+theorem Hoare.call_keeps {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (hk : KeepsOn W W fname) (arguments : List (ExpHOL 64)) :
+    Hoare W (.call (some (none, none)) fname arguments) (fun r t => r = none → W t) :=
+  Hoare.call0 hk (callEntryOn_of_localsFree hW _ _)
+    (fun s _ post v _ _ hq _ => hW post s.locals post.clock (hq (Or.inl ⟨v, rfl⟩)))
+    (fun _ _ hr _ h => absurd h hr)
+
+/-- `if c then (call g) ` with `g` keeping `W`, as a fall-through triple. -/
+theorem Hoare.ite_call_keeps {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (hk : KeepsOn W W fname) (cond : ExpHOL 64)
+    (arguments : List (ExpHOL 64)) :
+    Hoare W (.ite cond (.call (some (none, none)) fname arguments) .skip)
+      (fun r t => r = none → W t) :=
+  Hoare.ite (Hoare.mono (Hoare.call_keeps hW hk arguments) (fun _ h => h.1))
+    (Hoare.skip fun _ h _ => h.1) (fun _ _ h => absurd h (by simp))
+
+theorem clock_store {F : Type} (s : PanSemStateFiniteExact 64 F) (a v : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.store a v)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_store]
+  repeat' split
+  all_goals (try dsimp only)
+
 /-! ### Guarded bound leaves (generated) -/
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
@@ -8542,7 +8619,36 @@ def GBody.«decode_witness_to_mpt» : Prop :=
 theorem «callees_decode_witness_to_mpt» : sameNames (progCallees (fnBody Guest.Software.guestFn_decode_witness_to_mpt))
     ["_decode_witness_node", "alloc", "memcpy", "memeq", "mpt_fail", "nodedb_lookup"] = true := by decide
 
-theorem «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt» := by sorry
+theorem «lookup_decode_witness_to_mpt» : originalRuntimeCode.lookup (ofString "decode_witness_to_mpt") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_decode_witness_to_mpt).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 265 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_decode_witness_to_mpt) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt» := by
+  intro hdw hal hmc hme hmf hnl hrme hrmf hrnl
+  refine ⟨_, _, _, «lookup_decode_witness_to_mpt», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_decode_witness_to_mpt, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hme _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hrme _ (by simp) _)
+      (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.decCall_on hnl _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hrnl _ (by simp) _)
+          (TerminatingProgBoundedOn.seq_hoare
+            (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.call_on hmf _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _)) (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))
+            (Hoare.ite_call_keeps localsFree_worldOK
+              (ReadOnlyFn.keepsOn localsFree_worldOK worldOK_guestInv hrmf) _ _)
+            (TerminatingProgBoundedOn.decCall_on hdw _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+              (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+              (TerminatingProgBoundedOn.seq_guestInv
+                (TerminatingProgBoundedOn.ite_on
+                  (TerminatingProgBoundedOn.decCall_guestInv hal _ _ _
+                    (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hmc _ _)
+                      (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _)))) (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))
+                (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))) ?_
+  unfold K.«decode_witness_to_mpt»
+  simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
 
 theorem «gb_decode_witness_to_mpt» : TerminatingFunBoundedOn WorldOK (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt» :=
   «gbody_decode_witness_to_mpt» «gb__decode_witness_node» «fb_alloc» «fb_memcpy» «fb_memeq» «fb_mpt_fail» «fb_nodedb_lookup» «ro_memeq» «ro_mpt_fail» «ro_nodedb_lookup»
@@ -8655,7 +8761,26 @@ def GBody.«ws_storage_trie» : Prop :=
 theorem «callees_ws_storage_trie» : sameNames (progCallees (fnBody Guest.Software.guestFn_ws_storage_trie))
     ["decode_witness_to_mpt", "htab_get", "htab_set"] = true := by decide
 
-theorem «gbody_ws_storage_trie» : GBody.«ws_storage_trie» := by sorry
+theorem «lookup_ws_storage_trie» : originalRuntimeCode.lookup (ofString "ws_storage_trie") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_ws_storage_trie).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 368 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_ws_storage_trie) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_ws_storage_trie» : GBody.«ws_storage_trie» := by
+  intro hdw hget hset hro
+  refine ⟨_, _, _, «lookup_ws_storage_trie», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_ws_storage_trie, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (LocalsOnly.of_localsFree localsFree_worldOK) _ (by simp) _ _
+      (TerminatingProgBoundedOn.decCall_on hget _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hro _ (by simp) _)
+        (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+          (TerminatingProgBoundedOn.decCall_on hdw _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hset _ _)
+              (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
+  unfold K.«ws_storage_trie»; omega
 
 theorem «gb_ws_storage_trie» : TerminatingFunBoundedOn WorldOK (ofString "ws_storage_trie") K.«ws_storage_trie» :=
   «gbody_ws_storage_trie» «gb_decode_witness_to_mpt» «fb_htab_get» «fb_htab_set» «ro_htab_get»
@@ -8705,7 +8830,25 @@ def GBody.«get_pre_tx_storage» : Prop :=
 theorem «callees_get_pre_tx_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_pre_tx_storage))
     ["record_pre_state_read", "stor_lookup", "ws_get_storage"] = true := by decide
 
-theorem «gbody_get_pre_tx_storage» : GBody.«get_pre_tx_storage» := by sorry
+theorem «lookup_get_pre_tx_storage» : originalRuntimeCode.lookup (ofString "get_pre_tx_storage") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_get_pre_tx_storage).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 421 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_get_pre_tx_storage) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_get_pre_tx_storage» : GBody.«get_pre_tx_storage» := by
+  intro hrec hsl hws hk hro
+  refine ⟨_, _, _, «lookup_get_pre_tx_storage», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_get_pre_tx_storage, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hro _ (by simp) _)
+      (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _))
+          (Hoare.call_keeps localsFree_worldOK hk _)
+          (TerminatingProgBoundedOn.decCall_on hws _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))) ?_
+  unfold K.«get_pre_tx_storage»; omega
 
 theorem «gb_get_pre_tx_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_pre_tx_storage") K.«get_pre_tx_storage» :=
   «gbody_get_pre_tx_storage» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «wk_record_pre_state_read» «ro_stor_lookup»
@@ -8957,7 +9100,28 @@ def GBody.«get_storage_original» : Prop :=
 theorem «callees_get_storage_original» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_storage_original))
     ["htab_has", "record_pre_state_read", "stor_lookup", "ws_get_storage"] = true := by decide
 
-theorem «gbody_get_storage_original» : GBody.«get_storage_original» := by sorry
+theorem «lookup_get_storage_original» : originalRuntimeCode.lookup (ofString "get_storage_original") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_get_storage_original).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 379 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_get_storage_original) rfl
+
+/-- PROVED by concrete-body composition (no longer a primitive). -/
+theorem «gbody_get_storage_original» : GBody.«get_storage_original» := by
+  intro hhas hrec hsl hws hrh hk hrs
+  refine ⟨_, _, _, «lookup_get_storage_original», ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_get_storage_original, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hhas _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hrh _ (by simp) _)
+      (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hrs _ (by simp) _)
+          (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
+            (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _))
+              (Hoare.call_keeps localsFree_worldOK hk _)
+              (TerminatingProgBoundedOn.decCall_on hws _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+                (decCallResumeOn_guestInv worldOK_guestInv _ _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))) ?_
+  unfold K.«get_storage_original»; omega
 
 theorem «gb_get_storage_original» : TerminatingFunBoundedOn WorldOK (ofString "get_storage_original") K.«get_storage_original» :=
   «gbody_get_storage_original» «fb_htab_has» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «ro_htab_has» «wk_record_pre_state_read» «ro_stor_lookup»
@@ -9979,7 +10143,6 @@ structure Primitives : Prop where
   «fb_memcpy» : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»
   «fb_nodedb_lookup» : TerminatingFunBoundedOn GuestInv (ofString "nodedb_lookup") K.«nodedb_lookup»
   «ro_nodedb_lookup» : ReadOnlyFn (ofString "nodedb_lookup")
-  «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt»
   «fb_cache_get_root» : TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root»
   «fb_encode_account» : TerminatingFunBoundedOn GuestInv (ofString "encode_account") K.«encode_account»
   «fb_htab_copy» : TerminatingFunBoundedOn GuestInv (ofString "htab_copy") K.«htab_copy»
@@ -10011,7 +10174,6 @@ structure Primitives : Prop where
   «ww_ws_get_account_optional» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_nib_scratch", 64)])     ["heap_ptr", "scratch_ptr"] (ofString "ws_get_account_optional")
   «ww_ws_storage_root_of» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_nib_scratch", 64)])     ["heap_ptr", "scratch_ptr"] (ofString "ws_storage_root_of")
   «gbody_compute_state_root» : GBody.«compute_state_root»
-  «gbody_ws_storage_trie» : GBody.«ws_storage_trie»
   «fb_keccak256» : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»
   «fb_rlp_decode_fully» : TerminatingFunBoundedOn GuestInv (ofString "rlp_decode_fully") K.«rlp_decode_fully»
   «fb_trie_lookup» : TerminatingFunBoundedOn GuestInv (ofString "trie_lookup") K.«trie_lookup»
@@ -10021,7 +10183,6 @@ structure Primitives : Prop where
   «fb_stor_lookup» : TerminatingFunBoundedOn GuestInv (ofString "stor_lookup") K.«stor_lookup»
   «wk_record_pre_state_read» : KeepsOn WorldOK WorldOK (ofString "record_pre_state_read")
   «ro_stor_lookup» : ReadOnlyFn (ofString "stor_lookup")
-  «gbody_get_pre_tx_storage» : GBody.«get_pre_tx_storage»
   «fb_st_le64» : TerminatingFunBoundedOn GuestInv (ofString "st_le64") K.«st_le64»
   «ww_st_le64» : WritesWithin (fun s => [(locN s "p", 8)])     [] (ofString "st_le64")
   «gbody_idx_start_storage» : GBody.«idx_start_storage»
@@ -10084,7 +10245,6 @@ structure Primitives : Prop where
   «ww_u256_to_be32» : WritesWithin (fun s => [(locN s "out", 32)])     [] (ofString "u256_to_be32")
   «ek_warm_storage_key» : KeepsOn EvmInv EvmInv (ofString "warm_storage_key")
   «gbody_op_sload» : GBody.«op_sload»
-  «gbody_get_storage_original» : GBody.«get_storage_original»
   «fb_charge_state_gas» : TerminatingFunBoundedOn GuestInv (ofString "charge_state_gas") K.«charge_state_gas»
   «fb_check_gas» : TerminatingFunBoundedOn GuestInv (ofString "check_gas") K.«check_gas»
   «fb_max» : TerminatingFunBoundedOn GuestInv (ofString "max") K.«max»
@@ -10363,12 +10523,12 @@ theorem assembly_main (P : Primitives) :
   have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«ww_mpt_new» P.«wk_mpt_set» P.«ww_rlp_encode_word»
-  have «g_decode_witness_to_mpt» := P.«gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
+  have «g_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
   have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
   have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«ww_alloc» P.«ww_cache_get_root» P.«ww_encode_account» P.«ww_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«ww_memcpy» P.«wk_mpt_from_witness» P.«wk_mpt_root» P.«wk_mpt_set» P.«ww_rlp_encode_bytes» P.«ro_u256_is_zero» P.«ww_u256_to_be_min» P.«ww_ws_get_account_optional» P.«ww_ws_storage_root_of»
-  have «g_ws_storage_trie» := P.«gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
+  have «g_ws_storage_trie» := «gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
   have «g_ws_get_storage» := P.«gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«ww_ws_storage_root_of»
-  have «g_get_pre_tx_storage» := P.«gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
+  have «g_get_pre_tx_storage» := «gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
   have «g_idx_start_storage» := P.«gbody_idx_start_storage» P.«fb_alloc» «g_get_pre_tx_storage» P.«fb_htab_get» P.«fb_htab_set» P.«fb_memcpy» P.«fb_st_le64» P.«ro_htab_get» P.«ww_memcpy» P.«ww_st_le64»
   have «g_update_builder_from_tx» := P.«gbody_update_builder_from_tx» P.«fb_add_balance_change» P.«fb_add_code_change» P.«fb_add_nonce_change» P.«fb_add_storage_write» P.«fb_bal_remove_change» P.«fb_get_code» P.«fb_htab_item» P.«fb_idx_start_account» «g_idx_start_storage» P.«fb_memeq» P.«fb_remove_storage_write» P.«fb_u256_eq» P.«wk_add_balance_change» P.«wk_add_code_change» P.«wk_add_nonce_change» P.«wk_add_storage_write» P.«wk_bal_remove_change» P.«wk_get_code» P.«ro_htab_item» P.«wk_idx_start_account» P.«wk_idx_start_storage» P.«ro_memeq» P.«wk_remove_storage_write» P.«ro_u256_eq»
   have «g_incorporate_tx_into_block» := «gbody_incorporate_tx_into_block» P.«fb_merge_tx_into_block» «g_update_builder_from_tx»
@@ -10377,7 +10537,7 @@ theorem assembly_main (P : Primitives) :
   have «g_finish_child» := P.«gbody_finish_child» P.«fb_address_to_u256» P.«fb_create_finish» P.«fb_credit_state_gas_refund» P.«fb_frame_halt» P.«fb_frame_mem_release» P.«fb_incorporate_child_on_error» P.«fb_incorporate_child_on_success» P.«fb_memcpy» P.«fb_min» P.«fb_pc_add» P.«fb_refill_frame_state_gas» «g_rollback_child_access» P.«fb_scratch_release» P.«fb_set_retdata» P.«fb_stack_push» P.«fb_state_restore» P.«ek_create_finish» P.«ek_frame_halt» P.«ek_refill_frame_state_gas» P.«ek_state_restore»
   have «g_get_storage» := P.«gbody_get_storage» P.«fb_htab_set» P.«fb_record_pre_state_read» P.«fb_sk_make» P.«fb_stor_lookup» «g_ws_get_storage» P.«htab_set_spec» P.«wk_record_pre_state_read» P.«ww_sk_make» P.«ro_stor_lookup»
   have «g_op_sload» := P.«gbody_op_sload» P.«fb_charge_gas» «g_get_storage» P.«fb_is_warm_storage_key» P.«fb_pc_add» P.«fb_stack_pop» P.«fb_stack_push» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ww_is_warm_storage_key» P.«ek_stack_pop» P.«ww_u256_to_be32» P.«ek_warm_storage_key»
-  have «g_get_storage_original» := P.«gbody_get_storage_original» P.«fb_htab_has» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«ro_htab_has» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
+  have «g_get_storage_original» := «gbody_get_storage_original» P.«fb_htab_has» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«ro_htab_has» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
   have «g_op_sstore» := P.«gbody_op_sstore» P.«fb_charge_gas» P.«fb_charge_state_gas» P.«fb_check_gas» P.«fb_credit_state_gas_refund» «g_get_storage» «g_get_storage_original» P.«fb_is_warm_storage_key» P.«fb_max» P.«fb_pc_add» P.«fb_require_not_static» P.«fb_set_storage» P.«fb_stack_pop» P.«fb_u256_eq» P.«fb_u256_is_zero» P.«fb_u256_to_be32» P.«fb_warm_storage_key» P.«ek_charge_gas» P.«ro_check_gas» P.«ek_get_storage_original» P.«ww_is_warm_storage_key» P.«ro_max» P.«ro_require_not_static» P.«ek_stack_pop» P.«ww_u256_to_be32» P.«ek_warm_storage_key»
   have «g_op_dispatch» := P.«gbody_op_dispatch» P.«fb_op_add» P.«fb_op_addmod» P.«fb_op_address» P.«fb_op_and» P.«fb_op_balance» P.«fb_op_basefee» P.«fb_op_blobbasefee» P.«fb_op_blobhash» P.«fb_op_blockhash» P.«fb_op_byte» P.«fb_op_call» P.«fb_op_callcode» P.«fb_op_calldatacopy» P.«fb_op_calldataload» P.«fb_op_calldatasize» P.«fb_op_caller» P.«fb_op_callvalue» P.«fb_op_chainid» P.«fb_op_clz» P.«fb_op_codecopy» P.«fb_op_codesize» P.«fb_op_coinbase» P.«fb_op_create» P.«fb_op_create2» P.«fb_op_delegatecall» P.«fb_op_div» P.«fb_op_dup» P.«fb_op_dupn» P.«fb_op_eq» P.«fb_op_exchange» P.«fb_op_exp» P.«fb_op_extcodecopy» P.«fb_op_extcodehash» P.«fb_op_extcodesize» P.«fb_op_gas» P.«fb_op_gaslimit» P.«fb_op_gasprice» P.«fb_op_gt» P.«fb_op_iszero» P.«fb_op_jump» P.«fb_op_jumpdest» P.«fb_op_jumpi» P.«fb_op_keccak» P.«fb_op_log» P.«fb_op_lt» P.«fb_op_mcopy» P.«fb_op_mload» P.«fb_op_mod» P.«fb_op_msize» P.«fb_op_mstore» P.«fb_op_mstore8» P.«fb_op_mul» P.«fb_op_mulmod» P.«fb_op_not» P.«fb_op_number» P.«fb_op_or» P.«fb_op_origin» P.«fb_op_pc» P.«fb_op_pop» P.«fb_op_prevrandao» P.«fb_op_push» P.«fb_op_return» P.«fb_op_returndatacopy» P.«fb_op_returndatasize» P.«fb_op_revert» P.«fb_op_sar» P.«fb_op_sdiv» P.«fb_op_selfbalance» P.«fb_op_selfdestruct» P.«fb_op_sgt» P.«fb_op_shl» P.«fb_op_shr» P.«fb_op_signextend» «g_op_sload» P.«fb_op_slotnum» P.«fb_op_slt» P.«fb_op_smod» «g_op_sstore» P.«fb_op_staticcall» P.«fb_op_stop» P.«fb_op_sub» P.«fb_op_swap» P.«fb_op_swapn» P.«fb_op_timestamp» P.«fb_op_tload» P.«fb_op_tstore» P.«fb_op_xor»
   have «g_run_frames» := P.«gbody_run_frames» «g_finish_child» P.«fb_frame_epilogue» P.«fb_frame_exception» «g_op_dispatch» P.«finish_child_spec» P.«frame_epilogue_spec» P.«frame_exception_spec» P.«op_dispatch_spec»
@@ -10461,7 +10621,6 @@ theorem primitives : Primitives where
   «fb_memcpy» := «fb_memcpy»
   «fb_nodedb_lookup» := «fb_nodedb_lookup»
   «ro_nodedb_lookup» := «ro_nodedb_lookup»
-  «gbody_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt»
   «fb_cache_get_root» := «fb_cache_get_root»
   «fb_encode_account» := «fb_encode_account»
   «fb_htab_copy» := «fb_htab_copy»
@@ -10493,7 +10652,6 @@ theorem primitives : Primitives where
   «ww_ws_get_account_optional» := «ww_ws_get_account_optional»
   «ww_ws_storage_root_of» := «ww_ws_storage_root_of»
   «gbody_compute_state_root» := «gbody_compute_state_root»
-  «gbody_ws_storage_trie» := «gbody_ws_storage_trie»
   «fb_keccak256» := «fb_keccak256»
   «fb_rlp_decode_fully» := «fb_rlp_decode_fully»
   «fb_trie_lookup» := «fb_trie_lookup»
@@ -10503,7 +10661,6 @@ theorem primitives : Primitives where
   «fb_stor_lookup» := «fb_stor_lookup»
   «wk_record_pre_state_read» := «wk_record_pre_state_read»
   «ro_stor_lookup» := «ro_stor_lookup»
-  «gbody_get_pre_tx_storage» := «gbody_get_pre_tx_storage»
   «fb_st_le64» := «fb_st_le64»
   «ww_st_le64» := «ww_st_le64»
   «gbody_idx_start_storage» := «gbody_idx_start_storage»
@@ -10566,7 +10723,6 @@ theorem primitives : Primitives where
   «ww_u256_to_be32» := «ww_u256_to_be32»
   «ek_warm_storage_key» := «ek_warm_storage_key»
   «gbody_op_sload» := «gbody_op_sload»
-  «gbody_get_storage_original» := «gbody_get_storage_original»
   «fb_charge_state_gas» := «fb_charge_state_gas»
   «fb_check_gas» := «fb_check_gas»
   «fb_max» := «fb_max»

@@ -799,6 +799,76 @@ GBODY_PROOF['_decode_witness_node'] = """  intro hmpt hmk hsr hro
   unfold K.«_decode_witness_node»; omega
 """ % (WOK, WOK, WOK, HANDLER_REL, CALLWOK, RET0)
 
+# revision 6 (round-4 Astra item 8): guard clauses and `KeepsOn`/read-only calls carried by the
+# proved Hoare rules (`seq_hoare`, `Hoare.ite_return_skip`, `Hoare.call_keeps`, `Hoare.ite_call_keeps`)
+FBE = 'callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _'
+ROR = '(ReadOnlyFn.resumeOn (%s) worldOK_guestInv {H} _ (by simp) _)' % WOK
+ITE_RET = ('(TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))\n'
+           '        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))')
+SKIP0 = '(TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))'
+GBODY_PROOF['get_pre_tx_storage'] = """  intro hrec hsl hws hk hro
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (%s) %s
+      (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (%s))
+          (Hoare.call_keeps localsFree_worldOK hk _)
+          (TerminatingProgBoundedOn.decCall_on hws _ _ _ (%s)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _) %s)))) ?_
+  unfold K.«get_pre_tx_storage»; omega
+""" % (FBE, ROR.replace('{H}', 'hro'), ITE_RET, FBE, CALLWOK, RET0)
+GBODY_PROOF['get_storage_original'] = """  intro hhas hrec hsl hws hrh hk hrs
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hhas _ _ _ (%s) %s
+      (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.decCall_on hsl _ _ _ (%s) %s
+          (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+            (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hrec _ _ (%s))
+              (Hoare.call_keeps localsFree_worldOK hk _)
+              (TerminatingProgBoundedOn.decCall_on hws _ _ _ (%s)
+                (decCallResumeOn_guestInv worldOK_guestInv _ _ _) %s)))))) ?_
+  unfold K.«get_storage_original»; omega
+""" % (FBE, ROR.replace('{H}', 'hrh'), ITE_RET, FBE, ROR.replace('{H}', 'hrs'), ITE_RET, FBE, CALLWOK, RET0)
+GBODY_PROOF['ws_storage_trie'] = """  intro hdw hget hset hro
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.dec_onLocals (%s) _ (by simp) _ _
+      (TerminatingProgBoundedOn.decCall_on hget _ _ _ (%s) %s
+        (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+          (TerminatingProgBoundedOn.decCall_on hdw _ _ _ (%s)
+            (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+            (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hset _ _)
+              %s))))) ?_
+  unfold K.«ws_storage_trie»; omega
+""" % (WOK, FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, RET0)
+GBODY_PROOF['decode_witness_to_mpt'] = """  intro hdw hal hmc hme hmf hnl hrme hrmf hrnl
+  refine ⟨_, _, _, {LOOKUP}, ?_⟩
+  simp only [{UNFOLD}]
+  refine TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.decCall_on hme _ _ _ (%s) %s
+      (TerminatingProgBoundedOn.seq_hoare %s (Hoare.ite_return_skip _ _)
+        (TerminatingProgBoundedOn.decCall_on hnl _ _ _ (%s) %s
+          (TerminatingProgBoundedOn.seq_hoare
+            (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.call_on hmf _ _ (%s)) %s)
+            (Hoare.ite_call_keeps localsFree_worldOK
+              (ReadOnlyFn.keepsOn localsFree_worldOK worldOK_guestInv hrmf) _ _)
+            (TerminatingProgBoundedOn.decCall_on hdw _ _ _ (%s)
+              (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
+              (TerminatingProgBoundedOn.seq_guestInv
+                (TerminatingProgBoundedOn.ite_on
+                  (TerminatingProgBoundedOn.decCall_guestInv hal _ _ _
+                    (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hmc _ _)
+                      (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _)))) %s)
+                %s)))))) ?_
+  unfold K.«decode_witness_to_mpt»
+  simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
+  omega
+""" % (FBE, ROR.replace('{H}', 'hrme'), ITE_RET, FBE, ROR.replace('{H}', 'hrnl'), FBE, SKIP0, CALLWOK, SKIP0, RET0)
+
 UNFOLD_LEMMAS = ('sourceFunctionEntry, Guest.Software.guestFn_{F}, '
                  'InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, '
                  'InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, '

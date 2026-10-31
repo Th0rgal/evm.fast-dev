@@ -1808,3 +1808,80 @@ def fnBody : Decl (BitVec 64) → Prog (BitVec 64)
 
 /-- The two lists name the same set of functions. -/
 def sameNames (l m : List String) : Bool := l.all (· ∈ m) && m.all (· ∈ l)
+
+/-! ### Guard-carrying `seq` from the Hoare layer (revision 6, round-4 Astra item 8) -/
+
+/-- Guarded `seq` that needs the guard after the first part only when it falls through (a
+normal `none` result), stated as a Hoare triple. `seq_on` asks for preservation on every outcome,
+which fails for calls (a trapped callee leaves an arbitrary state). -/
+theorem TerminatingProgBoundedOn.seq_hoare
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {first second : ProgHOL 64} {a b : Nat}
+    (h1 : TerminatingProgBoundedOn P first a) (hp : Hoare P first (fun r t => r = none → P t))
+    (h2 : TerminatingProgBoundedOn P second b) :
+    TerminatingProgBoundedOn P (.seq first second) (a + b) := by
+  intro F state hcode hP
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata state first
+  unfold TerminatingRunBounded
+  dsimp only
+  intro hnt
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hr1 : evaluateHOLFiniteState state first with ⟨r1, mid⟩
+  have hmid := hp.run state hcode hP
+  simp only [hr1] at hmeta hnt hmid ⊢
+  cases r1 with
+  | none =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simp [hr1]
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    obtain ⟨s2, k2⟩ := h2 mid (hmeta.1.trans hcode) (hmid (by simp) rfl) hnt
+    exact ⟨by omega, by omega⟩
+  | some r =>
+    dsimp only at hnt ⊢
+    have hnt1 : (evaluateHOLFiniteState state first).1 ≠ some .timeOut := by simpa [hr1] using hnt
+    obtain ⟨s1, k1⟩ := h1 state hcode hP hnt1
+    rw [hr1] at s1 k1
+    dsimp only at s1 k1
+    exact ⟨by omega, k1⟩
+
+theorem return_ne_none {F : Type} (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.return e)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_return]
+  split
+  · simp
+  · split <;> simp
+
+theorem clock_skip {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s .skip).2.clock = s.clock := by simp
+
+/-- An early-return guard clause `if c then return e` falls through only from the unchanged
+state. -/
+theorem Hoare.ite_return_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (cond e : ExpHOL 64) : Hoare P (.ite cond (.return e) .skip) (fun r t => r = none → P t) :=
+  Hoare.ite ⟨fun s _ _ _ h => absurd h (return_ne_none s e)⟩ (Hoare.skip fun _ h _ => h.1)
+    (fun _ _ h => absurd h (by simp))
+
+/-- A handler-free call without destination to a callee that keeps the locals-free guard `W`
+falls through only into a `W` state. -/
+theorem Hoare.call_keeps {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (hk : KeepsOn W W fname) (arguments : List (ExpHOL 64)) :
+    Hoare W (.call (some (none, none)) fname arguments) (fun r t => r = none → W t) :=
+  Hoare.call0 hk (callEntryOn_of_localsFree hW _ _)
+    (fun s _ post v _ _ hq _ => hW post s.locals post.clock (hq (Or.inl ⟨v, rfl⟩)))
+    (fun _ _ hr _ h => absurd h hr)
+
+/-- `if c then (call g) ` with `g` keeping `W`, as a fall-through triple. -/
+theorem Hoare.ite_call_keeps {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hW : LocalsFree W) {fname : MlS} (hk : KeepsOn W W fname) (cond : ExpHOL 64)
+    (arguments : List (ExpHOL 64)) :
+    Hoare W (.ite cond (.call (some (none, none)) fname arguments) .skip)
+      (fun r t => r = none → W t) :=
+  Hoare.ite (Hoare.mono (Hoare.call_keeps hW hk arguments) (fun _ h => h.1))
+    (Hoare.skip fun _ h _ => h.1) (fun _ _ h => absurd h (by simp))
+
+theorem clock_store {F : Type} (s : PanSemStateFiniteExact 64 F) (a v : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.store a v)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_store]
+  repeat' split
+  all_goals (try dsimp only)
