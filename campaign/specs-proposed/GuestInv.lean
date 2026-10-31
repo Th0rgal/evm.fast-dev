@@ -1539,6 +1539,18 @@ def ArenaReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 def Allocated {F : Type} (s : PanSemStateFiniteExact 64 F) (i : Ivl) : Prop :=
   Inside i sourceBase (globN s "heap_ptr") ∨ Inside i (globN s "scratch_ptr") scratchEnd
 
+/-- Allocators retain every caller allocation: heap grows upwards and scratch downwards.
+Together with `ArenaReady post`, scratch can consume only the formerly free arena gap. -/
+def AllocatorGrows {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr"
+
+theorem AllocatorGrows.allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : AllocatorGrows s post) {i : Ivl} (hi : Allocated s i) : Allocated post i := by
+  rcases hi with hi | hi
+  · exact Or.inl ⟨hi.1, Nat.le_trans hi.2 h.1⟩
+  · exact Or.inr ⟨Nat.le_trans h.2 hi.1, hi.2⟩
+
 /-! ### Crit-bit tables (round-1 item 4)
 
 Layout (`htab_new`, `Guest/SoftwareAst.lean:4867`): header words at `t + 8k`,
@@ -1700,6 +1712,7 @@ def HtabExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinite
     let t := locN s "t"
     let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
     ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i ∧
       ((∃ j ∈ htabFootprint s t, Inside i j.1 (j.1 + j.2)) ∨ Inside i fresh.1 (fresh.1 + fresh.2))) ∧
@@ -1717,6 +1730,7 @@ def UnionExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinit
     let t := locN s "dst"
     let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
     ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
@@ -6119,7 +6133,7 @@ allocator pointers changes (round-3 Gemini item 5: the globals frame was missing
 def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
-    ArenaReady post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
+    ArenaReady post ∧ AllocatorGrows s post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
     hdr post w.toNat 0 = locN s "key_len" ∧
     (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
       (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
@@ -6690,6 +6704,7 @@ def NodeFnExit (names : List String)
     ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => Resumes r → ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    globN post "scratch_ptr" ≤ globN s "scratch_ptr" ∧
     ∀ Nd, NodeHeap s Nd → (∀ n ∈ names, RootIn Nd (locN s n)) → req s Nd →
       ∃ Nd', NodeHeap post Nd' ∧ (∀ n ∈ Nd, n ∈ Nd') ∧
         (∀ n ∈ Nd, memW post n = memW s n) ∧
@@ -6995,6 +7010,19 @@ def FreshBlock {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) : P
   p % 8 = 0 ∧ Inside (p, (n + 7) / 8 * 8) (globN s "heap_ptr") (globN post "heap_ptr") ∧
     WordsOK post (p, (n + 7) / 8 * 8)
 
+/-- Constructor ownership separates every returned block from the caller's live objects,
+including scratch frames. This is the separation needed at the decoder's inline stores. -/
+theorem FreshBlock.disj_allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} (h : FreshBlock s post p n) (hs : ArenaOK s) (hp : ArenaOK post)
+    {i : Ivl} (hi : Allocated s i) : Disj (p, (n + 7) / 8 * 8) i := by
+  rcases h with ⟨_, hlo, _⟩
+  rcases hi with hi | hi
+  · exact Or.inr (Nat.le_trans hi.2 hlo.1)
+  · rcases hs with ⟨_, _, hframe, hgap, _, _, _, _⟩
+    have hsep : heapLimit ≤ scratchStart := by decide
+    exact Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
+      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))
+
 /-- A normal return is a word `w` with `Q s post w`. -/
 def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
     Prop) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
@@ -7004,7 +7032,7 @@ def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFini
 def Returns (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
     (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat → Prop)
     (fname : MlS) : Prop :=
-  FunSpec P (RetWord Q) fname
+  FunSpec P (RetWord (fun s post p => ArenaReady post ∧ AllocatorGrows s post ∧ Q s post p)) fname
 
 /-- `mpt_from_witness`'s extra (revision 7): the returned trie object is a fresh 16-byte block
 with a fresh typed node set, placed in the exit world `S'` (`MptObjInWith`) and away from its
@@ -7012,6 +7040,7 @@ persistent tries. -/
 def RetMptObj : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    AllocatorGrows s post ∧
     ∃ Nm, MptObjInWith post S' Nm w.toNat ∧ IvlsDisj (mptObjIvls post Nm w.toNat) (nodeExtents post Nd') ∧
       ∀ o ∈ mptObjIvls post Nm w.toNat, o = (0, 0) ∨
         Inside o (globN s "heap_ptr") (globN post "heap_ptr")
@@ -7073,10 +7102,19 @@ def FreshScratch {F : Type} (s post : PanSemStateFiniteExact 64 F) (p n : Nat) :
 same record repeatedly and overwriting the saved links. -/
 def PushesFrame (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
-    v = .rStruct [.val (.word a), .val (.word b)] ∧ (a.toNat ≠ 0 →
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    (a.toNat = 0 → b.toNat = 0 ∨ FreshBlock s post b.toNat 32) ∧ (a.toNat ≠ 0 →
       FreshScratch s post b.toNat 88 ∧ (memW post (b.toNat + 8) = 1 ∨
         (memW post (b.toNat + 8) = 2 ∧ memW post (b.toNat + 32) = 0 ∧
-          memW post (b.toNat + 40) = 0)))) fname
+          memW post (b.toNat + 40) = 0 ∧
+          FreshBlock s post (memW post (b.toNat + 16)) 176)))) fname
+
+/-- `_resolve_step`'s completed result is null or a fresh 32-byte heap node. The decoder
+stores a hash at `result+24`; that store cannot touch its live scratch records. -/
+def ResolvesNode (fname : MlS) : Prop :=
+  FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) → ∃ a b c d : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] ∧
+    (a.toNat = 0 → b.toNat = 0 ∨ FreshBlock s post b.toNat 32)) fname
 
 /-- `node_invalidate(nd)` (revision 8, round-5 Astra item 7, Gemini suggestion; AST 10061): on a
 typed node (or `0`, which errors) it zeroes the three cache words `nd+8`, `nd+16`, `nd+24` and
@@ -8864,6 +8902,10 @@ theorem «rt_msg_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new") := by sorry
+/-- `node_new_ext` (AST line 10021): returns a fresh 56-byte heap node, separated from the decoder scratch stack. -/
+theorem «rt_node_new_ext» :
+    Returns ArenaReady (fun s post p => FreshBlock s post p 56)
+    (ofString "node_new_ext") := by sorry
 /-- `scratch_alloc` (AST line 154): returns a fresh aligned scratch block of `n` bytes and lowers `scratch_ptr` to it. -/
 theorem «rt_scratch_alloc» :
     Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧
@@ -8892,6 +8934,9 @@ theorem «rv_validate_transaction» :
 /-- `_decode_step` (AST line 10110): a pushed record is a fresh 88-byte scratch block tagged 1 or 2 (value contract). -/
 theorem «sp__decode_step» :
     PushesFrame (ofString "_decode_step") := by sorry
+/-- `_resolve_step` (AST line 10077): a completed result is null or a fresh heap node, separated from live scratch. -/
+theorem «sp__resolve_step» :
+    ResolvesNode (ofString "_resolve_step") := by sorry
 /-- `account_deployable` (AST line 13358): relational world step. -/
 theorem «wk_account_deployable» :
     WorldKeeps WorldOK (fun _ => [])
@@ -9443,7 +9488,7 @@ primitive; `gb_f` is PROVED from it. -/
 /-- The body of `_decode_witness_node_body` alone (AST line 10196, guard `ArenaReady`, #0 GUARD). Its direct callees are
 exactly `_decode_step`, `_resolve_step`, `mpt_fail`, `node_new_ext`, `rlp_item` (`«callees__decode_witness_node_body»`, checked against the AST). Hypotheses: the bound
 of each of these 5 callees, then the contract of each callee at a guard-carrying
-call site (6: `ww__decode_step`, `sp__decode_step`, `ww__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `ww_rlp_item`). Nothing else is assumed. -/
+call site (8: `ww__decode_step`, `sp__decode_step`, `ww__resolve_step`, `sp__resolve_step`, `ro_mpt_fail`, `ww_node_new_ext`, `rt_node_new_ext`, `ww_rlp_item`). Nothing else is assumed. -/
 def GBody.«_decode_witness_node_body» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_decode_step") K.«_decode_step») →
   (TerminatingFunBoundedOn GuestInv (ofString "_resolve_step") K.«_resolve_step») →
@@ -9455,9 +9500,12 @@ def GBody.«_decode_witness_node_body» : Prop :=
   (PushesFrame (ofString "_decode_step")) →
   (WritesWithin (fun s => [])
     ["heap_ptr", "scratch_ptr"] (ofString "_resolve_step")) →
+  (ResolvesNode (ofString "_resolve_step")) →
   (ReadOnlyFn (ofString "mpt_fail")) →
   (WritesWithin (fun s => [])
     ["heap_ptr"] (ofString "node_new_ext")) →
+  (Returns ArenaReady (fun s post p => FreshBlock s post p 56)
+    (ofString "node_new_ext")) →
   (WritesWithin (fun s => [])
     ["scratch_ptr"] (ofString "rlp_item")) →
   TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body»
@@ -9469,7 +9517,7 @@ theorem «callees__decode_witness_node_body» : sameNames (progCallees (fnBody G
 theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» := by sorry
 
 theorem «gb__decode_witness_node_body» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body» :=
-  «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ww__decode_step» «sp__decode_step» «ww__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «ww_rlp_item»
+  «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ww__decode_step» «sp__decode_step» «ww__resolve_step» «sp__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «rt_node_new_ext» «ww_rlp_item»
 
 /-- The body of `_decode_witness_node_mpt` alone (AST line 10311, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `_decode_witness_node_body`, `scratch_release` (`«callees__decode_witness_node_mpt»`, checked against the AST). Hypotheses: the bound
@@ -9643,7 +9691,7 @@ theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_m
 /-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptReady`, #0 GUARD). Its direct callees are
 exactly `_insert_into_leaf`, `_split_extension`, `common_prefix_length`, `mpt_fail`, `node_invalidate`, `node_new_ext`, `node_new_leaf` (`«callees__mpt_insert_node»`, checked against the AST). Hypotheses: the bound
 of each of these 7 callees, then the contract of each callee at a guard-carrying
-call site (9: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `iz_node_invalidate`, `nf_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
+call site (10: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `iz_node_invalidate`, `nf_node_new_ext`, `rt_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
 def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf») →
   (TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension») →
@@ -9672,6 +9720,8 @@ def GBody.«_mpt_insert_node» : Prop :=
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen"))
     (ofString "node_new_ext")) →
+  (Returns ArenaReady (fun s post p => FreshBlock s post p 56)
+    (ofString "node_new_ext")) →
   (NodeFn []
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen"))
@@ -9685,7 +9735,7 @@ theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Soft
 theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
 
 theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
-  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «nf_node_new_leaf»
+  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «rt_node_new_ext» «nf_node_new_leaf»
 
 /-- The body of `mpt_set` alone (AST line 10872, guard `MptObjReady`, loop-free). Its direct callees are
 exactly `_mpt_delete_node`, `_mpt_insert_node`, `mpt_nibble_key` (`«callees_mpt_set»`, checked against the AST). Hypotheses: the bound
@@ -11682,8 +11732,10 @@ structure Primitives : Prop where
   «ww__decode_step» : WritesWithin (fun s => [])     ["heap_ptr", "scratch_ptr"] (ofString "_decode_step")
   «sp__decode_step» : PushesFrame (ofString "_decode_step")
   «ww__resolve_step» : WritesWithin (fun s => [])     ["heap_ptr", "scratch_ptr"] (ofString "_resolve_step")
+  «sp__resolve_step» : ResolvesNode (ofString "_resolve_step")
   «ro_mpt_fail» : ReadOnlyFn (ofString "mpt_fail")
   «ww_node_new_ext» : WritesWithin (fun s => [])     ["heap_ptr"] (ofString "node_new_ext")
+  «rt_node_new_ext» : Returns ArenaReady (fun s post p => FreshBlock s post p 56)     (ofString "node_new_ext")
   «ww_rlp_item» : WritesWithin (fun s => [])     ["scratch_ptr"] (ofString "rlp_item")
   «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body»
   «fb_scratch_release» : TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release»
@@ -12116,12 +12168,12 @@ structure Primitives : Prop where
 
 theorem assembly_main (P : Primitives) :
     TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» := by
-  have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ww__decode_step» P.«sp__decode_step» P.«ww__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«ww_rlp_item»
+  have «g__decode_witness_node_body» := P.«gbody__decode_witness_node_body» P.«fb__decode_step» P.«fb__resolve_step» P.«fb_mpt_fail» P.«fb_node_new_ext» P.«fb_rlp_item» P.«ww__decode_step» P.«sp__decode_step» P.«ww__resolve_step» P.«sp__resolve_step» P.«ro_mpt_fail» P.«ww_node_new_ext» P.«rt_node_new_ext» P.«ww_rlp_item»
   have «g__decode_witness_node_mpt» := «gbody__decode_witness_node_mpt» «g__decode_witness_node_body» P.«fb_scratch_release»
   have «g__decode_witness_node» := «gbody__decode_witness_node» «g__decode_witness_node_mpt» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«ww_scratch_alloc» P.«rt_scratch_alloc»
   have «g__mpt_delete_node» := «gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
-  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«nf_node_new_ext» P.«nf_node_new_leaf»
+  have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«nf_node_new_ext» P.«rt_node_new_ext» P.«nf_node_new_leaf»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
   have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
   have «g_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
@@ -12175,8 +12227,10 @@ theorem primitives : Primitives where
   «ww__decode_step» := «ww__decode_step»
   «sp__decode_step» := «sp__decode_step»
   «ww__resolve_step» := «ww__resolve_step»
+  «sp__resolve_step» := «sp__resolve_step»
   «ro_mpt_fail» := «ro_mpt_fail»
   «ww_node_new_ext» := «ww_node_new_ext»
+  «rt_node_new_ext» := «rt_node_new_ext»
   «ww_rlp_item» := «ww_rlp_item»
   «gbody__decode_witness_node_body» := «gbody__decode_witness_node_body»
   «fb_scratch_release» := «fb_scratch_release»
@@ -12653,5 +12707,12 @@ example : 2 ^ 62 ≤ K.«finish_child» := by decide
 
 /-- Item 5, `incorporate_child_on_error` after a `2^62` mint: ≈ 2^58 `run_frames` iterations. -/
 example : 2 ^ 58 ≤ evmPotMax := by decide
+
+-- The revision-9 check records the trusted-axiom boundary in the same single-file Lean run.
+#print axioms assembly
+#print axioms assembly_main
+#print axioms K_pan_budget
+#print axioms AllocatorGrows.allocated
+#print axioms FreshBlock.disj_allocated
 
 end InitECandidate.Solver.Wave8GuestInv

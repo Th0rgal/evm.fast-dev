@@ -45,4 +45,11 @@ example : 2 ^ 62 ≤ K.«finish_child» := by decide
 /-- Item 5, `incorporate_child_on_error` after a `2^62` mint: ≈ 2^58 `run_frames` iterations. -/
 example : 2 ^ 58 ≤ evmPotMax := by decide
 
+-- The revision-9 check records the trusted-axiom boundary in the same single-file Lean run.
+#print axioms assembly
+#print axioms assembly_main
+#print axioms K_pan_budget
+#print axioms AllocatorGrows.allocated
+#print axioms FreshBlock.disj_allocated
+
 end InitECandidate.Solver.Wave8GuestInv
