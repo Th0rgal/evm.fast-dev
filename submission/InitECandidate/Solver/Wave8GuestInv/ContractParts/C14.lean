@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C13
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyHtabRollback
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -64,7 +65,8 @@ def GBody.«htab_truncate» : Prop :=
 theorem «callees_htab_truncate» : sameNames (progCallees (fnBody Guest.Software.guestFn_htab_truncate))
     ["htab_del"] = true := by decide
 
-theorem «gbody_htab_truncate» : GBody.«htab_truncate» := by sorry
+theorem «gbody_htab_truncate» : GBody.«htab_truncate» :=
+  R10Shards.GbodyHtabRollback.gbody_htab_truncate_proof
 
 theorem «gb_htab_truncate» : TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") K.«htab_truncate» :=
   «gbody_htab_truncate» «fb_htab_del» «htab_del_spec» «htab_del_progress_spec»
@@ -82,7 +84,8 @@ def GBody.«rollback_child_access» : Prop :=
 theorem «callees_rollback_child_access» : sameNames (progCallees (fnBody Guest.Software.guestFn_rollback_child_access))
     ["htab_truncate"] = true := by decide
 
-theorem «gbody_rollback_child_access» : GBody.«rollback_child_access» := by sorry
+theorem «gbody_rollback_child_access» : GBody.«rollback_child_access» :=
+  R10Shards.GbodyHtabRollback.gbody_rollback_child_access_proof
 
 theorem «gb_rollback_child_access» : TerminatingFunBoundedOn RollbackReady (ofString "rollback_child_access") K.«rollback_child_access» :=
   «gbody_rollback_child_access» «gb_htab_truncate» «htab_truncate_spec»
