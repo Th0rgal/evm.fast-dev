@@ -17,8 +17,26 @@ def FunSpec (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
   ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
     originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+        some (body, s.locals, retShape)) →
       (evaluateHOLFiniteState s body).1 ≠ some .timeOut →
       Q s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2
+
+/-- A successful finite lookup carries the installed return shape as well as
+its body and parameter locals. -/
+theorem lookupCodeHOLFinite_installed_return {F : Type}
+    (state : PanSemStateFiniteExact 64 F) (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body body' : ProgHOL 64) (ret ret' : ShapeHOL)
+    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : state.code.lookup fname = some (params, body, ret))
+    (hl : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ret' = ret := by
+  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+    state.code.lookup fname values body' callee ret' hl
+  simp only [Flapjack.lookupCodeHOLExact, hc] at hx
+  split at hx
+  · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+  · cases hx
 
 /-- `Q` on normal return only. -/
 def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) :
@@ -65,8 +83,8 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     FrameOutside s post
       [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
-    ∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+    ∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+      s.globals.lookup k = post.globals.lookup k
 
 /-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
 arenas, a key length from the literal call sites and a bounded capacity. `htab_new` checks
@@ -95,7 +113,16 @@ node records, fresh heap and the free scratch gap, which `KeyIn` keeps away from
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ locN s "level" ≤ locN s "klen" ∧ ∃ Nd, NodeHeap s Nd ∧
     RootIn Nd (locN s "node") ∧
-    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level")
+    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level") ∧
+    locN s "klen" ≤ 64
+
+/-- Insertion additionally bounds the newly stored value length. -/
+def MptInsertReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MptReady s ∧ locN s "vlen" < 2 ^ 40
+
+/-- Node encoding starts from a typed, size-bounded node heap. -/
+def NodeRlpReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
 
 /-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
 relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
@@ -139,6 +166,10 @@ revision-4 guard did not relate `m` and its nodes to the typed tables and fixed 
 def MptObjReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => MptObjAvoids (fun _ => []) s
 
+/-- The bounded key and payload sizes supplied by all mpt_set call sites. -/
+def MptSetReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MptObjReady s ∧ locN s "klen" ≤ 32 ∧ locN s "vlen" < 2 ^ 40
+
 /-- Exit: the returned root is typed in the new node heap, which extends the old one by fresh
 heap records; old memory outside the old nodes (sized by kind), the heap free at entry and the
 scratch free at entry is unchanged, and only `heap_ptr`/`scratch_ptr` among the globals change.
@@ -150,8 +181,8 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
-    (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+    (∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+      s.globals.lookup k = post.globals.lookup k) ∧
     ∃ Nd Nd', NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧ NodeHeap post Nd' ∧
       RootIn Nd' w.toNat ∧
       FrameOutside s post
@@ -164,7 +195,7 @@ empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions point
 `NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
 `2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
 this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
-theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
+theorem mpt_insert_node_spec : FunSpec MptInsertReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry
 
@@ -347,7 +378,7 @@ theorem localsFree_worldOK : LocalsFree WorldOK := by
 
 theorem localsFree_evmInv : LocalsFree EvmInv := by
   intro F s locals k h
-  simp only [EvmInv, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
+  simp only [EvmInv, FrameWF, MsgOwned, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
   exact h
 
 /-- Round-3 non-blocking: `main`'s guard reads neither locals nor the clock. -/
@@ -461,7 +492,7 @@ def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) 
     FrameOutside s post
       (R s ++ [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
       (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
-    ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = post.globals.lookup k)
     fname
 
 /-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object and
@@ -571,16 +602,6 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
 theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
     EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
 
-/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
-from every table footprint of `S`, every fixed object, every frame block of the chain and
-(revision 6, round-4 Astra item 2) the persistent tries. -/
-def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
-  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
-  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
-  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
-  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
-  AvoidsTries s S [(m, 176)]
-
 /-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
 and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
 still owned, for the same table set. `depth0_prepare` stores `msg+48` (18772) and
@@ -596,7 +617,7 @@ theorem evmInv_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F) (h : 
 
 theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
   intro F s locals k h
-  simp only [EvmMsgReady, EvmInvAt, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
+  simp only [EvmMsgReady, EvmInvAt, FrameWF, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
     evmChain_with_locals] at h ⊢
   exact h
 
@@ -637,8 +658,8 @@ def NodeFnExit (names : List String)
           ((Nd.map fun n => nodeIvl s n) ++
             [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
           (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
-        (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-          s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+        (∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+          s.globals.lookup k = post.globals.lookup k) ∧
         ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
 
 /-- `NodeFn names req g`: from a typed node heap rooting `names` and meeting `g`'s requirement
@@ -663,6 +684,7 @@ def RetNibbles (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
     ∃ p l : BitVec 64, v = .rStruct [.val (.word p), .val (.word l)] ∧
       NibblesOK post p.toNat l.toNat ∧
+      (locN s "klen" ≤ 32 → l.toNat ≤ 64) ∧
       Inside (p.toNat, l.toNat) (globN s "heap_ptr") (globN post "heap_ptr")) fname
 
 /-- `requests_append` entry: the next request slot exists. -/
@@ -716,7 +738,8 @@ are untyped, so an output region may lie inside one of them. -/
 def worldTypedIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : List Ivl :=
   S.flatMap (htabFootprint s) ++
     typedRecords.map (fun r => (globN s r.1, if globN s r.1 = 0 then 0 else r.2)) ++
-    [(globN s "journal", 32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s ++
+    [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s ++
     nodeExtents s Nd
 
 /-- Everything the world owns under the typing `(S, Nd)`. -/
@@ -735,7 +758,7 @@ def heapFree {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
 
 /-- Only the globals in `gw` change. -/
 def GlobalsKept (gw : List String) {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
-  ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+  ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = post.globals.lookup k
 
 /-- The listed words of the typed records are unchanged unless an output region hits them. -/
 def RecordsKept (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl)
@@ -859,6 +882,113 @@ theorem WorldStep.worldOK_nil {gw : List String} {keep : List (String × List Na
   obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
   exact h.worldOK ⟨S, Nd, hT, fun o ho => by simp at ho⟩
 
+/-- A null global buffer has an empty writable interval. -/
+def bufferRegion {F : Type} (s : PanSemStateFiniteExact 64 F) (gn : String × Nat) : Ivl :=
+  (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)
+
+theorem Disj.flip {i j : Ivl} (h : Disj i j) : Disj j i := by
+  rcases h with h | h | h | h
+  · exact Or.inr (Or.inl h)
+  · exact Or.inl h
+  · exact Or.inr (Or.inr (Or.inr h))
+  · exact Or.inr (Or.inr (Or.inl h))
+
+theorem bufferRegion_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd) (gn : String × Nat)
+    (hg : gn ∈ globalBuffers) (hu : gn.1 ∉ typedRecords.map Prod.fst) :
+    ∀ j ∈ worldTypedIvls s S Nd, Disj (bufferRegion s gn) j := by
+  let buffers := globalBuffers.map (bufferRegion s)
+  let rest := [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
+  have hfixed : fixedObjects s = buffers ++ rest := by
+    simp only [fixedObjects, buffers, rest, List.append_assoc]
+    rfl
+  have hpair := hW.2.2.1.2
+  rw [hfixed] at hpair
+  have hmem : bufferRegion s gn ∈ buffers := List.mem_map.mpr ⟨gn, hg, rfl⟩
+  have hfixmem : bufferRegion s gn ∈ fixedObjects s := by
+    rw [hfixed]; exact List.mem_append_left _ hmem
+  have hcross := (List.pairwise_append.mp hpair).2.2
+  have hnames : globalBuffers.Pairwise
+      (fun a b => Disj (bufferRegion s a) (bufferRegion s b)) :=
+    List.pairwise_map.mp (List.pairwise_append.mp hpair).1
+  letI : Std.Symm (fun a b : String × Nat => Disj (bufferRegion s a) (bufferRegion s b)) :=
+    ⟨fun _ _ h => h.flip⟩
+  intro j hj
+  simp only [worldTypedIvls, List.mem_append] at hj
+  rcases hj with ((((ht | hr) | hjournal) | hbo) | hbal) | hn
+  · obtain ⟨t, ht, hj⟩ := List.mem_flatMap.mp ht
+    exact ((hW.1.2.1 t ht).2 j hj).2 _ hfixmem |>.flip
+  · obtain ⟨r, hrecord, heq⟩ := List.mem_map.mp hr
+    rw [← heq]
+    change Disj (bufferRegion s gn) (bufferRegion s r)
+    have hrg : r ∈ globalBuffers :=
+      (by decide : ∀ r ∈ typedRecords, r ∈ globalBuffers) r hrecord
+    have hne : gn ≠ r := by
+      intro heq; apply hu; exact List.mem_map.mpr ⟨r, hrecord, congrArg Prod.fst heq.symm⟩
+    exact hnames.forall hg hrg hne
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inl (Or.inl hjournal))
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inl (Or.inr hbo))
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inr hbal)
+  · exact ((hW.2.2.2.2.1 j hn).2 _ hfixmem).flip
+
+theorem WorldKeeps.keepsOn_buffers
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
+    (h : WorldKeeps WorldOK R gw keep Q fname)
+    (hR : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) i, i ∈ R s →
+      ∃ gn ∈ globalBuffers, gn.1 ∉ typedRecords.map Prod.fst ∧ i = bufferRegion s gn) :
+    KeepsOn WorldOK WorldOK fname := by
+  obtain ⟨params, body, ret, hlook, hb⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => ?_⟩
+  have hstep := hb s hc hW hshape hnt hr
+  obtain ⟨_, S, hS⟩ := hW
+  obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
+  apply hstep.worldOK
+  refine ⟨S, Nd, hT, ?_⟩
+  intro i hi j hj
+  obtain ⟨gn, hg, hu, rfl⟩ := hR s i hi
+  exact bufferRegion_disj hT gn hg hu j hj
+
+
+theorem bufferRegion_disj_le {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd) (gn : String × Nat)
+    (hg : gn ∈ globalBuffers) (hu : gn.1 ∉ typedRecords.map Prod.fst)
+    (n : Nat) (hle : n ≤ gn.2) :
+    ∀ j ∈ worldTypedIvls s S Nd, Disj (bufferRegion s (gn.1, n)) j := by
+  intro j hj
+  have h := bufferRegion_disj hW gn hg hu j hj
+  by_cases hz : globN s gn.1 = 0
+  · exact Or.inl (by simp [bufferRegion, hz])
+  · simp only [bufferRegion, hz, ↓reduceIte] at h ⊢
+    unfold Disj at h ⊢
+    dsimp only at h ⊢
+    omega
+
+theorem WorldKeeps.keepsOn_buffer_parts
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
+    (h : WorldKeeps WorldOK R gw keep Q fname)
+    (hR : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) i, i ∈ R s →
+      ∃ gn ∈ globalBuffers, gn.1 ∉ typedRecords.map Prod.fst ∧
+        ∃ n, n ≤ gn.2 ∧ i = bufferRegion s (gn.1, n)) :
+    KeepsOn WorldOK WorldOK fname := by
+  obtain ⟨params, body, ret, hlook, hb⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => ?_⟩
+  have hstep := hb s hc hW hshape hnt hr
+  obtain ⟨_, S, hS⟩ := hW
+  obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
+  apply hstep.worldOK
+  refine ⟨S, Nd, hT, ?_⟩
+  intro i hi j hj
+  obtain ⟨gn, hg, hu, n, hle, rfl⟩ := hR s i hi
+  exact bufferRegion_disj_le hT gn hg hu n hle j hj
+
+
 /-- A relational world contract without output region implies the revision-6 shape (proved), so
 the proved compositions that only need `WorldOK` after the call keep their proofs. -/
 theorem WorldKeeps.keepsOn {gw : List String} {keep : List (String × List Nat)}
@@ -866,7 +996,7 @@ theorem WorldKeeps.keepsOn {gw : List String} {keep : List (String × List Nat)}
       PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
     (h : WorldKeeps WorldOK (fun _ => []) gw keep Q fname) : KeepsOn WorldOK WorldOK fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  exact ⟨params, body, ret, hlook, fun s hc hW hnt hr => (hb s hc hW hnt hr).worldOK_nil hW⟩
+  exact ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => (hb s hc hW hshape hnt hr).worldOK_nil hW⟩
 
 /-- `EvmInv` with an output region `R` that avoids the typed world, the persistent tries and every
 frame block (revision 7: the EVM-tier callees that write a caller buffer, `u256_to_be32` into
@@ -894,7 +1024,7 @@ def EvmKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (gw : Li
 theorem EvmKeeps.keepsOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
     {gw : List String} {fname : MlS} (h : EvmKeeps P gw fname) : KeepsOn P EvmInv fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  exact ⟨params, body, ret, hlook, fun s hc hP hnt hr => (hb s hc hP hnt hr).1⟩
+  exact ⟨params, body, ret, hlook, fun s hc hP hshape hnt hr => (hb s hc hP hshape hnt hr).1⟩
 
 /-- The intervals of a trie object `m` with node set `Nm`. -/
 def mptObjIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (Nm : List Nat) (m : Nat) : List Ivl :=
@@ -923,9 +1053,10 @@ def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (g
         FrameOutside s post
           (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s ++ [freeGap s]) (heapFree s)
 
-def MptKeeps (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+def MptKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (keep : List (String × List Nat)) (fname : MlS) : Prop :=
-  FunSpec MptObjReady (fun s r post => Resumes r → MptObjStep R gw keep s post) fname
+  FunSpec P (fun s r post => Resumes r → MptObjStep R gw keep s post) fname
 
 /-! ### Constructor return typing (revision 7, round-4 Gemini item 1(c)) -/
 
@@ -941,11 +1072,11 @@ theorem FreshBlock.disj_allocated {F : Type} {s post : PanSemStateFiniteExact 64
     {i : Ivl} (hi : Allocated s i) : Disj (p, (n + 7) / 8 * 8) i := by
   rcases h with ⟨_, hlo, _⟩
   rcases hi with hi | hi
-  · exact Or.inr (Nat.le_trans hi.2 hlo.1)
+  · exact Or.inr (Or.inr (Or.inr (Nat.le_trans hi.2 hlo.1)))
   · rcases hs with ⟨_, _, hframe, hgap, _, _, _, _⟩
     have hsep : heapLimit ≤ scratchStart := by decide
-    exact Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
-      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))
+    exact Or.inr (Or.inr (Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
+      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))))
 
 /-- A normal return is a word `w` with `Q s post w`. -/
 def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
@@ -1058,10 +1189,129 @@ def ReqCountInc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s _ post _ _ => memW post (globN s "bo" + 64) = memW s (globN s "bo" + 64) + 1
 
+/-- R10 header shape; the bounded extra-data length prevents encoder size wraparound. -/
+def HeaderAt {F : Type} (s : PanSemStateFiniteExact 64 F) (h : Nat) : Prop :=
+  WordsOK s (h, 248) ∧ memW s (h + 136) ≤ 32
+
+def HeaderOK : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => HeaderAt s (locN s "h")
+
+/-- Bounds are natural arithmetic, before any machine-word multiplication. -/
+def RequestsAt {F : Type} (s : PanSemStateFiniteExact 64 F) (rq : Nat) : Prop :=
+  WordsOK s (rq, 80) ∧ ∀ i, i < 5 → memW s (rq + 16 * i + 8) * 192 < 2 ^ 36
+
+def PayloadAt {F : Type} (s : PanSemStateFiniteExact 64 F) (pl : Nat) : Prop :=
+  WordsOK s (pl, 136) ∧ memW s (pl + 24) ≤ 32 ∧ memW s (pl + 40) < 2 ^ 32 ∧
+  ∀ i, i < memW s (pl + 40) → memW s (memW s (pl + 32) + 16 * i + 8) < 2 ^ 32
+
+/-- Access-list sizes counted before encoding, including all storage-key counts. -/
+def txAccessSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (tx : Nat) : Nat :=
+  ((List.range (memW s (tx + 216))).map
+    (fun i => memW s (memW s (tx + 208) + 24 * i + 16))).sum
+
+/-- Structural decoder result, shared by encoding, sender recovery and execution.
+The count bounds include fields unused by the selected transaction type, since
+`tx_encode_bound` reads all of them unconditionally. -/
+def TxValidAt {F : Type} (s : PanSemStateFiniteExact 64 F) (tx : Nat) : Prop :=
+  WordsOK s (tx, 384) ∧ Inside (tx, 384) sourceBase (globN s "heap_ptr") ∧
+  memW s tx ≤ 4 ∧ memW s (tx + 200) < 2 ^ 32 ∧
+  memW s (tx + 216) < 2 ^ 32 ∧ txAccessSlots s tx < 2 ^ 32 ∧
+  memW s (tx + 264) < 2 ^ 32 ∧ memW s (tx + 280) < 2 ^ 32 ∧
+  (0 < memW s (tx + 216) → WordsOK s (memW s (tx + 208), 24 * memW s (tx + 216))) ∧
+  (0 < memW s (tx + 280) → WordsOK s (memW s (tx + 272), 120 * memW s (tx + 280)))
+
+def TxValid : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxValidAt s (locN s "tx")
+
+/-- The access-list records modified during execution belong to the transaction,
+separate from the world. Their keys are read-only heap bytes. -/
+def TxAccessListAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (tx : Nat) : Prop :=
+  TxValidAt s tx ∧ IvlsDisj [(tx, 384)] (worldOwned s S Nd) ∧
+  (0 < memW s (tx + 216) →
+    Inside (memW s (tx + 208), 24 * memW s (tx + 216)) sourceBase (globN s "heap_ptr") ∧
+    IvlsDisj [(memW s (tx + 208), 24 * memW s (tx + 216))] (worldOwned s S Nd))
+
+def TxAccessListOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+  TxAccessListAt s S Nd (locN s "tx")
+
+/-- Entry established by execute_block after state_init and decode_transaction. -/
+def TxReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxReady s ∧ globN s "journal_cap" ≠ 0 ∧
+    memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0 ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListOK s S Nd
+
+/-- Stable copies retain heap-resident entries across scratch_release(tx_frame_mark). -/
+def StableLogsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  LogsListOK s logs ∧ (logs = 0 ∨
+    Inside (logs, 24) sourceBase (globN s "heap_ptr") ∧
+    Inside (memW s logs, 8 * memW s (logs + 16)) sourceBase (globN s "heap_ptr"))
+
+/-- Decoder ownership is relative to the EXIT typing, as for all fresh results. -/
+def RetDecodedTx : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ TxAccessListAt post S Nd w.toNat
+
+def RetHeader : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ HeaderAt post w.toNat ∧
+    Inside (w.toNat, 248) sourceBase (globN post "heap_ptr") ∧
+    IvlsDisj [(w.toNat, 248)] (worldOwned post S Nd)
+
+def RetHeaders : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    ∀ i, i < locN s "n" → HeaderAt post (memW post (a.toNat + 8 * i))
+
+/-- The frame returned to process_message_call retains its log header and
+entries until that caller's transaction mark is released. -/
+def RetFrameResult : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ WordsOK post (w.toNat, 280) ∧ Allocated post (w.toNat, 280) ∧
+    LogsListOK post (memW post (w.toNat + 88))
+
+/-- The output and its list remain usable until the transaction scratch mark is
+released. The entries themselves already have heap lifetime. -/
+def RetMessageOutput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ WordsOK post (w.toNat, 96) ∧
+    Inside (w.toNat, 96) sourceBase (globN post "heap_ptr") ∧
+    IvlsDisj [(w.toNat, 96)] (worldOwned post S Nd) ∧
+    LogsListOK post (memW post (w.toNat + 16))
+
+/-- Receipt slice and log count remain non-wrapping after writing the output pair. -/
+def RetReceiptBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr") ∧
+    a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
+    memW post (locN s "logs" + 8) < 2 ^ 28 ∧ LogsListOK post (locN s "logs")
+
+/-- state_init installs the journal before execute_block begins. -/
+def RetStateInit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post _ _ => ∀ v, r = some (.returned v) → globN post "journal_cap" ≠ 0
+
+/-- Newly appended receipt-log lists survive the final transaction scratch release. -/
+def RetTransactionLogs : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) →
+    let oldCount := memW s (memW s (globN s "bo" + 72) + 8)
+    let l := memW post (globN post "bo" + 72)
+    ∀ i, oldCount ≤ i → i < memW post (l + 8) →
+      StableLogsOK post (memW post (memW post l + 8 * i))
+
 /-- The host-input cells `run_attempt` reads the transaction count through: `si+0 = pl` and
 `pl+40 = ntx` (revision 7). -/
 def inputCells {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : List Ivl :=
-  [(si, 8), (memW s si + 40, 8)]
+  [(si, 40), (memW s si, 136), (memW s (si + 32), 80),
+   (memW s (memW s si + 32), 16 * memW s (memW s si + 40))]
 
 /-- `decode_host_input`'s extra (revision 7): the returned input record and its payload record are
 fresh heap words. Revision 8 (round-5 Astra items 4 and 8, Gemini suggestion): they are disjoint
@@ -1075,7 +1325,8 @@ def RetInput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemRes
     (∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
       Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i) ∧
     IvlsDisj (inputCells post w.toNat) (worldOwned post S' Nd') ∧
-    memW post (memW post w.toNat + 40) < 2 ^ 63
+    memW post (memW post w.toNat + 40) < 2 ^ 63 ∧
+    PayloadAt post (memW post w.toNat) ∧ RequestsAt post (memW post (w.toNat + 32))
 
 /-- Guard of `verify_stateless_new_payload`, `attempt_l*`, `run_attempt` (revision 7): `WorldOK`,
 and the input cells are allocated words outside the world, for one typing. `run_attempt` checks
@@ -1090,7 +1341,8 @@ def InputAt {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
   ArenaReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
     (∀ i ∈ inputCells s si, Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
     IvlsDisj (inputCells s si) (worldOwned s S Nd) ∧
-    memW s (memW s si + 40) < 2 ^ 63
+    memW s (memW s si + 40) < 2 ^ 63 ∧
+    PayloadAt s (memW s si) ∧ RequestsAt s (memW s (si + 32))
 
 def InputReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => InputAt s (locN s "si")
@@ -1118,6 +1370,24 @@ theorem localsOnly_inputReady : LocalsOnly ["si"] InputReady := by
   show InputAt _ _
   rw [ht]
   exact (inputAt_with_locals s locals k _).2 hP
+
+/-- The block executor retains decoded input slots and a validated header. The
+transaction slice lengths establish decode_transaction's non-wrapping guard. -/
+def BlockReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BlockReady s ∧ InputReady s ∧ HeaderAt s (locN s "hdr")
+
+theorem localsOnly_blockReadyStrong : LocalsOnly ["si", "hdr"] BlockReadyStrong := by
+  intro F s locals k hl hP
+  have hsi := locN_congr s locals k "si" (hl "si" (by simp))
+  have hh := locN_congr s locals k "hdr" (hl "hdr" (by simp))
+  refine ⟨localsOnly_blockReady s locals k (fun n hn => hl n (by simp_all)) hP.1, ?_, ?_⟩
+  · show InputAt _ _
+    rw [hsi]
+    exact (inputAt_with_locals s locals k _).2 hP.2.1
+  · change HeaderAt _ (locN { s with locals := locals, clock := k } "hdr")
+    rw [hh]
+    exact hP.2.2
+
 
 /-- The callee of a one-parameter function called with the caller's local of the same name sees
 that local's value (proved). -/
@@ -1275,8 +1545,8 @@ theorem ReadOnlyFn.keepsOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → 
     (hW : LocalsFree W) (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → GuestInv s)
     {fname : MlS} (h : ReadOnlyFn fname) : KeepsOn W W fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  refine ⟨params, body, ret, hlook, fun s hc hWs hnt hr => ?_⟩
-  rw [hb s hc (hG s hWs) hnt hr]
+  refine ⟨params, body, ret, hlook, fun s hc hWs hshape hnt hr => ?_⟩
+  rw [hb s hc (hG s hWs) hshape hnt hr]
   exact hW s _ _ hWs
 
 theorem worldOK_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : WorldOK s) :
@@ -1445,7 +1715,10 @@ theorem FunSpec.at_lookup {Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → 
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body body'
     ret ret' values callee (by rw [hcode]; exact hlook) hl
   subst hsame
-  exact hspec _ hcode hPc hnt
+  have hret := lookupCodeHOLFinite_installed_return state fname params body' body'
+    ret ret' values callee (by rw [hcode]; exact hlook) hl
+  subst hret
+  exact hspec _ hcode hPc ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩ hnt
 
 /-- Handler-free call with no destination, callee described by a `FunSpec`. Results other than
 a normal return are covered by `hother` (a call never yields `continue`). -/
@@ -2444,8 +2717,13 @@ theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
     ret' ret values callee (by rw [hcode]; exact hlook) hl
   subst hsame
+  have hret := lookupCodeHOLFinite_installed_return state fname params body body ret' ret
+    values callee (by rw [hcode]; exact hlook) hl
+  subst hret
   have hro := hb (callEntryStateHOLFinite state callee) hcode
-    (guestInv_callEntry state callee (hPG state hPs)) (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+    (guestInv_callEntry state callee (hPG state hPs))
+    ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
+    (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
   rw [hrun] at hro
   dsimp only at hro
   have heq : ({ post with locals := state.locals } : PanSemStateFiniteExact 64 F) =
@@ -2567,7 +2845,11 @@ theorem KeepsOn.resumeOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Pr
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
     ret' ret values callee (by rw [hcode]; exact hlook) hl
   subst hsame
+  have hret := lookupCodeHOLFinite_installed_return state fname params body body ret' ret
+    values callee (by rw [hcode]; exact hlook) hl
+  subst hret
   have hq := hb (callEntryStateHOLFinite state callee) hcode (hW state _ _ hP)
+    ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
     (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
   rw [hrun] at hq
   have := hW post (state.locals.update (name, value)) post.clock hq

@@ -1,0 +1,1721 @@
+{
+  "contracts": [
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_account_deployable",
+      "transitive_functions": 49,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_add_balance_change",
+      "transitive_functions": 18,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_add_code_change",
+      "transitive_functions": 18,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_add_nonce_change",
+      "transitive_functions": 17,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_add_storage_write",
+      "transitive_functions": 18,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_alloc",
+      "transitive_functions": 2,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "bal_accounts",
+        "bal_idx_accts",
+        "bal_idx_stor",
+        "bal_index",
+        "bal_key_buf",
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_bal_init",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "bal_accounts",
+        "bal_idx_accts",
+        "bal_idx_stor",
+        "bal_index",
+        "bal_key_buf",
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_bal_remove_change",
+      "transitive_functions": 6,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "b2_iv",
+        "b2_sigma",
+        "b2_v",
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "b2_iv": 64,
+        "b2_sigma": 80
+      },
+      "contract": "wk_blake2_init",
+      "transitive_functions": 3,
+      "writes_buffers": [
+        "b2_iv",
+        "b2_sigma"
+      ],
+      "writes_globals": [
+        "b2_iv",
+        "b2_sigma",
+        "b2_v",
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_block_rlp_length",
+      "transitive_functions": 24,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "bls_c",
+        "bls_discount",
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "bls_c": 7136,
+        "bls_discount": 2048
+      },
+      "contract": "wk_bls_precompiles_init",
+      "transitive_functions": 5,
+      "writes_buffers": [
+        "bls_c",
+        "bls_discount"
+      ],
+      "writes_globals": [
+        "bls_c",
+        "bls_discount",
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "bn_expw",
+        "bn_gamma",
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "bn_expw": 352,
+        "bn_gamma": 384
+      },
+      "contract": "wk_bn254_init",
+      "transitive_functions": 3,
+      "writes_buffers": [
+        "bn_expw",
+        "bn_gamma"
+      ],
+      "writes_globals": [
+        "bn_expw",
+        "bn_gamma",
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_build_block_access_list_rlp",
+      "transitive_functions": 43,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_hash_scratch": 40,
+        "mpt_key_scratch": 16
+      },
+      "contract": "wk_build_mpt_indexed",
+      "transitive_functions": 55,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_hash_scratch",
+        "mpt_key_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_cache_get_root",
+      "transitive_functions": 35,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {
+        "u256_ws": 640
+      },
+      "contract": "wk_calculate_blob_gas_price",
+      "transitive_functions": 20,
+      "writes_buffers": [
+        "u256_ws"
+      ],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_check_transaction",
+      "transitive_functions": 76,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_clear_account_preserving_balance",
+      "transitive_functions": 58,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_compute_contract_address",
+      "transitive_functions": 18,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_hash_scratch": 40,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_compute_state_root",
+      "transitive_functions": 105,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_hash_scratch",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_create_ether",
+      "transitive_functions": 59,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "ssz_offs": 64
+      },
+      "contract": "wk_decode_host_input",
+      "transitive_functions": 16,
+      "writes_buffers": [
+        "ssz_offs"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_decode_transaction",
+      "transitive_functions": 32,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n"
+      ],
+      "R_global_buffers": {
+        "sk_buf": 52
+      },
+      "contract": "wk_destroy_storage",
+      "transitive_functions": 17,
+      "writes_buffers": [
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {
+        "mpt_hash_scratch": 40
+      },
+      "contract": "wk_encode_account",
+      "transitive_functions": 10,
+      "writes_buffers": [
+        "mpt_hash_scratch"
+      ],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_encode_receipt",
+      "transitive_functions": 23,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_encode_transaction",
+      "transitive_functions": 31,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_encode_withdrawal_rlp",
+      "transitive_functions": 13,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "evm_empty",
+        "evm_key_buf",
+        "heap_ptr",
+        "null_address",
+        "pre_hdr_buf",
+        "transfer_topic",
+        "vm_system_address"
+      ],
+      "R_global_buffers": {
+        "evm_empty": 8,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "null_address": 24,
+        "transfer_topic": 32,
+        "vm_system_address": 24
+      },
+      "contract": "wk_evm_init",
+      "transitive_functions": 10,
+      "writes_buffers": [
+        "evm_empty",
+        "keccak_pad",
+        "keccak_st",
+        "null_address",
+        "transfer_topic",
+        "vm_system_address"
+      ],
+      "writes_globals": [
+        "evm_empty",
+        "evm_key_buf",
+        "heap_ptr",
+        "null_address",
+        "pre_hdr_buf",
+        "transfer_topic",
+        "vm_system_address"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_ext_code_of",
+      "transitive_functions": 50,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_extract_deposit_data",
+      "transitive_functions": 7,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "beacon_roots_address",
+        "builder_deposit_address",
+        "builder_exit_address",
+        "consolidation_request_address",
+        "deposit_contract_address",
+        "deposit_event_signature_hash",
+        "heap_ptr",
+        "history_storage_address",
+        "precompile_addrs",
+        "withdrawal_request_address",
+        "zero32"
+      ],
+      "R_global_buffers": {
+        "beacon_roots_address": 24,
+        "builder_deposit_address": 24,
+        "builder_exit_address": 24,
+        "consolidation_request_address": 24,
+        "deposit_contract_address": 24,
+        "deposit_event_signature_hash": 32,
+        "history_storage_address": 24,
+        "precompile_addrs": 360,
+        "withdrawal_request_address": 24,
+        "zero32": 32
+      },
+      "contract": "wk_fork_init",
+      "transitive_functions": 8,
+      "writes_buffers": [
+        "beacon_roots_address",
+        "builder_deposit_address",
+        "builder_exit_address",
+        "consolidation_request_address",
+        "deposit_contract_address",
+        "deposit_event_signature_hash",
+        "history_storage_address",
+        "precompile_addrs",
+        "withdrawal_request_address",
+        "zero32"
+      ],
+      "writes_globals": [
+        "beacon_roots_address",
+        "builder_deposit_address",
+        "builder_exit_address",
+        "consolidation_request_address",
+        "deposit_contract_address",
+        "deposit_event_signature_hash",
+        "heap_ptr",
+        "history_storage_address",
+        "precompile_addrs",
+        "withdrawal_request_address",
+        "zero32"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_get_account",
+      "transitive_functions": 45,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "sk_buf": 52
+      },
+      "contract": "wk_get_code",
+      "transitive_functions": 16,
+      "writes_buffers": [
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_header_hash",
+      "transitive_functions": 25,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "hdr_zero8",
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "hdr_zero8": 8
+      },
+      "contract": "wk_header_init",
+      "transitive_functions": 4,
+      "writes_buffers": [
+        "hdr_zero8"
+      ],
+      "writes_globals": [
+        "hdr_zero8",
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_htab_copy",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "ssz_len_chunk": 32
+      },
+      "contract": "wk_htr_new_payload_request",
+      "transitive_functions": 31,
+      "writes_buffers": [
+        "ssz_len_chunk"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "bal_key_buf": 64,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_idx_start_account",
+      "transitive_functions": 44,
+      "writes_buffers": [
+        "bal_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "bal_key_buf": 64,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_idx_start_storage",
+      "transitive_functions": 62,
+      "writes_buffers": [
+        "bal_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_increment_nonce",
+      "transitive_functions": 58,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_is_valid_versioned_hashes",
+      "transitive_functions": 35,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_keccak256",
+      "transitive_functions": 5,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "keccak_pad",
+        "keccak_rc",
+        "keccak_st"
+      ],
+      "R_global_buffers": {
+        "keccak_rc": 192
+      },
+      "contract": "wk_keccak_init",
+      "transitive_functions": 3,
+      "writes_buffers": [
+        "keccak_rc"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "keccak_pad",
+        "keccak_rc",
+        "keccak_st"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_logs_bloom",
+      "transitive_functions": 11,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_lst_new",
+      "transitive_functions": 3,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_lst_push",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_mark_account_created",
+      "transitive_functions": 12,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_memcpy",
+      "transitive_functions": 1,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_memzero",
+      "transitive_functions": 1,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_mpt_from_witness",
+      "transitive_functions": 37,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "empty_code_hash",
+        "empty_trie_root",
+        "heap_ptr",
+        "mpt_hash_scratch",
+        "mpt_key_scratch",
+        "mpt_nib_scratch"
+      ],
+      "R_global_buffers": {
+        "empty_code_hash": 32,
+        "empty_trie_root": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_hash_scratch": 40
+      },
+      "contract": "wk_mpt_init",
+      "transitive_functions": 8,
+      "writes_buffers": [
+        "empty_code_hash",
+        "empty_trie_root",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_hash_scratch"
+      ],
+      "writes_globals": [
+        "empty_code_hash",
+        "empty_trie_root",
+        "heap_ptr",
+        "mpt_hash_scratch",
+        "mpt_key_scratch",
+        "mpt_nib_scratch"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_mpt_new",
+      "transitive_functions": 3,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_msg_new",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_hash_scratch": 40
+      },
+      "contract": "wk_nodedb_build",
+      "transitive_functions": 17,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_hash_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr",
+        "wd_rlp_slices"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_hash_scratch": 40,
+        "mpt_key_scratch": 16,
+        "sha_pad": 128,
+        "sha_st": 64
+      },
+      "contract": "wk_payload_header",
+      "transitive_functions": 77,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_hash_scratch",
+        "mpt_key_scratch",
+        "sha_pad",
+        "sha_st"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr",
+        "wd_rlp_slices"
+      ]
+    },
+    {
+      "G": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ],
+      "R_global_buffers": {
+        "b2_v": 128,
+        "bal_key_buf": 64,
+        "bn_expw": 352,
+        "bn_gamma": 384,
+        "evm_key_buf": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "pre_hdr_buf": 96,
+        "rmd_h": 40,
+        "rmd_pad": 128,
+        "rmd_x": 128,
+        "sha_pad": 128,
+        "sha_st": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_process_checked_system_transaction",
+      "transitive_functions": 582,
+      "writes_buffers": [
+        "b2_v",
+        "bal_key_buf",
+        "bn_expw",
+        "bn_gamma",
+        "evm_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "pre_hdr_buf",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_x",
+        "sha_pad",
+        "sha_st",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ],
+      "R_global_buffers": {
+        "b2_v": 128,
+        "bal_key_buf": 64,
+        "bn_expw": 352,
+        "bn_gamma": 384,
+        "evm_key_buf": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "pre_hdr_buf": 96,
+        "rmd_h": 40,
+        "rmd_pad": 128,
+        "rmd_x": 128,
+        "sha_pad": 128,
+        "sha_st": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_process_general_purpose_requests",
+      "transitive_functions": 586,
+      "writes_buffers": [
+        "b2_v",
+        "bal_key_buf",
+        "bn_expw",
+        "bn_gamma",
+        "evm_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "pre_hdr_buf",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_x",
+        "sha_pad",
+        "sha_st",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "b2_v": 128,
+        "bn_expw": 352,
+        "bn_gamma": 384,
+        "evm_key_buf": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "pre_hdr_buf": 96,
+        "rmd_h": 40,
+        "rmd_pad": 128,
+        "rmd_x": 128,
+        "sha_pad": 128,
+        "sha_st": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_process_message_call",
+      "transitive_functions": 560,
+      "writes_buffers": [
+        "b2_v",
+        "bn_expw",
+        "bn_gamma",
+        "evm_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "pre_hdr_buf",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_x",
+        "sha_pad",
+        "sha_st",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "bal_index",
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ],
+      "R_global_buffers": {
+        "b2_v": 128,
+        "bal_key_buf": 64,
+        "bn_expw": 352,
+        "bn_gamma": 384,
+        "evm_key_buf": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "pre_hdr_buf": 96,
+        "rmd_h": 40,
+        "rmd_pad": 128,
+        "rmd_x": 128,
+        "sha_pad": 128,
+        "sha_st": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_process_transaction",
+      "transitive_functions": 626,
+      "writes_buffers": [
+        "b2_v",
+        "bal_key_buf",
+        "bn_expw",
+        "bn_gamma",
+        "evm_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "pre_hdr_buf",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_x",
+        "sha_pad",
+        "sha_st",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "bal_index",
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ],
+      "R_global_buffers": {
+        "b2_v": 128,
+        "bal_key_buf": 64,
+        "bn_expw": 352,
+        "bn_gamma": 384,
+        "evm_key_buf": 32,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "pre_hdr_buf": 96,
+        "rmd_h": 40,
+        "rmd_pad": 128,
+        "rmd_x": 128,
+        "sha_pad": 128,
+        "sha_st": 64,
+        "sk_buf": 52,
+        "u256_ws": 640
+      },
+      "contract": "wk_process_unchecked_system_transaction",
+      "transitive_functions": 581,
+      "writes_buffers": [
+        "b2_v",
+        "bal_key_buf",
+        "bn_expw",
+        "bn_gamma",
+        "evm_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "pre_hdr_buf",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_x",
+        "sha_pad",
+        "sha_st",
+        "sk_buf",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "bn_expw",
+        "bn_gamma",
+        "cur_cont",
+        "ev",
+        "frame_mem_ptr",
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ],
+      "R_global_buffers": {
+        "bal_key_buf": 64,
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_process_withdrawals",
+      "transitive_functions": 106,
+      "writes_buffers": [
+        "bal_key_buf",
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_record_pre_state_read",
+      "transitive_functions": 12,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "u256_ws": 640
+      },
+      "contract": "wk_recover_sender_with_chain_id",
+      "transitive_functions": 96,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_remove_storage_write",
+      "transitive_functions": 7,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_requests_append",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_tab",
+        "rmd_x"
+      ],
+      "R_global_buffers": {
+        "rmd_tab": 160
+      },
+      "contract": "wk_ripemd160_init",
+      "transitive_functions": 3,
+      "writes_buffers": [
+        "rmd_tab"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "rmd_h",
+        "rmd_pad",
+        "rmd_tab",
+        "rmd_x"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_rlp_encode_bytes",
+      "transitive_functions": 5,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_rlp_encode_word",
+      "transitive_functions": 3,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64,
+        "sk_buf": 52
+      },
+      "contract": "wk_set_account_balance",
+      "transitive_functions": 58,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch",
+        "sk_buf"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "sha_pad",
+        "sha_st"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_sha256_init",
+      "transitive_functions": 3,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "sha_pad",
+        "sha_st"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {
+        "sk_buf": 52
+      },
+      "contract": "wk_sk_make",
+      "transitive_functions": 2,
+      "writes_buffers": [
+        "sk_buf"
+      ],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "ssz_len_chunk",
+        "ssz_offs",
+        "zero_hashes"
+      ],
+      "R_global_buffers": {
+        "zero_hashes": 2048
+      },
+      "contract": "wk_ssz_init",
+      "transitive_functions": 3,
+      "writes_buffers": [
+        "zero_hashes"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "ssz_len_chunk",
+        "ssz_offs",
+        "zero_hashes"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_st_le64",
+      "transitive_functions": 2,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "journal_n",
+        "ts"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_state_fresh_tx",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "journal_n",
+        "ts"
+      ]
+    },
+    {
+      "G": [
+        "bs",
+        "heap_ptr",
+        "journal",
+        "journal_cap",
+        "journal_n",
+        "scratch_ptr",
+        "sk_buf",
+        "ts",
+        "ws"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_state_init",
+      "transitive_functions": 37,
+      "writes_buffers": [],
+      "writes_globals": [
+        "bs",
+        "heap_ptr",
+        "journal",
+        "journal_cap",
+        "journal_n",
+        "scratch_ptr",
+        "sk_buf",
+        "ts",
+        "ws"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_te_new",
+      "transitive_functions": 4,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_track_ancestor_access",
+      "transitive_functions": 1,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [],
+      "R_global_buffers": {},
+      "contract": "wk_u256_to_be_min",
+      "transitive_functions": 5,
+      "writes_buffers": [],
+      "writes_globals": []
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "u256_ws"
+      ],
+      "R_global_buffers": {},
+      "contract": "wk_u256_ws_init",
+      "transitive_functions": 3,
+      "writes_buffers": [],
+      "writes_globals": [
+        "heap_ptr",
+        "u256_ws"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "u256_ws": 640
+      },
+      "contract": "wk_validate_header",
+      "transitive_functions": 53,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "u256_ws"
+      ],
+      "writes_globals": [
+        "heap_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200
+      },
+      "contract": "wk_validate_headers",
+      "transitive_functions": 31,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_ws_get_account_optional",
+      "transitive_functions": 31,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    },
+    {
+      "G": [
+        "heap_ptr",
+        "scratch_ptr"
+      ],
+      "R_global_buffers": {
+        "keccak_pad": 136,
+        "keccak_st": 200,
+        "mpt_nib_scratch": 64
+      },
+      "contract": "wk_ws_storage_root_of",
+      "transitive_functions": 32,
+      "writes_buffers": [
+        "keccak_pad",
+        "keccak_st",
+        "mpt_nib_scratch"
+      ],
+      "writes_globals": [
+        "heap_ptr",
+        "scratch_ptr"
+      ]
+    }
+  ],
+  "count": 84,
+  "missing_buffers": 0,
+  "missing_globals": 0
+}

@@ -31,7 +31,7 @@ abbrev Ivl := Nat × Nat
 
 def Inside (i : Ivl) (lo hi : Nat) : Prop := lo ≤ i.1 ∧ i.1 + i.2 ≤ hi
 
-def Disj (i j : Ivl) : Prop := i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1
+def Disj (i j : Ivl) : Prop := i.2 = 0 ∨ j.2 = 0 ∨ i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1
 
 def InIvl (a : Nat) (i : Ivl) : Prop := i.1 ≤ a ∧ a < i.1 + i.2
 
@@ -225,6 +225,8 @@ def FunEnsures (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
   ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
     originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+        some (body, s.locals, retShape)) →
       ∀ v, (evaluateHOLFiniteState s body).1 = some (.returned v) →
         Q s (evaluateHOLFiniteState s body).2
 
@@ -248,7 +250,7 @@ def HtabExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinite
     (∀ i ∈ htabFootprint post t, Allocated post i ∧
       ((∃ j ∈ htabFootprint s t, Inside i j.1 (j.1 + j.2)) ∨ Inside i fresh.1 (fresh.1 + fresh.2))) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
-    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (∀ k : MlS, k ∉ (["heap_ptr"] : List String).map ofString → s.globals.lookup k = post.globals.lookup k)
 
 /-- `htab_union_into(dst, src)`: the same contract for `dst` (whatever `src` is, even `src = dst`
 or a table aliasing `dst`'s header: round-1 item 3). -/
@@ -265,7 +267,7 @@ def UnionExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinit
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
-    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (∀ k : MlS, k ∉ (["heap_ptr"] : List String).map ofString → s.globals.lookup k = post.globals.lookup k)
 
 /-! ### Global state typing: `WorldOK`
 
@@ -279,7 +281,7 @@ tables again. Values of every other table are never written through (accounts ar
 copy-on-write: `set_account_balance`, `increment_nonce`), so they are unconstrained. -/
 
 /-- Record slots holding table pointers. -/
-def wsTableSlots : List Nat := [32]
+def wsTableSlots : List Nat := [16, 32]
 def bsTableSlots : List Nat := [8, 16, 24, 32, 40, 48, 72]
 def tsTableSlots : List Nat := [8, 16, 24, 32, 40, 48, 56, 64]
 def globalTableRoots : List String := ["bal_accounts", "bal_idx_accts", "bal_idx_stor"]
@@ -302,16 +304,19 @@ An object whose pointer is still `0` (between `bo := alloc(88)`/`memzero` and th
 empty. -/
 def blockOutObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   let bo := globN s "bo"
-  let obj (p len : Nat) : Ivl := if bo = 0 ∨ p = 0 then (0, 0) else (p, len)
+  let obj (p len : Nat) : Ivl := if bo = 0 ∨ p = 0 ∨ len = 0 then (0, 0) else (p, len)
   let lst (k : Nat) : List Ivl :=
-    [obj (memW s (bo + k)) 24, obj (memW s (memW s (bo + k))) (8 * memW s (memW s (bo + k) + 16))]
+    let l := memW s (bo + k)
+    if bo = 0 ∨ l = 0 then [(0, 0), (0, 0)]
+    else [obj l 24, obj (memW s l) (8 * memW s (l + 16))]
   [obj (memW s (bo + 24)) (16 * memW s (bo + 80) + 16), obj (memW s (bo + 32)) (16 * memW s (bo + 80) + 16),
    obj (memW s (bo + 56)) 128] ++ lst 40 ++ lst 72
 
 /-- A list header `l` (`lst_new` 24-byte header: data `+0`, length `+8`, capacity `+16`) and its
 backing array of `esz`-byte elements. -/
 def lstObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz : Nat) : List Ivl :=
-  [(l, 24), (memW s l, esz * memW s (l + 16))]
+  if l = 0 then [(0, 0), (0, 0)] else
+    [(l, 24), (if esz * memW s (l + 16) = 0 then 0 else memW s l, esz * memW s (l + 16))]
 
 /-- A list can be pushed to and updated in place: `1 ≤` capacity (`lst_push` doubles it) and
 length `≤` capacity (`lst_upsert_idx` writes elements below the length). -/
@@ -348,7 +353,8 @@ array, the block-output objects (round-3 item 5) and the block-access-list accou
 their lists (round-3 Gemini item 4). -/
 def fixedObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) ++
-    [(globN s "journal", 32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
+    [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
 
 def RootIn (S : List Nat) (v : Nat) : Prop := v = 0 ∨ v ∈ S
 
@@ -387,7 +393,7 @@ they are checked for role CONSISTENCY against every slot rather than for distinc
 
 /-- Every table role with its key length. -/
 def tableRoles : List (String × Nat) :=
-  [("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
+  [("ws+16", 32), ("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
    ("bs+48", 32), ("bs+72", 20), ("ts+8", 20), ("ts+16", 20), ("ts+24", 52), ("ts+32", 20),
    ("ts+40", 52), ("ts+48", 32), ("ts+56", 20), ("ts+64", 52), ("bal_accounts", 20),
    ("bal_idx_accts", 28), ("bal_idx_stor", 60), ("bs.inner", 32), ("ts.inner", 32),
@@ -410,7 +416,7 @@ def nestRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g r : String) : List
 
 /-- Every logical world table slot outside the frames, with its role; `0` slots dropped. -/
 def worldRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
-  (recRoles s "ws" [(32, "ws+32")] ++
+  (recRoles s "ws" [(16, "ws+16"), (32, "ws+32")] ++
     recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"), (40, "bs+40"),
       (48, "bs+48"), (72, "bs+72")] ++
     recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"), (40, "ts+40"),
@@ -533,7 +539,10 @@ def NodeHeap {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop
     WordsOK s (nodeIvl s n) ∧
     (memW s n = 2 → RootIn Nd (memW s (n + 48))) ∧
     (memW s n = 3 → ∀ i, i < 16 → RootIn Nd (memW s (n + 32 + 8 * i))) ∧
-    ((memW s n = 1 ∨ memW s n = 2) → KeyIn s Nd (memW s (n + 32)) (memW s (n + 40)))) ∧
+    ((memW s n = 1 ∨ memW s n = 2) → KeyIn s Nd (memW s (n + 32)) (memW s (n + 40))) ∧
+    memW s (n + 16) < 2 ^ 40 ∧
+    (memW s n = 1 → memW s (n + 56) < 2 ^ 40) ∧
+    (memW s n = 3 → memW s (n + 168) < 2 ^ 40)) ∧
   (∀ n ∈ Nd, ∀ m ∈ Nd, n ≠ m → Disj (nodeIvl s n) (nodeIvl s m))
 
 /-- Everything a typed node set occupies: the node records and their paths (revision 6). Writing
@@ -631,6 +640,33 @@ def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List 
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
    (memW s (ec.1 + 88), 24)]
 
+/-- Log entries and their payloads live on the heap. Only the temporary list
+header/backing array may live in scratch before process_transaction copies it. -/
+def LogEntryOK {F : Type} (s : PanSemStateFiniteExact 64 F) (log : Nat) : Prop :=
+  WordsOK s (log, 40) ∧ Inside (log, 40) sourceBase (globN s "heap_ptr") ∧
+  memW s (log + 16) ≤ 4 ∧ memW s (log + 32) < 2 ^ 32 ∧
+  Inside (memW s log, 20) sourceBase (globN s "heap_ptr") ∧
+  Inside (memW s (log + 8), 32 * memW s (log + 16)) sourceBase (globN s "heap_ptr") ∧
+  Inside (memW s (log + 24), memW s (log + 32)) sourceBase (globN s "heap_ptr")
+
+/-- A null list represents the early, empty output of process_message_call;
+encode_receipt cannot return normally on a null list (its first word load errors). -/
+def LogsListOK {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  logs = 0 ∨ (WordsOK s (logs, 24) ∧ Allocated s (logs, 24) ∧
+    memW s (logs + 8) < 2 ^ 28 ∧ memW s (logs + 8) ≤ memW s (logs + 16) ∧
+    ∀ i, i < memW s (logs + 8) →
+      WordAt s (memW s logs + 8 * i) ∧ LogEntryOK s (memW s (memW s logs + 8 * i)))
+
+/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
+from every table footprint of `S`, every fixed object, every frame block of the chain and
+(revision 6, round-4 Astra item 2) the persistent tries. -/
+def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
+  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
+  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
+  AvoidsTries s S [(m, 176)]
+
 /-- One frame: record, continuation, stack and logs header in allocated scratch; EVM memory in
 the frame-memory arena below `frame_mem_ptr`; logs backing array in allocated heap or scratch;
 return-data buffer in allocated heap, or capacity `0` with pointer `evm_empty`;
@@ -654,7 +690,8 @@ def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Iv
     Inside (frameLogs s ec) (globN s "scratch_ptr") scratchEnd) ∧
   WordsOK s (frameLogs s ec) ∧
   ((memW s (e + 216) = 0 ∧ memW s (e + 144) = globN s "evm_empty") ∨
-    (Inside (frameRet s ec) sourceBase (globN s "heap_ptr") ∧ WordsOK s (frameRet s ec)))
+    (Inside (frameRet s ec) sourceBase (globN s "heap_ptr") ∧ WordsOK s (frameRet s ec))) ∧
+  LogsListOK s (memW s (e + 88)) ∧ MsgOwned s S (memW s (e + 112))
 
 /-- A suspended frame has room for one more stack word (round-2 item 2). `finish_child`
 (`Guest/SoftwareAst.lean:18572`) runs `stack_push` on the parent BEFORE

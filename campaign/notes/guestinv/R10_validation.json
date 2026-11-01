@@ -1,0 +1,94 @@
+{
+  "revision": 10,
+  "baseline": "ae2c240b83a9aa7d4af2d71a3ba479500e711f8e",
+  "toolchain": "leanprover/lean4:v4.33.1",
+  "source_sha256": "71c927399aea4a04eeee61a0ad766486340d3b4c5468b346078a523ab334be09",
+  "monolithic": {
+    "exit": 0,
+    "memory_cap_mib": 24576,
+    "wall_seconds": 44.01,
+    "peak_rss_kib": 9827120,
+    "olean_sha256": "d781156e0bfed83a65f6c47f06d71b3c64dbadb98c4671ce39ab154cc1d978a0"
+  },
+  "split": {
+    "modules": 36,
+    "all_exit_zero": true,
+    "memory_cap_mib": 24576,
+    "source_hashes_verified": true
+  },
+  "bounds": {
+    "K_pan": "37941560891073825511764141646999634224402957682657782639423140101703461104721948090020819186714614810687730474604",
+    "K_target": "4485583972239622846094745952947494668730166169983861635240711046121178727100250811132783957037278517212881661013543329547",
+    "K_pan_bits": 374,
+    "target_budget_ok": true,
+    "target_decimal_digits": 121,
+    "minimal_claim_json_bytes": 127,
+    "newline_terminated_claim_json_bytes": 128,
+    "largest_policy_finite_K": "99999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999999",
+    "policy_claim_byte_limit": 128
+  },
+  "source_audits": {
+    "retained_fb_unchanged": 723,
+    "node_leaves_reclassified": 4,
+    "GuestInv_unchanged": true,
+    "admitted_leaf_bodies": 936,
+    "wk_contracts": 84,
+    "missing_global_writes": 0,
+    "missing_buffer_regions": 0
+  },
+  "axioms": {
+    "assembly": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "assembly_main": [
+      "propext",
+      "Classical.choice",
+      "Quot.sound"
+    ],
+    "K_pan_budget": [
+      "propext"
+    ],
+    "K_target_budget": [
+      "propext"
+    ]
+  },
+  "status": "proposed specification with admitted leaves; no certificate verification claimed",
+  "bitmap_prerequisite": {
+    "original_source_sha256": "25e7708f1e2a72994ffa2c6c6157f75e9158177dcedfb07c82ee06ac34fca031",
+    "elaboration_source_sha256": "d1a3ab9ebf5a2fcac83e3ef5802e52d4f4b36e197b41fc4c8338172c3922210c",
+    "elaboration_changes": [
+      "section-local irreducibility of code and bitmaps",
+      "factor bitmap_image_byte through a generic list lemma",
+      "factor installed_bitmap_byte through generic ROM-reading lemmas"
+    ],
+    "command": [
+      "lean",
+      "-j1",
+      "-M24576",
+      "-DElab.async=false",
+      "-Dprofiler=true",
+      "-R",
+      "/var/lib/orb-node/caches/bitmap-prebuild/source",
+      "-o",
+      "/var/lib/orb-node/caches/repo/.lake/build/lib/lean/InitECandidate/Proofs/BitmapInstallation.olean",
+      "/var/lib/orb-node/caches/bitmap-prebuild/source/InitECandidate/Proofs/BitmapInstallation.lean"
+    ],
+    "exit": 0,
+    "seconds": 72.79,
+    "axioms": {
+      "InitE.installed_bitmap_byte": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ],
+      "InitE.installed_bitmap_word": [
+        "propext",
+        "Classical.choice",
+        "Quot.sound"
+      ]
+    },
+    "olean_sha256": "305b7ba287716efc73e5813f9be76b7b79dabc94f927380b8dd556d5c0d76786"
+  }
+}

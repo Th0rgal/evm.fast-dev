@@ -167,6 +167,33 @@ theorem coveredFfi_postDecls (input : Guest.InputBlob) (stCtxt : StructContextEx
   rw [hmeta.ffi]
   exact initial_oracle_consistent sourceOracle (Guest.guestHostMemory input)
 
+/-- Abstract-state entry bound, factored to keep the declaration AST out of the call proof. -/
+theorem terminating_main_run_bound
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {K : Nat}
+    (hmain : TerminatingFunBoundedOn P (ofString "main") K)
+    {F : Type} (s_decls : PanSemStateFiniteExact 64 F)
+    (hcode : s_decls.code = originalRuntimeCode)
+    (hentry : ∀ (k : Nat) (callee : HolFiniteMapExact MlS (ValueHOL 64)),
+      P (callEntryStateHOLFinite { s_decls with clock := k } callee)) :
+    ∀ (k : Nat) (res : Option (PanSemResultExact 64)) (s_post : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState { s_decls with clock := k }
+        (.call none (ofString "main") [] : ProgHOL 64) = (res, s_post) →
+      res ≠ some .timeOut → k - s_post.clock ≤ K + 1 := by
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+    fun state => ∀ callee, P (callEntryStateHOLFinite state callee)
+  have hcall : TerminatingProgBoundedOn (@Q)
+      (.call none (ofString "main") []) (K + 1) :=
+    TerminatingProgBoundedOn.tailCall_on (P := @Q) (Pc := @P) hmain [] (by
+      intro F state values body callee ret hcode hQ hargs hlookup
+      exact hQ callee)
+  intro k res s_post hrun hnt
+  have bound := hcall { s_decls with clock := k } hcode (hentry k)
+    (by rw [hrun]; exact hnt)
+  rw [hrun] at bound
+  change k ≤ s_post.clock + (K + 1) ∧ s_post.clock ≤ k at bound
+  omega
+
+
 /-- Generic bridge: any guard `P` that holds at every covered `main` entry state.
 Proof adapted from the repaired `coveredSourceTicksConsumedBounded_of_terminatingMain`. -/
 theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnP
@@ -182,68 +209,15 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnP
         sourceDeclarations = some s_decls →
       P (callEntryStateHOLFinite { s_decls with clock := k } callee)) :
     CoveredSourceTicksConsumedBounded (K + 1) := by
-  obtain ⟨params, body, retShape, hlook, hbody⟩ := hmain
-  have hparams : params = [] := by
-    rw [lookup_main] at hlook
-    have h1 := congrArg Prod.fst (Option.some.inj hlook)
-    exact h1.symm.trans rfl
-  subst hparams
-  intro input outcome events hgas _hsource _hcov stCtxt s_decls _hst hdecls k res s_post hrun hnt
+  intro input outcome events hgas _hsource _hcov stCtxt s_decls _hst hdecls
   have hmeta := B2PostDecls.evaluateDecls_meta sourceDeclarations
     { sourceInitialState input with structs := stCtxt } s_decls
     (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a)) hdecls
   have hcode : s_decls.code = originalRuntimeCode := by
     rw [hmeta.code]
     exact B2PostDecls.map_ext rfl
-  rw [evaluateHOLFiniteState_call] at hrun
-  have hargs : evalListHOLFinite { s_decls with clock := k }
-      (h := fun a => Classical.propDecidable (({ s_decls with clock := k } :
-        PanSemStateFiniteExact 64 Guest.HostMemory).memaddrs a)) [] = some [] := rfl
-  rw [hargs] at hrun
-  dsimp only at hrun
-  obtain ⟨callee, hlookup_call⟩ : ∃ callee,
-      PanSemStateFiniteExact.lookupCodeHOLFinite s_decls.code.lookup (ofString "main") [] =
-        some (body, callee, retShape) := by
-    rw [hcode]
-    rcases hx : PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup
-        (ofString "main") [] with _ | ⟨b, c, r⟩
-    · rw [PanSemStateFiniteExact.lookupCodeHOLFinite_eq_none_iff] at hx
-      simp [lookupCodeHOLExact, hlook] at hx
-    · have hx' := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some _ _ _ _ _ _ hx
-      simp [lookupCodeHOLExact, hlook] at hx'
-      obtain ⟨rfl, -, rfl⟩ := hx'
-      exact ⟨c, rfl⟩
-  rw [hlookup_call] at hrun
-  dsimp only at hrun
-  by_cases hk0 : k = 0
-  · subst hk0
-    simp at hrun
-    rcases hrun with ⟨rfl, _⟩
-    exact absurd rfl hnt
-  · simp only [hk0, ↓reduceIte] at hrun
-    let entry := callEntryStateHOLFinite { s_decls with clock := k } callee
-    have hentry_code : entry.code = originalRuntimeCode := hcode
-    have hentry_P : P entry := hentry input stCtxt s_decls k callee hgas hdecls
-    rcases hb_run : evaluateHOLFiniteState entry body with ⟨bres, bpost⟩
-    rw [hb_run] at hrun
-    have hb_nt : bres ≠ some .timeOut := by
-      intro hbt
-      subst hbt
-      simp at hrun
-      rcases hrun with ⟨rfl, _⟩
-      exact hnt rfl
-    have hb_bound := hbody entry hentry_code hentry_P (by rw [hb_run]; exact hb_nt)
-    rw [hb_run] at hb_bound
-    obtain ⟨hspent, _⟩ := hb_bound
-    have hentry_clk : entry.clock = k - 1 := rfl
-    dsimp only at hspent
-    have hpost_clk : s_post.clock = bpost.clock := by
-      cases bres with
-      | none => simp at hrun; obtain ⟨_, rfl⟩ := hrun; rfl
-      | some r =>
-        cases r <;> simp [emptyLocalsHOLFinite] at hrun
-        all_goals (try split at hrun) <;> obtain ⟨_, rfl⟩ := hrun <;> rfl
-    omega
+  exact terminating_main_run_bound hmain s_decls hcode
+    (fun k callee => hentry input stCtxt s_decls k callee hgas hdecls)
 
 /-- Main bridge (the replacement of `coveredSourceTicksConsumedBounded_of_terminatingMain`). -/
 theorem coveredSourceTicksConsumedBounded_of_terminatingMainOn {K : Nat}

@@ -1,9 +1,10 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 8
-(round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 10
+(R10 fixes: entry shapes, byte-key global frames, empty intervals, typed decoder outputs;
+round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
 results, guarded-loop progress contracts; the per-revision change lists are in
-`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; no `fb_*` changed).
+`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; R10 moves four node-encoding leaves to guarded contracts).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
@@ -16,7 +17,7 @@ Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
   sum over the body of `K(callee) + 1` per call and `(N + 1) * (body + 1)` per loop, where `N` is
   the loop's iteration bound, from a measure that holds for ARBITRARY memory and globals wherever
   one exists.
-* Five loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
+* The original guarded loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
   (count in memory), `_decode_witness_node_body` (needs heap/scratch separation) and the two MPT
   update loops. They and their callers form the *guarded tier* (§7), whose leaves carry explicit
   memory contracts (`HtabWF`, `EvmInv` with a gas-value-free potential, `WorldOK`).
@@ -1317,6 +1318,33 @@ theorem coveredFfi_postDecls (input : Guest.InputBlob) (stCtxt : StructContextEx
   rw [hmeta.ffi]
   exact initial_oracle_consistent sourceOracle (Guest.guestHostMemory input)
 
+/-- Abstract-state entry bound, factored to keep the declaration AST out of the call proof. -/
+theorem terminating_main_run_bound
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {K : Nat}
+    (hmain : TerminatingFunBoundedOn P (ofString "main") K)
+    {F : Type} (s_decls : PanSemStateFiniteExact 64 F)
+    (hcode : s_decls.code = originalRuntimeCode)
+    (hentry : ∀ (k : Nat) (callee : HolFiniteMapExact MlS (ValueHOL 64)),
+      P (callEntryStateHOLFinite { s_decls with clock := k } callee)) :
+    ∀ (k : Nat) (res : Option (PanSemResultExact 64)) (s_post : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState { s_decls with clock := k }
+        (.call none (ofString "main") [] : ProgHOL 64) = (res, s_post) →
+      res ≠ some .timeOut → k - s_post.clock ≤ K + 1 := by
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+    fun state => ∀ callee, P (callEntryStateHOLFinite state callee)
+  have hcall : TerminatingProgBoundedOn (@Q)
+      (.call none (ofString "main") []) (K + 1) :=
+    TerminatingProgBoundedOn.tailCall_on (P := @Q) (Pc := @P) hmain [] (by
+      intro F state values body callee ret hcode hQ hargs hlookup
+      exact hQ callee)
+  intro k res s_post hrun hnt
+  have bound := hcall { s_decls with clock := k } hcode (hentry k)
+    (by rw [hrun]; exact hnt)
+  rw [hrun] at bound
+  change k ≤ s_post.clock + (K + 1) ∧ s_post.clock ≤ k at bound
+  omega
+
+
 /-- Generic bridge: any guard `P` that holds at every covered `main` entry state.
 Proof adapted from the repaired `coveredSourceTicksConsumedBounded_of_terminatingMain`. -/
 theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnP
@@ -1332,68 +1360,15 @@ theorem coveredSourceTicksConsumedBounded_of_terminatingMainOnP
         sourceDeclarations = some s_decls →
       P (callEntryStateHOLFinite { s_decls with clock := k } callee)) :
     CoveredSourceTicksConsumedBounded (K + 1) := by
-  obtain ⟨params, body, retShape, hlook, hbody⟩ := hmain
-  have hparams : params = [] := by
-    rw [lookup_main] at hlook
-    have h1 := congrArg Prod.fst (Option.some.inj hlook)
-    exact h1.symm.trans rfl
-  subst hparams
-  intro input outcome events hgas _hsource _hcov stCtxt s_decls _hst hdecls k res s_post hrun hnt
+  intro input outcome events hgas _hsource _hcov stCtxt s_decls _hst hdecls
   have hmeta := B2PostDecls.evaluateDecls_meta sourceDeclarations
     { sourceInitialState input with structs := stCtxt } s_decls
     (fun a => Classical.propDecidable ((sourceInitialState input).memaddrs a)) hdecls
   have hcode : s_decls.code = originalRuntimeCode := by
     rw [hmeta.code]
     exact B2PostDecls.map_ext rfl
-  rw [evaluateHOLFiniteState_call] at hrun
-  have hargs : evalListHOLFinite { s_decls with clock := k }
-      (h := fun a => Classical.propDecidable (({ s_decls with clock := k } :
-        PanSemStateFiniteExact 64 Guest.HostMemory).memaddrs a)) [] = some [] := rfl
-  rw [hargs] at hrun
-  dsimp only at hrun
-  obtain ⟨callee, hlookup_call⟩ : ∃ callee,
-      PanSemStateFiniteExact.lookupCodeHOLFinite s_decls.code.lookup (ofString "main") [] =
-        some (body, callee, retShape) := by
-    rw [hcode]
-    rcases hx : PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup
-        (ofString "main") [] with _ | ⟨b, c, r⟩
-    · rw [PanSemStateFiniteExact.lookupCodeHOLFinite_eq_none_iff] at hx
-      simp [lookupCodeHOLExact, hlook] at hx
-    · have hx' := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some _ _ _ _ _ _ hx
-      simp [lookupCodeHOLExact, hlook] at hx'
-      obtain ⟨rfl, -, rfl⟩ := hx'
-      exact ⟨c, rfl⟩
-  rw [hlookup_call] at hrun
-  dsimp only at hrun
-  by_cases hk0 : k = 0
-  · subst hk0
-    simp at hrun
-    rcases hrun with ⟨rfl, _⟩
-    exact absurd rfl hnt
-  · simp only [hk0, ↓reduceIte] at hrun
-    let entry := callEntryStateHOLFinite { s_decls with clock := k } callee
-    have hentry_code : entry.code = originalRuntimeCode := hcode
-    have hentry_P : P entry := hentry input stCtxt s_decls k callee hgas hdecls
-    rcases hb_run : evaluateHOLFiniteState entry body with ⟨bres, bpost⟩
-    rw [hb_run] at hrun
-    have hb_nt : bres ≠ some .timeOut := by
-      intro hbt
-      subst hbt
-      simp at hrun
-      rcases hrun with ⟨rfl, _⟩
-      exact hnt rfl
-    have hb_bound := hbody entry hentry_code hentry_P (by rw [hb_run]; exact hb_nt)
-    rw [hb_run] at hb_bound
-    obtain ⟨hspent, _⟩ := hb_bound
-    have hentry_clk : entry.clock = k - 1 := rfl
-    dsimp only at hspent
-    have hpost_clk : s_post.clock = bpost.clock := by
-      cases bres with
-      | none => simp at hrun; obtain ⟨_, rfl⟩ := hrun; rfl
-      | some r =>
-        cases r <;> simp [emptyLocalsHOLFinite] at hrun
-        all_goals (try split at hrun) <;> obtain ⟨_, rfl⟩ := hrun <;> rfl
-    omega
+  exact terminating_main_run_bound hmain s_decls hcode
+    (fun k callee => hentry input stCtxt s_decls k callee hgas hdecls)
 
 /-- Main bridge (the replacement of `coveredSourceTicksConsumedBounded_of_terminatingMain`). -/
 theorem coveredSourceTicksConsumedBounded_of_terminatingMainOn {K : Nat}
@@ -1500,7 +1475,7 @@ abbrev Ivl := Nat × Nat
 
 def Inside (i : Ivl) (lo hi : Nat) : Prop := lo ≤ i.1 ∧ i.1 + i.2 ≤ hi
 
-def Disj (i j : Ivl) : Prop := i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1
+def Disj (i j : Ivl) : Prop := i.2 = 0 ∨ j.2 = 0 ∨ i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1
 
 def InIvl (a : Nat) (i : Ivl) : Prop := i.1 ≤ a ∧ a < i.1 + i.2
 
@@ -1694,6 +1669,8 @@ def FunEnsures (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
   ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
     originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+        some (body, s.locals, retShape)) →
       ∀ v, (evaluateHOLFiniteState s body).1 = some (.returned v) →
         Q s (evaluateHOLFiniteState s body).2
 
@@ -1717,7 +1694,7 @@ def HtabExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinite
     (∀ i ∈ htabFootprint post t, Allocated post i ∧
       ((∃ j ∈ htabFootprint s t, Inside i j.1 (j.1 + j.2)) ∨ Inside i fresh.1 (fresh.1 + fresh.2))) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
-    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (∀ k : MlS, k ∉ (["heap_ptr"] : List String).map ofString → s.globals.lookup k = post.globals.lookup k)
 
 /-- `htab_union_into(dst, src)`: the same contract for `dst` (whatever `src` is, even `src = dst`
 or a table aliasing `dst`'s header: round-1 item 3). -/
@@ -1734,7 +1711,7 @@ def UnionExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFinit
     globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
     (∀ i ∈ htabFootprint post t, Allocated post i) ∧
     FrameOutside s post (htabFootprint s t) fresh ∧
-    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (∀ k : MlS, k ∉ (["heap_ptr"] : List String).map ofString → s.globals.lookup k = post.globals.lookup k)
 
 /-! ### Global state typing: `WorldOK`
 
@@ -1748,7 +1725,7 @@ tables again. Values of every other table are never written through (accounts ar
 copy-on-write: `set_account_balance`, `increment_nonce`), so they are unconstrained. -/
 
 /-- Record slots holding table pointers. -/
-def wsTableSlots : List Nat := [32]
+def wsTableSlots : List Nat := [16, 32]
 def bsTableSlots : List Nat := [8, 16, 24, 32, 40, 48, 72]
 def tsTableSlots : List Nat := [8, 16, 24, 32, 40, 48, 56, 64]
 def globalTableRoots : List String := ["bal_accounts", "bal_idx_accts", "bal_idx_stor"]
@@ -1771,16 +1748,19 @@ An object whose pointer is still `0` (between `bo := alloc(88)`/`memzero` and th
 empty. -/
 def blockOutObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   let bo := globN s "bo"
-  let obj (p len : Nat) : Ivl := if bo = 0 ∨ p = 0 then (0, 0) else (p, len)
+  let obj (p len : Nat) : Ivl := if bo = 0 ∨ p = 0 ∨ len = 0 then (0, 0) else (p, len)
   let lst (k : Nat) : List Ivl :=
-    [obj (memW s (bo + k)) 24, obj (memW s (memW s (bo + k))) (8 * memW s (memW s (bo + k) + 16))]
+    let l := memW s (bo + k)
+    if bo = 0 ∨ l = 0 then [(0, 0), (0, 0)]
+    else [obj l 24, obj (memW s l) (8 * memW s (l + 16))]
   [obj (memW s (bo + 24)) (16 * memW s (bo + 80) + 16), obj (memW s (bo + 32)) (16 * memW s (bo + 80) + 16),
    obj (memW s (bo + 56)) 128] ++ lst 40 ++ lst 72
 
 /-- A list header `l` (`lst_new` 24-byte header: data `+0`, length `+8`, capacity `+16`) and its
 backing array of `esz`-byte elements. -/
 def lstObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz : Nat) : List Ivl :=
-  [(l, 24), (memW s l, esz * memW s (l + 16))]
+  if l = 0 then [(0, 0), (0, 0)] else
+    [(l, 24), (if esz * memW s (l + 16) = 0 then 0 else memW s l, esz * memW s (l + 16))]
 
 /-- A list can be pushed to and updated in place: `1 ≤` capacity (`lst_push` doubles it) and
 length `≤` capacity (`lst_upsert_idx` writes elements below the length). -/
@@ -1817,7 +1797,8 @@ array, the block-output objects (round-3 item 5) and the block-access-list accou
 their lists (round-3 Gemini item 4). -/
 def fixedObjects {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
   (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) ++
-    [(globN s "journal", 32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
+    [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
 
 def RootIn (S : List Nat) (v : Nat) : Prop := v = 0 ∨ v ∈ S
 
@@ -1856,7 +1837,7 @@ they are checked for role CONSISTENCY against every slot rather than for distinc
 
 /-- Every table role with its key length. -/
 def tableRoles : List (String × Nat) :=
-  [("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
+  [("ws+16", 32), ("ws+32", 32), ("bs+8", 20), ("bs+16", 20), ("bs+24", 52), ("bs+32", 20), ("bs+40", 52),
    ("bs+48", 32), ("bs+72", 20), ("ts+8", 20), ("ts+16", 20), ("ts+24", 52), ("ts+32", 20),
    ("ts+40", 52), ("ts+48", 32), ("ts+56", 20), ("ts+64", 52), ("bal_accounts", 20),
    ("bal_idx_accts", 28), ("bal_idx_stor", 60), ("bs.inner", 32), ("ts.inner", 32),
@@ -1879,7 +1860,7 @@ def nestRoles {F : Type} (s : PanSemStateFiniteExact 64 F) (g r : String) : List
 
 /-- Every logical world table slot outside the frames, with its role; `0` slots dropped. -/
 def worldRoleSlots {F : Type} (s : PanSemStateFiniteExact 64 F) : List (Nat × String) :=
-  (recRoles s "ws" [(32, "ws+32")] ++
+  (recRoles s "ws" [(16, "ws+16"), (32, "ws+32")] ++
     recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"), (40, "bs+40"),
       (48, "bs+48"), (72, "bs+72")] ++
     recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"), (40, "ts+40"),
@@ -2002,7 +1983,10 @@ def NodeHeap {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop
     WordsOK s (nodeIvl s n) ∧
     (memW s n = 2 → RootIn Nd (memW s (n + 48))) ∧
     (memW s n = 3 → ∀ i, i < 16 → RootIn Nd (memW s (n + 32 + 8 * i))) ∧
-    ((memW s n = 1 ∨ memW s n = 2) → KeyIn s Nd (memW s (n + 32)) (memW s (n + 40)))) ∧
+    ((memW s n = 1 ∨ memW s n = 2) → KeyIn s Nd (memW s (n + 32)) (memW s (n + 40))) ∧
+    memW s (n + 16) < 2 ^ 40 ∧
+    (memW s n = 1 → memW s (n + 56) < 2 ^ 40) ∧
+    (memW s n = 3 → memW s (n + 168) < 2 ^ 40)) ∧
   (∀ n ∈ Nd, ∀ m ∈ Nd, n ≠ m → Disj (nodeIvl s n) (nodeIvl s m))
 
 /-- Everything a typed node set occupies: the node records and their paths (revision 6). Writing
@@ -2100,6 +2084,33 @@ def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List 
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
    (memW s (ec.1 + 88), 24)]
 
+/-- Log entries and their payloads live on the heap. Only the temporary list
+header/backing array may live in scratch before process_transaction copies it. -/
+def LogEntryOK {F : Type} (s : PanSemStateFiniteExact 64 F) (log : Nat) : Prop :=
+  WordsOK s (log, 40) ∧ Inside (log, 40) sourceBase (globN s "heap_ptr") ∧
+  memW s (log + 16) ≤ 4 ∧ memW s (log + 32) < 2 ^ 32 ∧
+  Inside (memW s log, 20) sourceBase (globN s "heap_ptr") ∧
+  Inside (memW s (log + 8), 32 * memW s (log + 16)) sourceBase (globN s "heap_ptr") ∧
+  Inside (memW s (log + 24), memW s (log + 32)) sourceBase (globN s "heap_ptr")
+
+/-- A null list represents the early, empty output of process_message_call;
+encode_receipt cannot return normally on a null list (its first word load errors). -/
+def LogsListOK {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  logs = 0 ∨ (WordsOK s (logs, 24) ∧ Allocated s (logs, 24) ∧
+    memW s (logs + 8) < 2 ^ 28 ∧ memW s (logs + 8) ≤ memW s (logs + 16) ∧
+    ∀ i, i < memW s (logs + 8) →
+      WordAt s (memW s logs + 8 * i) ∧ LogEntryOK s (memW s (memW s logs + 8 * i)))
+
+/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
+from every table footprint of `S`, every fixed object, every frame block of the chain and
+(revision 6, round-4 Astra item 2) the persistent tries. -/
+def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
+  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
+  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
+  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
+  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
+  AvoidsTries s S [(m, 176)]
+
 /-- One frame: record, continuation, stack and logs header in allocated scratch; EVM memory in
 the frame-memory arena below `frame_mem_ptr`; logs backing array in allocated heap or scratch;
 return-data buffer in allocated heap, or capacity `0` with pointer `evm_empty`;
@@ -2123,7 +2134,8 @@ def FrameWF {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ec : Iv
     Inside (frameLogs s ec) (globN s "scratch_ptr") scratchEnd) ∧
   WordsOK s (frameLogs s ec) ∧
   ((memW s (e + 216) = 0 ∧ memW s (e + 144) = globN s "evm_empty") ∨
-    (Inside (frameRet s ec) sourceBase (globN s "heap_ptr") ∧ WordsOK s (frameRet s ec)))
+    (Inside (frameRet s ec) sourceBase (globN s "heap_ptr") ∧ WordsOK s (frameRet s ec))) ∧
+  LogsListOK s (memW s (e + 88)) ∧ MsgOwned s S (memW s (e + 112))
 
 /-- A suspended frame has room for one more stack word (round-2 item 2). `finish_child`
 (`Guest/SoftwareAst.lean:18572`) runs `stack_push` on the parent BEFORE
@@ -2334,17 +2346,17 @@ def «compact_to_nibbles» : Nat := Nat.max ((«mpt_fail» + 1)) (0) + («alloc�
 /-- `rlp_fail` (AST line 4305), log2 ≈ 0. -/
 def «rlp_fail» : Nat := 0
 
-/-- `rlp_read_length` (AST line 4317), log2 ≈ 65. -/
-def «rlp_read_length» : Nat := Nat.max ((«rlp_fail» + 1)) (0) + (2 ^ 64 + 1) * (0 + 1)
+/-- `rlp_read_length` (AST line 4317), log2 ≈ 35. -/
+def «rlp_read_length» : Nat := Nat.max ((«rlp_fail» + 1)) (0) + ((domainBytes + 1) + 1) * (0 + 1)
 
-/-- `rlp_item_header` (AST line 4432), log2 ≈ 66. -/
+/-- `rlp_item_header` (AST line 4432), log2 ≈ 36. -/
 def «rlp_item_header» : Nat := Nat.max ((«rlp_fail» + 1)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0)) (0)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0) + («rlp_read_length» + 1) + Nat.max ((«rlp_fail» + 1)) (0) + Nat.max ((«rlp_fail» + 1)) (0)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0)) (0) + Nat.max ((«rlp_fail» + 1)) (0) + («rlp_read_length» + 1) + Nat.max ((«rlp_fail» + 1)) (0) + Nat.max ((«rlp_fail» + 1)) (0)
 
 /-- `scratch_alloc` (AST line 154), log2 ≈ 2. -/
 def «scratch_alloc» : Nat := Nat.max ((«trap_with» + 1)) (0) + Nat.max ((«trap_with» + 1)) (0)
 
-/-- `_rlp_validate_items_body` (AST line 4507), log2 ≈ 319. -/
-def «_rlp_validate_items_body» : Nat := (((2 ^ 61 + 1) * 2 ^ 192) + 1) * (Nat.max (0) ((«rlp_item_header» + 1) + Nat.max ((«scratch_alloc» + 1)) (0)) + 1)
+/-- `_rlp_validate_items_body` (AST line 4507), log2 ≈ 72. -/
+def «_rlp_validate_items_body» : Nat := (62209915858 + 1) * (Nat.max (0) ((«rlp_item_header» + 1) + Nat.max ((«scratch_alloc» + 1)) (0)) + 1)
 
 /-- `scratch_mark` (AST line 176), log2 ≈ 0. -/
 def «scratch_mark» : Nat := 0
@@ -2352,28 +2364,28 @@ def «scratch_mark» : Nat := 0
 /-- `scratch_release` (AST line 186), log2 ≈ 0. -/
 def «scratch_release» : Nat := 0
 
-/-- `rlp_validate_items` (AST line 4548), log2 ≈ 319. -/
+/-- `rlp_validate_items` (AST line 4548), log2 ≈ 72. -/
 def «rlp_validate_items» : Nat := («scratch_mark» + 1) + («_rlp_validate_items_body» + 1) + («scratch_release» + 1) + («scratch_release» + 1)
 
-/-- `rlp_item_total` (AST line 4567), log2 ≈ 319. -/
+/-- `rlp_item_total` (AST line 4567), log2 ≈ 72. -/
 def «rlp_item_total» : Nat := («rlp_item_header» + 1) + Nat.max ((«rlp_validate_items» + 1)) (0)
 
-/-- `rlp_list_count` (AST line 4582), log2 ≈ 447. -/
-def «rlp_list_count» : Nat := (2 ^ 128 + 1) * ((«rlp_item_total» + 1) + 1)
+/-- `rlp_list_count` (AST line 4582), log2 ≈ 107. -/
+def «rlp_list_count» : Nat := ((domainBytes + 1) + 1) * ((«rlp_item_total» + 1) + 1)
 
-/-- `rlp_item` (AST line 4338), log2 ≈ 448. -/
+/-- `rlp_item` (AST line 4338), log2 ≈ 108. -/
 def «rlp_item» : Nat := Nat.max ((«rlp_fail» + 1)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0)) (0)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0) + («rlp_read_length» + 1) + Nat.max ((«rlp_fail» + 1)) (0) + Nat.max ((«rlp_fail» + 1)) (0)) (0) + Nat.max (Nat.max ((«rlp_fail» + 1)) (0) + («rlp_list_count» + 1)) (0) + Nat.max ((«rlp_fail» + 1)) (0) + («rlp_read_length» + 1) + Nat.max ((«rlp_fail» + 1)) (0) + Nat.max ((«rlp_fail» + 1)) (0) + («rlp_list_count» + 1)
 
-/-- `rlp_decode_fully` (AST line 4417), log2 ≈ 448. -/
+/-- `rlp_decode_fully` (AST line 4417), log2 ≈ 108. -/
 def «rlp_decode_fully» : Nat := («rlp_item» + 1) + Nat.max ((«rlp_fail» + 1)) (0)
 
-/-- `rlp_item_total_unchecked` (AST line 4600), log2 ≈ 66. -/
+/-- `rlp_item_total_unchecked` (AST line 4600), log2 ≈ 36. -/
 def «rlp_item_total_unchecked» : Nat := Nat.max ((«rlp_read_length» + 1)) (0) + («rlp_read_length» + 1)
 
-/-- `rlp_list_to_slices` (AST line 4631), log2 ≈ 447. -/
+/-- `rlp_list_to_slices` (AST line 4631), log2 ≈ 107. -/
 def «rlp_list_to_slices» : Nat := («rlp_list_count» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«rlp_item_total_unchecked» + 1) + 1)
 
-/-- `_decode_step` (AST line 10110), log2 ≈ 449. -/
+/-- `_decode_step` (AST line 10110), log2 ≈ 110. -/
 def «_decode_step» : Nat := («rlp_decode_fully» + 1) + («mpt_fail» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («rlp_list_to_slices» + 1) + Nat.max ((«rlp_item» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («compact_to_nibbles» + 1) + Nat.max ((«rlp_item» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («node_new_leaf» + 1)) (0) + Nat.max ((«mpt_fail» + 1)) (0) + («scratch_alloc» + 1)) (0) + Nat.max ((«mpt_fail» + 1)) (0) + («node_new_branch» + 1) + («scratch_alloc» + 1)
 
 /-- `node_new_hashed` (AST line 9975), log2 ≈ 2. -/
@@ -2391,16 +2403,16 @@ def «htab_get» : Nat := («htab_find_leaf» + 1) + («memeq» + 1)
 /-- `nodedb_lookup` (AST line 9960), log2 ≈ 67. -/
 def «nodedb_lookup» : Nat := («htab_get» + 1)
 
-/-- `_resolve_step` (AST line 10077), log2 ≈ 448. -/
+/-- `_resolve_step` (AST line 10077), log2 ≈ 108. -/
 def «_resolve_step» : Nat := («rlp_item» + 1) + («mpt_fail» + 1) + Nat.max (Nat.max ((«mpt_fail» + 1)) (0) + («nodedb_lookup» + 1) + Nat.max ((«node_new_hashed» + 1)) (0)) (0)
 
-/-- `_decode_witness_node_body` (AST line 10196), log2 ≈ 517. -/
-def «_decode_witness_node_body» : Nat := (2 ^ 68 + 1) * (Nat.max ((«_decode_step» + 1)) (Nat.max ((«_resolve_step» + 1)) (Nat.max (0) (Nat.max (Nat.max ((«mpt_fail» + 1)) (0) + Nat.max ((«mpt_fail» + 1)) (0) + («node_new_ext» + 1)) (Nat.max (0) ((«rlp_item» + 1) + Nat.max ((«mpt_fail» + 1)) (0)))))) + 1)
+/-- `_decode_witness_node_body` (AST line 10196), log2 ≈ 144. -/
+def «_decode_witness_node_body» : Nat := (22621787712 + 1) * (Nat.max ((«_decode_step» + 1)) (Nat.max ((«_resolve_step» + 1)) (Nat.max (0) (Nat.max (Nat.max ((«mpt_fail» + 1)) (0) + Nat.max ((«mpt_fail» + 1)) (0) + («node_new_ext» + 1)) (Nat.max (0) ((«rlp_item» + 1) + Nat.max ((«mpt_fail» + 1)) (0)))))) + 1)
 
-/-- `_decode_witness_node_mpt` (AST line 10311), log2 ≈ 517. -/
+/-- `_decode_witness_node_mpt` (AST line 10311), log2 ≈ 144. -/
 def «_decode_witness_node_mpt» : Nat := («_decode_witness_node_body» + 1) + («scratch_release» + 1)
 
-/-- `_decode_witness_node` (AST line 10328), log2 ≈ 517. -/
+/-- `_decode_witness_node` (AST line 10328), log2 ≈ 144. -/
 def «_decode_witness_node» : Nat := («scratch_mark» + 1) + («_decode_witness_node_mpt» + 1) + («scratch_release» + 1) + («scratch_release» + 1)
 
 /-- `_delete_ext_finish` (AST line 10727), log2 ≈ 66. -/
@@ -2418,17 +2430,17 @@ def «_insert_into_leaf» : Nat := Nat.max ((«memeq» + 1)) (0) + («common_pre
 /-- `node_invalidate` (AST line 10061), log2 ≈ 0. -/
 def «node_invalidate» : Nat := 0
 
-/-- `_mpt_delete_node_body` (AST line 10758), log2 ≈ 197. -/
-def «_mpt_delete_node_body» : Nat := (2 ^ 130 + 1) * (Nat.max (0) (Nat.max ((«mpt_fail» + 1)) (0) + («node_invalidate» + 1) + Nat.max (Nat.max ((«memeq» + 1)) (0)) (Nat.max ((«common_prefix_length» + 1) + Nat.max (0) ((«scratch_alloc» + 1))) (Nat.max (Nat.max (0) ((«_collapse_branch» + 1))) ((«scratch_alloc» + 1))))) + 1) + (2 ^ 64 + 1) * (Nat.max ((«_delete_ext_finish» + 1)) ((«_collapse_branch» + 1)) + 1)
+/-- `_mpt_delete_node_body` (AST line 10758), log2 ≈ 133. -/
+def «_mpt_delete_node_body» : Nat := (2 ^ 66 + 1) * (Nat.max (0) (Nat.max ((«mpt_fail» + 1)) (0) + («node_invalidate» + 1) + Nat.max (Nat.max ((«memeq» + 1)) (0)) (Nat.max ((«common_prefix_length» + 1) + Nat.max (0) ((«scratch_alloc» + 1))) (Nat.max (Nat.max (0) ((«_collapse_branch» + 1))) ((«scratch_alloc» + 1))))) + 1) + (2 ^ 64 + 1) * (Nat.max ((«_delete_ext_finish» + 1)) ((«_collapse_branch» + 1)) + 1)
 
-/-- `_mpt_delete_node` (AST line 10852), log2 ≈ 197. -/
+/-- `_mpt_delete_node` (AST line 10852), log2 ≈ 133. -/
 def «_mpt_delete_node» : Nat := («scratch_mark» + 1) + («_mpt_delete_node_body» + 1) + («scratch_release» + 1) + («scratch_release» + 1)
 
 /-- `_split_extension` (AST line 10561), log2 ≈ 65. -/
 def «_split_extension» : Nat := («node_new_branch» + 1) + Nat.max ((«node_new_ext» + 1)) (0) + Nat.max (0) (Nat.max ((«mpt_fail» + 1)) (0) + («node_new_leaf» + 1))
 
-/-- `_mpt_insert_node` (AST line 10598), log2 ≈ 197. -/
-def «_mpt_insert_node» : Nat := (2 ^ 130 + 1) * (Nat.max ((«node_new_leaf» + 1)) (Nat.max ((«mpt_fail» + 1)) (0) + («node_invalidate» + 1) + Nat.max ((«_insert_into_leaf» + 1)) (Nat.max ((«common_prefix_length» + 1) + Nat.max (0) ((«_split_extension» + 1) + Nat.max ((«node_new_ext» + 1)) (0))) (0))) + 1)
+/-- `_mpt_insert_node` (AST line 10598), log2 ≈ 133. -/
+def «_mpt_insert_node» : Nat := (2 ^ 66 + 1) * (Nat.max ((«node_new_leaf» + 1)) (Nat.max ((«mpt_fail» + 1)) (0) + («node_invalidate» + 1) + Nat.max ((«_insert_into_leaf» + 1)) (Nat.max ((«common_prefix_length» + 1) + Nat.max (0) ((«_split_extension» + 1) + Nat.max ((«node_new_ext» + 1)) (0))) (0))) + 1)
 
 /-- `_node_needs_rlp` (AST line 10989), log2 ≈ 0. -/
 def «_node_needs_rlp» : Nat := 0
@@ -2436,19 +2448,19 @@ def «_node_needs_rlp» : Nat := 0
 /-- `nibble_list_to_compact` (AST line 9877), log2 ≈ 35. -/
 def «nibble_list_to_compact» : Nat := ((domainBytes + 1) + 1) * (0 + 1)
 
-/-- `rlp_be_len` (AST line 4698), log2 ≈ 129. -/
-def «rlp_be_len» : Nat := (2 ^ 128 + 1) * (0 + 1)
+/-- `rlp_be_len` (AST line 4698), log2 ≈ 4. -/
+def «rlp_be_len» : Nat := (8 + 1) * (0 + 1)
 
-/-- `rlp_header_len` (AST line 4753), log2 ≈ 129. -/
+/-- `rlp_header_len` (AST line 4753), log2 ≈ 4. -/
 def «rlp_header_len» : Nat := («rlp_be_len» + 1)
 
-/-- `rlp_bytes_encoded_len` (AST line 4827), log2 ≈ 129. -/
+/-- `rlp_bytes_encoded_len` (AST line 4827), log2 ≈ 4. -/
 def «rlp_bytes_encoded_len» : Nat := («rlp_header_len» + 1)
 
-/-- `rlp_value_encoded_len` (AST line 11095), log2 ≈ 129. -/
+/-- `rlp_value_encoded_len` (AST line 11095), log2 ≈ 4. -/
 def «rlp_value_encoded_len» : Nat := («rlp_bytes_encoded_len» + 1)
 
-/-- `_node_rlp_begin` (AST line 10890), log2 ≈ 130. -/
+/-- `_node_rlp_begin` (AST line 10890), log2 ≈ 35. -/
 def «_node_rlp_begin» : Nat := Nat.max ((«alloc» + 1) + («nibble_list_to_compact» + 1) + («rlp_bytes_encoded_len» + 1) + Nat.max ((«rlp_value_encoded_len» + 1)) (0)) (0)
 
 /-- `node_ref_len` (AST line 11110), log2 ≈ 1. -/
@@ -2472,23 +2484,23 @@ def «node_write_ref» : Nat := Nat.max ((«memcpy» + 1)) (0) + Nat.max ((«mpt
 /-- `rlp_put_be` (AST line 4714), log2 ≈ 65. -/
 def «rlp_put_be» : Nat := (2 ^ 64 + 1) * (0 + 1)
 
-/-- `rlp_write_header` (AST line 4732), log2 ≈ 129. -/
+/-- `rlp_write_header` (AST line 4732), log2 ≈ 65. -/
 def «rlp_write_header» : Nat := («rlp_be_len» + 1) + («rlp_put_be» + 1)
 
-/-- `rlp_encode_bytes` (AST line 4768), log2 ≈ 129. -/
+/-- `rlp_encode_bytes` (AST line 4768), log2 ≈ 66. -/
 def «rlp_encode_bytes» : Nat := («rlp_write_header» + 1) + («memcpy» + 1)
 
-/-- `rlp_encode_list_header` (AST line 4817), log2 ≈ 129. -/
+/-- `rlp_encode_list_header` (AST line 4817), log2 ≈ 65. -/
 def «rlp_encode_list_header» : Nat := («rlp_write_header» + 1)
 
-/-- `rlp_list_header_len` (AST line 4842), log2 ≈ 129. -/
+/-- `rlp_list_header_len` (AST line 4842), log2 ≈ 4. -/
 def «rlp_list_header_len» : Nat := («rlp_header_len» + 1)
 
 /-- `_node_rlp_finish` (AST line 10930), log2 ≈ 164. -/
 def «_node_rlp_finish» : Nat := Nat.max ((«node_ref_len» + 1)) (0) + Nat.max ((2 ^ 64 + 1) * ((«node_ref_len» + 1) + 1) + («rlp_value_encoded_len» + 1)) (0) + («rlp_list_header_len» + 1) + («alloc» + 1) + («rlp_encode_list_header» + 1) + Nat.max ((«rlp_encode_bytes» + 1) + Nat.max ((«rlp_encode_bytes» + 1)) ((«node_write_ref» + 1))) ((2 ^ 64 + 1) * ((«node_write_ref» + 1) + 1) + («rlp_encode_bytes» + 1))
 
-/-- `_node_rlp_fill` (AST line 11011), log2 ≈ 256. -/
-def «_node_rlp_fill» : Nat := («scratch_mark» + 1) + («scratch_alloc» + 1) + («_node_rlp_begin» + 1) + (2 ^ 62 + 1) * (Nat.max (Nat.max ((«_node_needs_rlp» + 1)) (0)) (Nat.max ((2 ^ 192 + 1) * ((«_node_needs_rlp» + 1) + 1)) (0)) + Nat.max ((«scratch_alloc» + 1) + («_node_rlp_begin» + 1)) ((«_node_rlp_finish» + 1)) + 1) + («scratch_release» + 1)
+/-- `_node_rlp_fill` (AST line 11011), log2 ≈ 226. -/
+def «_node_rlp_fill» : Nat := («scratch_mark» + 1) + («scratch_alloc» + 1) + («_node_rlp_begin» + 1) + (2 ^ 62 + 1) * (Nat.max (Nat.max ((«_node_needs_rlp» + 1)) (0)) (Nat.max ((16 + 1) * ((«_node_needs_rlp» + 1) + 1)) (0)) + Nat.max ((«scratch_alloc» + 1) + («_node_rlp_begin» + 1)) ((«_node_rlp_finish» + 1)) + 1) + («scratch_release» + 1)
 
 /-- `htab_has` (AST line 5022), log2 ≈ 67. -/
 def «htab_has» : Nat := («htab_find_leaf» + 1) + («memeq» + 1)
@@ -2499,11 +2511,11 @@ def «is_warm_address» : Nat := («htab_has» + 1)
 /-- `access_gas_cost` (AST line 15496), log2 ≈ 67. -/
 def «access_gas_cost» : Nat := («is_warm_address» + 1)
 
-/-- `access_list_payload_len` (AST line 11977), log2 ≈ 194. -/
+/-- `access_list_payload_len` (AST line 11977), log2 ≈ 69. -/
 def «access_list_payload_len» : Nat := (2 ^ 64 + 1) * ((«rlp_list_header_len» + 1) + («rlp_list_header_len» + 1) + 1)
 
-/-- `htab_first_diff` (AST line 4951), log2 ≈ 129. -/
-def «htab_first_diff» : Nat := (2 ^ 64 + 1) * (Nat.max ((2 ^ 64 + 1) * (0 + 1)) (0) + 1)
+/-- `htab_first_diff` (AST line 4951), log2 ≈ 39. -/
+def «htab_first_diff» : Nat := ((domainBytes + 1) + 1) * (Nat.max ((8 + 1) * (0 + 1)) (0) + 1)
 
 /-- `htab_grow` (AST line 5117), log2 ≈ 66. -/
 def «htab_grow» : Nat := («alloc» + 1) + («memcpy» + 1) + («alloc» + 1) + («memcpy» + 1) + («alloc» + 1) + («memcpy» + 1)
@@ -2517,13 +2529,13 @@ def «htab_new_internal» : Nat := («htab_new_node» + 1)
 /-- `htab_new_leaf` (AST line 5068), log2 ≈ 67. -/
 def «htab_new_leaf» : Nat := («htab_new_node» + 1) + («memcpy» + 1)
 
-/-- `htab_set` (AST line 5149), log2 ≈ 130. -/
-def «htab_set» : Nat := («htab_find_leaf» + 1) + Nat.max ((«htab_new_leaf» + 1)) (0) + («memeq» + 1) + («htab_first_diff» + 1) + (2 ^ 128 + 1) * (0 + 1) + («htab_new_leaf» + 1) + («htab_new_internal» + 1)
+/-- `htab_set` (AST line 5149), log2 ≈ 69. -/
+def «htab_set» : Nat := («htab_find_leaf» + 1) + Nat.max ((«htab_new_leaf» + 1)) (0) + («memeq» + 1) + («htab_first_diff» + 1) + (7776239486 + 1) * (0 + 1) + («htab_new_leaf» + 1) + («htab_new_internal» + 1)
 
-/-- `record_pre_state_read` (AST line 12980), log2 ≈ 130. -/
+/-- `record_pre_state_read` (AST line 12980), log2 ≈ 69. -/
 def «record_pre_state_read» : Nat := («htab_set» + 1)
 
-/-- `decode_account_from_leaf` (AST line 11266), log2 ≈ 450. -/
+/-- `decode_account_from_leaf` (AST line 11266), log2 ≈ 111. -/
 def «decode_account_from_leaf» : Nat := («rlp_decode_fully» + 1) + («mpt_fail» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («rlp_list_to_slices» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («rlp_item» + 1) + («rlp_item» + 1) + («rlp_item» + 1) + («rlp_item» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + Nat.max ((«mpt_fail» + 1)) (0) + (2 ^ 64 + 1) * (0 + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («memzero» + 1) + (2 ^ 64 + 1) * (0 + 1) + Nat.max (0) (Nat.max ((«mpt_fail» + 1)) (0)) + Nat.max (0) (Nat.max ((«mpt_fail» + 1)) (0))
 
 /-- `heap_mark` (AST line 88), log2 ≈ 0. -/
@@ -2532,25 +2544,25 @@ def «heap_mark» : Nat := 0
 /-- `heap_release` (AST line 98), log2 ≈ 0. -/
 def «heap_release» : Nat := 0
 
-/-- `trie_walk` (AST line 10376), log2 ≈ 196. -/
-def «trie_walk» : Nat := (2 ^ 128 + 1) * (Nat.max ((«mpt_fail» + 1)) (0) + Nat.max (Nat.max ((«memeq» + 1)) (0)) (0) + Nat.max ((«memeq» + 1)) (0) + 1)
+/-- `trie_walk` (AST line 10376), log2 ≈ 163. -/
+def «trie_walk» : Nat := (71723149827058354885847154688 + 1) * (Nat.max ((«mpt_fail» + 1)) (0) + Nat.max (Nat.max ((«memeq» + 1)) (0)) (0) + Nat.max ((«memeq» + 1)) (0) + 1)
 
-/-- `trie_lookup` (AST line 10432), log2 ≈ 196. -/
+/-- `trie_lookup` (AST line 10432), log2 ≈ 163. -/
 def «trie_lookup» : Nat := («key_to_nibbles» + 1) + («trie_walk» + 1)
 
-/-- `ws_account_leaf` (AST line 12992), log2 ≈ 196. -/
+/-- `ws_account_leaf` (AST line 12992), log2 ≈ 163. -/
 def «ws_account_leaf» : Nat := («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + («trie_lookup» + 1) + («heap_release» + 1)
 
-/-- `ws_get_account_optional` (AST line 13009), log2 ≈ 450. -/
+/-- `ws_get_account_optional` (AST line 13009), log2 ≈ 163. -/
 def «ws_get_account_optional» : Nat := («ws_account_leaf» + 1) + («alloc» + 1) + («decode_account_from_leaf» + 1)
 
-/-- `ws_storage_root_of` (AST line 13027), log2 ≈ 450. -/
+/-- `ws_storage_root_of` (AST line 13027), log2 ≈ 163. -/
 def «ws_storage_root_of» : Nat := («ws_get_account_optional» + 1)
 
-/-- `ws_account_has_storage` (AST line 13119), log2 ≈ 450. -/
+/-- `ws_account_has_storage` (AST line 13119), log2 ≈ 163. -/
 def «ws_account_has_storage» : Nat := («ws_storage_root_of» + 1) + («memeq» + 1)
 
-/-- `account_has_storage` (AST line 13330), log2 ≈ 450. -/
+/-- `account_has_storage` (AST line 13330), log2 ≈ 163. -/
 def «account_has_storage» : Nat := («htab_get» + 1) + («htab_get» + 1) + («record_pre_state_read» + 1) + («ws_account_has_storage» + 1)
 
 /-- `acct_new` (AST line 12937), log2 ≈ 2. -/
@@ -2559,19 +2571,19 @@ def «acct_new» : Nat := («alloc» + 1)
 /-- `acct_empty` (AST line 12956), log2 ≈ 3. -/
 def «acct_empty» : Nat := («acct_new» + 1)
 
-/-- `get_pre_state_account_optional` (AST line 13135), log2 ≈ 450. -/
+/-- `get_pre_state_account_optional` (AST line 13135), log2 ≈ 163. -/
 def «get_pre_state_account_optional» : Nat := («htab_set» + 1) + («htab_get» + 1) + («record_pre_state_read» + 1) + («ws_get_account_optional» + 1)
 
-/-- `get_account_optional` (AST line 13170), log2 ≈ 450. -/
+/-- `get_account_optional` (AST line 13170), log2 ≈ 163. -/
 def «get_account_optional» : Nat := («htab_set» + 1) + («htab_get» + 1) + («get_pre_state_account_optional» + 1)
 
-/-- `get_account` (AST line 13188), log2 ≈ 450. -/
+/-- `get_account` (AST line 13188), log2 ≈ 163. -/
 def «get_account» : Nat := («get_account_optional» + 1) + Nat.max ((«acct_empty» + 1)) (0)
 
-/-- `account_deployable` (AST line 13358), log2 ≈ 451. -/
+/-- `account_deployable` (AST line 13358), log2 ≈ 164. -/
 def «account_deployable» : Nat := («get_account» + 1) + («memeq» + 1) + («account_has_storage» + 1)
 
-/-- `account_exists` (AST line 13315), log2 ≈ 450. -/
+/-- `account_exists` (AST line 13315), log2 ≈ 163. -/
 def «account_exists» : Nat := («get_account_optional» + 1)
 
 /-- `acct_copy` (AST line 12967), log2 ≈ 65. -/
@@ -2589,7 +2601,7 @@ def «htab_new» : Nat := («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + 
 /-- `lst_new` (AST line 13804), log2 ≈ 3. -/
 def «lst_new» : Nat := («alloc» + 1) + («alloc» + 1)
 
-/-- `bal_ensure_account` (AST line 13883), log2 ≈ 130. -/
+/-- `bal_ensure_account` (AST line 13883), log2 ≈ 69. -/
 def «bal_ensure_account» : Nat := («htab_get» + 1) + («alloc» + 1) + («htab_new» + 1) + («htab_new» + 1) + («lst_new» + 1) + («lst_new» + 1) + («lst_new» + 1) + («htab_set» + 1)
 
 /-- `lst_push` (AST line 13840), log2 ≈ 65. -/
@@ -2598,28 +2610,28 @@ def «lst_push» : Nat := Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0)
 /-- `lst_upsert_idx` (AST line 13919), log2 ≈ 66. -/
 def «lst_upsert_idx» : Nat := (2 ^ 64 + 1) * (0 + 1) + («lst_push» + 1)
 
-/-- `add_balance_change` (AST line 13978), log2 ≈ 130. -/
+/-- `add_balance_change` (AST line 13978), log2 ≈ 69. -/
 def «add_balance_change» : Nat := («bal_ensure_account» + 1) + («lst_upsert_idx» + 1)
 
-/-- `add_code_change` (AST line 14023), log2 ≈ 130. -/
+/-- `add_code_change` (AST line 14023), log2 ≈ 69. -/
 def «add_code_change» : Nat := («bal_ensure_account» + 1) + («lst_upsert_idx» + 1)
 
-/-- `add_nonce_change` (AST line 13992), log2 ≈ 130. -/
+/-- `add_nonce_change` (AST line 13992), log2 ≈ 69. -/
 def «add_nonce_change» : Nat := («bal_ensure_account» + 1) + (2 ^ 64 + 1) * (0 + 1) + («lst_push» + 1)
 
 /-- `add_sat` (AST line 14847), log2 ≈ 0. -/
 def «add_sat» : Nat := 0
 
-/-- `add_storage_read` (AST line 13965), log2 ≈ 131. -/
+/-- `add_storage_read` (AST line 13965), log2 ≈ 70. -/
 def «add_storage_read» : Nat := («bal_ensure_account» + 1) + («htab_set» + 1)
 
-/-- `add_storage_write` (AST line 13942), log2 ≈ 131. -/
+/-- `add_storage_write` (AST line 13942), log2 ≈ 70. -/
 def «add_storage_write» : Nat := («bal_ensure_account» + 1) + («htab_get» + 1) + Nat.max ((«lst_new» + 1) + («htab_set» + 1)) (0) + («lst_upsert_idx» + 1)
 
 /-- `add_to_bloom` (AST line 31915), log2 ≈ 100. -/
 def «add_to_bloom» : Nat := («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + (2 ^ 64 + 1) * (0 + 1) + («heap_release» + 1)
 
-/-- `add_touched_account` (AST line 14039), log2 ≈ 130. -/
+/-- `add_touched_account` (AST line 14039), log2 ≈ 69. -/
 def «add_touched_account» : Nat := («bal_ensure_account» + 1)
 
 /-- `st_be32` (AST line 585), log2 ≈ 0. -/
@@ -2640,13 +2652,13 @@ def «u256_from_be» : Nat := Nat.max ((«bswap64» + 1) + («bswap64» + 1) + (
 /-- `address_to_u256` (AST line 14906), log2 ≈ 65. -/
 def «address_to_u256» : Nat := («u256_from_be» + 1)
 
-/-- `udivmod` (AST line 695), log2 ≈ 65. -/
-def «udivmod» : Nat := Nat.max ((«trap_with» + 1)) (0) + (2 ^ 64 + 1) * (0 + 1)
+/-- `udivmod` (AST line 695), log2 ≈ 7. -/
+def «udivmod» : Nat := Nat.max ((«trap_with» + 1)) (0) + (64 + 1) * (0 + 1)
 
-/-- `udiv` (AST line 727), log2 ≈ 65. -/
+/-- `udiv` (AST line 727), log2 ≈ 7. -/
 def «udiv» : Nat := («udivmod» + 1)
 
-/-- `check_gas_limit` (AST line 9590), log2 ≈ 65. -/
+/-- `check_gas_limit` (AST line 9590), log2 ≈ 7. -/
 def «check_gas_limit» : Nat := («udiv» + 1)
 
 /-- `bal_init` (AST line 13863), log2 ≈ 6. -/
@@ -2655,7 +2667,7 @@ def «bal_init» : Nat := («htab_new» + 1) + («htab_new» + 1) + («htab_new�
 /-- `htab_keys` (AST line 5332), log2 ≈ 129. -/
 def «htab_keys» : Nat := («alloc» + 1) + (2 ^ 64 + 1) * ((«memcpy» + 1) + 1)
 
-/-- `rlp_encode_word` (AST line 4790), log2 ≈ 129. -/
+/-- `rlp_encode_word` (AST line 4790), log2 ≈ 65. -/
 def «rlp_encode_word» : Nat := («rlp_be_len» + 1) + («rlp_put_be» + 1)
 
 /-- `bit_length64` (AST line 1919), log2 ≈ 0. -/
@@ -2673,7 +2685,7 @@ def «u256_limb» : Nat := 0
 /-- `u256_to_be_min` (AST line 2302), log2 ≈ 66. -/
 def «u256_to_be_min» : Nat := («u256_byte_length» + 1) + (2 ^ 64 + 1) * ((«u256_limb» + 1) + 1)
 
-/-- `rlp_put_u256` (AST line 9334), log2 ≈ 129. -/
+/-- `rlp_put_u256` (AST line 9334), log2 ≈ 67. -/
 def «rlp_put_u256» : Nat := («heap_mark» + 1) + («alloc» + 1) + («u256_to_be_min» + 1) + («rlp_encode_bytes» + 1) + («heap_release» + 1)
 
 /-- `bal_sort_gt` (AST line 14327), log2 ≈ 65. -/
@@ -2697,22 +2709,22 @@ def «build_block_access_list_rlp» : Nat := (2 ^ 64 + 1) * ((«htab_item» + 1)
 /-- `mpt_new` (AST line 10444), log2 ≈ 2. -/
 def «mpt_new» : Nat := («alloc» + 1)
 
-/-- `node_rlp` (AST line 11074), log2 ≈ 256. -/
+/-- `node_rlp` (AST line 11074), log2 ≈ 226. -/
 def «node_rlp» : Nat := Nat.max ((«mpt_fail» + 1)) (0) + («_node_rlp_fill» + 1)
 
-/-- `node_hash` (AST line 11202), log2 ≈ 256. -/
+/-- `node_hash` (AST line 11202), log2 ≈ 226. -/
 def «node_hash» : Nat := («node_rlp» + 1) + («alloc» + 1) + («keccak256» + 1)
 
-/-- `mpt_root` (AST line 11223), log2 ≈ 256. -/
+/-- `mpt_root` (AST line 11223), log2 ≈ 226. -/
 def «mpt_root» : Nat := Nat.max ((«memcpy» + 1)) (0) + («node_hash» + 1) + («memcpy» + 1)
 
 /-- `mpt_nibble_key` (AST line 10470), log2 ≈ 100. -/
 def «mpt_nibble_key» : Nat := Nat.max ((«keccak256» + 1) + («alloc» + 1) + («key_to_nibbles» + 1)) (0) + («alloc» + 1) + («key_to_nibbles» + 1)
 
-/-- `mpt_set` (AST line 10872), log2 ≈ 197. -/
+/-- `mpt_set` (AST line 10872), log2 ≈ 133. -/
 def «mpt_set» : Nat := («mpt_nibble_key» + 1) + Nat.max ((«_mpt_delete_node» + 1)) ((«_mpt_insert_node» + 1))
 
-/-- `build_mpt_indexed` (AST line 11243), log2 ≈ 261. -/
+/-- `build_mpt_indexed` (AST line 11243), log2 ≈ 226. -/
 def «build_mpt_indexed» : Nat := («heap_mark» + 1) + («mpt_new» + 1) + (2 ^ 64 + 1) * ((«rlp_encode_word» + 1) + («mpt_set» + 1) + 1) + («mpt_root» + 1) + («heap_release» + 1)
 
 /-- `sha256_block` (AST line 2367), log2 ≈ 0. -/
@@ -2730,58 +2742,58 @@ def «sha256» : Nat := («sha256_state_init» + 1) + ((domainBytes + 1) + 1) * 
 /-- `compute_requests_hash` (AST line 32190), log2 ≈ 131. -/
 def «compute_requests_hash» : Nat := («heap_mark» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«sha256» + 1) + 1) + («sha256» + 1) + («heap_release» + 1)
 
-/-- `cache_get_root` (AST line 32325), log2 ≈ 450. -/
+/-- `cache_get_root` (AST line 32325), log2 ≈ 163. -/
 def «cache_get_root» : Nat := («htab_has» + 1) + («ws_storage_root_of» + 1)
 
-/-- `encode_account` (AST line 11343), log2 ≈ 131. -/
+/-- `encode_account` (AST line 11343), log2 ≈ 67. -/
 def «encode_account» : Nat := («rlp_encode_word» + 1) + («st_be64» + 1) + («st_be64» + 1) + («st_be64» + 1) + («st_be64» + 1) + (32 + 1) * (0 + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1)
 
 /-- `htab_copy` (AST line 5354), log2 ≈ 67. -/
 def «htab_copy» : Nat := («alloc» + 1) + («memcpy» + 1) + («alloc» + 1) + («memcpy» + 1) + («alloc» + 1) + («memcpy» + 1) + («alloc» + 1) + («memcpy» + 1)
 
-/-- `decode_witness_to_mpt` (AST line 10348), log2 ≈ 517. -/
+/-- `decode_witness_to_mpt` (AST line 10348), log2 ≈ 144. -/
 def «decode_witness_to_mpt» : Nat := («memeq» + 1) + («nodedb_lookup» + 1) + Nat.max ((«mpt_fail» + 1)) (0) + («_decode_witness_node» + 1) + Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0)
 
-/-- `mpt_from_witness` (AST line 10459), log2 ≈ 517. -/
+/-- `mpt_from_witness` (AST line 10459), log2 ≈ 144. -/
 def «mpt_from_witness» : Nat := («decode_witness_to_mpt» + 1) + («mpt_new» + 1)
 
-/-- `compute_state_root` (AST line 32341), log2 ≈ 581. -/
+/-- `compute_state_root` (AST line 32341), log2 ≈ 326. -/
 def «compute_state_root» : Nat := («htab_copy» + 1) + («htab_new» + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«htab_has» + 1) + Nat.max ((«htab_set» + 1)) (0) + («ws_storage_root_of» + 1) + («mpt_from_witness» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«u256_is_zero» + 1) + Nat.max ((«u256_to_be_min» + 1) + («rlp_encode_bytes» + 1) + («alloc» + 1) + («memcpy» + 1) + («mpt_set» + 1)) (0) + Nat.max ((«mpt_set» + 1)) (0)) (0) + 1) + 1) + («alloc» + 1) + («mpt_root» + 1) + («htab_set» + 1)) (0) + 1) + («mpt_from_witness» + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«htab_has» + 1) + Nat.max ((«ws_get_account_optional» + 1) + («htab_set» + 1) + Nat.max ((«htab_get» + 1) + («alloc» + 1) + («encode_account» + 1) + («mpt_set» + 1)) (0)) (0)) (0) + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max (Nat.max ((«mpt_set» + 1)) ((«htab_get» + 1) + Nat.max (0) ((«cache_get_root» + 1)) + («alloc» + 1) + («encode_account» + 1) + («mpt_set» + 1))) (0) + 1) + («mpt_root» + 1)
 
-/-- `tx_fixed_bytes` (AST line 11468), log2 ≈ 448. -/
+/-- `tx_fixed_bytes` (AST line 11468), log2 ≈ 108. -/
 def «tx_fixed_bytes» : Nat := («rlp_item» + 1)
 
-/-- `tx_list_item` (AST line 11510), log2 ≈ 448. -/
+/-- `tx_list_item` (AST line 11510), log2 ≈ 108. -/
 def «tx_list_item» : Nat := («rlp_item» + 1)
 
-/-- `decode_access_list` (AST line 11525), log2 ≈ 576. -/
+/-- `decode_access_list` (AST line 11525), log2 ≈ 236. -/
 def «decode_access_list» : Nat := («rlp_list_to_slices» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«rlp_item» + 1) + («rlp_list_to_slices» + 1) + («tx_fixed_bytes» + 1) + («tx_list_item» + 1) + («rlp_list_to_slices» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«tx_fixed_bytes» + 1) + («memcpy» + 1) + 1) + 1)
 
-/-- `tx_scalar_item` (AST line 11389), log2 ≈ 448. -/
+/-- `tx_scalar_item` (AST line 11389), log2 ≈ 108. -/
 def «tx_scalar_item» : Nat := («rlp_item» + 1)
 
-/-- `tx_scalar_u256` (AST line 11416), log2 ≈ 448. -/
+/-- `tx_scalar_u256` (AST line 11416), log2 ≈ 108. -/
 def «tx_scalar_u256» : Nat := («tx_scalar_item» + 1) + («u256_from_be» + 1)
 
-/-- `tx_scalar_word` (AST line 11431), log2 ≈ 448. -/
+/-- `tx_scalar_word` (AST line 11431), log2 ≈ 108. -/
 def «tx_scalar_word» : Nat := («tx_scalar_item» + 1) + (2 ^ 64 + 1) * (0 + 1)
 
-/-- `decode_authorizations` (AST line 11588), log2 ≈ 514. -/
+/-- `decode_authorizations` (AST line 11588), log2 ≈ 175. -/
 def «decode_authorizations» : Nat := («rlp_list_to_slices» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«rlp_item» + 1) + («rlp_list_to_slices» + 1) + («tx_scalar_u256» + 1) + («tx_fixed_bytes» + 1) + («tx_scalar_word» + 1) + («tx_scalar_word» + 1) + («tx_scalar_u256» + 1) + («tx_scalar_u256» + 1) + 1)
 
-/-- `decode_blob_hashes` (AST line 11569), log2 ≈ 512. -/
+/-- `decode_blob_hashes` (AST line 11569), log2 ≈ 172. -/
 def «decode_blob_hashes» : Nat := («rlp_list_to_slices» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«tx_fixed_bytes» + 1) + («memcpy» + 1) + 1)
 
-/-- `tx_bytes_item` (AST line 11453), log2 ≈ 448. -/
+/-- `tx_bytes_item` (AST line 11453), log2 ≈ 108. -/
 def «tx_bytes_item» : Nat := («rlp_item» + 1)
 
-/-- `tx_to_item` (AST line 11487), log2 ≈ 448. -/
+/-- `tx_to_item` (AST line 11487), log2 ≈ 108. -/
 def «tx_to_item» : Nat := («rlp_item» + 1)
 
-/-- `decode_transaction_rlp` (AST line 11634), log2 ≈ 576. -/
+/-- `decode_transaction_rlp` (AST line 11634), log2 ≈ 236. -/
 def «decode_transaction_rlp» : Nat := («alloc» + 1) + («memzero» + 1) + Nat.max ((«rlp_decode_fully» + 1)) (Nat.max ((«rlp_decode_fully» + 1)) (0)) + («rlp_list_to_slices» + 1) + Nat.max ((«tx_scalar_word» + 1)) (0) + Nat.max ((«tx_scalar_word» + 1)) ((«tx_scalar_u256» + 1)) + Nat.max ((«tx_scalar_u256» + 1)) ((«tx_scalar_u256» + 1) + («tx_scalar_u256» + 1)) + («tx_scalar_word» + 1) + Nat.max ((«tx_fixed_bytes» + 1)) ((«tx_to_item» + 1)) + («tx_scalar_u256» + 1) + («tx_bytes_item» + 1) + Nat.max ((«tx_list_item» + 1) + («decode_access_list» + 1)) (0) + Nat.max ((«tx_scalar_u256» + 1) + («tx_list_item» + 1) + («decode_blob_hashes» + 1)) (0) + Nat.max ((«tx_list_item» + 1) + («decode_authorizations» + 1)) (0) + («tx_scalar_u256» + 1) + («tx_scalar_u256» + 1) + («tx_scalar_u256» + 1)
 
-/-- `decode_transaction` (AST line 11805), log2 ≈ 576. -/
+/-- `decode_transaction` (AST line 11805), log2 ≈ 236. -/
 def «decode_transaction» : Nat := («decode_transaction_rlp» + 1)
 
 /-- `logs_bloom` (AST line 31941), log2 ≈ 228. -/
@@ -2805,19 +2817,19 @@ def «sk_make» : Nat := («memcpy» + 1) + («memcpy» + 1)
 /-- `ws_get_code` (AST line 13099), log2 ≈ 68. -/
 def «ws_get_code» : Nat := («memeq» + 1) + («nodedb_lookup» + 1)
 
-/-- `get_code` (AST line 13203), log2 ≈ 130. -/
+/-- `get_code` (AST line 13203), log2 ≈ 70. -/
 def «get_code» : Nat := («memeq» + 1) + («htab_get» + 1) + («htab_get» + 1) + («sk_make» + 1) + («htab_set» + 1) + («ws_get_code» + 1)
 
-/-- `ext_code_of` (AST line 16953), log2 ≈ 450. -/
+/-- `ext_code_of` (AST line 16953), log2 ≈ 163. -/
 def «ext_code_of» : Nat := («get_account» + 1) + («get_code» + 1)
 
 /-- `frame_mem_release` (AST line 142), log2 ≈ 0. -/
 def «frame_mem_release» : Nat := 0
 
-/-- `htab_union_into` (AST line 13711), log2 ≈ 194. -/
+/-- `htab_union_into` (AST line 13711), log2 ≈ 133. -/
 def «htab_union_into» : Nat := (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«htab_set» + 1)) (0) + 1)
 
-/-- `merge_tx_into_block` (AST line 13731), log2 ≈ 258. -/
+/-- `merge_tx_into_block` (AST line 13731), log2 ≈ 197. -/
 def «merge_tx_into_block» : Nat := («htab_union_into» + 1) + («htab_union_into» + 1) + («htab_union_into» + 1) + («htab_union_into» + 1) + («htab_union_into» + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«htab_get» + 1) + Nat.max ((«htab_new» + 1) + («htab_set» + 1)) (0) + («htab_union_into» + 1)) (0) + 1)
 
 /-- `bal_list_remove_idx` (AST line 14163), log2 ≈ 129. -/
@@ -2826,7 +2838,7 @@ def «bal_list_remove_idx» : Nat := (2 ^ 64 + 1) * (Nat.max (Nat.max ((«memcpy
 /-- `bal_remove_change` (AST line 14189), log2 ≈ 129. -/
 def «bal_remove_change» : Nat := («htab_get» + 1) + («bal_list_remove_idx» + 1)
 
-/-- `get_pre_tx_account` (AST line 14051), log2 ≈ 450. -/
+/-- `get_pre_tx_account` (AST line 14051), log2 ≈ 163. -/
 def «get_pre_tx_account» : Nat := («htab_get» + 1) + («record_pre_state_read» + 1) + («ws_get_account_optional» + 1)
 
 /-- `st_le32` (AST line 553), log2 ≈ 0. -/
@@ -2835,22 +2847,22 @@ def «st_le32» : Nat := 0
 /-- `st_le64` (AST line 571), log2 ≈ 2. -/
 def «st_le64» : Nat := («st_le32» + 1) + («st_le32» + 1)
 
-/-- `idx_start_account` (AST line 14087), log2 ≈ 450. -/
+/-- `idx_start_account` (AST line 14087), log2 ≈ 163. -/
 def «idx_start_account» : Nat := («st_le64» + 1) + («memcpy» + 1) + («htab_get» + 1) + («get_pre_tx_account» + 1) + («alloc» + 1) + («memzero» + 1) + («memcpy» + 1) + Nat.max ((«memcpy» + 1)) (0) + («st_le64» + 1) + («memcpy» + 1) + («htab_set» + 1)
 
 /-- `stor_lookup` (AST line 13233), log2 ≈ 68. -/
 def «stor_lookup» : Nat := («htab_get» + 1) + («htab_get» + 1)
 
-/-- `ws_storage_trie` (AST line 13042), log2 ≈ 517. -/
+/-- `ws_storage_trie` (AST line 13042), log2 ≈ 144. -/
 def «ws_storage_trie» : Nat := («htab_get» + 1) + («decode_witness_to_mpt» + 1) + («htab_set» + 1)
 
-/-- `ws_get_storage` (AST line 13061), log2 ≈ 517. -/
+/-- `ws_get_storage` (AST line 13061), log2 ≈ 164. -/
 def «ws_get_storage» : Nat := («ws_storage_root_of» + 1) + («memeq» + 1) + («ws_storage_trie» + 1) + («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + («trie_lookup» + 1) + («heap_release» + 1) + («rlp_decode_fully» + 1) + («u256_from_be» + 1)
 
-/-- `get_pre_tx_storage` (AST line 14069), log2 ≈ 517. -/
+/-- `get_pre_tx_storage` (AST line 14069), log2 ≈ 164. -/
 def «get_pre_tx_storage» : Nat := («stor_lookup» + 1) + («record_pre_state_read» + 1) + («ws_get_storage» + 1)
 
-/-- `idx_start_storage` (AST line 14129), log2 ≈ 517. -/
+/-- `idx_start_storage` (AST line 14129), log2 ≈ 164. -/
 def «idx_start_storage» : Nat := («st_le64» + 1) + («memcpy» + 1) + («memcpy» + 1) + («htab_get» + 1) + («get_pre_tx_storage» + 1) + («alloc» + 1) + («st_le64» + 1) + («memcpy» + 1) + («memcpy» + 1) + («htab_set» + 1)
 
 /-- `htab_del` (AST line 5217), log2 ≈ 67. -/
@@ -2862,10 +2874,10 @@ def «remove_storage_write» : Nat := («htab_get» + 1) + («htab_get» + 1) + 
 /-- `u256_eq` (AST line 869), log2 ≈ 0. -/
 def «u256_eq» : Nat := 0
 
-/-- `update_builder_from_tx` (AST line 14233), log2 ≈ 645. -/
+/-- `update_builder_from_tx` (AST line 14233), log2 ≈ 292. -/
 def «update_builder_from_tx» : Nat := (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«idx_start_account» + 1) + («u256_eq» + 1) + Nat.max ((«add_balance_change» + 1)) ((«bal_remove_change» + 1)) + Nat.max ((«add_nonce_change» + 1)) ((«bal_remove_change» + 1)) + («memeq» + 1) + Nat.max ((«get_code» + 1) + («add_code_change» + 1)) ((«bal_remove_change» + 1))) (0) + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«idx_start_storage» + 1) + («u256_eq» + 1) + Nat.max ((«add_storage_write» + 1)) ((«remove_storage_write» + 1))) (0) + 1)) (0) + 1)
 
-/-- `incorporate_tx_into_block` (AST line 14313), log2 ≈ 645. -/
+/-- `incorporate_tx_into_block` (AST line 14313), log2 ≈ 292. -/
 def «incorporate_tx_into_block» : Nat := («update_builder_from_tx» + 1) + («merge_tx_into_block» + 1)
 
 /-- `msg_new` (AST line 15344), log2 ≈ 65. -/
@@ -2880,25 +2892,25 @@ def «charge_gas» : Nat := 0
 /-- `charge_state_gas` (AST line 14968), log2 ≈ 1. -/
 def «charge_state_gas» : Nat := («add_sat» + 1)
 
-/-- `jset` (AST line 12825), log2 ≈ 130. -/
+/-- `jset` (AST line 12825), log2 ≈ 69. -/
 def «jset» : Nat := («htab_get» + 1) + Nat.max ((«trap_with» + 1)) (0) + («alloc» + 1) + («memcpy» + 1) + («htab_set» + 1)
 
 /-- `jdel` (AST line 12857), log2 ≈ 68. -/
 def «jdel» : Nat := («htab_get» + 1) + Nat.max ((«trap_with» + 1)) (0) + («alloc» + 1) + («memcpy» + 1) + («htab_del» + 1)
 
-/-- `destroy_storage` (AST line 13480), log2 ≈ 194. -/
-def «destroy_storage» : Nat := («htab_get» + 1) + (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«sk_make» + 1) + («htab_set» + 1)) (0) + 1) + («jdel» + 1)
+/-- `destroy_storage` (AST line 13480), log2 ≈ 132. -/
+def «destroy_storage» : Nat := («htab_get» + 1) + (2 ^ 63 + 1) * ((«htab_item» + 1) + Nat.max ((«sk_make» + 1) + («htab_set» + 1)) (0) + 1) + («jdel» + 1)
 
-/-- `set_account` (AST line 13439), log2 ≈ 130. -/
+/-- `set_account` (AST line 13439), log2 ≈ 69. -/
 def «set_account» : Nat := («jset» + 1)
 
-/-- `destroy_account` (AST line 13510), log2 ≈ 194. -/
+/-- `destroy_account` (AST line 13510), log2 ≈ 132. -/
 def «destroy_account» : Nat := («destroy_storage» + 1) + («set_account» + 1)
 
-/-- `modify_state_commit` (AST line 13524), log2 ≈ 194. -/
+/-- `modify_state_commit` (AST line 13524), log2 ≈ 132. -/
 def «modify_state_commit» : Nat := («set_account» + 1) + («acct_is_empty» + 1) + Nat.max ((«destroy_account» + 1)) (0)
 
-/-- `set_code` (AST line 13681), log2 ≈ 450. -/
+/-- `set_code` (AST line 13681), log2 ≈ 163. -/
 def «set_code» : Nat := («alloc» + 1) + («keccak256» + 1) + («memeq» + 1) + Nat.max ((«alloc» + 1) + («jset» + 1)) (0) + («get_account» + 1) + («acct_copy» + 1) + («modify_state_commit» + 1)
 
 /-- `ceil32` (AST line 14862), log2 ≈ 1. -/
@@ -2907,16 +2919,16 @@ def «ceil32» : Nat := («add_sat» + 1)
 /-- `words_of` (AST line 14878), log2 ≈ 2. -/
 def «words_of» : Nat := («ceil32» + 1)
 
-/-- `create_finish` (AST line 18867), log2 ≈ 450. -/
+/-- `create_finish` (AST line 18867), log2 ≈ 163. -/
 def «create_finish» : Nat := («words_of» + 1) + («charge_gas» + 1) + («charge_state_gas» + 1) + («alloc» + 1) + («memcpy» + 1) + («set_code» + 1)
 
 /-- `frame_halt` (AST line 18756), log2 ≈ 0. -/
 def «frame_halt» : Nat := 0
 
-/-- `increment_nonce` (AST line 13664), log2 ≈ 450. -/
+/-- `increment_nonce` (AST line 13664), log2 ≈ 163. -/
 def «increment_nonce» : Nat := («get_account» + 1) + («acct_copy» + 1) + («modify_state_commit» + 1)
 
-/-- `mark_account_created` (AST line 13562), log2 ≈ 130. -/
+/-- `mark_account_created` (AST line 13562), log2 ≈ 69. -/
 def «mark_account_created» : Nat := («htab_set» + 1)
 
 /-- `compute_jumpdests` (AST line 15279), log2 ≈ 65. -/
@@ -2928,16 +2940,16 @@ def «is_valid_delegation» : Nat := 0
 /-- `get_delegated_code_address` (AST line 17610), log2 ≈ 1. -/
 def «get_delegated_code_address» : Nat := («is_valid_delegation» + 1)
 
-/-- `get_pre_state_account` (AST line 13155), log2 ≈ 450. -/
+/-- `get_pre_state_account` (AST line 13155), log2 ≈ 163. -/
 def «get_pre_state_account» : Nat := («get_pre_state_account_optional» + 1) + Nat.max ((«acct_empty» + 1)) (0)
 
-/-- `is_account_alive` (AST line 13419), log2 ≈ 450. -/
+/-- `is_account_alive` (AST line 13419), log2 ≈ 163. -/
 def «is_account_alive» : Nat := («get_account_optional» + 1) + («acct_is_empty» + 1)
 
-/-- `warm_address` (AST line 15484), log2 ≈ 130. -/
+/-- `warm_address` (AST line 15484), log2 ≈ 69. -/
 def «warm_address» : Nat := («htab_set» + 1)
 
-/-- `prepare_dispatch` (AST line 17836), log2 ≈ 452. -/
+/-- `prepare_dispatch` (AST line 17836), log2 ≈ 165. -/
 def «prepare_dispatch» : Nat := Nat.max ((«get_pre_state_account» + 1) + («acct_is_empty» + 1) + Nat.max ((«charge_state_gas» + 1)) (0)) (0) + («u256_is_zero» + 1) + Nat.max ((«is_account_alive» + 1) + Nat.max ((«charge_state_gas» + 1)) (0)) (0) + («ext_code_of» + 1) + («get_delegated_code_address» + 1) + Nat.max ((«alloc» + 1) + («memcpy» + 1) + («is_warm_address» + 1) + Nat.max ((«charge_gas» + 1)) ((«charge_gas» + 1) + («warm_address» + 1)) + («ext_code_of» + 1)) (0) + («compute_jumpdests» + 1)
 
 /-- `ec_set_infinity` (AST line 6984), log2 ≈ 0. -/
@@ -2988,22 +3000,22 @@ def «mod_half» : Nat := («u256_add_carry» + 1)
 /-- `mod_sub` (AST line 6881), log2 ≈ 2. -/
 def «mod_sub» : Nat := («u256_lt» + 1) + («u256_sub» + 1) + Nat.max ((«u256_add» + 1)) (0)
 
-/-- `modinv_bin` (AST line 6815), log2 ≈ 387. -/
-def «modinv_bin» : Nat := («u256_is_zero» + 1) + (2 ^ 256 + 1) * ((2 ^ 128 + 1) * ((«mod_half» + 1) + 1) + (2 ^ 128 + 1) * ((«mod_half» + 1) + 1) + («u256_lt» + 1) + («u256_sub» + 1) + («mod_sub» + 1) + 1)
+/-- `modinv_bin` (AST line 6815), log2 ≈ 20. -/
+def «modinv_bin» : Nat := («u256_is_zero» + 1) + (513 + 1) * ((2 ^ 8 + 1) * ((«mod_half» + 1) + 1) + (2 ^ 8 + 1) * ((«mod_half» + 1) + 1) + («u256_lt» + 1) + («u256_sub» + 1) + («mod_sub» + 1) + 1)
 
-/-- `fp_inv` (AST line 6897), log2 ≈ 387. -/
+/-- `fp_inv` (AST line 6897), log2 ≈ 20. -/
 def «fp_inv» : Nat := («modinv_bin» + 1)
 
-/-- `ec_to_affine` (AST line 7308), log2 ≈ 387. -/
+/-- `ec_to_affine` (AST line 7308), log2 ≈ 20. -/
 def «ec_to_affine» : Nat := («u256_is_zero» + 1) + («fp_inv» + 1) + («fp_sqr» + 1) + («fp_mul» + 1) + («fp_mul» + 1) + («fp_mul» + 1) + («ec_set_affine» + 1)
 
 /-- `u256_bit` (AST line 854), log2 ≈ 1. -/
 def «u256_bit» : Nat := («u256_limb» + 1)
 
-/-- `ec_mul2` (AST line 7257), log2 ≈ 387. -/
+/-- `ec_mul2` (AST line 7257), log2 ≈ 73. -/
 def «ec_mul2» : Nat := («ec_set_infinity» + 1) + («u256_bit_length» + 1) + («u256_bit_length» + 1) + («max» + 1) + («heap_mark» + 1) + («alloc» + 1) + («ec_set_affine» + 1) + («ec_add_affine» + 1) + («ec_is_infinity» + 1) + Nat.max ((«ec_to_affine» + 1)) (0) + (2 ^ 64 + 1) * ((«ec_double» + 1) + («u256_bit» + 1) + («u256_bit» + 1) + Nat.max (Nat.max (Nat.max ((«ec_add_affine» + 1)) (0)) ((«ec_add_affine» + 1))) (Nat.max ((«ec_add_affine» + 1)) (0)) + 1) + («heap_release» + 1)
 
-/-- `fn_inv` (AST line 6974), log2 ≈ 387. -/
+/-- `fn_inv` (AST line 6974), log2 ≈ 20. -/
 def «fn_inv» : Nat := («modinv_bin» + 1)
 
 /-- `digits_len` (AST line 1566), log2 ≈ 65. -/
@@ -3012,73 +3024,73 @@ def «digits_len» : Nat := (2 ^ 64 + 1) * (0 + 1)
 /-- `digits_to_u256` (AST line 1556), log2 ≈ 0. -/
 def «digits_to_u256» : Nat := 0
 
-/-- `div64by32` (AST line 1506), log2 ≈ 65. -/
-def «div64by32» : Nat := (2 ^ 64 + 1) * (0 + 1)
+/-- `div64by32` (AST line 1506), log2 ≈ 6. -/
+def «div64by32» : Nat := (32 + 1) * (0 + 1)
 
 /-- `nlz32` (AST line 1467), log2 ≈ 0. -/
 def «nlz32» : Nat := 0
 
-/-- `divmnu` (AST line 1583), log2 ≈ 257. -/
-def «divmnu» : Nat := Nat.max ((2 ^ 64 + 1) * ((«div64by32» + 1) + 1)) (0) + («nlz32» + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (Nat.max (0) ((«div64by32» + 1)) + (2 ^ 192 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1) + Nat.max ((2 ^ 64 + 1) * (0 + 1)) (0) + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1)
+/-- `divmnu` (AST line 1583), log2 ≈ 71. -/
+def «divmnu» : Nat := Nat.max ((31104957944 + 1) * ((«div64by32» + 1) + 1)) (0) + («nlz32» + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (Nat.max (0) ((«div64by32» + 1)) + (3 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1) + Nat.max ((31104957944 + 1) * (0 + 1)) (0) + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1)
 
 /-- `u256_to_digits` (AST line 1530), log2 ≈ 0. -/
 def «u256_to_digits» : Nat := 0
 
-/-- `digits_divmod` (AST line 1718), log2 ≈ 257. -/
+/-- `digits_divmod` (AST line 1718), log2 ≈ 71. -/
 def «digits_divmod» : Nat := («u256_to_digits» + 1) + («digits_len» + 1) + («digits_len» + 1) + (16 + 1) * (0 + 1) + Nat.max ((«digits_to_u256» + 1)) (0) + (8 + 1) * (0 + 1) + («divmnu» + 1) + («digits_to_u256» + 1)
 
 /-- `mul64x64` (AST line 1127), log2 ≈ 0. -/
 def «mul64x64» : Nat := 0
 
-/-- `u256_divmod` (AST line 1754), log2 ≈ 257. -/
+/-- `u256_divmod` (AST line 1754), log2 ≈ 71. -/
 def «u256_divmod» : Nat := («u256_lt» + 1) + Nat.max ((«udivmod» + 1)) (0) + («u256_to_digits» + 1) + («digits_divmod» + 1) + («digits_to_u256» + 1)
 
-/-- `u256_mod` (AST line 1794), log2 ≈ 257. -/
+/-- `u256_mod` (AST line 1794), log2 ≈ 71. -/
 def «u256_mod» : Nat := («u256_divmod» + 1)
 
 /-- `u256_mul_full` (AST line 1230), log2 ≈ 5. -/
 def «u256_mul_full» : Nat := («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1)
 
-/-- `u256_mulmod` (AST line 1888), log2 ≈ 258. -/
+/-- `u256_mulmod` (AST line 1888), log2 ≈ 73. -/
 def «u256_mulmod» : Nat := Nat.max ((«mul64x64» + 1) + Nat.max ((«u256_mod» + 1)) (0) + («u256_to_digits» + 1) + («digits_divmod» + 1)) (0) + («u256_mul_full» + 1) + («u256_to_digits» + 1) + («u256_to_digits» + 1) + («digits_divmod» + 1)
 
-/-- `fn_mul` (AST line 6917), log2 ≈ 258. -/
+/-- `fn_mul` (AST line 6917), log2 ≈ 73. -/
 def «fn_mul» : Nat := («u256_mulmod» + 1)
 
 /-- `fp_neg` (AST line 5464), log2 ≈ 2. -/
 def «fp_neg» : Nat := («u256_is_zero» + 1) + («u256_sub» + 1)
 
-/-- `fp_pow` (AST line 6778), log2 ≈ 68. -/
-def «fp_pow» : Nat := (2 ^ 64 + 1) * (Nat.max ((«fp_sqr» + 1)) (0) + («u256_bit» + 1) + Nat.max ((«fp_mul» + 1)) (0) + 1)
+/-- `fp_pow` (AST line 6778), log2 ≈ 12. -/
+def «fp_pow» : Nat := (2 ^ 8 + 1) * (Nat.max ((«fp_sqr» + 1)) (0) + («u256_bit» + 1) + Nat.max ((«fp_mul» + 1)) (0) + 1)
 
-/-- `fp_sqrt` (AST line 6907), log2 ≈ 68. -/
+/-- `fp_sqrt` (AST line 6907), log2 ≈ 12. -/
 def «fp_sqrt» : Nat := («fp_pow» + 1)
 
-/-- `secp256k1_decompress_r` (AST line 7351), log2 ≈ 68. -/
+/-- `secp256k1_decompress_r` (AST line 7351), log2 ≈ 12. -/
 def «secp256k1_decompress_r» : Nat := Nat.max ((«u256_add_carry» + 1)) (0) + («u256_lt» + 1) + («fp_sqr» + 1) + («fp_mul» + 1) + («fp_add» + 1) + («fp_sqrt» + 1) + («fp_sqr» + 1) + («u256_eq» + 1) + Nat.max ((«fp_neg» + 1)) (0) + («ec_set_affine» + 1)
 
 /-- `u256_to_be32` (AST line 2265), log2 ≈ 5. -/
 def «u256_to_be32» : Nat := Nat.max ((«bswap64» + 1) + («bswap64» + 1) + («bswap64» + 1) + («bswap64» + 1)) (0) + («st_be64» + 1) + («st_be64» + 1) + («st_be64» + 1) + («st_be64» + 1)
 
-/-- `secp256k1_recover` (AST line 7395), log2 ≈ 389. -/
+/-- `secp256k1_recover` (AST line 7395), log2 ≈ 74. -/
 def «secp256k1_recover» : Nat := («u256_is_zero» + 1) + («u256_lt» + 1) + («u256_is_zero» + 1) + («u256_lt» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («secp256k1_decompress_r» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («u256_lt» + 1) + Nat.max ((«u256_sub» + 1)) (0) + («fn_inv» + 1) + («u256_is_zero» + 1) + Nat.max ((«u256_sub» + 1)) (0) + («fn_mul» + 1) + («fn_mul» + 1) + («ec_mul2» + 1) + («ec_to_affine» + 1) + Nat.max ((«u256_to_be32» + 1) + («u256_to_be32» + 1)) (0) + («heap_release» + 1)
 
 /-- `u256_gt` (AST line 921), log2 ≈ 1. -/
 def «u256_gt» : Nat := («u256_lt» + 1)
 
-/-- `recover_authority` (AST line 17625), log2 ≈ 389. -/
+/-- `recover_authority` (AST line 17625), log2 ≈ 101. -/
 def «recover_authority» : Nat := («u256_is_zero» + 1) + («u256_lt» + 1) + («u256_is_zero» + 1) + («u256_gt» + 1) + («heap_mark» + 1) + («alloc» + 1) + («rlp_put_u256» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_word» + 1) + («rlp_list_header_len» + 1) + («rlp_encode_list_header» + 1) + («alloc» + 1) + («keccak256» + 1) + («alloc» + 1) + («secp256k1_recover» + 1) + Nat.max ((«heap_release» + 1)) (0) + («keccak256» + 1) + («heap_release» + 1) + («alloc» + 1) + («memcpy» + 1)
 
 /-- `u256_fits_word` (AST line 800), log2 ≈ 0. -/
 def «u256_fits_word» : Nat := 0
 
-/-- `validate_authorization_checks` (AST line 17717), log2 ≈ 450. -/
+/-- `validate_authorization_checks` (AST line 17717), log2 ≈ 163. -/
 def «validate_authorization_checks» : Nat := («get_account» + 1) + («get_code» + 1) + Nat.max ((«is_valid_delegation» + 1)) (0)
 
-/-- `set_delegation` (AST line 17740), log2 ≈ 516. -/
+/-- `set_delegation` (AST line 17740), log2 ≈ 230. -/
 def «set_delegation» : Nat := («htab_new» + 1) + («htab_set» + 1) + («u256_is_zero» + 1) + Nat.max ((«htab_set» + 1)) (0) + («htab_new» + 1) + (2 ^ 64 + 1) * ((«u256_is_zero» + 1) + («u256_fits_word» + 1) + Nat.max (Nat.max ((«recover_authority» + 1) + Nat.max ((«warm_address» + 1) + («validate_authorization_checks» + 1)) (0)) (0)) (0) + Nat.max ((«account_exists» + 1) + Nat.max ((«charge_state_gas» + 1)) (0) + («htab_has» + 1) + Nat.max ((«charge_gas» + 1) + («htab_set» + 1)) (0) + («get_pre_state_account» + 1) + («get_code» + 1) + («is_valid_delegation» + 1) + («memeq» + 1) + Nat.max ((«set_code» + 1)) ((«htab_has» + 1) + Nat.max ((«charge_state_gas» + 1)) (0) + («htab_set» + 1) + («alloc» + 1) + («memcpy» + 1) + («set_code» + 1)) + («increment_nonce» + 1)) (0) + 1)
 
-/-- `depth0_prepare` (AST line 18772), log2 ≈ 516. -/
+/-- `depth0_prepare` (AST line 18772), log2 ≈ 230. -/
 def «depth0_prepare» : Nat := Nat.max ((«set_delegation» + 1) + («frame_state_gas_used» + 1)) (0) + («prepare_dispatch» + 1)
 
 /-- `frame_mem_alloc` (AST line 110), log2 ≈ 2. -/
@@ -3114,7 +3126,7 @@ def «log_append» : Nat := («lst_push» + 1)
 /-- `emit_transfer_log` (AST line 17459), log2 ≈ 67. -/
 def «emit_transfer_log» : Nat := («u256_is_zero» + 1) + («alloc» + 1) + («alloc» + 1) + («memcpy» + 1) + («memzero» + 1) + («memcpy» + 1) + («memzero» + 1) + («memcpy» + 1) + («alloc» + 1) + («u256_to_be32» + 1) + («log_append» + 1)
 
-/-- `move_ether` (AST line 13597), log2 ≈ 451. -/
+/-- `move_ether` (AST line 13597), log2 ≈ 164. -/
 def «move_ether» : Nat := («get_account» + 1) + («u256_lt» + 1) + («acct_copy» + 1) + («u256_sub» + 1) + («modify_state_commit» + 1) + («get_account» + 1) + («acct_copy» + 1) + («u256_add» + 1) + («modify_state_commit» + 1)
 
 /-- `precompile_index` (AST line 31482), log2 ≈ 65. -/
@@ -3126,10 +3138,10 @@ def «fq_mul» : Nat := («u256_lt» + 1) + Nat.max ((«u256_sub» + 1)) (0)
 /-- `fq_from_mont` (AST line 23320), log2 ≈ 2. -/
 def «fq_from_mont» : Nat := («fq_mul» + 1)
 
-/-- `fq_inv` (AST line 23330), log2 ≈ 387. -/
+/-- `fq_inv` (AST line 23330), log2 ≈ 20. -/
 def «fq_inv» : Nat := («modinv_bin» + 1) + («fq_mul» + 1)
 
-/-- `bn254_g1_to_bytes` (AST line 24508), log2 ≈ 387. -/
+/-- `bn254_g1_to_bytes` (AST line 24508), log2 ≈ 65. -/
 def «bn254_g1_to_bytes» : Nat := («u256_is_zero» + 1) + Nat.max ((«memzero» + 1)) (0) + («fq_inv» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_from_mont» + 1) + («fq_from_mont» + 1) + («u256_to_be32» + 1) + («u256_to_be32» + 1)
 
 /-- `fe_set_one` (AST line 23653), log2 ≈ 65. -/
@@ -3150,37 +3162,37 @@ def «fq_to_mont» : Nat := («fq_mul» + 1)
 /-- `bn254_parse_g1` (AST line 24385), log2 ≈ 67. -/
 def «bn254_parse_g1» : Nat := («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («u256_is_zero» + 1) + («u256_is_zero» + 1) + Nat.max ((«ecp_set_inf» + 1)) (0) + («fq_to_mont» + 1) + («fq_to_mont» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_add» + 1) + («u256_eq» + 1)
 
-/-- `fq_mul_small` (AST line 23341), log2 ≈ 68. -/
-def «fq_mul_small» : Nat := («bit_length64» + 1) + (2 ^ 64 + 1) * ((«fq_add» + 1) + Nat.max ((«fq_add» + 1)) (0) + 1)
+/-- `fq_mul_small` (AST line 23341), log2 ≈ 10. -/
+def «fq_mul_small» : Nat := («bit_length64» + 1) + (64 + 1) * ((«fq_add» + 1) + Nat.max ((«fq_add» + 1)) (0) + 1)
 
 /-- `fq_sub` (AST line 22307), log2 ≈ 2. -/
 def «fq_sub» : Nat := («u256_lt» + 1) + («u256_sub» + 1) + Nat.max ((«u256_add» + 1)) (0)
 
-/-- `fq12_reduce` (AST line 23386), log2 ≈ 133. -/
-def «fq12_reduce» : Nat := (2 ^ 64 + 1) * ((«fq_mul_small» + 1) + («fq_mul_small» + 1) + («fq_sub» + 1) + («fq_add» + 1) + 1)
+/-- `fq12_reduce` (AST line 23386), log2 ≈ 14. -/
+def «fq12_reduce» : Nat := (11 + 1) * ((«fq_mul_small» + 1) + («fq_mul_small» + 1) + («fq_sub» + 1) + («fq_add» + 1) + 1)
 
-/-- `fq12_mul` (AST line 23413), log2 ≈ 136. -/
-def «fq12_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + (23 + 1) * ((2 ^ 128 + 1) * ((«fq_mul» + 1) + («fq_add» + 1) + 1) + 1) + («fq12_reduce» + 1) + («memcpy» + 1) + («heap_release» + 1)
+/-- `fq12_mul` (AST line 23413), log2 ≈ 65. -/
+def «fq12_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + (23 + 1) * ((12 + 1) * ((«fq_mul» + 1) + («fq_add» + 1) + 1) + 1) + («fq12_reduce» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
 /-- `fq2_mul` (AST line 23362), log2 ≈ 5. -/
 def «fq2_mul» : Nat := («fq_mul» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_sub» + 1) + («fq_add» + 1)
 
-/-- `fe_mul` (AST line 23502), log2 ≈ 136. -/
+/-- `fe_mul` (AST line 23502), log2 ≈ 65. -/
 def «fe_mul» : Nat := Nat.max ((«fq_mul» + 1)) (0) + Nat.max ((«fq2_mul» + 1)) (0) + («fq12_mul» + 1)
 
-/-- `fe_mul_small` (AST line 23603), log2 ≈ 132. -/
-def «fe_mul_small» : Nat := (2 ^ 64 + 1) * ((«fq_mul_small» + 1) + 1)
+/-- `fe_mul_small` (AST line 23603), log2 ≈ 45. -/
+def «fe_mul_small» : Nat := (31104957944 + 1) * ((«fq_mul_small» + 1) + 1)
 
-/-- `fq12_sqr` (AST line 23456), log2 ≈ 136. -/
-def «fq12_sqr» : Nat := («heap_mark» + 1) + («alloc» + 1) + (23 + 1) * ((2 ^ 128 + 1) * ((«fq_mul» + 1) + («fq_add» + 1) + 1) + («fq_add» + 1) + Nat.max ((«fq_mul» + 1) + («fq_add» + 1)) (0) + 1) + («fq12_reduce» + 1) + («memcpy» + 1) + («heap_release» + 1)
+/-- `fq12_sqr` (AST line 23456), log2 ≈ 65. -/
+def «fq12_sqr» : Nat := («heap_mark» + 1) + («alloc» + 1) + (23 + 1) * ((22 + 1) * ((«fq_mul» + 1) + («fq_add» + 1) + 1) + («fq_add» + 1) + Nat.max ((«fq_mul» + 1) + («fq_add» + 1)) (0) + 1) + («fq12_reduce» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `fe_sqr` (AST line 23529), log2 ≈ 137. -/
+/-- `fe_sqr` (AST line 23529), log2 ≈ 66. -/
 def «fe_sqr» : Nat := Nat.max ((«fq12_sqr» + 1)) (0) + («fe_mul» + 1)
 
-/-- `fe_sub` (AST line 23566), log2 ≈ 67. -/
-def «fe_sub» : Nat := (2 ^ 64 + 1) * ((«fq_sub» + 1) + 1)
+/-- `fe_sub` (AST line 23566), log2 ≈ 38. -/
+def «fe_sub» : Nat := (31104957944 + 1) * ((«fq_sub» + 1) + 1)
 
-/-- `ecp_double` (AST line 23694), log2 ≈ 140. -/
+/-- `ecp_double` (AST line 23694), log2 ≈ 69. -/
 def «ecp_double» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fe_sqr» + 1) + («fe_mul_small» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sqr» + 1) + («fe_mul_small» + 1) + («fe_sub» + 1) + («fe_sqr» + 1) + («fe_mul» + 1) + («fe_mul_small» + 1) + («fe_mul_small» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_sqr» + 1) + («fe_mul» + 1) + («fe_mul_small» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_mul_small» + 1) + («memcpy» + 1) + («memcpy» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
 /-- `fe_eq` (AST line 23631), log2 ≈ 67. -/
@@ -3189,49 +3201,49 @@ def «fe_eq» : Nat := («memeq» + 1)
 /-- `fe_is_zero` (AST line 23621), log2 ≈ 65. -/
 def «fe_is_zero» : Nat := («is_zero_bytes» + 1)
 
-/-- `ecp_add` (AST line 23764), log2 ≈ 141. -/
+/-- `ecp_add` (AST line 23764), log2 ≈ 70. -/
 def «ecp_add» : Nat := («fe_is_zero» + 1) + Nat.max ((«memcpy» + 1)) (0) + («fe_is_zero» + 1) + Nat.max ((«memcpy» + 1)) (0) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_eq» + 1) + Nat.max ((«fe_eq» + 1) + («heap_release» + 1) + Nat.max ((«ecp_double» + 1)) (0) + («ecp_set_inf» + 1)) (0) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fe_sub» + 1) + («fe_sub» + 1) + («fe_sqr» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sqr» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul_small» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («memcpy» + 1) + («memcpy» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `bn254_g1_add` (AST line 24541), log2 ≈ 387. -/
+/-- `bn254_g1_add` (AST line 24541), log2 ≈ 70. -/
 def «bn254_g1_add» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («bn254_parse_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («bn254_parse_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_add» + 1) + («bn254_g1_to_bytes» + 1) + («heap_release» + 1)
 
 /-- `buffer_read` (AST line 15256), log2 ≈ 66. -/
 def «buffer_read» : Nat := Nat.max ((«memcpy» + 1)) (0) + («memzero» + 1)
 
-/-- `pre_alt_bn128_add` (AST line 24699), log2 ≈ 387. -/
+/-- `pre_alt_bn128_add` (AST line 24699), log2 ≈ 71. -/
 def «pre_alt_bn128_add» : Nat := («charge_gas» + 1) + («alloc» + 1) + («heap_mark» + 1) + («alloc» + 1) + («buffer_read» + 1) + («bn254_g1_add» + 1) + («heap_release» + 1)
 
-/-- `ecp_mul` (AST line 23874), log2 ≈ 206. -/
-def «ecp_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («ecp_set_inf» + 1) + («memcpy» + 1) + («u256_bit_length» + 1) + (2 ^ 64 + 1) * ((«u256_bit» + 1) + Nat.max ((«ecp_add» + 1)) (0) + Nat.max ((«ecp_double» + 1)) (0) + 1) + («memcpy» + 1) + («heap_release» + 1)
+/-- `ecp_mul` (AST line 23874), log2 ≈ 79. -/
+def «ecp_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («ecp_set_inf» + 1) + («memcpy» + 1) + («u256_bit_length» + 1) + (2 ^ 8 + 1) * ((«u256_bit» + 1) + Nat.max ((«ecp_add» + 1)) (0) + Nat.max ((«ecp_double» + 1)) (0) + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `bn254_g1_mul` (AST line 24574), log2 ≈ 387. -/
+/-- `bn254_g1_mul` (AST line 24574), log2 ≈ 79. -/
 def «bn254_g1_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + («bn254_parse_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («ecp_mul» + 1) + («bn254_g1_to_bytes» + 1) + («heap_release» + 1)
 
-/-- `pre_alt_bn128_mul` (AST line 24728), log2 ≈ 387. -/
+/-- `pre_alt_bn128_mul` (AST line 24728), log2 ≈ 79. -/
 def «pre_alt_bn128_mul» : Nat := («charge_gas» + 1) + («alloc» + 1) + («heap_mark» + 1) + («alloc» + 1) + («buffer_read» + 1) + («bn254_g1_mul» + 1) + («heap_release» + 1)
 
 /-- `bn254_init` (AST line 22161), log2 ≈ 3. -/
 def «bn254_init» : Nat := («alloc» + 1) + («alloc» + 1)
 
-/-- `ecp_linefunc` (AST line 23910), log2 ≈ 140. -/
+/-- `ecp_linefunc` (AST line 23910), log2 ≈ 69. -/
 def «ecp_linefunc» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + Nat.max ((«fe_set_zero» + 1) + («fe_set_zero» + 1)) ((«fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1)) + («fe_is_zero» + 1) + Nat.max ((«fe_is_zero» + 1) + Nat.max ((«fe_sqr» + 1) + («fe_mul_small» + 1) + («fe_mul» + 1) + («fe_mul_small» + 1)) ((«fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («heap_release» + 1))) (0) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_sub» + 1) + («fe_mul» + 1) + («fe_mul» + 1) + («heap_release» + 1)
 
 /-- `fq_neg` (AST line 22323), log2 ≈ 2. -/
 def «fq_neg» : Nat := («u256_is_zero» + 1) + («u256_sub» + 1)
 
-/-- `fe_neg` (AST line 23585), log2 ≈ 67. -/
-def «fe_neg» : Nat := (2 ^ 64 + 1) * ((«fq_neg» + 1) + 1)
+/-- `fe_neg` (AST line 23585), log2 ≈ 37. -/
+def «fe_neg» : Nat := (31104957944 + 1) * ((«fq_neg» + 1) + 1)
 
-/-- `fq12_frob` (AST line 24051), log2 ≈ 71. -/
+/-- `fq12_frob` (AST line 24051), log2 ≈ 14. -/
 def «fq12_frob» : Nat := (6 + 1) * ((«fq_mul_small» + 1) + («fq_add» + 1) + («fq_neg» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_mul» + 1) + («fq_sub» + 1) + («fq_add» + 1) + («fq_mul_small» + 1) + («fq_sub» + 1) + 1)
 
-/-- `bn254_miller_raw` (AST line 24253), log2 ≈ 207. -/
-def «bn254_miller_raw» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («memcpy» + 1) + («memcpy» + 1) + («fe_neg» + 1) + («fe_set_one» + 1) + («fe_set_one» + 1) + (2 ^ 64 + 1) * ((«ecp_linefunc» + 1) + («fq12_sqr» + 1) + («fq12_mul» + 1) + («fq12_sqr» + 1) + («fq12_mul» + 1) + («ecp_double» + 1) + Nat.max ((«ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1)) (0) + Nat.max ((«ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1)) (0) + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fe_neg» + 1) + («fq12_frob» + 1) + («ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1) + («ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («heap_release» + 1)
+/-- `bn254_miller_raw` (AST line 24253), log2 ≈ 78. -/
+def «bn254_miller_raw» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («memcpy» + 1) + («memcpy» + 1) + («fe_neg» + 1) + («fe_set_one» + 1) + («fe_set_one» + 1) + (64 + 1) * ((«ecp_linefunc» + 1) + («fq12_sqr» + 1) + («fq12_mul» + 1) + («fq12_sqr» + 1) + («fq12_mul» + 1) + («ecp_double» + 1) + Nat.max ((«ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1)) (0) + Nat.max ((«ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1)) (0) + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fq12_frob» + 1) + («fe_neg» + 1) + («fq12_frob» + 1) + («ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («ecp_add» + 1) + («ecp_linefunc» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1) + («heap_release» + 1)
 
-/-- `fe_add` (AST line 23547), log2 ≈ 67. -/
-def «fe_add» : Nat := (2 ^ 64 + 1) * ((«fq_add» + 1) + 1)
+/-- `fe_add` (AST line 23547), log2 ≈ 38. -/
+def «fe_add» : Nat := (31104957944 + 1) * ((«fq_add» + 1) + 1)
 
-/-- `bn254_parse_g2` (AST line 24436), log2 ≈ 69. -/
+/-- `bn254_parse_g2` (AST line 24436), log2 ≈ 68. -/
 def «bn254_parse_g2» : Nat := («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («is_zero_bytes» + 1) + Nat.max ((«ecp_set_inf» + 1)) (0) + («fq_to_mont» + 1) + («fq_to_mont» + 1) + («fq_to_mont» + 1) + («fq_to_mont» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fq2_mul» + 1) + («fq2_mul» + 1) + («fq2_mul» + 1) + («fe_add» + 1) + («memeq» + 1) + («heap_release» + 1)
 
 /-- `ecp_is_inf` (AST line 23684), log2 ≈ 65. -/
@@ -3246,19 +3258,19 @@ def «fq_poly_deg» : Nat := (2 ^ 64 + 1) * ((«is_zero_bytes» + 1) + 1)
 /-- `fq_poly_submul` (AST line 24103), log2 ≈ 38. -/
 def «fq_poly_submul» : Nat := ((domainBytes + 1) + 1) * ((«fq_mul» + 1) + («fq_sub» + 1) + 1)
 
-/-- `fq12_inv` (AST line 24124), log2 ≈ 391. -/
+/-- `fq12_inv` (AST line 24124), log2 ≈ 137. -/
 def «fq12_inv» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («memzero» + 1) + («memzero» + 1) + («memcpy» + 1) + («memzero» + 1) + («memzero» + 1) + (14 + 1) * ((«fq_poly_deg» + 1) + («fq_poly_deg» + 1) + («memzero» + 1) + («fq_inv» + 1) + (14 + 1) * ((«fq_mul» + 1) + («fq_poly_submul» + 1) + («fq_poly_deg» + 1) + 1) + («memcpy» + 1) + (13 + 1) * ((«u256_is_zero» + 1) + Nat.max ((«fq_poly_submul» + 1)) (0) + 1) + 1) + («fq_poly_deg» + 1) + Nat.max ((«memzero» + 1) + («heap_release» + 1)) (0) + («fq_inv» + 1) + (12 + 1) * ((«fq_mul» + 1) + 1) + («heap_release» + 1)
 
-/-- `fq12_pow_words` (AST line 24225), log2 ≈ 201. -/
+/-- `fq12_pow_words` (AST line 24225), log2 ≈ 130. -/
 def «fq12_pow_words» : Nat := («fe_set_one» + 1) + (2 ^ 64 + 1) * (Nat.max ((«fq12_sqr» + 1)) (0) + Nat.max ((«fq12_mul» + 1)) (0) + 1)
 
-/-- `fq12_twist` (AST line 23999), log2 ≈ 70. -/
+/-- `fq12_twist` (AST line 23999), log2 ≈ 65. -/
 def «fq12_twist» : Nat := («memzero» + 1) + (3 + 1) * ((«fq_mul_small» + 1) + («fq_sub» + 1) + 1)
 
-/-- `bn254_pairing_check` (AST line 24600), log2 ≈ 391. -/
-def «bn254_pairing_check» : Nat := («bn254_init» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fe_set_one» + 1) + («fe_set_one» + 1) + (2 ^ 64 + 1) * ((«bn254_parse_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («bn254_parse_g2» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_mul» + 1) + («ecp_is_inf» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_mul» + 1) + («ecp_is_inf» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_is_inf» + 1) + («ecp_is_inf» + 1) + Nat.max ((«fq12_twist» + 1) + («fq12_cast» + 1) + («bn254_miller_raw» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1)) (0) + 1) + Nat.max ((«fq12_inv» + 1) + («fq12_mul» + 1) + («fq12_pow_words» + 1) + («memzero» + 1) + («memeq» + 1)) (0) + («heap_release» + 1)
+/-- `bn254_pairing_check` (AST line 24600), log2 ≈ 137. -/
+def «bn254_pairing_check» : Nat := («bn254_init» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fe_set_one» + 1) + («fe_set_one» + 1) + (31104958272 + 1) * ((«bn254_parse_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («bn254_parse_g2» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_mul» + 1) + («ecp_is_inf» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_mul» + 1) + («ecp_is_inf» + 1) + Nat.max ((«heap_release» + 1)) (0) + («ecp_is_inf» + 1) + («ecp_is_inf» + 1) + Nat.max ((«fq12_twist» + 1) + («fq12_cast» + 1) + («bn254_miller_raw» + 1) + («fq12_mul» + 1) + («fq12_mul» + 1)) (0) + 1) + Nat.max ((«fq12_inv» + 1) + («fq12_mul» + 1) + («fq12_pow_words» + 1) + («memzero» + 1) + («memeq» + 1)) (0) + («heap_release» + 1)
 
-/-- `pre_alt_bn128_pairing_check` (AST line 24757), log2 ≈ 391. -/
+/-- `pre_alt_bn128_pairing_check` (AST line 24757), log2 ≈ 137. -/
 def «pre_alt_bn128_pairing_check» : Nat := («udivmod» + 1) + («charge_gas» + 1) + («bn254_pairing_check» + 1) + («alloc» + 1) + («memzero» + 1)
 
 /-- `blake2_g` (AST line 20073), log2 ≈ 0. -/
@@ -3339,22 +3351,22 @@ def «bls_fp_shr1» : Nat := 0
 /-- `bls_fp_half_can` (AST line 27590), log2 ≈ 2. -/
 def «bls_fp_half_can» : Nat := Nat.max ((«bls_fp_shr1» + 1)) (0) + («bls_fp_add_raw» + 1)
 
-/-- `bls_fp_inv_raw` (AST line 27605), log2 ≈ 388. -/
-def «bls_fp_inv_raw» : Nat := («bls_fp_is_zero» + 1) + (2 ^ 256 + 1) * ((2 ^ 128 + 1) * ((«bls_fp_shr1» + 1) + («bls_fp_half_can» + 1) + 1) + (2 ^ 128 + 1) * ((«bls_fp_shr1» + 1) + («bls_fp_half_can» + 1) + 1) + («bls_fp_lt_raw» + 1) + («bls_fp_sub_raw» + 1) + («bls_fp_sub» + 1) + 1)
+/-- `bls_fp_inv_raw` (AST line 27605), log2 ≈ 22. -/
+def «bls_fp_inv_raw» : Nat := («bls_fp_is_zero» + 1) + (769 + 1) * ((384 + 1) * ((«bls_fp_shr1» + 1) + («bls_fp_half_can» + 1) + 1) + (384 + 1) * ((«bls_fp_shr1» + 1) + («bls_fp_half_can» + 1) + 1) + («bls_fp_lt_raw» + 1) + («bls_fp_sub_raw» + 1) + («bls_fp_sub» + 1) + 1)
 
-/-- `bls_fp_inv` (AST line 27658), log2 ≈ 388. -/
+/-- `bls_fp_inv` (AST line 27658), log2 ≈ 22. -/
 def «bls_fp_inv» : Nat := («bls_fp_inv_raw» + 1) + («bls_fp_mul» + 1)
 
-/-- `g1_normalize` (AST line 28861), log2 ≈ 388. -/
+/-- `g1_normalize` (AST line 28861), log2 ≈ 22. -/
 def «g1_normalize» : Nat := («bls_fp_inv» + 1) + («bls_fp_mul» + 1) + («bls_fp_mul» + 1) + («bls_fp_is_zero» + 1)
 
-/-- `g1_encode` (AST line 28933), log2 ≈ 388. -/
+/-- `g1_encode` (AST line 28933), log2 ≈ 66. -/
 def «g1_encode» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g1_normalize» + 1) + («bls_fp_encode64» + 1) + («bls_fp_encode64» + 1) + («heap_release» + 1)
 
-/-- `bls_g1_add_exec` (AST line 30340), log2 ≈ 388. -/
+/-- `bls_g1_add_exec` (AST line 30340), log2 ≈ 68. -/
 def «bls_g1_add_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («g1_decode» + 1) + Nat.max ((«g1_decode» + 1)) (0) + Nat.max ((«heap_release» + 1)) (0) + («g1_add» + 1) + («g1_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_g1_add` (AST line 31236), log2 ≈ 388. -/
+/-- `pre_bls_g1_add` (AST line 31236), log2 ≈ 68. -/
 def «pre_bls_g1_add» : Nat := («charge_gas» + 1) + («alloc» + 1) + («bls_g1_add_exec» + 1)
 
 /-- `bls_g1_msm_discount` (AST line 31208), log2 ≈ 0. -/
@@ -3369,10 +3381,10 @@ def «g1_is_inf» : Nat := («bls_fp_is_zero» + 1)
 /-- `g1_subgroup_check` (AST line 28953), log2 ≈ 130. -/
 def «g1_subgroup_check» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g1_mul» + 1) + («g1_is_inf» + 1) + («heap_release» + 1)
 
-/-- `bls_g1_msm_exec` (AST line 30370), log2 ≈ 388. -/
-def «bls_g1_msm_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«g1_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g1_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («g1_mul» + 1) + Nat.max ((«g1_copy» + 1)) ((«g1_add» + 1)) + 1) + («g1_encode» + 1) + («heap_release» + 1)
+/-- `bls_g1_msm_exec` (AST line 30370), log2 ≈ 165. -/
+def «bls_g1_msm_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + (31104958240 + 1) * ((«g1_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g1_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («g1_mul» + 1) + Nat.max ((«g1_copy» + 1)) ((«g1_add» + 1)) + 1) + («g1_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_g1_msm` (AST line 31264), log2 ≈ 388. -/
+/-- `pre_bls_g1_msm` (AST line 31264), log2 ≈ 165. -/
 def «pre_bls_g1_msm» : Nat := («udivmod» + 1) + («bls_g1_msm_discount» + 1) + («udivmod» + 1) + («charge_gas» + 1) + («alloc» + 1) + («bls_g1_msm_exec» + 1)
 
 /-- `fp2_add` (AST line 27864), log2 ≈ 3. -/
@@ -3426,19 +3438,19 @@ def «g2_decode» : Nat := («bls_fp_decode64» + 1) + («bls_fp_decode64» + 1)
 /-- `bls_fp_neg` (AST line 26765), log2 ≈ 2. -/
 def «bls_fp_neg» : Nat := («bls_fp_is_zero» + 1) + («bls_fp_sub_raw» + 1)
 
-/-- `fp2_inv` (AST line 28035), log2 ≈ 388. -/
+/-- `fp2_inv` (AST line 28035), log2 ≈ 22. -/
 def «fp2_inv» : Nat := («bls_fp_sqr» + 1) + («bls_fp_sqr» + 1) + («bls_fp_add» + 1) + («bls_fp_inv» + 1) + («bls_fp_mul» + 1) + («bls_fp_mul» + 1) + («bls_fp_neg» + 1)
 
-/-- `g2_normalize` (AST line 29247), log2 ≈ 388. -/
+/-- `g2_normalize` (AST line 29247), log2 ≈ 65. -/
 def «g2_normalize» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g2_is_inf» + 1) + Nat.max ((«memzero» + 1) + («heap_release» + 1)) (0) + («fp2_inv» + 1) + («fp2_mul» + 1) + («fp2_mul» + 1) + («heap_release» + 1)
 
-/-- `g2_encode` (AST line 29343), log2 ≈ 388. -/
+/-- `g2_encode` (AST line 29343), log2 ≈ 67. -/
 def «g2_encode» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g2_normalize» + 1) + («bls_fp_encode64» + 1) + («bls_fp_encode64» + 1) + («bls_fp_encode64» + 1) + («bls_fp_encode64» + 1) + («heap_release» + 1)
 
-/-- `bls_g2_add_exec` (AST line 30416), log2 ≈ 388. -/
+/-- `bls_g2_add_exec` (AST line 30416), log2 ≈ 69. -/
 def «bls_g2_add_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («g2_decode» + 1) + Nat.max ((«g2_decode» + 1)) (0) + Nat.max ((«heap_release» + 1)) (0) + («g2_add» + 1) + («g2_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_g2_add` (AST line 31300), log2 ≈ 388. -/
+/-- `pre_bls_g2_add` (AST line 31300), log2 ≈ 69. -/
 def «pre_bls_g2_add» : Nat := («charge_gas» + 1) + («alloc» + 1) + («bls_g2_add_exec» + 1)
 
 /-- `bls_g2_msm_discount` (AST line 31222), log2 ≈ 0. -/
@@ -3450,10 +3462,10 @@ def «g2_mul» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g2_set_inf» 
 /-- `g2_subgroup_check` (AST line 29367), log2 ≈ 132. -/
 def «g2_subgroup_check» : Nat := («heap_mark» + 1) + («alloc» + 1) + («g2_mul» + 1) + («g2_is_inf» + 1) + («heap_release» + 1)
 
-/-- `bls_g2_msm_exec` (AST line 30446), log2 ≈ 388. -/
-def «bls_g2_msm_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«g2_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («g2_mul» + 1) + Nat.max ((«g2_copy» + 1)) ((«g2_add» + 1)) + 1) + («g2_encode» + 1) + («heap_release» + 1)
+/-- `bls_g2_msm_exec` (AST line 30446), log2 ≈ 168. -/
+def «bls_g2_msm_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + (31104958464 + 1) * ((«g2_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («g2_mul» + 1) + Nat.max ((«g2_copy» + 1)) ((«g2_add» + 1)) + 1) + («g2_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_g2_msm` (AST line 31328), log2 ≈ 388. -/
+/-- `pre_bls_g2_msm` (AST line 31328), log2 ≈ 168. -/
 def «pre_bls_g2_msm» : Nat := («udivmod» + 1) + («bls_g2_msm_discount» + 1) + («udivmod» + 1) + («charge_gas» + 1) + («alloc» + 1) + («bls_g2_msm_exec» + 1)
 
 /-- `iso_horner_fp2` (AST line 30055), log2 ≈ 73. -/
@@ -3483,10 +3495,10 @@ def «swu_g2» : Nat := («heap_mark» + 1) + («alloc» + 1) + («fp2_sqr» + 1
 /-- `map_fp2_to_g2` (AST line 30128), log2 ≈ 132. -/
 def «map_fp2_to_g2» : Nat := («heap_mark» + 1) + («alloc» + 1) + («swu_g2» + 1) + («iso_map_g2» + 1) + («g2_mul» + 1) + («heap_release» + 1)
 
-/-- `bls_map_fp2_to_g2_exec` (AST line 30581), log2 ≈ 388. -/
+/-- `bls_map_fp2_to_g2_exec` (AST line 30581), log2 ≈ 132. -/
 def «bls_map_fp2_to_g2_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («bls_fp_decode64» + 1) + Nat.max ((«bls_fp_decode64» + 1)) (0) + Nat.max ((«heap_release» + 1)) (0) + («map_fp2_to_g2» + 1) + («g2_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_map_fp2_to_g2` (AST line 31426), log2 ≈ 388. -/
+/-- `pre_bls_map_fp2_to_g2` (AST line 31426), log2 ≈ 132. -/
 def «pre_bls_map_fp2_to_g2» : Nat := («charge_gas» + 1) + («alloc» + 1) + («bls_map_fp2_to_g2_exec» + 1)
 
 /-- `iso_horner_fp` (AST line 29789), log2 ≈ 72. -/
@@ -3507,10 +3519,10 @@ def «swu_g1» : Nat := («bls_fp_sqr» + 1) + («bls_fp_mul» + 1) + («bls_fp_
 /-- `map_fp_to_g1` (AST line 29859), log2 ≈ 130. -/
 def «map_fp_to_g1» : Nat := («heap_mark» + 1) + («alloc» + 1) + («swu_g1» + 1) + («iso_map_g1» + 1) + («g1_mul» + 1) + («heap_release» + 1)
 
-/-- `bls_map_fp_to_g1_exec` (AST line 30554), log2 ≈ 388. -/
+/-- `bls_map_fp_to_g1_exec` (AST line 30554), log2 ≈ 130. -/
 def «bls_map_fp_to_g1_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («bls_fp_decode64» + 1) + Nat.max ((«heap_release» + 1)) (0) + («map_fp_to_g1» + 1) + («g1_encode» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_map_fp_to_g1` (AST line 31398), log2 ≈ 388. -/
+/-- `pre_bls_map_fp_to_g1` (AST line 31398), log2 ≈ 130. -/
 def «pre_bls_map_fp_to_g1» : Nat := («charge_gas» + 1) + («alloc» + 1) + («bls_map_fp_to_g1_exec» + 1)
 
 /-- `fp6_copy` (AST line 28118), log2 ≈ 65. -/
@@ -3552,10 +3564,10 @@ def «fp6_set_zero» : Nat := («memzero» + 1)
 /-- `fp12_set_one` (AST line 28351), log2 ≈ 66. -/
 def «fp12_set_one» : Nat := («fp6_set_one» + 1) + («fp6_set_zero» + 1)
 
-/-- `fp12_pow_absx` (AST line 28508), log2 ≈ 131. -/
-def «fp12_pow_absx» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («fp12_copy» + 1) + («fp12_set_one» + 1) + (2 ^ 64 + 1) * (Nat.max ((«fp12_mul» + 1)) (0) + Nat.max ((«fp12_mul» + 1)) (0) + 1) + («fp12_copy» + 1) + («heap_release» + 1)
+/-- `fp12_pow_absx` (AST line 28508), log2 ≈ 73. -/
+def «fp12_pow_absx» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («fp12_copy» + 1) + («fp12_set_one» + 1) + (64 + 1) * (Nat.max ((«fp12_mul» + 1)) (0) + Nat.max ((«fp12_mul» + 1)) (0) + 1) + («fp12_copy» + 1) + («heap_release» + 1)
 
-/-- `fp12_exp_x` (AST line 28545), log2 ≈ 131. -/
+/-- `fp12_exp_x` (AST line 28545), log2 ≈ 73. -/
 def «fp12_exp_x» : Nat := («fp12_pow_absx» + 1) + («fp12_conj» + 1)
 
 /-- `fp2_conj` (AST line 27932), log2 ≈ 2. -/
@@ -3564,13 +3576,13 @@ def «fp2_conj» : Nat := («bls_fp_neg» + 1)
 /-- `fp12_frob` (AST line 28476), log2 ≈ 11. -/
 def «fp12_frob» : Nat := («fp2_conj» + 1) + («fp2_conj» + 1) + («fp2_mul» + 1) + («fp2_conj» + 1) + («fp2_mul» + 1) + («fp2_conj» + 1) + («fp2_mul» + 1) + («fp2_conj» + 1) + («fp2_mul» + 1) + («fp2_conj» + 1) + («fp2_mul» + 1)
 
-/-- `fp6_inv` (AST line 28277), log2 ≈ 388. -/
+/-- `fp6_inv` (AST line 28277), log2 ≈ 22. -/
 def «fp6_inv» : Nat := («heap_mark» + 1) + («alloc» + 1) + («fp2_sqr» + 1) + («fp2_mul» + 1) + («fp2_mul_xi» + 1) + («fp2_sub» + 1) + («fp2_sqr» + 1) + («fp2_mul_xi» + 1) + («fp2_mul» + 1) + («fp2_sub» + 1) + («fp2_sqr» + 1) + («fp2_mul» + 1) + («fp2_sub» + 1) + («fp2_mul» + 1) + («fp2_mul» + 1) + («fp2_add» + 1) + («fp2_mul_xi» + 1) + («fp2_mul» + 1) + («fp2_add» + 1) + («fp2_inv» + 1) + («fp2_mul» + 1) + («fp2_mul» + 1) + («fp2_mul» + 1) + («heap_release» + 1)
 
-/-- `fp12_inv` (AST line 28443), log2 ≈ 388. -/
+/-- `fp12_inv` (AST line 28443), log2 ≈ 66. -/
 def «fp12_inv» : Nat := («heap_mark» + 1) + («alloc» + 1) + («fp6_mul» + 1) + («fp6_mul» + 1) + («fp6_mul_v» + 1) + («fp6_sub» + 1) + («fp6_inv» + 1) + («fp6_mul» + 1) + («fp6_mul» + 1) + («fp6_neg» + 1) + («heap_release» + 1)
 
-/-- `fp12_final_exp` (AST line 28559), log2 ≈ 388. -/
+/-- `fp12_final_exp` (AST line 28559), log2 ≈ 75. -/
 def «fp12_final_exp» : Nat := («heap_mark» + 1) + («alloc» + 1) + («fp12_inv» + 1) + («fp12_conj» + 1) + («fp12_mul» + 1) + («fp12_frob» + 1) + («fp12_frob» + 1) + («fp12_mul» + 1) + («fp12_exp_x» + 1) + («fp12_conj» + 1) + («fp12_mul» + 1) + («fp12_exp_x» + 1) + («fp12_conj» + 1) + («fp12_mul» + 1) + («fp12_exp_x» + 1) + («fp12_frob» + 1) + («fp12_mul» + 1) + («fp12_exp_x» + 1) + («fp12_exp_x» + 1) + («fp12_frob» + 1) + («fp12_frob» + 1) + («fp12_mul» + 1) + («fp12_conj» + 1) + («fp12_mul» + 1) + («fp12_mul» + 1) + («fp12_mul» + 1) + («fp12_mul» + 1) + («heap_release» + 1)
 
 /-- `fp12_is_one` (AST line 28365), log2 ≈ 67. -/
@@ -3588,25 +3600,25 @@ def «fp2_scale» : Nat := («bls_fp_mul» + 1) + («bls_fp_mul» + 1)
 /-- `pair_ell` (AST line 29595), log2 ≈ 67. -/
 def «pair_ell» : Nat := («heap_mark» + 1) + («alloc» + 1) + («memzero» + 1) + («fp2_copy» + 1) + («fp2_scale» + 1) + («fp2_scale» + 1) + («fp12_mul» + 1) + («heap_release» + 1)
 
-/-- `pair_miller_loop` (AST line 29619), log2 ≈ 132. -/
-def «pair_miller_loop» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («fp2_copy» + 1) + («fp2_copy» + 1) + («fp2_set_one» + 1) + («fp12_set_one» + 1) + (2 ^ 64 + 1) * ((«fp12_mul» + 1) + («pair_doubling_step» + 1) + («pair_ell» + 1) + Nat.max ((«pair_addition_step» + 1) + («pair_ell» + 1)) (0) + 1) + («fp12_conj» + 1) + («heap_release» + 1)
+/-- `pair_miller_loop` (AST line 29619), log2 ≈ 74. -/
+def «pair_miller_loop» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («fp2_copy» + 1) + («fp2_copy» + 1) + («fp2_set_one» + 1) + («fp12_set_one» + 1) + (63 + 1) * ((«fp12_mul» + 1) + («pair_doubling_step» + 1) + («pair_ell» + 1) + Nat.max ((«pair_addition_step» + 1) + («pair_ell» + 1)) (0) + 1) + («fp12_conj» + 1) + («heap_release» + 1)
 
-/-- `pair_accumulate` (AST line 29661), log2 ≈ 389. -/
+/-- `pair_accumulate` (AST line 29661), log2 ≈ 74. -/
 def «pair_accumulate» : Nat := («g1_is_inf» + 1) + («g2_is_inf» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («g1_normalize» + 1) + («g2_normalize» + 1) + («pair_miller_loop» + 1) + («fp12_mul» + 1) + («heap_release» + 1)
 
-/-- `bls_pairing_exec` (AST line 30492), log2 ≈ 453. -/
-def «bls_pairing_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fp12_set_one» + 1) + (2 ^ 64 + 1) * ((«g1_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g1_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («pair_accumulate» + 1) + 1) + («fp12_final_exp» + 1) + («fp12_is_one» + 1) + («memzero» + 1) + («heap_release» + 1)
+/-- `bls_pairing_exec` (AST line 30492), log2 ≈ 167. -/
+def «bls_pairing_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fp12_set_one» + 1) + (31104958464 + 1) * ((«g1_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g1_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_decode» + 1) + Nat.max ((«heap_release» + 1)) (0) + («g2_subgroup_check» + 1) + Nat.max ((«heap_release» + 1)) (0) + («pair_accumulate» + 1) + 1) + («fp12_final_exp» + 1) + («fp12_is_one» + 1) + («memzero» + 1) + («heap_release» + 1)
 
-/-- `pre_bls_pairing` (AST line 31364), log2 ≈ 453. -/
+/-- `pre_bls_pairing` (AST line 31364), log2 ≈ 167. -/
 def «pre_bls_pairing» : Nat := («udivmod» + 1) + («charge_gas» + 1) + («alloc» + 1) + («bls_pairing_exec» + 1)
 
 /-- `secp256k1_address_of_point` (AST line 7465), log2 ≈ 100. -/
 def «secp256k1_address_of_point» : Nat := («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `secp256k1_ecrecover` (AST line 7483), log2 ≈ 389. -/
+/-- `secp256k1_ecrecover` (AST line 7483), log2 ≈ 100. -/
 def «secp256k1_ecrecover» : Nat := («heap_mark» + 1) + («alloc» + 1) + («secp256k1_recover» + 1) + Nat.max ((«secp256k1_address_of_point» + 1)) (0) + («heap_release» + 1)
 
-/-- `pre_ecrecover` (AST line 31556), log2 ≈ 389. -/
+/-- `pre_ecrecover` (AST line 31556), log2 ≈ 100. -/
 def «pre_ecrecover» : Nat := («charge_gas» + 1) + («alloc» + 1) + («alloc» + 1) + («heap_mark» + 1) + («alloc» + 1) + («buffer_read» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_fits_word» + 1) + Nat.max ((«heap_release» + 1)) (0) + («secp256k1_ecrecover» + 1) + Nat.max ((«heap_release» + 1)) (0) + («memzero» + 1) + («heap_release» + 1)
 
 /-- `pre_identity` (AST line 31515), log2 ≈ 3. -/
@@ -3627,13 +3639,13 @@ def «g2_neg» : Nat := Nat.max ((«fp2_copy» + 1) + («fp2_copy» + 1)) (0) + 
 /-- `kzg_neg_scalar` (AST line 30245), log2 ≈ 65. -/
 def «kzg_neg_scalar» : Nat := («u256_from_be» + 1) + («u256_is_zero» + 1) + («u256_sub» + 1)
 
-/-- `kzg_verify` (AST line 30267), log2 ≈ 390. -/
+/-- `kzg_verify` (AST line 30267), log2 ≈ 132. -/
 def «kzg_verify» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («fp2_copy» + 1) + («fp2_copy» + 1) + («fp2_set_one» + 1) + («kzg_neg_scalar» + 1) + («g2_mul» + 1) + («fp2_copy» + 1) + («fp2_copy» + 1) + («fp2_set_one» + 1) + («g2_add» + 1) + («memcpy» + 1) + («memcpy» + 1) + («kzg_neg_scalar» + 1) + («g1_mul» + 1) + («g1_add» + 1) + («g2_neg» + 1) + («fp12_set_one» + 1) + («pair_accumulate» + 1) + («pair_accumulate» + 1) + («fp12_final_exp» + 1) + («fp12_is_one» + 1) + («heap_release» + 1)
 
-/-- `kzg_point_evaluation_exec` (AST line 30611), log2 ≈ 390. -/
+/-- `kzg_point_evaluation_exec` (AST line 30611), log2 ≈ 133. -/
 def «kzg_point_evaluation_exec» : Nat := («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («sha256» + 1) + («memeq» + 1) + Nat.max ((«heap_release» + 1)) (0) + («kzg_load_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («kzg_load_g1» + 1) + Nat.max ((«heap_release» + 1)) (0) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + Nat.max ((«heap_release» + 1)) (0) + («kzg_verify» + 1) + («heap_release» + 1) + («memzero» + 1) + («u256_to_be32» + 1)
 
-/-- `pre_kzg_point_evaluation` (AST line 31454), log2 ≈ 390. -/
+/-- `pre_kzg_point_evaluation` (AST line 31454), log2 ≈ 133. -/
 def «pre_kzg_point_evaluation» : Nat := («charge_gas» + 1) + («alloc» + 1) + («kzg_point_evaluation_exec» + 1)
 
 /-- `be_top_bit` (AST line 20407), log2 ≈ 66. -/
@@ -3642,19 +3654,19 @@ def «be_top_bit» : Nat := (2 ^ 64 + 1) * (Nat.max ((«bit_length64» + 1)) (0)
 /-- `bn_from_be` (AST line 20170), log2 ≈ 66. -/
 def «bn_from_be» : Nat := (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1)
 
-/-- `bn_divmnu` (AST line 20253), log2 ≈ 257. -/
-def «bn_divmnu» : Nat := Nat.max ((2 ^ 64 + 1) * ((«div64by32» + 1) + 1)) (0) + («nlz32» + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (Nat.max (0) ((«div64by32» + 1)) + (2 ^ 192 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1) + Nat.max ((2 ^ 64 + 1) * (0 + 1)) (0) + 1) + (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * (0 + 1)
+/-- `bn_divmnu` (AST line 20253), log2 ≈ 71. -/
+def «bn_divmnu» : Nat := Nat.max ((31104957944 + 1) * ((«div64by32» + 1) + 1)) (0) + («nlz32» + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (Nat.max (0) ((«div64by32» + 1)) + (3 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1) + Nat.max ((31104957944 + 1) * (0 + 1)) (0) + 1) + (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * (0 + 1)
 
-/-- `bn_mod` (AST line 20386), log2 ≈ 257. -/
+/-- `bn_mod` (AST line 20386), log2 ≈ 71. -/
 def «bn_mod» : Nat := («digits_len» + 1) + Nat.max ((«memcpy» + 1) + («memzero» + 1)) (0) + («bn_divmnu» + 1)
 
-/-- `bn_mul` (AST line 20218), log2 ≈ 129. -/
-def «bn_mul» : Nat := (2 ^ 64 + 1) * (0 + 1) + (2 ^ 64 + 1) * ((2 ^ 64 + 1) * (0 + 1) + 1)
+/-- `bn_mul` (AST line 20218), log2 ≈ 70. -/
+def «bn_mul» : Nat := (31104957944 + 1) * (0 + 1) + (31104957944 + 1) * ((31104957944 + 1) * (0 + 1) + 1)
 
 /-- `bn_to_be` (AST line 20196), log2 ≈ 65. -/
 def «bn_to_be» : Nat := (2 ^ 64 + 1) * (0 + 1)
 
-/-- `modexp` (AST line 20427), log2 ≈ 322. -/
+/-- `modexp` (AST line 20427), log2 ≈ 137. -/
 def «modexp» : Nat := («heap_mark» + 1) + («alloc» + 1) + («bn_from_be» + 1) + («digits_len» + 1) + Nat.max ((«memzero» + 1) + («heap_release» + 1)) (0) + («max» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («bn_from_be» + 1) + («bn_mod» + 1) + («be_top_bit» + 1) + Nat.max ((«memzero» + 1)) ((«memcpy» + 1) + (2 ^ 64 + 1) * ((«bn_mul» + 1) + («bn_mod» + 1) + Nat.max ((«bn_mul» + 1) + («bn_mod» + 1)) (0) + 1)) + («bn_to_be» + 1) + («heap_release» + 1)
 
 /-- `modexp_gas` (AST line 31689), log2 ≈ 3. -/
@@ -3663,7 +3675,7 @@ def «modexp_gas» : Nat := («max» + 1) + («u256_bit_length» + 1)
 /-- `sat_word` (AST line 14833), log2 ≈ 0. -/
 def «sat_word» : Nat := 0
 
-/-- `pre_modexp` (AST line 31725), log2 ≈ 322. -/
+/-- `pre_modexp` (AST line 31725), log2 ≈ 137. -/
 def «pre_modexp» : Nat := («buffer_read» + 1) + («u256_from_be» + 1) + («sat_word» + 1) + («u256_from_be» + 1) + («sat_word» + 1) + («u256_from_be» + 1) + («sat_word» + 1) + («min» + 1) + («buffer_read» + 1) + («u256_from_be» + 1) + («modexp_gas» + 1) + («charge_gas» + 1) + Nat.max ((«alloc» + 1)) (0) + («alloc» + 1) + («heap_mark» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («buffer_read» + 1) + («buffer_read» + 1) + («buffer_read» + 1) + («modexp» + 1) + («heap_release» + 1)
 
 /-- `p256_fp_add` (AST line 20490), log2 ≈ 3. -/
@@ -3672,11 +3684,11 @@ def «p256_fp_add» : Nat := («u256_add_carry» + 1) + Nat.max ((«u256_sub» +
 /-- `p256_fp_reduce` (AST line 20527), log2 ≈ 2. -/
 def «p256_fp_reduce» : Nat := («u256_lt» + 1) + Nat.max ((«u256_sub» + 1)) (0)
 
-/-- `p256_fp_mul` (AST line 20542), log2 ≈ 131. -/
-def «p256_fp_mul» : Nat := (2 ^ 128 + 1) * ((«u256_add_carry» + 1) + 1) + (2 ^ 128 + 1) * ((«u256_lt» + 1) + («u256_sub» + 1) + 1) + («p256_fp_reduce» + 1)
+/-- `p256_fp_mul` (AST line 20542), log2 ≈ 67. -/
+def «p256_fp_mul» : Nat := (2 ^ 65 + 1) * ((«u256_add_carry» + 1) + 1) + (2 ^ 64 + 1) * ((«u256_lt» + 1) + («u256_sub» + 1) + 1) + («p256_fp_reduce» + 1)
 
-/-- `p256_fp_sqr` (AST line 21184), log2 ≈ 131. -/
-def «p256_fp_sqr» : Nat := (2 ^ 128 + 1) * ((«u256_add_carry» + 1) + 1) + (2 ^ 128 + 1) * ((«u256_lt» + 1) + («u256_sub» + 1) + 1) + («p256_fp_reduce» + 1)
+/-- `p256_fp_sqr` (AST line 21184), log2 ≈ 67. -/
+def «p256_fp_sqr» : Nat := (2 ^ 65 + 1) * ((«u256_add_carry» + 1) + 1) + (2 ^ 64 + 1) * ((«u256_lt» + 1) + («u256_sub» + 1) + 1) + («p256_fp_reduce» + 1)
 
 /-- `p256_fp_sub` (AST line 20511), log2 ≈ 2. -/
 def «p256_fp_sub» : Nat := («u256_lt» + 1) + («u256_sub» + 1) + Nat.max ((«u256_add» + 1)) (0)
@@ -3684,25 +3696,25 @@ def «p256_fp_sub» : Nat := («u256_lt» + 1) + («u256_sub» + 1) + Nat.max ((
 /-- `p256_set_infinity` (AST line 21782), log2 ≈ 0. -/
 def «p256_set_infinity» : Nat := 0
 
-/-- `p256_ec_double` (AST line 21814), log2 ≈ 134. -/
+/-- `p256_ec_double` (AST line 21814), log2 ≈ 70. -/
 def «p256_ec_double» : Nat := («u256_is_zero» + 1) + («u256_is_zero» + 1) + Nat.max ((«p256_set_infinity» + 1)) (0) + («p256_fp_sqr» + 1) + («p256_fp_sqr» + 1) + («p256_fp_mul» + 1) + («p256_fp_sub» + 1) + («p256_fp_add» + 1) + («p256_fp_mul» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_sqr» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_sub» + 1) + («p256_fp_add» + 1) + («p256_fp_sqr» + 1) + («p256_fp_sub» + 1) + («p256_fp_sub» + 1) + («p256_fp_sub» + 1) + («p256_fp_mul» + 1) + («p256_fp_sqr» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_sub» + 1)
 
 /-- `p256_set_affine` (AST line 21798), log2 ≈ 0. -/
 def «p256_set_affine» : Nat := 0
 
-/-- `p256_ec_add_affine` (AST line 21880), log2 ≈ 135. -/
+/-- `p256_ec_add_affine` (AST line 21880), log2 ≈ 72. -/
 def «p256_ec_add_affine» : Nat := («u256_is_zero» + 1) + Nat.max ((«p256_set_affine» + 1)) (0) + («p256_fp_sqr» + 1) + («p256_fp_mul» + 1) + («p256_fp_mul» + 1) + («p256_fp_mul» + 1) + («u256_eq» + 1) + Nat.max ((«p256_fp_add» + 1) + («u256_is_zero» + 1) + Nat.max ((«p256_set_infinity» + 1)) (0) + («p256_ec_double» + 1)) (0) + («p256_fp_sub» + 1) + («p256_fp_sub» + 1) + («p256_fp_sqr» + 1) + («p256_fp_mul» + 1) + («p256_fp_mul» + 1) + («p256_fp_sqr» + 1) + («p256_fp_sub» + 1) + («p256_fp_add» + 1) + («p256_fp_sub» + 1) + («p256_fp_sub» + 1) + («p256_fp_mul» + 1) + («p256_fp_mul» + 1) + («p256_fp_sub» + 1) + («p256_fp_mul» + 1)
 
-/-- `p256_ec_mul2` (AST line 21944), log2 ≈ 200. -/
+/-- `p256_ec_mul2` (AST line 21944), log2 ≈ 137. -/
 def «p256_ec_mul2» : Nat := («p256_set_infinity» + 1) + («u256_bit_length» + 1) + («u256_bit_length» + 1) + («max» + 1) + (2 ^ 64 + 1) * ((«p256_ec_double» + 1) + («u256_bit» + 1) + Nat.max ((«p256_ec_add_affine» + 1)) (0) + («u256_bit» + 1) + Nat.max ((«p256_ec_add_affine» + 1)) (0) + 1)
 
-/-- `p256_on_curve` (AST line 22001), log2 ≈ 132. -/
+/-- `p256_on_curve` (AST line 22001), log2 ≈ 69. -/
 def «p256_on_curve» : Nat := («p256_fp_sqr» + 1) + («p256_fp_sqr» + 1) + («p256_fp_mul» + 1) + («p256_fp_add» + 1) + («p256_fp_add» + 1) + («p256_fp_sub» + 1) + («p256_fp_add» + 1) + («u256_eq» + 1)
 
-/-- `p256_verify` (AST line 22022), log2 ≈ 387. -/
+/-- `p256_verify` (AST line 22022), log2 ≈ 137. -/
 def «p256_verify» : Nat := («u256_is_zero» + 1) + («u256_lt» + 1) + («u256_is_zero» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («u256_lt» + 1) + («p256_on_curve» + 1) + («u256_from_be» + 1) + («u256_lt» + 1) + Nat.max ((«u256_sub» + 1)) (0) + («modinv_bin» + 1) + («u256_mulmod» + 1) + («u256_mulmod» + 1) + («heap_mark» + 1) + («alloc» + 1) + («p256_ec_mul2» + 1) + («u256_is_zero» + 1) + Nat.max ((«heap_release» + 1)) (0) + («p256_fp_sqr» + 1) + («heap_release» + 1) + («p256_fp_mul» + 1) + («u256_eq» + 1) + («u256_add_carry» + 1) + («u256_lt» + 1) + («p256_fp_mul» + 1) + («u256_eq» + 1)
 
-/-- `pre_p256verify` (AST line 22115), log2 ≈ 387. -/
+/-- `pre_p256verify` (AST line 22115), log2 ≈ 137. -/
 def «pre_p256verify» : Nat := («charge_gas» + 1) + («alloc» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («u256_from_be» + 1) + («p256_verify» + 1) + Nat.max ((«alloc» + 1) + («memzero» + 1)) (0)
 
 /-- `rmd_f` (AST line 19800), log2 ≈ 0. -/
@@ -3726,13 +3738,13 @@ def «pre_ripemd160» : Nat := («words_of» + 1) + («charge_gas» + 1) + («al
 /-- `pre_sha256` (AST line 31534), log2 ≈ 67. -/
 def «pre_sha256» : Nat := («words_of» + 1) + («charge_gas» + 1) + («alloc» + 1) + («sha256» + 1)
 
-/-- `run_precompile` (AST line 31795), log2 ≈ 453. -/
+/-- `run_precompile` (AST line 31795), log2 ≈ 169. -/
 def «run_precompile» : Nat := Nat.max ((«pre_ecrecover» + 1)) (0) + Nat.max ((«pre_sha256» + 1)) (0) + Nat.max ((«pre_ripemd160» + 1)) (0) + Nat.max ((«pre_identity» + 1)) (0) + Nat.max ((«pre_alt_bn128_add» + 1)) (0) + Nat.max ((«pre_alt_bn128_mul» + 1)) (0) + Nat.max ((«pre_alt_bn128_pairing_check» + 1)) (0) + Nat.max ((«pre_modexp» + 1)) (0) + Nat.max ((«pre_blake2f» + 1)) (0) + Nat.max ((«pre_kzg_point_evaluation» + 1)) (0) + Nat.max ((«pre_bls_g1_add» + 1)) (0) + Nat.max ((«pre_bls_g1_msm» + 1)) (0) + Nat.max ((«pre_bls_g2_add» + 1)) (0) + Nat.max ((«pre_bls_g2_msm» + 1)) (0) + Nat.max ((«pre_bls_pairing» + 1)) (0) + Nat.max ((«pre_bls_map_fp_to_g1» + 1)) (0) + Nat.max ((«pre_bls_map_fp2_to_g2» + 1)) (0) + Nat.max ((«pre_p256verify» + 1)) (0)
 
-/-- `frame_prologue` (AST line 18499), log2 ≈ 453. -/
+/-- `frame_prologue` (AST line 18499), log2 ≈ 169. -/
 def «frame_prologue» : Nat := Nat.max ((«u256_is_zero» + 1) + Nat.max ((«move_ether» + 1) + («memeq» + 1) + Nat.max ((«emit_transfer_log» + 1)) (0)) (0)) (0) + Nat.max ((«precompile_index» + 1) + Nat.max (Nat.max ((«run_precompile» + 1)) (0)) (0)) (0)
 
-/-- `frame_start` (AST line 18539), log2 ≈ 453. -/
+/-- `frame_start` (AST line 18539), log2 ≈ 169. -/
 def «frame_start» : Nat := («frame_prologue» + 1) + («frame_exception» + 1)
 
 /-- `credit_state_gas_refund` (AST line 15000), log2 ≈ 1. -/
@@ -3741,7 +3753,7 @@ def «credit_state_gas_refund» : Nat := («min» + 1)
 /-- `incorporate_child_on_error` (AST line 18941), log2 ≈ 0. -/
 def «incorporate_child_on_error» : Nat := 0
 
-/-- `incorporate_child_on_success` (AST line 18957), log2 ≈ 194. -/
+/-- `incorporate_child_on_success` (AST line 18957), log2 ≈ 133. -/
 def «incorporate_child_on_success» : Nat := («incorporate_child_on_error» + 1) + (2 ^ 64 + 1) * ((«log_append» + 1) + 1) + («htab_union_into» + 1)
 
 /-- `pc_add` (AST line 15437), log2 ≈ 0. -/
@@ -3759,13 +3771,13 @@ def «set_retdata» : Nat := Nat.max ((«alloc» + 1)) (0) + («memcpy» + 1)
 /-- `stack_push` (AST line 15065), log2 ≈ 65. -/
 def «stack_push» : Nat := Nat.max ((«scratch_alloc» + 1) + («memcpy» + 1)) (0)
 
-/-- `state_restore` (AST line 12903), log2 ≈ 194. -/
+/-- `state_restore` (AST line 12903), log2 ≈ 133. -/
 def «state_restore» : Nat := (2 ^ 64 + 1) * (Nat.max ((«htab_set» + 1)) ((«htab_del» + 1)) + 1)
 
-/-- `finish_child` (AST line 18572), log2 ≈ 450. -/
+/-- `finish_child` (AST line 18572), log2 ≈ 163. -/
 def «finish_child» : Nat := Nat.max (Nat.max ((«create_finish» + 1) + («state_restore» + 1) + («refill_frame_state_gas» + 1) + («frame_halt» + 1)) ((«state_restore» + 1))) (0) + Nat.max (Nat.max ((«rollback_child_access» + 1) + («incorporate_child_on_error» + 1) + Nat.max ((«credit_state_gas_refund» + 1)) (0) + («set_retdata» + 1) + («stack_push» + 1)) ((«incorporate_child_on_success» + 1) + («set_retdata» + 1) + («address_to_u256» + 1) + («stack_push» + 1))) (Nat.max ((«rollback_child_access» + 1) + («incorporate_child_on_error» + 1) + Nat.max ((«credit_state_gas_refund» + 1)) (0) + («set_retdata» + 1) + («stack_push» + 1)) ((«incorporate_child_on_success» + 1) + («set_retdata» + 1) + («stack_push» + 1)) + («min» + 1) + Nat.max ((«memcpy» + 1)) (0)) + («scratch_release» + 1) + («frame_mem_release» + 1) + («pc_add» + 1)
 
-/-- `frame_epilogue` (AST line 18558), log2 ≈ 194. -/
+/-- `frame_epilogue` (AST line 18558), log2 ≈ 133. -/
 def «frame_epilogue» : Nat := Nat.max ((«state_restore» + 1)) (0)
 
 /-- `stack_pop` (AST line 15046), log2 ≈ 0. -/
@@ -3774,10 +3786,10 @@ def «stack_pop» : Nat := 0
 /-- `op_add` (AST line 15525), log2 ≈ 65. -/
 def «op_add» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_add» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `u256_addmod` (AST line 1861), log2 ≈ 258. -/
+/-- `u256_addmod` (AST line 1861), log2 ≈ 72. -/
 def «u256_addmod» : Nat := («u256_add_carry» + 1) + Nat.max ((«u256_mod» + 1)) (0) + («u256_to_digits» + 1) + («digits_divmod» + 1)
 
-/-- `op_addmod` (AST line 15658), log2 ≈ 258. -/
+/-- `op_addmod` (AST line 15658), log2 ≈ 72. -/
 def «op_addmod» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_addmod» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_address` (AST line 16734), log2 ≈ 66. -/
@@ -3789,10 +3801,10 @@ def «op_and» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_ga
 /-- `to_address_masked` (AST line 14889), log2 ≈ 4. -/
 def «to_address_masked» : Nat := («st_be32» + 1) + («st_be64» + 1) + («st_be64» + 1)
 
-/-- `warm_after_charge` (AST line 15511), log2 ≈ 130. -/
+/-- `warm_after_charge` (AST line 15511), log2 ≈ 69. -/
 def «warm_after_charge» : Nat := Nat.max ((«warm_address» + 1)) (0)
 
-/-- `op_balance` (AST line 16751), log2 ≈ 450. -/
+/-- `op_balance` (AST line 16751), log2 ≈ 163. -/
 def «op_balance» : Nat := («stack_pop» + 1) + («to_address_masked» + 1) + («access_gas_cost» + 1) + («charge_gas» + 1) + («warm_after_charge» + 1) + («get_account» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `block_env` (AST line 17115), log2 ≈ 0. -/
@@ -3801,7 +3813,7 @@ def «block_env» : Nat := 0
 /-- `op_basefee` (AST line 17125), log2 ≈ 65. -/
 def «op_basefee» : Nat := («charge_gas» + 1) + («block_env» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `u256_div` (AST line 1783), log2 ≈ 257. -/
+/-- `u256_div` (AST line 1783), log2 ≈ 71. -/
 def «u256_div» : Nat := («u256_divmod» + 1)
 
 /-- `u256_from_word` (AST line 780), log2 ≈ 0. -/
@@ -3810,13 +3822,13 @@ def «u256_from_word» : Nat := 0
 /-- `u256_mul` (AST line 1150), log2 ≈ 3. -/
 def «u256_mul» : Nat := Nat.max ((«mul64x64» + 1)) (0) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1) + («mul64x64» + 1)
 
-/-- `taylor_exponential` (AST line 9511), log2 ≈ 321. -/
+/-- `taylor_exponential` (AST line 9511), log2 ≈ 135. -/
 def «taylor_exponential» : Nat := («u256_from_word» + 1) + («u256_from_word» + 1) + («u256_from_word» + 1) + («u256_mul» + 1) + («u256_is_zero» + 1) + ((2 ^ 64 + 1) + 1) * ((«u256_add» + 1) + («u256_mul_full» + 1) + Nat.max ((«trap_with» + 1)) (0) + («u256_from_word» + 1) + («u256_mul» + 1) + («u256_div» + 1) + («u256_is_zero» + 1) + 1) + («u256_div» + 1)
 
-/-- `calculate_blob_gas_price` (AST line 9550), log2 ≈ 321. -/
+/-- `calculate_blob_gas_price` (AST line 9550), log2 ≈ 135. -/
 def «calculate_blob_gas_price» : Nat := («taylor_exponential» + 1)
 
-/-- `op_blobbasefee` (AST line 17165), log2 ≈ 321. -/
+/-- `op_blobbasefee` (AST line 17165), log2 ≈ 135. -/
 def «op_blobbasefee» : Nat := («charge_gas» + 1) + («block_env» + 1) + («calculate_blob_gas_price» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_blobhash` (AST line 17142), log2 ≈ 66. -/
@@ -3837,7 +3849,7 @@ def «u256_byte» : Nat := («u256_limb» + 1)
 /-- `op_byte` (AST line 15922), log2 ≈ 65. -/
 def «op_byte» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («sat_word» + 1) + («u256_byte» + 1) + («stack_push_word» + 1) + («pc_add» + 1)
 
-/-- `calculate_delegation_cost` (AST line 17693), log2 ≈ 450. -/
+/-- `calculate_delegation_cost` (AST line 17693), log2 ≈ 163. -/
 def «calculate_delegation_cost» : Nat := («ext_code_of» + 1) + («is_valid_delegation» + 1) + («alloc» + 1) + («memcpy» + 1) + («is_warm_address» + 1)
 
 /-- `calculate_message_call_gas` (AST line 19328), log2 ≈ 3. -/
@@ -3864,16 +3876,16 @@ def «child_message» : Nat := («msg_new_scratch» + 1)
 /-- `state_snapshot` (AST line 12893), log2 ≈ 0. -/
 def «state_snapshot» : Nat := 0
 
-/-- `start_child` (AST line 18703), log2 ≈ 453. -/
+/-- `start_child` (AST line 18703), log2 ≈ 169. -/
 def «start_child» : Nat := Nat.max ((«state_snapshot» + 1) + («destroy_storage» + 1) + («mark_account_created» + 1) + («increment_nonce» + 1)) (0) + («frame_open» + 1) + («state_snapshot» + 1) + («frame_start» + 1)
 
-/-- `generic_call` (AST line 19294), log2 ≈ 453. -/
+/-- `generic_call` (AST line 19294), log2 ≈ 169. -/
 def «generic_call» : Nat := («set_retdata» + 1) + Nat.max (Nat.max ((«credit_state_gas_refund» + 1)) (0) + («stack_push» + 1)) (0) + («scratch_mark» + 1) + («frame_mem_mark» + 1) + («child_message» + 1) + («start_child» + 1)
 
-/-- `op_call` (AST line 19358), log2 ≈ 454. -/
+/-- `op_call` (AST line 19358), log2 ≈ 169. -/
 def «op_call» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («to_address_masked» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («u256_is_zero» + 1) + («extend_memory_cost2» + 1) + («is_warm_address» + 1) + («add_sat» + 1) + («charge_gas» + 1) + Nat.max ((«warm_address» + 1)) (0) + («calculate_delegation_cost» + 1) + Nat.max ((«charge_gas» + 1) + («warm_address» + 1)) (0) + («ext_code_of» + 1) + Nat.max ((«is_account_alive» + 1) + Nat.max ((«charge_state_gas» + 1)) (0)) (0) + («sat_word» + 1) + («calculate_message_call_gas» + 1) + («charge_gas» + 1) + («extend_memory» + 1) + («get_account» + 1) + («u256_lt» + 1) + Nat.max ((«stack_push» + 1) + («set_retdata» + 1) + Nat.max ((«credit_state_gas_refund» + 1)) (0)) ((«sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («generic_call» + 1)) + Nat.max ((«pc_add» + 1)) (0)
 
-/-- `op_callcode` (AST line 19457), log2 ≈ 454. -/
+/-- `op_callcode` (AST line 19457), log2 ≈ 169. -/
 def «op_callcode» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («to_address_masked» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («extend_memory_cost2» + 1) + («is_warm_address» + 1) + («u256_is_zero» + 1) + («add_sat» + 1) + («charge_gas» + 1) + Nat.max ((«warm_address» + 1)) (0) + («calculate_delegation_cost» + 1) + Nat.max ((«charge_gas» + 1) + («warm_address» + 1)) (0) + («ext_code_of» + 1) + («sat_word» + 1) + («calculate_message_call_gas» + 1) + («charge_gas» + 1) + («extend_memory» + 1) + («get_account» + 1) + («u256_lt» + 1) + Nat.max ((«stack_push» + 1) + («set_retdata» + 1)) ((«sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («generic_call» + 1)) + Nat.max ((«pc_add» + 1)) (0)
 
 /-- `copy_from_buffer` (AST line 16866), log2 ≈ 67. -/
@@ -3909,28 +3921,28 @@ def «op_codesize» : Nat := («charge_gas» + 1) + («stack_push_word» + 1) + 
 /-- `op_coinbase` (AST line 17220), log2 ≈ 66. -/
 def «op_coinbase» : Nat := («charge_gas» + 1) + («block_env» + 1) + («address_to_u256» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `compute_contract_address` (AST line 19098), log2 ≈ 131. -/
+/-- `compute_contract_address` (AST line 19098), log2 ≈ 100. -/
 def «compute_contract_address» : Nat := («heap_mark» + 1) + («alloc» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_word» + 1) + («rlp_list_header_len» + 1) + («rlp_encode_list_header» + 1) + («alloc» + 1) + («keccak256» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `generic_create` (AST line 19156), log2 ≈ 454. -/
+/-- `generic_create` (AST line 19156), log2 ≈ 169. -/
 def «generic_create» : Nat := («set_retdata» + 1) + («get_account» + 1) + («u256_lt» + 1) + Nat.max ((«stack_push» + 1)) (0) + («warm_address» + 1) + («is_account_alive» + 1) + Nat.max ((«charge_state_gas» + 1)) (0) + («account_deployable» + 1) + Nat.max ((«increment_nonce» + 1) + Nat.max ((«credit_state_gas_refund» + 1)) (0) + («stack_push» + 1)) (0) + («increment_nonce» + 1) + («scratch_mark» + 1) + («frame_mem_mark» + 1) + («child_message» + 1) + («start_child» + 1)
 
 /-- `require_not_static` (AST line 15459), log2 ≈ 0. -/
 def «require_not_static» : Nat := 0
 
-/-- `op_create` (AST line 19223), log2 ≈ 454. -/
+/-- `op_create` (AST line 19223), log2 ≈ 169. -/
 def «op_create» : Nat := («require_not_static» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («sat_word» + 1) + («extend_memory_cost1» + 1) + («words_of» + 1) + («add_sat» + 1) + («charge_gas» + 1) + («extend_memory» + 1) + («get_account» + 1) + («alloc» + 1) + («compute_contract_address» + 1) + («sat_word» + 1) + («generic_create» + 1) + Nat.max ((«pc_add» + 1)) (0)
 
 /-- `compute_create2_contract_address` (AST line 19129), log2 ≈ 101. -/
 def «compute_create2_contract_address» : Nat := («heap_mark» + 1) + («alloc» + 1) + («memcpy» + 1) + («memcpy» + 1) + («keccak256» + 1) + («alloc» + 1) + («keccak256» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `op_create2` (AST line 19257), log2 ≈ 454. -/
+/-- `op_create2` (AST line 19257), log2 ≈ 169. -/
 def «op_create2» : Nat := («require_not_static» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («sat_word» + 1) + («extend_memory_cost1» + 1) + («words_of» + 1) + («add_sat» + 1) + («charge_gas» + 1) + («alloc» + 1) + («u256_to_be32» + 1) + («extend_memory» + 1) + («sat_word» + 1) + («alloc» + 1) + («compute_create2_contract_address» + 1) + («generic_create» + 1) + Nat.max ((«pc_add» + 1)) (0)
 
-/-- `op_delegatecall` (AST line 19539), log2 ≈ 454. -/
+/-- `op_delegatecall` (AST line 19539), log2 ≈ 169. -/
 def «op_delegatecall» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («to_address_masked» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («extend_memory_cost2» + 1) + («is_warm_address» + 1) + («add_sat» + 1) + («charge_gas» + 1) + Nat.max ((«warm_address» + 1)) (0) + («calculate_delegation_cost» + 1) + Nat.max ((«charge_gas» + 1) + («warm_address» + 1)) (0) + («ext_code_of» + 1) + («sat_word» + 1) + («calculate_message_call_gas» + 1) + («charge_gas» + 1) + («extend_memory» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («generic_call» + 1) + Nat.max ((«pc_add» + 1)) (0)
 
-/-- `op_div` (AST line 15582), log2 ≈ 257. -/
+/-- `op_div` (AST line 15582), log2 ≈ 71. -/
 def «op_div» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_div» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_dup` (AST line 16308), log2 ≈ 65. -/
@@ -3963,13 +3975,13 @@ def «u256_exp» : Nat := («u256_bit_length» + 1) + (2 ^ 64 + 1) * ((«u256_bi
 /-- `op_exp` (AST line 15698), log2 ≈ 69. -/
 def «op_exp» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («u256_byte_length» + 1) + («charge_gas» + 1) + («u256_exp» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_extcodecopy` (AST line 16987), log2 ≈ 450. -/
+/-- `op_extcodecopy` (AST line 16987), log2 ≈ 163. -/
 def «op_extcodecopy» : Nat := («stack_pop» + 1) + («to_address_masked» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («sat_word» + 1) + («words_of» + 1) + («extend_memory_cost1» + 1) + («access_gas_cost» + 1) + («add_sat» + 1) + («charge_gas» + 1) + («warm_after_charge» + 1) + («extend_memory» + 1) + («ext_code_of» + 1) + Nat.max ((«sat_word» + 1) + («sat_word» + 1) + («buffer_read» + 1)) (0) + («pc_add» + 1)
 
-/-- `op_extcodehash` (AST line 17072), log2 ≈ 450. -/
+/-- `op_extcodehash` (AST line 17072), log2 ≈ 163. -/
 def «op_extcodehash» : Nat := («stack_pop» + 1) + («to_address_masked» + 1) + («access_gas_cost» + 1) + («charge_gas» + 1) + («warm_after_charge» + 1) + («get_account» + 1) + («acct_is_empty» + 1) + Nat.max ((«stack_push» + 1)) ((«u256_from_be» + 1) + («stack_push» + 1)) + («pc_add» + 1)
 
-/-- `op_extcodesize` (AST line 16965), log2 ≈ 450. -/
+/-- `op_extcodesize` (AST line 16965), log2 ≈ 163. -/
 def «op_extcodesize» : Nat := («stack_pop» + 1) + («to_address_masked» + 1) + («access_gas_cost» + 1) + («charge_gas» + 1) + («warm_after_charge» + 1) + («ext_code_of» + 1) + («stack_push_word» + 1) + («pc_add» + 1)
 
 /-- `op_gas` (AST line 16130), log2 ≈ 65. -/
@@ -4017,7 +4029,7 @@ def «charge_with_memory» : Nat := («extend_memory_cost1» + 1) + («add_sat»
 /-- `op_mload` (AST line 16198), log2 ≈ 67. -/
 def «op_mload» : Nat := («stack_pop» + 1) + («charge_with_memory» + 1) + («sat_word» + 1) + («u256_from_be» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_mod` (AST line 15620), log2 ≈ 257. -/
+/-- `op_mod` (AST line 15620), log2 ≈ 71. -/
 def «op_mod» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_mod» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_msize` (AST line 16217), log2 ≈ 65. -/
@@ -4032,7 +4044,7 @@ def «op_mstore8» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charg
 /-- `op_mul` (AST line 15544), log2 ≈ 65. -/
 def «op_mul» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_mul» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_mulmod` (AST line 15678), log2 ≈ 258. -/
+/-- `op_mulmod` (AST line 15678), log2 ≈ 73. -/
 def «op_mulmod» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_mulmod» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_not` (AST line 15905), log2 ≈ 65. -/
@@ -4092,16 +4104,16 @@ def «u256_neg» : Nat := 0
 /-- `u256_abs` (AST line 1805), log2 ≈ 1. -/
 def «u256_abs» : Nat := Nat.max ((«u256_neg» + 1)) (0)
 
-/-- `u256_sdiv` (AST line 1819), log2 ≈ 257. -/
+/-- `u256_sdiv` (AST line 1819), log2 ≈ 71. -/
 def «u256_sdiv» : Nat := («u256_abs» + 1) + («u256_abs» + 1) + («u256_div» + 1) + Nat.max ((«u256_neg» + 1)) (0)
 
-/-- `op_sdiv` (AST line 15601), log2 ≈ 257. -/
+/-- `op_sdiv` (AST line 15601), log2 ≈ 71. -/
 def «op_sdiv» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_sdiv» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_selfbalance` (AST line 17098), log2 ≈ 450. -/
+/-- `op_selfbalance` (AST line 17098), log2 ≈ 163. -/
 def «op_selfbalance» : Nat := («charge_gas» + 1) + («get_account» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_selfdestruct` (AST line 17551), log2 ≈ 452. -/
+/-- `op_selfdestruct` (AST line 17551), log2 ≈ 166. -/
 def «op_selfdestruct» : Nat := («require_not_static» + 1) + («stack_pop» + 1) + («to_address_masked» + 1) + («is_warm_address» + 1) + («charge_gas» + 1) + Nat.max ((«warm_address» + 1)) (0) + («is_account_alive» + 1) + («get_account» + 1) + («u256_is_zero» + 1) + («charge_gas» + 1) + («charge_state_gas» + 1) + («get_account» + 1) + («move_ether» + 1) + («memeq» + 1) + Nat.max ((«emit_transfer_log» + 1)) (0) + («htab_has» + 1) + Nat.max ((«htab_set» + 1)) (0)
 
 /-- `u256_slt` (AST line 931), log2 ≈ 0. -/
@@ -4131,16 +4143,16 @@ def «u256_signextend» : Nat := («u256_bit» + 1) + («u256_shl» + 1) + Nat.m
 /-- `op_signextend` (AST line 15718), log2 ≈ 65. -/
 def «op_signextend» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («sat_word» + 1) + («u256_signextend» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `get_storage` (AST line 13249), log2 ≈ 517. -/
+/-- `get_storage` (AST line 13249), log2 ≈ 164. -/
 def «get_storage» : Nat := («sk_make» + 1) + («htab_set» + 1) + («stor_lookup» + 1) + («stor_lookup» + 1) + («record_pre_state_read» + 1) + («ws_get_storage» + 1)
 
 /-- `is_warm_storage_key` (AST line 16559), log2 ≈ 67. -/
 def «is_warm_storage_key» : Nat := («sk_make» + 1) + («htab_has» + 1)
 
-/-- `warm_storage_key` (AST line 16571), log2 ≈ 130. -/
+/-- `warm_storage_key` (AST line 16571), log2 ≈ 69. -/
 def «warm_storage_key» : Nat := («sk_make» + 1) + («htab_set» + 1)
 
-/-- `op_sload` (AST line 16584), log2 ≈ 517. -/
+/-- `op_sload` (AST line 16584), log2 ≈ 164. -/
 def «op_sload» : Nat := («stack_pop» + 1) + («u256_to_be32» + 1) + («is_warm_storage_key» + 1) + Nat.max ((«charge_gas» + 1)) ((«charge_gas» + 1) + («warm_storage_key» + 1)) + («get_storage» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `op_slotnum` (AST line 17324), log2 ≈ 65. -/
@@ -4149,25 +4161,25 @@ def «op_slotnum» : Nat := («charge_gas» + 1) + («block_env» + 1) + («stac
 /-- `op_slt` (AST line 15776), log2 ≈ 65. -/
 def «op_slt» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_slt» + 1) + («stack_push_bool» + 1) + («pc_add» + 1)
 
-/-- `u256_smod` (AST line 1840), log2 ≈ 257. -/
+/-- `u256_smod` (AST line 1840), log2 ≈ 71. -/
 def «u256_smod» : Nat := («u256_abs» + 1) + («u256_abs» + 1) + («u256_mod» + 1) + Nat.max ((«u256_neg» + 1)) (0)
 
-/-- `op_smod` (AST line 15639), log2 ≈ 257. -/
+/-- `op_smod` (AST line 15639), log2 ≈ 71. -/
 def «op_smod» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_smod» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
 /-- `check_gas` (AST line 14935), log2 ≈ 0. -/
 def «check_gas» : Nat := 0
 
-/-- `get_storage_original` (AST line 13276), log2 ≈ 517. -/
+/-- `get_storage_original` (AST line 13276), log2 ≈ 164. -/
 def «get_storage_original» : Nat := («htab_has» + 1) + («stor_lookup» + 1) + («record_pre_state_read» + 1) + («ws_get_storage» + 1)
 
-/-- `set_storage` (AST line 13451), log2 ≈ 450. -/
+/-- `set_storage` (AST line 13451), log2 ≈ 163. -/
 def «set_storage» : Nat := («get_account_optional» + 1) + («htab_get» + 1) + Nat.max ((«htab_new» + 1) + («jset» + 1)) (0) + («alloc» + 1) + («jset» + 1)
 
-/-- `op_sstore` (AST line 16611), log2 ≈ 518. -/
+/-- `op_sstore` (AST line 16611), log2 ≈ 166. -/
 def «op_sstore» : Nat := («require_not_static» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («u256_to_be32» + 1) + («is_warm_storage_key» + 1) + («max» + 1) + («check_gas» + 1) + («charge_gas» + 1) + Nat.max ((«warm_storage_key» + 1)) (0) + («get_storage_original» + 1) + («get_storage» + 1) + («u256_eq» + 1) + («u256_eq» + 1) + («u256_eq» + 1) + («u256_is_zero» + 1) + («u256_is_zero» + 1) + («u256_is_zero» + 1) + Nat.max ((«credit_state_gas_refund» + 1)) (0) + («charge_gas» + 1) + («charge_state_gas» + 1) + («set_storage» + 1) + («pc_add» + 1)
 
-/-- `op_staticcall` (AST line 19600), log2 ≈ 454. -/
+/-- `op_staticcall` (AST line 19600), log2 ≈ 169. -/
 def «op_staticcall» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («to_address_masked» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («extend_memory_cost2» + 1) + («is_warm_address» + 1) + («add_sat» + 1) + («charge_gas» + 1) + Nat.max ((«warm_address» + 1)) (0) + («calculate_delegation_cost» + 1) + Nat.max ((«charge_gas» + 1) + («warm_address» + 1)) (0) + («ext_code_of» + 1) + («sat_word» + 1) + («calculate_message_call_gas» + 1) + («charge_gas» + 1) + («extend_memory» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («sat_word» + 1) + («generic_call» + 1) + Nat.max ((«pc_add» + 1)) (0)
 
 /-- `op_stop` (AST line 16052), log2 ≈ 1. -/
@@ -4191,28 +4203,28 @@ def «get_transient_storage» : Nat := («sk_make» + 1) + («htab_get» + 1)
 /-- `op_tload` (AST line 16688), log2 ≈ 68. -/
 def «op_tload» : Nat := («stack_pop» + 1) + («charge_gas» + 1) + («u256_to_be32» + 1) + («get_transient_storage» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `set_transient_storage` (AST line 13574), log2 ≈ 130. -/
+/-- `set_transient_storage` (AST line 13574), log2 ≈ 70. -/
 def «set_transient_storage» : Nat := («sk_make» + 1) + («u256_is_zero» + 1) + Nat.max ((«jdel» + 1)) (0) + («alloc» + 1) + («jset» + 1)
 
-/-- `op_tstore` (AST line 16710), log2 ≈ 130. -/
+/-- `op_tstore` (AST line 16710), log2 ≈ 70. -/
 def «op_tstore» : Nat := («require_not_static» + 1) + («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («u256_to_be32» + 1) + («set_transient_storage» + 1) + («pc_add» + 1)
 
 /-- `op_xor` (AST line 15887), log2 ≈ 65. -/
 def «op_xor» : Nat := («stack_pop» + 1) + («stack_pop» + 1) + («charge_gas» + 1) + («stack_push» + 1) + («pc_add» + 1)
 
-/-- `op_dispatch` (AST line 17902), log2 ≈ 519. -/
+/-- `op_dispatch` (AST line 17902), log2 ≈ 172. -/
 def «op_dispatch» : Nat := Nat.max (Nat.max (Nat.max ((«op_stop» + 1)) (0) + Nat.max ((«op_add» + 1)) (0) + Nat.max ((«op_mul» + 1)) (0) + Nat.max ((«op_sub» + 1)) (0) + Nat.max ((«op_div» + 1)) (0) + Nat.max ((«op_sdiv» + 1)) (0) + Nat.max ((«op_mod» + 1)) (0) + Nat.max ((«op_smod» + 1)) (0) + Nat.max ((«op_addmod» + 1)) (0) + Nat.max ((«op_mulmod» + 1)) (0) + Nat.max ((«op_exp» + 1)) (0) + Nat.max ((«op_signextend» + 1)) (0)) (Nat.max ((«op_lt» + 1)) (0) + Nat.max ((«op_gt» + 1)) (0) + Nat.max ((«op_slt» + 1)) (0) + Nat.max ((«op_sgt» + 1)) (0) + Nat.max ((«op_eq» + 1)) (0) + Nat.max ((«op_iszero» + 1)) (0) + Nat.max ((«op_and» + 1)) (0) + Nat.max ((«op_or» + 1)) (0) + Nat.max ((«op_xor» + 1)) (0) + Nat.max ((«op_not» + 1)) (0) + Nat.max ((«op_byte» + 1)) (0) + Nat.max ((«op_shl» + 1)) (0) + Nat.max ((«op_shr» + 1)) (0) + Nat.max ((«op_sar» + 1)) (0) + Nat.max ((«op_clz» + 1)) (0))) (0) + Nat.max (Nat.max (Nat.max ((«op_keccak» + 1)) (0) + Nat.max ((«op_address» + 1)) (0) + Nat.max ((«op_balance» + 1)) (0) + Nat.max ((«op_origin» + 1)) (0) + Nat.max ((«op_caller» + 1)) (0) + Nat.max ((«op_callvalue» + 1)) (0) + Nat.max ((«op_calldataload» + 1)) (0) + Nat.max ((«op_calldatasize» + 1)) (0) + Nat.max ((«op_calldatacopy» + 1)) (0) + Nat.max ((«op_codesize» + 1)) (0) + Nat.max ((«op_codecopy» + 1)) (0) + Nat.max ((«op_gasprice» + 1)) (0) + Nat.max ((«op_extcodesize» + 1)) (0) + Nat.max ((«op_extcodecopy» + 1)) (0) + Nat.max ((«op_returndatasize» + 1)) (0) + Nat.max ((«op_returndatacopy» + 1)) (0) + Nat.max ((«op_extcodehash» + 1)) (0)) (Nat.max ((«op_blockhash» + 1)) (0) + Nat.max ((«op_coinbase» + 1)) (0) + Nat.max ((«op_timestamp» + 1)) (0) + Nat.max ((«op_number» + 1)) (0) + Nat.max ((«op_prevrandao» + 1)) (0) + Nat.max ((«op_gaslimit» + 1)) (0) + Nat.max ((«op_chainid» + 1)) (0) + Nat.max ((«op_selfbalance» + 1)) (0) + Nat.max ((«op_basefee» + 1)) (0) + Nat.max ((«op_blobhash» + 1)) (0) + Nat.max ((«op_blobbasefee» + 1)) (0) + Nat.max ((«op_slotnum» + 1)) (0) + Nat.max ((«op_pop» + 1)) (0) + Nat.max ((«op_mload» + 1)) (0) + Nat.max ((«op_mstore» + 1)) (0) + Nat.max ((«op_mstore8» + 1)) (0) + Nat.max ((«op_sload» + 1)) (0) + Nat.max ((«op_sstore» + 1)) (0) + Nat.max ((«op_jump» + 1)) (0) + Nat.max ((«op_jumpi» + 1)) (0) + Nat.max ((«op_pc» + 1)) (0) + Nat.max ((«op_msize» + 1)) (0) + Nat.max ((«op_gas» + 1)) (0) + Nat.max ((«op_jumpdest» + 1)) (0) + Nat.max ((«op_tload» + 1)) (0) + Nat.max ((«op_tstore» + 1)) (0) + Nat.max ((«op_mcopy» + 1)) (0) + Nat.max ((«op_push» + 1)) (0))) (0) + Nat.max (Nat.max ((«op_push» + 1)) (0) + Nat.max ((«op_dup» + 1)) (0) + («op_swap» + 1)) (0) + Nat.max ((«op_log» + 1)) (0) + Nat.max ((«op_dupn» + 1)) (0) + Nat.max ((«op_swapn» + 1)) (0) + Nat.max ((«op_exchange» + 1)) (0) + Nat.max ((«op_create» + 1)) (0) + Nat.max ((«op_call» + 1)) (0) + Nat.max ((«op_callcode» + 1)) (0) + Nat.max ((«op_return» + 1)) (0) + Nat.max ((«op_delegatecall» + 1)) (0) + Nat.max ((«op_create2» + 1)) (0) + Nat.max ((«op_staticcall» + 1)) (0) + Nat.max ((«op_revert» + 1)) (0) + Nat.max ((«op_selfdestruct» + 1)) (0)
 
-/-- `run_frames` (AST line 18663), log2 ≈ 691. -/
+/-- `run_frames` (AST line 18663), log2 ≈ 344. -/
 def «run_frames» : Nat := (evmPotMax + 1) * (Nat.max (0) (Nat.max (0) (Nat.max (0) ((«op_dispatch» + 1) + («frame_exception» + 1)))) + Nat.max ((«frame_epilogue» + 1) + Nat.max (0) ((«finish_child» + 1) + («frame_exception» + 1))) (0) + 1)
 
-/-- `process_message` (AST line 18803), log2 ≈ 691. -/
+/-- `process_message` (AST line 18803), log2 ≈ 344. -/
 def «process_message» : Nat := («frame_open» + 1) + Nat.max ((«state_snapshot» + 1) + («depth0_prepare» + 1) + Nat.max ((«scratch_release» + 1) + («frame_mem_release» + 1)) (0) + («state_restore» + 1) + («refill_frame_state_gas» + 1) + («frame_halt» + 1)) (0) + («state_snapshot» + 1) + («frame_start» + 1) + («run_frames» + 1)
 
-/-- `process_create_message` (AST line 18899), log2 ≈ 691. -/
+/-- `process_create_message` (AST line 18899), log2 ≈ 344. -/
 def «process_create_message» : Nat := («state_snapshot» + 1) + («destroy_storage» + 1) + («mark_account_created» + 1) + («increment_nonce» + 1) + («process_message» + 1) + Nat.max ((«create_finish» + 1) + («state_restore» + 1) + («refill_frame_state_gas» + 1) + («frame_halt» + 1)) (0) + («state_restore» + 1)
 
-/-- `process_message_call` (AST line 19661), log2 ≈ 691. -/
+/-- `process_message_call` (AST line 19661), log2 ≈ 344. -/
 def «process_message_call» : Nat := («alloc» + 1) + («memzero» + 1) + Nat.max ((«account_deployable» + 1) + («process_create_message» + 1)) ((«process_message» + 1)) + («frame_state_gas_used» + 1)
 
 /-- `state_fresh_tx` (AST line 12778), log2 ≈ 7. -/
@@ -4221,17 +4233,17 @@ def «state_fresh_tx» : Nat := («alloc» + 1) + («htab_new» + 1) + («htab_n
 /-- `te_new` (AST line 32838), log2 ≈ 65. -/
 def «te_new» : Nat := («alloc» + 1) + («memzero» + 1)
 
-/-- `process_unchecked_system_transaction` (AST line 32851), log2 ≈ 691. -/
+/-- `process_unchecked_system_transaction` (AST line 32851), log2 ≈ 344. -/
 def «process_unchecked_system_transaction» : Nat := («state_fresh_tx» + 1) + («ext_code_of» + 1) + («te_new» + 1) + («msg_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («process_message_call» + 1) + («incorporate_tx_into_block» + 1) + Nat.max (Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0) + («scratch_release» + 1) + («frame_mem_release» + 1)) (0)
 
-/-- `process_checked_system_transaction` (AST line 32928), log2 ≈ 691. -/
+/-- `process_checked_system_transaction` (AST line 32928), log2 ≈ 344. -/
 def «process_checked_system_transaction» : Nat := («state_fresh_tx» + 1) + («ext_code_of» + 1) + («alloc» + 1) + («process_unchecked_system_transaction» + 1)
 
 /-- `requests_append` (AST line 33485), log2 ≈ 65. -/
 def «requests_append» : Nat := («alloc» + 1) + («memcpy» + 1)
 
-/-- `process_general_purpose_requests` (AST line 33507), log2 ≈ 693. -/
-def «process_general_purpose_requests» : Nat := («alloc» + 1) + (2 ^ 64 + 1) * ((2 ^ 64 + 1) * ((«memeq» + 1) + Nat.max (Nat.max ((«memeq» + 1) + Nat.max (Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0) + («extract_deposit_data» + 1)) (0)) (0)) (0) + 1) + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0)
+/-- `process_general_purpose_requests` (AST line 33507), log2 ≈ 346. -/
+def «process_general_purpose_requests» : Nat := («alloc» + 1) + (31104957944 + 1) * ((31104957944 + 1) * ((«memeq» + 1) + Nat.max (Nat.max ((«memeq» + 1) + Nat.max (Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0) + («extract_deposit_data» + 1)) (0)) (0)) (0) + 1) + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0) + («process_checked_system_transaction» + 1) + Nat.max ((«requests_append» + 1)) (0)
 
 /-- `calculate_total_blob_gas` (AST line 11914), log2 ≈ 0. -/
 def «calculate_total_blob_gas» : Nat := 0
@@ -4239,97 +4251,97 @@ def «calculate_total_blob_gas» : Nat := 0
 /-- `fee_mul` (AST line 32778), log2 ≈ 5. -/
 def «fee_mul» : Nat := («u256_mul_full» + 1)
 
-/-- `check_transaction` (AST line 32951), log2 ≈ 450. -/
+/-- `check_transaction` (AST line 32951), log2 ≈ 163. -/
 def «check_transaction» : Nat := («min» + 1) + («calculate_total_blob_gas» + 1) + («get_account» + 1) + Nat.max ((«u256_lt» + 1)) ((«u256_lt» + 1) + («u256_lt» + 1) + («u256_sub» + 1) + («u256_lt» + 1) + («u256_add» + 1)) + («fee_mul» + 1) + Nat.max ((2 ^ 64 + 1) * (0 + 1) + («calculate_blob_gas_price» + 1) + («u256_lt» + 1) + («fee_mul» + 1) + («u256_add_carry» + 1)) (0) + («u256_fits_word» + 1) + («u256_add_carry» + 1) + («u256_lt» + 1) + («get_code» + 1) + («memeq» + 1) + Nat.max ((«is_valid_delegation» + 1)) (0)
 
-/-- `clear_account_preserving_balance` (AST line 13541), log2 ≈ 450. -/
+/-- `clear_account_preserving_balance` (AST line 13541), log2 ≈ 163. -/
 def «clear_account_preserving_balance» : Nat := («destroy_storage» + 1) + («get_account» + 1) + («acct_copy» + 1) + («modify_state_commit» + 1)
 
-/-- `create_ether` (AST line 13629), log2 ≈ 450. -/
+/-- `create_ether` (AST line 13629), log2 ≈ 163. -/
 def «create_ether» : Nat := («get_account» + 1) + («acct_copy» + 1) + («u256_add» + 1) + («modify_state_commit» + 1)
 
-/-- `rlp_finish_list` (AST line 31969), log2 ≈ 130. -/
+/-- `rlp_finish_list` (AST line 31969), log2 ≈ 66. -/
 def «rlp_finish_list» : Nat := («rlp_list_header_len» + 1) + («memcpy» + 1) + («rlp_encode_list_header» + 1)
 
-/-- `encode_logs` (AST line 32005), log2 ≈ 257. -/
+/-- `encode_logs` (AST line 32005), log2 ≈ 194. -/
 def «encode_logs» : Nat := (2 ^ 64 + 1) * ((«rlp_encode_bytes» + 1) + (2 ^ 64 + 1) * ((«rlp_encode_bytes» + 1) + 1) + («rlp_finish_list» + 1) + («rlp_encode_bytes» + 1) + («rlp_finish_list» + 1) + 1) + («rlp_finish_list» + 1)
 
 /-- `logs_encoded_bound` (AST line 31985), log2 ≈ 65. -/
 def «logs_encoded_bound» : Nat := (2 ^ 64 + 1) * (0 + 1)
 
-/-- `encode_receipt` (AST line 32051), log2 ≈ 257. -/
+/-- `encode_receipt` (AST line 32051), log2 ≈ 228. -/
 def «encode_receipt» : Nat := («logs_encoded_bound» + 1) + («alloc» + 1) + («rlp_encode_word» + 1) + («alloc» + 1) + («logs_bloom» + 1) + («rlp_encode_bytes» + 1) + («encode_logs» + 1) + («rlp_finish_list» + 1)
 
-/-- `rlp_word_encoded_len` (AST line 4852), log2 ≈ 129. -/
+/-- `rlp_word_encoded_len` (AST line 4852), log2 ≈ 4. -/
 def «rlp_word_encoded_len» : Nat := («rlp_be_len» + 1)
 
 /-- `tx_u256_encoded_len` (AST line 11940), log2 ≈ 3. -/
 def «tx_u256_encoded_len» : Nat := («u256_byte_length» + 1)
 
-/-- `auth_payload_len` (AST line 12060), log2 ≈ 130. -/
+/-- `auth_payload_len` (AST line 12060), log2 ≈ 6. -/
 def «auth_payload_len» : Nat := («tx_u256_encoded_len» + 1) + («rlp_word_encoded_len» + 1) + («rlp_word_encoded_len» + 1) + («tx_u256_encoded_len» + 1) + («tx_u256_encoded_len» + 1)
 
-/-- `auth_list_payload_len` (AST line 12075), log2 ≈ 194. -/
+/-- `auth_list_payload_len` (AST line 12075), log2 ≈ 70. -/
 def «auth_list_payload_len» : Nat := (2 ^ 64 + 1) * ((«auth_payload_len» + 1) + («rlp_list_header_len» + 1) + 1)
 
-/-- `tx_encode_bound` (AST line 12141), log2 ≈ 195. -/
+/-- `tx_encode_bound` (AST line 12141), log2 ≈ 71. -/
 def «tx_encode_bound» : Nat := («access_list_payload_len» + 1) + («auth_list_payload_len» + 1)
 
-/-- `tx_put_access_list` (AST line 11998), log2 ≈ 257. -/
+/-- `tx_put_access_list` (AST line 11998), log2 ≈ 194. -/
 def «tx_put_access_list» : Nat := («access_list_payload_len» + 1) + («rlp_encode_list_header» + 1) + (2 ^ 64 + 1) * ((«rlp_list_header_len» + 1) + («rlp_encode_list_header» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_list_header» + 1) + (2 ^ 64 + 1) * ((«rlp_encode_bytes» + 1) + 1) + 1)
 
-/-- `tx_put_u256` (AST line 11924), log2 ≈ 129. -/
+/-- `tx_put_u256` (AST line 11924), log2 ≈ 67. -/
 def «tx_put_u256» : Nat := («heap_mark» + 1) + («alloc» + 1) + («u256_to_be_min» + 1) + («rlp_encode_bytes» + 1) + («heap_release» + 1)
 
-/-- `tx_put_authorizations` (AST line 12094), log2 ≈ 196. -/
+/-- `tx_put_authorizations` (AST line 12094), log2 ≈ 133. -/
 def «tx_put_authorizations» : Nat := («auth_list_payload_len» + 1) + («rlp_encode_list_header» + 1) + (2 ^ 64 + 1) * ((«auth_payload_len» + 1) + («rlp_encode_list_header» + 1) + («tx_put_u256» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («tx_put_u256» + 1) + («tx_put_u256» + 1) + 1)
 
-/-- `tx_put_blob_hashes` (AST line 12040), log2 ≈ 193. -/
+/-- `tx_put_blob_hashes` (AST line 12040), log2 ≈ 130. -/
 def «tx_put_blob_hashes» : Nat := («rlp_encode_list_header» + 1) + (2 ^ 64 + 1) * ((«rlp_encode_bytes» + 1) + 1)
 
-/-- `tx_put_to` (AST line 11961), log2 ≈ 129. -/
+/-- `tx_put_to` (AST line 11961), log2 ≈ 66. -/
 def «tx_put_to» : Nat := («rlp_encode_bytes» + 1)
 
-/-- `tx_encode_generic` (AST line 12154), log2 ≈ 257. -/
+/-- `tx_encode_generic` (AST line 12154), log2 ≈ 194. -/
 def «tx_encode_generic» : Nat := («tx_encode_bound» + 1) + («alloc» + 1) + Nat.max ((«rlp_encode_word» + 1)) (0) + («tx_put_u256» + 1) + Nat.max ((«tx_put_u256» + 1)) ((«tx_put_u256» + 1) + («tx_put_u256» + 1)) + («rlp_encode_word» + 1) + («tx_put_to» + 1) + («tx_put_u256» + 1) + («rlp_encode_bytes» + 1) + Nat.max ((«tx_put_access_list» + 1)) (0) + Nat.max ((«tx_put_u256» + 1) + («tx_put_blob_hashes» + 1)) (0) + Nat.max ((«tx_put_authorizations» + 1)) (0) + Nat.max ((«tx_put_u256» + 1) + («tx_put_u256» + 1) + («tx_put_u256» + 1)) (0) + Nat.max ((«rlp_encode_word» + 1)) (0) + («rlp_list_header_len» + 1) + («rlp_encode_list_header» + 1)
 
-/-- `encode_transaction` (AST line 12267), log2 ≈ 257. -/
+/-- `encode_transaction` (AST line 12267), log2 ≈ 194. -/
 def «encode_transaction» : Nat := («tx_encode_generic» + 1)
 
-/-- `tx_signing_hash_mode` (AST line 12289), log2 ≈ 257. -/
+/-- `tx_signing_hash_mode` (AST line 12289), log2 ≈ 194. -/
 def «tx_signing_hash_mode» : Nat := («heap_mark» + 1) + («tx_encode_generic» + 1) + («keccak256» + 1) + («heap_release» + 1)
 
-/-- `signing_hash_155` (AST line 12315), log2 ≈ 257. -/
+/-- `signing_hash_155` (AST line 12315), log2 ≈ 194. -/
 def «signing_hash_155» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signing_hash_1559` (AST line 12335), log2 ≈ 257. -/
+/-- `signing_hash_1559` (AST line 12335), log2 ≈ 194. -/
 def «signing_hash_1559» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signing_hash_2930` (AST line 12325), log2 ≈ 257. -/
+/-- `signing_hash_2930` (AST line 12325), log2 ≈ 194. -/
 def «signing_hash_2930» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signing_hash_4844` (AST line 12345), log2 ≈ 257. -/
+/-- `signing_hash_4844` (AST line 12345), log2 ≈ 194. -/
 def «signing_hash_4844» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signing_hash_7702` (AST line 12355), log2 ≈ 257. -/
+/-- `signing_hash_7702` (AST line 12355), log2 ≈ 194. -/
 def «signing_hash_7702» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signing_hash_pre155` (AST line 12305), log2 ≈ 257. -/
+/-- `signing_hash_pre155` (AST line 12305), log2 ≈ 194. -/
 def «signing_hash_pre155» : Nat := («tx_signing_hash_mode» + 1)
 
-/-- `signature_recovery_parameters` (AST line 12399), log2 ≈ 259. -/
+/-- `signature_recovery_parameters` (AST line 12399), log2 ≈ 196. -/
 def «signature_recovery_parameters» : Nat := («u256_is_zero» + 1) + («u256_lt» + 1) + («u256_is_zero» + 1) + («u256_gt» + 1) + («u256_fits_word» + 1) + Nat.max (Nat.max (Nat.max ((«signing_hash_pre155» + 1)) (0)) (0) + («u256_add» + 1) + («u256_add» + 1) + («u256_add» + 1) + («u256_eq» + 1) + («u256_eq» + 1) + («signing_hash_155» + 1)) (0) + Nat.max ((«signing_hash_2930» + 1)) (0) + Nat.max ((«signing_hash_1559» + 1)) (0) + Nat.max ((«signing_hash_4844» + 1)) (0) + Nat.max ((«signing_hash_7702» + 1)) (0)
 
-/-- `recover_transaction_public_key` (AST line 12483), log2 ≈ 389. -/
+/-- `recover_transaction_public_key` (AST line 12483), log2 ≈ 196. -/
 def «recover_transaction_public_key» : Nat := («heap_mark» + 1) + («alloc» + 1) + («signature_recovery_parameters» + 1) + («secp256k1_recover» + 1) + («heap_release» + 1)
 
 /-- `sender_address_from_public_key` (AST line 12503), log2 ≈ 100. -/
 def «sender_address_from_public_key» : Nat := («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + («memcpy» + 1) + («heap_release» + 1)
 
-/-- `recover_sender_with_chain_id` (AST line 12542), log2 ≈ 389. -/
+/-- `recover_sender_with_chain_id` (AST line 12542), log2 ≈ 196. -/
 def «recover_sender_with_chain_id» : Nat := («heap_mark» + 1) + («alloc» + 1) + («recover_transaction_public_key» + 1) + («sender_address_from_public_key» + 1) + («heap_release» + 1)
 
-/-- `set_account_balance` (AST line 13647), log2 ≈ 450. -/
+/-- `set_account_balance` (AST line 13647), log2 ≈ 163. -/
 def «set_account_balance» : Nat := («get_account» + 1) + («acct_copy» + 1) + («modify_state_commit» + 1)
 
 /-- `tx_chain_id` (AST line 12365), log2 ≈ 3. -/
@@ -4344,7 +4356,7 @@ def «tx_is_blob» : Nat := 0
 /-- `tx_is_setcode` (AST line 32764), log2 ≈ 0. -/
 def «tx_is_setcode» : Nat := 0
 
-/-- `udiv_small5` (AST line 33447), log2 ≈ 65. -/
+/-- `udiv_small5` (AST line 33447), log2 ≈ 7. -/
 def «udiv_small5» : Nat := («udiv» + 1)
 
 /-- `count_tokens_in_data` (AST line 12562), log2 ≈ 65. -/
@@ -4356,100 +4368,100 @@ def «calculate_intrinsic_cost» : Nat := («count_tokens_in_data» + 1) + («u2
 /-- `validate_transaction` (AST line 12639), log2 ≈ 67. -/
 def «validate_transaction» : Nat := («calculate_intrinsic_cost» + 1) + («u256_fits_word» + 1)
 
-/-- `process_transaction` (AST line 33103), log2 ≈ 691. -/
+/-- `process_transaction` (AST line 33103), log2 ≈ 344. -/
 def «process_transaction» : Nat := («state_fresh_tx» + 1) + («encode_transaction» + 1) + («tx_chain_id» + 1) + («alloc» + 1) + («recover_sender_with_chain_id» + 1) + («validate_transaction» + 1) + («check_transaction» + 1) + («calculate_total_blob_gas» + 1) + («get_account» + 1) + Nat.max ((«calculate_blob_gas_price» + 1) + («fee_mul» + 1)) (0) + («fee_mul» + 1) + («min» + 1) + («increment_nonce» + 1) + («u256_sub» + 1) + («u256_sub» + 1) + («set_account_balance» + 1) + («te_new» + 1) + («tx_has_access_list» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * (0 + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((2 ^ 64 + 1) * ((«memcpy» + 1) + («memcpy» + 1) + 1) + 1) + («tx_is_blob» + 1) + («tx_is_setcode» + 1) + («alloc» + 1) + («keccak256» + 1) + («msg_new» + 1) + («htab_new» + 1) + («htab_set» + 1) + (2 ^ 64 + 1) * ((«htab_set» + 1) + 1) + (2 ^ 64 + 1) * ((«htab_set» + 1) + 1) + («htab_new» + 1) + (2 ^ 64 + 1) * ((«htab_set» + 1) + 1) + («alloc» + 1) + Nat.max ((«get_account» + 1) + («alloc» + 1) + («compute_contract_address» + 1)) (0) + («htab_set» + 1) + («process_message_call» + 1) + («udiv_small5» + 1) + («min» + 1) + («max» + 1) + («fee_mul» + 1) + («u256_sub» + 1) + («fee_mul» + 1) + («create_ether» + 1) + («create_ether» + 1) + («max» + 1) + Nat.max ((«lst_new» + 1)) (0) + («encode_receipt» + 1) + (2 ^ 64 + 1) * ((«lst_push» + 1) + 1) + («lst_new» + 1) + (2 ^ 64 + 1) * (0 + 1) + («lst_push» + 1) + Nat.max ((2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«clear_account_preserving_balance» + 1)) (0) + 1)) (0) + («incorporate_tx_into_block» + 1) + Nat.max ((«scratch_release» + 1) + («frame_mem_release» + 1)) (0)
 
-/-- `process_withdrawals` (AST line 33458), log2 ≈ 645. -/
+/-- `process_withdrawals` (AST line 33458), log2 ≈ 292. -/
 def «process_withdrawals» : Nat := («state_fresh_tx» + 1) + (2 ^ 64 + 1) * ((«u256_mul» + 1) + («create_ether» + 1) + 1) + («incorporate_tx_into_block» + 1)
 
 /-- `validate_block_access_list_gas_limit` (AST line 14776), log2 ≈ 195. -/
 def «validate_block_access_list_gas_limit» : Nat := (2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((2 ^ 64 + 1) * ((«htab_item» + 1) + Nat.max ((«htab_has» + 1)) (0) + 1)) (0) + 1) + («udiv» + 1)
 
-/-- `execute_block` (AST line 33580), log2 ≈ 755. -/
-def «execute_block» : Nat := («alloc» + 1) + («memzero» + 1) + («alloc» + 1) + («alloc» + 1) + («lst_new» + 1) + («alloc» + 1) + («lst_new» + 1) + («bal_init» + 1) + («process_unchecked_system_transaction» + 1) + («process_unchecked_system_transaction» + 1) + («state_fresh_tx» + 1) + («track_ancestor_access» + 1) + (2 ^ 64 + 1) * ((«decode_transaction» + 1) + («process_transaction» + 1) + 1) + («process_withdrawals» + 1) + («process_general_purpose_requests» + 1) + («build_block_access_list_rlp» + 1) + («validate_block_access_list_gas_limit» + 1) + («alloc» + 1) + («compute_state_root» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («logs_bloom» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («compute_requests_hash» + 1) + («alloc» + 1) + («keccak256» + 1) + («max» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1)
+/-- `execute_block` (AST line 33580), log2 ≈ 374. -/
+def «execute_block» : Nat := («alloc» + 1) + («memzero» + 1) + («alloc» + 1) + («alloc» + 1) + («lst_new» + 1) + («alloc» + 1) + («lst_new» + 1) + («bal_init» + 1) + («process_unchecked_system_transaction» + 1) + («process_unchecked_system_transaction» + 1) + («state_fresh_tx» + 1) + («track_ancestor_access» + 1) + (1944059872 + 1) * ((«decode_transaction» + 1) + («process_transaction» + 1) + 1) + («process_withdrawals» + 1) + («process_general_purpose_requests» + 1) + («build_block_access_list_rlp» + 1) + («validate_block_access_list_gas_limit» + 1) + («alloc» + 1) + («compute_state_root» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («logs_bloom» + 1) + («alloc» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + («compute_requests_hash» + 1) + («alloc» + 1) + («keccak256» + 1) + («max» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1) + («memeq» + 1)
 
-/-- `encode_header` (AST line 9350), log2 ≈ 133. -/
+/-- `encode_header` (AST line 9350), log2 ≈ 70. -/
 def «encode_header» : Nat := («alloc» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_put_u256» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + («rlp_put_u256» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_bytes» + 1) + Nat.max ((«rlp_encode_bytes» + 1) + («rlp_encode_word» + 1)) (0) + («rlp_list_header_len» + 1) + («rlp_encode_list_header» + 1)
 
-/-- `header_hash` (AST line 9460), log2 ≈ 133. -/
+/-- `header_hash` (AST line 9460), log2 ≈ 100. -/
 def «header_hash» : Nat := («heap_mark» + 1) + («encode_header» + 1) + («keccak256» + 1) + («heap_release» + 1)
 
-/-- `is_valid_versioned_hashes` (AST line 32794), log2 ≈ 640. -/
+/-- `is_valid_versioned_hashes` (AST line 32794), log2 ≈ 300. -/
 def «is_valid_versioned_hashes» : Nat := (2 ^ 64 + 1) * ((«decode_transaction» + 1) + («tx_is_blob» + 1) + Nat.max ((2 ^ 64 + 1) * ((«memeq» + 1) + 1)) (0) + 1)
 
-/-- `nodedb_build` (AST line 9937), log2 ≈ 194. -/
+/-- `nodedb_build` (AST line 9937), log2 ≈ 164. -/
 def «nodedb_build» : Nat := (2 ^ 64 + 1) * (0 + 1) + («htab_new» + 1) + (2 ^ 64 + 1) * ((«keccak256» + 1) + («htab_set» + 1) + 1)
 
-/-- `withdrawal_rlp_len` (AST line 32099), log2 ≈ 131. -/
+/-- `withdrawal_rlp_len` (AST line 32099), log2 ≈ 6. -/
 def «withdrawal_rlp_len» : Nat := («rlp_word_encoded_len» + 1) + («rlp_word_encoded_len» + 1) + («rlp_word_encoded_len» + 1) + («rlp_list_header_len» + 1)
 
-/-- `block_rlp_length` (AST line 32586), log2 ≈ 195. -/
+/-- `block_rlp_length` (AST line 32586), log2 ≈ 71. -/
 def «block_rlp_length» : Nat := («heap_mark» + 1) + («encode_header» + 1) + («heap_release» + 1) + (2 ^ 64 + 1) * (Nat.max ((«rlp_bytes_encoded_len» + 1)) (0) + 1) + («rlp_list_header_len» + 1) + (2 ^ 64 + 1) * ((«withdrawal_rlp_len» + 1) + 1) + («rlp_list_header_len» + 1) + («rlp_list_header_len» + 1)
 
 /-- `encode_execution_requests` (AST line 32142), log2 ≈ 129. -/
 def «encode_execution_requests» : Nat := («alloc» + 1) + (2 ^ 64 + 1) * (Nat.max ((«alloc» + 1) + («memcpy» + 1)) (0) + 1)
 
-/-- `encode_withdrawal_rlp` (AST line 32114), log2 ≈ 131. -/
+/-- `encode_withdrawal_rlp` (AST line 32114), log2 ≈ 67. -/
 def «encode_withdrawal_rlp» : Nat := («alloc» + 1) + («rlp_encode_word» + 1) + («rlp_encode_word» + 1) + («rlp_encode_bytes» + 1) + («rlp_encode_word» + 1) + («rlp_finish_list» + 1)
 
-/-- `payload_header` (AST line 32645), log2 ≈ 262. -/
+/-- `payload_header` (AST line 32645), log2 ≈ 227. -/
 def «payload_header» : Nat := («alloc» + 1) + («memzero» + 1) + («alloc» + 1) + («alloc» + 1) + («keccak256» + 1) + («alloc» + 1) + («alloc» + 1) + («memzero» + 1) + («alloc» + 1) + («alloc» + 1) + («alloc» + 1) + («block_rlp_length» + 1) + («build_mpt_indexed» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«encode_withdrawal_rlp» + 1) + 1) + («build_mpt_indexed» + 1) + («encode_execution_requests» + 1) + («compute_requests_hash» + 1) + («keccak256» + 1)
 
-/-- `state_init` (AST line 12708), log2 ≈ 517. -/
+/-- `state_init` (AST line 12708), log2 ≈ 144. -/
 def «state_init» : Nat := («alloc» + 1) + («decode_witness_to_mpt» + 1) + («htab_new» + 1) + («alloc» + 1) + («htab_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («htab_new» + 1) + («alloc» + 1) + («alloc» + 1)
 
-/-- `calculate_base_fee_per_gas` (AST line 9613), log2 ≈ 259. -/
+/-- `calculate_base_fee_per_gas` (AST line 9613), log2 ≈ 73. -/
 def «calculate_base_fee_per_gas» : Nat := («check_gas_limit» + 1) + («u256_from_word» + 1) + («u256_from_word» + 1) + Nat.max ((«u256_from_word» + 1) + («u256_mul» + 1) + («u256_div» + 1) + («u256_div» + 1) + («u256_is_zero» + 1) + Nat.max ((«u256_from_word» + 1)) (0) + («u256_add» + 1)) (0) + («u256_from_word» + 1) + («u256_mul» + 1) + («u256_div» + 1) + («u256_div» + 1) + («u256_sub» + 1)
 
-/-- `calculate_excess_blob_gas` (AST line 9561), log2 ≈ 321. -/
+/-- `calculate_excess_blob_gas` (AST line 9561), log2 ≈ 135. -/
 def «calculate_excess_blob_gas» : Nat := («calculate_blob_gas_price» + 1) + («u256_from_word» + 1) + («u256_mul» + 1) + («u256_from_word» + 1) + («u256_mul» + 1) + («u256_gt» + 1) + Nat.max ((«udiv» + 1)) (0)
 
-/-- `validate_header` (AST line 9675), log2 ≈ 321. -/
+/-- `validate_header` (AST line 9675), log2 ≈ 135. -/
 def «validate_header» : Nat := («calculate_excess_blob_gas» + 1) + («calculate_base_fee_per_gas» + 1) + («u256_eq» + 1) + («u256_is_zero» + 1) + («memeq» + 1) + («heap_mark» + 1) + («alloc» + 1) + («keccak256» + 1) + («memeq» + 1) + Nat.max ((«heap_release» + 1)) (0) + («header_hash» + 1) + («memeq» + 1) + («heap_release» + 1)
 
-/-- `hdr_bytes_field` (AST line 9168), log2 ≈ 448. -/
+/-- `hdr_bytes_field` (AST line 9168), log2 ≈ 108. -/
 def «hdr_bytes_field» : Nat := («rlp_item» + 1)
 
-/-- `hdr_raw_field` (AST line 9187), log2 ≈ 448. -/
+/-- `hdr_raw_field` (AST line 9187), log2 ≈ 108. -/
 def «hdr_raw_field» : Nat := («rlp_item» + 1)
 
-/-- `hdr_uint_field` (AST line 9103), log2 ≈ 448. -/
+/-- `hdr_uint_field` (AST line 9103), log2 ≈ 108. -/
 def «hdr_uint_field» : Nat := («rlp_item» + 1)
 
-/-- `hdr_u256_field` (AST line 9152), log2 ≈ 448. -/
+/-- `hdr_u256_field` (AST line 9152), log2 ≈ 108. -/
 def «hdr_u256_field» : Nat := («hdr_uint_field» + 1) + («u256_from_be» + 1)
 
-/-- `hdr_word_field` (AST line 9130), log2 ≈ 448. -/
+/-- `hdr_word_field` (AST line 9130), log2 ≈ 108. -/
 def «hdr_word_field» : Nat := («hdr_uint_field» + 1) + (2 ^ 64 + 1) * (0 + 1)
 
-/-- `decode_header` (AST line 9202), log2 ≈ 452. -/
+/-- `decode_header` (AST line 9202), log2 ≈ 113. -/
 def «decode_header» : Nat := («rlp_decode_fully» + 1) + («rlp_list_to_slices» + 1) + («alloc» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_u256_field» + 1) + («hdr_word_field» + 1) + («hdr_word_field» + 1) + («hdr_word_field» + 1) + («hdr_uint_field» + 1) + («hdr_word_field» + 1) + («hdr_raw_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + («hdr_u256_field» + 1) + («hdr_bytes_field» + 1) + («hdr_uint_field» + 1) + («hdr_word_field» + 1) + («hdr_uint_field» + 1) + («hdr_word_field» + 1) + («hdr_bytes_field» + 1) + («hdr_bytes_field» + 1) + Nat.max ((«hdr_bytes_field» + 1) + («hdr_uint_field» + 1) + («hdr_word_field» + 1)) (0)
 
-/-- `validate_headers` (AST line 9476), log2 ≈ 516. -/
+/-- `validate_headers` (AST line 9476), log2 ≈ 177. -/
 def «validate_headers» : Nat := («alloc» + 1) + («alloc» + 1) + (2 ^ 64 + 1) * ((«decode_header» + 1) + («keccak256» + 1) + 1) + (2 ^ 64 + 1) * ((«memeq» + 1) + 1)
 
-/-- `run_attempt` (AST line 33734), log2 ≈ 755. -/
-def «run_attempt» : Nat := («validate_headers» + 1) + («check_gas_limit» + 1) + («nodedb_build» + 1) + («nodedb_build» + 1) + («state_init» + 1) + (2 ^ 64 + 1) * (0 + 1) + («payload_header» + 1) + («alloc» + 1) + («header_hash» + 1) + («memeq» + 1) + («is_valid_versioned_hashes» + 1) + («validate_header» + 1) + («alloc» + 1) + («memzero» + 1) + («execute_block» + 1)
+/-- `run_attempt` (AST line 33734), log2 ≈ 374. -/
+def «run_attempt» : Nat := («validate_headers» + 1) + («check_gas_limit» + 1) + («nodedb_build» + 1) + («nodedb_build» + 1) + («state_init» + 1) + (31104957952 + 1) * (0 + 1) + («payload_header» + 1) + («alloc» + 1) + («header_hash» + 1) + («memeq» + 1) + («is_valid_versioned_hashes» + 1) + («validate_header» + 1) + («alloc» + 1) + («memzero» + 1) + («execute_block» + 1)
 
-/-- `attempt_l1` (AST line 33847), log2 ≈ 755. -/
+/-- `attempt_l1` (AST line 33847), log2 ≈ 374. -/
 def «attempt_l1» : Nat := («run_attempt» + 1)
 
-/-- `attempt_l2` (AST line 33863), log2 ≈ 755. -/
+/-- `attempt_l2` (AST line 33863), log2 ≈ 374. -/
 def «attempt_l2» : Nat := («attempt_l1» + 1)
 
-/-- `attempt_l3` (AST line 33879), log2 ≈ 755. -/
+/-- `attempt_l3` (AST line 33879), log2 ≈ 374. -/
 def «attempt_l3» : Nat := («attempt_l2» + 1)
 
-/-- `attempt_l4` (AST line 33895), log2 ≈ 755. -/
+/-- `attempt_l4` (AST line 33895), log2 ≈ 374. -/
 def «attempt_l4» : Nat := («attempt_l3» + 1)
 
-/-- `attempt_l5` (AST line 33911), log2 ≈ 755. -/
+/-- `attempt_l5` (AST line 33911), log2 ≈ 374. -/
 def «attempt_l5» : Nat := («attempt_l4» + 1)
 
-/-- `attempt_l6` (AST line 33927), log2 ≈ 755. -/
+/-- `attempt_l6` (AST line 33927), log2 ≈ 374. -/
 def «attempt_l6» : Nat := («attempt_l5» + 1)
 
-/-- `attempt_l7` (AST line 33943), log2 ≈ 755. -/
+/-- `attempt_l7` (AST line 33943), log2 ≈ 374. -/
 def «attempt_l7» : Nat := («attempt_l6» + 1)
 
 /-- `blake2_init` (AST line 20017), log2 ≈ 4. -/
@@ -4479,16 +4491,16 @@ def «decode_bytes_list» : Nat := («ssz_split_var_list» + 1) + (2 ^ 64 + 1) *
 /-- `ssz_check_offsets` (AST line 8414), log2 ≈ 66. -/
 def «ssz_check_offsets» : Nat := (2 ^ 64 + 1) * (Nat.max ((«ssz_fail» + 1)) (0) + Nat.max (Nat.max ((«ssz_fail» + 1)) (0)) (0) + 1) + Nat.max ((«ssz_fail» + 1)) (0)
 
-/-- `ssz_fixed_list_count` (AST line 8496), log2 ≈ 65. -/
+/-- `ssz_fixed_list_count` (AST line 8496), log2 ≈ 7. -/
 def «ssz_fixed_list_count» : Nat := («udivmod» + 1) + Nat.max ((«ssz_fail» + 1)) (0) + Nat.max ((«ssz_fail» + 1)) (0)
 
 /-- `decode_payload` (AST line 8515), log2 ≈ 67. -/
 def «decode_payload» : Nat := Nat.max ((«ssz_fail» + 1)) (0) + («alloc» + 1) + («ssz_check_offsets» + 1) + Nat.max ((«ssz_fail» + 1)) (0) + («ssz_split_var_list» + 1) + («ssz_fixed_list_count» + 1)
 
-/-- `decode_requests` (AST line 8584), log2 ≈ 68. -/
+/-- `decode_requests` (AST line 8584), log2 ≈ 67. -/
 def «decode_requests» : Nat := Nat.max ((«ssz_fail» + 1)) (0) + (2 ^ 64 + 1) * (0 + 1) + («ssz_check_offsets» + 1) + («alloc» + 1) + («ssz_fixed_list_count» + 1) + («ssz_fixed_list_count» + 1) + («ssz_fixed_list_count» + 1) + («ssz_fixed_list_count» + 1) + («ssz_fixed_list_count» + 1)
 
-/-- `decode_stateless_input` (AST line 8656), log2 ≈ 70. -/
+/-- `decode_stateless_input` (AST line 8656), log2 ≈ 69. -/
 def «decode_stateless_input» : Nat := Nat.max ((«ssz_fail» + 1)) (0) + Nat.max ((«ssz_fail» + 1)) (0) + Nat.max ((«ssz_fail» + 1)) (0) + («ssz_check_offsets» + 1) + («alloc» + 1) + Nat.max ((«ssz_fail» + 1)) (0) + («ssz_check_offsets» + 1) + («decode_payload» + 1) + («ssz_fixed_list_count» + 1) + («decode_requests» + 1) + Nat.max ((«ssz_fail» + 1)) (0) + (2 ^ 64 + 1) * (0 + 1) + («ssz_check_offsets» + 1) + («decode_bytes_list» + 1) + («decode_bytes_list» + 1) + («decode_bytes_list» + 1)
 
 /-- `input_blob` (AST line 624), log2 ≈ 35. -/
@@ -4608,10 +4620,10 @@ def «ssz_init» : Nat := («alloc» + 1) + («alloc» + 1) + («alloc» + 1)
 /-- `u256_ws_init` (AST line 766), log2 ≈ 2. -/
 def «u256_ws_init» : Nat := Nat.max ((«alloc» + 1)) (0)
 
-/-- `verify_stateless_new_payload` (AST line 33959), log2 ≈ 755. -/
+/-- `verify_stateless_new_payload` (AST line 33959), log2 ≈ 374. -/
 def «verify_stateless_new_payload» : Nat := («attempt_l7» + 1)
 
-/-- `main` (AST line 33979), log2 ≈ 755. -/
+/-- `main` (AST line 33979), log2 ≈ 374. -/
 def «main» : Nat := («mem_init» + 1) + («sha256_init» + 1) + («keccak_init» + 1) + («ssz_init» + 1) + («mpt_init» + 1) + («u256_ws_init» + 1) + («secp256k1_init» + 1) + («bn254_init» + 1) + («bls_precompiles_init» + 1) + («ripemd160_init» + 1) + («blake2_init» + 1) + («header_init» + 1) + («evm_init» + 1) + («fork_init» + 1) + («alloc» + 1) + («alloc» + 1) + («memzero» + 1) + («decode_host_input» + 1) + («serialize_result» + 1) + («output_write» + 1) + («alloc» + 1) + («htr_new_payload_request» + 1) + («verify_stateless_new_payload» + 1) + («serialize_result» + 1) + («output_write» + 1)
 
 end K
@@ -4648,7 +4660,7 @@ theorem «fb_key_to_nibbles» : TerminatingFunBoundedOn GuestInv (ofString "key_
 theorem «fb_compact_to_nibbles» : TerminatingFunBoundedOn GuestInv (ofString "compact_to_nibbles") K.«compact_to_nibbles» := by sorry
 /-- `rlp_fail` (AST line 4305): loop-free. -/
 theorem «fb_rlp_fail» : TerminatingFunBoundedOn GuestInv (ofString "rlp_fail") K.«rlp_fail» := by sorry
-/-- `rlp_read_length` (AST line 4317): #0 CTR. -/
+/-- `rlp_read_length` (AST line 4317): #0 WALK. -/
 theorem «fb_rlp_read_length» : TerminatingFunBoundedOn GuestInv (ofString "rlp_read_length") K.«rlp_read_length» := by sorry
 /-- `rlp_item_header` (AST line 4432): loop-free. -/
 theorem «fb_rlp_item_header» : TerminatingFunBoundedOn GuestInv (ofString "rlp_item_header") K.«rlp_item_header» := by sorry
@@ -4664,7 +4676,7 @@ theorem «fb_scratch_release» : TerminatingFunBoundedOn GuestInv (ofString "scr
 theorem «fb_rlp_validate_items» : TerminatingFunBoundedOn GuestInv (ofString "rlp_validate_items") K.«rlp_validate_items» := by sorry
 /-- `rlp_item_total` (AST line 4567): loop-free. -/
 theorem «fb_rlp_item_total» : TerminatingFunBoundedOn GuestInv (ofString "rlp_item_total") K.«rlp_item_total» := by sorry
-/-- `rlp_list_count` (AST line 4582): #0 MONO. -/
+/-- `rlp_list_count` (AST line 4582): #0 WALK. -/
 theorem «fb_rlp_list_count» : TerminatingFunBoundedOn GuestInv (ofString "rlp_list_count") K.«rlp_list_count» := by sorry
 /-- `rlp_item` (AST line 4338): loop-free. -/
 theorem «fb_rlp_item» : TerminatingFunBoundedOn GuestInv (ofString "rlp_item") K.«rlp_item» := by sorry
@@ -4704,7 +4716,7 @@ theorem «fb__split_extension» : TerminatingFunBoundedOn GuestInv (ofString "_s
 theorem «fb__node_needs_rlp» : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp» := by sorry
 /-- `nibble_list_to_compact` (AST line 9877): #0 WALK. -/
 theorem «fb_nibble_list_to_compact» : TerminatingFunBoundedOn GuestInv (ofString "nibble_list_to_compact") K.«nibble_list_to_compact» := by sorry
-/-- `rlp_be_len` (AST line 4698): #0 RO(2). -/
+/-- `rlp_be_len` (AST line 4698): #0 MONO. -/
 theorem «fb_rlp_be_len» : TerminatingFunBoundedOn GuestInv (ofString "rlp_be_len") K.«rlp_be_len» := by sorry
 /-- `rlp_header_len` (AST line 4753): loop-free. -/
 theorem «fb_rlp_header_len» : TerminatingFunBoundedOn GuestInv (ofString "rlp_header_len") K.«rlp_header_len» := by sorry
@@ -4738,8 +4750,6 @@ theorem «fb_rlp_encode_list_header» : TerminatingFunBoundedOn GuestInv (ofStri
 theorem «fb_rlp_list_header_len» : TerminatingFunBoundedOn GuestInv (ofString "rlp_list_header_len") K.«rlp_list_header_len» := by sorry
 /-- `_node_rlp_finish` (AST line 10930): #0 CTR; #1 CTR. -/
 theorem «fb__node_rlp_finish» : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_finish") K.«_node_rlp_finish» := by sorry
-/-- `_node_rlp_fill` (AST line 11011): #0 ALLOC; #1 RO(3). -/
-theorem «fb__node_rlp_fill» : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_fill") K.«_node_rlp_fill» := by sorry
 /-- `htab_has` (AST line 5022): loop-free. -/
 theorem «fb_htab_has» : TerminatingFunBoundedOn GuestInv (ofString "htab_has") K.«htab_has» := by sorry
 /-- `is_warm_address` (AST line 15473): loop-free. -/
@@ -4748,7 +4758,7 @@ theorem «fb_is_warm_address» : TerminatingFunBoundedOn GuestInv (ofString "is_
 theorem «fb_access_gas_cost» : TerminatingFunBoundedOn GuestInv (ofString "access_gas_cost") K.«access_gas_cost» := by sorry
 /-- `access_list_payload_len` (AST line 11977): #0 CTR. -/
 theorem «fb_access_list_payload_len» : TerminatingFunBoundedOn GuestInv (ofString "access_list_payload_len") K.«access_list_payload_len» := by sorry
-/-- `htab_first_diff` (AST line 4951): #0 CTR; #1 CTR. -/
+/-- `htab_first_diff` (AST line 4951): #0 WALK; #1 CTR. -/
 theorem «fb_htab_first_diff» : TerminatingFunBoundedOn GuestInv (ofString "htab_first_diff") K.«htab_first_diff» := by sorry
 /-- `htab_grow` (AST line 5117): loop-free. -/
 theorem «fb_htab_grow» : TerminatingFunBoundedOn GuestInv (ofString "htab_grow") K.«htab_grow» := by sorry
@@ -4878,12 +4888,6 @@ theorem «fb_htab_item» : TerminatingFunBoundedOn GuestInv (ofString "htab_item
 theorem «fb_build_block_access_list_rlp» : TerminatingFunBoundedOn GuestInv (ofString "build_block_access_list_rlp") K.«build_block_access_list_rlp» := by sorry
 /-- `mpt_new` (AST line 10444): loop-free. -/
 theorem «fb_mpt_new» : TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new» := by sorry
-/-- `node_rlp` (AST line 11074): loop-free. -/
-theorem «fb_node_rlp» : TerminatingFunBoundedOn GuestInv (ofString "node_rlp") K.«node_rlp» := by sorry
-/-- `node_hash` (AST line 11202): loop-free. -/
-theorem «fb_node_hash» : TerminatingFunBoundedOn GuestInv (ofString "node_hash") K.«node_hash» := by sorry
-/-- `mpt_root` (AST line 11223): loop-free. -/
-theorem «fb_mpt_root» : TerminatingFunBoundedOn GuestInv (ofString "mpt_root") K.«mpt_root» := by sorry
 /-- `mpt_nibble_key` (AST line 10470): loop-free. -/
 theorem «fb_mpt_nibble_key» : TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key» := by sorry
 /-- `sha256_block` (AST line 2367): loop-free. -/
@@ -5070,7 +5074,7 @@ theorem «fb_digits_to_u256» : TerminatingFunBoundedOn GuestInv (ofString "digi
 theorem «fb_div64by32» : TerminatingFunBoundedOn GuestInv (ofString "div64by32") K.«div64by32» := by sorry
 /-- `nlz32` (AST line 1467): loop-free. -/
 theorem «fb_nlz32» : TerminatingFunBoundedOn GuestInv (ofString "nlz32") K.«nlz32» := by sorry
-/-- `divmnu` (AST line 1583): #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 RO(3); #5 CTR; #6 CTR; #7 CTR; #8 CTR. -/
+/-- `divmnu` (AST line 1583): #0 WALK; #1 WALK; #2 WALK; #3 WALK; #4 MONO; #5 WALK; #6 WALK; #7 WALK; #8 WALK. -/
 theorem «fb_divmnu» : TerminatingFunBoundedOn GuestInv (ofString "divmnu") K.«divmnu» := by sorry
 /-- `u256_to_digits` (AST line 1530): loop-free. -/
 theorem «fb_u256_to_digits» : TerminatingFunBoundedOn GuestInv (ofString "u256_to_digits") K.«u256_to_digits» := by sorry
@@ -5170,13 +5174,13 @@ theorem «fb_fq12_mul» : TerminatingFunBoundedOn GuestInv (ofString "fq12_mul")
 theorem «fb_fq2_mul» : TerminatingFunBoundedOn GuestInv (ofString "fq2_mul") K.«fq2_mul» := by sorry
 /-- `fe_mul` (AST line 23502): loop-free. -/
 theorem «fb_fe_mul» : TerminatingFunBoundedOn GuestInv (ofString "fe_mul") K.«fe_mul» := by sorry
-/-- `fe_mul_small` (AST line 23603): #0 CTR. -/
+/-- `fe_mul_small` (AST line 23603): #0 WALK. -/
 theorem «fb_fe_mul_small» : TerminatingFunBoundedOn GuestInv (ofString "fe_mul_small") K.«fe_mul_small» := by sorry
 /-- `fq12_sqr` (AST line 23456): #0 CTR; #1 CTR. -/
 theorem «fb_fq12_sqr» : TerminatingFunBoundedOn GuestInv (ofString "fq12_sqr") K.«fq12_sqr» := by sorry
 /-- `fe_sqr` (AST line 23529): loop-free. -/
 theorem «fb_fe_sqr» : TerminatingFunBoundedOn GuestInv (ofString "fe_sqr") K.«fe_sqr» := by sorry
-/-- `fe_sub` (AST line 23566): #0 CTR. -/
+/-- `fe_sub` (AST line 23566): #0 WALK. -/
 theorem «fb_fe_sub» : TerminatingFunBoundedOn GuestInv (ofString "fe_sub") K.«fe_sub» := by sorry
 /-- `ecp_double` (AST line 23694): loop-free. -/
 theorem «fb_ecp_double» : TerminatingFunBoundedOn GuestInv (ofString "ecp_double") K.«ecp_double» := by sorry
@@ -5204,13 +5208,13 @@ theorem «fb_bn254_init» : TerminatingFunBoundedOn GuestInv (ofString "bn254_in
 theorem «fb_ecp_linefunc» : TerminatingFunBoundedOn GuestInv (ofString "ecp_linefunc") K.«ecp_linefunc» := by sorry
 /-- `fq_neg` (AST line 22323): loop-free. -/
 theorem «fb_fq_neg» : TerminatingFunBoundedOn GuestInv (ofString "fq_neg") K.«fq_neg» := by sorry
-/-- `fe_neg` (AST line 23585): #0 CTR. -/
+/-- `fe_neg` (AST line 23585): #0 WALK. -/
 theorem «fb_fe_neg» : TerminatingFunBoundedOn GuestInv (ofString "fe_neg") K.«fe_neg» := by sorry
 /-- `fq12_frob` (AST line 24051): #0 CTR. -/
 theorem «fb_fq12_frob» : TerminatingFunBoundedOn GuestInv (ofString "fq12_frob") K.«fq12_frob» := by sorry
 /-- `bn254_miller_raw` (AST line 24253): #0 CTR. -/
 theorem «fb_bn254_miller_raw» : TerminatingFunBoundedOn GuestInv (ofString "bn254_miller_raw") K.«bn254_miller_raw» := by sorry
-/-- `fe_add` (AST line 23547): #0 CTR. -/
+/-- `fe_add` (AST line 23547): #0 WALK. -/
 theorem «fb_fe_add» : TerminatingFunBoundedOn GuestInv (ofString "fe_add") K.«fe_add» := by sorry
 /-- `bn254_parse_g2` (AST line 24436): loop-free. -/
 theorem «fb_bn254_parse_g2» : TerminatingFunBoundedOn GuestInv (ofString "bn254_parse_g2") K.«bn254_parse_g2» := by sorry
@@ -5228,7 +5232,7 @@ theorem «fb_fq12_inv» : TerminatingFunBoundedOn GuestInv (ofString "fq12_inv")
 theorem «fb_fq12_pow_words» : TerminatingFunBoundedOn GuestInv (ofString "fq12_pow_words") K.«fq12_pow_words» := by sorry
 /-- `fq12_twist` (AST line 23999): #0 CTR. -/
 theorem «fb_fq12_twist» : TerminatingFunBoundedOn GuestInv (ofString "fq12_twist") K.«fq12_twist» := by sorry
-/-- `bn254_pairing_check` (AST line 24600): #0 CTR. -/
+/-- `bn254_pairing_check` (AST line 24600): #0 WALK. -/
 theorem «fb_bn254_pairing_check» : TerminatingFunBoundedOn GuestInv (ofString "bn254_pairing_check") K.«bn254_pairing_check» := by sorry
 /-- `pre_alt_bn128_pairing_check` (AST line 24757): loop-free. -/
 theorem «fb_pre_alt_bn128_pairing_check» : TerminatingFunBoundedOn GuestInv (ofString "pre_alt_bn128_pairing_check") K.«pre_alt_bn128_pairing_check» := by sorry
@@ -5304,7 +5308,7 @@ theorem «fb_g1_mul» : TerminatingFunBoundedOn GuestInv (ofString "g1_mul") K.�
 theorem «fb_g1_is_inf» : TerminatingFunBoundedOn GuestInv (ofString "g1_is_inf") K.«g1_is_inf» := by sorry
 /-- `g1_subgroup_check` (AST line 28953): loop-free. -/
 theorem «fb_g1_subgroup_check» : TerminatingFunBoundedOn GuestInv (ofString "g1_subgroup_check") K.«g1_subgroup_check» := by sorry
-/-- `bls_g1_msm_exec` (AST line 30370): #0 CTR. -/
+/-- `bls_g1_msm_exec` (AST line 30370): #0 WALK. -/
 theorem «fb_bls_g1_msm_exec» : TerminatingFunBoundedOn GuestInv (ofString "bls_g1_msm_exec") K.«bls_g1_msm_exec» := by sorry
 /-- `pre_bls_g1_msm` (AST line 31264): loop-free. -/
 theorem «fb_pre_bls_g1_msm» : TerminatingFunBoundedOn GuestInv (ofString "pre_bls_g1_msm") K.«pre_bls_g1_msm» := by sorry
@@ -5358,7 +5362,7 @@ theorem «fb_bls_g2_msm_discount» : TerminatingFunBoundedOn GuestInv (ofString 
 theorem «fb_g2_mul» : TerminatingFunBoundedOn GuestInv (ofString "g2_mul") K.«g2_mul» := by sorry
 /-- `g2_subgroup_check` (AST line 29367): loop-free. -/
 theorem «fb_g2_subgroup_check» : TerminatingFunBoundedOn GuestInv (ofString "g2_subgroup_check") K.«g2_subgroup_check» := by sorry
-/-- `bls_g2_msm_exec` (AST line 30446): #0 CTR. -/
+/-- `bls_g2_msm_exec` (AST line 30446): #0 WALK. -/
 theorem «fb_bls_g2_msm_exec» : TerminatingFunBoundedOn GuestInv (ofString "bls_g2_msm_exec") K.«bls_g2_msm_exec» := by sorry
 /-- `pre_bls_g2_msm` (AST line 31328): loop-free. -/
 theorem «fb_pre_bls_g2_msm» : TerminatingFunBoundedOn GuestInv (ofString "pre_bls_g2_msm") K.«pre_bls_g2_msm» := by sorry
@@ -5454,7 +5458,7 @@ theorem «fb_pair_ell» : TerminatingFunBoundedOn GuestInv (ofString "pair_ell")
 theorem «fb_pair_miller_loop» : TerminatingFunBoundedOn GuestInv (ofString "pair_miller_loop") K.«pair_miller_loop» := by sorry
 /-- `pair_accumulate` (AST line 29661): loop-free. -/
 theorem «fb_pair_accumulate» : TerminatingFunBoundedOn GuestInv (ofString "pair_accumulate") K.«pair_accumulate» := by sorry
-/-- `bls_pairing_exec` (AST line 30492): #0 CTR. -/
+/-- `bls_pairing_exec` (AST line 30492): #0 WALK. -/
 theorem «fb_bls_pairing_exec» : TerminatingFunBoundedOn GuestInv (ofString "bls_pairing_exec") K.«bls_pairing_exec» := by sorry
 /-- `pre_bls_pairing` (AST line 31364): loop-free. -/
 theorem «fb_pre_bls_pairing» : TerminatingFunBoundedOn GuestInv (ofString "pre_bls_pairing") K.«pre_bls_pairing» := by sorry
@@ -5486,11 +5490,11 @@ theorem «fb_pre_kzg_point_evaluation» : TerminatingFunBoundedOn GuestInv (ofSt
 theorem «fb_be_top_bit» : TerminatingFunBoundedOn GuestInv (ofString "be_top_bit") K.«be_top_bit» := by sorry
 /-- `bn_from_be` (AST line 20170): #0 CTR; #1 CTR. -/
 theorem «fb_bn_from_be» : TerminatingFunBoundedOn GuestInv (ofString "bn_from_be") K.«bn_from_be» := by sorry
-/-- `bn_divmnu` (AST line 20253): #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 RO(3); #5 CTR; #6 CTR; #7 CTR; #8 CTR. -/
+/-- `bn_divmnu` (AST line 20253): #0 WALK; #1 WALK; #2 WALK; #3 WALK; #4 MONO; #5 WALK; #6 WALK; #7 WALK; #8 WALK. -/
 theorem «fb_bn_divmnu» : TerminatingFunBoundedOn GuestInv (ofString "bn_divmnu") K.«bn_divmnu» := by sorry
 /-- `bn_mod` (AST line 20386): loop-free. -/
 theorem «fb_bn_mod» : TerminatingFunBoundedOn GuestInv (ofString "bn_mod") K.«bn_mod» := by sorry
-/-- `bn_mul` (AST line 20218): #0 CTR; #1 CTR; #2 CTR. -/
+/-- `bn_mul` (AST line 20218): #0 WALK; #1 WALK; #2 WALK. -/
 theorem «fb_bn_mul» : TerminatingFunBoundedOn GuestInv (ofString "bn_mul") K.«bn_mul» := by sorry
 /-- `bn_to_be` (AST line 20196): #0 CTR. -/
 theorem «fb_bn_to_be» : TerminatingFunBoundedOn GuestInv (ofString "bn_to_be") K.«bn_to_be» := by sorry
@@ -6093,8 +6097,26 @@ def FunSpec (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
   ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
     originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+        some (body, s.locals, retShape)) →
       (evaluateHOLFiniteState s body).1 ≠ some .timeOut →
       Q s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2
+
+/-- A successful finite lookup carries the installed return shape as well as
+its body and parameter locals. -/
+theorem lookupCodeHOLFinite_installed_return {F : Type}
+    (state : PanSemStateFiniteExact 64 F) (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body body' : ProgHOL 64) (ret ret' : ShapeHOL)
+    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : state.code.lookup fname = some (params, body, ret))
+    (hl : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ret' = ret := by
+  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+    state.code.lookup fname values body' callee ret' hl
+  simp only [Flapjack.lookupCodeHOLExact, hc] at hx
+  split at hx
+  · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+  · cases hx
 
 /-- `Q` on normal return only. -/
 def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) :
@@ -6141,8 +6163,8 @@ def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     FrameOutside s post
       [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
-    ∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+    ∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+      s.globals.lookup k = post.globals.lookup k
 
 /-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
 arenas, a key length from the literal call sites and a bounded capacity. `htab_new` checks
@@ -6171,7 +6193,16 @@ node records, fresh heap and the free scratch gap, which `KeyIn` keeps away from
 def MptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ locN s "level" ≤ locN s "klen" ∧ ∃ Nd, NodeHeap s Nd ∧
     RootIn Nd (locN s "node") ∧
-    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level")
+    KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level") ∧
+    locN s "klen" ≤ 64
+
+/-- Insertion additionally bounds the newly stored value length. -/
+def MptInsertReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MptReady s ∧ locN s "vlen" < 2 ^ 40
+
+/-- Node encoding starts from a typed, size-bounded node heap. -/
+def NodeRlpReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node")
 
 /-- The trie object `m` (16 bytes, `mpt_new` 10446: `+0` root node) and its node set, placed
 relative to the typed world `S` (revision 5, round-4 Fable item 3): `m` is allocated, and `m` and
@@ -6215,6 +6246,10 @@ revision-4 guard did not relate `m` and its nodes to the typed tables and fixed 
 def MptObjReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => MptObjAvoids (fun _ => []) s
 
+/-- The bounded key and payload sizes supplied by all mpt_set call sites. -/
+def MptSetReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => MptObjReady s ∧ locN s "klen" ≤ 32 ∧ locN s "vlen" < 2 ^ 40
+
 /-- Exit: the returned root is typed in the new node heap, which extends the old one by fresh
 heap records; old memory outside the old nodes (sized by kind), the heap free at entry and the
 scratch free at entry is unchanged, and only `heap_ptr`/`scratch_ptr` among the globals change.
@@ -6226,8 +6261,8 @@ def MptExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResu
     PanSemStateFiniteExact 64 F → Prop :=
   fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
     ArenaReady post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
-    (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+    (∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+      s.globals.lookup k = post.globals.lookup k) ∧
     ∃ Nd Nd', NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧ NodeHeap post Nd' ∧
       RootIn Nd' w.toNat ∧
       FrameOutside s post
@@ -6240,7 +6275,7 @@ empty extension segments (`sl = 0`, `node := node+48`, e.g. two extensions point
 `NodeHeap` does not exclude it) the loop never returns: it reaches `WhileTimesOut` within the
 `2^130` iteration bound of its `GUARD` measure (DESIGN.md §3), so the bound leaf still holds and
 this spec is vacuous on such runs (round-4 Gemini non-blocking). -/
-theorem mpt_insert_node_spec : FunSpec MptReady MptExit (ofString "_mpt_insert_node") := by sorry
+theorem mpt_insert_node_spec : FunSpec MptInsertReady MptExit (ofString "_mpt_insert_node") := by sorry
 theorem mpt_delete_node_body_spec :
     FunSpec MptReady MptExit (ofString "_mpt_delete_node_body") := by sorry
 
@@ -6423,7 +6458,7 @@ theorem localsFree_worldOK : LocalsFree WorldOK := by
 
 theorem localsFree_evmInv : LocalsFree EvmInv := by
   intro F s locals k h
-  simp only [EvmInv, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
+  simp only [EvmInv, FrameWF, MsgOwned, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
   exact h
 
 /-- Round-3 non-blocking: `main`'s guard reads neither locals nor the clock. -/
@@ -6537,7 +6572,7 @@ def WritesWithin (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) 
     FrameOutside s post
       (R s ++ [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
       (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
-    ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = post.globals.lookup k)
     fname
 
 /-- `WorldOK`, and the regions `R s` are disjoint from every typed table and fixed object and
@@ -6647,16 +6682,6 @@ def EvmInvAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) : Prop 
 theorem evmInv_iff_at {F : Type} (s : PanSemStateFiniteExact 64 F) :
     EvmInv s ↔ ArenaReady s ∧ ∃ S, EvmInvAt s S := Iff.rfl
 
-/-- The 176-byte message record at `m` is owned (as in `MsgReady`): allocated words, disjoint
-from every table footprint of `S`, every fixed object, every frame block of the chain and
-(revision 6, round-4 Astra item 2) the persistent tries. -/
-def MsgOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (m : Nat) : Prop :=
-  Allocated s (m, 176) ∧ WordsOK s (m, 176) ∧
-  (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (m, 176) i) ∧
-  (∀ j ∈ fixedObjects s, Disj (m, 176) j) ∧
-  (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (m, 176) o) ∧
-  AvoidsTries s S [(m, 176)]
-
 /-- After `frame_open(msg, 0)` in `process_message` (revision 5, round-4 Fable item 2): `EvmInv`,
 and the outermost frame's message `ev+112` (the `msg` of `MsgReady`, stored by `frame_new`) is
 still owned, for the same table set. `depth0_prepare` stores `msg+48` (18772) and
@@ -6672,7 +6697,7 @@ theorem evmInv_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F) (h : 
 
 theorem localsFree_evmMsgReady : LocalsFree EvmMsgReady := by
   intro F s locals k h
-  simp only [EvmMsgReady, EvmInvAt, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
+  simp only [EvmMsgReady, EvmInvAt, FrameWF, MsgOwned, worldTyped_with_locals, arenaReady_with_locals,
     evmChain_with_locals] at h ⊢
   exact h
 
@@ -6713,8 +6738,8 @@ def NodeFnExit (names : List String)
           ((Nd.map fun n => nodeIvl s n) ++
             [(globN s "frame_mem_ptr", globN s "scratch_ptr" - globN s "frame_mem_ptr")])
           (globN s "heap_ptr", heapLimit - globN s "heap_ptr") ∧
-        (∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-          s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) ∧
+        (∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+          s.globals.lookup k = post.globals.lookup k) ∧
         ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧ RootIn Nd' w.toNat
 
 /-- `NodeFn names req g`: from a typed node heap rooting `names` and meeting `g`'s requirement
@@ -6739,6 +6764,7 @@ def RetNibbles (fname : MlS) : Prop :=
   FunSpec ArenaReady (fun s r post => ∀ v, r = some (.returned v) →
     ∃ p l : BitVec 64, v = .rStruct [.val (.word p), .val (.word l)] ∧
       NibblesOK post p.toNat l.toNat ∧
+      (locN s "klen" ≤ 32 → l.toNat ≤ 64) ∧
       Inside (p.toNat, l.toNat) (globN s "heap_ptr") (globN post "heap_ptr")) fname
 
 /-- `requests_append` entry: the next request slot exists. -/
@@ -6792,7 +6818,8 @@ are untyped, so an output region may lie inside one of them. -/
 def worldTypedIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : List Ivl :=
   S.flatMap (htabFootprint s) ++
     typedRecords.map (fun r => (globN s r.1, if globN s r.1 = 0 then 0 else r.2)) ++
-    [(globN s "journal", 32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s ++
+    [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s ++
     nodeExtents s Nd
 
 /-- Everything the world owns under the typing `(S, Nd)`. -/
@@ -6811,7 +6838,7 @@ def heapFree {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
 
 /-- Only the globals in `gw` change. -/
 def GlobalsKept (gw : List String) {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
-  ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+  ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = post.globals.lookup k
 
 /-- The listed words of the typed records are unchanged unless an output region hits them. -/
 def RecordsKept (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl)
@@ -6935,6 +6962,113 @@ theorem WorldStep.worldOK_nil {gw : List String} {keep : List (String × List Na
   obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
   exact h.worldOK ⟨S, Nd, hT, fun o ho => by simp at ho⟩
 
+/-- A null global buffer has an empty writable interval. -/
+def bufferRegion {F : Type} (s : PanSemStateFiniteExact 64 F) (gn : String × Nat) : Ivl :=
+  (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)
+
+theorem Disj.flip {i j : Ivl} (h : Disj i j) : Disj j i := by
+  rcases h with h | h | h | h
+  · exact Or.inr (Or.inl h)
+  · exact Or.inl h
+  · exact Or.inr (Or.inr (Or.inr h))
+  · exact Or.inr (Or.inr (Or.inl h))
+
+theorem bufferRegion_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd) (gn : String × Nat)
+    (hg : gn ∈ globalBuffers) (hu : gn.1 ∉ typedRecords.map Prod.fst) :
+    ∀ j ∈ worldTypedIvls s S Nd, Disj (bufferRegion s gn) j := by
+  let buffers := globalBuffers.map (bufferRegion s)
+  let rest := [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+      32 * globN s "journal_cap")] ++ blockOutObjects s ++ balObjects s
+  have hfixed : fixedObjects s = buffers ++ rest := by
+    simp only [fixedObjects, buffers, rest, List.append_assoc]
+    rfl
+  have hpair := hW.2.2.1.2
+  rw [hfixed] at hpair
+  have hmem : bufferRegion s gn ∈ buffers := List.mem_map.mpr ⟨gn, hg, rfl⟩
+  have hfixmem : bufferRegion s gn ∈ fixedObjects s := by
+    rw [hfixed]; exact List.mem_append_left _ hmem
+  have hcross := (List.pairwise_append.mp hpair).2.2
+  have hnames : globalBuffers.Pairwise
+      (fun a b => Disj (bufferRegion s a) (bufferRegion s b)) :=
+    List.pairwise_map.mp (List.pairwise_append.mp hpair).1
+  letI : Std.Symm (fun a b : String × Nat => Disj (bufferRegion s a) (bufferRegion s b)) :=
+    ⟨fun _ _ h => h.flip⟩
+  intro j hj
+  simp only [worldTypedIvls, List.mem_append] at hj
+  rcases hj with ((((ht | hr) | hjournal) | hbo) | hbal) | hn
+  · obtain ⟨t, ht, hj⟩ := List.mem_flatMap.mp ht
+    exact ((hW.1.2.1 t ht).2 j hj).2 _ hfixmem |>.flip
+  · obtain ⟨r, hrecord, heq⟩ := List.mem_map.mp hr
+    rw [← heq]
+    change Disj (bufferRegion s gn) (bufferRegion s r)
+    have hrg : r ∈ globalBuffers :=
+      (by decide : ∀ r ∈ typedRecords, r ∈ globalBuffers) r hrecord
+    have hne : gn ≠ r := by
+      intro heq; apply hu; exact List.mem_map.mpr ⟨r, hrecord, congrArg Prod.fst heq.symm⟩
+    exact hnames.forall hg hrg hne
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inl (Or.inl hjournal))
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inl (Or.inr hbo))
+  · exact hcross _ hmem _ (by simp only [rest, List.mem_append]; exact Or.inr hbal)
+  · exact ((hW.2.2.2.2.1 j hn).2 _ hfixmem).flip
+
+theorem WorldKeeps.keepsOn_buffers
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
+    (h : WorldKeeps WorldOK R gw keep Q fname)
+    (hR : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) i, i ∈ R s →
+      ∃ gn ∈ globalBuffers, gn.1 ∉ typedRecords.map Prod.fst ∧ i = bufferRegion s gn) :
+    KeepsOn WorldOK WorldOK fname := by
+  obtain ⟨params, body, ret, hlook, hb⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => ?_⟩
+  have hstep := hb s hc hW hshape hnt hr
+  obtain ⟨_, S, hS⟩ := hW
+  obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
+  apply hstep.worldOK
+  refine ⟨S, Nd, hT, ?_⟩
+  intro i hi j hj
+  obtain ⟨gn, hg, hu, rfl⟩ := hR s i hi
+  exact bufferRegion_disj hT gn hg hu j hj
+
+
+theorem bufferRegion_disj_le {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd) (gn : String × Nat)
+    (hg : gn ∈ globalBuffers) (hu : gn.1 ∉ typedRecords.map Prod.fst)
+    (n : Nat) (hle : n ≤ gn.2) :
+    ∀ j ∈ worldTypedIvls s S Nd, Disj (bufferRegion s (gn.1, n)) j := by
+  intro j hj
+  have h := bufferRegion_disj hW gn hg hu j hj
+  by_cases hz : globN s gn.1 = 0
+  · exact Or.inl (by simp [bufferRegion, hz])
+  · simp only [bufferRegion, hz, ↓reduceIte] at h ⊢
+    unfold Disj at h ⊢
+    dsimp only at h ⊢
+    omega
+
+theorem WorldKeeps.keepsOn_buffer_parts
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
+    (h : WorldKeeps WorldOK R gw keep Q fname)
+    (hR : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) i, i ∈ R s →
+      ∃ gn ∈ globalBuffers, gn.1 ∉ typedRecords.map Prod.fst ∧
+        ∃ n, n ≤ gn.2 ∧ i = bufferRegion s (gn.1, n)) :
+    KeepsOn WorldOK WorldOK fname := by
+  obtain ⟨params, body, ret, hlook, hb⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => ?_⟩
+  have hstep := hb s hc hW hshape hnt hr
+  obtain ⟨_, S, hS⟩ := hW
+  obtain ⟨Nd, hT⟩ := (worldTyped_iff_with s S).1 hS
+  apply hstep.worldOK
+  refine ⟨S, Nd, hT, ?_⟩
+  intro i hi j hj
+  obtain ⟨gn, hg, hu, n, hle, rfl⟩ := hR s i hi
+  exact bufferRegion_disj_le hT gn hg hu n hle j hj
+
+
 /-- A relational world contract without output region implies the revision-6 shape (proved), so
 the proved compositions that only need `WorldOK` after the call keep their proofs. -/
 theorem WorldKeeps.keepsOn {gw : List String} {keep : List (String × List Nat)}
@@ -6942,7 +7076,7 @@ theorem WorldKeeps.keepsOn {gw : List String} {keep : List (String × List Nat)}
       PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
     (h : WorldKeeps WorldOK (fun _ => []) gw keep Q fname) : KeepsOn WorldOK WorldOK fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  exact ⟨params, body, ret, hlook, fun s hc hW hnt hr => (hb s hc hW hnt hr).worldOK_nil hW⟩
+  exact ⟨params, body, ret, hlook, fun s hc hW hshape hnt hr => (hb s hc hW hshape hnt hr).worldOK_nil hW⟩
 
 /-- `EvmInv` with an output region `R` that avoids the typed world, the persistent tries and every
 frame block (revision 7: the EVM-tier callees that write a caller buffer, `u256_to_be32` into
@@ -6970,7 +7104,7 @@ def EvmKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (gw : Li
 theorem EvmKeeps.keepsOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
     {gw : List String} {fname : MlS} (h : EvmKeeps P gw fname) : KeepsOn P EvmInv fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  exact ⟨params, body, ret, hlook, fun s hc hP hnt hr => (hb s hc hP hnt hr).1⟩
+  exact ⟨params, body, ret, hlook, fun s hc hP hshape hnt hr => (hb s hc hP hshape hnt hr).1⟩
 
 /-- The intervals of a trie object `m` with node set `Nm`. -/
 def mptObjIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (Nm : List Nat) (m : Nat) : List Ivl :=
@@ -6999,9 +7133,10 @@ def MptObjStep (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (g
         FrameOutside s post
           (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s ++ [freeGap s]) (heapFree s)
 
-def MptKeeps (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+def MptKeeps (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
     (keep : List (String × List Nat)) (fname : MlS) : Prop :=
-  FunSpec MptObjReady (fun s r post => Resumes r → MptObjStep R gw keep s post) fname
+  FunSpec P (fun s r post => Resumes r → MptObjStep R gw keep s post) fname
 
 /-! ### Constructor return typing (revision 7, round-4 Gemini item 1(c)) -/
 
@@ -7017,11 +7152,11 @@ theorem FreshBlock.disj_allocated {F : Type} {s post : PanSemStateFiniteExact 64
     {i : Ivl} (hi : Allocated s i) : Disj (p, (n + 7) / 8 * 8) i := by
   rcases h with ⟨_, hlo, _⟩
   rcases hi with hi | hi
-  · exact Or.inr (Nat.le_trans hi.2 hlo.1)
+  · exact Or.inr (Or.inr (Or.inr (Nat.le_trans hi.2 hlo.1)))
   · rcases hs with ⟨_, _, hframe, hgap, _, _, _, _⟩
     have hsep : heapLimit ≤ scratchStart := by decide
-    exact Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
-      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))
+    exact Or.inr (Or.inr (Or.inl (Nat.le_trans hlo.2 (Nat.le_trans hp.2.1
+      (Nat.le_trans hsep (Nat.le_trans hframe (Nat.le_trans hgap hi.1)))))))
 
 /-- A normal return is a word `w` with `Q s post w`. -/
 def RetWord (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Nat →
@@ -7134,10 +7269,129 @@ def ReqCountInc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSem
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s _ post _ _ => memW post (globN s "bo" + 64) = memW s (globN s "bo" + 64) + 1
 
+/-- R10 header shape; the bounded extra-data length prevents encoder size wraparound. -/
+def HeaderAt {F : Type} (s : PanSemStateFiniteExact 64 F) (h : Nat) : Prop :=
+  WordsOK s (h, 248) ∧ memW s (h + 136) ≤ 32
+
+def HeaderOK : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => HeaderAt s (locN s "h")
+
+/-- Bounds are natural arithmetic, before any machine-word multiplication. -/
+def RequestsAt {F : Type} (s : PanSemStateFiniteExact 64 F) (rq : Nat) : Prop :=
+  WordsOK s (rq, 80) ∧ ∀ i, i < 5 → memW s (rq + 16 * i + 8) * 192 < 2 ^ 36
+
+def PayloadAt {F : Type} (s : PanSemStateFiniteExact 64 F) (pl : Nat) : Prop :=
+  WordsOK s (pl, 136) ∧ memW s (pl + 24) ≤ 32 ∧ memW s (pl + 40) < 2 ^ 32 ∧
+  ∀ i, i < memW s (pl + 40) → memW s (memW s (pl + 32) + 16 * i + 8) < 2 ^ 32
+
+/-- Access-list sizes counted before encoding, including all storage-key counts. -/
+def txAccessSlots {F : Type} (s : PanSemStateFiniteExact 64 F) (tx : Nat) : Nat :=
+  ((List.range (memW s (tx + 216))).map
+    (fun i => memW s (memW s (tx + 208) + 24 * i + 16))).sum
+
+/-- Structural decoder result, shared by encoding, sender recovery and execution.
+The count bounds include fields unused by the selected transaction type, since
+`tx_encode_bound` reads all of them unconditionally. -/
+def TxValidAt {F : Type} (s : PanSemStateFiniteExact 64 F) (tx : Nat) : Prop :=
+  WordsOK s (tx, 384) ∧ Inside (tx, 384) sourceBase (globN s "heap_ptr") ∧
+  memW s tx ≤ 4 ∧ memW s (tx + 200) < 2 ^ 32 ∧
+  memW s (tx + 216) < 2 ^ 32 ∧ txAccessSlots s tx < 2 ^ 32 ∧
+  memW s (tx + 264) < 2 ^ 32 ∧ memW s (tx + 280) < 2 ^ 32 ∧
+  (0 < memW s (tx + 216) → WordsOK s (memW s (tx + 208), 24 * memW s (tx + 216))) ∧
+  (0 < memW s (tx + 280) → WordsOK s (memW s (tx + 272), 120 * memW s (tx + 280)))
+
+def TxValid : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxValidAt s (locN s "tx")
+
+/-- The access-list records modified during execution belong to the transaction,
+separate from the world. Their keys are read-only heap bytes. -/
+def TxAccessListAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (tx : Nat) : Prop :=
+  TxValidAt s tx ∧ IvlsDisj [(tx, 384)] (worldOwned s S Nd) ∧
+  (0 < memW s (tx + 216) →
+    Inside (memW s (tx + 208), 24 * memW s (tx + 216)) sourceBase (globN s "heap_ptr") ∧
+    IvlsDisj [(memW s (tx + 208), 24 * memW s (tx + 216))] (worldOwned s S Nd))
+
+def TxAccessListOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+  TxAccessListAt s S Nd (locN s "tx")
+
+/-- Entry established by execute_block after state_init and decode_transaction. -/
+def TxReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxReady s ∧ globN s "journal_cap" ≠ 0 ∧
+    memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0 ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListOK s S Nd
+
+/-- Stable copies retain heap-resident entries across scratch_release(tx_frame_mark). -/
+def StableLogsOK {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  LogsListOK s logs ∧ (logs = 0 ∨
+    Inside (logs, 24) sourceBase (globN s "heap_ptr") ∧
+    Inside (memW s logs, 8 * memW s (logs + 16)) sourceBase (globN s "heap_ptr"))
+
+/-- Decoder ownership is relative to the EXIT typing, as for all fresh results. -/
+def RetDecodedTx : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ TxAccessListAt post S Nd w.toNat
+
+def RetHeader : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ HeaderAt post w.toNat ∧
+    Inside (w.toNat, 248) sourceBase (globN post "heap_ptr") ∧
+    IvlsDisj [(w.toNat, 248)] (worldOwned post S Nd)
+
+def RetHeaders : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    ∀ i, i < locN s "n" → HeaderAt post (memW post (a.toNat + 8 * i))
+
+/-- The frame returned to process_message_call retains its log header and
+entries until that caller's transaction mark is released. -/
+def RetFrameResult : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post _ _ => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ WordsOK post (w.toNat, 280) ∧ Allocated post (w.toNat, 280) ∧
+    LogsListOK post (memW post (w.toNat + 88))
+
+/-- The output and its list remain usable until the transaction scratch mark is
+released. The entries themselves already have heap lifetime. -/
+def RetMessageOutput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post S Nd => ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+    v = .val (.word w) ∧ WordsOK post (w.toNat, 96) ∧
+    Inside (w.toNat, 96) sourceBase (globN post "heap_ptr") ∧
+    IvlsDisj [(w.toNat, 96)] (worldOwned post S Nd) ∧
+    LogsListOK post (memW post (w.toNat + 16))
+
+/-- Receipt slice and log count remain non-wrapping after writing the output pair. -/
+def RetReceiptBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) → ∃ a b : BitVec 64,
+    v = .rStruct [.val (.word a), .val (.word b)] ∧
+    Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr") ∧
+    a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
+    memW post (locN s "logs" + 8) < 2 ^ 28 ∧ LogsListOK post (locN s "logs")
+
+/-- state_init installs the journal before execute_block begins. -/
+def RetStateInit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun _ r post _ _ => ∀ v, r = some (.returned v) → globN post "journal_cap" ≠ 0
+
+/-- Newly appended receipt-log lists survive the final transaction scratch release. -/
+def RetTransactionLogs : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post _ _ => ∀ v, r = some (.returned v) →
+    let oldCount := memW s (memW s (globN s "bo" + 72) + 8)
+    let l := memW post (globN post "bo" + 72)
+    ∀ i, oldCount ≤ i → i < memW post (l + 8) →
+      StableLogsOK post (memW post (memW post l + 8 * i))
+
 /-- The host-input cells `run_attempt` reads the transaction count through: `si+0 = pl` and
 `pl+40 = ntx` (revision 7). -/
 def inputCells {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : List Ivl :=
-  [(si, 8), (memW s si + 40, 8)]
+  [(si, 40), (memW s si, 136), (memW s (si + 32), 80),
+   (memW s (memW s si + 32), 16 * memW s (memW s si + 40))]
 
 /-- `decode_host_input`'s extra (revision 7): the returned input record and its payload record are
 fresh heap words. Revision 8 (round-5 Astra items 4 and 8, Gemini suggestion): they are disjoint
@@ -7151,7 +7405,8 @@ def RetInput : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemRes
     (∀ i ∈ inputCells post w.toNat, i.1 % 8 = 0 ∧
       Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∧ WordsOK post i) ∧
     IvlsDisj (inputCells post w.toNat) (worldOwned post S' Nd') ∧
-    memW post (memW post w.toNat + 40) < 2 ^ 63
+    memW post (memW post w.toNat + 40) < 2 ^ 63 ∧
+    PayloadAt post (memW post w.toNat) ∧ RequestsAt post (memW post (w.toNat + 32))
 
 /-- Guard of `verify_stateless_new_payload`, `attempt_l*`, `run_attempt` (revision 7): `WorldOK`,
 and the input cells are allocated words outside the world, for one typing. `run_attempt` checks
@@ -7166,7 +7421,8 @@ def InputAt {F : Type} (s : PanSemStateFiniteExact 64 F) (si : Nat) : Prop :=
   ArenaReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
     (∀ i ∈ inputCells s si, Inside i sourceBase (globN s "heap_ptr") ∧ WordsOK s i) ∧
     IvlsDisj (inputCells s si) (worldOwned s S Nd) ∧
-    memW s (memW s si + 40) < 2 ^ 63
+    memW s (memW s si + 40) < 2 ^ 63 ∧
+    PayloadAt s (memW s si) ∧ RequestsAt s (memW s (si + 32))
 
 def InputReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => InputAt s (locN s "si")
@@ -7194,6 +7450,24 @@ theorem localsOnly_inputReady : LocalsOnly ["si"] InputReady := by
   show InputAt _ _
   rw [ht]
   exact (inputAt_with_locals s locals k _).2 hP
+
+/-- The block executor retains decoded input slots and a validated header. The
+transaction slice lengths establish decode_transaction's non-wrapping guard. -/
+def BlockReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => BlockReady s ∧ InputReady s ∧ HeaderAt s (locN s "hdr")
+
+theorem localsOnly_blockReadyStrong : LocalsOnly ["si", "hdr"] BlockReadyStrong := by
+  intro F s locals k hl hP
+  have hsi := locN_congr s locals k "si" (hl "si" (by simp))
+  have hh := locN_congr s locals k "hdr" (hl "hdr" (by simp))
+  refine ⟨localsOnly_blockReady s locals k (fun n hn => hl n (by simp_all)) hP.1, ?_, ?_⟩
+  · show InputAt _ _
+    rw [hsi]
+    exact (inputAt_with_locals s locals k _).2 hP.2.1
+  · change HeaderAt _ (locN { s with locals := locals, clock := k } "hdr")
+    rw [hh]
+    exact hP.2.2
+
 
 /-- The callee of a one-parameter function called with the caller's local of the same name sees
 that local's value (proved). -/
@@ -7351,8 +7625,8 @@ theorem ReadOnlyFn.keepsOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → 
     (hW : LocalsFree W) (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → GuestInv s)
     {fname : MlS} (h : ReadOnlyFn fname) : KeepsOn W W fname := by
   obtain ⟨params, body, ret, hlook, hb⟩ := h
-  refine ⟨params, body, ret, hlook, fun s hc hWs hnt hr => ?_⟩
-  rw [hb s hc (hG s hWs) hnt hr]
+  refine ⟨params, body, ret, hlook, fun s hc hWs hshape hnt hr => ?_⟩
+  rw [hb s hc (hG s hWs) hshape hnt hr]
   exact hW s _ _ hWs
 
 theorem worldOK_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : WorldOK s) :
@@ -7521,7 +7795,10 @@ theorem FunSpec.at_lookup {Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → 
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body body'
     ret ret' values callee (by rw [hcode]; exact hlook) hl
   subst hsame
-  exact hspec _ hcode hPc hnt
+  have hret := lookupCodeHOLFinite_installed_return state fname params body' body'
+    ret ret' values callee (by rw [hcode]; exact hlook) hl
+  subst hret
+  exact hspec _ hcode hPc ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩ hnt
 
 /-- Handler-free call with no destination, callee described by a `FunSpec`. Results other than
 a normal return are covered by `hother` (a call never yields `continue`). -/
@@ -8520,8 +8797,13 @@ theorem ReadOnlyFn.resumeOn {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
     ret' ret values callee (by rw [hcode]; exact hlook) hl
   subst hsame
+  have hret := lookupCodeHOLFinite_installed_return state fname params body body ret' ret
+    values callee (by rw [hcode]; exact hlook) hl
+  subst hret
   have hro := hb (callEntryStateHOLFinite state callee) hcode
-    (guestInv_callEntry state callee (hPG state hPs)) (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
+    (guestInv_callEntry state callee (hPG state hPs))
+    ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
+    (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
   rw [hrun] at hro
   dsimp only at hro
   have heq : ({ post with locals := state.locals } : PanSemStateFiniteExact 64 F) =
@@ -8643,7 +8925,11 @@ theorem KeepsOn.resumeOn {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Pr
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body' body
     ret' ret values callee (by rw [hcode]; exact hlook) hl
   subst hsame
+  have hret := lookupCodeHOLFinite_installed_return state fname params body body ret' ret
+    values callee (by rw [hcode]; exact hlook) hl
+  subst hret
   have hq := hb (callEntryStateHOLFinite state callee) hcode (hW state _ _ hP)
+    ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩
     (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl ⟨value, rfl⟩)
   rw [hrun] at hq
   have := hW post (state.locals.update (name, value)) post.clock hq
@@ -8667,6 +8953,12 @@ theorem Hoare.ite_raise_skip {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F �
 
 /-! #### Callee contracts (generated; one leaf per callee and world guard) -/
 
+/-- `_node_rlp_begin` (AST line 10890): keeps `ArenaReady`. -/
+theorem «ak__node_rlp_begin» :
+    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_begin") := by sorry
+/-- `_node_rlp_finish` (AST line 10930): keeps `ArenaReady`. -/
+theorem «ak__node_rlp_finish» :
+    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_finish") := by sorry
 /-- `encode_withdrawal_rlp` (AST line 32114): resumes only on an in-domain record (`loadByte(wd)`, AST 32123). -/
 theorem «dm_encode_withdrawal_rlp» :
     ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp") := by sorry
@@ -8679,7 +8971,7 @@ theorem «ek_charge_gas» :
     [] (ofString "charge_gas") := by sorry
 /-- `create_finish` (AST line 18867): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_create_finish» :
-    EvmKeeps EvmInv
+    EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "create_finish") := by sorry
 /-- `depth0_prepare` (AST line 18772): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_depth0_prepare» :
@@ -8691,15 +8983,15 @@ theorem «ek_frame_halt» :
     [] (ofString "frame_halt") := by sorry
 /-- `frame_start` (AST line 18539): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_frame_start» :
-    EvmKeeps EvmInv
+    EvmKeeps (EvmAvoids (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)]))
     ["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] (ofString "frame_start") := by sorry
 /-- `get_storage_original` (AST line 13276): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_get_storage_original» :
-    EvmKeeps EvmInv
+    EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)]))
     ["heap_ptr", "scratch_ptr"] (ofString "get_storage_original") := by sorry
 /-- `is_warm_storage_key` (AST line 16559): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_is_warm_storage_key» :
-    EvmKeeps EvmInv
+    EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     [] (ofString "is_warm_storage_key") := by sorry
 /-- `refill_frame_state_gas` (AST line 15029): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_refill_frame_state_gas» :
@@ -8719,7 +9011,7 @@ theorem «ek_u256_to_be32» :
     [] (ofString "u256_to_be32") := by sorry
 /-- `warm_storage_key` (AST line 16571): EVM step: `EvmInv`, `ev`/`cur_cont` (unless written) and the frame chain kept. -/
 theorem «ek_warm_storage_key» :
-    EvmKeeps EvmInv
+    EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr"] (ofString "warm_storage_key") := by sorry
 /-- `frame_open` (AST line 18450): carries the frame built by `frame_open` (hand-written). -/
 theorem «fk_frame_open» :
@@ -8729,11 +9021,11 @@ theorem «iz_node_invalidate» :
     InvalidatesCache (ofString "node_invalidate") := by sorry
 /-- `mpt_root` (AST line 11223): trie-object step: the object `m` stays typed in the grown world. -/
 theorem «mk_mpt_root» :
-    MptKeeps (fun s => [(locN s "out", 32)]) ["heap_ptr", "scratch_ptr"]
+    MptKeeps MptObjReady (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)]) ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_root") := by sorry
 /-- `mpt_set` (AST line 10872): trie-object step: the object `m` stays typed in the grown world. -/
 theorem «mk_mpt_set» :
-    MptKeeps (fun _ => []) ["heap_ptr", "scratch_ptr"]
+    MptKeeps MptSetReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]) ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set") := by sorry
 /-- `_collapse_branch` (AST line 10674): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 3`. -/
 theorem «nf__collapse_branch» :
@@ -8747,18 +9039,18 @@ theorem «nf__delete_ext_finish» :
     (fun s Nd =>
       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl"))
     (ofString "_delete_ext_finish") := by sorry
-/-- `_insert_into_leaf` (AST line 10532): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl")`. -/
+/-- `_insert_into_leaf` (AST line 10532): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40`. -/
 theorem «nf__insert_into_leaf» :
     NodeFn ["node"]
     (fun s Nd =>
-      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))
+      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "_insert_into_leaf") := by sorry
-/-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"`. -/
+/-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"`. -/
 theorem «nf__split_extension» :
     NodeFn ["node"]
     (fun s Nd =>
       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
-      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
+      locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
     (ofString "_split_extension") := by sorry
 /-- `node_invalidate` (AST line 10061): typed nodes in, typed nodes out (MPT tier); requirement: none. -/
 theorem «nf_node_invalidate» :
@@ -8771,11 +9063,11 @@ theorem «nf_node_new_ext» :
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen"))
     (ofString "node_new_ext") := by sorry
-/-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen")`. -/
+/-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40`. -/
 theorem «nf_node_new_leaf» :
     NodeFn []
     (fun s Nd =>
-      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+      KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "node_new_leaf") := by sorry
 /-- `mpt_nibble_key` (AST line 10470): returns a fresh heap nibble array (value contract). -/
 theorem «nk_mpt_nibble_key» :
@@ -8783,6 +9075,9 @@ theorem «nk_mpt_nibble_key» :
 /-- `htab_set` (AST line 5149): resumes only on a nonzero table (`load(t + 0)` errors at `0`, AST 5156). -/
 theorem «nz_htab_set» :
     ArgNonNull "t" (ofString "htab_set") := by sorry
+/-- `_node_needs_rlp` (AST line 10989): read-only. -/
+theorem «ro__node_needs_rlp» :
+    ReadOnlyFn (ofString "_node_needs_rlp") := by sorry
 /-- `calculate_total_blob_gas` (AST line 11914): read-only. -/
 theorem «ro_calculate_total_blob_gas» :
     ReadOnlyFn (ofString "calculate_total_blob_gas") := by sorry
@@ -8937,9 +9232,9 @@ theorem «sp__decode_step» :
 /-- `_resolve_step` (AST line 10077): a completed result is null or a fresh heap node, separated from live scratch. -/
 theorem «sp__resolve_step» :
     ResolvesNode (ofString "_resolve_step") := by sorry
-/-- `account_deployable` (AST line 13358): relational world step. -/
+/-- `account_deployable` (AST line 13358): relational world step with output region. -/
 theorem «wk_account_deployable» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "account_deployable") := by sorry
@@ -8985,27 +9280,27 @@ theorem «wk_bal_remove_change» :
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bal_remove_change") := by sorry
-/-- `blake2_init` (AST line 20017): relational world step. -/
+/-- `blake2_init` (AST line 20017): relational world step with output region. -/
 theorem «wk_blake2_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "b2_iv", if globN s "b2_iv" = 0 then 0 else 64), (globN s "b2_sigma", if globN s "b2_sigma" = 0 then 0 else 80)])
     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "blake2_init") := by sorry
 /-- `block_rlp_length` (AST line 32586): relational world step. -/
 theorem «wk_block_rlp_length» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "block_rlp_length") := by sorry
-/-- `bls_precompiles_init` (AST line 30678): relational world step. -/
+/-- `bls_precompiles_init` (AST line 30678): relational world step with output region. -/
 theorem «wk_bls_precompiles_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "bls_c", if globN s "bls_c" = 0 then 0 else 7136), (globN s "bls_discount", if globN s "bls_discount" = 0 then 0 else 2048)])
     ["bls_c", "bls_discount", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bls_precompiles_init") := by sorry
-/-- `bn254_init` (AST line 22161): relational world step. -/
+/-- `bn254_init` (AST line 22161): relational world step with output region. -/
 theorem «wk_bn254_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384)])
     ["bn_expw", "bn_gamma", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bn254_init") := by sorry
@@ -9017,85 +9312,85 @@ theorem «wk_build_block_access_list_rlp» :
     NoExtra (ofString "build_block_access_list_rlp") := by sorry
 /-- `build_mpt_indexed` (AST line 11243): relational world step with output region. -/
 theorem «wk_build_mpt_indexed» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "build_mpt_indexed") := by sorry
-/-- `cache_get_root` (AST line 32325): relational world step. -/
+/-- `cache_get_root` (AST line 32325): relational world step with output region. -/
 theorem «wk_cache_get_root» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "cache_get_root") := by sorry
-/-- `calculate_blob_gas_price` (AST line 9550): relational world step. -/
+/-- `calculate_blob_gas_price` (AST line 9550): relational world step with output region. -/
 theorem «wk_calculate_blob_gas_price» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "calculate_blob_gas_price") := by sorry
-/-- `check_transaction` (AST line 32951): relational world step. -/
+/-- `check_transaction` (AST line 32951): relational world step with output region. -/
 theorem «wk_check_transaction» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "check_transaction") := by sorry
-/-- `clear_account_preserving_balance` (AST line 13541): relational world step. -/
+/-- `clear_account_preserving_balance` (AST line 13541): relational world step with output region. -/
 theorem «wk_clear_account_preserving_balance» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "clear_account_preserving_balance") := by sorry
 /-- `compute_contract_address` (AST line 19098): relational world step with output region. -/
 theorem «wk_compute_contract_address» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 20)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "compute_contract_address") := by sorry
 /-- `compute_state_root` (AST line 32341): relational world step with output region. -/
 theorem «wk_compute_state_root» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "compute_state_root") := by sorry
-/-- `create_ether` (AST line 13629): relational world step. -/
+/-- `create_ether` (AST line 13629): relational world step with output region. -/
 theorem «wk_create_ether» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "create_ether") := by sorry
-/-- `decode_host_input` (AST line 8401): relational world step and extra `RetInput`. -/
+/-- `decode_host_input` (AST line 8401): relational world step with output region and extra `RetInput`. -/
 theorem «wk_decode_host_input» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "ssz_offs", if globN s "ssz_offs" = 0 then 0 else 64)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetInput (ofString "decode_host_input") := by sorry
-/-- `decode_transaction` (AST line 11805): relational world step. -/
+/-- `decode_transaction` (AST line 11805): relational world step and extra `RetDecodedTx`. -/
 theorem «wk_decode_transaction» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps ((fun s => WorldOK s ∧ locN s "len" < 2 ^ 32)) (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "decode_transaction") := by sorry
-/-- `destroy_storage` (AST line 13480): relational world step. -/
+    RetDecodedTx (ofString "decode_transaction") := by sorry
+/-- `destroy_storage` (AST line 13480): relational world step with output region. -/
 theorem «wk_destroy_storage» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "destroy_storage") := by sorry
 /-- `encode_account` (AST line 11343): relational world step with output region. -/
 theorem «wk_encode_account» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 110)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_account") := by sorry
-/-- `encode_receipt` (AST line 32051): relational world step. -/
+/-- `encode_receipt` (AST line 32051): relational world step with output region and extra `RetReceiptBounded`. -/
 theorem «wk_encode_receipt» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "encode_receipt") := by sorry
+    RetReceiptBounded (ofString "encode_receipt") := by sorry
 /-- `encode_transaction` (AST line 12267): relational world step. -/
 theorem «wk_encode_transaction» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_transaction") := by sorry
@@ -9105,15 +9400,15 @@ theorem «wk_encode_withdrawal_rlp» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_withdrawal_rlp") := by sorry
-/-- `evm_init` (AST line 17353): relational world step. -/
+/-- `evm_init` (AST line 17353): relational world step with output region. -/
 theorem «wk_evm_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "evm_empty", if globN s "evm_empty" = 0 then 0 else 8), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "null_address", if globN s "null_address" = 0 then 0 else 24), (globN s "transfer_topic", if globN s "transfer_topic" = 0 then 0 else 32), (globN s "vm_system_address", if globN s "vm_system_address" = 0 then 0 else 24)])
     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "evm_init") := by sorry
-/-- `ext_code_of` (AST line 16953): relational world step. -/
+/-- `ext_code_of` (AST line 16953): relational world step with output region. -/
 theorem «wk_ext_code_of» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ext_code_of") := by sorry
@@ -9123,33 +9418,33 @@ theorem «wk_extract_deposit_data» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "extract_deposit_data") := by sorry
-/-- `fork_init` (AST line 32522): relational world step. -/
+/-- `fork_init` (AST line 32522): relational world step with output region. -/
 theorem «wk_fork_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "beacon_roots_address", if globN s "beacon_roots_address" = 0 then 0 else 24), (globN s "builder_deposit_address", if globN s "builder_deposit_address" = 0 then 0 else 24), (globN s "builder_exit_address", if globN s "builder_exit_address" = 0 then 0 else 24), (globN s "consolidation_request_address", if globN s "consolidation_request_address" = 0 then 0 else 24), (globN s "deposit_contract_address", if globN s "deposit_contract_address" = 0 then 0 else 24), (globN s "deposit_event_signature_hash", if globN s "deposit_event_signature_hash" = 0 then 0 else 32), (globN s "history_storage_address", if globN s "history_storage_address" = 0 then 0 else 24), (globN s "precompile_addrs", if globN s "precompile_addrs" = 0 then 0 else 360), (globN s "withdrawal_request_address", if globN s "withdrawal_request_address" = 0 then 0 else 24), (globN s "zero32", if globN s "zero32" = 0 then 0 else 32)])
     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "fork_init") := by sorry
-/-- `get_account` (AST line 13188): relational world step. -/
+/-- `get_account` (AST line 13188): relational world step with output region. -/
 theorem «wk_get_account» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "get_account") := by sorry
-/-- `get_code` (AST line 13203): relational world step. -/
+/-- `get_code` (AST line 13203): relational world step with output region. -/
 theorem «wk_get_code» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "get_code") := by sorry
 /-- `header_hash` (AST line 9460): relational world step with output region. -/
 theorem «wk_header_hash» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_hash") := by sorry
-/-- `header_init` (AST line 9657): relational world step. -/
+/-- `header_init` (AST line 9657): relational world step with output region. -/
 theorem «wk_header_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "hdr_zero8", if globN s "hdr_zero8" = 0 then 0 else 8)])
     ["hdr_zero8", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_init") := by sorry
@@ -9165,25 +9460,25 @@ theorem «wk_htab_copy» :
       (fun _ post w => htabFootprint post w)) (ofString "htab_copy") := by sorry
 /-- `htr_new_payload_request` (AST line 9053): relational world step with output region. -/
 theorem «wk_htr_new_payload_request» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "htr_new_payload_request") := by sorry
-/-- `idx_start_account` (AST line 14087): relational world step. -/
+/-- `idx_start_account` (AST line 14087): relational world step with output region. -/
 theorem «wk_idx_start_account» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "idx_start_account") := by sorry
-/-- `idx_start_storage` (AST line 14129): relational world step. -/
+/-- `idx_start_storage` (AST line 14129): relational world step with output region. -/
 theorem «wk_idx_start_storage» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "idx_start_storage") := by sorry
-/-- `increment_nonce` (AST line 13664): relational world step. -/
+/-- `increment_nonce` (AST line 13664): relational world step with output region. -/
 theorem «wk_increment_nonce» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "increment_nonce") := by sorry
@@ -9195,19 +9490,19 @@ theorem «wk_is_valid_versioned_hashes» :
     NoExtra (ofString "is_valid_versioned_hashes") := by sorry
 /-- `keccak256` (AST line 4262): relational world step with output region. -/
 theorem «wk_keccak256» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "keccak256") := by sorry
-/-- `keccak_init` (AST line 3974): relational world step. -/
+/-- `keccak_init` (AST line 3974): relational world step with output region. -/
 theorem «wk_keccak_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_rc", if globN s "keccak_rc" = 0 then 0 else 192)])
     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "keccak_init") := by sorry
 /-- `logs_bloom` (AST line 31941): relational world step with output region. -/
 theorem «wk_logs_bloom» :
-    WorldKeeps WorldOK (fun s => [(locN s "out", 256)])
+    WorldKeeps WorldOK (fun s => [(locN s "out", 256), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "logs_bloom") := by sorry
@@ -9249,9 +9544,9 @@ theorem «wk_mpt_from_witness» :
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetMptObj (ofString "mpt_from_witness") := by sorry
-/-- `mpt_init` (AST line 9781): relational world step. -/
+/-- `mpt_init` (AST line 9781): relational world step with output region. -/
 theorem «wk_mpt_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "empty_code_hash", if globN s "empty_code_hash" = 0 then 0 else 32), (globN s "empty_trie_root", if globN s "empty_trie_root" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "mpt_init") := by sorry
@@ -9267,51 +9562,51 @@ theorem «wk_msg_new» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new") := by sorry
-/-- `nodedb_build` (AST line 9937): relational world step. -/
+/-- `nodedb_build` (AST line 9937): relational world step with output region. -/
 theorem «wk_nodedb_build» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "nodedb_build") := by sorry
-/-- `payload_header` (AST line 32645): relational world step. -/
+/-- `payload_header` (AST line 32645): relational world step with output region and extra `RetHeader`. -/
 theorem «wk_payload_header» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "payload_header") := by sorry
-/-- `process_checked_system_transaction` (AST line 32928): relational world step. -/
+    RetHeader (ofString "payload_header") := by sorry
+/-- `process_checked_system_transaction` (AST line 32928): relational world step with output region. -/
 theorem «wk_process_checked_system_transaction» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_checked_system_transaction") := by sorry
-/-- `process_general_purpose_requests` (AST line 33507): relational world step. -/
+/-- `process_general_purpose_requests` (AST line 33507): relational world step with output region. -/
 theorem «wk_process_general_purpose_requests» :
-    WorldKeeps ReqsFresh (fun _ => [])
+    WorldKeeps ReqsFresh (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]
     NoExtra (ofString "process_general_purpose_requests") := by sorry
-/-- `process_message_call` (AST line 19661): relational world step with output region. -/
+/-- `process_message_call` (AST line 19661): relational world step with output region and extra `RetMessageOutput`. -/
 theorem «wk_process_message_call» :
-    WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
+    WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "process_message_call") := by sorry
-/-- `process_transaction` (AST line 33103): relational world step. -/
+    RetMessageOutput (ofString "process_message_call") := by sorry
+/-- `process_transaction` (AST line 33103): relational world step with output region and extra `RetTransactionLogs`. -/
 theorem «wk_process_transaction» :
-    WorldKeeps TxReady (fun _ => [])
+    WorldKeeps TxReadyStrong (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
-    NoExtra (ofString "process_transaction") := by sorry
-/-- `process_unchecked_system_transaction` (AST line 32851): relational world step. -/
+    RetTransactionLogs (ofString "process_transaction") := by sorry
+/-- `process_unchecked_system_transaction` (AST line 32851): relational world step with output region. -/
 theorem «wk_process_unchecked_system_transaction» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_unchecked_system_transaction") := by sorry
-/-- `process_withdrawals` (AST line 33458): relational world step. -/
+/-- `process_withdrawals` (AST line 33458): relational world step with output region. -/
 theorem «wk_process_withdrawals» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_withdrawals") := by sorry
@@ -9323,7 +9618,7 @@ theorem «wk_record_pre_state_read» :
     NoExtra (ofString "record_pre_state_read") := by sorry
 /-- `recover_sender_with_chain_id` (AST line 12542): relational world step with output region. -/
 theorem «wk_recover_sender_with_chain_id» :
-    WorldKeeps WorldOK (fun s => [(locN s "out20", 20)])
+    WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun s => [(locN s "out20", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "recover_sender_with_chain_id") := by sorry
@@ -9339,9 +9634,9 @@ theorem «wk_requests_append» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]
     ReqCountInc (ofString "requests_append") := by sorry
-/-- `ripemd160_init` (AST line 19738): relational world step. -/
+/-- `ripemd160_init` (AST line 19738): relational world step with output region. -/
 theorem «wk_ripemd160_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "rmd_tab", if globN s "rmd_tab" = 0 then 0 else 160)])
     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ripemd160_init") := by sorry
@@ -9357,9 +9652,9 @@ theorem «wk_rlp_encode_word» :
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "rlp_encode_word") := by sorry
-/-- `set_account_balance` (AST line 13647): relational world step. -/
+/-- `set_account_balance` (AST line 13647): relational world step with output region. -/
 theorem «wk_set_account_balance» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "set_account_balance") := by sorry
@@ -9369,15 +9664,15 @@ theorem «wk_sha256_init» :
     ["heap_ptr", "sha_pad", "sha_st"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "sha256_init") := by sorry
-/-- `sk_make` (AST line 12923): relational world step. -/
+/-- `sk_make` (AST line 12923): relational world step with output region. -/
 theorem «wk_sk_make» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "sk_make") := by sorry
-/-- `ssz_init` (AST line 7520): relational world step. -/
+/-- `ssz_init` (AST line 7520): relational world step with output region. -/
 theorem «wk_ssz_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "zero_hashes", if globN s "zero_hashes" = 0 then 0 else 2048)])
     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ssz_init") := by sorry
@@ -9393,12 +9688,12 @@ theorem «wk_state_fresh_tx» :
     ["heap_ptr", "journal_n", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "state_fresh_tx") := by sorry
-/-- `state_init` (AST line 12708): relational world step. -/
+/-- `state_init` (AST line 12708): relational world step and extra `RetStateInit`. -/
 theorem «wk_state_init» :
     WorldKeeps WorldOK (fun _ => [])
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "state_init") := by sorry
+    RetStateInit (ofString "state_init") := by sorry
 /-- `te_new` (AST line 32838): relational world step and extra `(RetAvoids (fun _ _ w => [(w, 200)]))`. -/
 theorem «wk_te_new» :
     WorldKeeps WorldOK (fun _ => [])
@@ -9423,27 +9718,27 @@ theorem «wk_u256_ws_init» :
     ["heap_ptr", "u256_ws"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "u256_ws_init") := by sorry
-/-- `validate_header` (AST line 9675): relational world step. -/
+/-- `validate_header` (AST line 9675): relational world step with output region. -/
 theorem «wk_validate_header» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s ∧ HeaderAt s (locN s "parent"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "validate_header") := by sorry
-/-- `validate_headers` (AST line 9476): relational world step. -/
+/-- `validate_headers` (AST line 9476): relational world step with output region and extra `RetHeaders`. -/
 theorem «wk_validate_headers» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "validate_headers") := by sorry
-/-- `ws_get_account_optional` (AST line 13009): relational world step. -/
+    RetHeaders (ofString "validate_headers") := by sorry
+/-- `ws_get_account_optional` (AST line 13009): relational world step with output region. -/
 theorem «wk_ws_get_account_optional» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_get_account_optional") := by sorry
-/-- `ws_storage_root_of` (AST line 13027): relational world step. -/
+/-- `ws_storage_root_of` (AST line 13027): relational world step with output region. -/
 theorem «wk_ws_storage_root_of» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_storage_root_of") := by sorry
@@ -9688,7 +9983,7 @@ theorem «gbody__mpt_delete_node» : GBody.«_mpt_delete_node» := by
 theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node» :=
   «gbody__mpt_delete_node» «gb__mpt_delete_node_body» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
 
-/-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptReady`, #0 GUARD). Its direct callees are
+/-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptInsertReady`, #0 GUARD). Its direct callees are
 exactly `_insert_into_leaf`, `_split_extension`, `common_prefix_length`, `mpt_fail`, `node_invalidate`, `node_new_ext`, `node_new_leaf` (`«callees__mpt_insert_node»`, checked against the AST). Hypotheses: the bound
 of each of these 7 callees, then the contract of each callee at a guard-carrying
 call site (10: `nf__insert_into_leaf`, `nf__split_extension`, `ro_common_prefix_length`, `rv_common_prefix_length`, `ro_mpt_fail`, `nf_node_invalidate`, `iz_node_invalidate`, `nf_node_new_ext`, `rt_node_new_ext`, `nf_node_new_leaf`). Nothing else is assumed. -/
@@ -9702,12 +9997,12 @@ def GBody.«_mpt_insert_node» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf») →
   (NodeFn ["node"]
     (fun s Nd =>
-      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))
+      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "_insert_into_leaf")) →
   (NodeFn ["node"]
     (fun s Nd =>
       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
-      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
+      locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
     (ofString "_split_extension")) →
   (ReadOnlyFn (ofString "common_prefix_length")) →
   (RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")) →
@@ -9724,9 +10019,9 @@ def GBody.«_mpt_insert_node» : Prop :=
     (ofString "node_new_ext")) →
   (NodeFn []
     (fun s Nd =>
-      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+      KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "node_new_leaf")) →
-  TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node»
+  TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node»
 
 /-- The direct callees of `_mpt_insert_node`, read off its AST body (revision 6). -/
 theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_insert_node))
@@ -9734,21 +10029,108 @@ theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Soft
 
 theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
 
-theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
+theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
   «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «rt_node_new_ext» «nf_node_new_leaf»
 
-/-- The body of `mpt_set` alone (AST line 10872, guard `MptObjReady`, loop-free). Its direct callees are
+/-- The body of `_node_rlp_fill` alone (AST line 11011, guard `NodeRlpReady`, #0 ALLOC; #1 CTR). Its direct callees are
+exactly `_node_needs_rlp`, `_node_rlp_begin`, `_node_rlp_finish`, `scratch_alloc`, `scratch_mark`, `scratch_release` (`«callees__node_rlp_fill»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (6: `ro__node_needs_rlp`, `ak__node_rlp_begin`, `ak__node_rlp_finish`, `ww_scratch_alloc`, `rt_scratch_alloc`, `ro_scratch_mark`). Nothing else is assumed. -/
+def GBody.«_node_rlp_fill» : Prop :=
+  (TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp») →
+  (TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_begin") K.«_node_rlp_begin») →
+  (TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_finish") K.«_node_rlp_finish») →
+  (TerminatingFunBoundedOn GuestInv (ofString "scratch_alloc") K.«scratch_alloc») →
+  (TerminatingFunBoundedOn GuestInv (ofString "scratch_mark") K.«scratch_mark») →
+  (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
+  (ReadOnlyFn (ofString "_node_needs_rlp")) →
+  (KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_begin")) →
+  (KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_finish")) →
+  (WritesWithin (fun s => [])
+    ["scratch_ptr"] (ofString "scratch_alloc")) →
+  (Returns ArenaReady (fun s post p => FreshScratch s post p (locN s "n") ∧
+      globN post "scratch_ptr" = p)
+    (ofString "scratch_alloc")) →
+  (ReadOnlyFn (ofString "scratch_mark")) →
+  TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill»
+
+/-- The direct callees of `_node_rlp_fill`, read off its AST body (revision 6). -/
+theorem «callees__node_rlp_fill» : sameNames (progCallees (fnBody Guest.Software.guestFn__node_rlp_fill))
+    ["_node_needs_rlp", "_node_rlp_begin", "_node_rlp_finish", "scratch_alloc", "scratch_mark", "scratch_release"] = true := by decide
+
+theorem «gbody__node_rlp_fill» : GBody.«_node_rlp_fill» := by sorry
+
+theorem «gb__node_rlp_fill» : TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill» :=
+  «gbody__node_rlp_fill» «fb__node_needs_rlp» «fb__node_rlp_begin» «fb__node_rlp_finish» «fb_scratch_alloc» «fb_scratch_mark» «fb_scratch_release» «ro__node_needs_rlp» «ak__node_rlp_begin» «ak__node_rlp_finish» «ww_scratch_alloc» «rt_scratch_alloc» «ro_scratch_mark»
+
+/-- The body of `node_rlp` alone (AST line 11074, guard `NodeRlpReady`, loop-free). Its direct callees are
+exactly `_node_rlp_fill`, `mpt_fail` (`«callees_node_rlp»`, checked against the AST). Hypotheses: the bound
+of each of these 2 callees, then the contract of each callee at a guard-carrying
+call site (1: `ro_mpt_fail`). Nothing else is assumed. -/
+def GBody.«node_rlp» : Prop :=
+  (TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill») →
+  (TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail») →
+  (ReadOnlyFn (ofString "mpt_fail")) →
+  TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp»
+
+/-- The direct callees of `node_rlp`, read off its AST body (revision 6). -/
+theorem «callees_node_rlp» : sameNames (progCallees (fnBody Guest.Software.guestFn_node_rlp))
+    ["_node_rlp_fill", "mpt_fail"] = true := by decide
+
+theorem «gbody_node_rlp» : GBody.«node_rlp» := by sorry
+
+theorem «gb_node_rlp» : TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp» :=
+  «gbody_node_rlp» «gb__node_rlp_fill» «fb_mpt_fail» «ro_mpt_fail»
+
+/-- The body of `node_hash` alone (AST line 11202, guard `NodeRlpReady`, loop-free). Its direct callees are
+exactly `alloc`, `keccak256`, `node_rlp` (`«callees_node_hash»`, checked against the AST). Hypotheses: the bound
+of each of these 3 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
+def GBody.«node_hash» : Prop :=
+  (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
+  (TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256») →
+  (TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp») →
+  TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash»
+
+/-- The direct callees of `node_hash`, read off its AST body (revision 6). -/
+theorem «callees_node_hash» : sameNames (progCallees (fnBody Guest.Software.guestFn_node_hash))
+    ["alloc", "keccak256", "node_rlp"] = true := by decide
+
+theorem «gbody_node_hash» : GBody.«node_hash» := by sorry
+
+theorem «gb_node_hash» : TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash» :=
+  «gbody_node_hash» «fb_alloc» «fb_keccak256» «gb_node_rlp»
+
+/-- The body of `mpt_root` alone (AST line 11223, guard `MptObjReady`, loop-free). Its direct callees are
+exactly `memcpy`, `node_hash` (`«callees_mpt_root»`, checked against the AST). Hypotheses: the bound
+of each of these 2 callees, then the contract of each callee at a guard-carrying
+call site (0: none). Nothing else is assumed. -/
+def GBody.«mpt_root» : Prop :=
+  (TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy») →
+  (TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash») →
+  TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»
+
+/-- The direct callees of `mpt_root`, read off its AST body (revision 6). -/
+theorem «callees_mpt_root» : sameNames (progCallees (fnBody Guest.Software.guestFn_mpt_root))
+    ["memcpy", "node_hash"] = true := by decide
+
+theorem «gbody_mpt_root» : GBody.«mpt_root» := by sorry
+
+theorem «gb_mpt_root» : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» :=
+  «gbody_mpt_root» «fb_memcpy» «gb_node_hash»
+
+/-- The body of `mpt_set` alone (AST line 10872, guard `MptSetReady`, loop-free). Its direct callees are
 exactly `_mpt_delete_node`, `_mpt_insert_node`, `mpt_nibble_key` (`«callees_mpt_set»`, checked against the AST). Hypotheses: the bound
 of each of these 3 callees, then the contract of each callee at a guard-carrying
 call site (2: `ww_mpt_nibble_key`, `nk_mpt_nibble_key`). Nothing else is assumed. -/
 def GBody.«mpt_set» : Prop :=
   (TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node») →
-  (TerminatingFunBoundedOn MptReady (ofString "_mpt_insert_node") K.«_mpt_insert_node») →
+  (TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node») →
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key») →
   (WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
     ["heap_ptr"] (ofString "mpt_nibble_key")) →
   (RetNibbles (ofString "mpt_nibble_key")) →
-  TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set»
+  TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»
 
 /-- The direct callees of `mpt_set`, read off its AST body (revision 6). -/
 theorem «callees_mpt_set» : sameNames (progCallees (fnBody Guest.Software.guestFn_mpt_set))
@@ -9756,7 +10138,7 @@ theorem «callees_mpt_set» : sameNames (progCallees (fnBody Guest.Software.gues
 
 theorem «gbody_mpt_set» : GBody.«mpt_set» := by sorry
 
-theorem «gb_mpt_set» : TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set» :=
+theorem «gb_mpt_set» : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set» :=
   «gbody_mpt_set» «gb__mpt_delete_node» «gb__mpt_insert_node» «fb_mpt_nibble_key» «ww_mpt_nibble_key» «nk_mpt_nibble_key»
 
 /-- The body of `build_mpt_indexed` alone (AST line 11243, guard `WorldOK`, #0 CTR). Its direct callees are
@@ -9767,8 +10149,8 @@ def GBody.«build_mpt_indexed» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark») →
   (TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release») →
   (TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new») →
-  (TerminatingFunBoundedOn GuestInv (ofString "mpt_root") K.«mpt_root») →
-  (TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set») →
+  (TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root») →
+  (TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set») →
   (TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word») →
   (ReadOnlyFn (ofString "heap_mark")) →
   (WorldKeeps WorldOK (fun _ => [])
@@ -9778,7 +10160,7 @@ def GBody.«build_mpt_indexed» : Prop :=
   (Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
     (ofString "mpt_new")) →
-  (MptKeeps (fun _ => []) ["heap_ptr", "scratch_ptr"]
+  (MptKeeps MptSetReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]) ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set")) →
   (WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])
     []
@@ -9793,7 +10175,7 @@ theorem «callees_build_mpt_indexed» : sameNames (progCallees (fnBody Guest.Sof
 theorem «gbody_build_mpt_indexed» : GBody.«build_mpt_indexed» := by sorry
 
 theorem «gb_build_mpt_indexed» : TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed» :=
-  «gbody_build_mpt_indexed» «fb_heap_mark» «fb_heap_release» «fb_mpt_new» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_word» «ro_heap_mark» «wk_mpt_new» «rt_mpt_new» «mk_mpt_set» «wk_rlp_encode_word»
+  «gbody_build_mpt_indexed» «fb_heap_mark» «fb_heap_release» «fb_mpt_new» «gb_mpt_root» «gb_mpt_set» «fb_rlp_encode_word» «ro_heap_mark» «wk_mpt_new» «rt_mpt_new» «mk_mpt_set» «wk_rlp_encode_word»
 
 /-- The body of `decode_witness_to_mpt` alone (AST line 10348, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `_decode_witness_node`, `alloc`, `memcpy`, `memeq`, `mpt_fail`, `nodedb_lookup` (`«callees_decode_witness_to_mpt»`, checked against the AST). Hypotheses: the bound
@@ -9897,8 +10279,8 @@ def GBody.«compute_state_root» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set») →
   (TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy») →
   (TerminatingFunBoundedOn ArenaReady (ofString "mpt_from_witness") K.«mpt_from_witness») →
-  (TerminatingFunBoundedOn GuestInv (ofString "mpt_root") K.«mpt_root») →
-  (TerminatingFunBoundedOn MptObjReady (ofString "mpt_set") K.«mpt_set») →
+  (TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root») →
+  (TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set») →
   (TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_bytes") K.«rlp_encode_bytes») →
   (TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero») →
   (TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min») →
@@ -9910,11 +10292,11 @@ def GBody.«compute_state_root» : Prop :=
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "cache_get_root")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 110)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_account")) →
@@ -9942,9 +10324,9 @@ def GBody.«compute_state_root» : Prop :=
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetMptObj (ofString "mpt_from_witness")) →
-  (MptKeeps (fun s => [(locN s "out", 32)]) ["heap_ptr", "scratch_ptr"]
+  (MptKeeps MptObjReady (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)]) ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_root")) →
-  (MptKeeps (fun _ => []) ["heap_ptr", "scratch_ptr"]
+  (MptKeeps MptSetReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]) ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set")) →
   (WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n" + 9)])
     []
@@ -9957,11 +10339,11 @@ def GBody.«compute_state_root» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "u256_to_be_min")) →
   (RetLe (fun _ => 32) (ofString "u256_to_be_min")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_get_account_optional")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_storage_root_of")) →
@@ -9974,7 +10356,7 @@ theorem «callees_compute_state_root» : sameNames (progCallees (fnBody Guest.So
 theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by sorry
 
 theorem «gb_compute_state_root» : TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root» :=
-  «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «fb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «wk_alloc» «rt_alloc» «wk_cache_get_root» «wk_encode_account» «wk_htab_copy» «rt_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_memcpy» «wk_mpt_from_witness» «mk_mpt_root» «mk_mpt_set» «wk_rlp_encode_bytes» «rv_rlp_encode_bytes» «ro_u256_is_zero» «wk_u256_to_be_min» «rv_u256_to_be_min» «wk_ws_get_account_optional» «wk_ws_storage_root_of»
+  «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «gb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «wk_alloc» «rt_alloc» «wk_cache_get_root» «wk_encode_account» «wk_htab_copy» «rt_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_memcpy» «wk_mpt_from_witness» «mk_mpt_root» «mk_mpt_set» «wk_rlp_encode_bytes» «rv_rlp_encode_bytes» «ro_u256_is_zero» «wk_u256_to_be_min» «rv_u256_to_be_min» «wk_ws_get_account_optional» «wk_ws_storage_root_of»
 
 /-- The body of `ws_storage_trie` alone (AST line 13042, guard `WorldOK`, loop-free). Its direct callees are
 exactly `decode_witness_to_mpt`, `htab_get`, `htab_set` (`«callees_ws_storage_trie»`, checked against the AST). Hypotheses: the bound
@@ -10031,7 +10413,7 @@ def GBody.«ws_get_storage» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "ws_storage_root_of") K.«ws_storage_root_of») →
   (TerminatingFunBoundedOn WorldOK (ofString "ws_storage_trie") K.«ws_storage_trie») →
   (ReadOnlyFn (ofString "memeq")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ws_storage_root_of")) →
@@ -10052,7 +10434,7 @@ theorem «gbody_ws_get_storage» : GBody.«ws_get_storage» := by
   refine ⟨_, _, _, «lookup_ws_get_storage», ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_ws_get_storage, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.decCall_on hsr _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wsr) _ _)
+    (TerminatingProgBoundedOn.decCall_on hsr _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn_buffers wsr (by intro F s i hi; change i ∈ [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200), bufferRegion s ("mpt_nib_scratch", 64)] at hi; simp only [List.mem_cons, List.not_mem_nil, or_false] at hi; rcases hi with rfl | rfl | rfl <;> exact ⟨_, by decide, by decide, rfl⟩)) _ _)
       (TerminatingProgBoundedOn.decCall_on hme _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (ReadOnlyFn.resumeOn (LocalsOnly.of_localsFree localsFree_worldOK) worldOK_guestInv hro _ (by simp) _)
         (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))
         (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_return_skip _ _)
@@ -10188,16 +10570,16 @@ def GBody.«update_builder_from_tx» : Prop :=
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bal_remove_change")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "get_code")) →
   (ReadOnlyFn (ofString "htab_item")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "idx_start_account")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "idx_start_storage")) →
@@ -10308,7 +10690,7 @@ def GBody.«finish_child» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "set_retdata") K.«set_retdata») →
   (TerminatingFunBoundedOn GuestInv (ofString "stack_push") K.«stack_push») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_restore") K.«state_restore») →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "create_finish")) →
   (EvmKeeps EvmInv
     [] (ofString "frame_halt")) →
@@ -10343,7 +10725,7 @@ def GBody.«get_storage» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "record_pre_state_read")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "sk_make")) →
@@ -10374,13 +10756,13 @@ def GBody.«op_sload» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "warm_storage_key") K.«warm_storage_key») →
   (EvmKeeps EvmInv
     [] (ofString "charge_gas")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     [] (ofString "is_warm_storage_key")) →
   (EvmKeeps EvmInv
     [] (ofString "stack_pop")) →
   (EvmKeeps (EvmAvoids (fun s => [(locN s "out", 32)]))
     [] (ofString "u256_to_be32")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr"] (ofString "warm_storage_key")) →
   TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload»
 
@@ -10464,9 +10846,9 @@ def GBody.«op_sstore» : Prop :=
   (EvmKeeps EvmInv
     [] (ofString "charge_gas")) →
   (ReadOnlyFn (ofString "check_gas")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)]))
     ["heap_ptr", "scratch_ptr"] (ofString "get_storage_original")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     [] (ofString "is_warm_storage_key")) →
   (ReadOnlyFn (ofString "max")) →
   (ReadOnlyFn (ofString "require_not_static")) →
@@ -10474,7 +10856,7 @@ def GBody.«op_sstore» : Prop :=
     [] (ofString "stack_pop")) →
   (EvmKeeps (EvmAvoids (fun s => [(locN s "out", 32)]))
     [] (ofString "u256_to_be32")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr"] (ofString "warm_storage_key")) →
   TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore»
 
@@ -10632,7 +11014,7 @@ def GBody.«process_message» : Prop :=
   (EvmKeeps EvmMsgReady
     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare")) →
   (KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")) →
-  (EvmKeeps EvmInv
+  (EvmKeeps (EvmAvoids (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)]))
     ["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] (ofString "frame_start")) →
   (ReadOnlyFn (ofString "state_snapshot")) →
   TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message»
@@ -10660,11 +11042,11 @@ def GBody.«process_create_message» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "refill_frame_state_gas") K.«refill_frame_state_gas») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_restore") K.«state_restore») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_snapshot") K.«state_snapshot») →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "destroy_storage")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "increment_nonce")) →
@@ -10695,7 +11077,7 @@ def GBody.«process_message_call» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn MsgReady (ofString "process_create_message") K.«process_create_message») →
   (TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message») →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "account_deployable")) →
@@ -10737,7 +11119,7 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "scratch_release") K.«scratch_release») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
   (TerminatingFunBoundedOn GuestInv (ofString "te_new") K.«te_new») →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ext_code_of")) →
@@ -10749,10 +11131,10 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new")) →
-  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
+  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "process_message_call")) →
+    RetMessageOutput (ofString "process_message_call")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "journal_n", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
@@ -10788,7 +11170,7 @@ def GBody.«process_checked_system_transaction» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ext_code_of")) →
@@ -10810,12 +11192,23 @@ theorem «lookup_process_checked_system_transaction» : originalRuntimeCode.look
 /-- PROVED by concrete-body composition (no longer a primitive). -/
 theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_system_transaction» := by
   intro hal hext hpu hsf wal wext wsf
+  have hwext : KeepsOn WorldOK WorldOK (ofString "ext_code_of") := by
+    apply wext.keepsOn_buffer_parts
+    intro F s i hi
+    change i ∈ [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200),
+      bufferRegion s ("mpt_nib_scratch", 64), bufferRegion s ("sk_buf", 52)] at hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl
+    · exact ⟨("keccak_pad", 136), by decide, by decide, 136, le_rfl, rfl⟩
+    · exact ⟨("keccak_st", 200), by decide, by decide, 200, le_rfl, rfl⟩
+    · exact ⟨("mpt_nib_scratch", 64), by decide, by decide, 64, le_rfl, rfl⟩
+    · exact ⟨("sk_buf", 64), by decide, by decide, 52, by decide, rfl⟩
   refine ⟨_, _, _, «lookup_process_checked_system_transaction», ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_process_checked_system_transaction, InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural, InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
     (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.call_on hsf _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _))
       (Hoare.call_keeps localsFree_worldOK (WorldKeeps.keepsOn wsf) _)
-      (TerminatingProgBoundedOn.decCall_on hext _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wext) _ _)
+      (TerminatingProgBoundedOn.decCall_on hext _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK hwext _ _)
         (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
         (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_raise_skip _ _ _)
           (TerminatingProgBoundedOn.decCall_on hal _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wal) _ _)
@@ -10830,7 +11223,7 @@ theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_s
 theorem «gb_process_checked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_checked_system_transaction") K.«process_checked_system_transaction» :=
   «gbody_process_checked_system_transaction» «fb_alloc» «fb_ext_code_of» «gb_process_unchecked_system_transaction» «fb_state_fresh_tx» «wk_alloc» «wk_ext_code_of» «wk_state_fresh_tx»
 
-/-- The body of `process_general_purpose_requests` alone (AST line 33507, guard `ReqsFresh`, #0 CTR; #1 CTR). Its direct callees are
+/-- The body of `process_general_purpose_requests` alone (AST line 33507, guard `ReqsFresh`, #0 WALK; #1 WALK). Its direct callees are
 exactly `alloc`, `extract_deposit_data`, `memcpy`, `memeq`, `process_checked_system_transaction`, `requests_append` (`«callees_process_general_purpose_requests»`, checked against the AST). Hypotheses: the bound
 of each of these 6 callees, then the contract of each callee at a guard-carrying
 call site (7: `wk_alloc`, `rt_alloc`, `wk_extract_deposit_data`, `wk_memcpy`, `ro_memeq`, `wk_process_checked_system_transaction`, `wk_requests_append`). Nothing else is assumed. -/
@@ -10856,7 +11249,7 @@ def GBody.«process_general_purpose_requests» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memcpy")) →
   (ReadOnlyFn (ofString "memeq")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_checked_system_transaction")) →
@@ -10875,7 +11268,7 @@ theorem «gbody_process_general_purpose_requests» : GBody.«process_general_pur
 theorem «gb_process_general_purpose_requests» : TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests» :=
   «gbody_process_general_purpose_requests» «fb_alloc» «fb_extract_deposit_data» «fb_memcpy» «fb_memeq» «gb_process_checked_system_transaction» «fb_requests_append» «wk_alloc» «rt_alloc» «wk_extract_deposit_data» «wk_memcpy» «ro_memeq» «wk_process_checked_system_transaction» «wk_requests_append»
 
-/-- The body of `process_transaction` alone (AST line 33103, guard `TxReady`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR). Its direct callees are
+/-- The body of `process_transaction` alone (AST line 33103, guard `TxReadyStrong`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR; #5 CTR; #6 CTR; #7 CTR; #8 CTR). Its direct callees are
 exactly `alloc`, `calculate_blob_gas_price`, `calculate_total_blob_gas`, `check_transaction`, `clear_account_preserving_balance`, `compute_contract_address`, `create_ether`, `encode_receipt`, `encode_transaction`, `fee_mul`, `frame_mem_release`, `get_account`, `htab_item`, `htab_new`, `htab_set`, `incorporate_tx_into_block`, `increment_nonce`, `keccak256`, `lst_new`, `lst_push`, `max`, `memcpy`, `min`, `msg_new`, `process_message_call`, `recover_sender_with_chain_id`, `scratch_release`, `set_account_balance`, `state_fresh_tx`, `te_new`, `tx_chain_id`, `tx_has_access_list`, `tx_is_blob`, `tx_is_setcode`, `u256_sub`, `udiv_small5`, `validate_transaction` (`«callees_process_transaction»`, checked against the AST). Hypotheses: the bound
 of each of these 37 callees, then the contract of each callee at a guard-carrying
 call site (41: `wk_alloc`, `rt_alloc`, `wk_calculate_blob_gas_price`, `ro_calculate_total_blob_gas`, `wk_check_transaction`, `wk_clear_account_preserving_balance`, `wk_compute_contract_address`, `wk_create_ether`, `wk_encode_receipt`, `wk_encode_transaction`, `ro_fee_mul`, `wk_get_account`, `ro_htab_item`, `htab_new_spec`, `htab_set_spec`, `wk_increment_nonce`, `wk_keccak256`, `wk_lst_new`, `rt_lst_new`, `wk_lst_push`, `ro_max`, `wk_memcpy`, `dm_memcpy`, `ro_min`, `rv_min`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_recover_sender_with_chain_id`, `wk_set_account_balance`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new`, `ro_tx_chain_id`, `ro_tx_has_access_list`, `ro_tx_is_blob`, `ro_tx_is_setcode`, `ro_u256_sub`, `ro_udiv_small5`, `ro_validate_transaction`, `rv_validate_transaction`). Nothing else is assumed. -/
@@ -10923,48 +11316,48 @@ def GBody.«process_transaction» : Prop :=
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "calculate_blob_gas_price")) →
   (ReadOnlyFn (ofString "calculate_total_blob_gas")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "check_transaction")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "clear_account_preserving_balance")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 20)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "compute_contract_address")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "create_ether")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "encode_receipt")) →
-  (WorldKeeps WorldOK (fun _ => [])
+    RetReceiptBounded (ofString "encode_receipt")) →
+  (WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_transaction")) →
   (ReadOnlyFn (ofString "fee_mul")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "get_account")) →
   (ReadOnlyFn (ofString "htab_item")) →
   (type_of% @htab_new_spec) →
   (type_of% @htab_set_spec) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "increment_nonce")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "keccak256")) →
@@ -10998,15 +11391,15 @@ def GBody.«process_transaction» : Prop :=
   (Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
       ∀ k, k < 22 → memW post (m + 8 * k) = 0)
     (ofString "msg_new")) →
-  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])
+  (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "process_message_call")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out20", 20)])
+    RetMessageOutput (ofString "process_message_call")) →
+  (WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun s => [(locN s "out20", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "recover_sender_with_chain_id")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "set_account_balance")) →
@@ -11029,7 +11422,7 @@ def GBody.«process_transaction» : Prop :=
   (ReadOnlyFn (ofString "udiv_small5")) →
   (ReadOnlyFn (ofString "validate_transaction")) →
   (RetIntrinsic (ofString "validate_transaction")) →
-  TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction»
+  TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction»
 
 /-- The direct callees of `process_transaction`, read off its AST body (revision 6). -/
 theorem «callees_process_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_transaction))
@@ -11037,7 +11430,7 @@ theorem «callees_process_transaction» : sameNames (progCallees (fnBody Guest.S
 
 theorem «gbody_process_transaction» : GBody.«process_transaction» := by sorry
 
-theorem «gb_process_transaction» : TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction» :=
+theorem «gb_process_transaction» : TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction» :=
   «gbody_process_transaction» «fb_alloc» «fb_calculate_blob_gas_price» «fb_calculate_total_blob_gas» «fb_check_transaction» «fb_clear_account_preserving_balance» «fb_compute_contract_address» «fb_create_ether» «fb_encode_receipt» «fb_encode_transaction» «fb_fee_mul» «fb_frame_mem_release» «fb_get_account» «fb_htab_item» «fb_htab_new» «fb_htab_set» «gb_incorporate_tx_into_block» «fb_increment_nonce» «fb_keccak256» «fb_lst_new» «fb_lst_push» «fb_max» «fb_memcpy» «fb_min» «fb_msg_new» «gb_process_message_call» «fb_recover_sender_with_chain_id» «fb_scratch_release» «fb_set_account_balance» «fb_state_fresh_tx» «fb_te_new» «fb_tx_chain_id» «fb_tx_has_access_list» «fb_tx_is_blob» «fb_tx_is_setcode» «fb_u256_sub» «fb_udiv_small5» «fb_validate_transaction» «wk_alloc» «rt_alloc» «wk_calculate_blob_gas_price» «ro_calculate_total_blob_gas» «wk_check_transaction» «wk_clear_account_preserving_balance» «wk_compute_contract_address» «wk_create_ether» «wk_encode_receipt» «wk_encode_transaction» «ro_fee_mul» «wk_get_account» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_increment_nonce» «wk_keccak256» «wk_lst_new» «rt_lst_new» «wk_lst_push» «ro_max» «wk_memcpy» «dm_memcpy» «ro_min» «rv_min» «wk_msg_new» «rt_msg_new» «wk_process_message_call» «wk_recover_sender_with_chain_id» «wk_set_account_balance» «wk_state_fresh_tx» «wk_te_new» «rt_te_new» «ro_tx_chain_id» «ro_tx_has_access_list» «ro_tx_is_blob» «ro_tx_is_setcode» «ro_u256_sub» «ro_udiv_small5» «ro_validate_transaction» «rv_validate_transaction»
 
 /-- The body of `process_withdrawals` alone (AST line 33458, guard `WorldOK`, #0 CTR). Its direct callees are
@@ -11049,7 +11442,7 @@ def GBody.«process_withdrawals» : Prop :=
   (TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
   (TerminatingFunBoundedOn GuestInv (ofString "u256_mul") K.«u256_mul») →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "create_ether")) →
@@ -11069,7 +11462,7 @@ theorem «gbody_process_withdrawals» : GBody.«process_withdrawals» := by sorr
 theorem «gb_process_withdrawals» : TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals» :=
   «gbody_process_withdrawals» «fb_create_ether» «gb_incorporate_tx_into_block» «fb_state_fresh_tx» «fb_u256_mul» «wk_create_ether» «wk_state_fresh_tx» «ro_u256_mul»
 
-/-- The body of `execute_block` alone (AST line 33580, guard `BlockReady`, #0 CTR). Its direct callees are
+/-- The body of `execute_block` alone (AST line 33580, guard `BlockReadyStrong`, #0 WALK). Its direct callees are
 exactly `alloc`, `bal_init`, `build_block_access_list_rlp`, `build_mpt_indexed`, `compute_requests_hash`, `compute_state_root`, `decode_transaction`, `keccak256`, `logs_bloom`, `lst_new`, `max`, `memeq`, `memzero`, `process_general_purpose_requests`, `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`, `state_fresh_tx`, `track_ancestor_access`, `validate_block_access_list_gas_limit` (`«callees_execute_block»`, checked against the AST). Hypotheses: the bound
 of each of these 20 callees, then the contract of each callee at a guard-carrying
 call site (20: `wk_alloc`, `rt_alloc`, `wk_bal_init`, `wk_build_block_access_list_rlp`, `wk_build_mpt_indexed`, `wk_compute_state_root`, `wk_decode_transaction`, `wk_logs_bloom`, `wk_lst_new`, `rt_lst_new`, `wk_memzero`, `ww_memzero`, `zv_memzero`, `wk_process_general_purpose_requests`, `wk_process_transaction`, `wk_process_unchecked_system_transaction`, `wk_process_withdrawals`, `wk_state_fresh_tx`, `wk_track_ancestor_access`, `ro_validate_block_access_list_gas_limit`). Nothing else is assumed. -/
@@ -11088,7 +11481,7 @@ def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests») →
-  (TerminatingFunBoundedOn TxReady (ofString "process_transaction") K.«process_transaction») →
+  (TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction») →
   (TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
   (TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
@@ -11108,19 +11501,19 @@ def GBody.«execute_block» : Prop :=
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "build_block_access_list_rlp")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "build_mpt_indexed")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "compute_state_root")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps ((fun s => WorldOK s ∧ locN s "len" < 2 ^ 32)) (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "decode_transaction")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 256)])
+    RetDecodedTx (ofString "decode_transaction")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 256), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "logs_bloom")) →
@@ -11142,19 +11535,19 @@ def GBody.«execute_block» : Prop :=
   (WritesWithin (fun s => [(locN s "dst", locN s "n")])
     [] (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
-  (WorldKeeps ReqsFresh (fun _ => [])
+  (WorldKeeps ReqsFresh (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]
     NoExtra (ofString "process_general_purpose_requests")) →
-  (WorldKeeps TxReady (fun _ => [])
+  (WorldKeeps TxReadyStrong (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
-    NoExtra (ofString "process_transaction")) →
-  (WorldKeeps WorldOK (fun _ => [])
+    RetTransactionLogs (ofString "process_transaction")) →
+  (WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_unchecked_system_transaction")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
     ["heap_ptr", "journal_n", "scratch_ptr", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "process_withdrawals")) →
@@ -11167,7 +11560,7 @@ def GBody.«execute_block» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "track_ancestor_access")) →
   (ReadOnlyFn (ofString "validate_block_access_list_gas_limit")) →
-  TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block»
+  TerminatingFunBoundedOn BlockReadyStrong (ofString "execute_block") K.«execute_block»
 
 /-- The direct callees of `execute_block`, read off its AST body (revision 6). -/
 theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Software.guestFn_execute_block))
@@ -11175,10 +11568,10 @@ theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Softwar
 
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
-theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block» :=
+theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReadyStrong (ofString "execute_block") K.«execute_block» :=
   «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «wk_alloc» «rt_alloc» «wk_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «wk_decode_transaction» «wk_logs_bloom» «wk_lst_new» «rt_lst_new» «wk_memzero» «ww_memzero» «zv_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «wk_state_fresh_tx» «wk_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
 
-/-- The body of `payload_header` alone (AST line 32645, guard `WorldOK`, #0 CTR). Its direct callees are
+/-- The body of `payload_header` alone (AST line 32645, guard `InputReady`, #0 CTR). Its direct callees are
 exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
 of each of these 8 callees, then the contract of each callee at a guard-carrying
 call site (9: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_indexed`, `wk_encode_withdrawal_rlp`, `dm_encode_withdrawal_rlp`, `wk_keccak256`, `wk_memzero`, `zv_memzero`). Nothing else is assumed. -/
@@ -11197,11 +11590,11 @@ def GBody.«payload_header» : Prop :=
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "block_rlp_length")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "build_mpt_indexed")) →
@@ -11210,7 +11603,7 @@ def GBody.«payload_header» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "encode_withdrawal_rlp")) →
   (ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "keccak256")) →
@@ -11219,7 +11612,7 @@ def GBody.«payload_header» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
-  TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header»
+  TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»
 
 /-- The direct callees of `payload_header`, read off its AST body (revision 6). -/
 theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Software.guestFn_payload_header))
@@ -11227,7 +11620,7 @@ theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Softwa
 
 theorem «gbody_payload_header» : GBody.«payload_header» := by sorry
 
-theorem «gb_payload_header» : TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header» :=
+theorem «gb_payload_header» : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header» :=
   «gbody_payload_header» «fb_alloc» «fb_block_rlp_length» «gb_build_mpt_indexed» «fb_compute_requests_hash» «fb_encode_execution_requests» «fb_encode_withdrawal_rlp» «fb_keccak256» «fb_memzero» «wk_alloc» «rt_alloc» «wk_block_rlp_length» «wk_build_mpt_indexed» «wk_encode_withdrawal_rlp» «dm_encode_withdrawal_rlp» «wk_keccak256» «wk_memzero» «zv_memzero»
 
 /-- The body of `state_init` alone (AST line 12708, guard `WorldOK`, loop-free). Its direct callees are
@@ -11255,20 +11648,20 @@ theorem «gbody_state_init» : GBody.«state_init» := by sorry
 theorem «gb_state_init» : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init» :=
   «gbody_state_init» «fb_alloc» «gb_decode_witness_to_mpt» «fb_htab_new» «wk_alloc» «rt_alloc»
 
-/-- The body of `run_attempt` alone (AST line 33734, guard `InputReady`, #0 CTR). Its direct callees are
+/-- The body of `run_attempt` alone (AST line 33734, guard `InputReady`, #0 WALK). Its direct callees are
 exactly `alloc`, `check_gas_limit`, `execute_block`, `header_hash`, `is_valid_versioned_hashes`, `memeq`, `memzero`, `nodedb_build`, `payload_header`, `state_init`, `validate_header`, `validate_headers` (`«callees_run_attempt»`, checked against the AST). Hypotheses: the bound
 of each of these 12 callees, then the contract of each callee at a guard-carrying
 call site (13: `wk_alloc`, `rt_alloc`, `ro_check_gas_limit`, `wk_header_hash`, `wk_is_valid_versioned_hashes`, `ro_memeq`, `wk_memzero`, `zv_memzero`, `wk_nodedb_build`, `wk_payload_header`, `wk_state_init`, `wk_validate_header`, `wk_validate_headers`). Nothing else is assumed. -/
 def GBody.«run_attempt» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit») →
-  (TerminatingFunBoundedOn BlockReady (ofString "execute_block") K.«execute_block») →
+  (TerminatingFunBoundedOn BlockReadyStrong (ofString "execute_block") K.«execute_block») →
   (TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash») →
   (TerminatingFunBoundedOn GuestInv (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes») →
   (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build») →
-  (TerminatingFunBoundedOn WorldOK (ofString "payload_header") K.«payload_header») →
+  (TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header») →
   (TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header») →
   (TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers») →
@@ -11279,7 +11672,7 @@ def GBody.«run_attempt» : Prop :=
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
   (ReadOnlyFn (ofString "check_gas_limit")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_hash")) →
@@ -11293,26 +11686,26 @@ def GBody.«run_attempt» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "nodedb_build")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "payload_header")) →
+    RetHeader (ofString "payload_header")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "state_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+    RetStateInit (ofString "state_init")) →
+  (WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s ∧ HeaderAt s (locN s "parent"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "validate_header")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "validate_headers")) →
+    RetHeaders (ofString "validate_headers")) →
   TerminatingFunBoundedOn InputReady (ofString "run_attempt") K.«run_attempt»
 
 /-- The direct callees of `run_attempt`, read off its AST body (revision 6). -/
@@ -11644,39 +12037,39 @@ def GBody.«main» : Prop :=
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
   (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
     (ofString "alloc")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "b2_iv", if globN s "b2_iv" = 0 then 0 else 64), (globN s "b2_sigma", if globN s "b2_sigma" = 0 then 0 else 80)])
     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "blake2_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "bls_c", if globN s "bls_c" = 0 then 0 else 7136), (globN s "bls_discount", if globN s "bls_discount" = 0 then 0 else 2048)])
     ["bls_c", "bls_discount", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bls_precompiles_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384)])
     ["bn_expw", "bn_gamma", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "bn254_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "ssz_offs", if globN s "ssz_offs" = 0 then 0 else 64)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetInput (ofString "decode_host_input")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "evm_empty", if globN s "evm_empty" = 0 then 0 else 8), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "null_address", if globN s "null_address" = 0 then 0 else 24), (globN s "transfer_topic", if globN s "transfer_topic" = 0 then 0 else 32), (globN s "vm_system_address", if globN s "vm_system_address" = 0 then 0 else 24)])
     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "evm_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "beacon_roots_address", if globN s "beacon_roots_address" = 0 then 0 else 24), (globN s "builder_deposit_address", if globN s "builder_deposit_address" = 0 then 0 else 24), (globN s "builder_exit_address", if globN s "builder_exit_address" = 0 then 0 else 24), (globN s "consolidation_request_address", if globN s "consolidation_request_address" = 0 then 0 else 24), (globN s "deposit_contract_address", if globN s "deposit_contract_address" = 0 then 0 else 24), (globN s "deposit_event_signature_hash", if globN s "deposit_event_signature_hash" = 0 then 0 else 32), (globN s "history_storage_address", if globN s "history_storage_address" = 0 then 0 else 24), (globN s "precompile_addrs", if globN s "precompile_addrs" = 0 then 0 else 360), (globN s "withdrawal_request_address", if globN s "withdrawal_request_address" = 0 then 0 else 24), (globN s "zero32", if globN s "zero32" = 0 then 0 else 32)])
     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "fork_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "hdr_zero8", if globN s "hdr_zero8" = 0 then 0 else 8)])
     ["hdr_zero8", "heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "header_init")) →
-  (WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "htr_new_payload_request")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_rc", if globN s "keccak_rc" = 0 then 0 else 192)])
     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "keccak_init")) →
@@ -11686,11 +12079,11 @@ def GBody.«main» : Prop :=
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "memzero")) →
   (ZeroFills (ofString "memzero")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "empty_code_hash", if globN s "empty_code_hash" = 0 then 0 else 32), (globN s "empty_trie_root", if globN s "empty_trie_root" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "mpt_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "rmd_tab", if globN s "rmd_tab" = 0 then 0 else 160)])
     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ripemd160_init")) →
@@ -11699,7 +12092,7 @@ def GBody.«main» : Prop :=
     ["heap_ptr", "sha_pad", "sha_st"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "sha256_init")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldKeeps WorldOK (fun s => [(globN s "zero_hashes", if globN s "zero_hashes" = 0 then 0 else 2048)])
     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "ssz_init")) →
@@ -11760,11 +12153,24 @@ structure Primitives : Prop where
   «fb__insert_into_leaf» : TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf»
   «fb__split_extension» : TerminatingFunBoundedOn GuestInv (ofString "_split_extension") K.«_split_extension»
   «fb_node_new_leaf» : TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf»
-  «nf__insert_into_leaf» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))     (ofString "_insert_into_leaf")
-  «nf__split_extension» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧       locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")     (ofString "_split_extension")
+  «nf__insert_into_leaf» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40)     (ofString "_insert_into_leaf")
+  «nf__split_extension» : NodeFn ["node"]     (fun s Nd =>       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧       locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")     (ofString "_split_extension")
   «nf_node_new_ext» : NodeFn ["child"]     (fun s Nd =>       KeyIn s Nd (locN s "nib") (locN s "nlen"))     (ofString "node_new_ext")
-  «nf_node_new_leaf» : NodeFn []     (fun s Nd =>       KeyIn s Nd (locN s "nib") (locN s "nlen"))     (ofString "node_new_leaf")
+  «nf_node_new_leaf» : NodeFn []     (fun s Nd =>       KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40)     (ofString "node_new_leaf")
   «gbody__mpt_insert_node» : GBody.«_mpt_insert_node»
+  «fb__node_needs_rlp» : TerminatingFunBoundedOn GuestInv (ofString "_node_needs_rlp") K.«_node_needs_rlp»
+  «fb__node_rlp_begin» : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_begin") K.«_node_rlp_begin»
+  «fb__node_rlp_finish» : TerminatingFunBoundedOn GuestInv (ofString "_node_rlp_finish") K.«_node_rlp_finish»
+  «ro__node_needs_rlp» : ReadOnlyFn (ofString "_node_needs_rlp")
+  «ak__node_rlp_begin» : KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_begin")
+  «ak__node_rlp_finish» : KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_finish")
+  «gbody__node_rlp_fill» : GBody.«_node_rlp_fill»
+  «gbody_node_rlp» : GBody.«node_rlp»
+  «fb_alloc» : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»
+  «fb_keccak256» : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»
+  «gbody_node_hash» : GBody.«node_hash»
+  «fb_memcpy» : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»
+  «gbody_mpt_root» : GBody.«mpt_root»
   «fb_mpt_nibble_key» : TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key»
   «ww_mpt_nibble_key» : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])     ["heap_ptr"] (ofString "mpt_nibble_key")
   «nk_mpt_nibble_key» : RetNibbles (ofString "mpt_nibble_key")
@@ -11772,16 +12178,13 @@ structure Primitives : Prop where
   «fb_heap_mark» : TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark»
   «fb_heap_release» : TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release»
   «fb_mpt_new» : TerminatingFunBoundedOn GuestInv (ofString "mpt_new") K.«mpt_new»
-  «fb_mpt_root» : TerminatingFunBoundedOn GuestInv (ofString "mpt_root") K.«mpt_root»
   «fb_rlp_encode_word» : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_word") K.«rlp_encode_word»
   «ro_heap_mark» : ReadOnlyFn (ofString "heap_mark")
   «wk_mpt_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new")
   «rt_mpt_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")     (ofString "mpt_new")
-  «mk_mpt_set» : MptKeeps (fun _ => []) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set")
+  «mk_mpt_set» : MptKeeps MptSetReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)]) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_set")
   «wk_rlp_encode_word» : WorldKeeps WorldOK (fun s => [(locN s "dst", 9)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "rlp_encode_word")
   «gbody_build_mpt_indexed» : GBody.«build_mpt_indexed»
-  «fb_alloc» : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»
-  «fb_memcpy» : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»
   «fb_nodedb_lookup» : TerminatingFunBoundedOn GuestInv (ofString "nodedb_lookup") K.«nodedb_lookup»
   «ro_nodedb_lookup» : ReadOnlyFn (ofString "nodedb_lookup")
   «fb_cache_get_root» : TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root»
@@ -11799,8 +12202,8 @@ structure Primitives : Prop where
   «fb_ws_storage_root_of» : TerminatingFunBoundedOn GuestInv (ofString "ws_storage_root_of") K.«ws_storage_root_of»
   «wk_alloc» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")
   «rt_alloc» : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))     (ofString "alloc")
-  «wk_cache_get_root» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "cache_get_root")
-  «wk_encode_account» : WorldKeeps WorldOK (fun s => [(locN s "out", 110)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_account")
+  «wk_cache_get_root» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "cache_get_root")
+  «wk_encode_account» : WorldKeeps WorldOK (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_account")
   «wk_htab_copy» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧         ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)       (fun _ post w => htabFootprint post w)) (ofString "htab_copy")
   «rt_htab_copy» : Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧       (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →         HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))     (ofString "htab_copy")
   «ro_htab_get» : ReadOnlyFn (ofString "htab_get")
@@ -11810,16 +12213,15 @@ structure Primitives : Prop where
   «htab_set_spec» : type_of% @htab_set_spec
   «wk_memcpy» : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "memcpy")
   «wk_mpt_from_witness» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetMptObj (ofString "mpt_from_witness")
-  «mk_mpt_root» : MptKeeps (fun s => [(locN s "out", 32)]) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_root")
+  «mk_mpt_root» : MptKeeps MptObjReady (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)]) ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] (ofString "mpt_root")
   «wk_rlp_encode_bytes» : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n" + 9)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "rlp_encode_bytes")
   «rv_rlp_encode_bytes» : RetLe (fun s => locN s "n" + 9) (ofString "rlp_encode_bytes")
   «ro_u256_is_zero» : ReadOnlyFn (ofString "u256_is_zero")
   «wk_u256_to_be_min» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "u256_to_be_min")
   «rv_u256_to_be_min» : RetLe (fun _ => 32) (ofString "u256_to_be_min")
-  «wk_ws_get_account_optional» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_get_account_optional")
-  «wk_ws_storage_root_of» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_storage_root_of")
+  «wk_ws_get_account_optional» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_get_account_optional")
+  «wk_ws_storage_root_of» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ws_storage_root_of")
   «gbody_compute_state_root» : GBody.«compute_state_root»
-  «fb_keccak256» : TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256»
   «fb_rlp_decode_fully» : TerminatingFunBoundedOn GuestInv (ofString "rlp_decode_fully") K.«rlp_decode_fully»
   «fb_trie_lookup» : TerminatingFunBoundedOn GuestInv (ofString "trie_lookup") K.«trie_lookup»
   «fb_u256_from_be» : TerminatingFunBoundedOn GuestInv (ofString "u256_from_be") K.«u256_from_be»
@@ -11844,9 +12246,9 @@ structure Primitives : Prop where
   «wk_add_nonce_change» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "add_nonce_change")
   «wk_add_storage_write» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "add_storage_write")
   «wk_bal_remove_change» : WorldKeeps BalChangeArg (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bal_remove_change")
-  «wk_get_code» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_code")
-  «wk_idx_start_account» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_account")
-  «wk_idx_start_storage» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_storage")
+  «wk_get_code» : WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_code")
+  «wk_idx_start_account» : WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_account")
+  «wk_idx_start_storage» : WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "idx_start_storage")
   «wk_remove_storage_write» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "remove_storage_write")
   «ro_u256_eq» : ReadOnlyFn (ofString "u256_eq")
   «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx»
@@ -11870,14 +12272,14 @@ structure Primitives : Prop where
   «fb_set_retdata» : TerminatingFunBoundedOn GuestInv (ofString "set_retdata") K.«set_retdata»
   «fb_stack_push» : TerminatingFunBoundedOn GuestInv (ofString "stack_push") K.«stack_push»
   «fb_state_restore» : TerminatingFunBoundedOn GuestInv (ofString "state_restore") K.«state_restore»
-  «ek_create_finish» : EvmKeeps EvmInv     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "create_finish")
+  «ek_create_finish» : EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "create_finish")
   «ek_frame_halt» : EvmKeeps EvmInv     [] (ofString "frame_halt")
   «ek_refill_frame_state_gas» : EvmKeeps EvmInv     [] (ofString "refill_frame_state_gas")
   «ek_state_restore» : EvmKeeps EvmInv     ["heap_ptr", "journal_n"] (ofString "state_restore")
   «gbody_finish_child» : GBody.«finish_child»
   «fb_sk_make» : TerminatingFunBoundedOn GuestInv (ofString "sk_make") K.«sk_make»
   «nz_htab_set» : ArgNonNull "t" (ofString "htab_set")
-  «wk_sk_make» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "sk_make")
+  «wk_sk_make» : WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "sk_make")
   «gbody_get_storage» : GBody.«get_storage»
   «fb_charge_gas» : TerminatingFunBoundedOn GuestInv (ofString "charge_gas") K.«charge_gas»
   «fb_is_warm_storage_key» : TerminatingFunBoundedOn GuestInv (ofString "is_warm_storage_key") K.«is_warm_storage_key»
@@ -11885,10 +12287,10 @@ structure Primitives : Prop where
   «fb_u256_to_be32» : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be32") K.«u256_to_be32»
   «fb_warm_storage_key» : TerminatingFunBoundedOn GuestInv (ofString "warm_storage_key") K.«warm_storage_key»
   «ek_charge_gas» : EvmKeeps EvmInv     [] (ofString "charge_gas")
-  «ek_is_warm_storage_key» : EvmKeeps EvmInv     [] (ofString "is_warm_storage_key")
+  «ek_is_warm_storage_key» : EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))     [] (ofString "is_warm_storage_key")
   «ek_stack_pop» : EvmKeeps EvmInv     [] (ofString "stack_pop")
   «ek_u256_to_be32» : EvmKeeps (EvmAvoids (fun s => [(locN s "out", 32)]))     [] (ofString "u256_to_be32")
-  «ek_warm_storage_key» : EvmKeeps EvmInv     ["heap_ptr"] (ofString "warm_storage_key")
+  «ek_warm_storage_key» : EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))     ["heap_ptr"] (ofString "warm_storage_key")
   «gbody_op_sload» : GBody.«op_sload»
   «fb_charge_state_gas» : TerminatingFunBoundedOn GuestInv (ofString "charge_state_gas") K.«charge_state_gas»
   «fb_check_gas» : TerminatingFunBoundedOn GuestInv (ofString "check_gas") K.«check_gas»
@@ -11896,7 +12298,7 @@ structure Primitives : Prop where
   «fb_require_not_static» : TerminatingFunBoundedOn GuestInv (ofString "require_not_static") K.«require_not_static»
   «fb_set_storage» : TerminatingFunBoundedOn GuestInv (ofString "set_storage") K.«set_storage»
   «ro_check_gas» : ReadOnlyFn (ofString "check_gas")
-  «ek_get_storage_original» : EvmKeeps EvmInv     ["heap_ptr", "scratch_ptr"] (ofString "get_storage_original")
+  «ek_get_storage_original» : EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)]))     ["heap_ptr", "scratch_ptr"] (ofString "get_storage_original")
   «ro_max» : ReadOnlyFn (ofString "max")
   «ro_require_not_static» : ReadOnlyFn (ofString "require_not_static")
   «gbody_op_sstore» : GBody.«op_sstore»
@@ -11999,20 +12401,20 @@ structure Primitives : Prop where
   «fb_state_snapshot» : TerminatingFunBoundedOn GuestInv (ofString "state_snapshot") K.«state_snapshot»
   «ek_depth0_prepare» : EvmKeeps EvmMsgReady     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare")
   «fk_frame_open» : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")
-  «ek_frame_start» : EvmKeeps EvmInv     ["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] (ofString "frame_start")
+  «ek_frame_start» : EvmKeeps (EvmAvoids (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)]))     ["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] (ofString "frame_start")
   «ro_state_snapshot» : ReadOnlyFn (ofString "state_snapshot")
   «gbody_process_message» : GBody.«process_message»
   «fb_destroy_storage» : TerminatingFunBoundedOn GuestInv (ofString "destroy_storage") K.«destroy_storage»
   «fb_increment_nonce» : TerminatingFunBoundedOn GuestInv (ofString "increment_nonce") K.«increment_nonce»
   «fb_mark_account_created» : TerminatingFunBoundedOn GuestInv (ofString "mark_account_created") K.«mark_account_created»
-  «wk_destroy_storage» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "destroy_storage")
-  «wk_increment_nonce» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "increment_nonce")
+  «wk_destroy_storage» : WorldKeeps WorldOK (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "destroy_storage")
+  «wk_increment_nonce» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "increment_nonce")
   «wk_mark_account_created» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "mark_account_created")
   «gbody_process_create_message» : GBody.«process_create_message»
   «fb_account_deployable» : TerminatingFunBoundedOn GuestInv (ofString "account_deployable") K.«account_deployable»
   «fb_frame_state_gas_used» : TerminatingFunBoundedOn GuestInv (ofString "frame_state_gas_used") K.«frame_state_gas_used»
   «fb_memzero» : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»
-  «wk_account_deployable» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "account_deployable")
+  «wk_account_deployable» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "account_deployable")
   «wk_memzero» : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "memzero")
   «zv_memzero» : ZeroFills (ofString "memzero")
   «gbody_process_message_call» : GBody.«process_message_call»
@@ -12020,10 +12422,10 @@ structure Primitives : Prop where
   «fb_msg_new» : TerminatingFunBoundedOn GuestInv (ofString "msg_new") K.«msg_new»
   «fb_state_fresh_tx» : TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx»
   «fb_te_new» : TerminatingFunBoundedOn GuestInv (ofString "te_new") K.«te_new»
-  «wk_ext_code_of» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ext_code_of")
+  «wk_ext_code_of» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ext_code_of")
   «wk_msg_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new")
   «rt_msg_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧       ∀ k, k < 22 → memW post (m + 8 * k) = 0)     (ofString "msg_new")
-  «wk_process_message_call» : WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_message_call")
+  «wk_process_message_call» : WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetMessageOutput (ofString "process_message_call")
   «wk_state_fresh_tx» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "state_fresh_tx")
   «wk_te_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoids (fun _ _ w => [(w, 200)])) (ofString "te_new")
   «rt_te_new» : Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧       ∀ k, k < 25 → memW post (m + 8 * k) = 0)     (ofString "te_new")
@@ -12031,7 +12433,7 @@ structure Primitives : Prop where
   «fb_extract_deposit_data» : TerminatingFunBoundedOn GuestInv (ofString "extract_deposit_data") K.«extract_deposit_data»
   «fb_requests_append» : TerminatingFunBoundedOn GuestInv (ofString "requests_append") K.«requests_append»
   «wk_extract_deposit_data» : WorldKeeps WorldOK (fun s => [(locN s "out", 192)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "extract_deposit_data")
-  «wk_process_checked_system_transaction» : WorldKeeps WorldOK (fun _ => [])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_checked_system_transaction")
+  «wk_process_checked_system_transaction» : WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_checked_system_transaction")
   «wk_requests_append» : WorldKeeps ReqRoom (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]     ReqCountInc (ofString "requests_append")
   «gbody_process_general_purpose_requests» : GBody.«process_general_purpose_requests»
   «fb_calculate_blob_gas_price» : TerminatingFunBoundedOn GuestInv (ofString "calculate_blob_gas_price") K.«calculate_blob_gas_price»
@@ -12055,25 +12457,25 @@ structure Primitives : Prop where
   «fb_u256_sub» : TerminatingFunBoundedOn GuestInv (ofString "u256_sub") K.«u256_sub»
   «fb_udiv_small5» : TerminatingFunBoundedOn GuestInv (ofString "udiv_small5") K.«udiv_small5»
   «fb_validate_transaction» : TerminatingFunBoundedOn GuestInv (ofString "validate_transaction") K.«validate_transaction»
-  «wk_calculate_blob_gas_price» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "calculate_blob_gas_price")
+  «wk_calculate_blob_gas_price» : WorldKeeps WorldOK (fun s => [(globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "calculate_blob_gas_price")
   «ro_calculate_total_blob_gas» : ReadOnlyFn (ofString "calculate_total_blob_gas")
-  «wk_check_transaction» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "check_transaction")
-  «wk_clear_account_preserving_balance» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "clear_account_preserving_balance")
-  «wk_compute_contract_address» : WorldKeeps WorldOK (fun s => [(locN s "out", 20)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "compute_contract_address")
-  «wk_create_ether» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "create_ether")
-  «wk_encode_receipt» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_receipt")
-  «wk_encode_transaction» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_transaction")
+  «wk_check_transaction» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "check_transaction")
+  «wk_clear_account_preserving_balance» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "clear_account_preserving_balance")
+  «wk_compute_contract_address» : WorldKeeps WorldOK (fun s => [(locN s "out", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "compute_contract_address")
+  «wk_create_ether» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "create_ether")
+  «wk_encode_receipt» : WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetReceiptBounded (ofString "encode_receipt")
+  «wk_encode_transaction» : WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_transaction")
   «ro_fee_mul» : ReadOnlyFn (ofString "fee_mul")
-  «wk_get_account» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_account")
-  «wk_keccak256» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "keccak256")
+  «wk_get_account» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "get_account")
+  «wk_keccak256» : WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "keccak256")
   «wk_lst_new» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)       (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")
   «rt_lst_new» : Returns ArenaReady (fun s post l =>       locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →         FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧         Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧         memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")     (ofString "lst_new")
   «wk_lst_push» : WorldKeeps BoListArg (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetListSlot (ofString "lst_push")
   «dm_memcpy» : ResumesInDomain (fun s => (locN s "dst", locN s "n")) (ofString "memcpy")
   «ro_min» : ReadOnlyFn (ofString "min")
   «rv_min» : RetLe (fun s => locN s "a") (ofString "min")
-  «wk_recover_sender_with_chain_id» : WorldKeeps WorldOK (fun s => [(locN s "out20", 20)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "recover_sender_with_chain_id")
-  «wk_set_account_balance» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "set_account_balance")
+  «wk_recover_sender_with_chain_id» : WorldKeeps ((fun s => WorldOK s ∧ TxValid s)) (fun s => [(locN s "out20", 20), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "recover_sender_with_chain_id")
+  «wk_set_account_balance» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "set_account_balance")
   «ro_tx_chain_id» : ReadOnlyFn (ofString "tx_chain_id")
   «ro_tx_has_access_list» : ReadOnlyFn (ofString "tx_has_access_list")
   «ro_tx_is_blob» : ReadOnlyFn (ofString "tx_is_blob")
@@ -12095,22 +12497,22 @@ structure Primitives : Prop where
   «fb_validate_block_access_list_gas_limit» : TerminatingFunBoundedOn GuestInv (ofString "validate_block_access_list_gas_limit") K.«validate_block_access_list_gas_limit»
   «wk_bal_init» : WorldKeeps WorldOK (fun _ => [])     ["bal_accounts", "bal_idx_accts", "bal_idx_stor", "bal_index", "bal_key_buf", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bal_init")
   «wk_build_block_access_list_rlp» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "build_block_access_list_rlp")
-  «wk_build_mpt_indexed» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "build_mpt_indexed")
-  «wk_compute_state_root» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "compute_state_root")
-  «wk_decode_transaction» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "decode_transaction")
-  «wk_logs_bloom» : WorldKeeps WorldOK (fun s => [(locN s "out", 256)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "logs_bloom")
+  «wk_build_mpt_indexed» : WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "build_mpt_indexed")
+  «wk_compute_state_root» : WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "compute_state_root")
+  «wk_decode_transaction» : WorldKeeps ((fun s => WorldOK s ∧ locN s "len" < 2 ^ 32)) (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetDecodedTx (ofString "decode_transaction")
+  «wk_logs_bloom» : WorldKeeps WorldOK (fun s => [(locN s "out", 256), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "logs_bloom")
   «ww_memzero» : WritesWithin (fun s => [(locN s "dst", locN s "n")])     [] (ofString "memzero")
-  «wk_process_general_purpose_requests» : WorldKeeps ReqsFresh (fun _ => [])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]     NoExtra (ofString "process_general_purpose_requests")
-  «wk_process_transaction» : WorldKeeps TxReady (fun _ => [])     ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]     NoExtra (ofString "process_transaction")
-  «wk_process_unchecked_system_transaction» : WorldKeeps WorldOK (fun _ => [])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_unchecked_system_transaction")
-  «wk_process_withdrawals» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_withdrawals")
+  «wk_process_general_purpose_requests» : WorldKeeps ReqsFresh (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]     NoExtra (ofString "process_general_purpose_requests")
+  «wk_process_transaction» : WorldKeeps TxReadyStrong (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]     RetTransactionLogs (ofString "process_transaction")
+  «wk_process_unchecked_system_transaction» : WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_unchecked_system_transaction")
+  «wk_process_withdrawals» : WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])     ["heap_ptr", "journal_n", "scratch_ptr", "ts"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "process_withdrawals")
   «wk_track_ancestor_access» : WorldKeeps WorldOK (fun _ => [])     []     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "track_ancestor_access")
   «ro_validate_block_access_list_gas_limit» : ReadOnlyFn (ofString "validate_block_access_list_gas_limit")
   «gbody_execute_block» : GBody.«execute_block»
   «fb_block_rlp_length» : TerminatingFunBoundedOn GuestInv (ofString "block_rlp_length") K.«block_rlp_length»
   «fb_encode_execution_requests» : TerminatingFunBoundedOn GuestInv (ofString "encode_execution_requests") K.«encode_execution_requests»
   «fb_encode_withdrawal_rlp» : TerminatingFunBoundedOn GuestInv (ofString "encode_withdrawal_rlp") K.«encode_withdrawal_rlp»
-  «wk_block_rlp_length» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "block_rlp_length")
+  «wk_block_rlp_length» : WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "block_rlp_length")
   «wk_encode_withdrawal_rlp» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "encode_withdrawal_rlp")
   «dm_encode_withdrawal_rlp» : ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp")
   «gbody_payload_header» : GBody.«payload_header»
@@ -12122,13 +12524,13 @@ structure Primitives : Prop where
   «fb_validate_header» : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»
   «fb_validate_headers» : TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers»
   «ro_check_gas_limit» : ReadOnlyFn (ofString "check_gas_limit")
-  «wk_header_hash» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "header_hash")
+  «wk_header_hash» : WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s)) (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "header_hash")
   «wk_is_valid_versioned_hashes» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "is_valid_versioned_hashes")
-  «wk_nodedb_build» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "nodedb_build")
-  «wk_payload_header» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "payload_header")
-  «wk_state_init» : WorldKeeps WorldOK (fun _ => [])     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "state_init")
-  «wk_validate_header» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "validate_header")
-  «wk_validate_headers» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "validate_headers")
+  «wk_nodedb_build» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "nodedb_build")
+  «wk_payload_header» : WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])     ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetHeader (ofString "payload_header")
+  «wk_state_init» : WorldKeeps WorldOK (fun _ => [])     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetStateInit (ofString "state_init")
+  «wk_validate_header» : WorldKeeps ((fun s => WorldOK s ∧ HeaderOK s ∧ HeaderAt s (locN s "parent"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "validate_header")
+  «wk_validate_headers» : WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])     ["heap_ptr", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetHeaders (ofString "validate_headers")
   «gbody_run_attempt» : GBody.«run_attempt»
   «fb_blake2_init» : TerminatingFunBoundedOn GuestInv (ofString "blake2_init") K.«blake2_init»
   «fb_bls_precompiles_init» : TerminatingFunBoundedOn GuestInv (ofString "bls_precompiles_init") K.«bls_precompiles_init»
@@ -12148,21 +12550,21 @@ structure Primitives : Prop where
   «fb_sha256_init» : TerminatingFunBoundedOn GuestInv (ofString "sha256_init") K.«sha256_init»
   «fb_ssz_init» : TerminatingFunBoundedOn GuestInv (ofString "ssz_init") K.«ssz_init»
   «fb_u256_ws_init» : TerminatingFunBoundedOn GuestInv (ofString "u256_ws_init") K.«u256_ws_init»
-  «wk_blake2_init» : WorldKeeps WorldOK (fun _ => [])     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "blake2_init")
-  «wk_bls_precompiles_init» : WorldKeeps WorldOK (fun _ => [])     ["bls_c", "bls_discount", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bls_precompiles_init")
-  «wk_bn254_init» : WorldKeeps WorldOK (fun _ => [])     ["bn_expw", "bn_gamma", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bn254_init")
-  «wk_decode_host_input» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetInput (ofString "decode_host_input")
-  «wk_evm_init» : WorldKeeps WorldOK (fun _ => [])     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "evm_init")
-  «wk_fork_init» : WorldKeeps WorldOK (fun _ => [])     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "fork_init")
-  «wk_header_init» : WorldKeeps WorldOK (fun _ => [])     ["hdr_zero8", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "header_init")
-  «wk_htr_new_payload_request» : WorldKeeps WorldOK (fun s => [(locN s "out", 32)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "htr_new_payload_request")
-  «wk_keccak_init» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "keccak_init")
+  «wk_blake2_init» : WorldKeeps WorldOK (fun s => [(globN s "b2_iv", if globN s "b2_iv" = 0 then 0 else 64), (globN s "b2_sigma", if globN s "b2_sigma" = 0 then 0 else 80)])     ["b2_iv", "b2_sigma", "b2_v", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "blake2_init")
+  «wk_bls_precompiles_init» : WorldKeeps WorldOK (fun s => [(globN s "bls_c", if globN s "bls_c" = 0 then 0 else 7136), (globN s "bls_discount", if globN s "bls_discount" = 0 then 0 else 2048)])     ["bls_c", "bls_discount", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bls_precompiles_init")
+  «wk_bn254_init» : WorldKeeps WorldOK (fun s => [(globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384)])     ["bn_expw", "bn_gamma", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "bn254_init")
+  «wk_decode_host_input» : WorldKeeps WorldOK (fun s => [(globN s "ssz_offs", if globN s "ssz_offs" = 0 then 0 else 64)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetInput (ofString "decode_host_input")
+  «wk_evm_init» : WorldKeeps WorldOK (fun s => [(globN s "evm_empty", if globN s "evm_empty" = 0 then 0 else 8), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "null_address", if globN s "null_address" = 0 then 0 else 24), (globN s "transfer_topic", if globN s "transfer_topic" = 0 then 0 else 32), (globN s "vm_system_address", if globN s "vm_system_address" = 0 then 0 else 24)])     ["evm_empty", "evm_key_buf", "heap_ptr", "null_address", "pre_hdr_buf", "transfer_topic", "vm_system_address"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "evm_init")
+  «wk_fork_init» : WorldKeeps WorldOK (fun s => [(globN s "beacon_roots_address", if globN s "beacon_roots_address" = 0 then 0 else 24), (globN s "builder_deposit_address", if globN s "builder_deposit_address" = 0 then 0 else 24), (globN s "builder_exit_address", if globN s "builder_exit_address" = 0 then 0 else 24), (globN s "consolidation_request_address", if globN s "consolidation_request_address" = 0 then 0 else 24), (globN s "deposit_contract_address", if globN s "deposit_contract_address" = 0 then 0 else 24), (globN s "deposit_event_signature_hash", if globN s "deposit_event_signature_hash" = 0 then 0 else 32), (globN s "history_storage_address", if globN s "history_storage_address" = 0 then 0 else 24), (globN s "precompile_addrs", if globN s "precompile_addrs" = 0 then 0 else 360), (globN s "withdrawal_request_address", if globN s "withdrawal_request_address" = 0 then 0 else 24), (globN s "zero32", if globN s "zero32" = 0 then 0 else 32)])     ["beacon_roots_address", "builder_deposit_address", "builder_exit_address", "consolidation_request_address", "deposit_contract_address", "deposit_event_signature_hash", "heap_ptr", "history_storage_address", "precompile_addrs", "withdrawal_request_address", "zero32"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "fork_init")
+  «wk_header_init» : WorldKeeps WorldOK (fun s => [(globN s "hdr_zero8", if globN s "hdr_zero8" = 0 then 0 else 8)])     ["hdr_zero8", "heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "header_init")
+  «wk_htr_new_payload_request» : WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])     ["heap_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "htr_new_payload_request")
+  «wk_keccak_init» : WorldKeeps WorldOK (fun s => [(globN s "keccak_rc", if globN s "keccak_rc" = 0 then 0 else 192)])     ["heap_ptr", "keccak_pad", "keccak_rc", "keccak_st"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "keccak_init")
   «mem_init_world» : type_of% @mem_init_world
-  «wk_mpt_init» : WorldKeeps WorldOK (fun _ => [])     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "mpt_init")
-  «wk_ripemd160_init» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ripemd160_init")
+  «wk_mpt_init» : WorldKeeps WorldOK (fun s => [(globN s "empty_code_hash", if globN s "empty_code_hash" = 0 then 0 else 32), (globN s "empty_trie_root", if globN s "empty_trie_root" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])     ["empty_code_hash", "empty_trie_root", "heap_ptr", "mpt_hash_scratch", "mpt_key_scratch", "mpt_nib_scratch"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "mpt_init")
+  «wk_ripemd160_init» : WorldKeeps WorldOK (fun s => [(globN s "rmd_tab", if globN s "rmd_tab" = 0 then 0 else 160)])     ["heap_ptr", "rmd_h", "rmd_pad", "rmd_tab", "rmd_x"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ripemd160_init")
   «ro_secp256k1_init» : ReadOnlyFn (ofString "secp256k1_init")
   «wk_sha256_init» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "sha_pad", "sha_st"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "sha256_init")
-  «wk_ssz_init» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ssz_init")
+  «wk_ssz_init» : WorldKeeps WorldOK (fun s => [(globN s "zero_hashes", if globN s "zero_hashes" = 0 then 0 else 2048)])     ["heap_ptr", "ssz_len_chunk", "ssz_offs", "zero_hashes"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "ssz_init")
   «wk_u256_ws_init» : WorldKeeps WorldOK (fun _ => [])     ["heap_ptr", "u256_ws"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     NoExtra (ofString "u256_ws_init")
   «gbody_main» : GBody.«main»
 
@@ -12174,11 +12576,15 @@ theorem assembly_main (P : Primitives) :
   have «g__mpt_delete_node_body» := P.«gbody__mpt_delete_node_body» P.«fb__collapse_branch» P.«fb__delete_ext_finish» P.«fb_common_prefix_length» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_scratch_alloc» P.«nf__collapse_branch» P.«nf__delete_ext_finish» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_memeq» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«ww_scratch_alloc» P.«rt_scratch_alloc»
   have «g__mpt_delete_node» := «gbody__mpt_delete_node» «g__mpt_delete_node_body» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro_scratch_mark»
   have «g__mpt_insert_node» := P.«gbody__mpt_insert_node» P.«fb__insert_into_leaf» P.«fb__split_extension» P.«fb_common_prefix_length» P.«fb_mpt_fail» P.«fb_node_invalidate» P.«fb_node_new_ext» P.«fb_node_new_leaf» P.«nf__insert_into_leaf» P.«nf__split_extension» P.«ro_common_prefix_length» P.«rv_common_prefix_length» P.«ro_mpt_fail» P.«nf_node_invalidate» P.«iz_node_invalidate» P.«nf_node_new_ext» P.«rt_node_new_ext» P.«nf_node_new_leaf»
+  have «g__node_rlp_fill» := P.«gbody__node_rlp_fill» P.«fb__node_needs_rlp» P.«fb__node_rlp_begin» P.«fb__node_rlp_finish» P.«fb_scratch_alloc» P.«fb_scratch_mark» P.«fb_scratch_release» P.«ro__node_needs_rlp» P.«ak__node_rlp_begin» P.«ak__node_rlp_finish» P.«ww_scratch_alloc» P.«rt_scratch_alloc» P.«ro_scratch_mark»
+  have «g_node_rlp» := P.«gbody_node_rlp» «g__node_rlp_fill» P.«fb_mpt_fail» P.«ro_mpt_fail»
+  have «g_node_hash» := P.«gbody_node_hash» P.«fb_alloc» P.«fb_keccak256» «g_node_rlp»
+  have «g_mpt_root» := P.«gbody_mpt_root» P.«fb_memcpy» «g_node_hash»
   have «g_mpt_set» := P.«gbody_mpt_set» «g__mpt_delete_node» «g__mpt_insert_node» P.«fb_mpt_nibble_key» P.«ww_mpt_nibble_key» P.«nk_mpt_nibble_key»
-  have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
+  have «g_build_mpt_indexed» := P.«gbody_build_mpt_indexed» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_mpt_new» «g_mpt_root» «g_mpt_set» P.«fb_rlp_encode_word» P.«ro_heap_mark» P.«wk_mpt_new» P.«rt_mpt_new» P.«mk_mpt_set» P.«wk_rlp_encode_word»
   have «g_decode_witness_to_mpt» := «gbody_decode_witness_to_mpt» «g__decode_witness_node» P.«fb_alloc» P.«fb_memcpy» P.«fb_memeq» P.«fb_mpt_fail» P.«fb_nodedb_lookup» P.«ro_memeq» P.«ro_mpt_fail» P.«ro_nodedb_lookup»
   have «g_mpt_from_witness» := «gbody_mpt_from_witness» «g_decode_witness_to_mpt» P.«fb_mpt_new»
-  have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» P.«fb_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«wk_alloc» P.«rt_alloc» P.«wk_cache_get_root» P.«wk_encode_account» P.«wk_htab_copy» P.«rt_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_memcpy» P.«wk_mpt_from_witness» P.«mk_mpt_root» P.«mk_mpt_set» P.«wk_rlp_encode_bytes» P.«rv_rlp_encode_bytes» P.«ro_u256_is_zero» P.«wk_u256_to_be_min» P.«rv_u256_to_be_min» P.«wk_ws_get_account_optional» P.«wk_ws_storage_root_of»
+  have «g_compute_state_root» := P.«gbody_compute_state_root» P.«fb_alloc» P.«fb_cache_get_root» P.«fb_encode_account» P.«fb_htab_copy» P.«fb_htab_get» P.«fb_htab_has» P.«fb_htab_item» P.«fb_htab_new» P.«fb_htab_set» P.«fb_memcpy» «g_mpt_from_witness» «g_mpt_root» «g_mpt_set» P.«fb_rlp_encode_bytes» P.«fb_u256_is_zero» P.«fb_u256_to_be_min» P.«fb_ws_get_account_optional» P.«fb_ws_storage_root_of» P.«wk_alloc» P.«rt_alloc» P.«wk_cache_get_root» P.«wk_encode_account» P.«wk_htab_copy» P.«rt_htab_copy» P.«ro_htab_get» P.«ro_htab_has» P.«ro_htab_item» P.«htab_new_spec» P.«htab_set_spec» P.«wk_memcpy» P.«wk_mpt_from_witness» P.«mk_mpt_root» P.«mk_mpt_set» P.«wk_rlp_encode_bytes» P.«rv_rlp_encode_bytes» P.«ro_u256_is_zero» P.«wk_u256_to_be_min» P.«rv_u256_to_be_min» P.«wk_ws_get_account_optional» P.«wk_ws_storage_root_of»
   have «g_ws_storage_trie» := «gbody_ws_storage_trie» «g_decode_witness_to_mpt» P.«fb_htab_get» P.«fb_htab_set» P.«ro_htab_get»
   have «g_ws_get_storage» := «gbody_ws_get_storage» P.«fb_alloc» P.«fb_heap_mark» P.«fb_heap_release» P.«fb_keccak256» P.«fb_memeq» P.«fb_rlp_decode_fully» P.«fb_trie_lookup» P.«fb_u256_from_be» P.«fb_ws_storage_root_of» «g_ws_storage_trie» P.«ro_memeq» P.«wk_ws_storage_root_of»
   have «g_get_pre_tx_storage» := «gbody_get_pre_tx_storage» P.«fb_record_pre_state_read» P.«fb_stor_lookup» «g_ws_get_storage» P.«wk_record_pre_state_read» P.«ro_stor_lookup»
@@ -12260,6 +12666,19 @@ theorem primitives : Primitives where
   «nf_node_new_ext» := «nf_node_new_ext»
   «nf_node_new_leaf» := «nf_node_new_leaf»
   «gbody__mpt_insert_node» := «gbody__mpt_insert_node»
+  «fb__node_needs_rlp» := «fb__node_needs_rlp»
+  «fb__node_rlp_begin» := «fb__node_rlp_begin»
+  «fb__node_rlp_finish» := «fb__node_rlp_finish»
+  «ro__node_needs_rlp» := «ro__node_needs_rlp»
+  «ak__node_rlp_begin» := «ak__node_rlp_begin»
+  «ak__node_rlp_finish» := «ak__node_rlp_finish»
+  «gbody__node_rlp_fill» := «gbody__node_rlp_fill»
+  «gbody_node_rlp» := «gbody_node_rlp»
+  «fb_alloc» := «fb_alloc»
+  «fb_keccak256» := «fb_keccak256»
+  «gbody_node_hash» := «gbody_node_hash»
+  «fb_memcpy» := «fb_memcpy»
+  «gbody_mpt_root» := «gbody_mpt_root»
   «fb_mpt_nibble_key» := «fb_mpt_nibble_key»
   «ww_mpt_nibble_key» := «ww_mpt_nibble_key»
   «nk_mpt_nibble_key» := «nk_mpt_nibble_key»
@@ -12267,7 +12686,6 @@ theorem primitives : Primitives where
   «fb_heap_mark» := «fb_heap_mark»
   «fb_heap_release» := «fb_heap_release»
   «fb_mpt_new» := «fb_mpt_new»
-  «fb_mpt_root» := «fb_mpt_root»
   «fb_rlp_encode_word» := «fb_rlp_encode_word»
   «ro_heap_mark» := «ro_heap_mark»
   «wk_mpt_new» := «wk_mpt_new»
@@ -12275,8 +12693,6 @@ theorem primitives : Primitives where
   «mk_mpt_set» := «mk_mpt_set»
   «wk_rlp_encode_word» := «wk_rlp_encode_word»
   «gbody_build_mpt_indexed» := «gbody_build_mpt_indexed»
-  «fb_alloc» := «fb_alloc»
-  «fb_memcpy» := «fb_memcpy»
   «fb_nodedb_lookup» := «fb_nodedb_lookup»
   «ro_nodedb_lookup» := «ro_nodedb_lookup»
   «fb_cache_get_root» := «fb_cache_get_root»
@@ -12314,7 +12730,6 @@ theorem primitives : Primitives where
   «wk_ws_get_account_optional» := «wk_ws_get_account_optional»
   «wk_ws_storage_root_of» := «wk_ws_storage_root_of»
   «gbody_compute_state_root» := «gbody_compute_state_root»
-  «fb_keccak256» := «fb_keccak256»
   «fb_rlp_decode_fully» := «fb_rlp_decode_fully»
   «fb_trie_lookup» := «fb_trie_lookup»
   «fb_u256_from_be» := «fb_u256_from_be»
@@ -12667,8 +13082,12 @@ theorem primitives : Primitives where
 /-- The proposed total source budget: the generated bound of `main` plus the entry tick. -/
 def K_pan : Nat := K.«main» + 1
 
-/-- Kernel-checked budget inequality (target side `32·K + 23077`, `ConcreteStage1To5Transfer`). -/
-theorem K_pan_budget : 32 * K_pan + 23077 ≤ (10 ^ 299 - 1) / 10 ^ 4 := by decide
+/-- Kernel-checked target budget after the concrete stage transfer. -/
+def K_target : Nat := 118223496 * K_pan + 119233963
+
+theorem K_target_budget : 118223496 * K_pan + 119233963 ≤ 10 ^ 122 - 1 := by decide
+
+theorem K_pan_budget : K_target ≤ 10 ^ 122 - 1 := K_target_budget
 
 /-- The conditional assembly (round-3 assembly ruling), PROVED and `sorry`-free: the primitive
 obligations imply the campaign target. `#print axioms assembly` lists no `sorryAx`. -/
@@ -12712,6 +13131,9 @@ example : 2 ^ 58 ≤ evmPotMax := by decide
 #print axioms assembly
 #print axioms assembly_main
 #print axioms K_pan_budget
+#print axioms K_target_budget
+#print axioms bufferRegion_disj
+#print axioms bufferRegion_disj_le
 #print axioms AllocatorGrows.allocated
 #print axioms FreshBlock.disj_allocated
 

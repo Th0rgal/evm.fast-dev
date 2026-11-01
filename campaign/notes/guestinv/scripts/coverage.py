@@ -180,6 +180,11 @@ OVERRIDES = {
     ('p256_fp_sqr', 1): ('MONO', 2 ** 128, 'as p256_fp_mul #1'),
 }
 
+# R10 has one authoritative override manifest, shared with the independent evaluator.
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'r10_inputs'))
+from evaluate_bound import R10_LOOP_OVERRIDES
+OVERRIDES.update(R10_LOOP_OVERRIDES)
+
 # Functions whose bound is not GuestInv-only (guard and potential in DESIGN.md section 6).
 EVM_POTENTIAL = {('run_frames', 0)}
 MAX_CHAIN = 16384                       # frames: implied by disjoint 1408-byte scratch objects
@@ -652,12 +657,12 @@ def costs(fns, graph, reach, recursive, loops):
 # ---------------------------------------------------------------------------------------------
 # Guarded compositions (revision 4, round-3 item 5 and the assembly ruling)
 
-GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK',
-           'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'BlockReady': 'WorldOK',
+GUARD_W = {'WorldOK': 'WorldOK', 'MainEntry': 'WorldOK', 'TxReady': 'WorldOK', 'TxReadyStrong': 'WorldOK',
+           'ReqsFresh': 'WorldOK', 'MsgReady': 'WorldOK', 'BlockReady': 'WorldOK', 'BlockReadyStrong': 'WorldOK',
            'InputReady': 'WorldOK',
            'EvmInv': 'EvmInv', 'FinishReady': 'EvmInv', 'EvmRun': 'EvmInv',
-           'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptObjReady': 'ArenaReady',
-           'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
+           'ArenaReady': 'ArenaReady', 'MptReady': 'ArenaReady', 'MptInsertReady': 'ArenaReady', 'MptObjReady': 'ArenaReady', 'MptSetReady': 'ArenaReady',
+           'NodeRlpReady': 'ArenaReady', 'HtabArgWF': 'ArenaReady', 'RollbackReady': 'ArenaReady'}
 W_PREFIX = {'WorldOK': 'wk', 'EvmInv': 'ek', 'ArenaReady': 'ak'}
 # callees with a hand-written contract leaf (§7): those leaves are the hypotheses
 SPEC_OF = {
@@ -701,12 +706,12 @@ NODE_FN = {'_insert_into_leaf': ['node'], '_split_extension': ['node'], '_collap
 # offsets, the nibble arrays it indexes a branch by or copies into a new node's path, and the
 # bounds that keep those indices inside the arrays
 NODE_REQ = {
-    'node_new_leaf': 'KeyIn s Nd (locN s "nib") (locN s "nlen")',
+    'node_new_leaf': 'KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40',
     'node_new_ext': 'KeyIn s Nd (locN s "nib") (locN s "nlen")',
     'node_invalidate': 'True',
-    '_insert_into_leaf': 'NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl")',
+    '_insert_into_leaf': 'NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40',
     '_split_extension': ('NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧\n'
-                         '      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"'),
+                         '      locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"'),
     '_collapse_branch': 'NodeKind s Nd "node" 3',
     '_delete_ext_finish': 'NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "seg") (locN s "sl")',
 }
@@ -929,6 +934,17 @@ ITE_RAISE = ('(TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_cloc
              '        (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s)))')
 WRES = '(KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn %s) _ _)'
 GBODY_PROOF['process_checked_system_transaction'] = """  intro hal hext hpu hsf wal wext wsf
+  have hwext : KeepsOn WorldOK WorldOK (ofString "ext_code_of") := by
+    apply wext.keepsOn_buffer_parts
+    intro F s i hi
+    change i ∈ [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200),
+      bufferRegion s ("mpt_nib_scratch", 64), bufferRegion s ("sk_buf", 52)] at hi
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl | rfl
+    · exact ⟨("keccak_pad", 136), by decide, by decide, 136, le_rfl, rfl⟩
+    · exact ⟨("keccak_st", 200), by decide, by decide, 200, le_rfl, rfl⟩
+    · exact ⟨("mpt_nib_scratch", 64), by decide, by decide, 64, le_rfl, rfl⟩
+    · exact ⟨("sk_buf", 64), by decide, by decide, 52, by decide, rfl⟩
   refine ⟨_, _, _, {LOOKUP}, ?_⟩
   simp only [{UNFOLD}]
   refine TerminatingProgBoundedOn.mono_bound
@@ -943,7 +959,7 @@ GBODY_PROOF['process_checked_system_transaction'] = """  intro hal hext hpu hsf 
   unfold K.«process_checked_system_transaction»
   try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
-""" % (FBE, FBE, WRES % 'wext', ITE_RAISE, FBE, WRES % 'wal', CALLWOK,
+""" % (FBE, FBE, (WRES % 'wext').replace('(WorldKeeps.keepsOn wext)', 'hwext'), ITE_RAISE, FBE, WRES % 'wal', CALLWOK,
        ITE_RAISE, RET0)
 
 GI_ITE_RET = ('(TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))\n'
@@ -970,7 +986,7 @@ GBODY_PROOF['ws_get_storage'] = """  intro hal hhm hhr hkc hme hrd htl hub hsr h
   unfold K.«ws_get_storage»
   try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
-""" % (FBE, WRES % 'wsr', FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, GI_ITE_RET, GI_ITE_RET,
+""" % (FBE, (WRES % 'wsr').replace('WorldKeeps.keepsOn wsr', 'WorldKeeps.keepsOn_buffers wsr (by intro F s i hi; change i ∈ [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200), bufferRegion s ("mpt_nib_scratch", 64)] at hi; simp only [List.mem_cons, List.not_mem_nil, or_false] at hi; rcases hi with rfl | rfl | rfl <;> exact ⟨_, by decide, by decide, rfl⟩)'), FBE, ROR.replace('{H}', 'hro'), ITE_RET, CALLWOK, GI_ITE_RET, GI_ITE_RET,
        ITE_RAISE, RET0)
 
 # revision 8: `_mpt_delete_node` (scratch mark, the guarded body under a handler that releases and
@@ -1019,6 +1035,17 @@ def ast_index(path, fname):
 # output buffers of `compute_state_root`/`build_mpt_indexed`/`mpt_root` are the region `R` of the
 # step, whose avoidance is a hypothesis of `WorldStep`, so their revision-6 `WorldAvoids` pre went)
 KEEP_PRE = {
+    'header_hash': '(fun s => WorldOK s ∧ HeaderOK s)',
+    'encode_header': '(fun s => WorldOK s ∧ HeaderOK s)',
+    'validate_header': '(fun s => WorldOK s ∧ HeaderOK s ∧ HeaderAt s (locN s "parent"))',
+    'block_rlp_length': '(fun s => WorldOK s ∧ HeaderOK s)',
+    'encode_transaction': '(fun s => WorldOK s ∧ TxValid s)',
+    'recover_sender': '(fun s => WorldOK s ∧ TxValid s)',
+    'recover_sender_with_chain_id': '(fun s => WorldOK s ∧ TxValid s)',
+    'encode_receipt': '(fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))',
+    'payload_header': 'InputReady',
+    'decode_transaction': '(fun s => WorldOK s ∧ locN s "len" < 2 ^ 32)',
+    'encode_execution_requests': '(fun s => WorldOK s ∧ RequestsAt s (locN s "rq"))',
     'requests_append': 'ReqRoom',
     'lst_push': 'BoListArg',
     # revision 8 (round-5 Astra item 2): the three list selectors only
@@ -1039,7 +1066,12 @@ NO_REGION = {'lst_push'}
 # trie-object callees (`MptKeeps`: the object `m` and its nodes are carried)
 MPT_KEEPS = {'mpt_set', 'mpt_root'}
 # callee-specific extras of `WorldStep` (stated for the exit typing `S'`)
-WQ = {'requests_append': 'ReqCountInc', 'mpt_from_witness': 'RetMptObj',
+WQ = {'state_init': 'RetStateInit', 'process_transaction': 'RetTransactionLogs',
+      'process_message': 'RetFrameResult', 'decode_transaction': 'RetDecodedTx',
+      'decode_header': 'RetHeader', 'payload_header': 'RetHeader',
+      'validate_headers': 'RetHeaders',
+      'process_message_call': 'RetMessageOutput', 'process_create_message': 'RetFrameResult',
+      'encode_receipt': 'RetReceiptBounded', 'requests_append': 'ReqCountInc', 'mpt_from_witness': 'RetMptObj',
       'decode_host_input': 'RetInput',
       # revision 8 (round-5 Astra item 4): the constructors' results avoid the EXIT world
       'alloc': '(RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)]))',
@@ -1213,7 +1245,7 @@ def written_params(path, fns, line_of, graph):
 
 def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of, order, loops, bufs):
     roots = {'run_frames', 'htab_truncate', '_decode_witness_node_body', '_mpt_insert_node',
-             '_mpt_delete_node_body'}
+             '_mpt_delete_node_body', '_node_rlp_fill'}
     wp, stores, calls_of, par = written_params(path, fns, line_of, graph)
     gw = {}
 
@@ -1227,6 +1259,8 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             gw[f] = r
         return gw[f]
     bufsize = {g: sorted(v)[0][1] for g, v in bufs.items()}
+    # sk_make copies 20 bytes then 32 at offset 20; the 64-byte allocation has padding.
+    bufsize["sk_buf"] = 52
 
     def closure(g):
         seen, st = set(), [g]
@@ -1238,26 +1272,42 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             st.extend(graph[x])
         return seen
 
+    buffer_cache = {}
     def buffers_written(g):
         res = set()
-        for x in closure(g):
-            decs = {}
-
+        seen, pending = set(), [g]
+        while pending:
+            x = pending.pop()
+            if x in seen or x not in fns:
+                continue
+            seen.add(x)
+            pending.extend(graph[x])
+            if x in buffer_cache:
+                res.update(buffer_cache[x])
+                continue
+            direct_buffers = set()
+            aliases = {}
             def d(y, _c):
                 if is_app(y, 'Prog.dec'):
-                    decs[strval(y[2][0])] = y[2][2]
+                    aliases.setdefault(strval(y[2][0]), []).append(y[2][2])
+                elif is_app(y, 'Prog.assign') and panast.show(y[2][0]) == 'local':
+                    aliases.setdefault(y[2][1][1], []).append(y[2][2])
             panast.walk(fns[x], d)
             targets = list(stores(fns[x]))
             for cg, args in calls_of(fns[x]):
                 for i, pn in enumerate(par.get(cg, [])):
                     if pn in wp.get(cg, ()) and i < len(args):
                         targets.append(args[i])
-            for a in targets:
-                exprs = [a] + [decs[n] for (k, n) in free_vars(a) if k == 'local' and n in decs]
-                for e in exprs:
-                    for (k, n) in free_vars(e):
-                        if k == 'global' and n in bufsize:
-                            res.add(n)
+            pending_exprs, visited_locals = list(targets), set()
+            while pending_exprs:
+                for k, n in free_vars(pending_exprs.pop()):
+                    if k == 'global' and n in bufsize:
+                        direct_buffers.add(n)
+                    elif k == 'local' and n not in visited_locals:
+                        visited_locals.add(n)
+                        pending_exprs.extend(aliases.get(n, []))
+            buffer_cache[x] = direct_buffers
+            res.update(direct_buffers)
         return sorted(res)
     def fresh_only(g):
         """Every store in g's closure (contracted callees excluded) lands in a block g's closure
@@ -1495,7 +1545,7 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
             if g not in impure:
                 name = 'ro_' + g
                 contracts[name] = ('ReadOnlyFn (ofString "%s")' % g, 'read-only')
-            elif G(f) in ('MptReady', 'MptObjReady') and g in NODE_FN:
+            elif G(f) in ('MptReady', 'MptInsertReady', 'MptObjReady', 'MptSetReady', 'NodeRlpReady') and g in NODE_FN:
                 name = 'nf_' + g
                 req = NODE_REQ[g]
                 req_s = 'fun _ _ => True' if req == 'True' else 'fun s Nd =>\n      ' + req
@@ -1531,11 +1581,15 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                 regs = [] if g in NO_REGION else (
                     [('locN s "%s"' % pn, ln) for pn, ln in (REGION.get(g) or [])] +
                     [('locN s "%s"' % pn, ln) for pn, ln in RREG.get(g, [])])
+                regs += [('globN s "%s"' % b, 'if globN s "%s" = 0 then 0 else %s' % (b, bufsize[b]))
+                         for b in buffers_written(g) if b not in rec_size]
                 R = 'fun s => [%s]' % ', '.join('(%s, %s)' % r for r in regs) if regs else 'fun _ => []'
                 if Wc == 'EvmInv':
                     name = 'ek_' + g
                     if (f, g) in CALL_PRE:
                         pre = CALL_PRE[(f, g)]
+                    elif g == 'op_log':
+                        pre = '(fun s => EvmInv s ∧ locN s "ntopics" ≤ 4)'
                     elif regs:
                         pre = 'EvmAvoids (%s)' % R
                     else:
@@ -1546,8 +1600,8 @@ def compose(path, outdir, fns, line_of, graph, reach, impure, guarded, guard_of,
                                        'frame chain kept')
                 elif g in MPT_KEEPS:
                     name = 'mk_' + g
-                    contracts[name] = ('MptKeeps (%s) %s\n    %s (ofString "%s")' % (
-                        R, gws, keep_lean(g), g),
+                    contracts[name] = ('MptKeeps %s (%s) %s\n    %s (ofString "%s")' % (
+                        'MptSetReady' if g == 'mpt_set' else 'MptObjReady', R, gws, keep_lean(g), g),
                         'trie-object step: the object `m` stays typed in the grown world')
                 else:
                     name = 'wk_' + g
@@ -1712,7 +1766,7 @@ def main():
     os.makedirs(outdir, exist_ok=True)
     # guarded tier: functions whose bound needs a memory contract, and all their callers
     roots = {'run_frames', 'htab_truncate', '_decode_witness_node_body', '_mpt_insert_node',
-             '_mpt_delete_node_body'}
+             '_mpt_delete_node_body', '_node_rlp_fill'}
     guarded = set(roots)
     changed = True
     while changed:
@@ -1724,15 +1778,17 @@ def main():
     guard_of = {
         'htab_truncate': 'HtabArgWF', 'rollback_child_access': 'RollbackReady',
         'finish_child': 'FinishReady', 'run_frames': 'EvmInv',
-        '_decode_witness_node_body': 'ArenaReady', '_mpt_insert_node': 'MptReady',
+        '_decode_witness_node_body': 'ArenaReady', '_node_rlp_fill': 'NodeRlpReady',
+        'node_rlp': 'NodeRlpReady', 'node_hash': 'NodeRlpReady',
+        'mpt_root': 'MptObjReady', '_mpt_insert_node': 'MptInsertReady',
         '_mpt_delete_node_body': 'MptReady', '_mpt_delete_node': 'MptReady',
-        'mpt_set': 'MptObjReady', 'main': 'MainEntry',
-        'process_transaction': 'TxReady', 'process_general_purpose_requests': 'ReqsFresh',
+        'mpt_set': 'MptSetReady', 'main': 'MainEntry',
+        'process_transaction': 'TxReadyStrong', 'process_general_purpose_requests': 'ReqsFresh',
         'process_message': 'MsgReady', 'process_message_call': 'MsgReady',
         'process_create_message': 'MsgReady',
         # revision 5 (round-4 Fable item 1 and non-blocking item)
         'op_dispatch': 'EvmRun', 'op_sload': 'EvmRun', 'op_sstore': 'EvmRun',
-        'execute_block': 'BlockReady',
+        'execute_block': 'BlockReadyStrong', 'payload_header': 'InputReady',
         # revision 7: the witness decoders run inside `state_init` after `ws := alloc(40)` and
         # before `ws+24`/`ws+32` are stored, where `WorldOK` does not hold; their bodies only
         # need separated arenas (the revision-6 proofs used `WorldOK` only to reach `ArenaReady`)

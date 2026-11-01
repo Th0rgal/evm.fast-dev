@@ -4,8 +4,12 @@
 /-- The proposed total source budget: the generated bound of `main` plus the entry tick. -/
 def K_pan : Nat := K.«main» + 1
 
-/-- Kernel-checked budget inequality (target side `32·K + 23077`, `ConcreteStage1To5Transfer`). -/
-theorem K_pan_budget : 32 * K_pan + 23077 ≤ (10 ^ 299 - 1) / 10 ^ 4 := by decide
+/-- Kernel-checked target budget after the concrete stage transfer. -/
+def K_target : Nat := 118223496 * K_pan + 119233963
+
+theorem K_target_budget : 118223496 * K_pan + 119233963 ≤ 10 ^ 122 - 1 := by decide
+
+theorem K_pan_budget : K_target ≤ 10 ^ 122 - 1 := K_target_budget
 
 /-- The conditional assembly (round-3 assembly ruling), PROVED and `sorry`-free: the primitive
 obligations imply the campaign target. `#print axioms assembly` lists no `sorryAx`. -/
@@ -49,6 +53,9 @@ example : 2 ^ 58 ≤ evmPotMax := by decide
 #print axioms assembly
 #print axioms assembly_main
 #print axioms K_pan_budget
+#print axioms K_target_budget
+#print axioms bufferRegion_disj
+#print axioms bufferRegion_disj_le
 #print axioms AllocatorGrows.allocated
 #print axioms FreshBlock.disj_allocated
 

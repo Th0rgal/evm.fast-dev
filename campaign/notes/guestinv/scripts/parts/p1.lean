@@ -1,9 +1,10 @@
 import InitECandidate.Solver.PanTerminatingBounded
 
-/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 8
-(round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
+/-! PROPOSED STATEMENTS ONLY (Wave 8, mission 9409f9a9, track `guestinv-opus55`), revision 10
+(R10 fixes: entry shapes, byte-key global frames, empty intervals, typed decoder outputs;
+round-5 fixes: role-typed tables with pinned key lengths, exit-world avoidance of constructor
 results, guarded-loop progress contracts; the per-revision change lists are in
-`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; no `fb_*` changed).
+`campaign/notes/guestinv/DESIGN.md` §0, revision 8 in §0.0 and §0.2c; R10 moves four node-encoding leaves to guarded contracts).
 
 Replaces the presumed-false all-state `TerminatingFunBounded "main"` route by a guarded one.
 Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
@@ -16,7 +17,7 @@ Revision 2 answered the round-1 quorum (`campaign/reviews/guestinv-r1.md`):
   sum over the body of `K(callee) + 1` per call and `(N + 1) * (body + 1)` per loop, where `N` is
   the loop's iteration bound, from a measure that holds for ARBITRARY memory and globals wherever
   one exists.
-* Five loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
+* The original guarded loops have no arbitrary-memory measure: `run_frames` (EVM gas), `htab_truncate`
   (count in memory), `_decode_witness_node_body` (needs heap/scratch separation) and the two MPT
   update loops. They and their callers form the *guarded tier* (§7), whose leaves carry explicit
   memory contracts (`HtabWF`, `EvmInv` with a gas-value-free potential, `WorldOK`).
