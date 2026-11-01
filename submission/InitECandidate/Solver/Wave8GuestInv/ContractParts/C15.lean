@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C14
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyStorageOps
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -45,7 +46,8 @@ def GBody.«get_storage» : Prop :=
 theorem «callees_get_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_get_storage))
     ["htab_set", "record_pre_state_read", "sk_make", "stor_lookup", "ws_get_storage"] = true := by decide
 
-theorem «gbody_get_storage» : GBody.«get_storage» := by sorry
+theorem «gbody_get_storage» : GBody.«get_storage» :=
+  R10Shards.GbodyStorageOps.gbody_get_storage_impl
 
 theorem «gb_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage» :=
   «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «nz_htab_set» «wk_record_pre_state_read» «wk_sk_make» «ro_stor_lookup»
@@ -79,7 +81,8 @@ def GBody.«op_sload» : Prop :=
 theorem «callees_op_sload» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_sload))
     ["charge_gas", "get_storage", "is_warm_storage_key", "pc_add", "stack_pop", "stack_push", "u256_to_be32", "warm_storage_key"] = true := by decide
 
-theorem «gbody_op_sload» : GBody.«op_sload» := by sorry
+theorem «gbody_op_sload» : GBody.«op_sload» :=
+  R10Shards.GbodyStorageOps.gbody_op_sload_impl
 
 theorem «gb_op_sload» : TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload» :=
   «gbody_op_sload» «fb_charge_gas» «gb_get_storage» «fb_is_warm_storage_key» «fb_pc_add» «fb_stack_pop» «fb_stack_push» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ek_is_warm_storage_key» «ek_stack_pop» «ek_u256_to_be32» «ek_warm_storage_key»
@@ -173,7 +176,8 @@ def GBody.«op_sstore» : Prop :=
 theorem «callees_op_sstore» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_sstore))
     ["charge_gas", "charge_state_gas", "check_gas", "credit_state_gas_refund", "get_storage", "get_storage_original", "is_warm_storage_key", "max", "pc_add", "require_not_static", "set_storage", "stack_pop", "u256_eq", "u256_is_zero", "u256_to_be32", "warm_storage_key"] = true := by decide
 
-theorem «gbody_op_sstore» : GBody.«op_sstore» := by sorry
+theorem «gbody_op_sstore» : GBody.«op_sstore» :=
+  R10Shards.GbodyStorageOps.gbody_op_sstore_impl
 
 theorem «gb_op_sstore» : TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore» :=
   «gbody_op_sstore» «fb_charge_gas» «fb_charge_state_gas» «fb_check_gas» «fb_credit_state_gas_refund» «gb_get_storage» «gb_get_storage_original» «fb_is_warm_storage_key» «fb_max» «fb_pc_add» «fb_require_not_static» «fb_set_storage» «fb_stack_pop» «fb_u256_eq» «fb_u256_is_zero» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ro_check_gas» «ek_get_storage_original» «ek_is_warm_storage_key» «ro_max» «ro_require_not_static» «ek_stack_pop» «ek_u256_to_be32» «ek_warm_storage_key»

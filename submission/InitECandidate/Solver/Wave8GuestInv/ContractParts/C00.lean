@@ -1,6 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.LeafStatements
 import InitECandidate.Solver.Wave8GuestInv.EntryDefs
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabNew
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloMemInitWorld
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -226,7 +227,13 @@ theorem mpt_delete_node_body_spec :
 /-- After `mem_init` the arenas are separated and every root is `0` (all globals were `0`). -/
 theorem mem_init_world :
     FunSpec (fun s => GuestInv s ∧ GlobalsZero s) (OnReturn fun _ post => WorldOK post)
-      (ofString "mem_init") := by sorry
+      (ofString "mem_init") := by
+  refine ⟨_, _, _, lookup_mem_init, ?_⟩
+  intro F s _ hs _ _ v _
+  change WorldOK
+    (evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_mem_init).2.2.1).2
+  rw [SoloMemInitWorld.evaluate s hs.2]
+  exact SoloMemInitWorld.worldOK s hs.1 hs.2
 
 /-! ### EVM frame contracts (round-1 item 5) -/
 

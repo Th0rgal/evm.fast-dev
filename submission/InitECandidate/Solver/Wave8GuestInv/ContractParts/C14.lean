@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C13
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyHtabRollback
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyFinishChild
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -125,7 +126,11 @@ def GBody.«finish_child» : Prop :=
 theorem «callees_finish_child» : sameNames (progCallees (fnBody Guest.Software.guestFn_finish_child))
     ["address_to_u256", "create_finish", "credit_state_gas_refund", "frame_halt", "frame_mem_release", "incorporate_child_on_error", "incorporate_child_on_success", "memcpy", "min", "pc_add", "refill_frame_state_gas", "rollback_child_access", "scratch_release", "set_retdata", "stack_push", "state_restore"] = true := by decide
 
-theorem «gbody_finish_child» : GBody.«finish_child» := by sorry
+theorem «gbody_finish_child» : GBody.«finish_child» := by
+  intro ha hc hcr hfh hfm he hs hm hmin hp hr hb hsr hsd hsp hst ekc ekf ekr eks
+  exact FinishChild.finish_child
+    ⟨ha, hc, hcr, hfh, hfm, he, hs, hm, hmin, hp, hr, hb, hsr, hsd, hsp, hst⟩
+    ⟨ekc, ekf, ekr, eks⟩
 
 theorem «gb_finish_child» : TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child» :=
   «gbody_finish_child» «fb_address_to_u256» «fb_create_finish» «fb_credit_state_gas_refund» «fb_frame_halt» «fb_frame_mem_release» «fb_incorporate_child_on_error» «fb_incorporate_child_on_success» «fb_memcpy» «fb_min» «fb_pc_add» «fb_refill_frame_state_gas» «gb_rollback_child_access» «fb_scratch_release» «fb_set_retdata» «fb_stack_push» «fb_state_restore» «ek_create_finish» «ek_frame_halt» «ek_refill_frame_state_gas» «ek_state_restore»
