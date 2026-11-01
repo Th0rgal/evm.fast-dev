@@ -1,5 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C15
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.GBODY_RUNFRAMES_SOL.OpDispatch
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.GBODY_RUNFRAMES_SOL.RunFrames
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -117,7 +119,8 @@ def GBody.«op_dispatch» : Prop :=
 theorem «callees_op_dispatch» : sameNames (progCallees (fnBody Guest.Software.guestFn_op_dispatch))
     ["op_add", "op_addmod", "op_address", "op_and", "op_balance", "op_basefee", "op_blobbasefee", "op_blobhash", "op_blockhash", "op_byte", "op_call", "op_callcode", "op_calldatacopy", "op_calldataload", "op_calldatasize", "op_caller", "op_callvalue", "op_chainid", "op_clz", "op_codecopy", "op_codesize", "op_coinbase", "op_create", "op_create2", "op_delegatecall", "op_div", "op_dup", "op_dupn", "op_eq", "op_exchange", "op_exp", "op_extcodecopy", "op_extcodehash", "op_extcodesize", "op_gas", "op_gaslimit", "op_gasprice", "op_gt", "op_iszero", "op_jump", "op_jumpdest", "op_jumpi", "op_keccak", "op_log", "op_lt", "op_mcopy", "op_mload", "op_mod", "op_msize", "op_mstore", "op_mstore8", "op_mul", "op_mulmod", "op_not", "op_number", "op_or", "op_origin", "op_pc", "op_pop", "op_prevrandao", "op_push", "op_return", "op_returndatacopy", "op_returndatasize", "op_revert", "op_sar", "op_sdiv", "op_selfbalance", "op_selfdestruct", "op_sgt", "op_shl", "op_shr", "op_signextend", "op_sload", "op_slotnum", "op_slt", "op_smod", "op_sstore", "op_staticcall", "op_stop", "op_sub", "op_swap", "op_swapn", "op_timestamp", "op_tload", "op_tstore", "op_xor"] = true := by decide
 
-theorem «gbody_op_dispatch» : GBody.«op_dispatch» := by sorry
+theorem «gbody_op_dispatch» : GBody.«op_dispatch» :=
+  RunFramesRace.gbody_op_dispatch
 
 theorem «gb_op_dispatch» : TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch» :=
   «gbody_op_dispatch» «fb_op_add» «fb_op_addmod» «fb_op_address» «fb_op_and» «fb_op_balance» «fb_op_basefee» «fb_op_blobbasefee» «fb_op_blobhash» «fb_op_blockhash» «fb_op_byte» «fb_op_call» «fb_op_callcode» «fb_op_calldatacopy» «fb_op_calldataload» «fb_op_calldatasize» «fb_op_caller» «fb_op_callvalue» «fb_op_chainid» «fb_op_clz» «fb_op_codecopy» «fb_op_codesize» «fb_op_coinbase» «fb_op_create» «fb_op_create2» «fb_op_delegatecall» «fb_op_div» «fb_op_dup» «fb_op_dupn» «fb_op_eq» «fb_op_exchange» «fb_op_exp» «fb_op_extcodecopy» «fb_op_extcodehash» «fb_op_extcodesize» «fb_op_gas» «fb_op_gaslimit» «fb_op_gasprice» «fb_op_gt» «fb_op_iszero» «fb_op_jump» «fb_op_jumpdest» «fb_op_jumpi» «fb_op_keccak» «fb_op_log» «fb_op_lt» «fb_op_mcopy» «fb_op_mload» «fb_op_mod» «fb_op_msize» «fb_op_mstore» «fb_op_mstore8» «fb_op_mul» «fb_op_mulmod» «fb_op_not» «fb_op_number» «fb_op_or» «fb_op_origin» «fb_op_pc» «fb_op_pop» «fb_op_prevrandao» «fb_op_push» «fb_op_return» «fb_op_returndatacopy» «fb_op_returndatasize» «fb_op_revert» «fb_op_sar» «fb_op_sdiv» «fb_op_selfbalance» «fb_op_selfdestruct» «fb_op_sgt» «fb_op_shl» «fb_op_shr» «fb_op_signextend» «gb_op_sload» «fb_op_slotnum» «fb_op_slt» «fb_op_smod» «gb_op_sstore» «fb_op_staticcall» «fb_op_stop» «fb_op_sub» «fb_op_swap» «fb_op_swapn» «fb_op_timestamp» «fb_op_tload» «fb_op_tstore» «fb_op_xor»
@@ -141,7 +144,8 @@ def GBody.«run_frames» : Prop :=
 theorem «callees_run_frames» : sameNames (progCallees (fnBody Guest.Software.guestFn_run_frames))
     ["finish_child", "frame_epilogue", "frame_exception", "op_dispatch"] = true := by decide
 
-theorem «gbody_run_frames» : GBody.«run_frames» := by sorry
+theorem «gbody_run_frames» : GBody.«run_frames» :=
+  RunFramesRace.gbody_run_frames
 
 theorem «gb_run_frames» : TerminatingFunBoundedOn EvmInv (ofString "run_frames") K.«run_frames» :=
   «gbody_run_frames» «gb_finish_child» «fb_frame_epilogue» «fb_frame_exception» «gb_op_dispatch» «finish_child_spec» «frame_epilogue_spec» «frame_exception_spec» «op_dispatch_spec»

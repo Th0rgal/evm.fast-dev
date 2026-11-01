@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C12
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyIdxBuilder
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -149,7 +150,8 @@ def GBody.«idx_start_storage» : Prop :=
 theorem «callees_idx_start_storage» : sameNames (progCallees (fnBody Guest.Software.guestFn_idx_start_storage))
     ["alloc", "get_pre_tx_storage", "htab_get", "htab_set", "memcpy", "st_le64"] = true := by decide
 
-theorem «gbody_idx_start_storage» : GBody.«idx_start_storage» := by sorry
+theorem «gbody_idx_start_storage» : GBody.«idx_start_storage» :=
+  R10GbodyIdxBuilder.gbody_idx_start_storage_impl
 
 theorem «gb_idx_start_storage» : TerminatingFunBoundedOn WorldOK (ofString "idx_start_storage") K.«idx_start_storage» :=
   «gbody_idx_start_storage» «fb_alloc» «gb_get_pre_tx_storage» «fb_htab_get» «fb_htab_set» «fb_memcpy» «fb_st_le64» «ro_htab_get» «wk_memcpy» «wk_st_le64»
@@ -216,7 +218,8 @@ def GBody.«update_builder_from_tx» : Prop :=
 theorem «callees_update_builder_from_tx» : sameNames (progCallees (fnBody Guest.Software.guestFn_update_builder_from_tx))
     ["add_balance_change", "add_code_change", "add_nonce_change", "add_storage_write", "bal_remove_change", "get_code", "htab_item", "idx_start_account", "idx_start_storage", "memeq", "remove_storage_write", "u256_eq"] = true := by decide
 
-theorem «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx» := by sorry
+theorem «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx» :=
+  R10GbodyIdxBuilder.gbody_update_builder_from_tx_impl
 
 theorem «gb_update_builder_from_tx» : TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx» :=
   «gbody_update_builder_from_tx» «fb_add_balance_change» «fb_add_code_change» «fb_add_nonce_change» «fb_add_storage_write» «fb_bal_remove_change» «fb_get_code» «fb_htab_item» «fb_idx_start_account» «gb_idx_start_storage» «fb_memeq» «fb_remove_storage_write» «fb_u256_eq» «wk_add_balance_change» «wk_add_code_change» «wk_add_nonce_change» «wk_add_storage_write» «wk_bal_remove_change» «wk_get_code» «ro_htab_item» «wk_idx_start_account» «wk_idx_start_storage» «ro_memeq» «wk_remove_storage_write» «ro_u256_eq»
