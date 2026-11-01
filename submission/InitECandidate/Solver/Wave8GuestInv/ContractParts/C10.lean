@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C09
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyMptInsert
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -106,7 +107,12 @@ def GBody.«_mpt_insert_node» : Prop :=
 theorem «callees__mpt_insert_node» : sameNames (progCallees (fnBody Guest.Software.guestFn__mpt_insert_node))
     ["_insert_into_leaf", "_split_extension", "common_prefix_length", "mpt_fail", "node_invalidate", "node_new_ext", "node_new_leaf"] = true := by decide
 
-theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by sorry
+theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by
+  intro fb_leaf fb_split fb_prefix fb_fail fb_invalidate fb_ext fb_new_leaf
+    nf_leaf nf_split ro_prefix rv_prefix ro_fail nf_invalidate iz_invalidate nf_ext rt_ext nf_new_leaf
+  exact GuardedBody.mptInsert_bounded ⟨fb_leaf, fb_split, fb_prefix, fb_fail,
+    fb_invalidate, fb_ext, fb_new_leaf, nf_leaf, nf_split, ro_prefix, rv_prefix,
+    ro_fail, nf_invalidate, iz_invalidate, nf_ext, rt_ext, nf_new_leaf⟩
 
 theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
   «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «rt_node_new_ext» «nf_node_new_leaf»
