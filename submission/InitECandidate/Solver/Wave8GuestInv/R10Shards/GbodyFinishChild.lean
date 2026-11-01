@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C13
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyHtabRollback
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -14,6 +15,8 @@ open InitECandidate.Solver.GuestCodeLookup
 open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
+open InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyHtabRollback
+  (IvlUnhit wordsOK_transfer htabFootprint_eq_of_hdr_unhit htabWF_congr_unhit)
 
 /-- Compose two bounds across a guard established on normal fall-through. -/
 theorem seq_cut
@@ -228,7 +231,7 @@ theorem rollback_output_frame {F : Type} {s post : PanSemStateFiniteExact 64 F} 
   · simpa only [Allocated, globN, hg] using hs.2.1
   · intro k h
     rw [hk k h]
-    refine ⟨htabWF_congr_unhit hs.1.1 hp (hs.2.2.2.1 k h).1 (hu k h), ?_⟩
+    refine ⟨(htabWF_congr_unhit hs.1.1 hp (hs.2.2.2.1 k h).1 (hu k h)).1, ?_⟩
     rw [hf k h]
     intro i hi
     refine ⟨?_, ((hs.2.2.2.1 k h).2 i hi).2⟩
@@ -252,8 +255,8 @@ theorem rollback_globals {F : Type} {s post : PanSemStateFiniteExact 64 F} {c : 
   · simpa only [Allocated, hh, hsc] using hs.2.1
   · intro k hk
     rw [hw]
-    refine ⟨htabWF_congr_unhit hs.1.1 hp (hs.2.2.2.1 k hk).1
-      (fun _ _ a _ _ => congrFun hm a), ?_⟩
+    refine ⟨(htabWF_congr_unhit hs.1.1 hp (hs.2.2.2.1 k hk).1
+      (fun _ _ a _ _ => congrFun hm a)).1, ?_⟩
     rw [hfp]
     intro i hi
     refine ⟨?_, ((hs.2.2.2.1 k hk).2 i hi).2⟩

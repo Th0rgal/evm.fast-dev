@@ -1496,7 +1496,7 @@ theorem evmInv_store_cur_cont_24 {F : Type} {s post : PanSemStateFiniteExact 64 
       Disj (globN s "cur_cont", 104) o := by
     have hpw0 := hpw_head_tail.1
     unfold frameObjects at hpw0
-    simp only [List.pairwise_cons] at hpw0
+    simp only [List.cons_append, List.pairwise_cons] at hpw0
     obtain ⟨hd0, hd1, _⟩ := hpw0
     intro o ho
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
@@ -1587,13 +1587,60 @@ theorem evmInv_store_cur_cont_24 {F : Type} {s post : PanSemStateFiniteExact 64 
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     unfold frameRet
     rw [he_eq 216 (by omega), he_eq 144 (by omega)]
+  have hframeLogObjects_eq : ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_other_eq ec hec
+    have hfw := hFW_all ec hec
+    unfold frameLogObjects
+    dsimp only
+    rw [he_eq 88 (by omega), h88_eq 8 (by omega),
+        show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by simpa using h88_eq 0 (by omega)]
+    apply List.flatMap_congr
+    intro i hi_r
+    have hi_lt : i < memW s (memW s (ec.1 + 88) + 8) := List.mem_range.1 hi_r
+    have h88_le16 : memW s (memW s (ec.1 + 88) + 8) ≤ memW s (memW s (ec.1 + 88) + 16) :=
+      hfw.2.2.2.2.2.2.2.2.2.2.2.1
+    have hd_flogs_x : Disj (frameLogs s ec) (x.toNat, 8) := by
+      apply disj_of_inside_right (j' := (globN s "cur_cont", 104)) hx_in_cont
+      apply Disj.flip
+      rw [hch_cons, List.mem_cons] at hec
+      rcases hec with rfl | htail
+      · exact hcont_disj_head _ (by simp)
+      · exact hpw_head_tail.2 _ hcont_fo ec htail _ (by simp [frameObjects])
+    have hal_fl : Allocated s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.1
+    have hflogs_hi : memW s (memW s (ec.1 + 88)) + 8 * memW s (memW s (ec.1 + 88) + 16) ≤ 2 ^ 64 :=
+      (ivl_allocated_bound hAs.2 hal_fl).2
+    have hslot_eq : memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i) := by
+      apply hmemW_ne _ (by omega)
+      rcases hd_flogs_x with h | h | h | h
+      · unfold frameLogs at h; dsimp only at h; omega
+      · cases h
+      · unfold frameLogs at h; dsimp only at h; rw [hx_eq] at h; omega
+      · unfold frameLogs at h; dsimp only at h; rw [hx_eq] at h; omega
+    rw [hslot_eq]
+    have hll := hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    rcases hll with h88_0 | ⟨_, _, _, _, hle_i⟩
+    · have hin88 := (hfw.1 (memW s (ec.1 + 88), 24) (by simp)).1
+      have hss : 32 ≤ scratchStart := by decide
+      have := hAs.2.2.2.1; have := hAs.2.2.2.2.1
+      dsimp [Inside] at hin88; omega
+    · obtain ⟨_, hle_ok⟩ := hle_i i hi_lt
+      have hlog_in : Inside (memW s (memW s (ec.1 + 88)) + 8 * i |> memW s, 40) sourceBase (globN s "heap_ptr") :=
+        hle_ok.2.1
+      have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAs.2.2.1
+      dsimp [Inside] at hlog_in
+      unfold logOwnedIvls logRecordIvls
+      rw [hglob_eq "vm_system_address",
+          hm_heap _ (by omega), hm_heap _ (by omega), hm_heap _ (by omega),
+          hm_heap _ (by omega), hm_heap _ (by omega)]
   have hframeObjects_eq : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec := by
     intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     unfold frameObjects
     rw [he_eq 8 (by omega), he_eq 232 (by omega),
         he_eq 24 (by omega), he_eq 40 (by omega),
-        he_eq 88 (by omega), hframeLogs_eq ec hec, hframeRet_eq ec hec]
+        he_eq 88 (by omega), hframeLogs_eq ec hec, hframeRet_eq ec hec, hframeLogObjects_eq ec hec]
   have hframeScratch_eq : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
     intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
@@ -1715,7 +1762,8 @@ theorem evmInv_store_cur_cont_24 {F : Type} {s post : PanSemStateFiniteExact 64 
     refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, m9⟩
     · intro j hj hij
       have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
-      rw [hframeScratch_eq _ hj_mem, hframeObjects_eq _ hj_mem, hframeLogs_eq _ hj_mem]
+      obtain ⟨he_j, _, _⟩ := hrec_other_eq _ hj_mem
+      rw [hframeScratch_eq _ hj_mem, hframeObjects_eq _ hj_mem, hframeLogs_eq _ hj_mem, he_j 112 (by omega)]
       exact m5 j hj hij
     · intro t ht
       rw [(htab_fp_hdr t ht).2, hdelEx_iff i t]

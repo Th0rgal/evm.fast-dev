@@ -1,6 +1,8 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Primitives
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.P10
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P11
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P14
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -215,13 +217,13 @@ theorem primitives : Primitives where
   «fb_op_blobbasefee» := «fb_op_blobbasefee»
   «fb_op_blobhash» := «fb_op_blobhash»
   «fb_op_blockhash» := «fb_op_blockhash»
-  «fb_op_byte» := «fb_op_byte»
-  «fb_op_call» := «fb_op_call»
-  «fb_op_callcode» := «fb_op_callcode»
-  «fb_op_calldatacopy» := «fb_op_calldatacopy»
-  «fb_op_calldataload» := «fb_op_calldataload»
-  «fb_op_calldatasize» := «fb_op_calldatasize»
-  «fb_op_caller» := «fb_op_caller»
+  «fb_op_byte» := R10Shards.P11.fb_op_byte «fb_stack_pop» «fb_charge_gas» «fb_sat_word» «fb_u256_byte» «fb_stack_push_word» «fb_pc_add»
+  «fb_op_call» := R10Shards.P11.fb_op_call «fb_stack_pop» «fb_to_address_masked» «fb_extend_memory_cost2» «fb_is_warm_address» «fb_u256_is_zero» «fb_add_sat» «fb_charge_gas» «fb_warm_address» «fb_calculate_delegation_cost» «fb_ext_code_of» «fb_sat_word» «fb_calculate_message_call_gas» «fb_extend_memory» «fb_get_account» «fb_u256_lt» «fb_stack_push» «fb_set_retdata» «fb_credit_state_gas_refund» «fb_is_account_alive» «fb_charge_state_gas» «fb_generic_call» «fb_pc_add»
+  «fb_op_callcode» := R10Shards.P11.fb_op_callcode «fb_stack_pop» «fb_to_address_masked» «fb_extend_memory_cost2» «fb_is_warm_address» «fb_u256_is_zero» «fb_add_sat» «fb_charge_gas» «fb_warm_address» «fb_calculate_delegation_cost» «fb_ext_code_of» «fb_sat_word» «fb_calculate_message_call_gas» «fb_extend_memory» «fb_get_account» «fb_u256_lt» «fb_stack_push» «fb_set_retdata» «fb_generic_call» «fb_pc_add»
+  «fb_op_calldatacopy» := R10Shards.P11.fb_op_calldatacopy (R10Shards.P11.fb_copy_from_buffer «fb_stack_pop» «fb_sat_word» «fb_words_of» «fb_extend_memory_cost1» «fb_add_sat» «fb_charge_gas» «fb_extend_memory» «fb_buffer_read» «fb_pc_add»)
+  «fb_op_calldataload» := R10Shards.P11.fb_op_calldataload «fb_stack_pop» «fb_charge_gas» «fb_sat_word» «fb_heap_mark» «fb_alloc» «fb_buffer_read» «fb_u256_from_be» «fb_heap_release» «fb_stack_push» «fb_pc_add»
+  «fb_op_calldatasize» := R10Shards.P11.fb_op_calldatasize «fb_charge_gas» «fb_stack_push_word» «fb_pc_add»
+  «fb_op_caller» := R10Shards.P11.fb_op_caller «fb_charge_gas» «fb_address_to_u256» «fb_stack_push» «fb_pc_add»
   «fb_op_callvalue» := «fb_op_callvalue»
   «fb_op_chainid» := «fb_op_chainid»
   «fb_op_clz» := «fb_op_clz»
@@ -255,13 +257,13 @@ theorem primitives : Primitives where
   «fb_op_mload» := «fb_op_mload»
   «fb_op_mod» := «fb_op_mod»
   «fb_op_msize» := «fb_op_msize»
-  «fb_op_mstore» := «fb_op_mstore»
-  «fb_op_mstore8» := «fb_op_mstore8»
-  «fb_op_mul» := «fb_op_mul»
-  «fb_op_mulmod» := «fb_op_mulmod»
-  «fb_op_not» := «fb_op_not»
-  «fb_op_number» := «fb_op_number»
-  «fb_op_or» := «fb_op_or»
+  «fb_op_mstore» := R10Shards.P14.fb_op_mstore «fb_stack_pop» «fb_charge_with_memory» «fb_sat_word» R10Shards.P10.fb_u256_to_be32 «fb_pc_add»
+  «fb_op_mstore8» := R10Shards.P14.fb_op_mstore8 «fb_stack_pop» «fb_charge_with_memory» «fb_sat_word» «fb_pc_add»
+  «fb_op_mul» := R10Shards.P14.fb_op_mul «fb_stack_pop» «fb_charge_gas» «fb_u256_mul» «fb_stack_push» «fb_pc_add»
+  «fb_op_mulmod» := R10Shards.P14.fb_op_mulmod «fb_stack_pop» «fb_charge_gas» «fb_u256_mulmod» «fb_stack_push» «fb_pc_add»
+  «fb_op_not» := R10Shards.P14.fb_op_not «fb_stack_pop» «fb_charge_gas» «fb_stack_push» «fb_pc_add»
+  «fb_op_number» := R10Shards.P14.fb_op_number «fb_charge_gas» «fb_block_env» «fb_stack_push_word» «fb_pc_add»
+  «fb_op_or» := R10Shards.P14.fb_op_or «fb_stack_pop» «fb_charge_gas» «fb_stack_push» «fb_pc_add»
   «fb_op_origin» := «fb_op_origin»
   «fb_op_pc» := «fb_op_pc»
   «fb_op_pop» := «fb_op_pop»

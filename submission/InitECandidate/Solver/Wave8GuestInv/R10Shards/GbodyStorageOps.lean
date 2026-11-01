@@ -1601,10 +1601,11 @@ theorem callEntryOn_u256_to_be32_evm_key_buf {kvExp : ExpHOL 64} :
         values body callee ret he1 he2 hargs hl
       have hv2_glob : state.globals.lookup (ofString "evm_key_buf") = some v2 := by
         rw [← hkey_eq]; exact he2
-      let ent := callEntryStateHOLFinite state callee
+      have hInv_ent : EvmInv (callEntryStateHOLFinite state callee) :=
+        localsFree_evmInv state callee (state.clock - 1) hInv
+      set ent := callEntryStateHOLFinite state callee
       have hout_eq : locN ent "out" = globN state "evm_key_buf" := by
         simp [locN, globN, ent, callEntryStateHOLFinite, hp.2.2, hv2_glob]
-      have hInv_ent : EvmInv ent := localsFree_evmInv state callee (state.clock - 1) hInv
       obtain ⟨hAs, S, hInvAt⟩ := (evmInv_iff_at ent).1 hInv_ent
       have hInvAt0 := hInvAt
       obtain ⟨hW, _, _, _, hFW_all, _, _, _, hFO_disj, ⟨Nd, hTr, _⟩, _⟩ := hInvAt
@@ -1621,7 +1622,7 @@ theorem callEntryOn_u256_to_be32_evm_key_buf {kvExp : ExpHOL 64} :
           have hal_ge : ∀ x : Ivl, Allocated ent x → 32 ≤ x.1 := by
             rintro x (⟨hlo, _⟩ | ⟨hlo, _⟩)
             · omega
-            · have := hAs.2.2.1; have := hAs.2.2.2.1; omega
+            · have h1 := hAs.2.2.2.1; have h2 := hAs.2.2.2.2.1; omega
           rcases List.mem_append.1 hj with hj_w | hj_f
           · unfold worldTypedIvls at hj_w
             simp only [List.mem_append] at hj_w
@@ -1633,9 +1634,14 @@ theorem callEntryOn_u256_to_be32_evm_key_buf {kvExp : ExpHOL 64} :
               · exact Or.inl h0
               · exact Or.inr (hal_ge _ hal)
             · simp only [List.mem_singleton] at h3; subst h3
+              change (32 * globN ent "journal_cap" = 0) ∨
+                32 ≤ (if globN ent "journal_cap" = 0 then 0 else globN ent "journal")
               rcases hW.2.1.2.2.1 with h0 | ⟨hal, _⟩
-              · exact Or.inl (by dsimp; omega)
-              · exact Or.inr (hal_ge _ hal)
+              · exact Or.inl (by omega)
+              · by_cases hjc0 : globN ent "journal_cap" = 0
+                · exact Or.inl (by omega)
+                · simp only [hjc0, ↓reduceIte]
+                  exact Or.inr (hal_ge (globN ent "journal", 32 * globN ent "journal_cap") hal)
             · rcases hW.2.2.1.1 j (by unfold fixedObjects; exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr h4)))) with h0 | ⟨hal, _⟩
               · exact Or.inl h0
               · exact Or.inr (hal_ge _ hal)
@@ -1647,7 +1653,7 @@ theorem callEntryOn_u256_to_be32_evm_key_buf {kvExp : ExpHOL 64} :
               rcases hno with rfl | rfl
               · exact Or.inr (hal_ge _ (hTr.1.1 n hn).2.1)
               · unfold nodePath; split_ifs with hc
-                · rcases (hTr.1.1 n hn).2.2.2.2.2.2 hc.1 with h0 | ⟨_, hal, _⟩
+                · rcases (hTr.1.1 n hn).2.2.2.2.2.2.1 hc.1 with h0 | ⟨_, hal, _⟩
                   · exact absurd h0 hc.2
                   · exact Or.inr (hal_ge _ hal)
                 · exact Or.inl rfl
@@ -1655,19 +1661,37 @@ theorem callEntryOn_u256_to_be32_evm_key_buf {kvExp : ExpHOL 64} :
             obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hl
             have hfw := hFW_all ec hec
             unfold frameObjects at hj_in
-            simp only [List.mem_cons, List.not_mem_nil, or_false] at hj_in
-            rcases hj_in with rfl | rfl | rfl | rfl | rfl | rfl | rfl
-            · exact Or.inr (hal_ge _ (Or.inr (hfw.1 (ec.1, 280) (by simp)).1))
-            · exact Or.inr (hal_ge _ (Or.inr (hfw.1 (ec.2, 104) (by simp)).1))
-            · exact Or.inr (hal_ge _ (Or.inr (hfw.1 _ (by simp)).1))
-            · have hin := hfw.2.1; exact Or.inr (by dsimp at hin ⊢; omega)
-            · exact Or.inr (hal_ge _ (Or.inr (hfw.1 _ (by simp)).1))
-            · rcases hfw.2.2.2.2.2.2.2.2.2.2.2.2.1 with h | h
-              · exact Or.inr (hal_ge _ (Or.inl h))
-              · exact Or.inr (hal_ge _ (Or.inr h))
-            · rcases hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with ⟨hz, _⟩ | ⟨h, _⟩
-              · unfold frameRet; simp [hz]
-              · exact Or.inr (hal_ge _ (Or.inl h))
+            rcases List.mem_append.1 hj_in with hj_in | hj_log
+            · simp only [List.mem_cons, List.not_mem_nil, or_false] at hj_in
+              rcases hj_in with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+              · exact Or.inr (hal_ge _ (Or.inr (hfw.1 (ec.1, 280) (by simp)).1))
+              · exact Or.inr (hal_ge _ (Or.inr (hfw.1 (ec.2, 104) (by simp)).1))
+              · exact Or.inr (hal_ge _ (Or.inr (hfw.1 _ (by simp)).1))
+              · have hin : scratchStart ≤ memW ent (ec.1 + 24) := hfw.2.1.1
+                exact Or.inr (by dsimp; omega)
+              · exact Or.inr (hal_ge _ (Or.inr (hfw.1 _ (by simp)).1))
+              · rcases hfw.2.2.2.2.2.2.2.2.2.2.2.2.1 with h | h
+                · exact Or.inr (hal_ge _ (Or.inl h))
+                · exact Or.inr (hal_ge _ (Or.inr h))
+              · rcases hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with ⟨hz, _⟩ | ⟨h, _⟩
+                · unfold frameRet; simp [hz]
+                · exact Or.inr (hal_ge _ (Or.inl h))
+            · unfold frameLogObjects at hj_log
+              obtain ⟨i, hi_r, hj_lo⟩ := List.mem_flatMap.1 hj_log
+              have hi_lt : i < memW ent (memW ent (ec.1 + 88) + 8) := List.mem_range.1 hi_r
+              have hll := hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+              rcases hll with h88_0 | ⟨_, _, _, _, hle_i⟩
+              · have hin88 := (hfw.1 (memW ent (ec.1 + 88), 24) (by simp)).1
+                have := hal_ge (memW ent (ec.1 + 88), 24) (Or.inr hin88)
+                dsimp at this; omega
+              · obtain ⟨_, hle_ok⟩ := hle_i i hi_lt
+                have hj_ri := (List.mem_filter.1 hj_lo).1
+                simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at hj_ri
+                rcases hj_ri with rfl | rfl | rfl | rfl
+                · exact Or.inr (hal_ge _ (Or.inl hle_ok.2.1))
+                · exact Or.inr (hal_ge _ (Or.inl hle_ok.2.2.2.2.1))
+                · exact Or.inr (hal_ge _ (Or.inl hle_ok.2.2.2.2.2.1))
+                · exact Or.inr (hal_ge _ (Or.inl hle_ok.2.2.2.2.2.2))
         rcases hj_ge with hz0 | hge
         · exact Or.inr (Or.inl hz0)
         · rw [hbuf0]; exact Or.inr (Or.inr (Or.inl (by dsimp; omega)))
@@ -2064,11 +2088,11 @@ theorem gbody_op_sstore_impl
                                                             (TerminatingProgBoundedOn.call_guestInv hcg _ _)
                                                             (TerminatingProgBoundedOn.seq_guestInv
                                                               (TerminatingProgBoundedOn.call_guestInv hcsg _ _)
-                                                              (TerminatingProgBoundedOn.seq_guestInv
-                                                                (TerminatingProgBoundedOn.call_guestInv hss _ _)
                                                                 (TerminatingProgBoundedOn.seq_guestInv
-                                                                  (TerminatingProgBoundedOn.call_guestInv hpc _ _)
-                                                                  (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))))))))))))))))))))))))))) ?_
+                                                                  (TerminatingProgBoundedOn.call_guestInv hss _ _)
+                                                                  (TerminatingProgBoundedOn.seq_guestInv
+                                                                    (TerminatingProgBoundedOn.call_guestInv hpc _ _)
+                                                                    (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))))))))))))))))))))))))))))) ?_
   unfold K.«op_sstore»
   simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
