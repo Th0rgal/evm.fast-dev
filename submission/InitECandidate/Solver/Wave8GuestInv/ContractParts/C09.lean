@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyDecodeWitness
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyMptDelete
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -180,7 +181,10 @@ theorem «lookup__mpt_delete_node_body» : originalRuntimeCode.lookup (ofString 
   originalRuntimeCode_lookup_of_guestAst_getElem 278 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn__mpt_delete_node_body) rfl
 
-theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by sorry
+theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by
+  intro hcb hef hcp hme hmf hni hsa ncb nef rcp vcp rme rmf nni ini wsa rsa
+  exact R10Shards.GbodyMptDelete.bounded
+    ⟨hcb, hef, hcp, hme, hmf, hni, hsa, ncb, nef, rcp, vcp, rme, rmf, nni, ini, wsa, rsa⟩
 
 theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
   «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «rv_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «ww_scratch_alloc» «rt_scratch_alloc»
