@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C15
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -172,7 +173,8 @@ def GBody.«process_message» : Prop :=
 theorem «callees_process_message» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_message))
     ["depth0_prepare", "frame_halt", "frame_mem_release", "frame_open", "frame_start", "refill_frame_state_gas", "run_frames", "scratch_release", "state_restore", "state_snapshot"] = true := by decide
 
-theorem «gbody_process_message» : GBody.«process_message» := by sorry
+theorem «gbody_process_message» : GBody.«process_message» :=
+  R10Shards.GbodyProcessMsg.gbody_process_message_proof
 
 theorem «gb_process_message» : TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message» :=
   «gbody_process_message» «fb_depth0_prepare» «fb_frame_halt» «fb_frame_mem_release» «fb_frame_open» «fb_frame_start» «fb_refill_frame_state_gas» «gb_run_frames» «fb_scratch_release» «fb_state_restore» «fb_state_snapshot» «ek_depth0_prepare» «fk_frame_open» «ek_frame_start» «ro_state_snapshot»
@@ -210,7 +212,8 @@ def GBody.«process_create_message» : Prop :=
 theorem «callees_process_create_message» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_create_message))
     ["create_finish", "destroy_storage", "frame_halt", "increment_nonce", "mark_account_created", "process_message", "refill_frame_state_gas", "state_restore", "state_snapshot"] = true := by decide
 
-theorem «gbody_process_create_message» : GBody.«process_create_message» := by sorry
+theorem «gbody_process_create_message» : GBody.«process_create_message» :=
+  R10Shards.GbodyProcessMsg.gbody_process_create_message_proof
 
 theorem «gb_process_create_message» : TerminatingFunBoundedOn MsgReady (ofString "process_create_message") K.«process_create_message» :=
   «gbody_process_create_message» «fb_create_finish» «fb_destroy_storage» «fb_frame_halt» «fb_increment_nonce» «fb_mark_account_created» «gb_process_message» «fb_refill_frame_state_gas» «fb_state_restore» «fb_state_snapshot» «wk_destroy_storage» «wk_increment_nonce» «wk_mark_account_created» «ro_state_snapshot»
