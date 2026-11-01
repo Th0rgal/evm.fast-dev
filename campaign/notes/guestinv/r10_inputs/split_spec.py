@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Split the working-tree R10 spec into small InitECandidate Solver modules.
+"""Split the working-tree spec into small InitECandidate Solver modules.
 
 Usage: python3 campaign/notes/guestinv/r10_inputs/split_spec.py
 An optional --upstream REV reads the source from Git instead. Existing merged
@@ -25,7 +25,7 @@ def git(*args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--upstream', help='Optional git revision; default is the R10 working tree')
+    parser.add_argument('--upstream', help='Optional git revision; default is the working tree')
     args = parser.parse_args()
     sha = git('rev-parse', args.upstream or 'HEAD').decode().strip()
     raw = git('show', f'{sha}:{SOURCE}') if args.upstream else (ROOT/SOURCE).read_bytes()
@@ -110,7 +110,7 @@ def main():
         module(name, imports, body, 'Guarded contracts and proved glue, bounded compilation unit.')
         if not optional_glue:
             previous = NS + '.' + name
-    outputs['Contracts.lean'] = f'import {previous}\n\n/-! R10 guarded contracts, split for bounded builds. -/\n'
+    outputs['Contracts.lean'] = f'import {previous}\n\n/-! R11 guarded contracts, split for bounded builds. -/\n'
     outputs['Spec.lean'] = (f'import {NS}.Target\nimport {NS}.FrameGlue\n\n'
                            f'/-! Compatibility entry point for the split spec @ {sha}.\n'
                            'Definitions live in Defs, costs in Bounds, unguarded leaves in\n'
@@ -130,7 +130,7 @@ def main():
     for name, content in outputs.items():
         (OUT/name).parent.mkdir(parents=True, exist_ok=True)
         (OUT/name).write_text(content)
-    note = {'source': SOURCE, 'source_commit': sha, 'revision': 10, 'source_kind': 'git' if args.upstream else 'working_tree',
+    note = {'source': SOURCE, 'source_commit': sha, 'revision': 11, 'source_kind': 'git' if args.upstream else 'working_tree',
             'proof_adaptations': ['factor the guarded main run through abstract-state EntryRunBound; no statement or definition changes'],
             'source_sha256': hashlib.sha256(raw).hexdigest(),
             'namespace': NS, 'primitive_fields': len(fields),

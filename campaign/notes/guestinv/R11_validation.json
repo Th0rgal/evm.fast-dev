@@ -1,0 +1,597 @@
+{
+  "base": "664524baaf0aff6938ff399c2017a85b8ccc0c59",
+  "toolchain": "leanprover/lean4:v4.33.1",
+  "cone_archive_sha256": "e57619335600890bce4f43801c85a1d4fd1ebe2833dec71c7c9844b0c56b0369",
+  "source_sha256": "9a32dcc6a90c5a200dd251e8597023274cf01addb484b421316adb14cf8761ed",
+  "compatibility": {
+    "LogEntryOK_unchanged": true,
+    "LogsListOK_unchanged": true,
+    "Assembly_unchanged_except_provenance": true,
+    "parts_p4_in_monolith": true,
+    "split_source_hash_matches": true
+  },
+  "split_results": [
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Defs",
+      "source_sha256": "1efbd441b5b147886f4ba785760b5382eea4a67bec18ac5088f54d7259e7728f",
+      "status": "built",
+      "exit": 0,
+      "seconds": 44.37,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Defs.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Defs.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.MemoryViews",
+      "source_sha256": "60679739b5dfcfd834b0708d9c93c4874a8ed60617106f941192a98d30923123",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.67,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/MemoryViews.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/MemoryViews.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Bounds",
+      "source_sha256": "3510fa4dd4094b6d3144e4227420a527bb71a3c41f45ec5c2c3880d84413eeb1",
+      "status": "built",
+      "exit": 0,
+      "seconds": 5.64,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Bounds.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Bounds.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Expressions",
+      "source_sha256": "0ecf88d9f9325854cd77b2de2f5578125d82b103af49e31e9c9d4f0b92cf3653",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.56,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Expressions.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Expressions.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.LeafStatements",
+      "source_sha256": "ac0f6101b73e92032fad671a09c52a5e4d6dcbdadb212b261173cec0d73e31fa",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.35,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/LeafStatements.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/LeafStatements.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.EntryDefs",
+      "source_sha256": "139c3d0067a670b31baff0bde2560a0926bed0150ae95c6e2c3984748dac9cd8",
+      "status": "built",
+      "exit": 0,
+      "seconds": 1.72,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/EntryDefs.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/EntryDefs.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C00",
+      "source_sha256": "bae8f50a9fdffabee3468458a3ed9e1f0f496ef768f9797dc79f0266bd079477",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.14,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C00.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C00.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C01",
+      "source_sha256": "07d521f0fc5af0bf7ca01189bde039c8552bea65738c937a445675b484e055fc",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.09,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C01.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C01.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C02",
+      "source_sha256": "877ff2f1d79fbf8993d3cc610477faaaf807f074da69047d7a9200e4504762b9",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.53,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C02.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C02.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C03",
+      "source_sha256": "27fa409def3c8007932ab80fae3b5498700f61b4c47db3b644c2a3fcd6ef66c5",
+      "status": "built",
+      "exit": 0,
+      "seconds": 4.63,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C03.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C03.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C04",
+      "source_sha256": "36d5db376319b9cd4c2d70e8a2cd84ae2e01b988a0659f2547c82af0d7fec703",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.09,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C04.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C04.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C05",
+      "source_sha256": "18692ba031699d7cce23824a9924efd2ce97597073e42f662466685985e09d54",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.1,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C05.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C05.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C07",
+      "source_sha256": "e566a9047abfa495d992d0834eee620326e52fd5f6546b7215ea29b0eb95dd7f",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.04,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C07.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C07.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C08",
+      "source_sha256": "a31b736f41c413761356101aa02a76ac09fc33085b1281177dc3fd5971f15dfe",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.91,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C08.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C08.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C09",
+      "source_sha256": "ef18c21777c7bb8350242e9c198283c9fb33a7e235b2b0f07e29d4155c584124",
+      "status": "built",
+      "exit": 0,
+      "seconds": 1.91,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C09.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C09.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C10",
+      "source_sha256": "75aa93dc2e39a82456bbd3f41485e1d80c77fb855f40d3d82350ba830de05f6d",
+      "status": "built",
+      "exit": 0,
+      "seconds": 1.98,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C10.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C10.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C11",
+      "source_sha256": "4fbdac23c4c861461240d85015044ff316573b1a860570586eeb1df37c8aa55b",
+      "status": "built",
+      "exit": 0,
+      "seconds": 1.93,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C11.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C11.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C12",
+      "source_sha256": "94586bca10d5f3e5d93a55c51a533afec844a88cf5e7c3b841f8869efc4b1c1e",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.23,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C12.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C12.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C13",
+      "source_sha256": "0ed851249bfb2b38abbfa202f1ba7131239b2ef5f4396874f08a7f6cd0ab9e6b",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.39,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C13.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C13.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C14",
+      "source_sha256": "aa3b461e24ee5164b2264a2695a95c4410889f3aca9c724d4ada3bb709d279ef",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.15,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C14.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C14.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C15",
+      "source_sha256": "f54cdd9a7171fc2a3de6594fc43c71363d55db113940511ba2a817d5cbba40fa",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.04,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C15.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C15.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C16",
+      "source_sha256": "05c68a0b49baa42f0e2e1763ba131a1f7188a4bbdeeb8c39a878d7ab4674c6bd",
+      "status": "built",
+      "exit": 0,
+      "seconds": 11.0,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C16.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C16.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C17",
+      "source_sha256": "67f2c86e421468de7bb5d2f087607d7072506d90b6f49ce714d6240a5e649f89",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.73,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C17.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C17.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C18",
+      "source_sha256": "c0e731c1184d50731636ae52f744f02b41bbf7cf26fdd564938a3802a16d1bf4",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.01,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C18.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C18.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C19",
+      "source_sha256": "403fb965b1c7830aef72e1de70e0cf6d5c6356fac68473e4ff3c18c24ada1883",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.38,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C19.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C19.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C20",
+      "source_sha256": "6549762153c5deb2331e7f66fbaa2a472f2fe0c76b351ee3e6e752b2081d8c7f",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.59,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C20.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C20.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.ContractParts.C21",
+      "source_sha256": "ba9eadee57f8cab6760d583f1c43524b244846b2c126e01e65b1b9fc43556db0",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.44,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/ContractParts/C21.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/ContractParts/C21.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Contracts",
+      "source_sha256": "200e7c83ab2f68b3b7e2cdee301ee5bfda2dc18df8af72109064bdf5f40ced9b",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.93,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Contracts.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Contracts.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Primitives",
+      "source_sha256": "b4a910b547bedeb9d6b6b7a6668eb6cc8fc581413181d2f135a0f61683d6e456",
+      "status": "built",
+      "exit": 0,
+      "seconds": 4.11,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Primitives.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Primitives.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.EntryRunBound",
+      "source_sha256": "4117a2e59366cb1bcddc95a13266ad34f00ccc2bb0e882e17d1606018d04ff4b",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.09,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/EntryRunBound.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/EntryRunBound.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.EntryBridge",
+      "source_sha256": "c0661a54f4340c5985389c6965aaf6b13e07ec3f181664f360f84d5654c56502",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.36,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/EntryBridge.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/EntryBridge.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Assembly",
+      "source_sha256": "7f0693bba510c3372eed8db6a61aa0db850b7ecc68ade0198a3483c41dad337b",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.68,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Assembly.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Assembly.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.FrameGlue",
+      "source_sha256": "0658ef51ff9c3f8cc1f9fd8f7cb5495a0f98c2cbc2793dc0de1ff055734539f4",
+      "status": "built",
+      "exit": 0,
+      "seconds": 64.82,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/FrameGlue.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/FrameGlue.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.PrimitivesProved",
+      "source_sha256": "ad496afa9a474942b8675ba01edce109cea894b510b78bf616c2a2f2f857d2fc",
+      "status": "built",
+      "exit": 0,
+      "seconds": 3.51,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/PrimitivesProved.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/PrimitivesProved.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Target",
+      "source_sha256": "f6385547bd713b78c1dc936ece492aef6beadf0ee6265c82d950c375d6dd4121",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.89,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Target.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Target.lean"
+      ]
+    },
+    {
+      "module": "InitECandidate.Solver.Wave8GuestInv.Spec",
+      "source_sha256": "540c93ba851100054af0290d38aeb1d9249e51360dee89a0d668abd2d22d8abb",
+      "status": "built",
+      "exit": 0,
+      "seconds": 2.64,
+      "command": [
+        "lean",
+        "-M24576",
+        "-R",
+        "submission",
+        "-o",
+        "/var/lib/orb-node/work/repo/.lake/build/lib/lean/InitECandidate/Solver/Wave8GuestInv/Spec.olean",
+        "submission/InitECandidate/Solver/Wave8GuestInv/Spec.lean"
+      ]
+    }
+  ],
+  "axiom_audit": "'InitECandidate.Solver.Wave8GuestInv.assembly' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.assembly_main' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.logRecordIvls_covered' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.logRecordIvls_inside' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.systemAddress_mem_fixedObjects' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.logRecord_owned' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.liveLogRecord_mem_frameObjects' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.evmInv_liveLogRecord_tables' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.evmInv_allLogIntervals_tables' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.frameObjects_memory_index' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.marksOK_ancestor_message' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n",
+  "monolithic_build": {
+    "exit": 0,
+    "command": "lean -M24576 -o /var/lib/orb-node/work/cache/R11GuestInv.olean campaign/specs-proposed/GuestInv.lean",
+    "axioms": "'InitECandidate.Solver.Wave8GuestInv.assembly' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.assembly_main' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.K_pan_budget' depends on axioms: [propext]\n'InitECandidate.Solver.Wave8GuestInv.K_target_budget' depends on axioms: [propext]\n'InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.bufferRegion_disj_le' depends on axioms: [propext, Classical.choice, Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.AllocatorGrows.allocated' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n'InitECandidate.Solver.Wave8GuestInv.FreshBlock.disj_allocated' depends on axioms: [propext,\n Classical.choice,\n Quot.sound]\n"
+  }
+}

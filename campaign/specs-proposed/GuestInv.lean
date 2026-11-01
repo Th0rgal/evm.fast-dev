@@ -2070,16 +2070,51 @@ def frameRet {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : Ivl :=
   if memW s (ec.1 + 216) = 0 then (0, 0)
   else (memW s (ec.1 + 144), (memW s (ec.1 + 216) + 15) / 8 * 8)
 
-/-- The memory blocks a frame writes: record, continuation, stack, EVM memory, logs header, logs
-backing array, return-data buffer. Index 3 (EVM memory) lives in the frame-memory arena, index 5
-(logs array) in the heap or scratch, index 6 (return data, round-3 item 4) in the heap, the others
-in scratch. -/
+/-- The four intervals read by `LogEntryOK` and receipt encoding: the log record,
+address, topics, and data. Log records and their payloads persist on the heap. -/
+def logRecordIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (log : Nat) : List Ivl :=
+  [(log, 40), (memW s log, 20),
+   (memW s (log + 8), 32 * memW s (log + 16)),
+   (memW s (log + 24), memW s (log + 32))]
+
+/-- Exclusive log ownership, with the shared EIP-7708 system address accounted for
+by `fixedObjects`. `emit_transfer_log` uses `vm_system_address` directly, so its
+20-byte address interval must not become an exclusive frame object. That interval
+is contained in the 24-byte fixed buffer, already separated from tables, tries,
+and every exclusive frame object. All other log intervals are owned by the frame. -/
+def logOwnedIvls {F : Type} (s : PanSemStateFiniteExact 64 F) (log : Nat) : List Ivl :=
+  (logRecordIvls s log).filter (fun o => o != (globN s "vm_system_address", 20))
+
+/-- Every interval is either exclusively owned or the protected shared address;
+no record or payload interval is silently omitted. -/
+theorem logRecordIvls_covered {F : Type} (s : PanSemStateFiniteExact 64 F) (log : Nat)
+    (o : Ivl) (h : o ∈ logRecordIvls s log) :
+    o ∈ logOwnedIvls s log ∨ o = (globN s "vm_system_address", 20) := by
+  by_cases he : o = (globN s "vm_system_address", 20)
+  · exact Or.inr he
+  · exact Or.inl (List.mem_filter.mpr ⟨h, by simpa using he⟩)
+
+/-- Only the live list entries, not spare capacity, own log records. `finish_child`
+pops the child from `evmChain` before `incorporate_child_on_success` appends its
+log pointers to the parent, so live frames never duplicate exclusive log ownership. -/
+def frameLogObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
+  let logs := memW s (ec.1 + 88)
+  (List.range (memW s (logs + 8))).flatMap fun i =>
+    logOwnedIvls s (memW s (memW s logs + 8 * i))
+
+/-- The memory blocks owned by a frame: record, continuation, stack, EVM memory,
+logs header, backing array, return data, and live log records and payloads (R11).
+The first seven indices stay unchanged: index 3 is EVM memory, index 5 the logs
+array, and index 6 return data. The appended log intervals are heap-resident.
+The shared system address is covered by `fixedObjects`, as `logRecordIvls_covered`
+records. The existing `EvmInv` disjointness therefore protects live logs against
+table updates, fixed-object writes, trie updates, and writes to other frame blocks. -/
 def frameObjects {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
    (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24), frameLogs s ec,
-   frameRet s ec]
+   frameRet s ec] ++ frameLogObjects s ec
 
-/-- The scratch-resident blocks of a frame (`frameObjects` without EVM memory and logs array). -/
+/-- The scratch-resident frame blocks; log records and payloads live on the heap. -/
 def frameScratch {F : Type} (s : PanSemStateFiniteExact 64 F) (ec : Ivl) : List Ivl :=
   [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
    (memW s (ec.1 + 88), 24)]
@@ -2205,7 +2240,10 @@ root or journal record names it, and no frame slot other than a deletion slot `e
 `j ≤ i` does. Astra's witness (`parent+136 = bal_idx_accts = child+136 = 0xb0bed2f8`, mark
 `0xb0bed8a8`) has the child's deletion table named by the parent and by a global root, so it must
 lie in the heap or above the mark, and the child-error release no longer frees it. The marks are
-8-byte aligned (revision 6, round-4 Astra item 7: `finish_child` releases to them, `ArenaOK`). -/
+8-byte aligned (revision 6, round-4 Astra item 7: `finish_child` releases to them, `ArenaOK`).
+R11 also protects each surviving ancestor's 176-byte message: the depth-zero message
+is on the heap, and a child's scratch message was allocated before the scratch mark
+of any later grandchild. Releasing that grandchild therefore preserves `MsgOwned`. -/
 def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : List Ivl) : Prop :=
   ∀ (i : Nat) (hi : i + 1 < ch.length),
     let m := memW s ((ch[i]'(by omega)).2 + 48)
@@ -2214,7 +2252,9 @@ def MarksOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat) (ch : Li
     (∀ j (hj : j < ch.length), i < j →
       (∀ o ∈ frameScratch s ch[j], Inside o m scratchEnd) ∧
       Inside (frameObjects s ch[j])[3]! scratchStart mm ∧
-      (Inside (frameLogs s ch[j]) sourceBase heapLimit ∨ Inside (frameLogs s ch[j]) m scratchEnd)) ∧
+      (Inside (frameLogs s ch[j]) sourceBase heapLimit ∨ Inside (frameLogs s ch[j]) m scratchEnd) ∧
+      (Inside (memW s (ch[j].1 + 112), 176) sourceBase heapLimit ∨
+        Inside (memW s (ch[j].1 + 112), 176) m scratchEnd)) ∧
     (∀ o ∈ frameScratch s (ch[i]'(by omega)), o.1 + o.2 ≤ m) ∧
     mm ≤ memW s ((ch[i]'(by omega)).1 + 24) ∧
     (∀ t ∈ S, (t ∈ (ch.take (i + 1)).map (fun ec => memW s (ec.1 + 136)) ∧ DelExclusive s S ch i t) ∨
