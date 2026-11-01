@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyDecodeWitness
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -53,7 +54,8 @@ def GBody.«_decode_witness_node_body» : Prop :=
 theorem «callees__decode_witness_node_body» : sameNames (progCallees (fnBody Guest.Software.guestFn__decode_witness_node_body))
     ["_decode_step", "_resolve_step", "mpt_fail", "node_new_ext", "rlp_item"] = true := by decide
 
-theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» := by sorry
+theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» :=
+  DecodeWitness.bounded
 
 theorem «gb__decode_witness_node_body» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body» :=
   «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ww__decode_step» «sp__decode_step» «ww__resolve_step» «sp__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «rt_node_new_ext» «ww_rlp_item»
