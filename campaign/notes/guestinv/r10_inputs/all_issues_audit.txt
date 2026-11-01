@@ -1,0 +1,1293 @@
+==================== origin/wave8/contracts-m00:campaign/contracts/m00/ISSUES.md ====================
+# Contract Micro-Shard `m00`: Blocking Spec Defect & Kernel-Verified Counterexamples (`wave8-spec-frozen-r9`)
+
+- **Spec revision**: `8a79d9f28bdd7a3522f8a9a81a892d9ecaabdeff` (`wave8-spec-frozen-r9`, unmodified)
+- **Shard manifest**: `campaign/contracts/micro/m00` (`19400c7b0068d3c402598db37c35db23ca949b18`)
+- **Result**: **0 / 6 provable as stated; 6 / 6 FALSE on the real guest code**, each with a
+  Lean-kernel-checked refutation theorem `¬ (type_of% @Wave8GuestInv.wk_*)` in
+  `campaign/contracts/m00/Axioms.lean` using only standard axioms
+  `[propext, Classical.choice, Quot.sound]` (zero `sorry`, zero custom axioms, zero `native_decide`).
+
+---
+
+## 1. Root Cause: `GlobalsKept` Quantifies Over `String` Through Non-Injective `ofString`
+
+Every contract in `m00` is a `WorldKeeps WorldOK ... gw ...` contract (`campaign/specs-proposed/GuestInv.lean:8941–8979`)
+with `"heap_ptr" ∈ gw`:
+
+- `wk_account_deployable`: `gw = ["heap_ptr", "scratch_ptr"]`
+- `wk_add_balance_change`: `gw = ["heap_ptr"]`
+- `wk_add_code_change`: `gw = ["heap_ptr"]`
+- `wk_add_nonce_change`: `gw = ["heap_ptr"]`
+- `wk_add_storage_write`: `gw = ["heap_ptr"]`
+- `wk_alloc`: `gw = ["heap_ptr"]`
+
+In frozen revision 9 (`GuestInv.lean:6813–6814, 6834–6847`), `WorldStep` requires `GlobalsKept gw s post`, defined as:
+
+```lean
+def GlobalsKept (gw : List String) {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ name, name ∉ gw → s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+```
+
+However, `s.globals` is keyed by `MlString`, and `Flapjack.Basis.Pure.MlString.ofString : String → MlString`
+truncates each Unicode scalar value modulo 256 (`Char` → 8-bit byte). Therefore `ofString` is not injective on `String`:
+for `name = "Ũeap_ptr"` (`'Ũ' = U+0168`, `0x168 % 256 = 0x68 = 'h'`),
+
+```lean
+ofString "Ũeap_ptr" = ofString "heap_ptr"
+"Ũeap_ptr" ∉ ["heap_ptr", "scratch_ptr"]
+```
+
+(Checked in `Common.lean`: `ofString_heap_ptr_alias`.)
+
+Consequently, on **any** `WorldOK` entry state `s` from which the function resumes (`some (.returned v)`)
+and strictly advances `heap_ptr` (`p ≠ q`), instantiating `GlobalsKept gw s post` at `name = "Ũeap_ptr"`
+forces `some (.val (.word p)) = some (.val (.word q))`, a contradiction (`Common.lean`: `refute_worldKeeps_of_heap_change`).
+
+All 6 functions in `m00` allocate on the bump heap (`alloc`) on valid `WorldOK` inputs and return normally.
+
+---
+
+## 2. Concrete Counterexamples & Kernel-Checked Refutations
+
+All 6 counterexamples are constructed as concrete `PanSemStateFiniteExact 64 Unit` states with full
+kernel-checked `WorldOK` proofs and concrete `evaluateHOLFiniteState` execution traces, audited in
+`campaign/contracts/m00/Axioms.lean` against `type_of% @InitECandidate.Solver.Wave8GuestInv.wk_*` by `rfl`:
+
+1. **`wk_alloc`** (`campaign/contracts/m00/wk_alloc.lean`, `refute_wk_alloc`):
+   - **Entry state** (`allocCeState`): empty `WorldOK` state (`heap_ptr = 0xa1000000`, `frame_mem_ptr = 0xb0000000`, `scratch_ptr = 0xb0bee000`, all other globals `0`, `clock = 1000`), local `n = 8`.
+   - **Trace**: `alloc(8)` passes both `cMax` checks, advances `heap_ptr` from `0xa1000000` to `0xa1000008`, and returns `0xa1000000` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr"]` fails at `"Ũeap_ptr"`.
+
+2. **`wk_account_deployable`** (`campaign/contracts/m00/wk_account_deployable.lean`, `refute_wk_account_deployable`):
+   - **Entry state** (`deployCeState`): `WorldOK` state with `ts = 0xa1000000`, `empty_code_hash = dCodeHash` (`0xa1000048`, 32 zero bytes), `empty_trie_root = 0`, `heap_ptr = 0xa10004e0`, and four 1-leaf crit-bit tables `S = [dTs8Hdr, dTs16Hdr, dTs32Hdr, dInnerHdr]`, where `ts+8 = dTs8Hdr` maps zero key `dCodeHash` to `1`, `ts+16 = dTs16Hdr` maps `dCodeHash` to `1` (absent/deleted sentinel), and `ts+32 = dTs32Hdr` maps `dCodeHash` to `dInnerHdr` (`count = 1`); local `addr = dCodeHash`.
+   - **Trace**: `get_account(dCodeHash)` sees sentinel `1` from `get_account_optional` and calls `acct_empty()` → `acct_new` → `alloc(56)`, advancing `heap_ptr` from `0xa10004e0` to `0xa1000518`; `memeq(dCodeHash, dCodeHash, 32)` returns `1`; `account_has_storage(dCodeHash)` hits `dTs32Hdr` → `dInnerHdr` (`count = 1 > 0`) and returns `1`; `account_deployable` returns `0` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr", "scratch_ptr"]` fails at `"Ũeap_ptr"`.
+
+3. **`wk_add_balance_change`** (`campaign/contracts/m00/wk_add_balance_change.lean`, `refute_wk_add_balance_change`):
+   - **Entry state** (`balCeState`): `WorldOK` state (`balWorldState` in `BalWitness.lean`, `heap_ptr = 0xa1000498`) with `bal_accounts = bBalHdr` mapping zero key `bZeroBuf` (`0xa1000000`) to BAL account record `bAdRec`, whose balance-change list `bL16Hdr` (`esz = 40`) is at full capacity (`len = 1, cap = 1`, existing entry index `99`); locals `addr = bZeroBuf`, `idx = 0`, `post_balance = <0,0,0,0>`.
+   - **Trace**: `bal_ensure_account(bZeroBuf)` hits leaf 1 and returns `bAdRec`; `lst_upsert_idx(bL16Hdr, 40, 0)` misses index `99` and calls `lst_push(bL16Hdr, 40)` → `alloc(80)`, advancing `heap_ptr` from `0xa1000498` to `0xa10004e8`, copies 40B, stores `0` and `<0,0,0,0>`, and returns `0` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr"]` fails at `"Ũeap_ptr"`.
+
+4. **`wk_add_code_change`** (`campaign/contracts/m00/wk_add_code_change.lean`, `refute_wk_add_code_change`):
+   - **Entry state** (`codeCeState`): `balWorldState` (`WorldOK`, `heap_ptr = 0xa1000498`), where `bAdRec + 32 = bL32Hdr` (`esz = 24`) has `len = 1, cap = 1`, existing entry index `99`; locals `addr = bZeroBuf`, `idx = 0`, `code = 0`, `code_len = 0`.
+   - **Trace**: `bal_ensure_account(bZeroBuf)` returns `bAdRec`; `lst_upsert_idx(bL32Hdr, 24, 0)` calls `lst_push(bL32Hdr, 24)` → `alloc(48)`, advancing `heap_ptr` from `0xa1000498` to `0xa10004c8`, stores `code` and `code_len`, and returns `0` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr"]` fails at `"Ũeap_ptr"`.
+
+5. **`wk_add_nonce_change`** (`campaign/contracts/m00/wk_add_nonce_change.lean`, `refute_wk_add_nonce_change`):
+   - **Entry state** (`nonceCeState`): `balWorldState` (`WorldOK`, `heap_ptr = 0xa1000498`), where `bAdRec + 24 = bL24Hdr` (`esz = 16`) has `len = 1, cap = 1`, existing entry index `99`; locals `addr = bZeroBuf`, `idx = 0`, `new_nonce = 1`.
+   - **Trace**: `bal_ensure_account(bZeroBuf)` returns `bAdRec`; the inlined loop misses index `99` and calls `lst_push(bL24Hdr, 16)` → `alloc(32)`, advancing `heap_ptr` from `0xa1000498` to `0xa10004b8`, stores `0` and `1`, and returns `0` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr"]` fails at `"Ũeap_ptr"`.
+
+6. **`wk_add_storage_write`** (`campaign/contracts/m00/wk_add_storage_write.lean`, `refute_wk_add_storage_write`):
+   - **Entry state** (`storCeState`): `balWorldState` (`WorldOK`, `heap_ptr = 0xa1000498`), where `bAdRec + 0 = bStorHdr` (`klen = 32`) has 1 leaf at zero slot `bStorKeys + 32` mapping to per-slot list `bL0Hdr` (`esz = 40`, `len = 1, cap = 1`, existing entry index `99`); locals `addr = bZeroBuf`, `slot = bStorKeys + 32`, `idx = 0`, `new_value = <0,0,0,0>`.
+   - **Trace**: `bal_ensure_account(bZeroBuf)` returns `bAdRec`; `htab_get(bStorHdr, slot)` returns `<1, bL0Hdr>`; `lst_upsert_idx(bL0Hdr, 40, 0)` calls `lst_push(bL0Hdr, 40)` → `alloc(80)`, advancing `heap_ptr` from `0xa1000498` to `0xa10004e8`, stores `0` and `<0,0,0,0>`, and returns `0` (`Resumes r`).
+   - **Violation**: `GlobalsKept ["heap_ptr"]` fails at `"Ũeap_ptr"`.
+
+---
+
+## 3. Recommended Spec Fix (for Next Spec Revision)
+
+Quantify over `MlS` (`MlString`) keys in `GlobalsKept` (and in `HtabExit`, `UnionExit`, `HtabNewExit`,
+`NodeFnExit`, `MptObjStep`, `EvmStep` where the same `ofString name` global-frame idiom appears):
+
+```lean
+def GlobalsKept (gw : List String) {F : Type} (s post : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = post.globals.lookup k
+```
+
+No other defect was found in the 6 `m00` contracts:
+- `alloc` checks `cMax - p < n` and `cMax < q` (`q = (p + n + 7) & -8`) and traps on overflow, preserving `ArenaReady`, `WorldTypedWith` (`S' = S`, `Nd' = Nd`), `OwnedGrows`, `FrameOutside` (memory unchanged), and `RetAvoids [(p, (n + 7) / 8 * 8)]` since `worldOwned s S Nd` lies inside `[sourceBase, p) ∪ [scratch_ptr, scratchEnd)`.
+- `account_deployable` writes only fresh heap (`acct_empty` → `alloc(56)`), `ts+8`, `ts+40`, and `scratch` (inside `ws_account_has_storage`), all within `WorldOK` + `["heap_ptr", "scratch_ptr"]`.
+- `add_balance_change`, `add_code_change`, `add_nonce_change`, and `add_storage_write` mutate only `bal_accounts`, `bAdRec + 0` (`bal.stor`), the owned BAL list headers/arrays in `balObjects`, and fresh heap (`alloc`), preserving `WorldTypedWith` (`S' ⊇ S`) and `RecordsKept` for `ws`, `bs`, `ts`, `bo`.
+
+==================== origin/wave8/contracts-m04:campaign/contracts/m04/ISSUES.md ====================
+# Counterexamples for False Contracts in Micro-Shard `m04` (`wave8-spec-frozen-r9`, `8a79d9f28`)
+
+Two of the six contracts assigned to `campaign/contracts/micro/m04` are **FALSE** on the real guest code (`Guest/SoftwareAst.lean`) because their precondition is `WorldOK` alone, with **no structural or non-overflow guard** on the caller-supplied pointer parameter (`logs` in `wk_encode_receipt`, `tx` in `wk_encode_transaction`). Both functions size their `alloc` buffer using unchecked 64-bit modular arithmetic over fields loaded from that unguarded pointer, allowing the `alloc` size to wrap modulo $2^{64}$ to a tiny allocation near `heapLimit = 0xb0000000` while the subsequent encoding `memcpy` writes past `0xb0000000` into allocated scratch (`[scratch_ptr, scratchEnd)`), corrupting world-owned objects (`ws`) and returning normally (`some (.returned …)`).
+
+---
+
+## 1. `wk_encode_receipt` is FALSE (`campaign/specs-proposed/GuestInv.lean:9091`, AST line 32051)
+
+### Frozen Statement (`GuestInv.lean:9091–9095`)
+```lean
+theorem «wk_encode_receipt» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "encode_receipt")
+```
+
+### Root Cause in Real Guest Code
+1. `encode_receipt(tx_type, succeeded, cumulative_gas, logs)` (`Guest/SoftwareAst.lean:32051`) calls `bound := logs_encoded_bound(logs)` (`AST:31985`) and allocates `buf := alloc(bound + 400)`.
+2. For each `i <s n` (`n = memW(logs + 8)`, `p = memW(logs + 0)`), `logs_encoded_bound` loads `log = memW(p + 8*i)` and updates `total` modulo $2^{64}$:
+   $$\text{total} \leftarrow (\text{total} + 64 + \text{memW}(\text{log} + 16) \cdot 33 + \text{memW}(\text{log} + 32)) \bmod 2^{64}.$$
+3. Both `logs_bloom` (`AST:31957`) and `encode_logs` (`AST:32025`) iterate over topics with a **signed** loop test `Cmp.less j nt` (`nt = memW(log + 16)`). When `nt ≥ 2^63` (signed negative), the inner topic loops in `logs_bloom` and `encode_logs` execute **0 iterations** (writing 0 topic bytes), whereas `logs_encoded_bound` still adds `nt * 33 (mod 2^64)` (and $\gcd(33, 2^{64}) = 1$).
+4. Note: even with `nt = 0`, two logs (`n = 2`) with `dlen_0 = 2000` and `dlen_1` chosen or `nt` chosen wrap `bound` before `alloc`; with `nt ≥ 2^63` a **single** log (`n = 1`) suffices and `encode_receipt` completes and returns normally!
+
+### Concrete Counterexample State `s`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain` (`[0xa1000000, 0x7defffde8)`), `s.shMemaddrs = sharedDomain`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 10^9`.
+* **Globals**:
+  * `heap_ptr = 0xaffffd00` (`sourceBase ≤ 0xaffffd00 ≤ 0xb0000000`, 8-byte aligned; 768 bytes of heap room)
+  * `frame_mem_ptr = 0xb0000000`
+  * `scratch_ptr = 0xb0000300` (`0xb0000000 ≤ frame_mem_ptr ≤ scratch_ptr ≤ 0xb0bee000`, 8-byte aligned)
+  * `ws = 0xb0000300` (40-byte record `[0xb0000300, 0xb0000328)` in allocated scratch `[scratch_ptr, scratchEnd)`)
+  * `keccak_st = 0xa1002000` (200B in allocated heap), `keccak_pad = 0xa1002100` (136B in allocated heap), `keccak_rc = 0xa1002200` (192B in allocated heap)
+  * All other 60 globals = `0`.
+* **Entry Locals**:
+  * `tx_type = 0`, `succeeded = 1`, `cumulative_gas = 0`, `logs = 0xa1000000`.
+* **Memory**:
+  * `[0xb0000300 .. 0xb0000320] = 0` (all 5 words of `ws` are `0`, so `memW s (ws + 32) = 0`).
+  * `[0xa1000000] = 0xa1000010` (`logs.data`), `[0xa1000008] = 1` (`logs.len = 1`).
+  * `[0xa1000010] = 0xa1000020` (`log0`).
+  * At `log0 = 0xa1000020`:
+    * `[0xa1000020] = 0xa1000100` (`address`, 20 zero bytes)
+    * `[0xa1000028] = 0xa1000200` (`topics`, unread because `0 <s nt` is false)
+    * `[0xa1000030] = 0xf07c1f07c1f07be0` (`nt`, signed `-1117984489315730464 < 0`; satisfies `(16 + 64 + 33 * nt + 2000) ≡ 0 (mod 2^64)`)
+    * `[0xa1000038] = 0xa1001000` (`data`, where `[0xa1001000, 0xa10017d0)` contains 2000 bytes of `0xff`, i.e. words `0xffffffffffffffff`)
+    * `[0xa1000040] = 2000` (`data_len = 2000`).
+
+### Verification of Precondition & Violation of Postcondition
+1. **`WorldOK s` holds** with `S = []`, `Nd = []`:
+   * `ArenaReady s` holds (`GuestInv s` and `ArenaOK s`).
+   * `TablesTyped s []` holds (`ws + 32` holds `0`, all other table roots are `0`, `worldRoleSlots s = []`, `journalRoleSlots s = []`).
+   * `JournalTyped s []` holds (`journal_n = journal_cap = 0`).
+   * `FixedTyped s` holds: the four non-empty fixed buffers (`keccak_st`, `keccak_pad`, `keccak_rc` on allocated heap, `ws` on allocated scratch) are 8-byte aligned, `Allocated s`, `WordsOK s`, and pairwise disjoint.
+   * `TriesTypedWith s [] []` holds (`memW s (ws + 24) = 0`).
+2. **Execution trace**:
+   * `logs_encoded_bound(0xa1000000)` computes `(16 + 64 + 0xf07c1f07c1f07be0 * 33 + 2000) mod 2^64 = 0`, returning `bound = 0`.
+   * `buf := alloc(0 + 400)` succeeds without trapping (`0xaffffd00 + 400 → 0xaffffe90 ≤ 0xb0000000`), returning `buf = 0xaffffd00`.
+   * `bloom := alloc(256)` succeeds (`heap_ptr := 0xafffff90 ≤ 0xb0000000`); `logs_bloom` hashes the 20-byte address (`alloc(32)` peaks at `0xafffffb0 ≤ 0xb0000000`, then `heap_release`), skips the `j <s nt` topic loop (`0 <s -1117984489315730464` is false), and returns `0`.
+   * Before `encode_logs`, `p = 0xaffffe0f`.
+   * Inside `encode_logs(0xaffffe0f, 0xa1000000)`: encodes the 20-byte address (`21` bytes), skips `j <s nt`, finishes empty topic list (`1` byte `0xc0`), reaching `r = 0xaffffe37`. Then `rlp_encode_bytes(0xaffffe37, 0xa1001000, 2000)` writes `[0xb9, 0x07, 0xd0]` at `0xaffffe37..0xaffffe39` and calls `memcpy(0xaffffe3a, 0xa1001000, 2000)`, writing `0xff` across `[0xaffffe3a, 0xb000060a)` — **directly overwriting `ws` at `[0xb0000300, 0xb0000328)`**!
+   * The three `rlp_finish_list` shifts (`6` bytes left each) leave `[0xaffffe28, 0xb00005f8)` filled with `0xff`, and `encode_receipt` returns normally with `some (.returned (.rStruct [.val (.word 0xaffffd01), .val (.word 2295)]))`.
+3. **Postcondition `WorldStep` fails**:
+   * `Resumes r` holds (`r = some (.returned …)`).
+   * `memW post (globN s "ws" + 0) = 0xffffffffffffffff ≠ 0 = memW s (globN s "ws" + 0)`, violating `RecordsKept`, `FrameOutside` (at `S = [], Nd = []`), and `WorldTyped post S'` (`memW post (ws + 32) = 0xffffffffffffffff` is unaligned so cannot be a `HtabWF` table in any `S'`).
+
+---
+
+## 2. `wk_encode_transaction` is FALSE (`campaign/specs-proposed/GuestInv.lean:9097`, AST line 12267)
+
+### Frozen Statement (`GuestInv.lean:9097–9101`)
+```lean
+theorem «wk_encode_transaction» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "encode_transaction")
+```
+
+### Root Cause in Real Guest Code
+1. `encode_transaction(tx)` (`AST:12267`) tail-calls `tx_encode_generic(tx, 0, 0)` (`AST:12154`), which calls `bound := tx_encode_bound(tx)` (`AST:12141`) and allocates `buf := alloc(bound)`.
+2. `tx_encode_bound(tx)` **unconditionally** adds `bh = (33 * memW(tx + 264)) mod 2^64` (the blob-hashes bound) to the return value:
+   $$\text{bound} = (655 + \text{memW}(\text{tx} + 200) + \text{al} + \text{au} + 33 \cdot \text{memW}(\text{tx} + 264)) \bmod 2^{64},$$
+   even when the transaction type `t = memW(tx + 0)` is **`0` (legacy transaction)**!
+3. When `t = 0`, `tx_encode_generic` never reads or encodes `tx + 264` (`tx_put_blob_hashes` is guarded by `if t == 3`, `AST:12214`), yet it **does** encode `memW(tx + 200)` bytes of calldata via `rlp_encode_bytes(p, memW(tx + 192), memW(tx + 200))` (`AST:12203`). Because $\gcd(33, 2^{64}) = 1$, choosing `memW(tx + 264)` wraps `bound` to `64` while `data_len = memW(tx + 200) = 2000`.
+
+### Concrete Counterexample State `s`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 10^9`.
+* **Globals**:
+  * `heap_ptr = 0xafffff00` (`sourceBase ≤ 0xafffff00 ≤ 0xb0000000`, 8-byte aligned; 256 bytes of heap room)
+  * `frame_mem_ptr = 0xb0000000`
+  * `scratch_ptr = 0xb0000300`
+  * `ws = 0xb0000300` (40-byte record `[0xb0000300, 0xb0000328)` in allocated scratch, all 5 words `0`)
+  * All other 63 globals = `0`.
+* **Entry Local**: `tx = 0xa1000000`.
+* **Memory**:
+  * `[0xb0000300 .. 0xb0000320] = 0` (`ws` words all `0`).
+  * At `tx = 0xa1000000` (`[0xa1000000, 0xa1000180)` all words `0` except):
+    * `[tx + 0] = 0` (`t = 0`, legacy transaction)
+    * `[tx + 192] = 0xa1001000` (`data` pointer, where `[0xa1001000, 0xa10017d0)` holds 2000 bytes of `0xff`)
+    * `[tx + 200] = 2000` (`data_len = 2000`)
+    * `[tx + 216] = 0` (`al = 0`), `[tx + 280] = 0` (`au = 0`)
+    * `[tx + 264] = 0xf83e0f83e0f83dc1` (`(64 - 2655) * 33⁻¹ mod 2^64`, so `(655 + 2000 + 33 * 0xf83e0f83e0f83dc1) mod 2^64 = 64`).
+
+### Verification of Precondition & Violation of Postcondition
+1. **`WorldOK s` holds** with `S = []`, `Nd = []` (only fixed buffer is `(ws, 40)` at `[0xb0000300, 0xb0000328)` in allocated scratch, all words `0`).
+2. **Execution trace**:
+   * `tx_encode_bound(0xa1000000)` returns `bound = 64`.
+   * `buf := alloc(64)` returns `buf = 0xafffff00` and sets `heap_ptr := 0xafffff40 ≤ 0xb0000000`.
+   * Each `tx_put_u256` temporarily allocates `32` bytes (`heap_ptr` peaks at `0xafffff60 ≤ 0xb0000000`) and releases back to `0xafffff40`, writing 1 byte `0x80` for each zero field (`nonce`, `gas_price`, `gas`, `to`, `value`), advancing `p` from `0xafffff0a` to `0xafffff0f`.
+   * `rlp_encode_bytes(0xafffff0f, 0xa1001000, 2000)` writes `[0xb9, 0x07, 0xd0]` at `0xafffff0f..0xafffff11` and calls `memcpy(0xafffff12, 0xa1001000, 2000)`, writing `0xff` across `[0xafffff12, 0xb00006e2)` — **overwriting `ws` at `[0xb0000300, 0xb0000328)`**!
+   * Encodes `v, r, s` (`3` bytes at `0xb00006e2..0xb00006e4`), writes the list header `[0xf9, 0x07, 0xdb]` at `0xafffff07..0xafffff09`, and returns normally with `some (.returned (.rStruct [.val (.word 0xafffff07), .val (.word 2014)]))`.
+3. **Postcondition `WorldStep` fails**:
+   * `Resumes r` holds, yet `memW post (globN s "ws" + 0) = 0xffffffffffffffff ≠ 0 = memW s (globN s "ws" + 0)`, violating `RecordsKept`, `FrameOutside`, and `WorldTyped post S'`.
+
+==================== origin/wave8/contracts-m05:campaign/contracts/m05/ISSUES.md ====================
+# Counterexamples for False Contracts in Micro-Shard `m05` (`wave8-spec-frozen-r9`, `8a79d9f28`)
+
+Five of the six contracts assigned to `campaign/contracts/micro/m05` (`wk_header_init`, `wk_fork_init`, `wk_header_hash`, `wk_get_account`, `wk_get_code`) are **FALSE** on the real guest code (`Guest/SoftwareAst.lean`) against the frozen rev9 specification (`campaign/specs-proposed/GuestInv.lean:9121–9155`). Only `wk_extract_deposit_data` is true (proved in `campaign/contracts/m05/wk_extract_deposit_data.lean`).
+
+The five false contracts fall into two root causes:
+
+1. **Unguarded zero-length `journal` entry in `fixedObjects` + non-zero-exempt `Disj`** (`wk_header_init`, `wk_fork_init`, `wk_get_account`, `wk_get_code`):
+   * In `GuestInv.lean:6413–6416`, `fixedObjects s` includes `(globN s "journal", 32 * globN s "journal_cap")` **without** zeroing the base address when `journal_cap = 0` (unlike `globalBuffers` and `typedRecords`, which normalize `p = 0 ↦ (0, 0)`, and unlike `journal_cap = 0` where `32 * 0 = 0` leaves `.1 = globN s "journal"` arbitrary).
+   * Meanwhile, `Disj (i j : Ivl) : Prop := i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1` (`GuestInv.lean:6220`) has **no exemption for zero-length intervals** (`.2 = 0`): a zero-length interval `(p, 0)` strictly inside `(a, n)` (`a < p < a + n`) fails `Disj (a, n) (p, 0)` (`a + n ≤ p ∨ p ≤ a` is false!).
+   * Under `WorldOK s`, `JournalTyped s S` (`journal_n = 0, journal_cap = 0`) and `FixedTyped s` allow `globN s "journal" = heap_ptr + 4` when all allocated objects lie strictly below `heap_ptr` or in scratch: `(heap_ptr + 4, 0)` satisfies `WordsOK` (`4 < 0` vacuous), `Allocated` (`0 = 0`), and `Disj` against every pre-existing interval `(x, m)` with `x + m ≤ heap_ptr` or `x ≥ scratch_ptr`.
+   * Any function that allocates ≥ 8 bytes at `heap_ptr` and either stores that buffer into a `fixedObjects` slot (`hdr_zero8` in `header_init`, `zero32` in `fork_init`) or grows a `worldRoleSlots` hash table via `htab_grow` (`ts+8` in `get_account`, `ts+40` in `get_code`) produces a post-state interval `(heap_ptr, sz)` (`sz ≥ 8`) that fails `Disj` against `(journal, 0) = (heap_ptr + 4, 0)`, refuting `FixedTyped post` or `TablesTyped post S'` for **every** choice of `(S', Nd')`.
+   * **Formal kernel-checked proof**: `campaign/contracts/m05/Refutations.lean` proves `refutation_wk_header_init : ¬ (type_of% @InitECandidate.Solver.Wave8GuestInv.«wk_header_init»)` with standard axioms only (`[propext, Classical.choice, Quot.sound]`).
+
+2. **Missing caller-supplied header-struct / `HDR_EXTRA_N` precondition on `wk_header_hash`** (`wk_header_hash`):
+   * `header_hash(h, out)` (`AST:9460`) calls `encode_header(h)` (`AST:9350`), which allocates a **fixed 1024-byte buffer** `buf := alloc(1024)` (`AST:9357`) and encodes variable-length extra data via `rlp_encode_bytes(p, memW(h + 128), memW(h + 136))` (`AST:9407`).
+   * In real execution, `decode_header` / `validate_header` rejects `HDR_EXTRA_N > 32` (`AST:9696`), so `encode_header` writes at most ~600 bytes (< 1024). However, `wk_header_hash` has precondition `WorldOK` alone, with **no constraint** on `locN s "h"` or `memW s (locN s "h" + 136)`. Setting `memW s (h + 136) = 2000` with `heap_ptr = 0xaffff800` allocates `buf = 0xaffff800` (`heap_ptr := 0xaffffc00 ≤ 0xb0000000`) and then `memcpy`s 2000 bytes across `0xb0000000` into allocated scratch, overwriting `ws` and returning `0`.
+
+---
+
+## 1. `wk_header_init` is FALSE (`campaign/specs-proposed/GuestInv.lean:9151`, AST line 9657)
+
+* **Machine-checked refutation**: `InitECandidate.Solver.Wave8Contracts.M05.refutation_wk_header_init` in `campaign/contracts/m05/Refutations.lean`.
+
+### Frozen Statement (`GuestInv.lean:9151–9155`)
+```lean
+theorem «wk_header_init» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["hdr_zero8", "heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "header_init")
+```
+
+### Concrete Counterexample State `s` (`cexState` in `Refutations.lean`)
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.eshapes = expectedExceptionShapes`, `s.structs = []`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 200`.
+* **Globals**:
+  * `heap_ptr = 0xa1000000` (`sourceBase`)
+  * `frame_mem_ptr = 0xb0000000` (`heapLimit`)
+  * `scratch_ptr = 0xb0bee000` (`scratchEnd`)
+  * `journal = 0xa1000004` (`sourceBase + 4`)
+  * `journal_cap = 0`, `journal_n = 0`, `hdr_zero8 = 0`, all other globals `= 0`.
+* **Locals / Memory**: empty locals; all memory words `= 0`.
+
+### Precondition, Trace, and Postcondition Failure
+1. **`WorldOK s` holds** with `S = []`, `Nd = []` (`cex_worldOK` in `Refutations.lean`):
+   * `ArenaReady s` holds (`0xa1000000 % 8 = 0`, `0xb0000000 % 8 = 0`, `0xb0bee000 % 8 = 0`).
+   * `TablesTyped s []` and `TriesTypedWith s [] []` hold (`ws = bs = ts = bo = 0`).
+   * `JournalTyped s []` holds (`journal_n = 0 ≤ 0 = journal_cap`).
+   * `FixedTyped s` holds: `fixedObjects s` consists of 48 copies of `(0, 0)` plus `(0xa1000004, 0)`. Every entry has `.2 = 0` (so `WordsOK` and `Allocated` hold trivially), and `Disj (0, 0) (0xa1000004, 0)` holds because `0 + 0 ≤ 0xa1000004`.
+2. **Execution trace of `header_init()` (`AST:9657`)**:
+   * `hdr_zero8 == 0`, so the early-return `if` is skipped.
+   * `hdr_zero8 := alloc(8)` returns `0xa1000000` and advances `heap_ptr` to `0xa1000008`.
+   * `memzero(0xa1000000, 8)` stores `0` to `[0xa1000000]` and returns `0`.
+   * `header_init` returns `some (.returned (.val (.word 0)))` (`Resumes` holds).
+3. **Postcondition `WorldStep` fails**:
+   * In `post`, `globN post "hdr_zero8" = 0xa1000000`, `globN post "journal" = 0xa1000004`, `globN post "journal_cap" = 0`.
+   * Both `(0xa1000000, 8)` (from `("hdr_zero8", 8) ∈ globalBuffers`) and `(0xa1000004, 0)` (from `(journal, 32 * journal_cap)`) appear in `fixedObjects post` (`indices 21` and `49`), and `Disj (0xa1000000, 8) (0xa1000004, 0)` is `0xa1000008 ≤ 0xa1000004 ∨ 0xa1000004 ≤ 0xa1000000`, which is **false**. Thus `FixedTyped post` (and hence `WorldTypedWith post S' Nd'`) is false for all `S', Nd'`.
+
+---
+
+## 2. `wk_fork_init` is FALSE (`campaign/specs-proposed/GuestInv.lean:9127`, AST line 32522)
+
+### Frozen Statement (`GuestInv.lean:9127–9131`)
+```lean
+theorem «wk_fork_init» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["beacon_roots_address", "builder_deposit_address", "builder_exit_address",
+     "consolidation_request_address", "deposit_contract_address",
+     "deposit_event_signature_hash", "heap_ptr", "history_storage_address",
+     "precompile_addrs", "withdrawal_request_address", "zero32"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "fork_init")
+```
+
+### Concrete Counterexample State `s`
+* Identical to `cexState` in §1 except `s.clock = 10000`:
+  * `heap_ptr = 0xa1000000`, `frame_mem_ptr = 0xb0000000`, `scratch_ptr = 0xb0bee000`, `journal = 0xa1000004`, `journal_cap = 0`, `journal_n = 0`, all other globals `= 0`, all memory words `= 0`.
+
+### Precondition, Trace, and Postcondition Failure
+1. **`WorldOK s` holds** with `S = []`, `Nd = []` by the exact same proof as §1 (`WorldOK` is clock-independent).
+2. **Execution trace of `fork_init()` (`AST:32522–32584`)**:
+   * `zero32 := alloc(32)` returns `0xa1000000` (`heap_ptr := 0xa1000020`), `memzero(0xa1000000, 32)` zeroes it.
+   * `precompile_addrs := alloc(360)` returns `0xa1000020` (`heap_ptr := 0xa1000188`), zeroes and populates precompile bytes.
+   * Allocates and initializes the 7 24-byte system address globals (`0xa1000188 .. 0xa1000230`) via `addr_from_words` and `deposit_event_signature_hash := alloc(32)` (`0xa1000230 .. 0xa1000250`) via four `st_be64` calls (`heap_ptr = 0xa1000250 ≤ 0xb0000000`).
+   * Returns `some (.returned (.val (.word 0)))` (`Resumes` holds).
+3. **Postcondition `WorldStep` fails**:
+   * In `post`, `globN post "zero32" = 0xa1000000`, `globN post "journal" = 0xa1000004`, `globN post "journal_cap" = 0`.
+   * `fixedObjects post` contains `(0xa1000000, 32)` (from `("zero32", 32) ∈ globalBuffers`, index 47) and `(0xa1000004, 0)` (index 49), and `Disj (0xa1000000, 32) (0xa1000004, 0)` (`0xa1000020 ≤ 0xa1000004 ∨ 0xa1000004 ≤ 0xa1000000`) is **false**. Hence `FixedTyped post` fails for all `S', Nd'`.
+
+---
+
+## 3. `wk_header_hash` is FALSE (`campaign/specs-proposed/GuestInv.lean:9145`, AST line 9460)
+
+### Frozen Statement (`GuestInv.lean:9145–9149`)
+```lean
+theorem «wk_header_hash» :
+    WorldKeeps WorldOK (fun s => [(locN s "out", 32)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "header_hash")
+```
+
+### Root Cause in Real Guest Code
+1. `header_hash(h, out)` (`AST:9460–9474`) saves `mark := heap_mark()`, calls `e := encode_header(h)`, hashes `keccak256(e.0, e.1, out)`, calls `heap_release(mark)`, and returns `0`.
+2. `encode_header(h)` (`AST:9350–9458`) allocates a **hard-coded 1024-byte buffer** `buf := alloc(1024)` (`AST:9357`) and starts writing fields at `p := buf + 9`:
+   * Fields `0..6` (`32, 32, 20, 32, 32, 32, 256` bytes) + `7` (`u256 = 0`) + `8..11` (`words = 0`): `33 + 33 + 21 + 33 + 33 + 33 + 259 + 1 + 1 + 1 + 1 + 1 = 450` bytes (`p = buf + 459`).
+   * Field `12` (`HDR_EXTRA`, `AST:9407`): `rlp_encode_bytes(p, memW(h + 128), memW(h + 136))`, where `memW(h + 136)` (`HDR_EXTRA_N`) is **completely unconstrained** by `WorldOK`!
+3. When `memW(h + 136) = 2000`, `rlp_encode_bytes` writes 3 header bytes `[0xb9, 0x07, 0xd0]` at `p .. p+2` and calls `memcpy(buf + 462, memW(h + 128), 2000)`, writing 1426 bytes past `buf + 1024` across `heapLimit = 0xb0000000` into allocated scratch `[0xb0000000, 0xb0bee000)`.
+
+### Concrete Counterexample State `s`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.eshapes = expectedExceptionShapes`, `s.structs = []`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 10^8`.
+* **Globals**:
+  * `heap_ptr = 0xaffff800` (`2048` bytes below `heapLimit = 0xb0000000`, 8-byte aligned)
+  * `frame_mem_ptr = 0xb0000000`
+  * `scratch_ptr = 0xb0000000` (`[0xb0000000, 0xb0bee000)` is allocated scratch)
+  * `ws = 0xb0000000` (`40`-byte world-state record `[0xb0000000, 0xb0000028)` in allocated scratch)
+  * `keccak_st = 0xa1002000` (`200`B), `keccak_pad = 0xa1002100` (`136`B), `keccak_rc = 0xa1002200` (`192`B, initialized with Keccak round constants; all in allocated heap `< 0xaffff800`)
+  * All other globals `= 0`.
+* **Entry Locals**: `h = 0xa1000000`, `out = 0xa1003000`.
+* **Memory**:
+  * `[0xb0000000 .. 0xb0000020] = 0` (all 5 words of `ws` are `0`).
+  * `[0xa1000200, 0xa1000300)` all `0` (256-byte zero buffer for fixed-length header byte fields).
+  * `[0xa1001000, 0xa10017d0)` filled with `0xff` (`2000` bytes, i.e. words `0xffffffffffffffff`).
+  * Header struct at `h = 0xa1000000`:
+    * `[h + 0] = 0` (`is_current = 0`)
+    * `[h + 8], [h + 16], [h + 24], [h + 32], [h + 40], [h + 48], [h + 56] = 0xa1000200`
+    * `[h + 64 .. h + 120] = 0` (`difficulty = 0`, `number = gas_limit = gas_used = timestamp = 0`)
+    * `[h + 128] = 0xa1001000` (`HDR_EXTRA`), `[h + 136] = 2000` (`HDR_EXTRA_N = 2000`)
+    * `[h + 144], [h + 152] = 0xa1000200` (`mix_digest`, `nonce`)
+    * `[h + 160 .. h + 184] = 0` (`base_fee = 0`)
+    * `[h + 192] = 0xa1000200`, `[h + 200] = 0`, `[h + 208] = 0`, `[h + 216] = 0xa1000200`, `[h + 224] = 0xa1000200`.
+
+### Precondition, Trace, and Postcondition Failure
+1. **`WorldOK s` holds** with `S = []`, `Nd = []`:
+   * `ArenaReady s`, `TablesTyped s []`, `JournalTyped s []`, `TriesTypedWith s [] []` hold (`ws` has 5 zero words).
+   * `FixedTyped s` holds: the four non-empty fixed objects (`keccak_st`, `keccak_pad`, `keccak_rc` in `[0xa1002000, 0xa10022c0) ⊆ [sourceBase, heap_ptr)`, and `ws` at `[0xb0000000, 0xb0000028) ⊆ [scratch_ptr, scratchEnd)`) are 8-byte aligned, `WordsOK`, `Allocated`, and pairwise `Disj`.
+2. **Execution trace**:
+   * `mark := heap_mark()` returns `0xaffff800`.
+   * `encode_header(0xa1000000)` allocates `buf := alloc(1024) = 0xaffff800` (`heap_ptr := 0xaffffc00 ≤ 0xb0000000`; `rlp_put_u256` peaks at `0xaffffc20 ≤ 0xb0000000` and releases back to `0xaffffc00`).
+   * At field 12 (`p = 0xaffff9cb`), `rlp_encode_bytes(0xaffff9cb, 0xa1001000, 2000)` writes `[0xb9, 0x07, 0xd0]` at `0xaffff9cb..0xaffff9cd` and runs `memcpy(0xaffff9ce, 0xa1001000, 2000)` across `[0xaffff9ce, 0xb000019e)`, overwriting all 40 bytes of `ws` at `[0xb0000000, 0xb0000028)` with `0xff`!
+   * Remaining fields `13..20` (`33 + 9 + 1 + 33 + 1 + 1 + 33 + 33 = 144` bytes) write into `[0xb000019e, 0xb000022e)` (`payload_len = 2597`, `hl = 3`, `start = 0xaffff806`), leaving `ws` filled with `0xffffffffffffffff`.
+   * `keccak256(0xaffff806, 2600, 0xa1003000)` reads `[0xaffff806, 0xb000022e) ⊆ ordinaryDomain` and writes 32 digest bytes to `[0xa1003000, 0xa1003020)`.
+   * `heap_release(0xaffff800)` restores `heap_ptr := 0xaffff800`, and `header_hash` returns `0` (`Resumes` holds).
+3. **Postcondition `WorldStep` fails**:
+   * `memW post (globN s "ws" + 0) = 0xffffffffffffffff ≠ 0 = memW s (globN s "ws" + 0)` (violating `RecordsKept` and `FrameOutside`), and `memW post (ws + 32) = 0xffffffffffffffff` is unaligned so cannot be a `HtabWF` table in any `S'` (violating `TablesTyped post S'`).
+
+---
+
+## 4. `wk_get_account` is FALSE (`campaign/specs-proposed/GuestInv.lean:9133`, AST line 13188)
+
+### Frozen Statement (`GuestInv.lean:9133–9137`)
+```lean
+theorem «wk_get_account» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "get_account")
+```
+
+### Root Cause in Real Guest Code
+1. `get_account(addr)` (`AST:13188`) calls `a := get_account_optional(addr)` (`AST:13170`), which immediately executes:
+   ```
+   htab_set([ts + 8], addr, 1)
+   w := htab_get([ts + 16], addr)
+   if w.0 != 0 then return w.1 ...
+   ```
+   and if `a != 1`, `get_account` returns `a` directly (`AST:13197–13200`).
+2. When `t1 = [ts + 8]` (role `"ts+8"`, `klen = 20, stride = 24`) has `cap = 2, cnt = 1 < cap, root = 1, next = 3, free = 2, ncap = 2` (`L = [1], I = [], Fr = [2]`), inserting a new 20-byte key `addr` pops leaf `2` from the freelist (`free := 0`), then calls `htab_new_internal(t1)` (`free = 0, next = 3 > ncap = 2`), triggering `htab_grow(t1)` (`AST:5841`), which allocates `keys' := alloc(5 * 24) = heap_ptr`.
+3. With `journal = heap_ptr + 4` and `journal_cap = 0` in the `WorldOK` pre-state, `(heap_ptr, 120) ∈ htabFootprint post t1` fails `Disj` against `(heap_ptr + 4, 0) ∈ fixedObjects post`, violating `TablesTyped post S'`.
+
+### Concrete Counterexample State `s`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.eshapes = expectedExceptionShapes`, `s.structs = []`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 10000`.
+* **Globals**:
+  * `ts = 0xa1000230` (72-byte tx-state record `[0xa1000230, 0xa1000278)`)
+  * `heap_ptr = 0xa1000290`, `frame_mem_ptr = 0xb0000000`, `scratch_ptr = 0xb0bee000`
+  * `journal = 0xa1000294` (`heap_ptr + 4`), `journal_cap = 0`, `journal_n = 0`, all other globals `= 0`.
+* **Entry Local**: `addr = 0xa1000278` (20-byte buffer at `[0xa1000278, 0xa100028c)`, padded to `0xa1000290`, containing `0x80` at byte 0 and `0x00` at bytes `1..19`).
+* **Hash Tables (`S = [t1, t2]`, `Nd = []`)**:
+  * `t1 = 0xa1000000` at `[ts + 8]` (`roleSpec "ts+8" = some (20, false)`):
+    * Header `[0xa1000000, 0xa1000058)`: `klen = 20, stride = 24, cap = 2, cnt = 1, keys = 0xa1000058, nodes = 0xa10000a0, order = 0xa1000100, root = 1, next = 3, free = 2, ncap = 2`.
+    * `keys` `[0xa1000058, 0xa10000a0)` (`3 * 24 = 72`B): slot 1 (`0xa1000070`) has 20 zero bytes + `val = 1`.
+    * `nodes` `[0xa10000a0, 0xa1000100)` (`3 * 32 = 96`B): node 1 (`0xa10000c0`) has `kind = 1, leaf = 1`; node 2 (`0xa10000e0`, freelist head) has `next_free = 0`.
+    * `order` `[0xa1000100, 0xa1000118)` (`3 * 8 = 24`B): `[0xa1000100] = 1`.
+  * `t2 = 0xa1000118` at `[ts + 16]` (`roleSpec "ts+16" = some (20, false)` — flat value, so `val = 0` needs no child table!):
+    * Header `[0xa1000118, 0xa1000170)`: `klen = 20, stride = 24, cap = 2, cnt = 1, keys = 0xa1000170, nodes = 0xa10001b8, order = 0xa1000218, root = 1, next = 2, free = 0, ncap = 2`.
+    * `keys` `[0xa1000170, 0xa10001b8)`: slot 1 (`0xa1000188`) has key `0x80 :: 19 zeros` (matching `addr`) and `val = 0`.
+    * `nodes` `[0xa10001b8, 0xa1000218)`: node 1 (`0xa10001d8`) has `kind = 1, leaf = 1`.
+    * `order` `[0xa1000218, 0xa1000230)`: `[0xa1000218] = 1`.
+  * `ts` record `[0xa1000230, 0xa1000278)`: `[ts + 8] = 0xa1000000`, `[ts + 16] = 0xa1000118`, all other 7 fields `= 0`.
+
+### Precondition, Trace, and Postcondition Failure
+1. **`WorldOK s` holds** with `S = [0xa1000000, 0xa1000118]`, `Nd = []`:
+   * Both `t1` (`L = [1], I = [], Fr = [2]`) and `t2` (`L = [1], I = [], Fr = []`) satisfy `HtabWF`; all 8 table buffers + `(ts, 72)` lie in `[0xa1000000, 0xa1000278) ⊆ [sourceBase, heap_ptr)` and are pairwise disjoint from each other and from `(journal, 0) = (0xa1000294, 0)`.
+2. **Execution trace**:
+   * `htab_set(0xa1000000, 0xa1000278, 1)` sees `addr` (`0x80…`) ≠ leaf 1 (`0x00…`), pops leaf 2 (`free := 0`), calls `htab_new_internal(t1)` (`free = 0, next = 3 > ncap = 2`), and runs `htab_grow(t1)`, allocating `keys' = 0xa1000290` (`5 * 24 = 120`B), `nodes' = 0xa1000308` (`160`B), `order' = 0xa10003a8` (`40`B), updating `[t1 + 32] := 0xa1000290`, `[t1 + 16] := 4`.
+   * `htab_get(0xa1000118, 0xa1000278)` finds `addr` in `t2` with `val = 0`, returning `<1, 0>`.
+   * `get_account_optional` returns `0`; in `get_account`, `0 == 1` is false, so `get_account` returns `some (.returned (.val (.word 0)))` (`Resumes` holds).
+3. **Postcondition `WorldStep` fails**:
+   * For any `S', Nd'` with `WorldTypedWith post S' Nd'`, `memW post (globN post "ts" + 8) = 0xa1000000 ≠ 0` forces `0xa1000000 ∈ S'` (via `TablesTyped` on `("ts+8", 0xa1000000) ∈ worldRoleSlots post`).
+   * `htabFootprint post 0xa1000000` contains `(memW post (0xa1000000 + 32), (memW post (0xa1000000 + 16) + 1) * 24) = (0xa1000290, 120)`, while `fixedObjects post` contains `(globN post "journal", 32 * globN post "journal_cap") = (0xa1000294, 0)`.
+   * `TablesTyped post S'` requires `Disj i j` for every `i ∈ htabFootprint post t` (`t ∈ S'`) and `j ∈ fixedObjects post`, which fails on `(0xa1000290, 120)` and `(0xa1000294, 0)` (`0xa1000308 ≤ 0xa1000294 ∨ 0xa1000294 ≤ 0xa1000290` is false).
+
+---
+
+## 5. `wk_get_code` is FALSE (`campaign/specs-proposed/GuestInv.lean:9139`, AST line 13203)
+
+### Frozen Statement (`GuestInv.lean:9139–9143`)
+```lean
+theorem «wk_get_code» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "get_code")
+```
+
+### Root Cause in Real Guest Code
+1. `get_code(code_hash, addr)` (`AST:13203–13231`):
+   * Checks `memeq(code_hash, empty_code_hash, 32)`; if `0` (not empty), looks up `code_hash` in `[ts + 48]` and `[bs + 48]`.
+   * On miss in both, builds the 52-byte scoped key `k := sk_make(addr, code_hash)` in `sk_buf`, calls `htab_set([ts + 40], k, 1)` (`AST:13228`), and calls `ws_get_code(code_hash)` (`AST:13229`), which calls `nodedb_lookup([ws + 16], code_hash)` (`AST:13111`).
+2. Note also that `[ws + 16]` (`nodedb` / `codedb`) is **not** in `worldRoleSlots` (`recRoles s "ws" [(32, "ws+32")]` only tracks `ws + 32`!), even though `ws_get_code` calls `nodedb_lookup([ws + 16], code_hash)` (`htab_get([ws + 16], key)`). Placing a valid 1-entry `nodedb` table at `[ws + 16]` (outside `S`, in allocated heap below `heap_ptr`) lets `get_code` return `<0, 0>` normally (`some (.returned (.rStruct [0, 0]))`) — or with an empty `nodedb` at `[ws + 16]`, `ws_get_code` raises `StateErr 2`, which **also** satisfies `Resumes` (`"StateErr" ≠ "TrapErr"`).
+3. Either way, `htab_set([ts + 40], k, 1)` triggers `htab_grow` on `t_tcr = [ts + 40]` (`roleSpec "ts+40" = some (52, false)`, `stride = 56`), allocating `keys' = (heap_ptr, 280)` across `(journal, 0) = (heap_ptr + 4, 0)`.
+
+### Concrete Counterexample State `s`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.eshapes = expectedExceptionShapes`, `s.structs = []`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 10000`.
+* **Globals**:
+  * `ts = 0xa10003d8` (`72`B), `bs = 0xa1000420` (`80`B), `ws = 0xa1000470` (`40`B)
+  * `empty_code_hash = 0xa1000498` (`32`B of zeros), `sk_buf = 0xa10004b8` (`52`B, padded to `0xa10004f0`)
+  * `heap_ptr = 0xa1000660`, `frame_mem_ptr = 0xb0000000`, `scratch_ptr = 0xb0bee000`
+  * `journal = 0xa1000664` (`heap_ptr + 4`), `journal_cap = 0`, `journal_n = 0`, all other globals `= 0`.
+* **Entry Locals**:
+  * `code_hash = 0xa1000628` (`32`B: byte 0 = `0x80`, bytes `1..31` = `0x00`, so `code_hash ≠ empty_code_hash`)
+  * `addr = 0xa1000648` (`20`B of zeros).
+* **Tables (`S = [t_tcr, t_tcw, t_bcw]`, `Nd = []`)**:
+  * `t_tcr = 0xa1000000` at `[ts + 40]` (role `"ts+40"`, `klen = 52, stride = 56, cap = 2, cnt = 1, keys = 0xa1000058, nodes = 0xa1000100, order = 0xa1000160, root = 1, next = 3, free = 2, ncap = 2`, `L = [1], I = [], Fr = [2]`, leaf 1 key = 52 zero bytes).
+  * `t_tcw = 0xa1000178` at `[ts + 48]` (role `"ts+48"`, `klen = 32, stride = 40, cap = 2, cnt = 0, keys = 0xa10001d0, nodes = 0xa1000248, order = 0xa1000288, root = 0, next = 1, free = 0, ncap = 1`, empty `HtabWF` table).
+  * `t_bcw = 0xa10002a8` at `[bs + 48]` (role `"bs+48"`, `klen = 32, stride = 40, cap = 2, cnt = 0, keys = 0xa1000300, nodes = 0xa1000378, order = 0xa10003b8, root = 0, next = 1, free = 0, ncap = 1`, empty `HtabWF` table).
+  * Untracked empty `nodedb` table `t_cdb = 0xa10004f0` at `[ws + 16]` (`klen = 32, stride = 40, cap = 2, cnt = 0, keys = 0xa1000548, nodes = 0xa10005c0, order = 0xa1000600, root = 0, next = 1, free = 0, ncap = 1`; all other fields of `ws`, `bs`, `ts` are `0`).
+
+### Precondition, Trace, and Postcondition Failure
+1. **`WorldOK s` holds** with `S = [0xa1000000, 0xa1000178, 0xa10002a8]`, `Nd = []` (all typed tables, global buffers `empty_code_hash`/`sk_buf`, and records `ws`/`bs`/`ts` lie in `[0xa1000000, 0xa1000660) ⊆ [sourceBase, heap_ptr)` and are pairwise disjoint from `(journal, 0) = (0xa1000664, 0)`).
+2. **Execution trace**:
+   * `memeq(code_hash, empty_code_hash, 32)` returns `0`; `htab_get(t_tcw, code_hash)` and `htab_get(t_bcw, code_hash)` both return `<0, 0>`.
+   * `sk_make(addr, code_hash)` writes 20 zero bytes + `code_hash` (`0x80` at byte 20) into `sk_buf` and returns `sk_buf`.
+   * `htab_set(t_tcr, sk_buf, 1)` pops free leaf 2 (`free := 0`), calls `htab_new_internal(t_tcr)` (`next = 3 > ncap = 2`), and runs `htab_grow(t_tcr)`, allocating `keys' = 0xa1000660` (`5 * 56 = 280`B).
+   * `ws_get_code(code_hash)` calls `nodedb_lookup(0xa10004f0, code_hash)`, gets `<0, 0, 0>`, and raises `StateErr 2` (`some (.exception "StateErr" (.val (.word 2)))`, so `Resumes` holds because `"StateErr" ≠ "TrapErr"` — and if `t_cdb` instead stores one leaf mapping `code_hash` to slice `<0, 0>`, `get_code` returns `some (.returned (.rStruct [0, 0]))` normally).
+3. **Postcondition `WorldStep` fails**:
+   * In `post`, `0xa1000000 ∈ S'` (`memW post (ts + 40) = 0xa1000000`), `(0xa1000660, 280) ∈ htabFootprint post 0xa1000000`, and `(0xa1000664, 0) ∈ fixedObjects post`, violating `Disj` in `TablesTyped post S'` for all `S', Nd'`.
+
+---
+
+## Minimal Specification Fixes Required in `GuestInv.lean`
+
+1. **Fix zero-length `fixedObjects` / `Disj` (`GuestInv.lean:6220, 6413–6416`)**:
+   * Either normalize the journal entry in `fixedObjects` when `journal_cap = 0` (matching `globalBuffers` and `typedRecords`):
+     ```lean
+     [(if globN s "journal_cap" = 0 then 0 else globN s "journal",
+       32 * globN s "journal_cap")]
+     ```
+     **and/or** make `Disj` exempt empty intervals (`i.2 = 0 ∨ j.2 = 0 ∨ i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1`), which is standard interval disjointness (`∅ ∩ J = ∅`) and eliminates spurious collisions between `(0, 0)` / `(p, 0)` sentinels and live allocations.
+   * With that single fix:
+     * `wk_header_init` and `wk_fork_init` become **TRUE** as stated (straightforward heap-allocation + fixed-buffer write proofs).
+     * For `wk_get_account` and `wk_get_code`, also check:
+       * `get_account` can reach `record_pre_state_read` (`journal_push`, modifying `journal`, `journal_n`, `journal_cap` — already allowed by `WorldStep` outside `G`? Wait: `WorldKeeps` restricts `SameGlobalsExcept s post (G ++ ["fail_code"])`, so if `get_account` misses `[ts+16]` and `[bs+16]`, `record_pre_state_read` calls `journal_push` (`AST:12541`), which mutates **`journal_n`** (and **`journal`**, **`journal_cap`** on grow), **none of which are in `G = ["heap_ptr", "scratch_ptr"]`**, AND `ws_get_account_optional` mutates `mpt_last_*` cache globals (`mpt_last_trie`, `mpt_last_addr`, `mpt_last_node`)!). Verify `G` of `wk_get_account` (`["heap_ptr", "scratch_ptr", "journal", "journal_n", "journal_cap", "mpt_last_trie", "mpt_last_addr", "mpt_last_node"]`) and `WordsAt s (locN s "addr") 20` / `[ws + 24]` MPT preconditions!
+       * Similarly, in `get_code`, `sk_make` writes to `sk_buf` (already excluded from `TypedMem` since `sk_buf` is in `fixedObjects` — wait: `fixedObjects` **is** in `TypedMem` (`FixedTyped` is only `WordsOK` + `Allocated`, not value-locked, EXCEPT `FrameOutside` requires `SameCellsOutside` on all cells outside `R` + heap/scratch tail! If `sk_buf` is in allocated heap below `heap_ptr`, `sk_make` mutates `sk_buf` **below `heap_ptr`**, which violates `FrameOutside` unless `(globN s "sk_buf", 52)` is in `R`!), AND `ws_get_code` reads `[ws + 16]`, which needs `"ws+16"` (or `ReadSafe` on `nodedb`) so `htab_get([ws + 16], code_hash)` cannot dereference an unaligned pointer and hit `.error` (`¬ Resumes` holds on `.error`, wait — `WorldKeeps` is guarded by `Resumes r → ...`, so `.error` is vacuously `¬ Resumes`, **except** `fb_get_code` termination needs `htab_get([ws + 16], ...)` to terminate, i.e. `"ws+16"` in `worldRoleSlots`!). Adding `(globN s "sk_buf", 52)` to `R` of `wk_get_code` is **essential** because `sk_make` overwrites `[sk_buf, sk_buf + 52)` in place!
+
+2. **Fix `wk_header_hash` (`GuestInv.lean:9145`)**:
+   * Strengthen the precondition `P` of `wk_header_hash` from `WorldOK` to require a valid decoded header at `locN s "h"` — specifically `WordsOK s (locN s "h", 248)` and `memW s (locN s "h" + 136) ≤ 32` (established by `decode_header` / `validate_header` at `AST:9696` before `run_attempt` calls `header_hash` at `AST:33915`). With `HDR_EXTRA_N ≤ 32`, total payload length in `encode_header` is at most `9 + 450 + 33 + 144 + 66 = 702 < 1024`, so all writes stay strictly inside `[buf, buf + 1024) ⊆ [heap_ptr_pre, heapLimit)`.
+
+==================== origin/wave8/contracts-m12:campaign/contracts/m12/STATUS.md ====================
+# Contract Micro-Shard m12 Status (`wave8/contracts-m12`)
+
+- **Spec revision**: `8a79d9f28bdd7a3522f8a9a81a892d9ecaabdeff` (`wave8-spec-frozen-r9`)
+- **Base commit**: `19400c7b0068d3c402598db37c35db23ca949b18` (`wave8/contracts-shards`)
+- **Proved**: 1 / 6 (`wk_st_le64`) + `wk_track_ancestor_access_safe` + `not_wk_track_ancestor_access`
+- **In progress**: 4 / 6
+- **Blocked / False on literal rev9**: 1 / 6 (`wk_track_ancestor_access` formally refuted; 4 more under formal refutation + safe variant proof)
+
+## Contract Status Table
+
+| # | Contract | `guestAst` idx | Status | Module |
+|---|---|---:|---|---|
+| 1 | `wk_ssz_init` | 185 | in progress (`GlobalsKept` non-ASCII alias audit) | `campaign/contracts/m12/wk_ssz_init.lean` |
+| 2 | `wk_st_le64` | 26 | **proved** (0 errors, 0 sorry) | `campaign/contracts/m12/wk_st_le64.lean` |
+| 3 | `wk_state_fresh_tx` | 355 | in progress (`GlobalsKept` non-ASCII alias audit) | `campaign/contracts/m12/wk_state_fresh_tx.lean` |
+| 4 | `wk_state_init` | 354 | in progress (`GlobalsKept` non-ASCII alias audit) | `campaign/contracts/m12/wk_state_init.lean` |
+| 5 | `wk_te_new` | 869 | in progress (`GlobalsKept` non-ASCII alias audit) | `campaign/contracts/m12/wk_te_new.lean` |
+| 6 | `wk_track_ancestor_access` | 402 | **FALSE** on literal rev9 (`not_wk_track_ancestor_access` + `wk_track_ancestor_access_safe` proved) | `campaign/contracts/m12/wk_track_ancestor_access.lean` |
+
+==================== origin/wave8/contracts-m13:campaign/contracts/m13/STATUS.md ====================
+# Contract Micro-Shard m13 Status (`wave8/contracts-m13`)
+
+- **Base commit**: `19400c7b0068d3c402598db37c35db23ca949b18` (`wave8/contracts-shards`, frozen rev9 `8a79d9f28`)
+- **Proved on frozen rev9**: 1 / 6 (`wk_u256_to_be_min`)
+- **Pending refutation / salvage**: 5 / 6
+
+## Contract Status Table
+
+| # | Contract | Rev9 Status | File | Notes |
+|---|---|---|---|---|
+| 1 | `wk_u256_to_be_min` | **proved** | `wk_u256_to_be_min.lean` | Exact `type_of%` match & `[propext, Classical.choice, Quot.sound]` |
+| 2 | `wk_u256_ws_init` | in progress (false on rev9) | `Refutations.lean` | Fails both `FixedTyped` unnormalized zero-cap journal `Disj` and `GlobalsKept` `ofString` alias |
+| 3 | `wk_validate_header` | in progress (false on rev9) | `Refutations.lean` | `encode_header(parent)` trusts `*(parent + 136)` without bounds check, overflowing `alloc(1024)` past `heapLimit` |
+| 4 | `wk_validate_headers` | in progress | `Refutations.lean` / `wk_validate_headers_fixed.lean` | False on rev9 `GlobalsKept` (`ofString` alias); true under `GlobalsKeptMlS` |
+| 5 | `wk_ws_get_account_optional` | in progress | `Refutations.lean` / `wk_ws_get_account_optional_fixed.lean` | False on rev9 `GlobalsKept` (`ofString` alias); true under `GlobalsKeptMlS` |
+| 6 | `wk_ws_storage_root_of` | in progress | `Refutations.lean` / `wk_ws_storage_root_of_fixed.lean` | False on rev9 `GlobalsKept` (`ofString` alias); true under `GlobalsKeptMlS` |
+
+==================== origin/wave8/contracts-m19:campaign/contracts/m19/ISSUES.md ====================
+# Counterexamples for False Contracts in Micro-Shard `m19` (`wave8-spec-frozen-r9`, `8a79d9f28`)
+
+Of the 6 contracts assigned to `campaign/contracts/micro/m19` on frozen spec revision 9 (`8a79d9f28`):
+
+- **3 are TRUE and PROVED unconditionally** (0 `sorry`, 0 `axiom`, 0 `native_decide`, `type_of%` = `rfl` against `GuestInv.lean`, `#print axioms` = `[propext, Classical.choice, Quot.sound]`):
+  1. `htab_del_spec` (`campaign/contracts/m19/htab_del_spec.lean`)
+  2. `htab_del_progress_spec` (`campaign/contracts/m19/htab_del_progress_spec.lean`)
+  3. `htab_truncate_spec` (`campaign/contracts/m19/htab_truncate_spec.lean`)
+
+- **3 are FALSE as stated on the real guest code (`Guest/SoftwareAst.lean`)**:
+  4. `htab_new_spec` — **FALSE** due to `MlString.ofString` modulo-256 byte-truncation aliasing in `HtabNewExit`'s global frame (`not_htab_new_spec` formally kernel-proved in `campaign/contracts/m19/Counterexamples.lean`, while the repaired global-frame version `htab_new_spec_safe` is also fully kernel-proved in `campaign/contracts/m19/htab_new_spec.lean`).
+  5. `htab_set_spec` — **FALSE** due to `MlString.ofString` modulo-256 byte-truncation aliasing in `HtabExit`'s global frame whenever `htab_set` grows the table via `htab_grow` (`alloc` advances `heap_ptr`, violating `s.globals.lookup (ofString fakeHeapPtr) = post.globals.lookup (ofString fakeHeapPtr)` for `fakeHeapPtr ≠ "heap_ptr"`).
+  6. `htab_union_into_spec` — **FALSE** due to `MlString.ofString` modulo-256 byte-truncation aliasing in `UnionExit`'s global frame whenever `htab_union_into` grows `dst` via `htab_set` → `htab_grow`. Note that the conditional reduction `htab_union_into_spec_of : type_of% @htab_set_spec → type_of% @htab_union_into_spec` is also fully kernel-proved in `campaign/contracts/m19/htab_union_into_spec.lean`.
+
+---
+
+## 1. `htab_new_spec` is FALSE (`GuestInv.lean:6155`, AST line 4867)
+
+### Frozen Statement (`GuestInv.lean:6133–6155`)
+```lean
+def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ≤ htabCapMax
+
+def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    ArenaReady post ∧ AllocatorGrows s post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
+    hdr post w.toNat 0 = locN s "key_len" ∧
+    (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
+      (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
+        Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
+    FrameOutside s post
+      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
+    ∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)
+
+theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new")
+```
+
+### Root Cause
+In `Flapjack.Basis.Pure.MlString`:
+```lean
+def ofString (s : String) : MlString :=
+  MlString.implode (List.map (fun c => BitVec.ofNat 8 c.toNat) s.toList)
+```
+Each Lean `Char` (`UInt32` Unicode scalar value) is mapped to `BitVec.ofNat 8 c.toNat`, which reduces `c.toNat` **modulo 256**. Therefore `ofString` is **not injective** on `String`:
+- Define `fakeHeapPtr : String := "heap_pt" ++ String.singleton (Char.ofNat ('r'.toNat + 256))` (where `'r'.toNat = 114` and `114 + 256 = 370`, `Ū`, a valid Unicode scalar value).
+- `fakeHeapPtr ≠ "heap_ptr"` and `fakeHeapPtr ≠ "scratch_ptr"` (`fakeHeapPtr ∉ ["heap_ptr", "scratch_ptr"]` holds by `decide`).
+- Yet `ofString fakeHeapPtr = ofString "heap_ptr"` (holds by `decide`).
+
+Whenever `htab_new` returns normally, it executes 4 `alloc` calls (`88`, `(ncap + 1) * stride`, `(ncap + 1) * 32`, `(ncap + 1) * 8`), strictly advancing `s.globals.lookup (ofString "heap_ptr")` from `p0` to `p0 + 88 + (ncap + 1) * (stride + 40)`. Evaluating the last conjunct of `HtabNewExit` at `name = fakeHeapPtr` requires:
+`s.globals.lookup (ofString "heap_ptr") = post.globals.lookup (ofString "heap_ptr")`,
+contradicting the non-empty fresh heap allocation!
+
+*(Note: `htab_del` and `htab_truncate` never modify any global — `post.globals = s.globals` — so `htab_del_spec` and `htab_truncate_spec` hold unconditionally even for `fakeHeapPtr`!)*
+
+### Concrete Counterexample State (`cxState`, kernel-verified in `Counterexamples.lean`)
+* **State `cxState`** (`PanSemStateFiniteExact 64 Guest.HostMemory`):
+  * `code = originalRuntimeCode`, `memaddrs = ordinaryDomain`, `shMemaddrs = sharedDomain`, `baseAddr = 0xa1000000` (`2701131776`), `be = false`, `clock = 100`.
+  * `globals`: `heap_ptr = 0xa1000000` (`2701131776`), `frame_mem_ptr = 0xb0000000` (`2952790016`), `scratch_ptr = 0xb0bee000` (`2965299200`).
+  * `locals`: `key_len = 20`, `cap = 2`.
+* **Precondition**: `HtabNewReady cxState` holds (`cxState_ready` in `Counterexamples.lean`): `ArenaReady cxState`, `20 ∈ htabKeyLens`, `2 ≤ 2^32`.
+* **Execution**: `(evaluateHOLFiniteState cxState (sourceFnBody guestFn_htab_new))` returns `some (.returned (.val (.word 0xa1000000#64)))` (`htab_new_cx_returns` in `Counterexamples.lean`), updating `heap_ptr` from `2701131776` (`0xa1000000`) to `2701132056` (`0xa1000118`, `+280` bytes).
+* **Postcondition Violation**: `fakeHeapPtr ∉ ["heap_ptr", "scratch_ptr"]`, but `cxState.globals.lookup (ofString fakeHeapPtr) = some (.val (.word 2701131776#64)) ≠ some (.val (.word 2701132056#64)) = post.globals.lookup (ofString fakeHeapPtr)`.
+* **Kernel Proof**: `theorem not_htab_new_spec : ¬ FunSpec HtabNewReady HtabNewExit (ofString "htab_new")` is proved with 0 `sorry` in `campaign/contracts/m19/Counterexamples.lean` (and verified against `type_of% @InitECandidate.Solver.Wave8GuestInv.htab_new_spec` in `Axioms.lean`).
+* **Suggested Spec Fix**: Quantify global-frame preservation over `ofString name ∉ [ofString "heap_ptr", ofString "scratch_ptr"]` (or restrict `name ∈ guestGlobalNames`). With that single fix, `htab_new_spec_safe` is **proved** in `campaign/contracts/m19/htab_new_spec.lean`.
+
+---
+
+## 2. `htab_set_spec` is FALSE (`GuestInv.lean:6107`, AST line 5149)
+
+### Frozen Statement (`GuestInv.lean:6107`, `MemoryViews.lean:260–271`)
+```lean
+def HtabExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop :=
+  fun s post =>
+    let t := locN s "t"
+    let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
+    ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
+    globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    (∀ i ∈ htabFootprint post t, Allocated post i ∧
+      ((∃ j ∈ htabFootprint s t, Inside i j.1 (j.1 + j.2)) ∨ Inside i fresh.1 (fresh.1 + fresh.2))) ∧
+    FrameOutside s post (htabFootprint s t) fresh ∧
+    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+
+theorem htab_set_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_set")
+```
+
+### Root Cause
+Whenever `htab_set` inserts a new key into a full table (`free = 0` and `ncap < next`, i.e. `next = ncap + 1`), `htab_new_leaf` → `htab_new_node` (`AST:5059–5060`) calls `htab_grow(t)` (`AST:5117`), which calls `alloc` three times to double `ncap`, strictly advancing `heap_ptr`. The final conjunct of `HtabExit` quantifies over all `name : String` with `name ≠ "heap_ptr"`, which fails at `name = fakeHeapPtr` (`fakeHeapPtr ≠ "heap_ptr"` while `ofString fakeHeapPtr = ofString "heap_ptr"`).
+
+#### Concrete Counterexample State `s` for `htab_set_spec`
+* **Metadata (`GuestInv s`)**: `s.code = originalRuntimeCode`, `s.memaddrs = ordinaryDomain`, `s.shMemaddrs = sharedDomain`, `s.baseAddr = 0xa1000000`, `s.be = false`, `s.clock = 100000`.
+* **Globals**:
+  * `heap_ptr = 0xa1002000` (`2701139968`, 8-byte aligned, `sourceBase ≤ heap_ptr ≤ heapLimit`)
+  * `frame_mem_ptr = 0xb0000000` (`2952790016`)
+  * `scratch_ptr = 0xb0bee000` (`2965299200`).
+* **Locals**:
+  * `t = 0xa1000000` (`2701131776`)
+  * `key = 0xa1001000` (`2701135872`, holding byte `0x40`, i.e. word `0x0000000000000040` in little-endian)
+  * `value = 99`.
+* **Table `t = 0xa1000000` in Memory** (`ncap = 3, count = 2, next = 4, free = 0` — full table with empty free list!):
+  * Header `[0xa1000000 .. 0xa1000058)`:
+    * `t + 0` (`key_len`): `1` (`1 ≤ 1 ≤ 60`)
+    * `t + 8` (`stride`): `8` (`(1 + 7) / 8 * 8 = 8`)
+    * `t + 16` (`cap`): `3`
+    * `t + 24` (`count`): `2`
+    * `t + 32` (`keys`): `0xa1000100` (interval `(0xa1000100, 32)`, `4 * 8 = 32` B)
+    * `t + 40` (`nodes`): `0xa1000200` (interval `(0xa1000200, 128)`, `4 * 32 = 128` B)
+    * `t + 48` (`order`): `0xa1000300` (interval `(0xa1000300, 32)`, `4 * 8 = 32` B)
+    * `t + 56` (`root`): `3`
+    * `t + 64` (`next`): `4` (`1 ≤ 4 ≤ ncap + 1 = 4`)
+    * `t + 72` (`free`): `0`
+    * `t + 80` (`ncap`): `3` (`2 ≤ 3`).
+  * Keys (`0xa1000100`):
+    * Slot `1` (`0xa1000108`): `0x00` (word `0`)
+    * Slot `2` (`0xa1000110`): `0x80` (word `0x80`, byte 0 = `0x80`).
+  * Nodes (`0xa1000200`):
+    * Node `1` (`0xa1000220`, leaf): `+0 = 3` (parent), `+8 = 10` (value), `+16 = 0` (pos), `+24 = 8` (`8 * klen`).
+    * Node `2` (`0xa1000240`, leaf): `+0 = 3` (parent), `+8 = 20` (value), `+16 = 1` (pos), `+24 = 8` (`8 * klen`).
+    * Node `3` (`0xa1000260`, internal): `+0 = 0` (parent), `+8 = 1` (left), `+16 = 2` (right), `+24 = 0` (`crit = 0 < 8`).
+  * Order (`0xa1000300`):
+    * `order[0]` (`0xa1000300`): `1`
+    * `order[1]` (`0xa1000308`): `2`.
+* **Verification of `HtabArgWF s`**:
+  * `ArenaReady s` holds.
+  * `HtabWF s 0xa1000000` holds with `L = [1, 2]`, `I = [3]`, `Fr = []`, `dep = fun n => if n = 3 then 0 else 1`.
+  * All 4 blocks of `htabFootprint s 0xa1000000` lie in `[0xa1000000, 0xa1000320) ⊆ [sourceBase, globN s "heap_ptr")`, so `Allocated s i` holds for each.
+* **Execution of `htab_set`**:
+  1. `htab_find_leaf(t, 0xa1001000)` tests bit 0 of `0x40` (`0`), steps to `1`, and returns `leaf = 1`.
+  2. `memeq(0xa1000108, 0xa1001000, 1)` compares `0x00` vs `0x40` → returns `0`.
+  3. `htab_first_diff(0xa1001000, 0xa1000108, 1)` returns `d = 1`.
+  4. Walk loop ends with `p = 3, n = 1`.
+  5. `htab_new_leaf` calls `htab_new_node(t)`: since `free = 0` and `ncap = 3 < next = 4` (`Cmp.lower 3 4` is true, `AST:5059`), it calls **`htab_grow(t)`** (`AST:5060`)!
+  6. `htab_grow(t)` (`AST:5117`) sets `ncap := 6` and executes 3 `alloc` calls (`7 * 8 = 56` → `+56`, `7 * 32 = 224` → `+224`, `7 * 8 = 56` → `+56`), advancing `heap_ptr` from `0xa1002000` to `0xa1002150` (`+336` bytes)!
+  7. `htab_new_leaf` allocates node `nl = 4`, `htab_new_internal` allocates node `ni = 5`, splices `5` between `3` and `1`, and `htab_set` returns `some (.returned (.val (.word 0)))`!
+* **Violation of `HtabExit s post`**:
+  * Take `name := fakeHeapPtr = "heap_pt" ++ String.singleton (Char.ofNat ('r'.toNat + 256))`.
+  * `fakeHeapPtr ≠ "heap_ptr"` holds (`fakeHeapPtr_ne_heap_ptr`), yet `ofString fakeHeapPtr = ofString "heap_ptr"`.
+  * `s.globals.lookup (ofString fakeHeapPtr) = some (.val (.word 0xa1002000#64))`, whereas `post.globals.lookup (ofString fakeHeapPtr) = some (.val (.word 0xa1002150#64))` — **FALSE**!
+
+---
+
+## 3. `htab_union_into_spec` is FALSE (`GuestInv.lean:6124`, AST line 13711)
+
+### Frozen Statement (`GuestInv.lean:6124–6125`, `MemoryViews.lean:274–288`)
+```lean
+def UnionArgWF : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ HtabWF s (locN s "dst") ∧
+    ∀ i ∈ htabFootprint s (locN s "dst"), Allocated s i
+
+def UnionExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop :=
+  fun s post =>
+    let t := locN s "dst"
+    let fresh : Ivl := (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")
+    ArenaReady post ∧ HtabWF post t ∧
+    hdr post t 0 = hdr s t 0 ∧ hdr post t 1 = hdr s t 1 ∧
+    globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+    (∀ i ∈ htabFootprint post t, Allocated post i) ∧
+    FrameOutside s post (htabFootprint s t) fresh ∧
+    (∀ name, name ≠ "heap_ptr" → s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+
+theorem htab_union_into_spec :
+    FunSpec UnionArgWF (OnReturn UnionExit) (ofString "htab_union_into")
+```
+
+### Concrete Counterexample State `s` for `htab_union_into_spec`
+Take the exact same state `s` as Counterexample 2 above, with:
+* **Locals**: `dst = 0xa1000000` (the same full `HtabWF` table with `ncap = 3, count = 2, next = 4, free = 0`), `src = 0xa1001100`.
+* **Source table `src = 0xa1001100` in Memory** (1-element table holding key `0x40`):
+  * `src + 8` (`stride`): `8`
+  * `src + 24` (`count` / `cap` local in `htab_union_into`): `1`
+  * `src + 32` (`keys`): `0xa1001200` (with `[0xa1001208] = 0x40`)
+  * `src + 40` (`nodes`): `0xa1001300` (with `[0xa1001328] = 99`, node `1` value)
+  * `src + 48` (`order`): `0xa1001400` (with `[0xa1001400] = 1`).
+* **Precondition**: `UnionArgWF s` holds (`ArenaReady s`, `HtabWF s 0xa1000000`, and `htabFootprint s 0xa1000000` is `Allocated s` below `heap_ptr = 0xa1002000`).
+* **Execution of `htab_union_into(dst, src)`** (`AST:13711–13729`):
+  * Reads `cap := memW(src + 24) = 1`.
+  * Iteration `i = 0 <s 1`:
+    * `htab_item(src, 0)` returns `<1, 0xa1001208, 99>`.
+    * Calls `htab_set(dst, 0xa1001208, 99)`, which triggers `htab_grow(dst)` and advances `heap_ptr` from `0xa1002000` to `0xa1002150`!
+  * Loop terminates at `i = 1`, and `htab_union_into` returns `some (.returned (.val (.word 0)))`.
+* **Violation of `UnionExit s post`**:
+  * For `name = fakeHeapPtr ≠ "heap_ptr"`, `s.globals.lookup (ofString fakeHeapPtr) = some (.val (.word 0xa1002000#64)) ≠ some (.val (.word 0xa1002150#64)) = post.globals.lookup (ofString fakeHeapPtr)` — **FALSE**!
+* **Conditional Proof Provided**: Once `htab_set_spec`'s global frame is repaired (e.g. `ofString name ≠ ofString "heap_ptr"`), `htab_union_into_spec` follows immediately: `theorem htab_union_into_spec_of : type_of% @htab_set_spec → type_of% @htab_union_into_spec` is kernel-proved with 0 `sorry` in `campaign/contracts/m19/htab_union_into_spec.lean` and verified in `Axioms.lean`.
+
+==================== origin/wave8/contracts-m22:campaign/contracts/m22/ISSUES.md ====================
+# Counterexamples & Contract Issues — Micro-shard `m22` (`wave8/contracts-m22`)
+
+Evaluated against frozen spec revision 9 (`campaign/specs-proposed/GuestInv.lean` @
+`8a79d9f28bdd7a3522f8a9a81a892d9ecaabdeff`, tag `wave8-spec-frozen-r9`) and the real guest AST
+(`Guest/SoftwareAst.lean`).
+
+Summary:
+- `ek_is_warm_storage_key` — **TRUE** (proved unconditionally in `ek_is_warm_storage_key.lean`).
+- `ek_refill_frame_state_gas` — **TRUE** (proved unconditionally in `ek_refill_frame_state_gas.lean`).
+- `ek_frame_halt`, `ek_get_storage_original`, `ek_depth0_prepare`, `ek_frame_start` — **FALSE** as
+  literally stated in rev9; each has a kernel-verified refutation theorem (`not_ek_*`) with `0 sorry`
+  and standard Lean axioms only.
+
+---
+
+## 1. `ek_frame_halt` (`Guest/SoftwareAst.lean:18756`) — FALSE
+
+- **Frozen rev9 statement** (`GuestInv.lean:8689`):
+  ```lean
+  EvmKeeps EvmInv [] (ofString "frame_halt")
+  ```
+- **Bug / Counterexample**:
+  `FunSpec` quantifies universally over all `s` satisfying `EvmInv s` without constraining the shape
+  of parameter `s.locals.lookup (ofString "err")` (which `lookupCodeHOLFinite` checks at call sites,
+  but `FunSpec` evaluates `body` directly on `s`).
+  In `guestFn_frame_halt`:
+  ```
+  store (ev + 184) ((load .one (ev + 184)) + (load .one (ev + 64)));
+  store (ev + 64) 0;
+  store (ev + 160) err;
+  return 0
+  ```
+  Take `s := fhCxState` (`EvmInv s`, `ev = 0xb0bec000`, `memW s (ev + 168) = 0xa1001000 ∈ S`) with
+  `s.locals.lookup (ofString "err") = some (.rStruct [.val (.word 0), .val (.word 0)])`.
+  In Pancake's `evaluateHOLFiniteState_store`, `panMemStoresHOL (ev + 160) (flattenHOL err)` writes
+  two consecutive words (`0` to `ev + 160` and `0` to `ev + 168`, overwriting the `frame.addr`
+  table pointer!) and `return 0` returns `some (.returned (.val (.word 0)))` (`Resumes` holds).
+  In `post`, `memW post (ev + 168) = 0`, violating `FrameWF post S' (ev, cur_cont)` (`0 ∉ S'` since
+  `0 ∉ ordinaryDomain`) and hence `¬ EvmInv post`.
+- **Formal refutation & safe variant**:
+  - `not_ek_frame_halt : ¬ EvmKeeps EvmInv [] (ofString "frame_halt")` (`ek_frame_halt.lean`)
+  - `ek_frame_halt_safe : EvmKeeps EvmInvWordErr [] (ofString "frame_halt")` (`ek_frame_halt.lean`),
+    proved unconditionally once `err` has 1-word shape (`∃ w, s.locals.lookup (ofString "err") = some (.val (.word w))`).
+
+==================== origin/wave8/leaves-s00:campaign/leaves/s00/ISSUES.md ====================
+# Proof blockers
+
+## `_node_rlp_fill`: allocation-progress argument needs an additional invariant
+
+This is a blocker for the proposed proof strategy, **not a counterexample to the
+leaf statement**. No leaf is currently classified false.
+
+DESIGN.md line 1501 explains the outer `2^62` bound using strict progress on
+every iteration: either `scratch_alloc(48)` reduces the scratch pointer, or
+`_node_rlp_finish` calls `alloc(n >= 1)` and increases the heap pointer.
+The latter positive-size assertion is not valid for arbitrary payload words.
+
+Concrete input to the allocation suffix of `_node_rlp_finish`:
+
+- `payload = 18446744073709551607 = 2^64 - 9`;
+- `heap_ptr = 0xa2000000`, an aligned pointer below `0xb0000000`;
+- enough clock for the shown calls; no exceptional callee result.
+
+AST trace:
+
+1. `Guest/SoftwareAst.lean:10958` calls `rlp_list_header_len(payload)`.
+2. `:4842` delegates to `rlp_header_len`; `:4753` takes the large-length path.
+3. `rlp_be_len` at `:4698` shifts the word right by eight until zero (eight
+   iterations), returning 8. Thus the header length is 9.
+4. `:10959` passes `(9 + payload) mod 2^64 = 0` to `alloc`.
+5. `alloc` at `:66` computes `q = (heap_ptr + 0 + 7) & (-8) = heap_ptr`.
+   Both allocator guards pass, and `heap_ptr` does not increase.
+
+The arithmetic is now kernel-checked in `AllocationProgress.lean`; its
+[check and axiom output](evidence/checks/allocation-progress.txt) exited 0.
+This is not a Lean-checked execution proof. In particular, this note does not establish
+that this suffix state is reachable from the outer function's initial frame,
+or that a complete continuing iteration fails to allocate elsewhere.
+
+To finish the outer leaf, prove a suitable reachability/size invariant, handle
+zero-allocation iterations with a separate ranking or stationary argument, or
+supply another bound. The copied counter and read-only loop combinators alone
+do not discharge this obligation. All other 23 leaves now pass single-file stock-Lean checks (the authorized
+Turbo timeout fallback) and cumulative exact-type/axiom compatibility audits.
+The exact full-rev9 gate remains pending a usable frozen spec artifact.
+
+## Remaining semantic work after the 23-leaf audit
+
+`_node_rlp_finish` now has a checked clock bound, but that bound alone does not
+prove positive allocation on a successful return. The zero-size suffix example
+above therefore remains an obstruction to the proposed ranking proof.
+
+One possible route is to prove that successful `rlp_encode_bytes`/`memcpy` calls
+force their lengths below the finite ordinary-memory domain, then connect those
+lengths to the accumulated payload. This would need to account for arbitrary
+input memory, aliasing between node/frame/output storage, and modular allocator
+arithmetic. This is a proposed proof obligation, not an established invariant.
+No `fb__node_rlp_fill` proof, admission, or false-statement classification has
+been added.
+
+## Initial allocator wraparound (kernel-checked arithmetic)
+
+`GuestInv` constrains metadata, not the initial globals. Even a positive request
+does not by itself establish monotonic heap progress on an arbitrary initial
+state: with `p = 2^64 - 8` and `n = 8`, the first allocator guard compares
+`(0xb0000000 - p) mod 2^64 = 0xb0000008` against 8 and passes; the rounded
+next pointer is zero, so the second guard passes too.
+`AllocationProgress.positive_allocation_wraps` checks precisely these guard and
+update expressions. An eventual progress proof must establish an appropriate
+bounded-pointer invariant after initialization or account for this initial wrap.
+This arithmetic example is not a counterexample to `fb__node_rlp_fill`.
+
+The GitHub `wave8-cone-cache` release was rechecked after the 23-leaf push. Its
+only asset is the original PanTerminatingBounded cone dated 2026-10-30; it does
+not provide a new full-rev9 spec artifact.
+
+==================== origin/wave8/leaves-s12:campaign/leaves/s12/reuse-rlp/ISSUES.md ====================
+# RLP-family leaves: issues found against `campaign/specs-proposed/GuestInv.lean` (rev 2, 7e73988d)
+
+Speculative leaf prover `wave8/leaves-rlp-opus55`. Neither item below makes a leaf statement false
+(the constants survive), but both are wrong justifications in DESIGN.md / the generated loop table
+that a proof cannot follow as written.
+
+## 1. `scratch_alloc` can wrap `scratch_ptr` upward once (STACK class, `_rlp_validate_items_body`)
+
+DESIGN.md §3 (`STACK`) and the §4 row for `_rlp_validate_items_body` say each push "strictly lowers
+`scratch_ptr` and cannot wrap (<= 2^61 pushes, arbitrary globals)". For arbitrary globals this is
+false. `scratch_alloc(n)` (AST line 154) is
+
+    p := scratch_ptr
+    if (p - frame_mem_ptr) <u n then trap_with(7)
+    q := (p - n) & ~7
+    if q <u frame_mem_ptr then trap_with(7)
+    scratch_ptr := q
+
+Counterexample: `scratch_ptr = 8`, `frame_mem_ptr = 16`, `n = 24`. Then `p - fmp = 2^64 - 8 ≥ 24`
+(no trap), `q = (8 - 24) & ~7 = 2^64 - 16 ≥ fmp` (no trap), so `scratch_ptr := 2^64 - 16 > 8`.
+
+Why the constant still holds: if `p < fmp` then any `p ≥ 24` traps at the second test, so the wrap
+needs `p < 24` and happens at most once; afterwards `p ≥ fmp` and every push lowers `p` by ≥ 24
+while staying ≥ fmp. The potential `φ = if fmp ≤ p then p / 8 else 2^61` is ≤ 2^61 and strictly
+decreases on every non-trapping push, so the `(2^61 + 1)` phase count in `K._rlp_validate_items_body`
+is still sufficient. Proofs must use this two-regime potential, not "p strictly decreases".
+
+## 2. `rlp_list_count` is not read-only (RO(2) classification unsound)
+
+The §4 table and §1 item 2 justify `rlp_list_count` (AST line 4582) as read-only with no-repeat key
+`(off, count)`. Its loop body calls `rlp_item_total → rlp_validate_items → _rlp_validate_items_body`,
+whose push branch executes three `store`s into fresh scratch records, and `rlp_validate_items` moves
+`scratch_ptr` (mark/release). Memory therefore differs between loop heads, so the no-repeat
+(pigeonhole) argument does not apply to this loop as stated. The same holds for every loop
+classified RO whose body reaches `_rlp_validate_items_body` through calls; the coverage script
+appears to classify loops by their syntactic body only, without the callees' write sets.
+
+Why the leaf is still plausibly true (not yet proved here): every `returned` outcome of
+`rlp_item_header(p, len)` is a triple `(h0, h1, h2)` with `1 ≤ h0 + h1 ≤ len` (no overflow: each
+branch checks `len - 1 ≥ ll` and `len - 1 - ll ≥ n` before returning `(1 + ll, n, _)`, and the
+single-byte branch returns `(0, 1, 0)` with `len ≥ 1`). Hence `rlp_item_total` returns
+`total ∈ [1, len - off]`, and `rlp_list_count` terminates by the strict-counter measure `len - off`
+(≤ 2^64 iterations, well inside `K.rlp_list_count = (2^128 + 1)(K.rlp_item_total + 2)`). A proof
+needs a return-value postcondition for `rlp_item_total`, which the spec's combinators do not provide.
+
+**Update (proved):** `fb_rlp_list_count` is now proved exactly this way (`RlpPost.hdr_post`,
+`RlpPost.total_post`, `RlpCount.while_lower_step`), so the leaf statement and its constant hold;
+only the DESIGN justification is wrong.
+
+## 3. Combinators the leaves need beyond §3 of the spec (all proved here, no `sorry`)
+
+The spec's own `TerminatingProgBoundedOn.while_rank` and `callHandle_guestInv` are `sorry`; none of the
+delivered leaves uses them. The family needed these extra rules, each proved in `campaign/leaves/rlp`:
+
+| rule | file | used by |
+|---|---|---|
+| `callHandle_guestInv'` (exact statement of the spec's sorried `callHandle_guestInv`) | RlpHandle | `rlp_validate_items` |
+| `tailCall_guestInv` (`.call none`, GuestInv-guarded; step0 has only the unguarded one) | RlpLoops | `rlp_value_encoded_len`, … |
+| `while_walk` (fresh-address walk, via step0 `while_measure`) | RlpWalk | `memcpy`, `memzero`, `memeq`, `key_to_nibbles` |
+| `while_ctr`, `while_localDec`, `while_lower_step`, `while_incr` (strict counters / local decrease) | RlpCore, RlpLoops, RlpCount, RlpIncr | most loops |
+| `while_phased` (no-repeat inside phases of a decreasing potential) | RlpPhased | `_rlp_validate_items_body` |
+| `evaluate_ro` (read-only frame: memory, globals, ffi, topAddr) | RlpFrame | idem |
+| `evaluate_wordLocal` (flowing runs keep word locals words) | RlpWord | idem |
+| `RetOK` calculus (return-value postconditions) | RlpPost | `rlp_list_count` |
+
+The spec could replace its `callHandle_guestInv` `sorry` by the proof of `callHandle_guestInv'`.
+
+## 4. Stale wave-7 modules at the base
+
+At 7e73988d, `InitECandidate.Solver.GuestBoundRlpMpt` and `GuestBoundLoopFree` do not build
+(`lake build` errors: removed `ProgBounded.tailCall`, `split` multi-target, `omega` failures), so their
+`FunBounded` lemmas cannot be reused. Only cone modules (`GuestUniformClockBound`, `HeapPotential`,
+`GuestTrapAlign`, `GuestGlobalKeep`, …) are used here.
+
+## 5. Helper dependencies proved here that belong to other families
+
+To close RLP decoders, these non-RLP leaves are proved here as dependencies (possible overlap with
+other tracks; same statements as the spec): `trap_with`, `alloc`, `scratch_alloc`, `scratch_mark`,
+`scratch_release`, `bswap64` (lifted cone bounds), `u256_from_be` (arithmetic, Astra's family),
+`node_new_leaf`, `node_new_branch` (MPT), `mpt_fail`.
+
+==================== origin/wave8/salvage-htab:campaign/leaves/salvage-htab/ISSUES.md ====================
+# Hash-table leaves: issues and notes (`wave8-spec-frozen-r9`)
+
+Spec: frozen revision 9, commit `8a79d9f28` (unmodified).
+
+## Blocking frozen-spec defect: `HtabNewExit` global frame
+
+`HtabNewExit` requires every `String` other than the two literal strings
+`"heap_ptr"` and `"scratch_ptr"` to retain its global-map lookup.  The map key is
+`MlString`, however, and `ofString` encodes every character as an 8-bit word.  This map is
+not injective on Lean `String`: the checked witness in `SpecAudit.lean` proves
+
+```lean
+ofString "Ũeap_ptr" = ofString "heap_ptr"
+```
+
+while `"Ũeap_ptr" ≠ "heap_ptr"`.  A normal `htab_new` updates the `heap_ptr` map key, so the
+specified equality for `name = "Ũeap_ptr"` demands that this update leave the same key unchanged.
+It cannot be established without either restricting the quantified names to canonical byte
+strings or framing directly over `MlString` keys.  The same issue applies to the scratch
+constructor through `"ųcratch_ptr"`-style byte aliases.
+
+The leaf proof therefore cannot meet the exact frozen `HtabNewExit` statement.  No weakened
+constructor theorem is staged as a substitute.
+
+---
+
+Historical notes below refer to the predecessor salvage work and are not acceptance evidence for
+revision 9.
+
+## No false leaf found
+
+I checked every contract leaf of the family against `Guest/guest-software.pp.pnk` and found no
+counterexample. These are arguments, not proofs:
+
+- **`htab_new_spec` / `htab_new_scratch_spec`.** `alloc` and `scratch_alloc` return
+  normally only within the arena checks. `trap_with` never returns normally: its body ends in
+  `raise`, so a trapping allocation is not a `returned` run.
+  - Word stores need an 8-aligned address: `ordinaryDomain` is `StackRemove.addresses`, the
+    aligned cells `base + 8k`. An unaligned initial `heap_ptr`, which `ArenaReady` allows, makes
+    the first `st t+0` error, so that case is vacuous.
+  - With `key_len ∈ htabKeyLens` and `cap ∈ htabCaps`:
+    - the stride is `(klen+7)/8*8`;
+    - every block length is a multiple of 8;
+    - the four blocks are consecutive and disjoint;
+    - `next = 1` and `free = 0` give `L = I = Fr = []`.
+- **`htab_set_spec`.** `memeq` and `htab_first_diff` compare the same `klen` bytes, with no
+  write in between. So when `memeq` returns 0, `d < 8·klen` and the new internal node has a
+  valid crit bit.
+  - Children are nonzero (they lie in `L ++ I ⊆ [1, next)`), so the descent stops at a nonzero
+    `n`.
+  - Inserting `ni` on the edge `p → n` keeps the tree rooted and acyclic: take `dep' = 2·dep`,
+    and give `ni` the odd value between its parent and child.
+  - `count = |L| ≤ next - 1 ≤ ncap`, so the `order[pos]` write stays inside its block.
+  - `htab_grow` writes only fresh heap.
+- **`htab_del_spec` / `htab_del_progress_spec`.** A leaf found by `htab_find_leaf` is in `L`.
+  - Rooted acyclicity forces `root ∈ I` whenever `I ≠ []`. So a root leaf means `count = 1`.
+  - The sibling splice and the `leaf → p → old free` chain keep `HtabWF`.
+  - The no-delete path writes nothing, so the post-state equals the entry state up to locals
+    and clock.
+- **`htab_truncate_spec` / `htab_union_into_spec`.** These follow by composing `HtabExit`
+  across iterations. The footprint clause of `HtabExit` makes the frames compose.
+
+## Infrastructure notes
+
+1. **`submission/InitECandidate/Solver/GuestBoundHtab.lean` no longer elaborates** on Lean 4.33.1.
+   - It has errors at lines 923, 1761, 1983–1986, 2160–2163, 2445, 2481, 4504 and 4624 (stuck
+     `NeZero ?m` instances and similar), and it is not in the cone cache.
+   - Lines 1–719 and 1189–1292 do elaborate: the 0-`sorry` `FunBounded` proofs and the `lookup_*`
+     lemmas. They are copied verbatim, with a new namespace, into `OldBounds.lean`.
+   - `LeafHtabCritBit.lean` and `LeafStateJournalHtab.lean` import that broken file.
+2. **The no-repeat rule** (`while_noRepeat`, proved on `wave8/step0-opus55` and not on this
+   cone) is ported in `Loop.lean`. It uses the spec's `evaluate_ne_of_clock_lt`,
+   `while_unfold_continue` and `LoopActive`.
+3. **The `htab_set` descent carries two words, `p` and `n`.** `K` already uses `2^128`, which is
+   right. A head with a non-word `p` cannot continue: Pancake assignment keeps the shape of a
+   local, so `p = n` fails. `CopiesTo` (`Loop2.lean`) records this, and with it `(n, p)` is a key
+   in `Fin (2^128)`.
+4. Every generated `K.«f»` of the family was met exactly: the structural walk produces the
+   generator's formula term for term. No bound needed slack.
+
+## Open in this family
+
+These seven contract leaves are not proved here: `htab_new_spec`, `htab_new_scratch_spec`,
+`htab_set_spec`, `htab_del_spec`, `htab_del_progress_spec`, `htab_truncate_spec`,
+`htab_union_into_spec`.
+
+`gb_htab_truncate` is proved from `htab_del_spec`, `htab_del_progress_spec` and `fb_memeq`, all
+taken as hypotheses.
+
+==================== origin/wave8/race-gbody-ptx-gemini:campaign/leaves/race-gbody-ptx-gemini/Obstruction.lean ====================
+import campaign.leaves.«race-gbody-ptx-gemini».WorldFrame
+
+/-! Exact, kernel-verified obstruction theorems showing why `GBody.process_transaction` on frozen
+rev9 (`8a79d9f28`) is unprovable as stated, and identifying the minimal strengthened precondition
+under which the entire proof goes through cleanly.
+
+### Summary of the Frozen rev9 Interface Obstruction
+
+In `MemoryViews.lean`:
+- `fixedObjects s` contains `(globN s "journal", 32 * globN s "journal_cap")`, `blockOutObjects s`,
+  and `balObjects s`.
+- `FixedTyped s` requires `∀ i ∈ fixedObjects s, i.2 = 0 ∨ (Allocated s i ∧ WordsOK s i)` and
+  `(fixedObjects s).Pairwise Disj`.
+- `Disj i j` is `i.1 + i.2 ≤ j.1 ∨ j.1 + j.2 ≤ i.1` (does NOT exempt `j.2 = 0` when `j.1 ≠ 0`!).
+- Therefore, a zero-length interval `(p, 0) ∈ fixedObjects s` with `p ∈ [globN s "heap_ptr", heapLimit)`
+  in *unallocated* free heap satisfies `FixedTyped s` (`i.2 = 0` holds, and `Disj (p, 0) other` holds
+  against every currently allocated heap or scratch object), yet `p` is NOT constrained to be `0` or
+  allocated!
+- Three concrete sources of such unallocated zero-length `(p, 0) ∈ fixedObjects s` exist under
+  `TxReady s`:
+  1. **Zero-capacity journal (`Obstruction 1`)**: `globN s "journal_cap" = 0` with
+     `globN s "journal" = p` in free heap (`JournalTyped` allows `journal_cap = 0` with arbitrary
+     `journal`; neither `state_fresh_tx` nor any subsequent callee in `process_transaction` modifies
+     `journal` or `journal_cap`).
+  2. **Null `bo + 40` / `bo + 72` list pointer (`Obstruction 2`)**: `TxReady` requires `bo ≠ 0`,
+     `bo + 24 ≠ 0`, `bo + 32 ≠ 0`, `index < bo + 80`, but allows `memW s (bo + 40) = 0` or
+     `memW s (bo + 72) = 0`. In `blockOutObjects s`, `lst 40` evaluates
+     `obj (memW s (memW s (bo + 40))) (8 * memW s (memW s (bo + 40) + 16))` = `obj (memW s 0) (8 * memW s 16)`.
+     When `memW s 16 = 0` and `memW s 0 = p` in free heap (note addresses `0` and `16` are outside
+     `ordinaryDomain`, so `memW _ 0` and `memW _ 16` are invariant across ALL Pancake evaluations and
+     ALL `WorldStep`/`HtabNewExit`/`HtabExit` transitions!), `(p, 0) ∈ blockOutObjects s ⊆ fixedObjects s`
+     in EVERY reachable state!
+     Moreover, even if `memW s 0 = 0`, when `memW s (bo + 72) = 0`, `process_transaction` calls
+     `rl := lst_push(load(bo + 72), 8)` (`AST:33418`), and `GBody.process_transaction` lacks
+     `ArgNonNull "l" "lst_push"`; `wk_lst_push`'s `RetListSlot` requires
+     `Inside (rl, 8) (memW post 0) (memW post 0 + 8 * memW post 16)`, which is only non-vacuous if
+     `memW post 16 ≥ 1` — and if `memW s 0 = 0` and `memW s 16 = 1`, `(0, 8) ∈ blockOutObjects s`, so
+     `rl = 0`, which errors at `store rl stable_logs` (ok), EXCEPT if `memW s 0 = globN s "evm_empty"`?
+     No, `Pairwise Disj` blocks overlap with non-empty buffers, EXCEPT when `memW s 0` is an allocated
+     heap word outside `worldOwned` (e.g., `m` or `aa`? Wait: if `memW s 0` was allocated at `s₀` outside
+     `worldOwned`, then `(memW s 0, 8)` IS in `fixedObjects s₀ ⊆ worldOwned s₀`!).
+     However, for `memW s 16 = 0` and `memW s 0 = aa + 8` (in free heap at `s₀`), `(aa + 8, 0) ∈ fixedObjects`
+     at ALL states on the REAL guest code too (whenever `bo + 40 = 0` or `bo + 72 = 0`)!
+- When `process_transaction` calls `aa := htab_new(20, 64)` (`AST:33272`), `htab_new` allocates the
+  88-byte header `(aa, 88)` at the current `heap_ptr`. Setting `p := aa + 8` (deterministic from `s₀`)
+  places `(aa + 8, 0) ∈ fixedObjects` strictly inside `(aa, 88)`, so `Disj (aa, 88) (aa + 8, 0)` is
+  **FALSE** (`not_msgReady_of_zero_len_journal_inside_aa`, `not_msgReady_of_memW0_inside_aa`),
+  falsifying `TablesTyped` for ANY `S'` containing `aa`, and hence falsifying `MsgReady` at the
+  `process_message_call(m)` call site (`AST:33346`)! Because both `gb_process_message_call` and
+  `wk_process_message_call` are guarded by `MsgReady`, they become vacuous on that call, making
+  `GBody.process_transaction` FALSE as a pure implication!
+
+### Clean Resolution (`TxReadyStrong`)
+
+Under the natural strengthening `TxReadyStrong` (which holds on every real execution from
+`execute_block` after `state_init`, where `journal_cap = 524288 > 0`, `bo + 40 = logs ≠ 0`,
+`bo + 72 = rls ≠ 0`, and every `balObjects` list has `LstOK` so `cap ≥ 1` and `esz * cap > 0`):
+- **Every** interval `j ∈ worldOwned s S Nd` satisfies `j = (0, 0) ∨ Allocated s j`!
+  Specifically:
+  * `S.flatMap htabFootprint`: `Allocated` by `TablesTyped`.
+  * `globalBuffers`: `(0, 0)` when `globN = 0`, else `Allocated` by `FixedTyped` (since `sz > 0`).
+  * `(journal, 32 * journal_cap)`: since `journal_cap ≠ 0`, `32 * journal_cap > 0`, so `Allocated` by `FixedTyped`.
+  * `blockOutObjects`: since `bo ≠ 0`, `bo+24 ≠ 0`, `bo+32 ≠ 0`, `bo+40 ≠ 0`, `bo+72 ≠ 0`:
+    - `(bo+24, 16*ntx + 16)`: length `≥ 16 > 0` → `Allocated`.
+    - `(bo+32, 16*ntx + 16)`: length `≥ 16 > 0` → `Allocated`.
+    - `obj (bo+56) 128`: `(0, 0)` if `bo+56 = 0`, else length `128 > 0` → `Allocated`.
+    - `lst 40` and `lst 72`: since `bo+40 ≠ 0` and `bo+72 ≠ 0`, `TablesTyped` gives `LstOK`, so
+      `1 ≤ cap` and `8 * cap ≥ 8 > 0`; thus header `(l, 24)` is `Allocated`, and backing `obj (memW l) (8 * cap)`
+      is `(0, 0)` if `memW l = 0`, else length `≥ 8 > 0` → `Allocated`!
+  * `balObjects`: for every `ad ∈ balRecords s`, `(ad, 40)` has length `40 > 0` → `Allocated`; and for
+    every list `l` (`ad+16`, `ad+24`, `ad+32`, and `l ∈ htabValues (memW ad)`), `TablesTyped` gives
+    `LstOK s l`, so `1 ≤ cap`, hence `(l, 24)` has length `24 > 0` → `Allocated`, and `(memW l, esz * cap)`
+    has length `≥ esz > 0` → `Allocated`!
+  * `nodeExtents`: `nodeIvl` has length `≥ 32 > 0` → `Allocated`, and `nodePath` is `(0, 0)` or `Allocated` by `KeyIn`!
+
+WAIT A SECOND!! Look at that list above!!
+Let's check EVERY item of that list!!
+Under ONLY:
+  `globN s "journal_cap" ≠ 0 ∧ memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0`
+(all three of which are preserved by EVERY `wk_*`, `htab_new_spec`, `htab_set_spec`, `ro_*`, and inline store in `process_transaction`, because `"journal_cap"` and `"bo"` are in NO callee's `gw`, and `40, 72` are in EVERY callee's `RecordsKept` for `"bo"`!),
+**EVERY SINGLE INTERVAL** `j ∈ worldOwned s S Nd` is **PROVABLY** `j = (0, 0) ∨ Allocated s j`!!
+And `(0, 0)` IS `Disj i (0, 0)` (`0 + 0 ≤ i.1`) for EVERY interval `i`!!
+-/
+
+set_option autoImplicit false
+set_option maxRecDepth 100000
+set_option maxHeartbeats 1000000
+
+namespace InitECandidate.Solver.Wave8GuestInv.RacePtxGemini
+
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
+open Flapjack.Basis.Pure.MlString
+open InitE
+open InitECandidate.Solver.Wave8GuestInv
+
+/-- **Obstruction Theorem 1**: Any state `s` where `globN s "journal_cap" = 0` and
+`globN s "journal"` lies strictly inside the 88-byte header `(aa, 88)` of `msg + 152 = aa`
+cannot satisfy `MsgReady s`. -/
+theorem not_msgReady_of_zero_len_journal_inside_aa {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hjcap : globN s "journal_cap" = 0)
+    (hinside : memW s (locN s "msg" + 152) < globN s "journal" ∧
+               globN s "journal" < memW s (locN s "msg" + 152) + 88) :
+    ¬ MsgReady s := by
+  rintro ⟨_, S, hWT, haa_S, _⟩
+  have hT : TablesTyped s S := hWT.1
+  have hhdr_mem : (memW s (locN s "msg" + 152), 88) ∈
+      htabFootprint s (memW s (locN s "msg" + 152)) := by
+    simp [htabFootprint]
+  have hjr_mem : (globN s "journal", 0) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append.2; left
+    apply List.mem_append.2; left
+    apply List.mem_append.2; right
+    simp [hjcap]
+  have hdisj : Disj (memW s (locN s "msg" + 152), 88) (globN s "journal", 0) :=
+    ((hT.2.1 _ haa_S).2 _ hhdr_mem).2 _ hjr_mem
+  rcases hdisj with h1 | h2
+  · dsimp only at h1; omega
+  · dsimp only at h2; omega
+
+/-- **Obstruction Theorem 2**: Any state `s` where `globN s "bo" ≠ 0`,
+`memW s (globN s "bo" + 40) = 0`, `memW s 16 = 0`, and `memW s 0` lies strictly inside `(aa, 88)`
+cannot satisfy `MsgReady s`. -/
+theorem not_msgReady_of_memW0_inside_aa {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hbo : globN s "bo" ≠ 0)
+    (hbo40 : memW s (globN s "bo" + 40) = 0)
+    (hm16 : memW s 16 = 0)
+    (hinside : memW s (locN s "msg" + 152) < memW s 0 ∧
+               memW s 0 < memW s (locN s "msg" + 152) + 88) :
+    ¬ MsgReady s := by
+  rintro ⟨_, S, hWT, haa_S, _⟩
+  have hT : TablesTyped s S := hWT.1
+  have hhdr_mem : (memW s (locN s "msg" + 152), 88) ∈
+      htabFootprint s (memW s (locN s "msg" + 152)) := by
+    simp [htabFootprint]
+  have hbo_mem : (memW s 0, 0) ∈ blockOutObjects s := by
+    unfold blockOutObjects
+    simp only [hbo, false_or, hbo40, hm16, Nat.mul_zero]
+    by_cases hm0 : memW s 0 = 0
+    · omega
+    · simp [hm0]
+  have hfix_mem : (memW s 0, 0) ∈ fixedObjects s := by
+    unfold fixedObjects
+    exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hbo_mem)))
+  have hdisj : Disj (memW s (locN s "msg" + 152), 88) (memW s 0, 0) :=
+    ((hT.2.1 _ haa_S).2 _ hhdr_mem).2 _ hfix_mem
+  rcases hdisj with h1 | h2
+  · dsimp only at h1; omega
+  · dsimp only at h2; omega
+
+/-- **Obstruction Theorem 3 (Post-call receipt-log bound gap)**:
+Even when `MsgReady` holds at `process_message_call` (`AST:33346`), `wk_process_message_call`
+has `NoExtra` (saying nothing about the returned `out` pointer or `logs := memW (out + 16)`),
+and `wk_encode_receipt` has `NoExtra` (saying nothing about `nl := memW (logs + 8)`).
+At `AST:33407`, `process_transaction` calls `stable_logs := lst_new(8, stable_log_cap)` where
+`stable_log_cap = max nl 1`. In Pancake, `.panop .mul` is wrapping 64-bit multiplication (`*`),
+NOT checked multiplication: when `nl = 2^61` (an unowned or arbitrary word in memory),
+`8#64 * (2^61)#64 = 0#64`, so `lst_new(8, 2^61)` calls `alloc(24)` and `alloc(0)` and succeeds,
+returning a 24-byte header `stable_logs` with `memW stable_logs = heap_ptr` (a 0-byte backing
+array!). Meanwhile `8 * 2^61 = 2^64` violates `8 * cap < 2^64`, so BOTH `wk_lst_new`'s
+`RetAvoidsIf (8 * cap < 2^64)` AND `rt_lst_new`'s `8 * cap < 2^64 → ...` become VACUOUS!
+Without `RetAvoidsIf`, `wk_lst_new` allows `stable_logs` to equal `globN post "ws"` (an existing
+world-owned buffer!), so the very next line `store (stable_logs + 8) nl` (`AST:33409`) overwrites
+`ws + 8` (or `ws + 32` if `stable_logs = ws + 24`, breaking `TablesTyped` / `WorldOK` before
+`incorporate_tx_into_block` at `AST:33436`)! -/
+theorem panOp_mul_wraps_at_2_pow_61 :
+    panOpHOL PanOp.mul [8#64, (BitVec.ofNat 64 (2 ^ 61))] = some 0#64 ∧
+    ¬ (8 * (BitVec.ofNat 64 (2 ^ 61)).toNat < 2 ^ 64) := by
+  decide
+
+/-- Receipt-log & output-pair non-wrapping postcondition for `encode_receipt`:
+in `guestFn_encode_receipt` (`AST:32051`), `rc = (p, w)` is an RLP slice inside `alloc(bound + 400)`
+in `[sourceBase, heapLimit) < 2^32`, and `logs_encoded_bound` + `encode_logs` walk `i <s nl` of
+`logs` (`nl < 2^28 ≪ 2^61`), ensuring `stable_logs := lst_new(8, max nl 1)` (`AST:33407`) satisfies
+`8 * cap < 2 ^ 64` even if `store (bo+32 + 16*index [+ 8])` aliases `logs + 8`! -/
+def RetReceiptBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
+  fun s r post => ∀ v, r = some (.returned v) →
+    ∃ a b : BitVec 64, v = .rStruct [.val (.word a), .val (.word b)] ∧
+      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧ memW post (locN s "logs" + 8) < 2 ^ 61
+
+/--Strengthened transaction guard `TxReadyStrong`:
+1. `TxReady s` (`WorldOK`, `bo ≠ 0`, `bo+24 ≠ 0`, `bo+32 ≠ 0`, `index < bo+80`),
+2. Non-null journal & log lists (`journal_cap ≠ 0`, `bo+40 ≠ 0`, `bo+72 ≠ 0` — resolving Obstructions 1 & 2),
+3. Decoded transaction access-list ownership & bounds (`tx` decoded fresh by `decode_transaction`
+   immediately before `process_transaction` in `execute_block` at `AST:33633–33637`):
+   when `memW s (locN s "tx") ≠ 0`, `(locN s "tx", 384)` and `(memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))`
+   are aligned heap blocks disjoint from `worldOwned s S Nd`, with `nal := memW s (locN s "tx" + 216) < 2 ^ 32`
+   and `sum_{i < nal} ns_i < 2 ^ 32`! -/
+def TxAccessListOK {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+  let tx := locN s "tx"
+  let nal := memW s (tx + 216)
+  let recs := memW s (tx + 208)
+  tx % 8 = 0 ∧ Inside (tx, 384) sourceBase (globN s "heap_ptr") ∧
+  (∀ o ∈ worldOwned s S Nd, Disj (tx, 384) o) ∧
+  (memW s tx ≠ 0 →
+    nal < 2 ^ 32 ∧
+    (0 < nal → recs % 8 = 0 ∧ Inside (recs, 24 * nal) sourceBase (globN s "heap_ptr") ∧
+      ∀ o ∈ worldOwned s S Nd, Disj (recs, 24 * nal) o) ∧
+    ((List.range nal).map (fun i => memW s (recs + 24 * i + 16))).sum < 2 ^ 32)
+
+def TxReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxReady s ∧ globN s "journal_cap" ≠ 0 ∧
+    memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0 ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListOK s S Nd
+
+/-- Under `WorldTypedWith s S Nd` + `journal_cap ≠ 0` + `(bo = 0 ∨ (bo+40 ≠ 0 ∧ bo+72 ≠ 0))`,
+EVERY interval in `worldOwned s S Nd` is literally `(0, 0)` or `Allocated s j`! -/
+theorem worldOwned_zero_or_allocated {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hjcap : globN s "journal_cap" ≠ 0)
+    (hbo_lsts : globN s "bo" ≠ 0 → memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0) :
+    ∀ j ∈ worldOwned s S Nd, j = (0, 0) ∨ Allocated s j := by
+  obtain ⟨hT, hJ, hF, hTr⟩ := hW
+  intro j hj
+  unfold worldOwned at hj
+  rcases List.mem_append.1 hj with h1 | hnd
+  · rcases List.mem_append.1 h1 with htab | hfix
+    · obtain ⟨u, hu, hj_fp⟩ := List.mem_flatMap.1 htab
+      exact Or.inr (((hT.2.1 u hu).2 j hj_fp).1)
+    · rcases hF.1 j hfix with hz | ⟨hal, _⟩
+      · left
+        unfold fixedObjects at hfix
+        rcases List.mem_append.1 hfix with hf1 | hbal
+        · rcases List.mem_append.1 hf1 with hf2 | hbo
+          · rcases List.mem_append.1 hf2 with hbuf | hjr
+            · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hbuf
+              by_cases h0 : globN s p.1 = 0
+              · simp [h0]
+              · simp only [h0, ↓reduceIte] at hz
+                have hpos : ∀ q ∈ globalBuffers, 0 < q.2 := by decide
+                exact absurd hz (Nat.ne_of_gt (hpos p hp))
+            · simp only [List.mem_singleton] at hjr
+              rw [hjr] at hz; dsimp at hz; omega
+          · by_cases hbo0 : globN s "bo" = 0
+            · unfold blockOutObjects at hbo
+              simp [hbo0] at hbo
+              exact hbo
+            · obtain ⟨hl40, hl72⟩ := hbo_lsts hbo0
+              have hok40 := hT.2.2.2.2.2.2.2.2.2.2.1 hbo0 40 (by simp) hl40
+              have hok72 := hT.2.2.2.2.2.2.2.2.2.2.1 hbo0 72 (by simp) hl72
+              unfold LstOK at hok40 hok72
+              unfold blockOutObjects at hbo
+              simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hbo
+              rcases hbo with ((rfl | rfl | rfl) | (rfl | rfl)) | (rfl | rfl)
+              all_goals (split_ifs at hz ⊢ <;> first | rfl | (dsimp at hz; omega))
+        · -- balObjects: every entry has positive length because LstOK gives cap ≥ 1!
+          exfalso
+          unfold balObjects at hbal
+          obtain ⟨ad, had, hj_ad⟩ := List.mem_flatMap.1 hbal
+          have had_T := hT.2.2.2.2.2.2.2.2.2.1 ad had
+          rcases List.mem_cons.1 hj_ad with rfl | hj_rest
+          · dsimp at hz; omega
+          · rcases List.mem_append.1 hj_rest with hj123 | hj_stor
+            · rcases List.mem_append.1 hj123 with hj12 | hj32
+              · rcases List.mem_append.1 hj12 with hj16 | hj24
+                · have hok := had_T.2.2.1 16 (by simp); unfold LstOK at hok
+                  simp only [lstObjects, List.mem_cons, List.not_mem_nil, or_false] at hj16
+                  rcases hj16 with rfl | rfl <;> dsimp at hz <;> omega
+                · have hok := had_T.2.2.1 24 (by simp); unfold LstOK at hok
+                  simp only [lstObjects, List.mem_cons, List.not_mem_nil, or_false] at hj24
+                  rcases hj24 with rfl | rfl <;> dsimp at hz <;> omega
+              · have hok := had_T.2.2.1 32 (by simp); unfold LstOK at hok
+                simp only [lstObjects, List.mem_cons, List.not_mem_nil, or_false] at hj32
+                rcases hj32 with rfl | rfl <;> dsimp at hz <;> omega
+            · obtain ⟨l, hl, hj_l⟩ := List.mem_flatMap.1 hj_stor
+              have hok := had_T.2.2.2 l hl; unfold LstOK at hok
+              simp only [lstObjects, List.mem_cons, List.not_mem_nil, or_false] at hj_l
+              rcases hj_l with rfl | rfl <;> dsimp at hz <;> omega
+      · exact Or.inr hal
+  · obtain ⟨n, hn, hj_n⟩ := List.mem_flatMap.1 hnd
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hj_n
+    rcases hj_n with rfl | rfl
+    · exact Or.inr (hTr.1.1 n hn).2.1
+    · unfold nodePath
+      split_ifs with hp
+      · rcases (hTr.1.1 n hn).2.2.2.2.2.2 hp.1 with h0 | ⟨_, hal, _⟩
+        · exact absurd h0 hp.2
+        · exact Or.inr hal
+      · exact Or.inl rfl
+
+end InitECandidate.Solver.Wave8GuestInv.RacePtxGemini
+
