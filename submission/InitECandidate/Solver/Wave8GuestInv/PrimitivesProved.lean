@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Primitives
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P10
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -187,7 +188,7 @@ theorem primitives : Primitives where
   «fb_charge_gas» := «fb_charge_gas»
   «fb_is_warm_storage_key» := «fb_is_warm_storage_key»
   «fb_stack_pop» := «fb_stack_pop»
-  «fb_u256_to_be32» := «fb_u256_to_be32»
+  «fb_u256_to_be32» := R10Shards.P10.fb_u256_to_be32
   «fb_warm_storage_key» := «fb_warm_storage_key»
   «ek_charge_gas» := «ek_charge_gas»
   «ek_is_warm_storage_key» := «ek_is_warm_storage_key»
@@ -197,13 +198,13 @@ theorem primitives : Primitives where
   «gbody_op_sload» := «gbody_op_sload»
   «fb_charge_state_gas» := «fb_charge_state_gas»
   «fb_check_gas» := «fb_check_gas»
-  «fb_max» := «fb_max»
+  «fb_max» := R10Shards.P10.fb_max
   «fb_require_not_static» := «fb_require_not_static»
   «fb_set_storage» := «fb_set_storage»
   «ro_check_gas» := R10Ports.ro_check_gas
   «ek_get_storage_original» := «ek_get_storage_original»
   «ro_max» := «ro_max»
-  «ro_require_not_static» := «ro_require_not_static»
+  «ro_require_not_static» := R10Shards.P10.ro_require_not_static
   «gbody_op_sstore» := «gbody_op_sstore»
   «fb_op_add» := «fb_op_add»
   «fb_op_addmod» := «fb_op_addmod»
