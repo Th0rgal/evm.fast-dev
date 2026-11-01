@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.LeafStatements
 import InitECandidate.Solver.Wave8GuestInv.EntryDefs
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabNew
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -114,7 +115,8 @@ stride; `cap = 2^64 - 1` wraps `(ncap + 1) * stride`. 31 call sites pass a liter
 def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ≤ htabCapMax
 
-theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") := by sorry
+theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") :=
+  R10Shards.SoloHtabNew.htab_new_entry_exit
 theorem htab_new_scratch_spec :
     FunSpec HtabNewReady HtabNewExit (ofString "htab_new_scratch") := by sorry
 
