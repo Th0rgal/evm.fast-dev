@@ -1,3 +1,4 @@
+import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Primitives
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
@@ -44,7 +45,7 @@ theorem primitives : Primitives where
   «fb_scratch_alloc» := «fb_scratch_alloc»
   «nf__collapse_branch» := «nf__collapse_branch»
   «nf__delete_ext_finish» := «nf__delete_ext_finish»
-  «ro_common_prefix_length» := «ro_common_prefix_length»
+  «ro_common_prefix_length» := R10Ports.ro_common_prefix_length
   «rv_common_prefix_length» := «rv_common_prefix_length»
   «ro_memeq» := «ro_memeq»
   «nf_node_invalidate» := «nf_node_invalidate»
@@ -81,7 +82,7 @@ theorem primitives : Primitives where
   «fb_heap_release» := «fb_heap_release»
   «fb_mpt_new» := «fb_mpt_new»
   «fb_rlp_encode_word» := «fb_rlp_encode_word»
-  «ro_heap_mark» := «ro_heap_mark»
+  «ro_heap_mark» := R10Ports.ro_heap_mark
   «wk_mpt_new» := «wk_mpt_new»
   «rt_mpt_new» := «rt_mpt_new»
   «mk_mpt_set» := «mk_mpt_set»
@@ -199,7 +200,7 @@ theorem primitives : Primitives where
   «fb_max» := «fb_max»
   «fb_require_not_static» := «fb_require_not_static»
   «fb_set_storage» := «fb_set_storage»
-  «ro_check_gas» := «ro_check_gas»
+  «ro_check_gas» := R10Ports.ro_check_gas
   «ek_get_storage_original» := «ek_get_storage_original»
   «ro_max» := «ro_max»
   «ro_require_not_static» := «ro_require_not_static»
@@ -360,14 +361,14 @@ theorem primitives : Primitives where
   «fb_udiv_small5» := «fb_udiv_small5»
   «fb_validate_transaction» := «fb_validate_transaction»
   «wk_calculate_blob_gas_price» := «wk_calculate_blob_gas_price»
-  «ro_calculate_total_blob_gas» := «ro_calculate_total_blob_gas»
+  «ro_calculate_total_blob_gas» := R10Ports.ro_calculate_total_blob_gas
   «wk_check_transaction» := «wk_check_transaction»
   «wk_clear_account_preserving_balance» := «wk_clear_account_preserving_balance»
   «wk_compute_contract_address» := «wk_compute_contract_address»
   «wk_create_ether» := «wk_create_ether»
   «wk_encode_receipt» := «wk_encode_receipt»
   «wk_encode_transaction» := «wk_encode_transaction»
-  «ro_fee_mul» := «ro_fee_mul»
+  «ro_fee_mul» := R10Ports.ro_fee_mul
   «wk_get_account» := «wk_get_account»
   «wk_keccak256» := «wk_keccak256»
   «wk_lst_new» := «wk_lst_new»
@@ -425,7 +426,7 @@ theorem primitives : Primitives where
   «fb_nodedb_build» := «fb_nodedb_build»
   «fb_validate_header» := «fb_validate_header»
   «fb_validate_headers» := «fb_validate_headers»
-  «ro_check_gas_limit» := «ro_check_gas_limit»
+  «ro_check_gas_limit» := R10Ports.ro_check_gas_limit
   «wk_header_hash» := «wk_header_hash»
   «wk_is_valid_versioned_hashes» := «wk_is_valid_versioned_hashes»
   «wk_nodedb_build» := «wk_nodedb_build»

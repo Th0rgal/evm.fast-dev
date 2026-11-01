@@ -1,4 +1,5 @@
-import InitECandidate.Solver.Wave8GuestInv.Target
+import InitECandidate.Solver.Wave8GuestInv.Contracts
+import InitECandidate.Solver.Wave8GuestInv.EntryBridge
 import InitECandidate.Solver.Wave8GuestInv.FrameGlue
 
 /-! Compatibility entry point for the split spec @ 664524baaf0aff6938ff399c2017a85b8ccc0c59.

@@ -1,0 +1,12 @@
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_calculate_total_blob_gas' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_check_gas' depends on axioms: [propext, Classical.choice, Quot.sound]
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_check_gas_limit' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_common_prefix_length' depends on axioms: [propext,
+ Classical.choice,
+ Quot.sound]
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_fee_mul' depends on axioms: [propext, Classical.choice, Quot.sound]
+'InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_heap_mark' depends on axioms: [propext, Classical.choice, Quot.sound]
