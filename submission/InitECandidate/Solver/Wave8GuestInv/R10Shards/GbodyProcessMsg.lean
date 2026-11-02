@@ -1014,9 +1014,7 @@ theorem worldTypedWith_store_word_disj {F : Type} {s post : PanSemStateFiniteExa
   obtain ⟨hT, hJ, hF, hTr⟩ := hW
   have h264 : heapEnd ≤ 2 ^ 64 := by decide
   have hgP : GuestInv post := guestInv_congr hpost.1 hpost.2.1 hpost.2.2.1 hpost.2.2.2.1 hAs.1
-  have hAp : ArenaReady post := by
-    refine ⟨hgP, ?_⟩
-    unfold ArenaOK; simp only [globN_congr hpost.2.2.2.2.2.1]; exact hAs.2
+  have hAp : ArenaReady post := ⟨hgP, arenaOK_congr hpost.2.2.2.2.2.1 hAs.2⟩
   have hag : AllocatorGrows s post := by
     unfold AllocatorGrows; simp only [globN_congr hpost.2.2.2.2.2.1]; exact ⟨le_rfl, le_rfl⟩
   have hgs := worldGlobalsSame_of_globals_eq hpost.2.2.2.2.2.1

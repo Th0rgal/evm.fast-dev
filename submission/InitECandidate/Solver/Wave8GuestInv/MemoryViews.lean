@@ -76,11 +76,75 @@ block and leaves the pointers aligned. The release marks are earlier pointer val
 `frame_mem_ptr = 0xb0000001` made `frame_open`'s `frame_mem_alloc(1024)` return an unaligned EVM
 memory, which `WordsOK` (in `FrameWF`) rejects. Every contract that ends in `ArenaReady` (all of
 §7) now also re-establishes alignment. -/
+def GlobalsWord {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ name ∈ guestGlobalNames, ∃ w : BitVec 64, GlobalWord s name w
+
 def ArenaOK {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   sourceBase ≤ globN s "heap_ptr" ∧ globN s "heap_ptr" ≤ heapLimit ∧
   scratchStart ≤ globN s "frame_mem_ptr" ∧ globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" ∧
   globN s "scratch_ptr" ≤ scratchEnd ∧
-  globN s "heap_ptr" % 8 = 0 ∧ globN s "frame_mem_ptr" % 8 = 0 ∧ globN s "scratch_ptr" % 8 = 0
+  globN s "heap_ptr" % 8 = 0 ∧ globN s "frame_mem_ptr" % 8 = 0 ∧ globN s "scratch_ptr" % 8 = 0 ∧
+  GlobalsWord s
+
+theorem globalsWord_congr {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    (h : t.globals = s.globals) (hs : GlobalsWord s) : GlobalsWord t := by
+  intro n hn
+  obtain ⟨w, hw⟩ := hs n hn
+  exact ⟨w, by unfold GlobalWord at hw ⊢; rw [h]; exact hw⟩
+
+theorem globalsWord_lookup {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    (h : ∀ k, t.globals.lookup k = s.globals.lookup k) (hs : GlobalsWord s) : GlobalsWord t := by
+  intro n hn
+  obtain ⟨w, hw⟩ := hs n hn
+  exact ⟨w, by unfold GlobalWord at hw ⊢; rw [h]; exact hw⟩
+
+theorem globalsWord_evaluate {F : Type} (s : PanSemStateFiniteExact 64 F) (prog : ProgHOL 64)
+    (hs : GlobalsWord s) : GlobalsWord (evaluateHOLFiniteState s prog).2 := by
+  intro n hn
+  obtain ⟨w, hw⟩ := hs n hn
+  obtain ⟨v', hv', hsh⟩ := evaluateHOLFiniteState_global_shape_invariant s prog _ _
+    (ofString n) _ rfl hw
+  rcases v' with ⟨⟨w'⟩⟩ | fs | ⟨nm, fs⟩
+  · exact ⟨w', hv'⟩
+  · simp [shapeOfHOLExact] at hsh
+  · simp [shapeOfHOLExact] at hsh
+
+theorem globalsWord_frame {F : Type} {s t : PanSemStateFiniteExact 64 F} (gw : List String)
+    (hk : ∀ k : MlS, k ∉ gw.map ofString → s.globals.lookup k = t.globals.lookup k)
+    (hw : ∀ n ∈ guestGlobalNames, ofString n ∈ gw.map ofString → ∃ w : BitVec 64, GlobalWord t n w)
+    (hs : GlobalsWord s) : GlobalsWord t := by
+  intro n hn
+  by_cases hm : ofString n ∈ gw.map ofString
+  · exact hw n hn hm
+  · obtain ⟨w, hw'⟩ := hs n hn
+    exact ⟨w, by unfold GlobalWord at hw' ⊢; rw [← hk _ hm]; exact hw'⟩
+
+theorem globalsWord_update {F : Type} {s t : PanSemStateFiniteExact 64 F} (k : MlS) (w : BitVec 64)
+    (h : t.globals = s.globals.update (k, .val (.word w))) (hs : GlobalsWord s) : GlobalsWord t := by
+  intro n hn
+  by_cases hk : k = ofString n
+  · exact ⟨w, by unfold GlobalWord; rw [h]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hk]⟩
+  · obtain ⟨w', hw'⟩ := hs n hn
+    refine ⟨w', ?_⟩
+    unfold GlobalWord at hw' ⊢
+    rw [h]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, hk, hw']
+
+theorem globalWord_of_globN_pos {F : Type} (s : PanSemStateFiniteExact 64 F) (n : String)
+    (h : 0 < globN s n) : ∃ w : BitVec 64, GlobalWord s n w := by
+  unfold globN at h
+  unfold GlobalWord
+  split at h
+  · rename_i w hw; exact ⟨w, hw⟩
+  · omega
+
+theorem arenaOK_congr {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    (h : t.globals = s.globals) (hs : ArenaOK s) : ArenaOK t := by
+  have hg : ∀ g, globN t g = globN s g := fun g => by simp [globN, h]
+  unfold ArenaOK at hs ⊢
+  simp only [hg]
+  exact ⟨hs.1, hs.2.1, hs.2.2.1, hs.2.2.2.1, hs.2.2.2.2.1, hs.2.2.2.2.2.1, hs.2.2.2.2.2.2.1,
+    hs.2.2.2.2.2.2.2.1, globalsWord_congr h hs.2.2.2.2.2.2.2.2⟩
 
 def ArenaReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => GuestInv s ∧ ArenaOK s

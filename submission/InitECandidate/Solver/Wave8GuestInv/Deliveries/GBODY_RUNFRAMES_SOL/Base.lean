@@ -21,8 +21,24 @@ def FunSpec (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
   ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
     originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
+        some (body, s.locals, retShape)) →
       (evaluateHOLFiniteState s body).1 ≠ some .timeOut →
       Q s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2
+
+theorem lookupCodeHOLFinite_installed_return {F : Type}
+    (state : PanSemStateFiniteExact 64 F) (fname : MlS)
+    (params : List (MlS × ShapeHOL)) (body body' : ProgHOL 64) (ret ret' : ShapeHOL)
+    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : state.code.lookup fname = some (params, body, ret))
+    (hl : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ret' = ret := by
+  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
+    state.code.lookup fname values body' callee ret' hl
+  simp only [Flapjack.lookupCodeHOLExact, hc] at hx
+  split at hx
+  · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+  · cases hx
 
 /-- `Q` on normal return only. -/
 def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) :
@@ -109,7 +125,7 @@ theorem localsFree_worldOK : LocalsFree WorldOK := by
 
 theorem localsFree_evmInv : LocalsFree EvmInv := by
   intro F s locals k h
-  simp only [EvmInv, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
+  simp only [EvmInv, FrameWF, MsgOwned, worldTyped_with_locals, arenaReady_with_locals, evmChain_with_locals] at h ⊢
   exact h
 
 
@@ -257,7 +273,10 @@ theorem FunSpec.at_lookup {Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → 
   have hsame := lookupCodeHOLFinite_installed_body state.code.lookup fname params body body'
     ret ret' values callee (by rw [hcode]; exact hlook) hl
   subst hsame
-  exact hspec _ hcode hPc hnt
+  have hret := lookupCodeHOLFinite_installed_return state fname params body' body'
+    ret ret' values callee (by rw [hcode]; exact hlook) hl
+  subst hret
+  exact hspec _ hcode hPc ⟨values, by simpa only [hcode, callEntryStateHOLFinite] using hl⟩ hnt
 
 /-- Handler-free call with no destination, callee described by a `FunSpec`. Results other than
 a normal return are covered by `hother` (a call never yields `continue`). -/

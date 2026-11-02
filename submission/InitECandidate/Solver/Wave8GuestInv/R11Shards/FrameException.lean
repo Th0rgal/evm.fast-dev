@@ -783,6 +783,12 @@ theorem frame_exception_exec {F : Type} (s : PanSemStateFiniteExact 64 F)
   -- Step 2: `ite (err != 1) ... ...`
   have hite_noret := ite_ne_returned (s := s1)
     (c := .cmp .notEqual (.var .local (ofString "err")) (.const 1))
+    (y := .seq
+      (.call (some (none, none)) (ofString "frame_halt") [.var .local (ofString "err")])
+      (.seq
+        (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .global (ofString "evm_empty")))
+        (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const 0))))
+    (n := .store (.op .add [.var .global (ofString "ev"), .const 160]) (.var .local (ofString "err")))
     (seq_ne_returned (fun t u => call0_ne_returned t _ _ u)
       (seq_ne_returned (fun t u => store_ne_returned t _ _ u) (fun t u => store_ne_returned t _ _ u)))
     (fun t u => store_ne_returned t _ _ u)
@@ -960,7 +966,7 @@ theorem frame_exception_exec {F : Type} (s : PanSemStateFiniteExact 64 F)
   have hgas_post : memW post (globN s2 "ev" + 64) + memW post (globN s2 "ev" + 192) ≤
       memW s2 (globN s2 "ev" + 64) + memW s2 (globN s2 "ev" + 192) := by
     have hdisj_ec2 : Disj (globN s2 "ev", 280) (globN s2 "cur_cont", 104) := by
-      obtain ⟨_, _, _, _, _, _, _, _, hP2, _⟩ := hInv2
+      obtain ⟨_, _, _, _, _, _, _, _, _, hP2, _⟩ := hInv2
       have hfl := List.pairwise_flatten.mp hP2
       have hmem0 : (globN s2 "ev", globN s2 "cur_cont") ∈ evmChain s2 := by simp [evmChain, evmChainFrom]
       have hp0 := hfl.1 _ (List.mem_map_of_mem hmem0)

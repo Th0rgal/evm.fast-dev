@@ -55,7 +55,7 @@ theorem mpt_arena_local_program {F : Type} (s : PanSemStateFiniteExact 64 F)
     funext g
     exact evaluate_keepsG g (fun _ => false) (fun _ hf => by contradiction)
       p (hs g) s h.1.code
-  simpa only [ArenaOK, globN, hg] using h.2
+  exact arenaOK_congr hg h.2
 
 theorem mpt_stopped_local_program {F : Type} (s : PanSemStateFiniteExact 64 F)
     (p : ProgHOL 64) (h : ArenaReady s) (hz : locN s "go" = 0)

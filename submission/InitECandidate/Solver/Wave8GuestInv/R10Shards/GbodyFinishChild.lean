@@ -227,7 +227,7 @@ theorem rollback_output_frame {F : Type} {s post : PanSemStateFiniteExact 64 F} 
       (Nat.le_trans hh.1.2 (by decide))
       (hu k h (t, 88) (by simp [t, htabFootprint]))).2
   refine ⟨⟨hp, ?_⟩, ?_, wordsOK_transfer hs.1.1 hp hs.2.2.1, ?_, ?_⟩
-  · simpa only [ArenaOK, globN, hg] using hs.1.2
+  · exact arenaOK_congr hg hs.1.2
   · simpa only [Allocated, globN, hg] using hs.2.1
   · intro k h
     rw [hk k h]
@@ -245,13 +245,18 @@ theorem rollback_globals {F : Type} {s post : PanSemStateFiniteExact 64 F} {c : 
     (hm : post.memory = s.memory)
     (hh : globN post "heap_ptr" = globN s "heap_ptr")
     (hf : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
-    (hsc : globN post "scratch_ptr" = globN s "scratch_ptr") :
+    (hsc : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hgw : GlobalsWord post) :
     RollbackReadyAt post c := by
   have hw : memW post = memW s := memW_congr hm
   have hfp (t : Nat) : htabFootprint post t = htabFootprint s t := by
     simp only [htabFootprint, hdr, hw]
   refine ⟨⟨hp, ?_⟩, ?_, wordsOK_transfer hs.1.1 hp hs.2.2.1, ?_, ?_⟩
-  · simpa only [ArenaOK, hh, hf, hsc] using hs.1.2
+  · have ha := hs.1.2
+    unfold ArenaOK at ha ⊢
+    rw [hh, hf, hsc]
+    exact ⟨ha.1, ha.2.1, ha.2.2.1, ha.2.2.2.1, ha.2.2.2.2.1, ha.2.2.2.2.2.1,
+      ha.2.2.2.2.2.2.1, ha.2.2.2.2.2.2.2.1, hgw⟩
   · simpa only [Allocated, hh, hsc] using hs.2.1
   · intro k hk
     rw [hw]
@@ -747,29 +752,38 @@ theorem pending_assign (name : MlS) (src : ExpHOL 64)
     (hne : ∀ n ∈ (["heap_ptr", "frame_mem_ptr", "scratch_ptr", "evm_empty"] : List String),
       ofString n ≠ name) :
     Hoare Pending (.assign .global name src) (fun r s => r = none → Pending s) := by
-  apply Hoare.assign
-  · intro F s v hs hv he
-    have hg : GuestInv (setKvarHOLFinite .global name v s) :=
-      guestInv_congr (s := s) rfl rfl rfl rfl hs.1
-    have hget (n : String) (hn : n ∈ (["heap_ptr", "frame_mem_ptr", "scratch_ptr", "evm_empty"] : List String)) :
-        (setKvarHOLFinite .global name v s).globals.lookup (ofString n) = s.globals.lookup (ofString n) := by
-      simp [setKvarHOLFinite, setGlobalHOLFinite, HolFiniteMapExact.lookup_update,
-        FUPDATE, Ne.symm (hne n hn)]
-    have hgn (n : String) (hn : n ∈ (["heap_ptr", "frame_mem_ptr", "scratch_ptr", "evm_empty"] : List String)) :
-        globN (setKvarHOLFinite .global name v s) n = globN s n := by
-      simp only [globN, hget n hn]
-    refine ⟨hg, ?_⟩
-    rcases hs.2 with hr | ⟨hk, hb⟩
-    · left
-      exact rollback_globals hr hg rfl (hgn "heap_ptr" (by simp))
-        (hgn "frame_mem_ptr" (by simp)) (hgn "scratch_ptr" (by simp))
-    · right
-      refine ⟨hk, ?_⟩
-      unfold EmptyBad at hb ⊢
-      rw [hget "evm_empty" (by simp)]
-      exact hb
-  · intro F s hs he
-    cases he
+  refine ⟨fun {F} s _ hs _ => ?_⟩
+  have hgw_eval : ∀ hgw : GlobalsWord s,
+      GlobalsWord (evaluateHOLFiniteState s (.assign .global name src)).2 :=
+    fun hgw => globalsWord_evaluate s (.assign .global name src) hgw
+  rw [evaluateHOLFiniteState_assign] at hgw_eval ⊢
+  revert hgw_eval
+  split
+  · intro _ he; cases he
+  · rename_i v hv
+    split
+    · intro hgw_eval _
+      have hg : GuestInv (setKvarHOLFinite .global name v s) :=
+        guestInv_congr (s := s) rfl rfl rfl rfl hs.1
+      have hget (n : String) (hn : n ∈ (["heap_ptr", "frame_mem_ptr", "scratch_ptr", "evm_empty"] : List String)) :
+          (setKvarHOLFinite .global name v s).globals.lookup (ofString n) = s.globals.lookup (ofString n) := by
+        simp [setKvarHOLFinite, setGlobalHOLFinite, HolFiniteMapExact.lookup_update,
+          FUPDATE, Ne.symm (hne n hn)]
+      have hgn (n : String) (hn : n ∈ (["heap_ptr", "frame_mem_ptr", "scratch_ptr", "evm_empty"] : List String)) :
+          globN (setKvarHOLFinite .global name v s) n = globN s n := by
+        simp only [globN, hget n hn]
+      refine ⟨hg, ?_⟩
+      rcases hs.2 with hr | ⟨hk, hb⟩
+      · left
+        exact rollback_globals hr hg rfl (hgn "heap_ptr" (by simp))
+          (hgn "frame_mem_ptr" (by simp)) (hgn "scratch_ptr" (by simp))
+          (hgw_eval hr.1.2.2.2.2.2.2.2.2.2)
+      · right
+        refine ⟨hk, ?_⟩
+        unfold EmptyBad at hb ⊢
+        rw [hget "evm_empty" (by simp)]
+        exact hb
+    · intro _ he; cases he
 
 def cleanupCost : Nat := (K.scratch_release + 1) + (K.frame_mem_release + 1) + (K.pc_add + 1)
 

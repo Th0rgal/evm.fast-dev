@@ -1,7 +1,12 @@
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C00Defs
 import InitECandidate.Solver.Wave8GuestInv.EntryDefs
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabNew
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloMemInitWorld
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabSetFinal
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.DelSpecs
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.TruncateSpec
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.NewScratchSpec
+import InitECandidate.Solver.Wave8GuestInv.R11Shards.FrameException
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -31,61 +36,25 @@ their guarded call sites are the contracts of this section, each a separate leaf
 `LocalsOnly` (end of this section), so `dec_onLocals`, `LocalsOnly.decClock` (`hdec` of the
 `while` rules) and `decCall_on` apply to it. -/
 
-/-- Outcome specification of a function body from its callee-entry state. -/
-def FunSpec (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
-    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
-      PanSemStateFiniteExact 64 F → Prop)
-    (fname : MlS) : Prop :=
-  ∃ (params : List (MlS × ShapeHOL)) (body : ProgHOL 64) (retShape : ShapeHOL),
-    originalRuntimeCode.lookup fname = some (params, body, retShape) ∧
-    ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
-      (∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup fname values =
-        some (body, s.locals, retShape)) →
-      (evaluateHOLFiniteState s body).1 ≠ some .timeOut →
-      Q s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2
-
-/-- A successful finite lookup carries the installed return shape as well as
-its body and parameter locals. -/
-theorem lookupCodeHOLFinite_installed_return {F : Type}
-    (state : PanSemStateFiniteExact 64 F) (fname : MlS)
-    (params : List (MlS × ShapeHOL)) (body body' : ProgHOL 64) (ret ret' : ShapeHOL)
-    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
-    (hc : state.code.lookup fname = some (params, body, ret))
-    (hl : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
-    ret' = ret := by
-  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some
-    state.code.lookup fname values body' callee ret' hl
-  simp only [Flapjack.lookupCodeHOLExact, hc] at hx
-  split at hx
-  · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
-  · cases hx
-
-/-- `Q` on normal return only. -/
-def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) :
-    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
-      PanSemStateFiniteExact 64 F → Prop :=
-  fun s r post => ∀ v, r = some (.returned v) → Q s post
-
 /-! ### Table contracts (round-1 items 3 and 4) -/
 
 theorem htab_set_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_set") :=
   SoloHtabSet.htab_set_spec_proof
-theorem htab_del_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_del") := by sorry
+theorem htab_del_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_del") :=
+  HtabC00Ports.htab_del_spec
 
 /-- Progress of `htab_del` (round-2 item 3, `htab_truncate`): a normal return either deleted a
 leaf, so the count `t+24` dropped by one, or wrote nothing at all (`htab_find_leaf` found no leaf
 or `memeq` rejected its key; `HtabWF` does not constrain key bytes, so the key of the last leaf
 need not lead back to that leaf). In the second case memory, globals and the FFI state are those of
 the entry state: the caller's loop head repeats exactly (`SameHead`). -/
-def HtabDelProgress : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F →
-    Prop :=
-  fun s post => hdr post (locN s "t") 3 + 1 = hdr s (locN s "t") 3 ∨
-    post = { s with locals := post.locals, clock := post.clock }
 
 theorem htab_del_progress_spec :
-    FunSpec HtabArgWF (OnReturn HtabDelProgress) (ofString "htab_del") := by sorry
+    FunSpec HtabArgWF (OnReturn HtabDelProgress) (ofString "htab_del") :=
+  HtabC00Ports.htab_del_progress_spec
 theorem htab_truncate_spec :
-    FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_truncate") := by sorry
+    FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_truncate") :=
+  HtabC00Ports.htab_truncate_spec
 theorem htab_union_into_spec :
     FunSpec UnionArgWF (OnReturn UnionExit) (ofString "htab_union_into") := by sorry
 
@@ -95,32 +64,12 @@ changes (round-2 Astra item 2: revision 2 intersected the two frames), and no gl
 allocator pointers changes (round-3 Gemini item 5: the globals frame was missing). Revision 8
 (round-5 Gemini item 2): the new table has the requested key length (`htab_new` stores `key_len` at
 `t+0`), which the callers need for the role key lengths of `RolesOK`. -/
-def HtabNewExit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
-    PanSemStateFiniteExact 64 F → Prop :=
-  fun s r post => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
-    ArenaReady post ∧ AllocatorGrows s post ∧ HtabWF post w.toNat ∧ hdr post w.toNat 3 = 0 ∧
-    hdr post w.toNat 0 = locN s "key_len" ∧
-    (∀ i ∈ htabFootprint post w.toNat, Allocated post i ∧
-      (Inside i (globN s "heap_ptr") (globN post "heap_ptr") ∨
-        Inside i (globN post "scratch_ptr") (globN s "scratch_ptr"))) ∧
-    FrameOutside s post
-      [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
-      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
-    ∀ k : MlS, k ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
-      s.globals.lookup k = post.globals.lookup k
-
-/-- Entry of `htab_new` / `htab_new_scratch` (round-2 Fable item 1, Astra item 3): separated
-arenas, a key length from the literal call sites and a bounded capacity. `htab_new` checks
-neither: `key_len = 0` breaks `1 ≤ klen`, `61` breaks `klen ≤ maxKeyLen`, `2^64 - 3` wraps the
-stride; `cap = 2^64 - 1` wraps `(ncap + 1) * stride`. 31 call sites pass a literal capacity
-(≤ 256); `nodedb_build` passes a power of two, which its caller bounds (round-3 non-blocking). -/
-def HtabNewReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ locN s "key_len" ∈ htabKeyLens ∧ locN s "cap" ≤ htabCapMax
 
 theorem htab_new_spec : FunSpec HtabNewReady HtabNewExit (ofString "htab_new") :=
   R10Shards.SoloHtabNew.htab_new_entry_exit
 theorem htab_new_scratch_spec :
-    FunSpec HtabNewReady HtabNewExit (ofString "htab_new_scratch") := by sorry
+    FunSpec HtabNewReady HtabNewExit (ofString "htab_new_scratch") :=
+  HtabC00Ports.htab_new_scratch_spec
 
 /-! ### MPT update contracts (`_mpt_insert_node`, `_mpt_delete_node_body`) -/
 
@@ -261,7 +210,10 @@ theorem frame_exception_spec :
     FunSpec EvmInv
       (OnReturn fun s post => EvmInv post ∧ EvmDone post ∧
         (evmChain post).length = (evmChain s).length ∧ evmR post ≤ evmR s)
-      (ofString "frame_exception") := by sorry
+      (ofString "frame_exception") := by
+  obtain ⟨ps, body, ret, hl, hrun⟩ := R11Shards.frame_exception_spec_of_evm_empty_word
+  exact ⟨ps, body, ret, hl, fun s hc hInv hex hnt v hv =>
+    hrun s hc ⟨hInv, hInv.1.2.2.2.2.2.2.2.2.2 "evm_empty" (by decide)⟩ hex hnt v hv⟩
 
 /-- The epilogue only rolls back the journal (tables in the typed set). -/
 theorem frame_epilogue_spec :

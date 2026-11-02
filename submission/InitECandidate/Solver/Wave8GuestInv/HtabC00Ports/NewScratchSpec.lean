@@ -647,7 +647,7 @@ theorem new_core_scratch {F : Type} (s post : PanSemStateFiniteExact 64 F)
     NewPost s (.val (.word r1)) post := by
   obtain ⟨hst, hst8, hst64, hL1, hL2, hL3, _, _, hk1, hk60⟩ := new_params k c hkl hcap2 hcapmax
   set st := (k + 7) &&& 18446744073709551608#64
-  obtain ⟨hgis, hlo, hhi, hf1, hf2, hf3, ha_hp, ha_fm, ha_sp⟩ := hAR
+  obtain ⟨hgis, hlo, hhi, hf1, hf2, hf3, ha_hp, ha_fm, ha_sp, hgw_s⟩ := hAR
   have hgsp : globN s "scratch_ptr" = sp.toNat := by simp [globN, hsp]
   have hgf : globN s "frame_mem_ptr" = f.toNat := by simp [globN, hfp]
   have hss : scratchStart = 2952790016 := rfl
@@ -682,7 +682,7 @@ theorem new_core_scratch {F : Type} (s post : PanSemStateFiniteExact 64 F)
     rw [← hgf]; simp [globN, hG, HolFiniteMapExact.lookup_update, FUPDATE, nm47]
   have hr4align : r4.toNat % 8 = 0 := by omega
   refine ⟨r1, rfl, ?_, ?_, ?_, d3, ?_, ?_, ?_, ?_⟩
-  · refine ⟨hGI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · refine ⟨hGI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · rw [hhp]; exact hlo
     · rw [hhp]; exact hhi
     · rw [hfm, hss]; exact hf1
@@ -691,6 +691,11 @@ theorem new_core_scratch {F : Type} (s post : PanSemStateFiniteExact 64 F)
     · rw [hhp]; exact ha_hp
     · rw [hfm, ← hgf]; exact ha_fm
     · rw [hgpost]; exact hr4align
+    · intro n hn
+      by_cases hk' : ofString "scratch_ptr" = ofString n
+      · exact ⟨r4, by unfold GlobalWord; rw [hG]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hk']⟩
+      · obtain ⟨w', hw'⟩ := hgw_s n hn
+        exact ⟨w', by unfold GlobalWord at hw' ⊢; rw [hG]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hk', hw']⟩
   · exact ⟨by rw [hhp], by rw [hgpost, hgsp]; omega⟩
   · exact htabWF_empty post r1.toNat hGI.memaddrs k.toNat st.toNat c.toNat r2.toNat r3.toNat
       r4.toNat d0 d1 d3 d4 d5 d6 d7 d8 d9 d10 hk1 hk60 hst (by omega) (by omega)

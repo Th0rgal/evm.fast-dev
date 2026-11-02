@@ -109,9 +109,14 @@ theorem worldTyped_empty {F : Type} (s : PanSemStateFiniteExact 64 F)
 theorem worldOK {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hi : GuestInv s) (hz : GlobalsZero s) : WorldOK (post s) := by
   have hguest : GuestInv (post s) := guestInv_congr (s := s) rfl rfl rfl rfl hi
+  have hgw : GlobalsWord (post s) := by
+    have h := globalsWord_evaluate s (sourceFunctionEntry Guest.Software.guestFn_mem_init).2.2.1
+      (fun n hn => ⟨0, hz n hn⟩)
+    rwa [evaluate s hz] at h
   have harena : ArenaOK (post s) := by
     have hb := hi.baseAddr
-    simp [ArenaOK, globN, post, emptyLocalsHOLFinite, setGlobalHOLFinite,
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hgw⟩ <;>
+    simp [globN, globN, post, emptyLocalsHOLFinite, setGlobalHOLFinite,
       HolFiniteMapExact.lookup_update, FUPDATE, hb, heapLimit,
       sourceBase, scratchStart, scratchEnd,
       Ne.symm heap_ne_scratch, Ne.symm heap_ne_frame, Ne.symm scratch_ne_frame]

@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.C00
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C00Defs
 import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.LightBatch
 import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.Reads
 
@@ -87,14 +87,45 @@ theorem htabWF_iff_light {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) 
       htabFootprint_eq_light, Inside_eq_light, WordsOK_eq_light, maxKeyLen_eq_light]
     exact ⟨hfp, hp, hk1, hk60, hst, rest⟩
 
+theorem globN_eq_light : @globN = @Wave8M19.globN := rfl
+theorem locN_eq_light : @locN = @Wave8M19.locN := rfl
+theorem Allocated_eq_light : @Allocated = @Wave8M19.Allocated := rfl
+theorem FrameOutside_eq_light : @FrameOutside = @Wave8M19.FrameOutside := rfl
+
+theorem arenaOK_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : ArenaOK s) : Wave8M19.ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2.1⟩
+
+theorem arenaOK_from_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : Wave8M19.ArenaOK s) (hgw : GlobalsWord s) : ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2, hgw⟩
+
 theorem arg_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : HtabArgWF s) : Wave8M19.HtabArgWF s := by
   rcases h with ⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hal⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_to_light s ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
 
 theorem exit_from_light {F : Type} (s post : PanSemStateFiniteExact 64 F)
-    (h : Wave8M19.Htab.ExitR9 (Wave8M19.locN s "t") s post) : HtabExit s post := by
-  rcases h with ⟨⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, rest⟩, hk, hs⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light post _).mpr hw, hk, hs, rest⟩
+    (h : Wave8M19.Htab.ExitR9 (Wave8M19.locN s "t") s post)
+    (hgw : GlobalsWord s) : HtabExit s post := by
+  rcases h with ⟨⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hh, hfp, hfo, hgl⟩, hk, hs⟩
+  have hgw' : GlobalsWord post := by
+    intro n hn
+    by_cases hk : ofString n = ofString "heap_ptr"
+    · have hgN : globN post n = globN post "heap_ptr" := by unfold globN; rw [hk]
+      refine globalWord_of_globN_pos post n ?_
+      rw [hgN]
+      have : sourceBase ≤ globN post "heap_ptr" := ha.1
+      have : sourceBase = 0xa1000000 := rfl
+      omega
+    · obtain ⟨w, hw⟩ := hgw n hn
+      exact ⟨w, by
+        unfold GlobalWord at hw ⊢
+        have hne : ofString n ∉ (["heap_ptr"] : List String).map ofString := by simpa
+        rw [← hgl _ hne]; exact hw⟩
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_from_light post ha hgw'⟩,
+    (htabWF_iff_light post _).mpr hw, hk, hs, hh, hfp, hfo, hgl⟩
 
 end InitECandidate.Solver.Wave8GuestInv.HtabC00Ports

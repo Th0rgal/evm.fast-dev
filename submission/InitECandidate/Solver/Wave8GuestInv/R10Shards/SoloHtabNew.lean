@@ -887,7 +887,7 @@ theorem new_core_heap {F : Type} (s post : PanSemStateFiniteExact 64 F)
   obtain ⟨hst, hst8, hst64, hL1, hL2, hL3, _, _, hk1, hk60⟩ := new_params k c hkl hcap2 hcapmax
   set st := (k + 7) &&& 18446744073709551608#64
   have hcMax : cMax.toNat = 2952790016 := rfl
-  obtain ⟨hgis, hlo, hhi, h4, h5, h6, h7, h8, h9⟩ := hAR
+  obtain ⟨hgis, hlo, hhi, h4, h5, h6, h7, h8, h9, hgw⟩ := hAR
   have hgp : globN s "heap_ptr" = p0.toNat := by simp [globN, hp]
   rw [hgp] at hlo hhi
   have hsb : sourceBase = 2701131776 := rfl
@@ -926,7 +926,7 @@ theorem new_core_heap {F : Type} (s post : PanSemStateFiniteExact 64 F)
   have hq4align : q4.toNat % 8 = 0 := by
     rw [← hQ4, and_neg8_toNat_htab]; omega
   refine ⟨p0, rfl, ?_, ?_, ?_, d3, ?_, ?_, ?_, ?_⟩
-  · refine ⟨hGI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · refine ⟨hGI, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · rw [hgpost, hsb]; omega
     · rw [hgpost, hhl]; omega
     · rw [hfm]; exact h4
@@ -935,6 +935,11 @@ theorem new_core_heap {F : Type} (s post : PanSemStateFiniteExact 64 F)
     · rw [hgpost]; exact hq4align
     · rw [hfm]; exact h8
     · rw [hsc]; exact h9
+    · intro n hn
+      by_cases hk : ofString "heap_ptr" = ofString n
+      · exact ⟨q4, by unfold GlobalWord; rw [hG]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hk]⟩
+      · obtain ⟨w', hw'⟩ := hgw n hn
+        exact ⟨w', by unfold GlobalWord at hw' ⊢; rw [hG]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hk, hw']⟩
   · exact ⟨by rw [hgp, hgpost]; omega, by rw [hsc]⟩
   · exact htabWF_empty post p0.toNat hGI.memaddrs k.toNat st.toNat c.toNat q1.toNat q2.toNat
       q3.toNat d0 d1 d3 d4 d5 d6 d7 d8 d9 d10 hk1 hk60 hst (by omega) hal

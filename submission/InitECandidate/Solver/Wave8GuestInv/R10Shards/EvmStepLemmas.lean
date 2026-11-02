@@ -652,9 +652,9 @@ theorem ByteRegionEffect.to_evmStep_nil_with {F : Type}
     · exact absurd h0 honz
     · exact hd
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  have hApost : ArenaReady post := by
-    refine ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1, ?_⟩
-    unfold ArenaOK; simp only [hglob_eq]; exact hAs.2
+  have hApost : ArenaReady post :=
+    ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1,
+     arenaOK_congr heff.globals hAs.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [heff.globals]
@@ -1025,9 +1025,9 @@ theorem evmStep_of_head_frame_cont_update {F : Type}
         exact ⟨frameObjects s headEc, List.mem_map.2 ⟨_, hhead_mem, rfl⟩, hx_fo⟩
       exact Or.inr (hAT_at _ hfl i h6)
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  have hApost : ArenaReady post := by
-    refine ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1, ?_⟩
-    unfold ArenaOK; simp only [hglob_eq]; exact hAs.2
+  have hApost : ArenaReady post :=
+    ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1,
+     arenaOK_congr heff.globals hAs.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [heff.globals]
@@ -1417,9 +1417,9 @@ theorem ByteRegionEffect.to_worldStep {F : Type}
   obtain ⟨S0, hWT0⟩ := hWOK.2
   have hF0 : FixedTyped s := hWT0.2.2.1
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  have hApost : ArenaReady post := by
-    refine ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1, ?_⟩
-    unfold ArenaOK; simp only [hglob_eq]; exact hAs.2
+  have hApost : ArenaReady post :=
+    ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1,
+     arenaOK_congr heff.globals hAs.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [heff.globals]

@@ -99,11 +99,11 @@ theorem arenaReady_upd_heap {F : Type} {s : PanSemStateFiniteExact 64 F}
     simp [s', globN, HolFiniteMapExact.lookup_update, FUPDATE,
       show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
   have hhl : heapLimit = cMax.toNat := rfl
-  obtain ⟨h1, h2, h3, h4, h5, _, h7, h8⟩ := hA.2
+  obtain ⟨h1, h2, h3, h4, h5, _, h7, h8, hgw⟩ := hA.2
   refine ⟨⟨hG, ?_⟩, hhp, ?_⟩
   · unfold ArenaOK
     rw [hhp, hfm, hsp, hhl]
-    exact ⟨le_trans h1 hq_lo, hq_hi, h3, h4, h5, hq_al, h7, h8⟩
+    exact ⟨le_trans h1 hq_lo, hq_hi, h3, h4, h5, hq_al, h7, h8, globalsWord_update _ _ rfl hgw⟩
   · intro k hk
     have hne : ofString "heap_ptr" ≠ k := by
       rintro rfl; exact hk (by simp)
@@ -275,9 +275,7 @@ theorem Ret.seq_memcpy_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hA_res : ArenaReady s_res := by
     refine ⟨hG_res, ?_⟩
     have hg : s_res.globals = s.globals := hrel_s.2.2.2.2.2.1
-    unfold ArenaOK globN
-    rw [hg]
-    exact hA.2
+    exact arenaOK_congr hg hA.2
   exact hk s_res hA_res hrel_s rfl
 
 /-- `Ret.seq_memcpy_frame`: `call memcpy(ed, es, en); cont` without `Disj` (frame-only). -/
@@ -319,9 +317,7 @@ theorem Ret.seq_memcpy_frame {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hA_res : ArenaReady s_res := by
     refine ⟨hG_res, ?_⟩
     have hg : s_res.globals = s.globals := hrel_s.2.2.2.2.2.1
-    unfold ArenaOK globN
-    rw [hg]
-    exact hA.2
+    exact arenaOK_congr hg hA.2
   exact hk s_res hA_res hrel_s rfl
 
 /-! ## 2. `htab_grow` Postcondition -/

@@ -187,8 +187,7 @@ theorem evmInv_of_head_status_gas_update {F : Type}
   have hglobN : ∀ g, globN post g = globN s g := fun g => by simp [globN, hglob]
   have hAlloc_eq : ∀ o, Allocated post o ↔ Allocated s o := fun o => by simp [Allocated, hglobN]
   have hAR_post : ArenaReady post := by
-    refine ⟨hGp, ?_⟩
-    unfold ArenaOK; simp only [hglobN]; exact hAR.2
+    exact ⟨hGp, arenaOK_congr hglob hAR.2⟩
   have halloc_bound : ∀ o, Allocated s o → o.1 + o.2 < 2 ^ 64 := by
     intro o ho
     rcases ho with ⟨_, h⟩ | ⟨_, h⟩
