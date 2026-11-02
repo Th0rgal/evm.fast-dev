@@ -2,6 +2,7 @@ import InitECandidate.Solver.Wave8GuestInv.LeafStatements
 import InitECandidate.Solver.Wave8GuestInv.EntryDefs
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabNew
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloMemInitWorld
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.SoloHtabSetFinal
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -68,7 +69,8 @@ def OnReturn (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFin
 
 /-! ### Table contracts (round-1 items 3 and 4) -/
 
-theorem htab_set_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_set") := by sorry
+theorem htab_set_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_set") :=
+  SoloHtabSet.htab_set_spec_proof
 theorem htab_del_spec : FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_del") := by sorry
 
 /-- Progress of `htab_del` (round-2 item 3, `htab_truncate`): a normal return either deleted a
