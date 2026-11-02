@@ -23,12 +23,12 @@ structure MptInsertCallees : Prop where
   fb_node_new_leaf : TerminatingFunBoundedOn GuestInv (ofString "node_new_leaf") K.«node_new_leaf»
   nf__insert_into_leaf : NodeFn ["node"]
     (fun s Nd =>
-      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl"))
+      NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "_insert_into_leaf")
   nf__split_extension : NodeFn ["node"]
     (fun s Nd =>
       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
-      locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
+      locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
     (ofString "_split_extension")
   ro_common_prefix_length : ReadOnlyFn (ofString "common_prefix_length")
   rv_common_prefix_length : RetLe (fun s => min (locN s "al") (locN s "bl")) (ofString "common_prefix_length")
@@ -45,7 +45,7 @@ structure MptInsertCallees : Prop where
     (ofString "node_new_ext")
   nf_node_new_leaf : NodeFn []
     (fun s Nd =>
-      KeyIn s Nd (locN s "nib") (locN s "nlen"))
+      KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40)
     (ofString "node_new_leaf")
 
 structure MptDeleteCallees : Prop where
