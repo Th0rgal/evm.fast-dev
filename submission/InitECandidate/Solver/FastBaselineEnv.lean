@@ -11,7 +11,7 @@ import InitECandidate.Proofs.BootstrapAsmComposition
 import InitECandidate.Proofs.BootstrapStraightLine
 import InitECandidate.Proofs.BootstrapTailMemory
 import InitECandidate.Proofs.PanInstallationConstructor
-import InitECandidate.Proofs.BitmapSeparation
+import InitECandidate.Solver.BitmapSeparationCompact
 import InitECandidate.Proofs.SourceMemoryInstallation
 import InitE.MachineInitialization
 import InitE.SubmissionInitialization
@@ -2228,7 +2228,7 @@ theorem baseline_pan_installed_core :
       .word Guest.startupHeaders[4]
     exact h
   · rw [baseline_bitmap_aligned_domain]
-    exact baseline_bitmap_separation
+    exact InitECandidate.Solver.BitmapInstallationCompact.baseline_bitmap_separation
   · intro i hi
     have heq : i = 2 := by
       change mmioPcsMinIndex baselineNames = some i at hi

@@ -1,4 +1,5 @@
 import InitE.Challenge
+import InitECandidate.Solver.ConcreteOracleWitness
 import InitECandidate.Solver.Wave8GuestInv.Certificate
 
 set_option autoImplicit false
@@ -19,7 +20,14 @@ theorem claimedScore_eq_K_target :
     claimedScore = .finite K_target := rfl
 
 private noncomputable def pendingCompilationWitness :
-    LeanBridge.ConcreteOracleCompilationWitness := sorry
+    LeanBridge.ConcreteOracleCompilationWitness :=
+  let w := InitECandidate.Solver.ConcreteOracleWitness.concreteOracleWitness
+  { oracles := w.oracles
+    c := w.c
+    depth := w.depth
+    hlab := w.hlab
+    compiled := w.compiled
+    depthBound := w.depthBound }
 
 private theorem pendingStageTransfer : StageTransfer := sorry
 

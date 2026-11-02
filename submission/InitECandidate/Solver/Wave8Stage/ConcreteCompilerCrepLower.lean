@@ -1,0 +1,13 @@
+import InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepContext
+import InitECandidate.Solver.Wave8Stage.CrepCompilerComposition
+
+set_option autoImplicit false
+set_option maxRecDepth 200000
+set_option maxHeartbeats 8000000
+
+namespace InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepLower
+wave8_list_spine lowered := CrepCompilerComposition.lower
+  ConcreteCompilerCrepContext.functions ConcreteCompilerCrepContext.functionMap
+  ConcreteCompilerCrepContext.exceptions
+#print axioms lowered_eq
+end InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepLower
