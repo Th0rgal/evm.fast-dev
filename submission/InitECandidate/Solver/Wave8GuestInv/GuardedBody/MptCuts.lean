@@ -139,8 +139,8 @@ def mptCost : ProgHOL 64 → Nat
 def mptInsertCost := Nat.max ((K.«node_new_leaf» + 1)) (Nat.max ((K.«mpt_fail» + 1)) (0) + (K.«node_invalidate» + 1) + Nat.max ((K.«_insert_into_leaf» + 1)) (Nat.max ((K.«common_prefix_length» + 1) + Nat.max (0) ((K.«_split_extension» + 1) + Nat.max ((K.«node_new_ext» + 1)) (0))) (0)))
 def mptDeleteCost := Nat.max (0) (Nat.max ((K.«mpt_fail» + 1)) (0) + (K.«node_invalidate» + 1) + Nat.max (Nat.max ((K.«memeq» + 1)) (0)) (Nat.max ((K.«common_prefix_length» + 1) + Nat.max (0) ((K.«scratch_alloc» + 1))) (Nat.max (Nat.max (0) ((K.«_collapse_branch» + 1))) ((K.«scratch_alloc» + 1)))))
 def mptUnwindCost := Nat.max ((K.«_delete_ext_finish» + 1)) ((K.«_collapse_branch» + 1))
-def mptInsertBudget := (2 ^ 130 + 1) * (mptInsertCost + 1)
-def mptDeleteBudget := (2 ^ 130 + 1) * (mptDeleteCost + 1)
+def mptInsertBudget := (2 ^ 66 + 1) * (mptInsertCost + 1)
+def mptDeleteBudget := (2 ^ 66 + 1) * (mptDeleteCost + 1)
 def mptUnwindBudget := (2 ^ 64 + 1) * (mptUnwindCost + 1)
 
 theorem mptInsert_budget : mptInsertBudget = K._mpt_insert_node := rfl
@@ -160,7 +160,7 @@ def MptInsertHead : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     locN s "level" ≤ locN s "klen" ∧ ∃ Nd, NodeHeap s Nd ∧
       RootIn Nd (locN s "node") ∧
       KeyIn s Nd (locN s "key" + locN s "level") (locN s "klen" - locN s "level") ∧
-      MptSlotOK s Nd)
+      MptSlotOK s Nd ∧ locN s "vlen" < 2 ^ 40 ∧ locN s "klen" ≤ 64)
 def MptInsertActive : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => MptInsertHead s ∧ locN s "go" ≠ 0
 
@@ -205,13 +205,17 @@ theorem mptKind_le {F : Type} {s : PanSemStateFiniteExact 64 F} (h : MptReady s)
 
 theorem mptInsert_kind {F : Type} {s : PanSemStateFiniteExact 64 F} (h : MptInsertActive s) :
     mptKind s ≤ 3 := by
-  obtain ⟨hl, Nd, hn, hr, hk, _⟩ := h.1.2 h.2
-  exact mptKind_le ⟨h.1.1, hl, Nd, hn, hr, hk⟩
+  obtain ⟨hl, Nd, hn, hr, hk, _, _, hkl⟩ := h.1.2 h.2
+  exact mptKind_le ⟨h.1.1, hl, Nd, hn, hr, hk, hkl⟩
 theorem mptDelete_kind {F : Type} {s : PanSemStateFiniteExact 64 F} (h : MptDeleteActive s) :
     mptKind s ≤ 3 := by
   obtain ⟨Nd, fs, hn, _, _, ha⟩ := h.1.2
   obtain ⟨hl, hr, hk⟩ := ha h.2
-  exact mptKind_le ⟨h.1.1, hl, Nd, hn, hr, hk⟩
+  unfold mptKind
+  split
+  · omega
+  · rename_i hz
+    exact (hn.1 _ (hr.resolve_left hz)).1
 
 /-- The only non-progressing insertion transition is a zero-length extension.
 Its memory effect is exactly cache clearing: the parent pointer store is redundant.
