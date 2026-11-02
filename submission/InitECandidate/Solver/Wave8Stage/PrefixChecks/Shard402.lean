@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8Stage.PrefixChecks.Support
 import InitECandidate.Solver.Wave8Stage.CertifiedListSpine
+import InitECandidate.Solver.Wave8Stage.CertifiedRemoveDead
 
 /-! One original compiler entry, independently checked through named passes. -/
 set_option autoImplicit false
@@ -76,12 +77,12 @@ wave8_certified_reduce simplified := WordSimp.compileExp wordProgram
 wave8_certified_reduce temporary := maxVarHOL simplified + 1
 wave8_certified_reduce selected := WordInst.instSelectExecutable riscvConfig temporary simplified
 wave8_certified_reduce ssa := WordAlloc.fullSsaCcTrans arity selected
-wave8_certified_reduce dead := Flapjack.WordAlloc.removeDeadProg ssa
+wave8_certified_remove_dead dead := ssa
 wave8_certified_reduce common := WordCse.wordCommonSubexpElim dead
 wave8_certified_reduce copied := WordCopy.copyProp common
 wave8_certified_reduce twoRegister := WordInst.threeToTwoRegProg riscvConfig.twoRegArith copied
 wave8_certified_reduce reachable := WordUnreach.removeUnreach twoRegister
-wave8_certified_reduce prefixProgram := Flapjack.WordAlloc.removeDeadProg reachable
+wave8_certified_remove_dead prefixProgram := reachable
 
 theorem prefixCompileEq :
     WordCostCompilerControl.preAllocation riscvConfig riscvConfig.twoRegArith arity

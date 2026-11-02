@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.EntryDefs
+import InitECandidate.Solver.Wave8GuestInv.MemoryViews
 import InitECandidate.Solver.Wave8GuestInv.Expressions
 import InitECandidate.Solver.HeapPotential
 import InitECandidate.Solver.PanRunBoundedExt
