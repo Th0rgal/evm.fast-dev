@@ -49,6 +49,4 @@ theorem fallback_initStateOk {width : Nat} [NeZero width] {C F : Type}
   · intro index
     simp
 
-#print axioms makeInit_withBitmaps
-#print axioms fallback_initStateOk
 end InitECandidate.Solver.Wave8Stage.WordToStackFallbackInitialization

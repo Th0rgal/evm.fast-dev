@@ -121,6 +121,4 @@ theorem evaluate_code_empty_oracle {C F : Type}
   rw [hor]
   exact ho _
 
-#print axioms leaf_evaluate_safe
-#print axioms evaluate_code_empty_oracle
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

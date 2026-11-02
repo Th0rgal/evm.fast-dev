@@ -237,8 +237,5 @@ theorem compCorrectLoop {width : Nat} [NeZero width] {C F : Type}
               targetBody (bodyResult.map compileResult) targetRun targetExits
           · exact exitRelation ac k f frame source cutSource bodyPost targetBody lens bodyResult
               (cutHandler names source cutSource cut) bodyConclusion
-#print axioms enterBody
-#print axioms enterRecursive
-#print axioms compCorrectLoop
 
 end InitECandidate.Solver.Wave8Stage.WordToStackLoopClock

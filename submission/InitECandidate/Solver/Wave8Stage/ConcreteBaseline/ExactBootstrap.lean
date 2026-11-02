@@ -89,5 +89,4 @@ theorem full_evaluator_exact {σ : Type} (io : HolFfiState σ) (ms : riscv_state
   rw [full_steps] at shift search
   exact ⟨post, shift, search, by rwa [full_endpoint] at relation⟩
 
-#print axioms full_evaluator_exact
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.ExactBootstrap

@@ -51,6 +51,3 @@ theorem baseline_pan_installed (input : Guest.InputBlob) :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_mmio_projection
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_pan_installed_metadata
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_pan_installed

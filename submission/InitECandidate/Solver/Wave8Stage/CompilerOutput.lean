@@ -54,7 +54,4 @@ theorem same_position_empty {width : Nat} [NeZero width]
   have zero : bytes.length = 0 := by omega
   exact List.length_eq_zero_iff.mp zero
 
-#print axioms witness
-#print axioms position
-#print axioms same_position_empty
 end InitECandidate.Solver.Wave8Stage.CompilerOutput

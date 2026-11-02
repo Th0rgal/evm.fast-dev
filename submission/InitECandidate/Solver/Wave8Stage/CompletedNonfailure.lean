@@ -81,7 +81,4 @@ theorem lab_nonfail_of_ready {width : Nat} [NeZero width] {C F : Type}
   rw [equal]
   exact ready
 
-#print axioms stack_result_agreement
-#print axioms stack_nonfail_of_ready
-#print axioms lab_nonfail_of_ready
 end InitECandidate.Solver.Wave8Stage.CompletedNonfailure

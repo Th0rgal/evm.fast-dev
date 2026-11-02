@@ -19,5 +19,4 @@ theorem compile_eq : panToWordCompileProgHOL .riscv sourceDeclarations = source 
     ConcreteCompilerStruct.source_eq ConcreteCompilerGlobals.compile_eq
     ConcreteCompilerCrep.source_eq ConcreteCompilerLoop.source_eq source_eq
 
-#print axioms compile_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerWord

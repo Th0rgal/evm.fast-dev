@@ -206,20 +206,3 @@ theorem baseline_native_codeLoaded :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.machineStateOfAsm_mode
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.machineStateOfAsm_ok
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.machineStateOfAsm_relation
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_ffi_boundary
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_ffi_interference
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_cache_interference
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_machine_isRiscv
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_machine_noInterference
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.dispatch_not_program
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.dispatch_not_shared
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_start_pc
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_literal_layout
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.literal_append_byte
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.initialMemory_of_lt
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_native_loaded_byte
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_native_program_byte
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_native_codeLoaded

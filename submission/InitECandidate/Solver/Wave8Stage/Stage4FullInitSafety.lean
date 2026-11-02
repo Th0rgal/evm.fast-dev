@@ -183,10 +183,6 @@ theorem fullMakeInit_entry_without_stub {C F : Type}
     { initial with clock := k } start he' (hs.withClock k) hn hor
   simpa only [StackToLab.Proofs.FullMakeInitSemantics.code1, hcode] using hh
 
-#print axioms fullMakeInit_entry_without_stub
 
-#print axioms memorySafe_of_goodInitState
 
-#print axioms fullMakeInit_s2_coreSafe
-#print axioms fullMakeInit_reduced_stateSafe
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

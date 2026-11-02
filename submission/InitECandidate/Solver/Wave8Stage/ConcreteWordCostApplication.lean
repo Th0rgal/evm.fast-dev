@@ -78,5 +78,4 @@ theorem stage2_to_3_of_checked
     (.inr rfl) (by decide) ConcreteWordCostAnnotations.bitmapBound ConcreteWordCostAnnotations.bitmapPrefix
     (by decide) (by decide) hwtw hwts rfl hw_ne hw_nt
 
-#print axioms stage2_to_3_of_checked
 end InitECandidate.Solver.Wave8Stage.ConcreteWordCostApplication

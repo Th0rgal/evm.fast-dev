@@ -69,7 +69,4 @@ theorem notTimeOutOfStaticBudget {width : Nat} [NeZero width] {C F : Type}
   simp only [Nat.add_mul, Nat.one_mul]
   omega
 
-#print axioms codeBudget_bounds
-#print axioms entryCost_bound
-#print axioms notTimeOutOfStaticBudget
 end InitECandidate.Solver.Wave8Stage.WordToStackStaticBudget

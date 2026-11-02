@@ -96,6 +96,5 @@ theorem compCorrect {width : Nat} [NeZero width] {C F : Type}
     exact fun op v e s => WordToStackSharedClock.compCorrectShareInst ac op v e s
   case call => exact fun ret dest args handler s ih => WordToStackCostCalls.compCorrectCall ac ret dest args handler s ih
 
-#print axioms compCorrect
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCostSimulation

@@ -42,6 +42,5 @@ example : type_of% (fb_encode_header (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "rlp_put_u256") K.«rlp_put_u256») →
     TerminatingFunBoundedOn GuestInv (ofString "encode_header") K.«encode_header») := rfl
 
-#print axioms fb_encode_header
 
 end InitECandidate.Solver.Wave8Leaves.S13

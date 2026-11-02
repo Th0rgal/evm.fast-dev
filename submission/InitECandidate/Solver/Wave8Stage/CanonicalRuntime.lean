@@ -105,7 +105,4 @@ theorem codeBound (code : LabProgHOL 64)
     change (riscvAst i).length - 1 + 1 + count * (0 + 1) ≤ 6
     omega
 
-#print axioms positions
-#print axioms noInstall_similar
-#print axioms codeBound
 end InitECandidate.Solver.Wave8Stage.CanonicalRuntime

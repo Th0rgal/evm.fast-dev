@@ -105,7 +105,4 @@ theorem loop {width : Nat} [NeZero width] {C F : Type}
     cases run
     rfl
 
-#print axioms seq
-#print axioms ite
-#print axioms loop
 end InitECandidate.Solver.Wave8Stage.StackBitmapControl

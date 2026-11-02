@@ -20,5 +20,4 @@ wave8_list_spine compiled := ConcreteCompilerGlobalsSplit.functions.map (fun dec
       body := compileProgExactHOL ConcreteCompilerGlobalsHeader.compiled.2.2.2 function.body }
   | _ => DeclHOL.name (Flapjack.Basis.Pure.MlString.ofString "") [])
 
-#print axioms compiled_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsFunctions

@@ -101,8 +101,4 @@ theorem pan_to_target_affine_not_timeOut {F : Type}
     labComplete
 
 set_option pp.fullNames true
-#print axioms pan_to_initialized_lab_not_timeOut
-#print axioms CompletedNonfailure.lab_nonfail_of_ready
-#print axioms ConcreteBaseline.Initialized.stage5_lab_to_target_affine_not_timeOut
-#print axioms pan_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.ConcreteIntegration

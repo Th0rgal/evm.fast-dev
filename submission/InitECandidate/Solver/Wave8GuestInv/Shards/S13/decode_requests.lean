@@ -34,6 +34,5 @@ example : type_of% (fb_decode_requests (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "ssz_fixed_list_count") K.«ssz_fixed_list_count») →
     TerminatingFunBoundedOn GuestInv (ofString "decode_requests") K.«decode_requests») := rfl
 
-#print axioms fb_decode_requests
 
 end InitECandidate.Solver.Wave8Leaves.S13

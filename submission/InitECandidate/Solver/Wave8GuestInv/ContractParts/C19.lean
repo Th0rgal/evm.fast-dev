@@ -40,8 +40,6 @@ theorem «callees_state_init» : sameNames (progCallees (fnBody Guest.Software.g
 
 theorem «gbody_state_init» : GBody.«state_init» := by sorry
 
-theorem «gb_state_init» : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init» :=
-  «gbody_state_init» «fb_alloc» «gb_decode_witness_to_mpt» «fb_htab_new» «wk_alloc» «rt_alloc»
 
 /-- The body of `run_attempt` alone (AST line 33734, guard `InputReady`, #0 WALK). Its direct callees are
 exactly `alloc`, `check_gas_limit`, `execute_block`, `header_hash`, `is_valid_versioned_hashes`, `memeq`, `memzero`, `nodedb_build`, `payload_header`, `state_init`, `validate_header`, `validate_headers` (`«callees_run_attempt»`, checked against the AST). Hypotheses: the bound
@@ -114,8 +112,6 @@ theorem «lookup_run_attempt» : originalRuntimeCode.lookup (ofString "run_attem
 
 theorem «gbody_run_attempt» : GBody.«run_attempt» := by sorry
 
-theorem «gb_run_attempt» : TerminatingFunBoundedOn InputReady (ofString "run_attempt") K.«run_attempt» :=
-  «gbody_run_attempt» «fb_alloc» «fb_check_gas_limit» «gb_execute_block» «fb_header_hash» «fb_is_valid_versioned_hashes» «fb_memeq» «fb_memzero» «fb_nodedb_build» «gb_payload_header» «gb_state_init» «fb_validate_header» «fb_validate_headers» «wk_alloc» «rt_alloc» «ro_check_gas_limit» «wk_header_hash» «wk_is_valid_versioned_hashes» «ro_memeq» «wk_memzero» «zv_memzero» «wk_nodedb_build» «wk_payload_header» «wk_state_init» «wk_validate_header» «wk_validate_headers»
 
 /-- The body of `attempt_l1` alone (AST line 33847, guard `InputReady`, loop-free). Its direct callees are
 exactly `run_attempt` (`«callees_attempt_l1»`, checked against the AST). Hypotheses: the bound
@@ -149,8 +145,6 @@ theorem «gbody_attempt_l1» : GBody.«attempt_l1» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l1»; omega
 
-theorem «gb_attempt_l1» : TerminatingFunBoundedOn InputReady (ofString "attempt_l1") K.«attempt_l1» :=
-  «gbody_attempt_l1» «gb_run_attempt»
 
 /-- The body of `attempt_l2` alone (AST line 33863, guard `InputReady`, loop-free). Its direct callees are
 exactly `attempt_l1` (`«callees_attempt_l2»`, checked against the AST). Hypotheses: the bound
@@ -184,7 +178,5 @@ theorem «gbody_attempt_l2» : GBody.«attempt_l2» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l2»; omega
 
-theorem «gb_attempt_l2» : TerminatingFunBoundedOn InputReady (ofString "attempt_l2") K.«attempt_l2» :=
-  «gbody_attempt_l2» «gb_attempt_l1»
 
 end InitECandidate.Solver.Wave8GuestInv

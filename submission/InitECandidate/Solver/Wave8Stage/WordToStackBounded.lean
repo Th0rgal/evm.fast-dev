@@ -86,6 +86,5 @@ theorem compCorrectRaise {width : Nat} [NeZero width] {C F : Type}
     · have distinct : 1 ≠ k := by omega
       simpa [unwindTarget,HolFiniteMapExact.lookup_updateEq,FUPDATE_HOL,distinct] using placed
 
-#print axioms compCorrectRaise
 
 end InitECandidate.Solver.Wave8Stage.WordToStackBounded

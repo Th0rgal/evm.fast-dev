@@ -20,8 +20,6 @@ theorem functions {width : Nat} [NeZero width] (context : PanGlobalsContextExact
       initializers compiled exceptions final ⟨run,allFunctions⟩
   rfl
 
-#print axioms functions
-#print axioms PanGlobalsCompileDecsStructural.compile_decls_appendHOL
 
 /-- Assemble header and function-map certificates while the lists and result
 remain abstract, avoiding conversion of the concrete function bodies. -/
@@ -45,5 +43,4 @@ theorem assemble {width : Nat} [NeZero width] (context : PanGlobalsContextExact 
   simp only [List.append_nil]
   rw [← functionMap]
 
-#print axioms assemble
 end InitECandidate.Solver.Wave8Stage.GlobalDeclarationComposition

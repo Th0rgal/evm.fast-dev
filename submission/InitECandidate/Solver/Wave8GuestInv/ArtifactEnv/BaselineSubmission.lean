@@ -78,7 +78,3 @@ theorem baselineSubmission_admitted : baselineSubmission.Admitted := by
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.entryPc_model
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.program_model
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineSubmission_code
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineSubmission_admitted

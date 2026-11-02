@@ -80,9 +80,4 @@ theorem raise_at {width : Nat} [NeZero width] {C F : Type}
       simp only [Fits,netCost,evaluate,hg,hj,sourceCost,classify,atom,if_true,covers_some]
       omega
 
-#print axioms skip_at
-#print axioms break_at
-#print axioms continue_at
-#print axioms return_at
-#print axioms raise_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

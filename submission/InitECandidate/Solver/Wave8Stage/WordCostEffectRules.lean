@@ -100,6 +100,4 @@ theorem tailCall_at {width : Nat} [NeZero width] {C F : Type}
       dsimp only [entry,WordSemStateFiniteExact.callEnv,decClock]
       omega
 
-#print axioms branch_at
-#print axioms tailCall_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

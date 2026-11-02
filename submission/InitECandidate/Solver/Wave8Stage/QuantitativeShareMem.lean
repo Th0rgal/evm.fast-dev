@@ -463,5 +463,4 @@ theorem compileCorrect_shareMem {width : Nat} [NeZero width] {S Q F : Type}
     rw [hclk, hstep]
     exact hk
 
-#print axioms compileCorrect_shareMem
 end InitECandidate.Solver.Wave8Stage.Quantitative

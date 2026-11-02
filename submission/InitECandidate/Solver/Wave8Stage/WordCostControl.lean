@@ -108,7 +108,4 @@ theorem erase_wordAlloc {width : Nat} [NeZero width]
     · exact erase_applyColour _ _
     · rfl
 
-#print axioms erase_applyColour
-#print axioms oracleColourOk_erase
-#print axioms erase_wordAlloc
 end InitECandidate.Solver.Wave8Stage.WordCostControl

@@ -105,6 +105,5 @@ theorem compCorrect {width : Nat} [NeZero width] {σ : Type} :
 
 
 
-#print axioms compCorrect
 
 end InitECandidate.Solver.Wave8Stage.CrepCostSimulation

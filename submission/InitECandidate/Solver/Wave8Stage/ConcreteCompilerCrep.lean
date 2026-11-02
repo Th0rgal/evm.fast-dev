@@ -38,5 +38,4 @@ theorem source_eq : compileProgDeclsHOLW ConcreteCompilerGlobals.source = source
     ConcreteCompilerCrepContext.functionMap_eq ConcreteCompilerCrepContext.exceptions_eq
     ConcreteCompilerCrepLower.lowered_eq inline_eq
 
-#print axioms source_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrep

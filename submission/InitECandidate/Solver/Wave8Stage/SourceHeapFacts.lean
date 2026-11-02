@@ -125,6 +125,4 @@ theorem installed_ordinary_word (a : BitVec 64) (ha : ordinaryDomain a) :
         omega
 
 
-#print axioms source_globals_allocatable
-#print axioms installed_ordinary_word
 end InitECandidate.Solver.Wave8Stage.SourceHeapFacts

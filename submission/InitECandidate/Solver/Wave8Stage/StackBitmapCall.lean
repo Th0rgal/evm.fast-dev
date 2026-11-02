@@ -133,6 +133,4 @@ theorem returning {width : Nat} [NeZero width] {C F : Type}
         | timeOut => cases run; rfl
         | error => cases run; contradiction
 
-#print axioms tail
-#print axioms returning
 end InitECandidate.Solver.Wave8Stage.StackBitmapCall

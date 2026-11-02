@@ -48,5 +48,3 @@ theorem concreteOracleCompilationWitness_nonempty :
 
 end InitECandidate.Solver.ConcreteOracleWitness
 
-#print axioms InitECandidate.Solver.ConcreteOracleWitness.concreteOracleWitness
-#print axioms InitECandidate.Solver.ConcreteOracleWitness.concreteOracleCompilationWitness_nonempty

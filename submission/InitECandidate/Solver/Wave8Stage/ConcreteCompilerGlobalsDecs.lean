@@ -23,5 +23,4 @@ theorem compile_eq : compileDecsExactHOL ConcreteCompilerGlobalsInit.initial
     ConcreteCompilerGlobalsHeader.compiled_eq ConcreteCompilerGlobalsSplit.allFunctions
     ConcreteCompilerGlobalsFunctions.compiled_eq
 
-#print axioms compile_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsDecs

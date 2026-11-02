@@ -45,7 +45,5 @@ theorem lab_filter_align_not_timeOut {width : Nat} [NeZero width] {C F : Type}
   rw [hadd] at he
   exact (congrArg Prod.fst he) ▸ hnt
 
-#print axioms lab_align_result
-#print axioms lab_filter_align_not_timeOut
 
 end InitECandidate.Solver.Wave8Stage.Stage4

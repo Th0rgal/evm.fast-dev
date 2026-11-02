@@ -14,7 +14,6 @@ theorem bitmap_image_byte (offset : Fin (8*InitECandidate.bitmaps.length)) :
   exact byte_of_image InitECandidate.code InitECandidate.bitmaps
     (initDataRom-initialPc+24) offset.val offset.isLt bitmap_image_bytes
 
-#print axioms bitmap_image_byte
 
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

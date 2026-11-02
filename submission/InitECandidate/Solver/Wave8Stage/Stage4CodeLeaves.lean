@@ -98,5 +98,4 @@ theorem install_evaluate_withCode {C F : Type}
   repeat' split
   all_goals first | contradiction | simp_all only [replaceResultCode]
 
-#print axioms leaf_evaluate_withCode
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

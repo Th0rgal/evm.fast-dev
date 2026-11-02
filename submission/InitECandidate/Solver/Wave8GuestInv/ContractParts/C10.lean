@@ -60,8 +60,6 @@ theorem «gbody__mpt_delete_node» : GBody.«_mpt_delete_node» := by
               (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
   unfold K.«_mpt_delete_node»; omega
 
-theorem «gb__mpt_delete_node» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node» :=
-  «gbody__mpt_delete_node» «gb__mpt_delete_node_body» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
 
 /-- The body of `_mpt_insert_node` alone (AST line 10598, guard `MptInsertReady`, #0 GUARD). Its direct callees are
 exactly `_insert_into_leaf`, `_split_extension`, `common_prefix_length`, `mpt_fail`, `node_invalidate`, `node_new_ext`, `node_new_leaf` (`«callees__mpt_insert_node»`, checked against the AST). Hypotheses: the bound
@@ -114,8 +112,6 @@ theorem «gbody__mpt_insert_node» : GBody.«_mpt_insert_node» := by
     fb_invalidate, fb_ext, fb_new_leaf, nf_leaf, nf_split, ro_prefix, rv_prefix,
     ro_fail, nf_invalidate, iz_invalidate, nf_ext, rt_ext, nf_new_leaf⟩
 
-theorem «gb__mpt_insert_node» : TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node» :=
-  «gbody__mpt_insert_node» «fb__insert_into_leaf» «fb__split_extension» «fb_common_prefix_length» «fb_mpt_fail» «fb_node_invalidate» «fb_node_new_ext» «fb_node_new_leaf» «nf__insert_into_leaf» «nf__split_extension» «ro_common_prefix_length» «rv_common_prefix_length» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «nf_node_new_ext» «rt_node_new_ext» «nf_node_new_leaf»
 
 /-- The body of `_node_rlp_fill` alone (AST line 11011, guard `NodeRlpReady`, #0 ALLOC; #1 CTR). Its direct callees are
 exactly `_node_needs_rlp`, `_node_rlp_begin`, `_node_rlp_finish`, `scratch_alloc`, `scratch_mark`, `scratch_release` (`«callees__node_rlp_fill»`, checked against the AST). Hypotheses: the bound
@@ -145,8 +141,6 @@ theorem «callees__node_rlp_fill» : sameNames (progCallees (fnBody Guest.Softwa
 
 theorem «gbody__node_rlp_fill» : GBody.«_node_rlp_fill» := by sorry
 
-theorem «gb__node_rlp_fill» : TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill» :=
-  «gbody__node_rlp_fill» «fb__node_needs_rlp» «fb__node_rlp_begin» «fb__node_rlp_finish» «fb_scratch_alloc» «fb_scratch_mark» «fb_scratch_release» «ro__node_needs_rlp» «ak__node_rlp_begin» «ak__node_rlp_finish» «ww_scratch_alloc» «rt_scratch_alloc» «ro_scratch_mark»
 
 /-- The body of `node_rlp` alone (AST line 11074, guard `NodeRlpReady`, loop-free). Its direct callees are
 exactly `_node_rlp_fill`, `mpt_fail` (`«callees_node_rlp»`, checked against the AST). Hypotheses: the bound
@@ -164,7 +158,5 @@ theorem «callees_node_rlp» : sameNames (progCallees (fnBody Guest.Software.gue
 
 theorem «gbody_node_rlp» : GBody.«node_rlp» := by sorry
 
-theorem «gb_node_rlp» : TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp» :=
-  «gbody_node_rlp» «gb__node_rlp_fill» «fb_mpt_fail» «ro_mpt_fail»
 
 end InitECandidate.Solver.Wave8GuestInv

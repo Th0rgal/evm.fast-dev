@@ -130,5 +130,4 @@ theorem bounded (s1 : AsmState 64) (i : HolAsm 64) (s2 : AsmState 64)
     expose_witness riscv_encoder_correct_loc r c s1 s2 ms h
     decide
 
-#print axioms bounded
 end InitECandidate.Solver.Wave8Stage.BoundedEncoder

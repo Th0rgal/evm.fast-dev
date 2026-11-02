@@ -27,5 +27,4 @@ wave8_list_spine rendered := ConcreteCompilerSource.source.map simplifyDeclarati
 noncomputable def source := rendered
 theorem source_eq : panSimpDeclsHOL ConcreteCompilerSource.source = source :=
   (declarations_eq_map _).trans rendered_eq
-#print axioms source_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerSimp

@@ -144,5 +144,4 @@ theorem analyze_derives {width : Nat} [NeZero width]
       apply Derives.normal
       simp only [erase]
 
-#print axioms analyze_derives
 end InitECandidate.Solver.Wave8Stage.WordCostAnalysis

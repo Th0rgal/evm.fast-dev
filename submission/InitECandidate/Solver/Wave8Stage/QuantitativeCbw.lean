@@ -166,5 +166,4 @@ theorem compileCorrect_cbw {width : Nat} [NeZero width] {S Q F : Type}
     (fun k => ⟨(hl k).1, (hl k).2.1⟩) (hl 0).2.2.2
     ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ hrel' hev hres (ih w1 w2 _ hr1 hr2 hbw)
 
-#print axioms compileCorrect_cbw
 end InitECandidate.Solver.Wave8Stage.Quantitative

@@ -233,9 +233,4 @@ theorem compileCorrect_halt {width : Nat} [NeZero width] {S Q F : Type}
     simp only [hnp, ↓reduceIte]
     simp [shiftInterfer, hhalt, hptr]
 
-#print axioms compileCorrect_jump
-#print axioms compileCorrect_jumpCmp
-#print axioms compileCorrect_call
-#print axioms compileCorrect_locValue
-#print axioms compileCorrect_halt
 end InitECandidate.Solver.Wave8Stage.Quantitative

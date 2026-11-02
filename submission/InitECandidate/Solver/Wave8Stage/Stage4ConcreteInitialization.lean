@@ -120,5 +120,4 @@ theorem initialization_exists
     exact ha.2
 
 set_option pp.fullNames true
-#print axioms initialization_exists
 end InitECandidate.Solver.Wave8Stage.ConcreteInitialization

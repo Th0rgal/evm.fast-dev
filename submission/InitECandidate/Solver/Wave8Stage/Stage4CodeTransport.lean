@@ -199,5 +199,4 @@ theorem evaluate_withCode {C F : Type} {bad : Nat}
     evaluate (p, { s with code := code }) = replaceResultCode code (evaluate (p, s)) :=
   evaluate_withCode_measure (stackSemMeasure p s) p s rfl hp hs hc ho code agree
 
-#print axioms evaluate_withCode
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

@@ -161,7 +161,5 @@ theorem compCorrectIf {width : Nat} [NeZero width] {C F : Type}
   rw [routing q1 q2 (target.clock+extraClock),sameClock]
   exact targetRun
 
-#print axioms selectedSourceBranch
-#print axioms compCorrectIf
 
 end InitECandidate.Solver.Wave8Stage.WordToStackIfClock

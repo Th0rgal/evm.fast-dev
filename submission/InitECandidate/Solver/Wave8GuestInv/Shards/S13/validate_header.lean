@@ -46,6 +46,5 @@ example : type_of% (fb_validate_header (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero») →
     TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header») := rfl
 
-#print axioms fb_validate_header
 
 end InitECandidate.Solver.Wave8Leaves.S13

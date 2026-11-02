@@ -66,6 +66,4 @@ theorem codeBound_le {width : Nat} [NeZero width]
       dsimp only
       omega
 
-#print axioms codeBound_bounds
-#print axioms codeBound_le
 end InitECandidate.Solver.Wave8Stage.CrepCodeBudget

@@ -74,6 +74,4 @@ theorem notTimeOut_two_mul {width : Nat} [NeZero width] {C F : Type}
   dsimp only at bound
   omega
 
-#print axioms entryCost_bound
-#print axioms notTimeOut_two_mul
 end InitECandidate.Solver.Wave8Stage.WordCostEntryCertificate

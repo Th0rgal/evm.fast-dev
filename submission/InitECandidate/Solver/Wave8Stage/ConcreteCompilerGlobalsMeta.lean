@@ -35,6 +35,4 @@ theorem newName_eq : newMainNameHOL ConcreteCompilerStruct.source = newName := b
   rw [CompilerFunctionNames.concrete, names_eq]
   exact fresh_eq
 
-#print axioms resorted_eq
-#print axioms newName_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsMeta

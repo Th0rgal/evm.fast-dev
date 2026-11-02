@@ -283,7 +283,5 @@ theorem entry_result_add_one {C F : Type} {bad : Nat}
   have hc : extra + k + (k + 1 - (extra + k)) = k + 1 := by omega
   simpa only [hc, StackSemEvaluate.evaluate] using congrArg Prod.fst lifted
 
-#print axioms entry_result_add_one
 
-#print axioms compCorrectZ
 end InitECandidate.Solver.Wave8Stage.SafeRemoveClock

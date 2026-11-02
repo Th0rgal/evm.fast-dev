@@ -2475,6 +2475,4 @@ theorem stage2_to_3_concrete :
     type_of% (@ConcreteWordCostApplication.stage2_to_3_of_checked checked) :=
   @ConcreteWordCostApplication.stage2_to_3_of_checked checked
 
-#print axioms checked
-#print axioms stage2_to_3_concrete
 end InitECandidate.Solver.Wave8Stage.PrefixChecks

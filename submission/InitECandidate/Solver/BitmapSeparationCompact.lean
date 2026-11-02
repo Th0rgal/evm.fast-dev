@@ -69,5 +69,4 @@ theorem baseline_bitmap_separation :
     InitECandidate.bitmaps i.val i.isLt
   exact (congrArg WordLocW.word (installed_bitmap_word ⟨i.val,hi⟩)).trans hm.symm
 
-#print axioms baseline_bitmap_separation
 end InitECandidate.Solver.BitmapInstallationCompact

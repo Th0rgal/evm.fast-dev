@@ -36,5 +36,4 @@ theorem renamed_eq : fpermDecsHOL (ofString "main")
     ConcreteCompilerGlobalsMeta.newName ConcreteCompilerGlobalsMeta.resorted = renamed :=
   (declarations_eq_map _ _ _).trans rendered_eq
 
-#print axioms renamed_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsRename

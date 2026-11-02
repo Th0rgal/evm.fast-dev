@@ -151,9 +151,4 @@ theorem pan_to_target_certified_affine_not_timeOut_concrete :
       ConcreteWordCostAnnotations.entryBound oracleEq WordSourceOracle.terminalOracle
 end
 
-#print axioms initialized_certified_word_to_stack_complete_concrete
-#print axioms pan_to_certified_stack_complete_concrete
-#print axioms pan_to_certified_lab_not_timeOut_concrete
-#print axioms pan_to_certified_lab_complete_concrete
-#print axioms pan_to_target_certified_affine_not_timeOut_concrete
 end InitECandidate.Solver.Wave8Stage.PrefixChecks.CertifiedPipeline

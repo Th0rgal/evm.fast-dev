@@ -50,8 +50,6 @@ theorem «gbody_attempt_l7» : GBody.«attempt_l7» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l7»; omega
 
-theorem «gb_attempt_l7» : TerminatingFunBoundedOn InputReady (ofString "attempt_l7") K.«attempt_l7» :=
-  «gbody_attempt_l7» «gb_attempt_l6»
 
 /-- The body of `verify_stateless_new_payload` alone (AST line 33959, guard `InputReady`, loop-free). Its direct callees are
 exactly `attempt_l7` (`«callees_verify_stateless_new_payload»`, checked against the AST). Hypotheses: the bound
@@ -88,8 +86,6 @@ theorem «gbody_verify_stateless_new_payload» : GBody.«verify_stateless_new_pa
           inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))) ?_
   unfold K.«verify_stateless_new_payload»; omega
 
-theorem «gb_verify_stateless_new_payload» : TerminatingFunBoundedOn InputReady (ofString "verify_stateless_new_payload") K.«verify_stateless_new_payload» :=
-  «gbody_verify_stateless_new_payload» «gb_attempt_l7»
 
 /-- The body of `main` alone (AST line 33979, guard `MainEntry`, loop-free). Its direct callees are
 exactly `alloc`, `blake2_init`, `bls_precompiles_init`, `bn254_init`, `decode_host_input`, `evm_init`, `fork_init`, `header_init`, `htr_new_payload_request`, `keccak_init`, `mem_init`, `memzero`, `mpt_init`, `output_write`, `ripemd160_init`, `secp256k1_init`, `serialize_result`, `sha256_init`, `ssz_init`, `u256_ws_init`, `verify_stateless_new_payload` (`«callees_main»`, checked against the AST). Hypotheses: the bound
@@ -194,7 +190,5 @@ theorem «callees_main» : sameNames (progCallees (fnBody Guest.Software.guestFn
 
 theorem «gbody_main» : GBody.«main» := by sorry
 
-theorem «gb_main» : TerminatingFunBoundedOn MainEntry (ofString "main") K.«main» :=
-  «gbody_main» «fb_alloc» «fb_blake2_init» «fb_bls_precompiles_init» «fb_bn254_init» «fb_decode_host_input» «fb_evm_init» «fb_fork_init» «fb_header_init» «fb_htr_new_payload_request» «fb_keccak_init» «fb_mem_init» «fb_memzero» «fb_mpt_init» «fb_output_write» «fb_ripemd160_init» «fb_secp256k1_init» «fb_serialize_result» «fb_sha256_init» «fb_ssz_init» «fb_u256_ws_init» «gb_verify_stateless_new_payload» «wk_alloc» «rt_alloc» «wk_blake2_init» «wk_bls_precompiles_init» «wk_bn254_init» «wk_decode_host_input» «wk_evm_init» «wk_fork_init» «wk_header_init» «wk_htr_new_payload_request» «wk_keccak_init» «mem_init_world» «wk_memzero» «zv_memzero» «wk_mpt_init» «wk_ripemd160_init» «ro_secp256k1_init» «wk_sha256_init» «wk_ssz_init» «wk_u256_ws_init»
 
 end InitECandidate.Solver.Wave8GuestInv

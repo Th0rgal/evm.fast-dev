@@ -26,5 +26,4 @@ theorem original_of_all (checked : ConcreteCompilerWord.source.all check = true)
   rw [ConcreteCompilerWord.compile_eq]
   exact List.all_eq_true.mp checked
 
-#print axioms original_of_all
 end InitECandidate.Solver.Wave8Stage.ConcreteWordCheckInput

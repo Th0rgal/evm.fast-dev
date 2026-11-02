@@ -122,7 +122,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
   · rw [halt]; intro impossible; cases impossible
   · rw [halt]; intro impossible; cases impossible
 
-#print axioms initialized_stateRel
-#print axioms initialized_not_timeOut
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.InitializedTransfer

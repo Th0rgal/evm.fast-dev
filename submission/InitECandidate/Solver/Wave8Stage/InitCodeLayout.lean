@@ -209,8 +209,5 @@ theorem reduced_layout {width : Nat} [NeZero width] {C F : Type}
     erw [holFapply_of_lookup tk2,holFapply_of_lookup tk1]
     simp only [wordSemTheWord,size,space]
 
-#print axioms reduced_layout
 
-#print axioms framed_wordListExists
-#print axioms run_layout
 end InitECandidate.Solver.Wave8Stage.InitCodeLayout

@@ -109,7 +109,4 @@ theorem compile_codeCertified {width : Nat} [NeZero width]
   intro entry member
   exact WordCostCheck.checkProgram_sound defs terminal noLabels fuel _ _ (checked entry member)
 
-#print axioms codeCertified_of_members
-#print axioms compile_members
-#print axioms compile_codeCertified
 end InitECandidate.Solver.Wave8Stage.WordCostCodeCertificates

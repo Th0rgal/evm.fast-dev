@@ -29,5 +29,4 @@ theorem compile_eq :
     ConcreteCompilerGlobalsInit.initial_eq
     ConcreteCompilerGlobalsDecs.compile_eq
 
-#print axioms compile_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobals

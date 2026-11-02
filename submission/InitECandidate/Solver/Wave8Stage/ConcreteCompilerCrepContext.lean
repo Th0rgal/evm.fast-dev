@@ -44,8 +44,4 @@ wave8_list_spine inlineNames :=
   (Flapjack.Pancake.PanLang.functionsHOL
     (ConcreteCompilerGlobals.source.filter Flapjack.Pancake.PanLang.inlinableHOL)).map Prod.fst
 
-#print axioms functions_eq
-#print axioms functionMap_eq
-#print axioms exceptions_eq
-#print axioms inlineNames_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepContext

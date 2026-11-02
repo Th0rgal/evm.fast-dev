@@ -41,7 +41,6 @@ theorem shapeToHOL_function_eq : shapeToHOL = shapeToHOLStructural := by
   funext shape
   exact shapeToHOL_eq shape
 
-#print axioms shapeToHOL_function_eq
 
 mutual
   def expToHOLStructural {width : Nat} [NeZero width] :
@@ -155,7 +154,6 @@ theorem expToHOL_function_eq : @expToHOL = @expToHOLStructural := by
   funext width inst e
   exact expToHOL_eq e
 
-#print axioms expToHOL_function_eq
 
 def progToHOLStructural {width : Nat} [NeZero width] : (program : Prog (BitVec width)) → ProgHOL width
   | .skip => .skip
@@ -234,7 +232,6 @@ theorem progToHOL_function_eq : @progToHOL = @progToHOLStructural := by
   funext width inst p
   exact progToHOL_eq p
 
-#print axioms progToHOL_function_eq
 
 
 def paramToHOLStructural (p : String × Shape) : MlS × ShapeHOL :=
@@ -273,6 +270,5 @@ theorem declToHOL_function_eq : @declToHOL = @declToHOLStructural := by
   funext width inst d
   exact declToHOL_eq d
 
-#print axioms declToHOL_function_eq
 
 end InitECandidate.Solver.FrontendCodecComputation

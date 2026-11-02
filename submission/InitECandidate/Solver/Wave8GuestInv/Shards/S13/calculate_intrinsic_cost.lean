@@ -32,6 +32,5 @@ example : type_of% (fb_calculate_intrinsic_cost (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero») →
     TerminatingFunBoundedOn GuestInv (ofString "calculate_intrinsic_cost") K.«calculate_intrinsic_cost») := rfl
 
-#print axioms fb_calculate_intrinsic_cost
 
 end InitECandidate.Solver.Wave8Leaves.S13

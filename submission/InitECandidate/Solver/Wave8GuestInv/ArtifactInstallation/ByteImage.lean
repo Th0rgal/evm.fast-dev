@@ -19,7 +19,6 @@ theorem byte_of_image (bytes : List (BitVec 8)) (words : List (BitVec 64))
   simpa [List.getElem?_take, bound, List.getElem?_drop,
     List.getElem?_map, List.getElem?_range, Nat.add_comm] using h
 
-#print axioms byte_of_image
 
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

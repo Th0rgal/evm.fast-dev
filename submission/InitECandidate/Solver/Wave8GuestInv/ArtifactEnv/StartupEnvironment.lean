@@ -52,7 +52,3 @@ theorem baselineInitialState_registers_zero (input : Guest.InputBlob) (r : BitVe
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineInitialState_mode
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineInitialState_related
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineInitialState_ram_zero
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineInitialState_registers_zero

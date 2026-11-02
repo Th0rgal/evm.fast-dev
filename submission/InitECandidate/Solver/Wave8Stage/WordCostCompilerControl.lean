@@ -104,7 +104,4 @@ theorem compile_project {width : Nat} [NeZero width]
   exact zip_project ac ac.twoRegArith _ wc.regAlg programs _
     (WordToWord.nextNOracle_length _ _) noMt
 
-#print axioms erase_compileSingle
-#print axioms erase_fullCompileSingle
-#print axioms compile_project
 end InitECandidate.Solver.Wave8Stage.WordCostCompilerControl

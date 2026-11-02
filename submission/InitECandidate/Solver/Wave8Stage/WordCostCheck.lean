@@ -84,6 +84,4 @@ theorem checkProgram_sound {width : Nat} [NeZero width]
     exact ⟨effects,derived,checkWithin_sound (labelBound p) effects expected
       (derives_high defs terminal noLabels p effects derived) (by simpa only [run] using checked)⟩
 
-#print axioms checkWithin_sound
-#print axioms checkProgram_sound
 end InitECandidate.Solver.Wave8Stage.WordCostCheck

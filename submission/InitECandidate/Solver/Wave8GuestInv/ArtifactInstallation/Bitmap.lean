@@ -24,6 +24,5 @@ theorem installed_bitmap_word (i : Fin InitECandidate.bitmaps.length) :
     simp [initDataRam,Nat.add_mod,Nat.mul_mod_right]
   · exact installed_bitmap_byte i
 
-#print axioms installed_bitmap_word
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

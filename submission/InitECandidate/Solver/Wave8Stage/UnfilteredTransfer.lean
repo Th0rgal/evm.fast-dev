@@ -86,7 +86,4 @@ theorem stage5_after_bootstrap_not_timeOut {F : Type}
   rw [bootstrapRun]
   exact post
 
-#print axioms filter_observation
-#print axioms stage5_lab_to_target_affine_not_timeOut
-#print axioms stage5_after_bootstrap_not_timeOut
 end InitECandidate.Solver.Wave8Stage.UnfilteredTransfer

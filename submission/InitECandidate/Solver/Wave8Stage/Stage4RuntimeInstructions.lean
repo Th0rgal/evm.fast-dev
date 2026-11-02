@@ -86,6 +86,4 @@ theorem StateSafe.instHOL_safe {C F : Type} {bad : Nat}
   rw [run] at hi
   exact h.instInteger_safe i hi
 
-#print axioms StateSafe.instInteger_safe
-#print axioms StateSafe.instHOL_safe
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

@@ -164,5 +164,4 @@ theorem coreSafe_initCode {C F : Type} {bad : Nat} (hb : 1 ≠ bad)
     (StackRemove.Proofs.InitClock.initCodeClockNeutral generateGc maxHeap pointer)
     (programSafe_initCode hb generateGc maxHeap pointer) hs
 
-#print axioms coreSafe_initCode
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

@@ -129,6 +129,4 @@ theorem CounterAdd.suffix (counter : MlS) (step : BitVec 64) {first : ProgHOL 64
       dsimp only at h ⊢
       exact h
 
-#print axioms while_down_first_unsigned
-#print axioms CounterAdd.suffix
 end InitECandidate.Solver.Wave8Leaves.S00Spec.Arith

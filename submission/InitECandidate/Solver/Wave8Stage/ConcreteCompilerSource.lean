@@ -11,5 +11,4 @@ are deliberately deferred to the individual concrete function checks. -/
 
 namespace InitECandidate.Solver.Wave8Stage.ConcreteCompilerSource
 wave8_list_spine source := sourceDeclarations
-#print axioms source_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerSource

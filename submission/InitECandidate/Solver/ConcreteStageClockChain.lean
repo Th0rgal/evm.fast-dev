@@ -61,4 +61,3 @@ def CoveredSourceTicksConsumedBounded (K_pan_max : Nat) : Prop :=
 
 end InitECandidate.Solver.ConcreteStageClockChain
 
-#print axioms InitECandidate.Solver.ConcreteStageClockChain.yukonScore_lt_ceiling_of_le_maxYukonK

@@ -11,6 +11,5 @@ example (h : TerminatingFunBoundedOn GuestInv (ofString "u256_from_be") K.«u256
     type_of% (fb_address_to_u256 h) =
       type_of% InitECandidate.Solver.Wave8GuestInv.«fb_address_to_u256» := rfl
 
-#print axioms fb_address_to_u256
 
 end InitECandidate.Solver.Wave8GuestInv.S02

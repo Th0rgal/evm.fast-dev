@@ -135,9 +135,5 @@ theorem findCode_eq_of_safe {K A : Type} {bad : Nat}
       exact hc n (hr r (.loc n 0) he)
     · rfl
 
-#print axioms findCode_safe_target
-#print axioms findCode_eq_of_safe
-#print axioms StateSafe.memStore_safe
-#print axioms StateSafe.assign_safe
 
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

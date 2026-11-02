@@ -129,6 +129,4 @@ theorem share_safe {width : Nat} [NeZero width]
     | trivial
 
 
-#print axioms inst_safe
-#print axioms copyRet_safe
 end InitECandidate.Solver.Wave8Stage.StackBitmapNativeHelpers

@@ -84,7 +84,5 @@ theorem initialized_notTimeOutOfStaticBudget {width : Nat} [NeZero width] {C F :
   · exact notError
   · exact notTimeout
 
-#print axioms initialized_stateRel
-#print axioms initialized_notTimeOutOfStaticBudget
 
 end InitECandidate.Solver.Wave8Stage.WordToStackPipelineBudget

@@ -76,5 +76,4 @@ theorem leaf_evaluate_extendCode {C F : Type} {bad : Nat}
   all_goals repeat' split
   all_goals simp_all only [replaceResultCode, emptyEnv, setVar, setStore, decClock]
 
-#print axioms leaf_evaluate_extendCode
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

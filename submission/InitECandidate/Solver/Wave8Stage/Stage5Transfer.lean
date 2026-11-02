@@ -53,6 +53,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
   exact initialized_not_timeOut mc target installed ffi code code2 labs clock i cbspace t m dm sdm
     coracle names info shiftedInfo init safe k_lab notError notTimeout
 
-#print axioms lab_run_not_error_of_nonfail
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage

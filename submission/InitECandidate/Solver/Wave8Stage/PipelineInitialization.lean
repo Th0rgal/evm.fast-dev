@@ -125,10 +125,4 @@ theorem initialized_stateRel {F : Type}
   exact InitializedTransfer.initialized_stateRel mc ms ffi lab.code code2 labs clock i cbspace
     t m lab.memDomain lab.sharedMemDomain lab.compileOracle names info shiftedInfo init
 
-#print axioms compile_eq_code2
-#print axioms filtered_makeInit
-#print axioms code2_state_eq
-#print axioms pipeline_eq_makeInit
-#print axioms filter_observation
-#print axioms initialized_stateRel
 end InitECandidate.Solver.Wave8Stage.PipelineInitialization

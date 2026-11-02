@@ -30,6 +30,5 @@ example : type_of% (fb_ssz_fixed_list_count (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "udivmod") K.«udivmod») →
     TerminatingFunBoundedOn GuestInv (ofString "ssz_fixed_list_count") K.«ssz_fixed_list_count») := rfl
 
-#print axioms fb_ssz_fixed_list_count
 
 end InitECandidate.Solver.Wave8Leaves.S13

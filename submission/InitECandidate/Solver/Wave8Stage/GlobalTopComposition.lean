@@ -54,5 +54,4 @@ theorem assemble {width : Nat} [NeZero width]
   dsimp only
   rw [freshRun,sortRun,renameRun,initRun,compiledRun]
 
-#print axioms assemble
 end InitECandidate.Solver.Wave8Stage.GlobalTopComposition

@@ -77,7 +77,5 @@ theorem copyWords_append {width : Nat} [NeZero width]
     simpa only [sign,Bool.false_eq_true,if_false] using run
 
 set_option pp.fullNames true in
-#print axioms copyPattern_append
 set_option pp.fullNames true in
-#print axioms copyWords_append
 end InitECandidate.Solver.Wave8Stage.StackBitmapPrefix

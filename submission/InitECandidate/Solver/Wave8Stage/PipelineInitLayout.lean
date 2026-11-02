@@ -98,5 +98,4 @@ theorem initialized_layout {width : Nat} [NeZero width] {C F : Type}
     rw [fields.2.2.1,reducedMemory]
     exact (agree a ha).symm
 
-#print axioms initialized_layout
 end InitECandidate.Solver.Wave8Stage.PipelineInitLayout

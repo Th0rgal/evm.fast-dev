@@ -77,8 +77,5 @@ theorem frontBudget_le_staticFrontBudget {width : Nat} [NeZero width]
     frontBudget code start ≤ staticFrontBudget code start :=
   crepBudget_le_listBudget _
 
-#print axioms listBudget_bounds
-#print axioms crepBudget_le_listBudget
-#print axioms frontBudget_le_staticFrontBudget
 
 end InitECandidate.Solver.Wave8Stage.FrontendStaticBudget

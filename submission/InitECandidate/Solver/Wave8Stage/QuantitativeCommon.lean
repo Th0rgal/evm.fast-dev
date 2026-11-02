@@ -62,5 +62,4 @@ theorem compileCorrect_step {width : Nat} [NeZero width] {S Q F : Type}
   rw [show s1.clock + (k' + l - 1) = (s1'.clock + k') + l by omega, (hl _).1, ← hffi]
   exact hk
 
-#print axioms compileCorrect_step
 end InitECandidate.Solver.Wave8Stage.Quantitative

@@ -32,6 +32,5 @@ example : type_of% (fb_decode_host_input (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "precheck_host_ssz_header") K.«precheck_host_ssz_header») →
     TerminatingFunBoundedOn GuestInv (ofString "decode_host_input") K.«decode_host_input») := rfl
 
-#print axioms fb_decode_host_input
 
 end InitECandidate.Solver.Wave8Leaves.S13

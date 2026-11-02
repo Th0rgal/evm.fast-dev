@@ -148,7 +148,4 @@ theorem stepNopOfLine {width : Nat} [NeZero width] {S Q F σ : Type}
   exact ⟨hb, henc, c43, c44, c45, rfl, hnf, hok⟩
 
 
-#print axioms stepOfLine
-#print axioms stepNopOfLineMem
-#print axioms stepNopOfLine
 end InitECandidate.Solver.Wave8Stage.Quantitative

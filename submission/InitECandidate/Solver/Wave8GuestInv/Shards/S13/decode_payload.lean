@@ -36,6 +36,5 @@ example : type_of% (fb_decode_payload (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "ssz_split_var_list") K.«ssz_split_var_list») →
     TerminatingFunBoundedOn GuestInv (ofString "decode_payload") K.«decode_payload») := rfl
 
-#print axioms fb_decode_payload
 
 end InitECandidate.Solver.Wave8Leaves.S13

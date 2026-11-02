@@ -75,5 +75,4 @@ theorem derives_high {width : Nat} [NeZero width]
       have hh := ihHandlers name hbody h1 h2 rfl label (by simp only [labelBound] at lt; omega)
       simp [returningEffects,hc.1,hc.2,hh.1,hh.2,join]
 
-#print axioms derives_high
 end InitECandidate.Solver.Wave8Stage.WordCostLabelSupport

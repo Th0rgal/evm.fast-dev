@@ -51,6 +51,4 @@ theorem shared_iff (a : BitVec 64) :
     exact holAligned_iff _ _
   rw [aligned]
 
-#print axioms ordinary_iff
-#print axioms shared_iff
 end InitECandidate.Solver.Wave8Stage.SourceDomainArithmetic

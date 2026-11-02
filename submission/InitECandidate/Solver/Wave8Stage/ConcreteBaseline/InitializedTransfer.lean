@@ -67,6 +67,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
     (initialized_stateRel input ffi code code2 labs clock i cbspace t m dm sdm coracle
       names info shiftedInfo init) ⟨rfl,rfl,rfl,rfl⟩ k_lab notError notTimeout
 
-#print axioms initialized_stateRel
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.Initialized

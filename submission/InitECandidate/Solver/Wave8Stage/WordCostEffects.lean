@@ -161,6 +161,4 @@ theorem tick_at {width : Nat} [NeZero width] {C F : Type}
     dsimp only [decClock]
     omega
 
-#print axioms seq_at
-#print axioms tick_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

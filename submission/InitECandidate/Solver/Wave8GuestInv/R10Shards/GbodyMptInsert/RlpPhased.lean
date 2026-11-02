@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.LeafStatements
+import InitECandidate.Solver.Wave8GuestInv.Expressions
 import InitECandidate.Solver.PanTerminatingNoRepeat
 
 /-! RLP family, part 8: phased no-repeat loop rule. A potential `φ ≤ Φ` never increases along

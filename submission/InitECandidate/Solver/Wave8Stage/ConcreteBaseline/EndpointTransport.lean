@@ -99,8 +99,4 @@ theorem initialization_transport {mc : MachineConfig 64 riscv_state RiscVProject
     by simpa only [agreement.pc] using h,j,k,l,n,o,
     by simpa only [agreement.pc] using p⟩
 
-#print axioms goodInitState_transport
-#print axioms baseline_endpoint_agreement
-#print axioms stateRel_transport
-#print axioms initialization_transport
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline

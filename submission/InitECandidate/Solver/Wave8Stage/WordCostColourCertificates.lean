@@ -103,7 +103,4 @@ theorem fullCompileSingle_derives {width : Nat} [NeZero width]
     WordInst.instSelectExecutable_eq] using wordAlloc_derives defs terminal name ac algorithm registers
       (WordCostCompilerControl.preAllocation ac twoRegisters arity p) colour effects certificate
 
-#print axioms applyColour_derives
-#print axioms wordAlloc_derives
-#print axioms fullCompileSingle_derives
 end InitECandidate.Solver.Wave8Stage.WordCostColourCertificates

@@ -40,6 +40,5 @@ example : type_of% (fb_calculate_base_fee_per_gas (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "u256_sub") K.«u256_sub») →
     TerminatingFunBoundedOn GuestInv (ofString "calculate_base_fee_per_gas") K.«calculate_base_fee_per_gas») := rfl
 
-#print axioms fb_calculate_base_fee_per_gas
 
 end InitECandidate.Solver.Wave8Leaves.S13

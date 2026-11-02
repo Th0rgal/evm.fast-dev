@@ -37,8 +37,4 @@ theorem headShape : head.returnShape = .one := by
   rw [one]
   exact Flapjack.Pancake.PanStructs.CompileShapeExact.compileShapeExact.eq_1 _
 
-#print axioms codeShape
-#print axioms headName
-#print axioms headParams
-#print axioms headShape
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsInput

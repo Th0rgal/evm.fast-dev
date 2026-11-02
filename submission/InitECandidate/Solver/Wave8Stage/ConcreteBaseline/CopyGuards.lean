@@ -115,4 +115,3 @@ theorem copyLoop_guards :
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapCopyGuards
 
 
-#print axioms InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapCopyGuards.copyLoop_guards

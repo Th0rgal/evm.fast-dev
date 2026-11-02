@@ -225,5 +225,4 @@ theorem evaluate_safe {C F : Type} {bad : Nat}
     (ho : ∀ i, (s.compileOracle i).2.1 = []) : StateSafe bad (evaluate (p, s)).2 :=
   evaluate_safe_measure (stackSemMeasure p s) p s rfl hp hs hc ho
 
-#print axioms evaluate_safe
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

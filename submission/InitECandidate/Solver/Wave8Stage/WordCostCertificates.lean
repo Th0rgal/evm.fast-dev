@@ -240,5 +240,4 @@ decreasing_by
     | exact Prod.Lex.left _ _ (by omega)
     | apply LoopSemStateFiniteExact.lexLt <;> first | omega | simp +arith
 
-#print axioms sound
 end InitECandidate.Solver.Wave8Stage.WordCostCertificates

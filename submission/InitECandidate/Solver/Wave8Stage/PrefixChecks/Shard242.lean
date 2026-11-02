@@ -104,6 +104,4 @@ wave8_list_spine entries := (ConcreteCompilerWord.source.drop 242).take 1
 theorem checked : entries.all ConcreteWordCheckInput.check = true := by
   wave8_all [checkedEntry]
 
-#print axioms checkedEntry
-#print axioms checked
 end InitECandidate.Solver.Wave8Stage.PrefixChecks.Shard242

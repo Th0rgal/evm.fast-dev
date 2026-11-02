@@ -85,6 +85,4 @@ theorem withoutSection_agreement (bad : Nat) (entries : List (Nat × HolProg wid
   rw [withoutSection_absent] at hp
   cases hp
 
-#print axioms withoutSection_agreement
-#print axioms codeAgreement_of_local_labels
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

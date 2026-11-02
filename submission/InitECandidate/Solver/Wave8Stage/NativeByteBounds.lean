@@ -40,6 +40,4 @@ theorem padded_cost_le (i : HolAsm 64) (bytes : List (BitVec 8))
   rw [encoding, padded_length] at size
   omega
 
-#print axioms encoding_length_le
-#print axioms padded_cost_le
 end InitECandidate.Solver.Wave8Stage.NativeByteBounds

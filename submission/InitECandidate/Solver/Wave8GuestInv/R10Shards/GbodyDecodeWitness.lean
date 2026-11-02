@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
 
 /-! Scratch-stack invariant and ranking argument for the witness decoder. -/
 

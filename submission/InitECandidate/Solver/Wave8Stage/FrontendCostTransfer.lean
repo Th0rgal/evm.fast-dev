@@ -522,8 +522,6 @@ theorem pan_to_word_affine_notTimeOut {width : Nat} [NeZero width] {C σ : Type}
   rw [lifted]
   exact hnt
 
-#print axioms pan_to_word_affine_notTimeOut
 
-#print axioms pan_to_word_clocked_sim
 
 end InitECandidate.Solver.Wave8Stage.FrontendCostTransfer

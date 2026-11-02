@@ -133,7 +133,4 @@ theorem shMemOp_withBitmaps {width : Nat} [NeZero width] {C F : Type}
     shMemLoadByte_withBitmaps, shMemStoreByte_withBitmaps, shMemLoad16_withBitmaps,
     shMemStore16_withBitmaps, shMemLoad32_withBitmaps, shMemStore32_withBitmaps]
 
-#print axioms wordExp_withBitmaps
-#print axioms inst_withBitmaps
-#print axioms shMemOp_withBitmaps
 end InitECandidate.Solver.Wave8Stage.StackBitmapPrimitives

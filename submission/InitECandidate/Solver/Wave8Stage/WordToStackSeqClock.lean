@@ -239,8 +239,5 @@ theorem compCorrectSeq {width : Nat} [NeZero width] {C F : Type}
   · exact compCorrectSeqFirstNone ac first second source firstBound secondBound ih guard
   · exact compCorrectSeqFirstNonNone ac first second source firstBound secondBound ih guard
 
-#print axioms compCorrectSeqFirstNonNone
-#print axioms compCorrectSeqFirstNone
-#print axioms compCorrectSeq
 
 end InitECandidate.Solver.Wave8Stage.WordToStackSeqClock

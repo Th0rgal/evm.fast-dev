@@ -188,17 +188,3 @@ theorem baseline_heap_bitmap_disjoint (a : BitVec 64) :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_shared_domain
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_data_aligned_closed
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_shared_aligned_closed
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.native_dispatch_below
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_data_program
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_program_shared_disjoint
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.native_address_nat
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.native_data_excluded
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_code_bytes
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_code_buffer
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_code_size_bound
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.bitmap_index_address
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_bitmap_aligned_domain
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_heap_bitmap_disjoint

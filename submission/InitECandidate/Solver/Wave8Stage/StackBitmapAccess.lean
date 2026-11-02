@@ -63,6 +63,4 @@ theorem bitmapLoad_append {width : Nat} [NeZero width] {C F : Type}
         rfl
     · cases run
 
-#print axioms storeConstSem_append
-#print axioms bitmapLoad_append
 end InitECandidate.Solver.Wave8Stage.StackBitmapAccess

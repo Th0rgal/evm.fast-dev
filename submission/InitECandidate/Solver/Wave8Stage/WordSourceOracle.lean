@@ -24,5 +24,4 @@ theorem terminalOracle : TerminalOracle terminal InitE.sourceOracle := by
       exact InitE.trap_is_terminal ffi.ffiState config bytes
     exact ⟨_,callFFIHOL_final ffi (.extCall (ofString "trap")) config bytes .failed (by decide) final⟩
 
-#print axioms terminalOracle
 end InitECandidate.Solver.Wave8Stage.WordSourceOracle

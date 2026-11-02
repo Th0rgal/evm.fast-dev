@@ -88,8 +88,5 @@ theorem fullMakeInit_s2_s3_entry_result {width : Nat} [NeZero width] {C F : Type
   · rfl
   · rfl
 
-#print axioms stack_names_rename_makeInit
-#print axioms stack_names_makeInit_entry_result
-#print axioms fullMakeInit_s2_s3_entry_result
 
 end InitECandidate.Solver.Wave8Stage.Stage4

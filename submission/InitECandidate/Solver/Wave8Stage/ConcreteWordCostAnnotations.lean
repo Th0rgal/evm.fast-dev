@@ -33,8 +33,4 @@ theorem bitmapBound : InitECandidate.bitmaps.length + 1 < 2 ^ 64 := by decide +k
 theorem bitmapPrefix : [(4 : BitVec 64)] <+: InitECandidate.bitmaps := by
   exact ⟨InitECandidate.bitmaps.tail,rfl⟩
 
-#print axioms indirect
-#print axioms entryBound
-#print axioms bitmapBound
-#print axioms bitmapPrefix
 end InitECandidate.Solver.Wave8Stage.ConcreteWordCostAnnotations

@@ -54,5 +54,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
     ltconf output bytes compiled position safe rfl rfl related tied bootstrap k_lab
     bootstrapRun notError notTimeout
 
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.PipelineTransfer

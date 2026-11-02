@@ -104,6 +104,3 @@ theorem ro_require_not_static :
 
 end InitECandidate.Solver.Wave8GuestInv.R10Shards.P10
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.R10Shards.P10.fb_max
-#print axioms InitECandidate.Solver.Wave8GuestInv.R10Shards.P10.fb_u256_to_be32
-#print axioms InitECandidate.Solver.Wave8GuestInv.R10Shards.P10.ro_require_not_static

@@ -153,11 +153,6 @@ theorem pancake_entry_without_stub {C F : Type} (dc : DataToWord.Config)
   · exact pancake_compiled_codeSafe dc conf perf wc arch source s he
   · exact ho
 
-#print axioms pancake_entry_without_stub
 
-#print axioms compiled_codeSafe
-#print axioms pancake_compiled_codeSafe
 
-#print axioms programSafe_allocComp
-#print axioms programSafe_gcStub
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

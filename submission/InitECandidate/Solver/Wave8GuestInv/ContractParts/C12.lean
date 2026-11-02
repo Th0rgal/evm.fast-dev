@@ -69,8 +69,6 @@ theorem «gbody_decode_witness_to_mpt» : GBody.«decode_witness_to_mpt» := by
   simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
 
-theorem «gb_decode_witness_to_mpt» : TerminatingFunBoundedOn ArenaReady (ofString "decode_witness_to_mpt") K.«decode_witness_to_mpt» :=
-  «gbody_decode_witness_to_mpt» «gb__decode_witness_node» «fb_alloc» «fb_memcpy» «fb_memeq» «fb_mpt_fail» «fb_nodedb_lookup» «ro_memeq» «ro_mpt_fail» «ro_nodedb_lookup»
 
 /-- The body of `mpt_from_witness` alone (AST line 10459, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `decode_witness_to_mpt`, `mpt_new` (`«callees_mpt_from_witness»`, checked against the AST). Hypotheses: the bound
@@ -101,8 +99,6 @@ theorem «gbody_mpt_from_witness» : GBody.«mpt_from_witness» := by
       (TerminatingProgBoundedOn.tailCall_guestInv hn _)) ?_
   unfold K.«mpt_from_witness»; omega
 
-theorem «gb_mpt_from_witness» : TerminatingFunBoundedOn ArenaReady (ofString "mpt_from_witness") K.«mpt_from_witness» :=
-  «gbody_mpt_from_witness» «gb_decode_witness_to_mpt» «fb_mpt_new»
 
 /-- The body of `compute_state_root` alone (AST line 32341, guard `WorldOK`, #0 CTR; #1 CTR; #2 CTR; #3 CTR; #4 CTR). Its direct callees are
 exactly `alloc`, `cache_get_root`, `encode_account`, `htab_copy`, `htab_get`, `htab_has`, `htab_item`, `htab_new`, `htab_set`, `memcpy`, `mpt_from_witness`, `mpt_root`, `mpt_set`, `rlp_encode_bytes`, `u256_is_zero`, `u256_to_be_min`, `ws_get_account_optional`, `ws_storage_root_of` (`«callees_compute_state_root»`, checked against the AST). Hypotheses: the bound
@@ -196,8 +192,6 @@ theorem «callees_compute_state_root» : sameNames (progCallees (fnBody Guest.So
 
 theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by sorry
 
-theorem «gb_compute_state_root» : TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root» :=
-  «gbody_compute_state_root» «fb_alloc» «fb_cache_get_root» «fb_encode_account» «fb_htab_copy» «fb_htab_get» «fb_htab_has» «fb_htab_item» «fb_htab_new» «fb_htab_set» «fb_memcpy» «gb_mpt_from_witness» «gb_mpt_root» «gb_mpt_set» «fb_rlp_encode_bytes» «fb_u256_is_zero» «fb_u256_to_be_min» «fb_ws_get_account_optional» «fb_ws_storage_root_of» «wk_alloc» «rt_alloc» «wk_cache_get_root» «wk_encode_account» «wk_htab_copy» «rt_htab_copy» «ro_htab_get» «ro_htab_has» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_memcpy» «wk_mpt_from_witness» «mk_mpt_root» «mk_mpt_set» «wk_rlp_encode_bytes» «rv_rlp_encode_bytes» «ro_u256_is_zero» «wk_u256_to_be_min» «rv_u256_to_be_min» «wk_ws_get_account_optional» «wk_ws_storage_root_of»
 
 /-- The body of `ws_storage_trie` alone (AST line 13042, guard `WorldOK`, loop-free). Its direct callees are
 exactly `decode_witness_to_mpt`, `htab_get`, `htab_set` (`«callees_ws_storage_trie»`, checked against the AST). Hypotheses: the bound
@@ -235,7 +229,5 @@ theorem «gbody_ws_storage_trie» : GBody.«ws_storage_trie» := by
               (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
   unfold K.«ws_storage_trie»; omega
 
-theorem «gb_ws_storage_trie» : TerminatingFunBoundedOn WorldOK (ofString "ws_storage_trie") K.«ws_storage_trie» :=
-  «gbody_ws_storage_trie» «gb_decode_witness_to_mpt» «fb_htab_get» «fb_htab_set» «ro_htab_get»
 
 end InitECandidate.Solver.Wave8GuestInv

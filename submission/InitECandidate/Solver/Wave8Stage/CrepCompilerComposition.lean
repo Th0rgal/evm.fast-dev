@@ -31,5 +31,4 @@ theorem assemble {width : Nat} [NeZero width]
   change CrepInlineCanonical.compileInlTopHOLExact names (lower functions fs eids) = result
   rw [lowerRun, inlineRun]
 
-#print axioms assemble
 end InitECandidate.Solver.Wave8Stage.CrepCompilerComposition

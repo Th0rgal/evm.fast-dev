@@ -408,18 +408,5 @@ theorem fullMakeInit_lab_affine_of_remove_bridge {C F : Type}
   exact fullMakeInit_lab_affine_of_postInit_run sc dc maxHeap sp offset bitmaps code t
     saveRegs dataSp oracle hA ho post run k hne hnt
 
-#print axioms fullMakeInit_s3_codeStepBounded_ge_fiftyOne
-#print axioms fullMakeInit_init_result_none
-#print axioms fullMakeInit_postInit_stateRel
-#print axioms fullMakeInit_lab_affine_of_remove_bridge
-#print axioms initCode_stepCost_ge_four
-#print axioms initCode_stepCost_ge_fiftyOne
-#print axioms compiled_table_not_codeStepBounded_three
-#print axioms fullMakeInit_s2_not_codeStepBounded_three
-#print axioms codeStepBounded_of_empty_oracle
-#print axioms fullMakeInit_s3_codeStepBounded
-#print axioms stackToLab_call_affine_not_timeOut
-#print axioms fullMakeInit_lab_affine_not_timeOut
-#print axioms fullMakeInit_lab_affine_of_postInit_run
 
 end InitECandidate.Solver.Wave8Stage.Stage4

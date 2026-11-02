@@ -1512,44 +1512,24 @@ theorem compCorrectFFI {width : Nat} [NeZero width] {C F : Type}
 
 end FFI
 
-#print axioms Control.compCorrectSkip
 
-#print axioms Control.compCorrectBreak
 
-#print axioms Control.compCorrectContinue
 
-#print axioms Alloc.compCorrectAlloc
 
-#print axioms StoreConsts.compCorrectStoreConsts
 
-#print axioms MoveFull.compCorrectMove
 
-#print axioms Inst.compCorrectInst
 
-#print axioms Flat.compCorrectAssign
 
-#print axioms Flat.compCorrectStore
 
-#print axioms Get.compCorrectGet
 
-#print axioms Set.compCorrectSet
 
-#print axioms OpCurrHeap.compCorrectOpCurrHeap
 
-#print axioms Clock.compCorrectTick
 
-#print axioms Clock.compCorrectMustTerminate
 
-#print axioms Return.compCorrectReturn
 
-#print axioms LocValue.compCorrectLocValue
 
-#print axioms Install.compCorrectInstall
 
-#print axioms CodeBufferWrite.compCorrectCodeBufferWrite
 
-#print axioms DataBufferWrite.compCorrectDataBufferWrite
 
-#print axioms FFI.compCorrectFFI
 
 end InitECandidate.Solver.Wave8Stage.WordToStackZeroClock

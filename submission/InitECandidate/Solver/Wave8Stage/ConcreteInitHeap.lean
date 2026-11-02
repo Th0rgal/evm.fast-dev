@@ -44,7 +44,6 @@ theorem heap_boundary (oracles : List (Option (Spt Nat))) :
         (2 * DataToWord.maxHeapLimit 64 RiscVConfig.pancakeRiscVBackendConfig.dataConf - 1))) = _
   decide
 
-#print axioms heap_boundary
 
 noncomputable abbrev lab (oracles : List (Option (Spt Nat))) (input : Guest.InputBlob)
     (t : AsmState 64) (m : BitVec 64 → WordLocW 64) (bitmapsDm sdm : BitVec 64 → Bool)
@@ -188,8 +187,5 @@ theorem fullMakeInit_success (oracles : List (Option (Spt Nat))) (input : Guest.
       decide)
   exact ⟨aux,Prod.ext rfl success⟩
 
-#print axioms fullMakeInit_success
 
-#print axioms heap_included
-#print axioms machine_pre
 end InitECandidate.Solver.Wave8Stage.ConcreteInitHeap

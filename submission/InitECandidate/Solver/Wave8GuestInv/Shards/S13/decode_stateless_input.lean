@@ -40,6 +40,5 @@ example : type_of% (fb_decode_stateless_input (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "ssz_fixed_list_count") K.«ssz_fixed_list_count») →
     TerminatingFunBoundedOn GuestInv (ofString "decode_stateless_input") K.«decode_stateless_input») := rfl
 
-#print axioms fb_decode_stateless_input
 
 end InitECandidate.Solver.Wave8Leaves.S13

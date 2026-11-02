@@ -68,6 +68,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
     ffis clock compiled safe related tied k_lab _ _ rfl notError notTimeout
   simpa only [simulation] using notTimeout
 
-#print axioms lab_to_target_affine_run
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.AffineTransfer

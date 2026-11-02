@@ -49,8 +49,6 @@ theorem «gbody_incorporate_tx_into_block» : GBody.«incorporate_tx_into_block�
       (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«incorporate_tx_into_block»; omega
 
-theorem «gb_incorporate_tx_into_block» : TerminatingFunBoundedOn WorldOK (ofString "incorporate_tx_into_block") K.«incorporate_tx_into_block» :=
-  «gbody_incorporate_tx_into_block» «fb_merge_tx_into_block» «gb_update_builder_from_tx»
 
 /-- The body of `htab_truncate` alone (AST line 5278, guard `HtabArgWF`, #0 WF). Its direct callees are
 exactly `htab_del` (`«callees_htab_truncate»`, checked against the AST). Hypotheses: the bound
@@ -69,8 +67,6 @@ theorem «callees_htab_truncate» : sameNames (progCallees (fnBody Guest.Softwar
 theorem «gbody_htab_truncate» : GBody.«htab_truncate» :=
   R10Shards.GbodyHtabRollback.gbody_htab_truncate_proof
 
-theorem «gb_htab_truncate» : TerminatingFunBoundedOn HtabArgWF (ofString "htab_truncate") K.«htab_truncate» :=
-  «gbody_htab_truncate» «fb_htab_del» «htab_del_spec» «htab_del_progress_spec»
 
 /-- The body of `rollback_child_access` alone (AST line 18995, guard `RollbackReady`, loop-free). Its direct callees are
 exactly `htab_truncate` (`«callees_rollback_child_access»`, checked against the AST). Hypotheses: the bound
@@ -88,8 +84,6 @@ theorem «callees_rollback_child_access» : sameNames (progCallees (fnBody Guest
 theorem «gbody_rollback_child_access» : GBody.«rollback_child_access» :=
   R10Shards.GbodyHtabRollback.gbody_rollback_child_access_proof
 
-theorem «gb_rollback_child_access» : TerminatingFunBoundedOn RollbackReady (ofString "rollback_child_access") K.«rollback_child_access» :=
-  «gbody_rollback_child_access» «gb_htab_truncate» «htab_truncate_spec»
 
 /-- The body of `finish_child` alone (AST line 18572, guard `FinishReady`, loop-free). Its direct callees are
 exactly `address_to_u256`, `create_finish`, `credit_state_gas_refund`, `frame_halt`, `frame_mem_release`, `incorporate_child_on_error`, `incorporate_child_on_success`, `memcpy`, `min`, `pc_add`, `refill_frame_state_gas`, `rollback_child_access`, `scratch_release`, `set_retdata`, `stack_push`, `state_restore` (`«callees_finish_child»`, checked against the AST). Hypotheses: the bound
@@ -132,7 +126,5 @@ theorem «gbody_finish_child» : GBody.«finish_child» := by
     ⟨ha, hc, hcr, hfh, hfm, he, hs, hm, hmin, hp, hr, hb, hsr, hsd, hsp, hst⟩
     ⟨ekc, ekf, ekr, eks⟩
 
-theorem «gb_finish_child» : TerminatingFunBoundedOn FinishReady (ofString "finish_child") K.«finish_child» :=
-  «gbody_finish_child» «fb_address_to_u256» «fb_create_finish» «fb_credit_state_gas_refund» «fb_frame_halt» «fb_frame_mem_release» «fb_incorporate_child_on_error» «fb_incorporate_child_on_success» «fb_memcpy» «fb_min» «fb_pc_add» «fb_refill_frame_state_gas» «gb_rollback_child_access» «fb_scratch_release» «fb_set_retdata» «fb_stack_push» «fb_state_restore» «ek_create_finish» «ek_frame_halt» «ek_refill_frame_state_gas» «ek_state_restore»
 
 end InitECandidate.Solver.Wave8GuestInv

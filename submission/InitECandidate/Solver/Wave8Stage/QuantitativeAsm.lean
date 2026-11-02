@@ -148,6 +148,4 @@ theorem compileCorrect_jumpReg {width : Nat} [NeZero width] {S Q F : Type}
         (fun k => ⟨(hl k).1, (hl k).2.1⟩) (hl 0).2.2.2
         ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩ hrel' hev hres (ih n1 n2 pc hr hpc)
 
-#print axioms compileCorrect_asmInst
-#print axioms compileCorrect_jumpReg
 end InitECandidate.Solver.Wave8Stage.Quantitative

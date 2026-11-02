@@ -108,8 +108,5 @@ theorem compCorrectLeaf {width : Nat} [NeZero width] {F : Type}
   dsimp only at hcons hmono
   omega
 
-#print axioms compiledLeaf_cost
-#print axioms leaf_notTimeOut
-#print axioms compCorrectLeaf
 
 end InitECandidate.Solver.Wave8Stage.CrepCostLeaf

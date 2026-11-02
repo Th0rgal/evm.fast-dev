@@ -99,5 +99,4 @@ theorem fields (oracles : List (Option (Spt Nat))) (input : Guest.InputBlob)
   · change (st.store.eraseEq .handler).lookup .heapLength = _
     simpa only [HolFiniteMapExact.lookup_eraseEq,FDOMSUB_HOL,reduceCtorEq,if_false,heapLength] using len
 
-#print axioms fields
 end InitECandidate.Solver.Wave8Stage.ConcreteFrontendState

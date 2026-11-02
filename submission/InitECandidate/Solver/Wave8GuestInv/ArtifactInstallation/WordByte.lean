@@ -15,6 +15,5 @@ theorem wordByte_getByte (word : BitVec 64) (offset : Nat) (ho : offset < 8) :
     Nat.shiftRight_eq_div_pow]
   rw [Nat.mod_eq_of_lt (by omega : offset < 2^64),Nat.mod_eq_of_lt ho]
 
-#print axioms wordByte_getByte
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

@@ -44,7 +44,3 @@ theorem baselineSubmission_initialState (input : Guest.InputBlob) :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineSubmission_machineConfig
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_pureMemory
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineSubmission_memory
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baselineSubmission_initialState

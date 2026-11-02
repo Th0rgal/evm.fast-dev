@@ -719,6 +719,4 @@ theorem checked_trace_evaluator_bootstrap {σ : Type}
     · rw [firstSearch, restSearch]
 
 
-#print axioms riscv_encoder_correct_bootstrap
-#print axioms checked_trace_evaluator_bootstrap
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.ExactInstructions

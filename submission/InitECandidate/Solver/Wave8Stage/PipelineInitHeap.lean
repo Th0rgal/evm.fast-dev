@@ -43,5 +43,4 @@ theorem fullMakeInit_success {width : Nat} [NeZero width] {C F : Type}
       rw [run]
       exact if_pos result.2.2.1
 
-#print axioms fullMakeInit_success
 end InitECandidate.Solver.Wave8Stage.PipelineInitHeap

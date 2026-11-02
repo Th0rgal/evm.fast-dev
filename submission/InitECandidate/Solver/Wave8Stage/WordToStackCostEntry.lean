@@ -116,8 +116,6 @@ theorem notTimeOutOfCostBound {width : Nat} [NeZero width] {C F : Type}
   rw [lifted]
   exact targetNotTimeout
 
-#print axioms notTimeOutOfCostBound
 
-#print axioms compCall
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCostEntry

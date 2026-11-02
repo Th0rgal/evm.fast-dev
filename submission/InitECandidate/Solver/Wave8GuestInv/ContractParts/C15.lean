@@ -49,8 +49,6 @@ theorem «callees_get_storage» : sameNames (progCallees (fnBody Guest.Software.
 theorem «gbody_get_storage» : GBody.«get_storage» :=
   R10Shards.GbodyStorageOps.gbody_get_storage_impl
 
-theorem «gb_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_storage") K.«get_storage» :=
-  «gbody_get_storage» «fb_htab_set» «fb_record_pre_state_read» «fb_sk_make» «fb_stor_lookup» «gb_ws_get_storage» «htab_set_spec» «nz_htab_set» «wk_record_pre_state_read» «wk_sk_make» «ro_stor_lookup»
 
 /-- The body of `op_sload` alone (AST line 16584, guard `EvmRun`, loop-free). Its direct callees are
 exactly `charge_gas`, `get_storage`, `is_warm_storage_key`, `pc_add`, `stack_pop`, `stack_push`, `u256_to_be32`, `warm_storage_key` (`«callees_op_sload»`, checked against the AST). Hypotheses: the bound
@@ -84,8 +82,6 @@ theorem «callees_op_sload» : sameNames (progCallees (fnBody Guest.Software.gue
 theorem «gbody_op_sload» : GBody.«op_sload» :=
   R10Shards.GbodyStorageOps.gbody_op_sload_impl
 
-theorem «gb_op_sload» : TerminatingFunBoundedOn EvmRun (ofString "op_sload") K.«op_sload» :=
-  «gbody_op_sload» «fb_charge_gas» «gb_get_storage» «fb_is_warm_storage_key» «fb_pc_add» «fb_stack_pop» «fb_stack_push» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ek_is_warm_storage_key» «ek_stack_pop» «ek_u256_to_be32» «ek_warm_storage_key»
 
 /-- The body of `get_storage_original` alone (AST line 13276, guard `WorldOK`, loop-free). Its direct callees are
 exactly `htab_has`, `record_pre_state_read`, `stor_lookup`, `ws_get_storage` (`«callees_get_storage_original»`, checked against the AST). Hypotheses: the bound
@@ -131,8 +127,6 @@ theorem «gbody_get_storage_original» : GBody.«get_storage_original» := by
                 (decCallResumeOn_guestInv worldOK_guestInv _ _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))) ?_
   unfold K.«get_storage_original»; omega
 
-theorem «gb_get_storage_original» : TerminatingFunBoundedOn WorldOK (ofString "get_storage_original") K.«get_storage_original» :=
-  «gbody_get_storage_original» «fb_htab_has» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «ro_htab_has» «wk_record_pre_state_read» «ro_stor_lookup»
 
 /-- The body of `op_sstore` alone (AST line 16611, guard `EvmRun`, loop-free). Its direct callees are
 exactly `charge_gas`, `charge_state_gas`, `check_gas`, `credit_state_gas_refund`, `get_storage`, `get_storage_original`, `is_warm_storage_key`, `max`, `pc_add`, `require_not_static`, `set_storage`, `stack_pop`, `u256_eq`, `u256_is_zero`, `u256_to_be32`, `warm_storage_key` (`«callees_op_sstore»`, checked against the AST). Hypotheses: the bound
@@ -179,7 +173,5 @@ theorem «callees_op_sstore» : sameNames (progCallees (fnBody Guest.Software.gu
 theorem «gbody_op_sstore» : GBody.«op_sstore» :=
   R10Shards.GbodyStorageOps.gbody_op_sstore_impl
 
-theorem «gb_op_sstore» : TerminatingFunBoundedOn EvmRun (ofString "op_sstore") K.«op_sstore» :=
-  «gbody_op_sstore» «fb_charge_gas» «fb_charge_state_gas» «fb_check_gas» «fb_credit_state_gas_refund» «gb_get_storage» «gb_get_storage_original» «fb_is_warm_storage_key» «fb_max» «fb_pc_add» «fb_require_not_static» «fb_set_storage» «fb_stack_pop» «fb_u256_eq» «fb_u256_is_zero» «fb_u256_to_be32» «fb_warm_storage_key» «ek_charge_gas» «ro_check_gas» «ek_get_storage_original» «ek_is_warm_storage_key» «ro_max» «ro_require_not_static» «ek_stack_pop» «ek_u256_to_be32» «ek_warm_storage_key»
 
 end InitECandidate.Solver.Wave8GuestInv

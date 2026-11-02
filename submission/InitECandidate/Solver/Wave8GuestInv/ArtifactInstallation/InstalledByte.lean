@@ -27,5 +27,4 @@ theorem installed_bitmap_byte (i : Fin InitECandidate.bitmaps.length) (j : Fin 8
       rfl
     _ = _ := wordByte_getByte _ _ j.isLt
 
-#print axioms installed_bitmap_byte
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

@@ -235,9 +235,4 @@ theorem line_bytes_le (code : LabProgHOL 64) (hcode : ProgramBound (fun n => n =
   | asm => exact bound.1
   | labAsm => exact bound.1
 
-#print axioms encSecList_bound
-#print axioms encSecsAgain_bound
-#print axioms updLabLen_bound
-#print axioms padCode_bound
-#print axioms removeLabels_bound
 end InitECandidate.Solver.Wave8Stage.CanonicalLineBounds

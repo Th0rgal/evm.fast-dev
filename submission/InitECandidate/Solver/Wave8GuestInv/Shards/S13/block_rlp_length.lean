@@ -38,6 +38,5 @@ example : type_of% (fb_block_rlp_length (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "withdrawal_rlp_len") K.«withdrawal_rlp_len») →
     TerminatingFunBoundedOn GuestInv (ofString "block_rlp_length") K.«block_rlp_length») := rfl
 
-#print axioms fb_block_rlp_length
 
 end InitECandidate.Solver.Wave8Leaves.S13

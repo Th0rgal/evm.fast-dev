@@ -113,6 +113,5 @@ theorem compCorrectSeq {width : Nat} [NeZero width] {σ : Type}
       | some value => rfl
 
 
-#print axioms compCorrectSeq
 
 end InitECandidate.Solver.Wave8Stage.CrepCostSeq

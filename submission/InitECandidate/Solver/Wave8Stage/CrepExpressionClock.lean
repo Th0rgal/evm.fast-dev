@@ -186,9 +186,5 @@ theorem compExps_preserves_eval_bounded {width : Nat} [NeZero width] {F : Type}
   exact offset_le _ t post _ extra none hcost run (by simp)
     (h.2.1.2.2.1.symm.trans hs.2.2.1)
 
-#print axioms compileExp_cost
-#print axioms compileExps_cost
-#print axioms compExp_preserves_eval_bounded
-#print axioms compExps_preserves_eval_bounded
 
 end InitECandidate.Solver.Wave8Stage.CrepExpressionClock

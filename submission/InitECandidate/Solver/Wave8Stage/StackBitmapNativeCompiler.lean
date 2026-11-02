@@ -220,6 +220,4 @@ theorem compile_codeSafe {width : Nat} [NeZero width] (ac : AsmConfigExact width
   · simp [storeConstsStubNative,Safe]
   · exact list_safe ac _ programs (.list [4],1) guard (name,body) member
 
-#print axioms comp_safe
-#print axioms compile_codeSafe
 end InitECandidate.Solver.Wave8Stage.StackBitmapNativeCompiler

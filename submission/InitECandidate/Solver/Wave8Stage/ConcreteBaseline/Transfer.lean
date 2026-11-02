@@ -80,6 +80,4 @@ theorem stage5_lab_halt_to_target {F : Type}
   · rw [halt]; intro impossible; cases impossible
   · rw [halt]; intro impossible; cases impossible
 
-#print axioms stage5_lab_to_target_affine_not_timeOut
-#print axioms stage5_lab_halt_to_target
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline

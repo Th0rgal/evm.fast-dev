@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyDecodeWitness
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyMptDelete
 
@@ -58,8 +58,6 @@ theorem «callees__decode_witness_node_body» : sameNames (progCallees (fnBody G
 theorem «gbody__decode_witness_node_body» : GBody.«_decode_witness_node_body» :=
   DecodeWitness.bounded
 
-theorem «gb__decode_witness_node_body» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_body") K.«_decode_witness_node_body» :=
-  «gbody__decode_witness_node_body» «fb__decode_step» «fb__resolve_step» «fb_mpt_fail» «fb_node_new_ext» «fb_rlp_item» «ww__decode_step» «sp__decode_step» «ww__resolve_step» «sp__resolve_step» «ro_mpt_fail» «ww_node_new_ext» «rt_node_new_ext» «ww_rlp_item»
 
 /-- The body of `_decode_witness_node_mpt` alone (AST line 10311, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `_decode_witness_node_body`, `scratch_release` (`«callees__decode_witness_node_mpt»`, checked against the AST). Hypotheses: the bound
@@ -93,8 +91,6 @@ theorem «gbody__decode_witness_node_mpt» : GBody.«_decode_witness_node_mpt» 
           arenaReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))) ?_
   unfold K.«_decode_witness_node_mpt»; omega
 
-theorem «gb__decode_witness_node_mpt» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node_mpt") K.«_decode_witness_node_mpt» :=
-  «gbody__decode_witness_node_mpt» «gb__decode_witness_node_body» «fb_scratch_release»
 
 /-- The body of `_decode_witness_node` alone (AST line 10328, guard `ArenaReady`, loop-free). Its direct callees are
 exactly `_decode_witness_node_mpt`, `scratch_mark`, `scratch_release` (`«callees__decode_witness_node»`, checked against the AST). Hypotheses: the bound
@@ -134,8 +130,6 @@ theorem «gbody__decode_witness_node» : GBody.«_decode_witness_node» := by
               (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _))))))) ?_
   unfold K.«_decode_witness_node»; omega
 
-theorem «gb__decode_witness_node» : TerminatingFunBoundedOn ArenaReady (ofString "_decode_witness_node") K.«_decode_witness_node» :=
-  «gbody__decode_witness_node» «gb__decode_witness_node_mpt» «fb_scratch_mark» «fb_scratch_release» «ro_scratch_mark»
 
 /-- The body of `_mpt_delete_node_body` alone (AST line 10758, guard `MptReady`, #0 GUARD; #1 GUARD). Its direct callees are
 exactly `_collapse_branch`, `_delete_ext_finish`, `common_prefix_length`, `memeq`, `mpt_fail`, `node_invalidate`, `scratch_alloc` (`«callees__mpt_delete_node_body»`, checked against the AST). Hypotheses: the bound
@@ -186,7 +180,5 @@ theorem «gbody__mpt_delete_node_body» : GBody.«_mpt_delete_node_body» := by
   exact R10Shards.GbodyMptDelete.bounded
     ⟨hcb, hef, hcp, hme, hmf, hni, hsa, ncb, nef, rcp, vcp, rme, rmf, nni, ini, wsa, rsa⟩
 
-theorem «gb__mpt_delete_node_body» : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node_body") K.«_mpt_delete_node_body» :=
-  «gbody__mpt_delete_node_body» «fb__collapse_branch» «fb__delete_ext_finish» «fb_common_prefix_length» «fb_memeq» «fb_mpt_fail» «fb_node_invalidate» «fb_scratch_alloc» «nf__collapse_branch» «nf__delete_ext_finish» «ro_common_prefix_length» «rv_common_prefix_length» «ro_memeq» «ro_mpt_fail» «nf_node_invalidate» «iz_node_invalidate» «ww_scratch_alloc» «rt_scratch_alloc»
 
 end InitECandidate.Solver.Wave8GuestInv

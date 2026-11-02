@@ -14,7 +14,6 @@ theorem read_rom_byte (bytes : List (BitVec 8)) (pc address : Nat)
       bytes[address-pc]?.getD 0 := by
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt limit, if_pos ⟨lower,upper⟩]
 
-#print axioms read_rom_byte
 
 theorem initial_memory_byte (address : Nat)
     (lower : initialPc ≤ address) (upper : address < initialPc + 1028080)
@@ -24,6 +23,5 @@ theorem initial_memory_byte (address : Nat)
   exact read_rom_byte InitECandidate.code initialPc address lower
     (by rw [InitECandidate.Proofs.LiteralFacts.code_length]; exact upper) limit
 
-#print axioms initial_memory_byte
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

@@ -112,7 +112,4 @@ theorem installed_pc :
 
 theorem target_is_riscv : baselineMachineConfig.target = riscvTarget := rfl
 
-#print axioms machineStateOfAsm_relation
-#print axioms baselineInitialState_related
-#print axioms installed_pc
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline

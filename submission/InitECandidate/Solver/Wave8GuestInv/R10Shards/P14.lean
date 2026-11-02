@@ -183,12 +183,5 @@ theorem fb_op_or
     TerminatingFunBoundedOn GuestInv (ofString "op_or") K.«op_or» := by
   fb_prove 493 Guest.Software.guestFn_op_or K.«op_or»
 
-#print axioms fb_op_mstore
-#print axioms fb_op_mstore8
-#print axioms fb_op_mul
-#print axioms fb_op_mulmod
-#print axioms fb_op_not
-#print axioms fb_op_number
-#print axioms fb_op_or
 
 end InitECandidate.Solver.Wave8GuestInv.R10Shards.P14

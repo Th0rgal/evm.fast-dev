@@ -79,5 +79,4 @@ theorem notTimeOut_two_mul {width : Nat} [NeZero width] {C F : Type}
       (by rw [ffiEq]; exact oracleEq) terminalCalls
       dimension widthBound registers isa bitmapBound bitmapPrefix wtw wts failed actual notError notTimeout
 
-#print axioms notTimeOut_two_mul
 end InitECandidate.Solver.Wave8Stage.WordCostFullPipelineCertificate

@@ -132,6 +132,4 @@ theorem fullMakeInit_lab_affine_of_source_run {C F : Type}
   change (LabSem.evaluate { t with clock := (M + 1) * (2 * k) + (3 * M + 2) }).1 ≠ .timeOut at h
   rwa [hbudget] at h
 
-#print axioms fullMakeInit_reduced_entry_result
-#print axioms fullMakeInit_lab_affine_of_source_run
 end InitECandidate.Solver.Wave8Stage.Stage4

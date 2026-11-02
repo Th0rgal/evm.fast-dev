@@ -9,5 +9,4 @@ namespace InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepLower
 wave8_list_spine lowered := CrepCompilerComposition.lower
   ConcreteCompilerCrepContext.functions ConcreteCompilerCrepContext.functionMap
   ConcreteCompilerCrepContext.exceptions
-#print axioms lowered_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrepLower

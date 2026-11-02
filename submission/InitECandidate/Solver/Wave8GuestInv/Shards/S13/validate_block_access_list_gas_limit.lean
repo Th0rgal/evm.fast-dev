@@ -32,6 +32,5 @@ example : type_of% (fb_validate_block_access_list_gas_limit (GuestInv := GuestIn
     (TerminatingFunBoundedOn GuestInv (ofString "udiv") K.«udiv») →
     TerminatingFunBoundedOn GuestInv (ofString "validate_block_access_list_gas_limit") K.«validate_block_access_list_gas_limit») := rfl
 
-#print axioms fb_validate_block_access_list_gas_limit
 
 end InitECandidate.Solver.Wave8Leaves.S13

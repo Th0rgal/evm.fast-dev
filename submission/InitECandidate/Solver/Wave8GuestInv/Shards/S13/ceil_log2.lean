@@ -43,6 +43,5 @@ theorem fb_ceil_log2 :
 example : type_of% (fb_ceil_log2 (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "ceil_log2") K.«ceil_log2») := rfl
 
-#print axioms fb_ceil_log2
 
 end InitECandidate.Solver.Wave8Leaves.S13

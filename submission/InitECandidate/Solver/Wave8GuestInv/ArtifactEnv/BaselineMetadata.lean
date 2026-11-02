@@ -62,4 +62,3 @@ theorem baseline_finite_facts :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_finite_facts

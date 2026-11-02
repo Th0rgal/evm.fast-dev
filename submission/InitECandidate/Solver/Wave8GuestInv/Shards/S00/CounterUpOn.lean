@@ -101,6 +101,4 @@ theorem while_up_unsigned_one_on (counter : MlS) (bound : ExpHOL 64)
     ⟨hguest, unsignedUpRank_le counter s⟩
 
 
-#print axioms while_up_unsigned_const_on
-#print axioms while_up_unsigned_one_on
 end InitECandidate.Solver.Wave8Leaves.S00Spec.Arith

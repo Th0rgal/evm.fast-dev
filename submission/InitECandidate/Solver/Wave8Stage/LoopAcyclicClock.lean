@@ -168,8 +168,5 @@ theorem offset_le {width : Nat} [NeZero width] {F : Type}
   dsimp only at hc
   omega
 
-#print axioms evaluate_bound
-#print axioms consumed_le
-#print axioms offset_le
 
 end InitECandidate.Solver.Wave8Stage.LoopAcyclicClock

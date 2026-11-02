@@ -551,9 +551,5 @@ theorem compCorrectCall {width : Nat} [NeZero width] {C F : Type}
     exact returningCallCase ac values names retCode l1 l2 dest args handler source ih
 
 
-#print axioms compCorrectCall
-#print axioms compCorrectCallTail
-#print axioms compCorrectCallReturningNone
-#print axioms compCorrectCallReturningHandler
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCostCalls

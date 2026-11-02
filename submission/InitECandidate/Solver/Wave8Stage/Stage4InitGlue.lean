@@ -54,7 +54,5 @@ theorem stack_init_entry_not_timeOut {width : Nat} [NeZero width] {C F : Type}
   rw [stack_init_entry_result generateGc maxHeap pointer start s post k hentry hrun]
   exact hnt
 
-#print axioms stack_init_entry_result
-#print axioms stack_init_entry_not_timeOut
 
 end InitECandidate.Solver.Wave8Stage.Stage4

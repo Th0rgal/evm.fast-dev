@@ -36,6 +36,5 @@ example : type_of% (fb_calculate_excess_blob_gas (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "udiv") K.«udiv») →
     TerminatingFunBoundedOn GuestInv (ofString "calculate_excess_blob_gas") K.«calculate_excess_blob_gas») := rfl
 
-#print axioms fb_calculate_excess_blob_gas
 
 end InitECandidate.Solver.Wave8Leaves.S13

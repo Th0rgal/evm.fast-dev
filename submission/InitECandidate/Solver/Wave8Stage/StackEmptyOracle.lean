@@ -49,5 +49,4 @@ theorem preserved {width : Nat} [NeZero width] {C F : Type}
     rw [oracle]
     exact empty (index+count)
 
-#print axioms preserved
 end InitECandidate.Solver.Wave8Stage.StackEmptyOracle

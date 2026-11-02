@@ -45,6 +45,5 @@ example : type_of% (fb_input_blob (GuestInv := GuestInv)) =
      (TerminatingFunBoundedOn GuestInv (ofString "trap_with") K.«trap_with») →
       TerminatingFunBoundedOn GuestInv (ofString "input_blob") K.«input_blob») := rfl
 
-#print axioms fb_input_blob
 
 end InitECandidate.Solver.Wave8Leaves.S13

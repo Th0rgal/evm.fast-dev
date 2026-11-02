@@ -79,6 +79,4 @@ theorem initialized_notTimeOut_two_mul {width : Nat} [NeZero width] {C F : Type}
     ⟨rfl,by change stack.ffi.oracle = oracle; rw [ffiEq]; exact oracleEq⟩
     entryBound related notError notTimeout
 
-#print axioms panToWord_noMt_members
-#print axioms initialized_notTimeOut_two_mul
 end InitECandidate.Solver.Wave8Stage.WordCostPipelineCertificate

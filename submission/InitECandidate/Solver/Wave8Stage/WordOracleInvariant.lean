@@ -742,5 +742,4 @@ theorem evaluate_oracle_eq {width : Nat} [NeZero width] {C F : Type}
                         hev, rfl, rfl, hh, rfl, rfl, rfl, hl, hd⟩
 
 
-#print axioms evaluate_oracle_eq
 end InitECandidate.Solver.Wave8Stage.WordOracleInvariant

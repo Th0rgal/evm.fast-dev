@@ -25,6 +25,5 @@ theorem installed_memory_bitmap_copy (index byte : Nat)
   have hrom : initDataRom+(initDataRam+24+8*index+byte)-initDataRam = initDataRom+24+8*index+byte := by omega
   rw [hrom]
 
-#print axioms installed_memory_bitmap_copy
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

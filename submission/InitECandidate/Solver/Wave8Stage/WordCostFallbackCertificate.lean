@@ -98,5 +98,4 @@ theorem fallback_notTimeOut_two_mul {width : Nat} [NeZero width] {C F : Type}
         rw [targetOracle]; exact ⟨rfl,rfl⟩)
   simpa only [targetEq] using extended
 
-#print axioms fallback_notTimeOut_two_mul
 end InitECandidate.Solver.Wave8Stage.WordCostFallbackCertificate

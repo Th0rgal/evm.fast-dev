@@ -81,7 +81,4 @@ theorem pipeline_codeSafe {width : Nat} [NeZero width]
   have result := compile_codeSafe ac wordCode guard
   rwa [wts] at result
 
-#print axioms pan_sourceSafe
-#print axioms compile_sourceSafe
-#print axioms pipeline_codeSafe
 end InitECandidate.Solver.Wave8Stage.WordToStackBitmapPipeline

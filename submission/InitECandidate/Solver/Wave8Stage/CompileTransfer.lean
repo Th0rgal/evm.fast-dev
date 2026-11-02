@@ -100,8 +100,4 @@ theorem stage5_lab_to_target_affine_not_timeOut {F : Type}
     (compiledCode riscvConfig cfg output lab.code bytes compiled) output.labels cfg.labels ffis
     cfg.initClock removed safe compiler failed related tied k_lab notError notTimeout
 
-#print axioms canonical_witness
-#print axioms compiledCode_spec
-#print axioms compiledCode_eq
-#print axioms stage5_lab_to_target_affine_not_timeOut
 end InitECandidate.Solver.Wave8Stage.CompileTransfer

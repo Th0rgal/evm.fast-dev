@@ -185,5 +185,4 @@ theorem evaluate_withAllocFields {C F : Type} {bad : Nat}
     evaluate (p, { s with useAlloc := cfg.useAlloc, gcFun := cfg.gcFun, compile := cfg.compile, compileOracle := cfg.compileOracle }) = replaceResult cfg (evaluate (p, s)) :=
   evaluate_withAllocFields_measure (stackSemMeasure p s) p s rfl hp hs hc ho cfg ht
 
-#print axioms evaluate_withAllocFields
 end InitECandidate.Solver.Wave8Stage.AllocFields

@@ -148,6 +148,4 @@ theorem notTimeOut_of_append {width : Nat} [NeZero width] {C F : Type}
   have lifted := evaluate_append p s extra safe codes empty (some .timeOut) _ (by intro h; cases h) run
   exact extended (congrArg Prod.fst lifted)
 
-#print axioms evaluate_append
-#print axioms notTimeOut_of_append
 end InitECandidate.Solver.Wave8Stage.StackBitmapRefinement

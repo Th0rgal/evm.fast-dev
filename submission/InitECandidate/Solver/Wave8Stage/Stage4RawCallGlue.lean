@@ -74,8 +74,5 @@ theorem fullMakeInit_rawCall_entry_result {C F : Type}
     simp [he, StackToLab.Proofs.FlattenSemantics.stackEntryClass] at hne
   exact rawCall_entry_result_double code initial BvlToBvi.initGlobalsLocation k hd rfl hn hnt
 
-#print axioms pancake_stack_code_distinct
-#print axioms rawCall_entry_result_double
-#print axioms fullMakeInit_rawCall_entry_result
 
 end InitECandidate.Solver.Wave8Stage.Stage4

@@ -236,9 +236,5 @@ theorem compCorrectShareInst {width : Nat} [NeZero width] {C F : Type}
       · simpa [compCorrectResult] using hr
       · simp [compCorrectResult, hffi, hclk]
 
-#print axioms evaluateShareInstLoad
-#print axioms evaluateShareInstStore
-#print axioms evaluateShareInstCorrectLemma
-#print axioms compCorrectShareInst
 
 end InitECandidate.Solver.Wave8Stage.WordToStackSharedClock

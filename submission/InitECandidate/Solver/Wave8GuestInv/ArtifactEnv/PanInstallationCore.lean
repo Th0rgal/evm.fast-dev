@@ -103,9 +103,3 @@ theorem baseline_pan_installed_core :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_dataDm_eq
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.align_sourceBase
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.align_ramEnd
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.align_bitmapPtr
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_good_init
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_pan_installed_core

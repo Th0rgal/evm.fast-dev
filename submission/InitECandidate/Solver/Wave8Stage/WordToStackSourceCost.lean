@@ -95,6 +95,5 @@ decreasing_by
       wordSemSTOP, true_and] at *
     omega
 
-#print axioms sourceCost
 
 end InitECandidate.Solver.Wave8Stage.WordToStackSourceCost

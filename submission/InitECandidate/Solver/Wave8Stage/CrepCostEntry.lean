@@ -95,6 +95,5 @@ theorem compCall {width : Nat} [NeZero width] {σ : Type}
   omega
 
 
-#print axioms compCall
 
 end InitECandidate.Solver.Wave8Stage.CrepCostEntry

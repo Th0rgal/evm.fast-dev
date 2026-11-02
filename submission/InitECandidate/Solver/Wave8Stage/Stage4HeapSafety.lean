@@ -110,5 +110,4 @@ theorem stateSafe_of_remove_relation {C F : Type} {bad : Nat}
       exact ⟨a, ha, rfl⟩
   next hbad => contradiction
 
-#print axioms stateSafe_of_remove_relation
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

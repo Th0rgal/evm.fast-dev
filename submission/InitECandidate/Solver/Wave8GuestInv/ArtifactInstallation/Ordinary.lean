@@ -75,7 +75,5 @@ theorem installed_ordinary_word (a : BitVec 64) (ha : ordinaryDomain a) :
           Nat.mod_eq_of_lt (by have hj := j.isLt; omega : sourceBase+8*i+j.val < 2^64)]
         omega
 
-#print axioms installedMemory_zero_after_headers
-#print axioms installed_ordinary_word
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

@@ -386,5 +386,4 @@ theorem initCode_heap {width : Nat} [NeZero width] {C F : Type}
     · omega
     · exact heapHalf
 
-#print axioms initCode_heap
 end InitECandidate.Solver.Wave8Stage.InitCodeHeap

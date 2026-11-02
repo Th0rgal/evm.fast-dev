@@ -30,6 +30,5 @@ example : type_of% (fb_ssz_split_var_list (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "ssz_fail") K.«ssz_fail») →
     TerminatingFunBoundedOn GuestInv (ofString "ssz_split_var_list") K.«ssz_split_var_list») := rfl
 
-#print axioms fb_ssz_split_var_list
 
 end InitECandidate.Solver.Wave8Leaves.S13

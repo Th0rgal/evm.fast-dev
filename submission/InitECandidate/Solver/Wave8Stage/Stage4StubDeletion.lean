@@ -86,7 +86,4 @@ theorem compiled_evaluate_without_stub {C F : Type}
   have heq := congrArg Prod.fst (evaluate_withCode p s hp hs hc ho _ hag)
   exact heq
 
-#print axioms compiled_storeConstsStub_lookup
-#print axioms compiled_without_stub_agreement
-#print axioms compiled_evaluate_without_stub
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

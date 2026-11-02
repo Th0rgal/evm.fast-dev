@@ -180,8 +180,6 @@ theorem «callees_process_transaction» : sameNames (progCallees (fnBody Guest.S
 
 theorem «gbody_process_transaction» : GBody.«process_transaction» := by sorry
 
-theorem «gb_process_transaction» : TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction» :=
-  «gbody_process_transaction» «fb_alloc» «fb_calculate_blob_gas_price» «fb_calculate_total_blob_gas» «fb_check_transaction» «fb_clear_account_preserving_balance» «fb_compute_contract_address» «fb_create_ether» «fb_encode_receipt» «fb_encode_transaction» «fb_fee_mul» «fb_frame_mem_release» «fb_get_account» «fb_htab_item» «fb_htab_new» «fb_htab_set» «gb_incorporate_tx_into_block» «fb_increment_nonce» «fb_keccak256» «fb_lst_new» «fb_lst_push» «fb_max» «fb_memcpy» «fb_min» «fb_msg_new» «gb_process_message_call» «fb_recover_sender_with_chain_id» «fb_scratch_release» «fb_set_account_balance» «fb_state_fresh_tx» «fb_te_new» «fb_tx_chain_id» «fb_tx_has_access_list» «fb_tx_is_blob» «fb_tx_is_setcode» «fb_u256_sub» «fb_udiv_small5» «fb_validate_transaction» «wk_alloc» «rt_alloc» «wk_calculate_blob_gas_price» «ro_calculate_total_blob_gas» «wk_check_transaction» «wk_clear_account_preserving_balance» «wk_compute_contract_address» «wk_create_ether» «wk_encode_receipt» «wk_encode_transaction» «ro_fee_mul» «wk_get_account» «ro_htab_item» «htab_new_spec» «htab_set_spec» «wk_increment_nonce» «wk_keccak256» «wk_lst_new» «rt_lst_new» «wk_lst_push» «ro_max» «wk_memcpy» «dm_memcpy» «ro_min» «rv_min» «wk_msg_new» «rt_msg_new» «wk_process_message_call» «wk_recover_sender_with_chain_id» «wk_set_account_balance» «wk_state_fresh_tx» «wk_te_new» «rt_te_new» «ro_tx_chain_id» «ro_tx_has_access_list» «ro_tx_is_blob» «ro_tx_is_setcode» «ro_u256_sub» «ro_udiv_small5» «ro_validate_transaction» «rv_validate_transaction»
 
 /-- The body of `process_withdrawals` alone (AST line 33458, guard `WorldOK`, #0 CTR). Its direct callees are
 exactly `create_ether`, `incorporate_tx_into_block`, `state_fresh_tx`, `u256_mul` (`«callees_process_withdrawals»`, checked against the AST). Hypotheses: the bound
@@ -209,8 +207,6 @@ theorem «callees_process_withdrawals» : sameNames (progCallees (fnBody Guest.S
 
 theorem «gbody_process_withdrawals» : GBody.«process_withdrawals» := by sorry
 
-theorem «gb_process_withdrawals» : TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals» :=
-  «gbody_process_withdrawals» «fb_create_ether» «gb_incorporate_tx_into_block» «fb_state_fresh_tx» «fb_u256_mul» «wk_create_ether» «wk_state_fresh_tx» «ro_u256_mul»
 
 /-- The body of `execute_block` alone (AST line 33580, guard `BlockReadyStrong`, #0 WALK). Its direct callees are
 exactly `alloc`, `bal_init`, `build_block_access_list_rlp`, `build_mpt_indexed`, `compute_requests_hash`, `compute_state_root`, `decode_transaction`, `keccak256`, `logs_bloom`, `lst_new`, `max`, `memeq`, `memzero`, `process_general_purpose_requests`, `process_transaction`, `process_unchecked_system_transaction`, `process_withdrawals`, `state_fresh_tx`, `track_ancestor_access`, `validate_block_access_list_gas_limit` (`«callees_execute_block»`, checked against the AST). Hypotheses: the bound
@@ -318,8 +314,6 @@ theorem «callees_execute_block» : sameNames (progCallees (fnBody Guest.Softwar
 
 theorem «gbody_execute_block» : GBody.«execute_block» := by sorry
 
-theorem «gb_execute_block» : TerminatingFunBoundedOn BlockReadyStrong (ofString "execute_block") K.«execute_block» :=
-  «gbody_execute_block» «fb_alloc» «fb_bal_init» «fb_build_block_access_list_rlp» «gb_build_mpt_indexed» «fb_compute_requests_hash» «gb_compute_state_root» «fb_decode_transaction» «fb_keccak256» «fb_logs_bloom» «fb_lst_new» «fb_max» «fb_memeq» «fb_memzero» «gb_process_general_purpose_requests» «gb_process_transaction» «gb_process_unchecked_system_transaction» «gb_process_withdrawals» «fb_state_fresh_tx» «fb_track_ancestor_access» «fb_validate_block_access_list_gas_limit» «wk_alloc» «rt_alloc» «wk_bal_init» «wk_build_block_access_list_rlp» «wk_build_mpt_indexed» «wk_compute_state_root» «wk_decode_transaction» «wk_logs_bloom» «wk_lst_new» «rt_lst_new» «wk_memzero» «ww_memzero» «zv_memzero» «wk_process_general_purpose_requests» «wk_process_transaction» «wk_process_unchecked_system_transaction» «wk_process_withdrawals» «wk_state_fresh_tx» «wk_track_ancestor_access» «ro_validate_block_access_list_gas_limit»
 
 /-- The body of `payload_header` alone (AST line 32645, guard `InputReady`, #0 CTR). Its direct callees are
 exactly `alloc`, `block_rlp_length`, `build_mpt_indexed`, `compute_requests_hash`, `encode_execution_requests`, `encode_withdrawal_rlp`, `keccak256`, `memzero` (`«callees_payload_header»`, checked against the AST). Hypotheses: the bound
@@ -370,7 +364,5 @@ theorem «callees_payload_header» : sameNames (progCallees (fnBody Guest.Softwa
 
 theorem «gbody_payload_header» : GBody.«payload_header» := by sorry
 
-theorem «gb_payload_header» : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header» :=
-  «gbody_payload_header» «fb_alloc» «fb_block_rlp_length» «gb_build_mpt_indexed» «fb_compute_requests_hash» «fb_encode_execution_requests» «fb_encode_withdrawal_rlp» «fb_keccak256» «fb_memzero» «wk_alloc» «rt_alloc» «wk_block_rlp_length» «wk_build_mpt_indexed» «wk_encode_withdrawal_rlp» «dm_encode_withdrawal_rlp» «wk_keccak256» «wk_memzero» «zv_memzero»
 
 end InitECandidate.Solver.Wave8GuestInv

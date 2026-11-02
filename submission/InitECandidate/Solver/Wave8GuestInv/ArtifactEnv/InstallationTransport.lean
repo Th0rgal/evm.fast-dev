@@ -88,6 +88,3 @@ theorem baseline_endpoint_agreement (ms : Flapjack.RiscV.L3.riscv_state)
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.goodInitState_transport
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.panInstalled_transport
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_endpoint_agreement

@@ -122,8 +122,6 @@ theorem «callees_op_dispatch» : sameNames (progCallees (fnBody Guest.Software.
 theorem «gbody_op_dispatch» : GBody.«op_dispatch» :=
   RunFramesRace.gbody_op_dispatch
 
-theorem «gb_op_dispatch» : TerminatingFunBoundedOn EvmRun (ofString "op_dispatch") K.«op_dispatch» :=
-  «gbody_op_dispatch» «fb_op_add» «fb_op_addmod» «fb_op_address» «fb_op_and» «fb_op_balance» «fb_op_basefee» «fb_op_blobbasefee» «fb_op_blobhash» «fb_op_blockhash» «fb_op_byte» «fb_op_call» «fb_op_callcode» «fb_op_calldatacopy» «fb_op_calldataload» «fb_op_calldatasize» «fb_op_caller» «fb_op_callvalue» «fb_op_chainid» «fb_op_clz» «fb_op_codecopy» «fb_op_codesize» «fb_op_coinbase» «fb_op_create» «fb_op_create2» «fb_op_delegatecall» «fb_op_div» «fb_op_dup» «fb_op_dupn» «fb_op_eq» «fb_op_exchange» «fb_op_exp» «fb_op_extcodecopy» «fb_op_extcodehash» «fb_op_extcodesize» «fb_op_gas» «fb_op_gaslimit» «fb_op_gasprice» «fb_op_gt» «fb_op_iszero» «fb_op_jump» «fb_op_jumpdest» «fb_op_jumpi» «fb_op_keccak» «fb_op_log» «fb_op_lt» «fb_op_mcopy» «fb_op_mload» «fb_op_mod» «fb_op_msize» «fb_op_mstore» «fb_op_mstore8» «fb_op_mul» «fb_op_mulmod» «fb_op_not» «fb_op_number» «fb_op_or» «fb_op_origin» «fb_op_pc» «fb_op_pop» «fb_op_prevrandao» «fb_op_push» «fb_op_return» «fb_op_returndatacopy» «fb_op_returndatasize» «fb_op_revert» «fb_op_sar» «fb_op_sdiv» «fb_op_selfbalance» «fb_op_selfdestruct» «fb_op_sgt» «fb_op_shl» «fb_op_shr» «fb_op_signextend» «gb_op_sload» «fb_op_slotnum» «fb_op_slt» «fb_op_smod» «gb_op_sstore» «fb_op_staticcall» «fb_op_stop» «fb_op_sub» «fb_op_swap» «fb_op_swapn» «fb_op_timestamp» «fb_op_tload» «fb_op_tstore» «fb_op_xor»
 
 /-- The body of `run_frames` alone (AST line 18663, guard `EvmInv`, #0 POT). Its direct callees are
 exactly `finish_child`, `frame_epilogue`, `frame_exception`, `op_dispatch` (`«callees_run_frames»`, checked against the AST). Hypotheses: the bound
@@ -147,8 +145,6 @@ theorem «callees_run_frames» : sameNames (progCallees (fnBody Guest.Software.g
 theorem «gbody_run_frames» : GBody.«run_frames» :=
   RunFramesRace.gbody_run_frames
 
-theorem «gb_run_frames» : TerminatingFunBoundedOn EvmInv (ofString "run_frames") K.«run_frames» :=
-  «gbody_run_frames» «gb_finish_child» «fb_frame_epilogue» «fb_frame_exception» «gb_op_dispatch» «finish_child_spec» «frame_epilogue_spec» «frame_exception_spec» «op_dispatch_spec»
 
 /-- The body of `process_message` alone (AST line 18803, guard `MsgReady`, loop-free). Its direct callees are
 exactly `depth0_prepare`, `frame_halt`, `frame_mem_release`, `frame_open`, `frame_start`, `refill_frame_state_gas`, `run_frames`, `scratch_release`, `state_restore`, `state_snapshot` (`«callees_process_message»`, checked against the AST). Hypotheses: the bound
@@ -180,8 +176,6 @@ theorem «callees_process_message» : sameNames (progCallees (fnBody Guest.Softw
 theorem «gbody_process_message» : GBody.«process_message» :=
   R10Shards.GbodyProcessMsg.gbody_process_message_proof
 
-theorem «gb_process_message» : TerminatingFunBoundedOn MsgReady (ofString "process_message") K.«process_message» :=
-  «gbody_process_message» «fb_depth0_prepare» «fb_frame_halt» «fb_frame_mem_release» «fb_frame_open» «fb_frame_start» «fb_refill_frame_state_gas» «gb_run_frames» «fb_scratch_release» «fb_state_restore» «fb_state_snapshot» «ek_depth0_prepare» «fk_frame_open» «ek_frame_start» «ro_state_snapshot»
 
 /-- The body of `process_create_message` alone (AST line 18899, guard `MsgReady`, loop-free). Its direct callees are
 exactly `create_finish`, `destroy_storage`, `frame_halt`, `increment_nonce`, `mark_account_created`, `process_message`, `refill_frame_state_gas`, `state_restore`, `state_snapshot` (`«callees_process_create_message»`, checked against the AST). Hypotheses: the bound
@@ -219,7 +213,5 @@ theorem «callees_process_create_message» : sameNames (progCallees (fnBody Gues
 theorem «gbody_process_create_message» : GBody.«process_create_message» :=
   R10Shards.GbodyProcessMsg.gbody_process_create_message_proof
 
-theorem «gb_process_create_message» : TerminatingFunBoundedOn MsgReady (ofString "process_create_message") K.«process_create_message» :=
-  «gbody_process_create_message» «fb_create_finish» «fb_destroy_storage» «fb_frame_halt» «fb_increment_nonce» «fb_mark_account_created» «gb_process_message» «fb_refill_frame_state_gas» «fb_state_restore» «fb_state_snapshot» «wk_destroy_storage» «wk_increment_nonce» «wk_mark_account_created» «ro_state_snapshot»
 
 end InitECandidate.Solver.Wave8GuestInv

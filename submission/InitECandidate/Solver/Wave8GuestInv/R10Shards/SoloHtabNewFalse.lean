@@ -268,7 +268,5 @@ theorem decCall_alloc {s : PanSemStateFiniteExact 64 F} (x : MlS) (arg : ExpHOL 
 
 end Step
 
-#print axioms alloc_result
-#print axioms decCall_alloc
 
 end InitECandidate.Solver.Wave8GuestInv.R10Shards

@@ -387,6 +387,5 @@ theorem compCorrectCallTail {width : Nat} [NeZero width] {C F : Type}
             | «continue» l => simp [wordSemBadFunReturn] at hbf
             | _ => exact hresb
 
-#print axioms compCorrectCallTail
 
 end InitECandidate.Solver.Wave8Stage.WordToStackTailClock

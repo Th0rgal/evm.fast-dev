@@ -103,6 +103,4 @@ theorem asmStepImpEvaluate_bounded {width : Nat} [NeZero width]
   exact ⟨(hout k).1, (hout k).2.1, (hout k).2.2, by omega⟩
 
 
-#print axioms riscv_bounded_encoder
-#print axioms asmStepImpEvaluate_bounded
 end InitECandidate.Solver.Wave8Stage.BoundedAsm

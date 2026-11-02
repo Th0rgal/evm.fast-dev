@@ -17,6 +17,5 @@ example
     type_of% (fb_rlp_put_u256 h1 h2 h3 h4 h5) =
       type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_put_u256» := rfl
 
-#print axioms fb_rlp_put_u256
 
 end InitECandidate.Solver.Wave8GuestInv.S02

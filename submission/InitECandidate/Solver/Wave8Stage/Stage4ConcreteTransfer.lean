@@ -58,5 +58,4 @@ theorem lab_transfer_exists
     (oracleCompilerConfig oracles).wordToWordConf riscvConfig.isa sourceDeclarations
     compiled hmem (fun _ => rfl) k
 
-#print axioms lab_transfer_exists
 end InitECandidate.Solver.Wave8Stage.ConcreteInitialization

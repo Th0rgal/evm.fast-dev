@@ -417,7 +417,3 @@ theorem covered_source_pan_not_timeOut_at_uniform_clock
 
 end InitECandidate.Solver.UniformSourceClock
 
-#print axioms InitECandidate.Solver.UniformSourceClock.source_terminate_minimal_input_clock
-#print axioms InitECandidate.Solver.UniformSourceClock.covered_source_ticks_bounded_iff_uniform_terminates
-#print axioms InitECandidate.Solver.UniformSourceClock.covered_source_terminates_at_uniform_clock
-#print axioms InitECandidate.Solver.UniformSourceClock.covered_source_pan_not_timeOut_at_uniform_clock

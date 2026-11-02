@@ -88,6 +88,4 @@ theorem while_up_signed_one_on (counter : MlS) (bound : ExpHOL 64)
   omega
 
 
-#print axioms while_up_signed_on
-#print axioms while_up_signed_one_on
 end InitECandidate.Solver.Wave8Leaves.S04.Light.Arith

@@ -392,7 +392,5 @@ theorem compCorrectIf {width : Nat} [NeZero width] {σ : Type} :
     rfl
 
 
-#print axioms compCorrectDec
-#print axioms compCorrectIf
 
 end InitECandidate.Solver.Wave8Stage.CrepCostBranches

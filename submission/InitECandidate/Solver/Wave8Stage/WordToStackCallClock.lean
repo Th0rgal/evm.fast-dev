@@ -190,6 +190,5 @@ theorem compCorrectCall {width : Nat} [NeZero width] {C F : Type}
     rcases descriptor with ⟨values,names,retCode,l1,l2⟩
     exact returningCallCase ac values names retCode l1 l2 dest args handler source ih
 
-#print axioms compCorrectCall
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCallClock

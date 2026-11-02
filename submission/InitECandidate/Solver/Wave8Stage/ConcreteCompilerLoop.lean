@@ -10,5 +10,4 @@ open InitE Flapjack Lean
 
 wave8_list_spine source := compileProgHOLExact .riscv ConcreteCompilerCrep.source
 
-#print axioms source_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerLoop

@@ -258,5 +258,4 @@ theorem evaluate_extendCode {C F : Type} {bad : Nat}
     evaluate (p, { s with code := code }) = replaceResultCode code (evaluate (p, s)) :=
   evaluate_extendCode_measure (stackSemMeasure p s) p s rfl hp hs hc ho code ext hne
 
-#print axioms evaluate_extendCode
 end InitECandidate.Solver.Wave8Stage.RuntimeLabels

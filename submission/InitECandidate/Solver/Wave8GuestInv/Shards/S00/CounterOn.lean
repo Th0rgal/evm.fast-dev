@@ -113,5 +113,4 @@ theorem while_down_first_unsigned_on (counter : MlS) {tail : ProgHOL 64} {B : Na
     s hcode ⟨hguest, unsignedDownRank_le counter s⟩
 
 
-#print axioms while_down_first_unsigned_on
 end InitECandidate.Solver.Wave8Leaves.S00Spec.Arith

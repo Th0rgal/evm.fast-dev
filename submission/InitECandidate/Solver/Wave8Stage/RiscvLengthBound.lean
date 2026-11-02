@@ -62,6 +62,5 @@ theorem ast_length_le_six (i : HolAsm 64) : (riscvAst i).length ≤ 6 := by
   | jumpReg => close_length
   | loc => close_length
 
-#print axioms ast_length_le_six
 
 end InitECandidate.Solver.Wave8Stage.RiscvLengthBound

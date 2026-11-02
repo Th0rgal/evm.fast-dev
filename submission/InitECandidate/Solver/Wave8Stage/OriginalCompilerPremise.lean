@@ -24,5 +24,4 @@ theorem native_image_cannot_update_labels_only
   change 979140 = 0 at zero
   omega
 
-#print axioms native_image_cannot_update_labels_only
 end InitECandidate.Solver.Wave8Stage.OriginalCompilerPremise

@@ -939,6 +939,5 @@ theorem compCorrectCallReturningNone {width : Nat} [NeZero width] {C F : Type}
       compilation execution (by omega) bitmapPrefix
     exact ⟨0, Nat.zero_le _, targetPost, some (.halt (.word (BitVec.ofNat width 2))), by simpa only [Nat.add_zero] using run, conclusion⟩
 
-#print axioms compCorrectCallReturningNone
 
 end InitECandidate.Solver.Wave8Stage.WordToStackReturnClock

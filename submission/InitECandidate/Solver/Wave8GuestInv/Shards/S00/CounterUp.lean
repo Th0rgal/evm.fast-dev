@@ -224,6 +224,4 @@ theorem while_up_unsigned_one (counter : MlS) (bound : ExpHOL 64)
     omega
   · exact unsignedUpRank_le counter
 
-#print axioms while_up_signed_one
-#print axioms while_up_unsigned_one
 end InitECandidate.Solver.Wave8Leaves.S00Spec.Arith

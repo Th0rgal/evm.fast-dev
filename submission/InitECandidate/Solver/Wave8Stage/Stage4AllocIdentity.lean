@@ -66,6 +66,4 @@ theorem pancake_alloc_compile_eq (dc : DataToWord.Config) (conf : AsmConfigExact
       panToWordToWord_NSL arch source wc conf e he⟩)
     (panToStackRawCall_noAlloc_unconditional arch source wc conf perf)
 
-#print axioms rawCall_alloc_progComp_id
-#print axioms pancake_alloc_compile_eq
 end InitECandidate.Solver.Wave8Stage.AllocIdentity

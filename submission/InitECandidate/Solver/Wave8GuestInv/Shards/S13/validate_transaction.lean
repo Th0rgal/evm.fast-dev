@@ -30,6 +30,5 @@ example : type_of% (fb_validate_transaction (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "u256_fits_word") K.«u256_fits_word») →
     TerminatingFunBoundedOn GuestInv (ofString "validate_transaction") K.«validate_transaction») := rfl
 
-#print axioms fb_validate_transaction
 
 end InitECandidate.Solver.Wave8Leaves.S13

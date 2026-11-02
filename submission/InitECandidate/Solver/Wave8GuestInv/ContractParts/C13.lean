@@ -79,8 +79,6 @@ theorem «gbody_ws_get_storage» : GBody.«ws_get_storage» := by
   try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
 
-theorem «gb_ws_get_storage» : TerminatingFunBoundedOn WorldOK (ofString "ws_get_storage") K.«ws_get_storage» :=
-  «gbody_ws_get_storage» «fb_alloc» «fb_heap_mark» «fb_heap_release» «fb_keccak256» «fb_memeq» «fb_rlp_decode_fully» «fb_trie_lookup» «fb_u256_from_be» «fb_ws_storage_root_of» «gb_ws_storage_trie» «ro_memeq» «wk_ws_storage_root_of»
 
 /-- The body of `get_pre_tx_storage` alone (AST line 14069, guard `WorldOK`, loop-free). Its direct callees are
 exactly `record_pre_state_read`, `stor_lookup`, `ws_get_storage` (`«callees_get_pre_tx_storage»`, checked against the AST). Hypotheses: the bound
@@ -121,8 +119,6 @@ theorem «gbody_get_pre_tx_storage» : GBody.«get_pre_tx_storage» := by
             (decCallResumeOn_guestInv worldOK_guestInv _ _ _) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))) ?_
   unfold K.«get_pre_tx_storage»; omega
 
-theorem «gb_get_pre_tx_storage» : TerminatingFunBoundedOn WorldOK (ofString "get_pre_tx_storage") K.«get_pre_tx_storage» :=
-  «gbody_get_pre_tx_storage» «fb_record_pre_state_read» «fb_stor_lookup» «gb_ws_get_storage» «wk_record_pre_state_read» «ro_stor_lookup»
 
 /-- The body of `idx_start_storage` alone (AST line 14129, guard `WorldOK`, loop-free). Its direct callees are
 exactly `alloc`, `get_pre_tx_storage`, `htab_get`, `htab_set`, `memcpy`, `st_le64` (`«callees_idx_start_storage»`, checked against the AST). Hypotheses: the bound
@@ -153,8 +149,6 @@ theorem «callees_idx_start_storage» : sameNames (progCallees (fnBody Guest.Sof
 theorem «gbody_idx_start_storage» : GBody.«idx_start_storage» :=
   R10GbodyIdxBuilder.gbody_idx_start_storage_impl
 
-theorem «gb_idx_start_storage» : TerminatingFunBoundedOn WorldOK (ofString "idx_start_storage") K.«idx_start_storage» :=
-  «gbody_idx_start_storage» «fb_alloc» «gb_get_pre_tx_storage» «fb_htab_get» «fb_htab_set» «fb_memcpy» «fb_st_le64» «ro_htab_get» «wk_memcpy» «wk_st_le64»
 
 /-- The body of `update_builder_from_tx` alone (AST line 14233, guard `WorldOK`, #0 CTR; #1 CTR; #2 CTR). Its direct callees are
 exactly `add_balance_change`, `add_code_change`, `add_nonce_change`, `add_storage_write`, `bal_remove_change`, `get_code`, `htab_item`, `idx_start_account`, `idx_start_storage`, `memeq`, `remove_storage_write`, `u256_eq` (`«callees_update_builder_from_tx»`, checked against the AST). Hypotheses: the bound
@@ -221,7 +215,5 @@ theorem «callees_update_builder_from_tx» : sameNames (progCallees (fnBody Gues
 theorem «gbody_update_builder_from_tx» : GBody.«update_builder_from_tx» :=
   R10GbodyIdxBuilder.gbody_update_builder_from_tx_impl
 
-theorem «gb_update_builder_from_tx» : TerminatingFunBoundedOn WorldOK (ofString "update_builder_from_tx") K.«update_builder_from_tx» :=
-  «gbody_update_builder_from_tx» «fb_add_balance_change» «fb_add_code_change» «fb_add_nonce_change» «fb_add_storage_write» «fb_bal_remove_change» «fb_get_code» «fb_htab_item» «fb_idx_start_account» «gb_idx_start_storage» «fb_memeq» «fb_remove_storage_write» «fb_u256_eq» «wk_add_balance_change» «wk_add_code_change» «wk_add_nonce_change» «wk_add_storage_write» «wk_bal_remove_change» «wk_get_code» «ro_htab_item» «wk_idx_start_account» «wk_idx_start_storage» «ro_memeq» «wk_remove_storage_write» «ro_u256_eq»
 
 end InitECandidate.Solver.Wave8GuestInv

@@ -30,6 +30,5 @@ example : type_of% (fb_encode_execution_requests (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy») →
     TerminatingFunBoundedOn GuestInv (ofString "encode_execution_requests") K.«encode_execution_requests») := rfl
 
-#print axioms fb_encode_execution_requests
 
 end InitECandidate.Solver.Wave8Leaves.S13

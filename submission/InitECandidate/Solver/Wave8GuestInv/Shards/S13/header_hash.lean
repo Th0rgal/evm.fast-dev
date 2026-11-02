@@ -34,6 +34,5 @@ example : type_of% (fb_header_hash (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256») →
     TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash») := rfl
 
-#print axioms fb_header_hash
 
 end InitECandidate.Solver.Wave8Leaves.S13

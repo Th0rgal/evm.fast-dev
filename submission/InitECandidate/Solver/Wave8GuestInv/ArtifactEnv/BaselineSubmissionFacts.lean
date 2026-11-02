@@ -133,10 +133,3 @@ theorem baseline_submission_finite :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_mmio_eq
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_entry_pcs_eq
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_names_length
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_entry_nodup
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_entry_conditions
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.admission_mmio_bounds
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_submission_finite

@@ -76,6 +76,5 @@ decreasing_by
     | exact Prod.Lex.left _ _ (by omega)
     | exact LoopSemStateFiniteExact.lexLt (by omega) (by simp +arith)
 
-#print axioms sourceCost
 
 end InitECandidate.Solver.Wave8Stage.CrepSourceCost

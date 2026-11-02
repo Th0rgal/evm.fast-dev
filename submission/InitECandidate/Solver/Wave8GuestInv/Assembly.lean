@@ -120,13 +120,5 @@ example : 2 ^ 62 ≤ K.«finish_child» := by decide
 example : 2 ^ 58 ≤ evmPotMax := by decide
 
 -- The revision-9 check records the trusted-axiom boundary in the same single-file Lean run.
-#print axioms assembly
-#print axioms assembly_main
-#print axioms K_pan_budget
-#print axioms K_target_budget
-#print axioms bufferRegion_disj
-#print axioms bufferRegion_disj_le
-#print axioms AllocatorGrows.allocated
-#print axioms FreshBlock.disj_allocated
 
 end InitECandidate.Solver.Wave8GuestInv

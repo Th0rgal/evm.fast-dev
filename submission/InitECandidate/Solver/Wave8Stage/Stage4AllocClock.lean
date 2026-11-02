@@ -73,6 +73,4 @@ theorem makeInit_entry_result {C F : Type}
   rw [hstate] at added
   exact added.trans fields.symm
 
-#print axioms alloc_code_extension
-#print axioms makeInit_entry_result
 end InitECandidate.Solver.Wave8Stage.AllocClock

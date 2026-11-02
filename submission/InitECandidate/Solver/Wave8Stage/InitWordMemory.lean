@@ -45,5 +45,4 @@ theorem goodInitState_memory {S Q : Type}
   exact (packedMemoryWord_of_bytes (mc.target.getByte ms) a w
     (InitCodeThm.byteAligned_iff good a |>.2 aligned) lane).symm
 
-#print axioms goodInitState_memory
 end InitECandidate.Solver.Wave8Stage.InitWordMemory

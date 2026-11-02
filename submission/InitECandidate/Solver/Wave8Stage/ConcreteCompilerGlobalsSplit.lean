@@ -24,6 +24,4 @@ theorem allFunctions : ∀ declaration ∈ functions, isFunctionHOL declaration 
   apply List.all_eq_true.mp
   decide +kernel
 
-#print axioms split
-#print axioms allFunctions
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsSplit

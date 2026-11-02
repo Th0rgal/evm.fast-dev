@@ -80,5 +80,4 @@ theorem layout (oracles : List (Option (Spt Nat))) (input : Guest.InputBlob)
   refine ⟨curr,?_,domain,ffi,be,shared,mem⟩
   convert len using 2 <;> decide
 
-#print axioms layout
 end InitECandidate.Solver.Wave8Stage.ConcreteStackLayout

@@ -100,8 +100,5 @@ theorem headers (oracles : List (Option (Spt Nat)))
     norm_num [sourceBase,ramEnd,ramStart,ramSize] at *
     omega
 
-#print axioms headers
 
-#print axioms registers
-#print axioms heap_word
 end InitECandidate.Solver.Wave8Stage.ConcreteInitMemory

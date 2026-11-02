@@ -120,5 +120,3 @@ theorem full_evaluator {σ : Type} (io : HolFfiState σ) (ms : riscv_state)
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapTrace
 
 
-#print axioms InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapTrace.full_evaluator
-#print axioms InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapTrace.full_endpoint

@@ -367,5 +367,4 @@ decreasing_by
     | exact Prod.Lex.left _ _ (by omega)
     | exact LoopSemStateFiniteExact.lexLt (by omega) (by simp +arith)
 
-#print axioms sourceCost_bound
 end InitECandidate.Solver.Wave8Stage.WordToStackCostBound

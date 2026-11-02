@@ -30,7 +30,6 @@ private theorem slice_byte {α : Type} (bytes : List α) (fallback : α)
       (bytes[start + offset]?).getD fallback := by
   simp only [List.getElem?_take, hi, if_true, List.getElem?_drop]
 
-#print axioms slice_byte
 
 private theorem mapped_byte (words : List (BitVec 64)) (offset : Nat)
     (hi : offset < 8 * words.length) :
@@ -39,7 +38,6 @@ private theorem mapped_byte (words : List (BitVec 64)) (offset : Nat)
       wordByte (words[offset / 8]?.getD 0) (offset % 8) := by
   simp only [List.getElem?_map, List.getElem?_range hi, Option.map_some, Option.getD_some]
 
-#print axioms mapped_byte
 
 private theorem image_byte (bytes : List (BitVec 8)) (words : List (BitVec 64))
     (himage : (bytes.drop (initDataRom-initialPc+24)).take (8*words.length) =
@@ -52,7 +50,6 @@ private theorem image_byte (bytes : List (BitVec 8)) (words : List (BitVec 64))
   rw [slice_byte _ _ _ _ _ offset.isLt] at h
   exact h.trans (mapped_byte words offset.val offset.isLt)
 
-#print axioms image_byte
 
 private theorem wordByte_getByte (word : BitVec 64) (offset : Nat) (ho : offset < 8) :
     wordByte word offset = HolByte.getByte (BitVec.ofNat 64 offset) word false := by
@@ -62,7 +59,6 @@ private theorem wordByte_getByte (word : BitVec 64) (offset : Nat) (ho : offset 
     Nat.shiftRight_eq_div_pow]
   rw [Nat.mod_eq_of_lt (by omega : offset < 2^64),Nat.mod_eq_of_lt ho]
 
-#print axioms wordByte_getByte
 
 private theorem copied_byte (bytes : List (BitVec 8)) (words : List (BitVec 64))
     (hsize : bytes.length = 1028080) (hlen : words.length = 4603)
@@ -105,7 +101,6 @@ private theorem copied_byte (bytes : List (BitVec 8)) (words : List (BitVec 64))
   exact wordByte_getByte _ _ j.isLt
 
 
-#print axioms copied_byte
 
 /-- The concrete ROM is supplied only after the generic copied-byte argument
 has been kernel checked, avoiding reductions through the megabyte image. -/
@@ -115,7 +110,6 @@ theorem installed_bitmap_byte (i : Fin InitECandidate.bitmaps.length) (j : Fin 8
   copied_byte InitECandidate.code InitECandidate.bitmaps submitted_image_size bitmap_count
     bitmap_image_bytes i j
 
-#print axioms installed_bitmap_byte
 
 theorem installed_bitmap_word (i : Fin InitECandidate.bitmaps.length) :
     packedMemoryWord installedMemory (BitVec.ofNat 64 (initDataRam+24+8*i.val)) =
@@ -134,5 +128,4 @@ theorem installed_bitmap_word (i : Fin InitECandidate.bitmaps.length) :
     simp [initDataRam,Nat.add_mod,Nat.mul_mod_right]
   · exact installed_bitmap_byte i
 
-#print axioms installed_bitmap_word
 end InitECandidate.Solver.BitmapInstallationCompact

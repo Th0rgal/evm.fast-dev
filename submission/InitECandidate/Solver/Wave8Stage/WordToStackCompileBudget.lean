@@ -89,7 +89,6 @@ theorem compile_stateRel {width : Nat} [NeZero width] {C F : Type}
     funext x
     simp only [List.map_cons, List.mem_cons, keys]
 
-#print axioms compile_stateRel
 
 /-- Compiler-level static affine native entry budget. -/
 theorem compile_notTimeOutOfStaticBudget {width : Nat} [NeZero width] {C F : Type}
@@ -122,7 +121,6 @@ theorem compile_notTimeOutOfStaticBudget {width : Nat} [NeZero width] {C F : Typ
   · rw [hrun]; exact hne
   · rw [hrun]; exact hnt
 
-#print axioms compile_notTimeOutOfStaticBudget
 
 /-- Compiler-level precise execution-cost budget. -/
 theorem compile_notTimeOutOfCostBound {width : Nat} [NeZero width] {C F : Type}
@@ -154,7 +152,6 @@ theorem compile_notTimeOutOfCostBound {width : Nat} [NeZero width] {C F : Type}
     (compile_stateRel asmConf code t k coracle codeEq kEq ok noRaise noStore
       bitmapsPrefix conventions) hne hnt costBound
 
-#print axioms compile_notTimeOutOfCostBound
 
 /-- No-install is preserved by the actual Word-to-Word compiler, including
 removal of MustTerminate blocks under its original no-MustTerminate input. -/
@@ -177,6 +174,5 @@ theorem compile_noInstall {width : Nat} [NeZero width]
   rw [WordToWord.sptAListLookup_isSome_map_fullCompileSingle _ _ _ _ source _
     (WordToWord.compile_zip_length wconf source)]
 
-#print axioms compile_noInstall
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCompileBudget

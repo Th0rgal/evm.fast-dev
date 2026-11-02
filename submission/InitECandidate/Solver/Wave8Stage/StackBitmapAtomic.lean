@@ -124,8 +124,4 @@ theorem bitmapLoad_append {width : Nat} [NeZero width] {C F : Type}
   subst res
   exact StackBitmapAccess.bitmapLoad_append r v s post extra run
 
-#print axioms ordinary_withBitmaps
-#print axioms ordinary_append
-#print axioms storeConsts_append
-#print axioms bitmapLoad_append
 end InitECandidate.Solver.Wave8Stage.StackBitmapAtomic

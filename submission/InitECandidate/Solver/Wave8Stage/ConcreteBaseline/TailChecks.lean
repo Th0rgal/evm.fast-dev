@@ -1173,5 +1173,3 @@ theorem tail_guards : EvaluatorGuards baselineMachineConfig tailCode (copyState 
 end InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapStraightLine
 
 
-#print axioms InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapStraightLine.tail_checked
-#print axioms InitECandidate.Solver.Wave8Stage.ConcreteBaseline.BootstrapStraightLine.tail_guards

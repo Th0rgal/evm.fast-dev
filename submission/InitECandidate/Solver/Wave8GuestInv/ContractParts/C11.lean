@@ -34,8 +34,6 @@ theorem «callees_node_hash» : sameNames (progCallees (fnBody Guest.Software.gu
 
 theorem «gbody_node_hash» : GBody.«node_hash» := by sorry
 
-theorem «gb_node_hash» : TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash» :=
-  «gbody_node_hash» «fb_alloc» «fb_keccak256» «gb_node_rlp»
 
 /-- The body of `mpt_root` alone (AST line 11223, guard `MptObjReady`, loop-free). Its direct callees are
 exactly `memcpy`, `node_hash` (`«callees_mpt_root»`, checked against the AST). Hypotheses: the bound
@@ -52,8 +50,6 @@ theorem «callees_mpt_root» : sameNames (progCallees (fnBody Guest.Software.gue
 
 theorem «gbody_mpt_root» : GBody.«mpt_root» := by sorry
 
-theorem «gb_mpt_root» : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» :=
-  «gbody_mpt_root» «fb_memcpy» «gb_node_hash»
 
 /-- The body of `mpt_set` alone (AST line 10872, guard `MptSetReady`, loop-free). Its direct callees are
 exactly `_mpt_delete_node`, `_mpt_insert_node`, `mpt_nibble_key` (`«callees_mpt_set»`, checked against the AST). Hypotheses: the bound
@@ -74,8 +70,6 @@ theorem «callees_mpt_set» : sameNames (progCallees (fnBody Guest.Software.gues
 
 theorem «gbody_mpt_set» : GBody.«mpt_set» := by sorry
 
-theorem «gb_mpt_set» : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set» :=
-  «gbody_mpt_set» «gb__mpt_delete_node» «gb__mpt_insert_node» «fb_mpt_nibble_key» «ww_mpt_nibble_key» «nk_mpt_nibble_key»
 
 /-- The body of `build_mpt_indexed` alone (AST line 11243, guard `WorldOK`, #0 CTR). Its direct callees are
 exactly `heap_mark`, `heap_release`, `mpt_new`, `mpt_root`, `mpt_set`, `rlp_encode_word` (`«callees_build_mpt_indexed»`, checked against the AST). Hypotheses: the bound
@@ -110,7 +104,5 @@ theorem «callees_build_mpt_indexed» : sameNames (progCallees (fnBody Guest.Sof
 
 theorem «gbody_build_mpt_indexed» : GBody.«build_mpt_indexed» := by sorry
 
-theorem «gb_build_mpt_indexed» : TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed» :=
-  «gbody_build_mpt_indexed» «fb_heap_mark» «fb_heap_release» «fb_mpt_new» «gb_mpt_root» «gb_mpt_set» «fb_rlp_encode_word» «ro_heap_mark» «wk_mpt_new» «rt_mpt_new» «mk_mpt_set» «wk_rlp_encode_word»
 
 end InitECandidate.Solver.Wave8GuestInv

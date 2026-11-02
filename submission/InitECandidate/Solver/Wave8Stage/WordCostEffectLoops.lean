@@ -120,7 +120,4 @@ theorem loop_at {width : Nat} [NeZero width] {C F : Type}
         apply covers_mono bodyFits
         omega
 
-#print axioms covers_continuing
-#print axioms loop_exit_effect
-#print axioms loop_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

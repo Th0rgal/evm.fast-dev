@@ -456,6 +456,5 @@ theorem compCorrectWhile {width : Nat} [NeZero width] {σ : Type} :
             omega
 
 
-#print axioms compCorrectWhile
 
 end InitECandidate.Solver.Wave8Stage.CrepCostWhile

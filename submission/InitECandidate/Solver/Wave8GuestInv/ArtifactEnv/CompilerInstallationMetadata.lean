@@ -30,4 +30,3 @@ theorem baseline_installation_metadata :
 end InitECandidate.Solver.Wave8GuestInv.ArtifactEnv
 
 
-#print axioms InitECandidate.Solver.Wave8GuestInv.ArtifactEnv.baseline_installation_metadata

@@ -10,6 +10,5 @@ theorem nativeCode_length_word_ne_zero :
   rw [InitECandidate.Proofs.LiteralFacts.nativeCode_length]
   decide
 
-#print axioms nativeCode_length_word_ne_zero
 
 end InitECandidate.Solver.Wave8Stage.Stage5

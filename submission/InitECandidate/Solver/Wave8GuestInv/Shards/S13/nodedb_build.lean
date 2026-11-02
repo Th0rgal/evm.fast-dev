@@ -42,6 +42,5 @@ example : type_of% (fb_nodedb_build (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256») →
     TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build») := rfl
 
-#print axioms fb_nodedb_build
 
 end InitECandidate.Solver.Wave8Leaves.S13

@@ -101,6 +101,4 @@ theorem ffi_at {width : Nat} [NeZero width] {C F : Type}
       simp only [ffiEffects,if_true,Fits,netCost,final,classify,atom,if_true,sourceCost,covers_some]
       omega
 
-#print axioms share_at
-#print axioms ffi_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

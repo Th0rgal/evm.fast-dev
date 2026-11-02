@@ -225,6 +225,4 @@ theorem asmStepImpEvaluateStepNop_bounded {width : Nat} [NeZero width] {S Q : Ty
     rw [hupd, hspc, pcAddAdd, ← hblen] at h3
     rw [hs2]; exact h3
 
-#print axioms evaluateNopSteps_bounded
-#print axioms asmStepImpEvaluateStepNop_bounded
 end InitECandidate.Solver.Wave8Stage.BoundedNop

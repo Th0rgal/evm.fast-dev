@@ -22,5 +22,4 @@ theorem assemble {width : Nat} [NeZero width]
   simp only [panToWordCompileProgHOL, decodeRun, simpRun, structRun, globalRun,
     crepRun, loopRun, wordRun]
 
-#print axioms assemble
 end InitECandidate.Solver.Wave8Stage.CompilerPipelineComposition

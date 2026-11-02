@@ -145,8 +145,5 @@ theorem compCorrectLoop {width : Nat} [NeZero width] {C F : Type}
       exact ih.2 cutSource cut
 
 
-#print axioms compCorrectSeq
-#print axioms compCorrectIf
-#print axioms compCorrectLoop
 
 end InitECandidate.Solver.Wave8Stage.WordToStackCostComposition

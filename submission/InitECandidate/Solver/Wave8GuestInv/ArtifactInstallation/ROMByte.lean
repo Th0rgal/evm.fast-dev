@@ -20,6 +20,5 @@ theorem installed_memory_bitmap_rom_byte (index byte : Nat)
     simp only [initDataRom,initialPc]; omega
   rw [hoff]
 
-#print axioms installed_memory_bitmap_rom_byte
 
 end InitECandidate.Solver.Wave8GuestInv.ArtifactInstallation

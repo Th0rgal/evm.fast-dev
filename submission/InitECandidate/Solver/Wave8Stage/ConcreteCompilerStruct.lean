@@ -35,6 +35,4 @@ theorem source_eq : compileTopExact ConcreteCompilerSimp.source = source := by
   rw [globalsContext_eq]
   exact rendered_eq
 
-#print axioms namesContext_eq
-#print axioms source_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerStruct

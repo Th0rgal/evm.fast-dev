@@ -301,5 +301,4 @@ theorem compileCorrect_callFFI {width : Nat} [NeZero width] {S Q : Type} {F : Ty
     rw [show s1.clock + (k + l) = (s1.clock + k) + l by omega, (hl _).1, hclk, hstep, hcall]
     exact hk
 
-#print axioms compileCorrect_callFFI
 end InitECandidate.Solver.Wave8Stage.Quantitative

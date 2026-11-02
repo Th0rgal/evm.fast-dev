@@ -28,6 +28,5 @@ example : type_of% (fb_ssz_check_offsets (GuestInv := GuestInv)) =
     ((TerminatingFunBoundedOn GuestInv (ofString "ssz_fail") K.«ssz_fail») →
     TerminatingFunBoundedOn GuestInv (ofString "ssz_check_offsets") K.«ssz_check_offsets») := rfl
 
-#print axioms fb_ssz_check_offsets
 
 end InitECandidate.Solver.Wave8Leaves.S13

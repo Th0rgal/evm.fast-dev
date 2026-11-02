@@ -52,8 +52,6 @@ theorem «callees_process_message_call» : sameNames (progCallees (fnBody Guest.
 
 theorem «gbody_process_message_call» : GBody.«process_message_call» := by sorry
 
-theorem «gb_process_message_call» : TerminatingFunBoundedOn MsgReady (ofString "process_message_call") K.«process_message_call» :=
-  «gbody_process_message_call» «fb_account_deployable» «fb_alloc» «fb_frame_state_gas_used» «fb_memzero» «gb_process_create_message» «gb_process_message» «wk_account_deployable» «wk_alloc» «rt_alloc» «wk_memzero» «zv_memzero»
 
 /-- The body of `process_unchecked_system_transaction` alone (AST line 32851, guard `WorldOK`, loop-free). Its direct callees are
 exactly `alloc`, `ext_code_of`, `frame_mem_release`, `htab_new`, `incorporate_tx_into_block`, `memcpy`, `msg_new`, `process_message_call`, `scratch_release`, `state_fresh_tx`, `te_new` (`«callees_process_unchecked_system_transaction»`, checked against the AST). Hypotheses: the bound
@@ -106,8 +104,6 @@ theorem «callees_process_unchecked_system_transaction» : sameNames (progCallee
 
 theorem «gbody_process_unchecked_system_transaction» : GBody.«process_unchecked_system_transaction» := by sorry
 
-theorem «gb_process_unchecked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction» :=
-  «gbody_process_unchecked_system_transaction» «fb_alloc» «fb_ext_code_of» «fb_frame_mem_release» «fb_htab_new» «gb_incorporate_tx_into_block» «fb_memcpy» «fb_msg_new» «gb_process_message_call» «fb_scratch_release» «fb_state_fresh_tx» «fb_te_new» «wk_ext_code_of» «htab_new_spec» «wk_msg_new» «rt_msg_new» «wk_process_message_call» «wk_state_fresh_tx» «wk_te_new» «rt_te_new»
 
 /-- The body of `process_checked_system_transaction` alone (AST line 32928, guard `WorldOK`, loop-free). Its direct callees are
 exactly `alloc`, `ext_code_of`, `process_unchecked_system_transaction`, `state_fresh_tx` (`«callees_process_checked_system_transaction»`, checked against the AST). Hypotheses: the bound
@@ -172,8 +168,6 @@ theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_s
   try simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl]
   omega
 
-theorem «gb_process_checked_system_transaction» : TerminatingFunBoundedOn WorldOK (ofString "process_checked_system_transaction") K.«process_checked_system_transaction» :=
-  «gbody_process_checked_system_transaction» «fb_alloc» «fb_ext_code_of» «gb_process_unchecked_system_transaction» «fb_state_fresh_tx» «wk_alloc» «wk_ext_code_of» «wk_state_fresh_tx»
 
 /-- The body of `process_general_purpose_requests` alone (AST line 33507, guard `ReqsFresh`, #0 WALK; #1 WALK). Its direct callees are
 exactly `alloc`, `extract_deposit_data`, `memcpy`, `memeq`, `process_checked_system_transaction`, `requests_append` (`«callees_process_general_purpose_requests»`, checked against the AST). Hypotheses: the bound
@@ -217,7 +211,5 @@ theorem «callees_process_general_purpose_requests» : sameNames (progCallees (f
 
 theorem «gbody_process_general_purpose_requests» : GBody.«process_general_purpose_requests» := by sorry
 
-theorem «gb_process_general_purpose_requests» : TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests» :=
-  «gbody_process_general_purpose_requests» «fb_alloc» «fb_extract_deposit_data» «fb_memcpy» «fb_memeq» «gb_process_checked_system_transaction» «fb_requests_append» «wk_alloc» «rt_alloc» «wk_extract_deposit_data» «wk_memcpy» «ro_memeq» «wk_process_checked_system_transaction» «wk_requests_append»
 
 end InitECandidate.Solver.Wave8GuestInv

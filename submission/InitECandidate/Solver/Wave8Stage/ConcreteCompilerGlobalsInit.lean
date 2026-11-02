@@ -20,5 +20,4 @@ wave8_certified_reduce initial := ({
   maxGlobalsSize := cakeBytesInWord 64 * BitVec.ofNat 64
     ((decShapesHOL ConcreteCompilerGlobalsRename.renamed).map sizeOfShapeHOL).sum } : PanGlobalsContextExact 64)
 
-#print axioms initial_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsInit

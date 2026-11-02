@@ -24,5 +24,4 @@ theorem compiled_eq :
     compileDecsExactHOL ConcreteCompilerGlobalsInit.initial ConcreteCompilerGlobalsSplit.header = result :=
   (congrArg (compileDecsExactHOL ConcreteCompilerGlobalsInit.initial) input_eq).trans result_eq
 
-#print axioms compiled_eq
 end InitECandidate.Solver.Wave8Stage.ConcreteCompilerGlobalsHeader

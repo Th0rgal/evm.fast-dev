@@ -844,6 +844,5 @@ theorem compCorrectCall {width : Nat} [NeZero width] {σ : Type} :
     · simp only [hnd, not_false_eq_true, if_true, Prod.mk.injEq] at he
       exact absurd he.1.symm hne
 
-#print axioms compCorrectCall
 
 end InitECandidate.Solver.Wave8Stage.CrepCostCall

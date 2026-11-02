@@ -1301,6 +1301,5 @@ theorem compCorrectCallReturningHandler {width : Nat} [NeZero width] {C F : Type
     bitmapPrefix labels execution notError hypotheses
   exact ⟨extra, clockBound, targetFinal, targetResult, run, conclusion⟩
 
-#print axioms compCorrectCallReturningHandler
 
 end InitECandidate.Solver.Wave8Stage.WordToStackHandlerClock

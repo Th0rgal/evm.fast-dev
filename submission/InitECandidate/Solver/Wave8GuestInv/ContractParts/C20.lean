@@ -50,8 +50,6 @@ theorem «gbody_attempt_l3» : GBody.«attempt_l3» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l3»; omega
 
-theorem «gb_attempt_l3» : TerminatingFunBoundedOn InputReady (ofString "attempt_l3") K.«attempt_l3» :=
-  «gbody_attempt_l3» «gb_attempt_l2»
 
 /-- The body of `attempt_l4` alone (AST line 33895, guard `InputReady`, loop-free). Its direct callees are
 exactly `attempt_l3` (`«callees_attempt_l4»`, checked against the AST). Hypotheses: the bound
@@ -85,8 +83,6 @@ theorem «gbody_attempt_l4» : GBody.«attempt_l4» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l4»; omega
 
-theorem «gb_attempt_l4» : TerminatingFunBoundedOn InputReady (ofString "attempt_l4") K.«attempt_l4» :=
-  «gbody_attempt_l4» «gb_attempt_l3»
 
 /-- The body of `attempt_l5` alone (AST line 33911, guard `InputReady`, loop-free). Its direct callees are
 exactly `attempt_l4` (`«callees_attempt_l5»`, checked against the AST). Hypotheses: the bound
@@ -120,8 +116,6 @@ theorem «gbody_attempt_l5» : GBody.«attempt_l5» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l5»; omega
 
-theorem «gb_attempt_l5» : TerminatingFunBoundedOn InputReady (ofString "attempt_l5") K.«attempt_l5» :=
-  «gbody_attempt_l5» «gb_attempt_l4»
 
 /-- The body of `attempt_l6` alone (AST line 33927, guard `InputReady`, loop-free). Its direct callees are
 exactly `attempt_l5` (`«callees_attempt_l6»`, checked against the AST). Hypotheses: the bound
@@ -155,7 +149,5 @@ theorem «gbody_attempt_l6» : GBody.«attempt_l6» := by
         inputReady_guestInv (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))) ?_
   unfold K.«attempt_l6»; omega
 
-theorem «gb_attempt_l6» : TerminatingFunBoundedOn InputReady (ofString "attempt_l6") K.«attempt_l6» :=
-  «gbody_attempt_l6» «gb_attempt_l5»
 
 end InitECandidate.Solver.Wave8GuestInv

@@ -101,7 +101,4 @@ theorem compileCorrectFor_all {width : Nat} [NeZero width] {S Q F : Type}
     | halt => exact compileCorrect_halt s1 w bytes n hc hf
 
 
-#print axioms compileCorrectFor_all
-#print axioms compileCorrect_error
-#print axioms compileCorrect_timeOut
 end InitECandidate.Solver.Wave8Stage.Quantitative

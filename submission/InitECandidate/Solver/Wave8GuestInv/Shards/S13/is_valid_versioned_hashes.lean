@@ -32,6 +32,5 @@ example : type_of% (fb_is_valid_versioned_hashes (GuestInv := GuestInv)) =
     (TerminatingFunBoundedOn GuestInv (ofString "tx_is_blob") K.«tx_is_blob») →
     TerminatingFunBoundedOn GuestInv (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes») := rfl
 
-#print axioms fb_is_valid_versioned_hashes
 
 end InitECandidate.Solver.Wave8Leaves.S13

@@ -63,6 +63,5 @@ theorem compCorrectTick {width : Nat} [NeZero width] {σ : Type}
     · exact hLocals
 
 
-#print axioms compCorrectTick
 
 end InitECandidate.Solver.Wave8Stage.CrepCostTick

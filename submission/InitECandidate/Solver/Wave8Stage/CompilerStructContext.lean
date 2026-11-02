@@ -44,5 +44,4 @@ theorem compile_eq (context : ContextExact) (declarations : List (DeclHOL 64)) :
   | cons declaration rest ih =>
     cases declaration <;> simp only [compileDeclsExact, render, finalContext, ih]
 
-#print axioms compile_eq
 end InitECandidate.Solver.Wave8Stage.CompilerStructContext

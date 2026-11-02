@@ -35,5 +35,4 @@ theorem concrete : names ConcreteCompilerStruct.source = names ConcreteCompilerS
   rw [← ConcreteCompilerSimp.rendered_eq]
   exact simplify _
 
-#print axioms concrete
 end InitECandidate.Solver.Wave8Stage.CompilerFunctionNames

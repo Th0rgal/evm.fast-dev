@@ -101,5 +101,4 @@ theorem install_evaluate_withAllocFields {C F : Type}
   repeat' split
   all_goals first | contradiction | simp_all only [replaceResult, override]
 
-#print axioms leaf_evaluate_withAllocFields
 end InitECandidate.Solver.Wave8Stage.AllocFields

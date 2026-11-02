@@ -232,5 +232,4 @@ theorem returningCall_at {width : Nat} [NeZero width] {C F : Type}
           | timeOut => exact (bodyNt rfl).elim
           | «break» label | «continue» label => exact (ne rfl).elim
 
-#print axioms returningCall_at
 end InitECandidate.Solver.Wave8Stage.WordCostEffects

@@ -88,7 +88,6 @@ theorem word_to_stack_certified_complete {width : Nat} [NeZero width] {C F : Typ
   rw [lifted]
   exact targetComplete
 
-#print axioms word_to_stack_certified_complete
 theorem initialized_certified_word_to_stack_complete {width : Nat} [NeZero width] {C F : Type}
     (ac : AsmConfigExact width) (wc : WordToWord.Config) (panCode : List (DeclHOL width))
     (col : List (Option (Spt Nat)))
@@ -258,8 +257,6 @@ theorem pan_to_certified_stack_complete {width : Nat} [NeZero width] {C F : Type
 
 
 set_option pp.fullNames true
-#print axioms initialized_certified_word_to_stack_complete
-#print axioms pan_to_certified_stack_complete
 open InitECandidate.Solver.Wave8Stage.RuntimeLabels
 open InitECandidate.Solver.Wave8Stage.InitializedTransfer
 open Flapjack.Compiler.Backend.LabToTarget Flapjack.Compiler.Backend.LabSem
@@ -471,8 +468,4 @@ theorem pan_to_target_certified_affine_not_timeOut {F : Type}
 
 
 set_option pp.fullNames true
-#print axioms word_to_stack_certified_complete
-#print axioms pan_to_certified_lab_not_timeOut
-#print axioms pan_to_certified_lab_complete
-#print axioms pan_to_target_certified_affine_not_timeOut
 end InitECandidate.Solver.Wave8GuestInv.CertifiedPipelineTransfer
