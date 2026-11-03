@@ -26,7 +26,7 @@ theorem htab_del_progress_spec_proof :
     FunSpec HtabArgWF (OnReturn HtabDelProgress) (ofString "htab_del") := by
   rcases Wave8HtabAstra.Htab.htab_del_progress_spec_proof with ⟨ps, body, ret, hl, hrun⟩
   refine ⟨ps, body, ret, hl, ?_⟩
-  intro F s hc hpre hnt v hv
+  intro F s hc hpre _ hnt v hv
   exact hrun s hc (arg_to_light s hpre) hnt v hv
 
 example : type_of% htab_del_progress_spec := htab_del_progress_spec_proof
@@ -40,16 +40,32 @@ open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
 theorem exit_from_light {F : Type} (s post : PanSemStateFiniteExact 64 F)
-    (h : Wave8HtabAstra.Htab.ExitR9 (Wave8HtabAstra.locN s "t") s post) : HtabExit s post := by
-  rcases h with ⟨⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, rest⟩, hk, hs⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light post _).mpr hw, hk, hs, rest⟩
+    (h : Wave8HtabAstra.Htab.ExitR9 (Wave8HtabAstra.locN s "t") s post)
+    (hgw : GlobalsWord s) : HtabExit s post := by
+  rcases h with ⟨⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hh, hfp, hfo, hgl⟩, hk, hs⟩
+  have hgw' : GlobalsWord post := by
+    intro n hn
+    by_cases hk : ofString n = ofString "heap_ptr"
+    · have hgN : globN post n = globN post "heap_ptr" := by unfold globN; rw [hk]
+      refine globalWord_of_globN_pos post n ?_
+      rw [hgN]
+      have : sourceBase ≤ globN post "heap_ptr" := ha.1
+      have : sourceBase = 0xa1000000 := rfl
+      omega
+    · obtain ⟨w, hw⟩ := hgw n hn
+      exact ⟨w, by
+        unfold GlobalWord at hw ⊢
+        have hne : ofString n ∉ (["heap_ptr"] : List String).map ofString := by simpa
+        rw [← hgl _ hne]; exact hw⟩
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_from_light post ha hgw'⟩,
+    (htabWF_iff_light post _).mpr hw, hk, hs, hh, hfp, hfo, hgl⟩
 
 theorem htab_del_spec_proof :
     FunSpec HtabArgWF (OnReturn HtabExit) (ofString "htab_del") := by
   rcases Wave8HtabAstra.Htab.htab_del_spec_proof with ⟨ps, body, ret, hl, hrun⟩
   refine ⟨ps, body, ret, hl, ?_⟩
-  intro F s hc hpre hnt v hv
-  exact exit_from_light s _ (hrun s hc (arg_to_light s hpre) hnt v hv)
+  intro F s hc hpre _ hnt v hv
+  exact exit_from_light s _ (hrun s hc (arg_to_light s hpre) hnt v hv) hpre.1.2.2.2.2.2.2.2.2.2
 
 example : type_of% htab_del_spec := htab_del_spec_proof
 end InitECandidate.Solver.Wave8GuestInv.HtabAstra

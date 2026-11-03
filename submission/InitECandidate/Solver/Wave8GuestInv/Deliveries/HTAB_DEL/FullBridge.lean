@@ -33,9 +33,24 @@ theorem htabWF_iff_light {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) 
   simp only [hfree, hdr_eq_light, nodeF_eq_light, memW_eq_light, htabFootprint_eq_light,
     Inside_eq_light, WordsOK_eq_light, Disj_eq_light, maxKeyLen_eq_light]
 
+theorem globN_eq_light : @globN = @Wave8HtabAstra.globN := rfl
+theorem locN_eq_light : @locN = @Wave8HtabAstra.locN := rfl
+theorem Allocated_eq_light : @Allocated = @Wave8HtabAstra.Allocated := rfl
+theorem FrameOutside_eq_light : @FrameOutside = @Wave8HtabAstra.FrameOutside := rfl
+
+theorem arenaOK_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : ArenaOK s) : Wave8HtabAstra.ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2.1⟩
+
+theorem arenaOK_from_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : Wave8HtabAstra.ArenaOK s) (hgw : GlobalsWord s) : ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2, hgw⟩
+
 theorem arg_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : HtabArgWF s) : Wave8HtabAstra.HtabArgWF s := by
   rcases h with ⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hal⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_to_light s ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
 
 end InitECandidate.Solver.Wave8GuestInv.HtabAstra

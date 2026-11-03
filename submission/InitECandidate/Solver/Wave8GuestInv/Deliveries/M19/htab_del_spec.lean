@@ -18,6 +18,6 @@ theorem htab_del_spec :
   rcases Wave8M19.Htab.htab_del_spec_proof with ⟨ps, body, ret, hl, hrun⟩
   refine ⟨ps, body, ret, hl, ?_⟩
   intro F s hc hpre _ hnt v hv
-  exact exit_from_light s _ (hrun s hc (arg_to_light s hpre) hnt v hv)
+  exact exit_from_light s _ (hrun s hc (arg_to_light s hpre) hnt v hv) hpre.1.2.2.2.2.2.2.2.2.2
 
 end InitECandidate.Solver.Wave8GuestInv.M19

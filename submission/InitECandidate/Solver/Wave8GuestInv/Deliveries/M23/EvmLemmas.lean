@@ -833,9 +833,7 @@ theorem evmStep_of_head_16_64_184 {F : Type}
       · intro heq; have := congrArg BitVec.toNat heq; rw [hal_b, ha184_nat] at this
         exact hno (e0, 280) (by simp) ⟨by dsimp only; omega, by dsimp only; omega⟩
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, hglob]
-  have hApost : ArenaReady post := by
-    refine ⟨hGp, ?_⟩
-    unfold ArenaOK; simp only [hglob_eq]; exact hAs.2
+  have hApost : ArenaReady post := ⟨hGp, arenaOK_congr hglob hAs.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [hglob]

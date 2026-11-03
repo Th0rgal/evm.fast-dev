@@ -363,8 +363,8 @@ theorem ivl_unhit_free_of_zero_or_allocated {F : Type} {s post : PanSemStateFini
     {j : Ivl} (hj : j = (0, 0) ∨ (j.2 ≠ 0 ∧ Allocated s j)) :
     IvlUnhit s post j := by
   obtain ⟨hd_hp, hd_sc⟩ := ivl_disj_free_of_zero_or_allocated hAs hAp hag hj
-  obtain ⟨_, _, _, _, _, hs_hp8, _, hs_sc8⟩ := hAs
-  obtain ⟨_, _, _, _, _, hp_hp8, _, hp_sc8⟩ := hAp
+  obtain ⟨_, _, _, _, _, hs_hp8, _, hs_sc8, _⟩ := hAs
+  obtain ⟨_, _, _, _, _, hp_hp8, _, hp_sc8, _⟩ := hAp
   have hg_hp := hag.1; have hg_sc := hag.2
   have hj_z : j.2 = 0 → j.1 % 8 = 0 := by
     intro hz; rcases hj with rfl | ⟨hnz, _⟩
@@ -1741,8 +1741,8 @@ theorem worldTypedWith_htab_new {F : Type} {s post : PanSemStateFiniteExact 64 F
   have hsb : 24 < sourceBase := by decide
   have hsb264 : sourceBase < 2 ^ 64 := by decide
   have hsep : heapLimit ≤ scratchStart := by decide
-  obtain ⟨hs_lo, hs_hp, hs_fm, hs_sc, hs_end, hs_hp8, hs_fm8, hs_sc8⟩ := hAs.2
-  obtain ⟨hp_lo, hp_hp, hp_fm, hp_sc, hp_end, hp_hp8, hp_fm8, hp_sc8⟩ := hAp.2
+  obtain ⟨hs_lo, hs_hp, hs_fm, hs_sc, hs_end, hs_hp8, hs_fm8, hs_sc8, _⟩ := hAs.2
+  obtain ⟨hp_lo, hp_hp, hp_fm, hp_sc, hp_end, hp_hp8, hp_fm8, hp_sc8, _⟩ := hAp.2
   have hg_hp := hag.1; have hg_sc := hag.2
   have hf_al : (globN s "heap_ptr") % 8 = 0 ∧ (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 :=
     ⟨hs_hp8, by omega⟩

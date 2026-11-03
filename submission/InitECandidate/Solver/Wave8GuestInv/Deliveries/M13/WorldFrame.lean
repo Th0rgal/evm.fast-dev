@@ -1195,11 +1195,7 @@ theorem ByteRegionEffect.to_worldStep {F : Type}
   have hinv_post : GuestInv post :=
     guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hW.1.1
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  have hA_post : ArenaReady post := by
-    refine ⟨hinv_post, ?_⟩
-    unfold ArenaOK
-    simp only [hglob_eq]
-    exact hW.1.2
+  have hA_post : ArenaReady post := ⟨hinv_post, arenaOK_congr heff.globals hW.1.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [heff.globals]

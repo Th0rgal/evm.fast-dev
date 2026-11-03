@@ -134,7 +134,7 @@ theorem rt_scratch_alloc :
         have h := and_neg8_toNat (sp - n)
         rw [hsub_pn] at h
         exact h
-      have hsp_al : sp.toNat % 8 = 0 := by rw [hhp_eq, hfp_eq, hsp_eq] at *; exact hA.2.2.2.2.2.2.2
+      have hsp_al : sp.toNat % 8 = 0 := by rw [hhp_eq, hfp_eq, hsp_eq] at *; exact hA.2.2.2.2.2.2.2.1
       have hq_al : q.toNat % 8 = 0 := by omega
       have hq_ge_fp : fp.toNat ≤ q.toNat := Nat.le_of_not_lt hcmp2
       have hq_le_sp : q.toNat ≤ sp.toNat := by omega
@@ -142,7 +142,8 @@ theorem rt_scratch_alloc :
       have hA_post : ArenaOK post := by
         unfold ArenaOK
         rw [hpost_hp, hpost_fp, hpost_sp]
-        refine ⟨hA.1, hA.2.1, hA.2.2.1, ?_, ?_, hA.2.2.2.2.2.1, hA.2.2.2.2.2.2.1, hq_al⟩
+        refine ⟨hA.1, hA.2.1, hA.2.2.1, ?_, ?_, hA.2.2.2.2.2.1, hA.2.2.2.2.2.2.1, hq_al,
+          globalsWord_update (ofString "scratch_ptr") q hpost_g hA.2.2.2.2.2.2.2.2⟩
         · rw [← hfp_eq]; exact hq_ge_fp
         · have hsp_le_se := hA.2.2.2.2.1
           rw [← hsp_eq] at hsp_le_se

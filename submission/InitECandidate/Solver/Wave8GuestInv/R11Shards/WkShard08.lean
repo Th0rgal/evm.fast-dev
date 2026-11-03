@@ -128,7 +128,7 @@ private theorem worldStep_of_bs56_effect {F : Type}
     guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hW.1.1
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
   have hA_post : ArenaReady post :=
-    ⟨hinv_post, by unfold ArenaOK; simp only [hglob_eq]; exact hW.1.2⟩
+    ⟨hinv_post, arenaOK_congr heff.globals hW.1.2⟩
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq]
   have hsc : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by rw [hglob_eq]
   have hG : GlobalsKept [] s post := fun _ _ => by rw [heff.globals]
@@ -295,7 +295,9 @@ private theorem worldStep_of_bs56_effect {F : Type}
       unfold ArenaOK
       simp only [hsNoBs_other "heap_ptr" (by decide), hsNoBs_other "frame_mem_ptr" (by decide),
         hsNoBs_other "scratch_ptr" (by decide)]
-      exact hW.1.2
+      exact ⟨hW.1.2.1, hW.1.2.2.1, hW.1.2.2.2.1, hW.1.2.2.2.2.1, hW.1.2.2.2.2.2.1,
+        hW.1.2.2.2.2.2.2.1, hW.1.2.2.2.2.2.2.2.1, hW.1.2.2.2.2.2.2.2.2.1,
+        globalsWord_update (ofString "bs") 0#64 rfl hW.1.2.2.2.2.2.2.2.2.2⟩
     have hF_sNoBs : FixedTyped sNoBs := by
       let tailIvls := [(if globN s "journal_cap" = 0 then 0 else globN s "journal", 32 * globN s "journal_cap")] ++
         blockOutObjects s ++ balObjects s

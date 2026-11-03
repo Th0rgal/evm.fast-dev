@@ -161,7 +161,7 @@ theorem arenaOK_update_heap {F : Type} {s t : PanSemStateFiniteExact 64 F}
   have hgw : GlobalsWord t := globalsWord_update (ofString "heap_ptr") q hg hA.2.2.2.2.2.2.2.2
   unfold ArenaOK at hA ⊢
   rw [hhp, hfp, hsp]
-  exact ⟨hlo, hhi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hal, hA.2.2.2.2.2.2.1, hgw⟩
+  exact ⟨hlo, hhi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hal, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2.1, hgw⟩
 
 theorem nodeSize_bounds (k : Nat) : 32 ≤ nodeSize k ∧ nodeSize k ≤ 176 ∧ nodeSize k % 8 = 0 := by
   unfold nodeSize

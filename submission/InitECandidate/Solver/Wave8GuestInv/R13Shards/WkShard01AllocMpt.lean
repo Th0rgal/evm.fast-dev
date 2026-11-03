@@ -293,6 +293,29 @@ theorem wk_alloc_impl :
   rw [← hp_eq, hpost_hp]
   exact ⟨le_rfl, le_of_eq hq_eq.symm⟩
 
+theorem rt_alloc_impl :
+    Wave8Contracts.M26.Returns ArenaReady (fun s post p =>
+      Wave8Contracts.M26.FreshBlock s post p (locN s "n"))
+    (ofString "alloc") := by
+  refine ⟨_, _, _, lookup_alloc_r13, ?_⟩
+  intro F s hcode hAR _ _ v hret
+  obtain ⟨p, q, hrv, hp_eq, hq_eq, hq_hi, _, hp_le_q, _, _, _, _, hA_post, hpost_hp, hpost_sp⟩ :=
+    alloc_body_resumes_props s hcode hAR (Or.inl ⟨v, hret⟩)
+  set post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2
+  rw [hrv] at hret
+  injection hret with h1; injection h1 with h2; subst h2
+  have hhp_al : p.toNat % 8 = 0 := by rw [hp_eq]; exact hAR.2.2.2.2.2.2.1
+  have hsb_le : sourceBase ≤ p.toNat := by rw [hp_eq]; exact hAR.2.1
+  have hlim_le_he : heapLimit ≤ heapEnd := by decide
+  have hAG : AllocatorGrows s post := by
+    refine ⟨?_, by rw [hpost_sp]⟩
+    rw [← hp_eq, hpost_hp]; exact hp_le_q
+  refine ⟨p, rfl, hA_post, hAG, hhp_al, ?_, ?_⟩
+  · rw [← hp_eq, hpost_hp]
+    exact ⟨le_rfl, le_of_eq hq_eq.symm⟩
+  · exact wordsOK_of_guestInv post hA_post.1 p.toNat ((locN s "n" + 7) / 8 * 8)
+      hhp_al (by omega) hsb_le (by omega)
+
 /-! ## 2. `rt_mpt_new` and `wk_mpt_new` -/
 
 theorem lookup_mpt_new_r13 :

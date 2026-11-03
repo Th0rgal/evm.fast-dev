@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C09
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -6,7 +6,7 @@ set_option maxHeartbeats 2000000
 set_option exponentiation.threshold 2000
 set_option linter.unusedSimpArgs false
 
-namespace InitECandidate.Solver.Wave8GuestInv
+namespace InitECandidate.Solver.Wave8GuestInv.P3MptRoot
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -17,13 +17,7 @@ open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
-
-def GBody.«mpt_root» : Prop :=
-  (TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy») →
-  (TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash») →
-  TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»
-
-namespace P3MptRoot
+open InitECandidate.Solver.Wave8GuestInv
 
 private theorem straight (p : ProgHOL 64) (h : extStraightLine p = true) :
     TerminatingProgBoundedOn GuestInv p 0 :=
@@ -156,11 +150,11 @@ private theorem root_entry :
   rw [hx]
   exact hP.2
 
-end P3MptRoot
-
-theorem «gbody_mpt_root» : GBody.«mpt_root» := by
-  intro hm hn
-  refine ⟨_, _, _, P3MptRoot.lookup_root, ?_⟩
+theorem gbody_mpt_root_proof
+    (hm : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
+    (hn : TerminatingFunBoundedOn NodeRlpReady (ofString "node_hash") K.«node_hash») :
+    TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root» := by
+  refine ⟨_, _, _, lookup_root, ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_mpt_root,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
     InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
@@ -170,14 +164,14 @@ theorem «gbody_mpt_root» : GBody.«mpt_root» := by
     InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
     Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
-    (P3MptRoot.dec_guard _ _ _ P3MptRoot.root_init
+    (dec_guard _ _ _ root_init
       (TerminatingProgBoundedOn.seq_hoare
         (TerminatingProgBoundedOn.ite_on
-          (P3MptRoot.weakenGuard
+          (weakenGuard
             (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _)
               (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))
             (fun s h => h.1.1))
-          (P3MptRoot.weakenGuard (P3MptRoot.straight _ rfl) (fun s h => h.1.1)))
+          (weakenGuard (straight _ rfl) (fun s h => h.1.1)))
         (Hoare.ite
           ⟨fun s hc hP hnt he => by
             rw [evaluateHOLFiniteState_seq_line780] at he
@@ -186,7 +180,7 @@ theorem «gbody_mpt_root» : GBody.«mpt_root» := by
             · exact False.elim (return_ne_none _ _ he)
             · simp_all⟩
           (Hoare.skip (fun s h _ => h.1)) (fun _ _ h => absurd h (by simp)))
-        (TerminatingProgBoundedOn.decCall_on hn _ _ _ P3MptRoot.root_entry
+        (TerminatingProgBoundedOn.decCall_on hn _ _ _ root_entry
           (decCallResumeOn_guestInv (fun s h => h.1.1) _ _ _)
           (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.call_guestInv hm _ _)
             (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))) ?_
@@ -194,4 +188,4 @@ theorem «gbody_mpt_root» : GBody.«mpt_root» := by
   simp only [Nat.max_def]
   split <;> omega
 
-end InitECandidate.Solver.Wave8GuestInv
+end InitECandidate.Solver.Wave8GuestInv.P3MptRoot

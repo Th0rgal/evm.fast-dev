@@ -86,7 +86,7 @@ theorem LocFrame.arenaReady {F : Type} {s t : PanSemStateFiniteExact 64 F}
            by unfold LocFrame at h; rw [h]; exact hAR.1.memaddrs,
            by unfold LocFrame at h; rw [h]; exact hAR.1.shMemaddrs,
            by unfold LocFrame at h; rw [h]; exact hAR.1.baseAddr⟩, ?_⟩
-  have hok := hAR.2; unfold ArenaOK at hok ⊢; simpa only [hgN] using hok
+  exact arenaOK_congr hg hAR.2
 
 def locOnlyW : ProgHOL 64 → Bool
   | .dec _ _ _ body => locOnlyW body

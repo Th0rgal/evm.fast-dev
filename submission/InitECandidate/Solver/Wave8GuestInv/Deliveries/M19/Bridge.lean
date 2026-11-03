@@ -114,16 +114,27 @@ theorem htabWF_iff_light {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) 
   · rintro ⟨h1, h2, h3, h4, h5, rest⟩
     exact ⟨h1, (htab_pairwise_disj_iff s t h3 h5).mpr h2, h3, h4, h5, rest⟩
 
+theorem arenaOK_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : ArenaOK s) : Wave8M19.ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2.1⟩
+
+theorem arenaOK_from_light {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : Wave8M19.ArenaOK s) (hgw : GlobalsWord s) : ArenaOK s :=
+  ⟨h.1, h.2.1, h.2.2.1, h.2.2.2.1, h.2.2.2.2.1, h.2.2.2.2.2.1, h.2.2.2.2.2.2.1,
+    h.2.2.2.2.2.2.2, hgw⟩
+
 theorem arg_to_light {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : HtabArgWF s) : Wave8M19.HtabArgWF s := by
   rcases h with ⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hal⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_to_light s ha⟩, (htabWF_iff_light s _).mp hw, hal⟩
 
 theorem exit_from_light {F : Type} (s post : PanSemStateFiniteExact 64 F)
-    (h : Wave8M19.Htab.ExitR9 (Wave8M19.locN s "t") s post) :
-    HtabExit s post := by
+    (h : Wave8M19.Htab.ExitR9 (Wave8M19.locN s "t") s post)
+    (hgw : GlobalsWord s) : HtabExit s post := by
   rcases h with ⟨⟨⟨⟨c, m, sh, b⟩, ha⟩, hw, hh, hfp, hfr, _⟩, hk, hs, hg⟩
-  exact ⟨⟨⟨c, m, sh, b⟩, ha⟩, (htabWF_iff_light post _).mpr hw, hk, hs, hh, hfp, hfr,
+  exact ⟨⟨⟨c, m, sh, b⟩, arenaOK_from_light post ha (globalsWord_congr hg hgw)⟩,
+    (htabWF_iff_light post _).mpr hw, hk, hs, hh, hfp, hfr,
     fun k _ => hg.symm ▸ rfl⟩
 
 end InitECandidate.Solver.Wave8GuestInv.M19

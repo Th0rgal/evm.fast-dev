@@ -180,7 +180,9 @@ theorem state_restore_preserves_head_frames
         unfold ArenaOK at hA_ok ⊢
         rw [hg_nat "heap_ptr" (by decide), hg_nat "frame_mem_ptr" (by decide),
           hg_nat "scratch_ptr" (by decide)]
-        exact hA_ok
+        exact ⟨hA_ok.1, hA_ok.2.1, hA_ok.2.2.1, hA_ok.2.2.2.1, hA_ok.2.2.2.2.1,
+          hA_ok.2.2.2.2.2.1, hA_ok.2.2.2.2.2.2.1, hA_ok.2.2.2.2.2.2.2.1,
+          globalsWord_update (ofString "journal_n") (b - 1) rfl hA_ok.2.2.2.2.2.2.2.2⟩
       have hwf_eq : ∀ u ∈ S, HtabWF s1 u := fun u hu =>
         htabWF_congr_unhit hA.1 hA1.1 (hT' u hu).1 (fun _ _ _ _ _ _ => rfl)
       have hfp_eq : ∀ u ∈ S, htabFootprint s1 u = htabFootprint st u := fun u hu => by

@@ -360,7 +360,8 @@ private theorem alloc_returned_props {F : Type}
           show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
       have hpost_ginv : GuestInv post := ⟨hginv.code, hginv.memaddrs, hginv.shMemaddrs, hginv.baseAddr⟩
       have hpost_arena : ArenaOK post := by
-        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+          globalsWord_update (ofString "heap_ptr") q rfl harena.2.2.2.2.2.2.2.2⟩
         · rw [hpost_hp]; omega
         · rw [hpost_hp]; exact hq_le_hl
         · rw [hpost_fm]; exact hfm_lo

@@ -658,7 +658,8 @@ theorem rt_msg_new :
                 unfold ArenaOK
                 rw [hpost_hp, hpost_fp, hpost_sp]
                 exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1,
-                  hq_al, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2⟩
+                  hq_al, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2.1,
+                  globalsWord_update (ofString "heap_ptr") q hpost_glob hA.2.2.2.2.2.2.2.2⟩
               have hAG : AllocatorGrows s post := by
                 refine ⟨?_, by rw [hpost_sp]⟩
                 rw [hpost_hp, ← hhp_eq]; exact hp_le_q

@@ -7,7 +7,7 @@ set_option exponentiation.threshold 2000
 set_option linter.style.nameCheck false
 set_option linter.unusedSimpArgs false
 
-namespace InitECandidate.Solver.Wave8GuestInv
+namespace InitECandidate.Solver.Wave8GuestInv.P3MptSet
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -18,17 +18,7 @@ open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
-
-def GBody.«mpt_set» : Prop :=
-  (TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node») →
-  (TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node») →
-  (TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key») →
-  (WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
-    ["heap_ptr"] (ofString "mpt_nibble_key")) →
-  (RetNibbles (ofString "mpt_nibble_key")) →
-  TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»
-
-namespace P3MptSet
+open InitECandidate.Solver.Wave8GuestInv
 
 private def AfterNk : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => ArenaReady s ∧ locN s "vlen" < 2 ^ 40 ∧
@@ -269,11 +259,15 @@ private theorem insert_entry :
   · rw [hklen_loc]; exact hl64
   · rw [hvlen_loc]; exact hvlen
 
-end P3MptSet
-
-theorem «gbody_mpt_set» : GBody.«mpt_set» := by
-  intro hdel hins hnk_fb hww hnk
-  refine ⟨_, _, _, P3MptSet.lookup_mpt_set, ?_⟩
+theorem gbody_mpt_set_proof
+    (hdel : TerminatingFunBoundedOn MptReady (ofString "_mpt_delete_node") K.«_mpt_delete_node»)
+    (hins : TerminatingFunBoundedOn MptInsertReady (ofString "_mpt_insert_node") K.«_mpt_insert_node»)
+    (hnk_fb : TerminatingFunBoundedOn GuestInv (ofString "mpt_nibble_key") K.«mpt_nibble_key»)
+    (hww : WritesWithin (fun s => [(globN s "keccak_pad", 136), (globN s "keccak_st", 200), (globN s "mpt_hash_scratch", 40)])
+      ["heap_ptr"] (ofString "mpt_nibble_key"))
+    (hnk : RetNibbles (ofString "mpt_nibble_key")) :
+    TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set» := by
+  refine ⟨_, _, _, lookup_mpt_set, ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_mpt_set,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
     InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
@@ -285,12 +279,12 @@ theorem «gbody_mpt_set» : GBody.«mpt_set» := by
   refine TerminatingProgBoundedOn.mono_bound
     (TerminatingProgBoundedOn.decCall_on hnk_fb _ _ _
       (callEntryOn_of_imp localsFree_guestInv (fun s h => h.1.1.1) _ _)
-      (P3MptSet.nk_resume hww hnk)
-      (P3MptSet.dec_guard _ _ _ P3MptSet.root_dec_init
+      (nk_resume hww hnk)
+      (dec_guard _ _ _ root_dec_init
         (TerminatingProgBoundedOn.seq_guestInv_after
           (TerminatingProgBoundedOn.ite_on
-            (TerminatingProgBoundedOn.call_on hdel _ _ P3MptSet.delete_entry)
-            (TerminatingProgBoundedOn.call_on hins _ _ P3MptSet.insert_entry))
+            (TerminatingProgBoundedOn.call_on hdel _ _ delete_entry)
+            (TerminatingProgBoundedOn.call_on hins _ _ insert_entry))
           (fun s h => h.1.1)
           (TerminatingProgBoundedOn.seq_guestInv
             (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
@@ -299,4 +293,4 @@ theorem «gbody_mpt_set» : GBody.«mpt_set» := by
   simp only [Nat.max_def]
   split <;> omega
 
-end InitECandidate.Solver.Wave8GuestInv
+end InitECandidate.Solver.Wave8GuestInv.P3MptSet

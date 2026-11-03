@@ -87,7 +87,7 @@ theorem InitEff.of_byteEff {F : Type} {s cur next : PanSemStateFiniteExact 64 F}
     InitEff s next Rl B gw := by
   have hGn : GuestInv next :=
     guestInv_congr hb.code hb.memaddrs hb.shMemaddrs hb.baseAddr h.arena.1
-  have hAn : ArenaReady next := ⟨hGn, by simpa [ArenaOK, globN, hb.globals] using h.arena.2⟩
+      have hAn : ArenaReady next := ⟨hGn, arenaOK_congr hb.globals h.arena.2⟩
   refine ⟨hAn, hb.code.trans h.code, hb.memaddrs.trans h.memaddrs, hb.be.trans h.be, hb.eshapes.trans h.eshapes,
     by rw [hb.globals]; exact h.hp_word,
     by simpa [globN, hb.globals] using h.hp_lo,
@@ -594,8 +594,13 @@ theorem step_call_alloc_global {F : Type}
           heff.code, heff.memaddrs, heff.be, heff.eshapes,
           ⟨q, hhp_out_lookup⟩, ?_, hfmp_out.trans heff.fmp_eq, hsp_out.trans heff.sp_eq,
           ?_, ?_, heff.out_dom, heff.cell_frame, heff.byte_frame⟩
-        · obtain ⟨ha1, ha2, ha3, ha4, ha5, ha6, ha7, ha8⟩ := heff.arena.2
-          refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+        · obtain ⟨ha1, ha2, ha3, ha4, ha5, ha6, ha7, ha8, ha9⟩ := heff.arena.2
+          refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+            globalsWord_update (s := { cur with globals := HolFiniteMapExact.update cur.globals (ofString "heap_ptr", .val (.word q)) })
+              (ofString gname) pw rfl
+              (globalsWord_update (s := cur)
+                (t := { cur with globals := HolFiniteMapExact.update cur.globals (ofString "heap_ptr", .val (.word q)) })
+                (ofString "heap_ptr") q rfl ha9)⟩
           · rw [hhp_out]; rw [hpw_glob] at ha1; exact le_trans ha1 hq_ge_pw
           · rw [hhp_out]; exact hbnds.2.1
           · rw [hfmp_out]; exact ha3

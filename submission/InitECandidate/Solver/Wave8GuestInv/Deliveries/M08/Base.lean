@@ -1449,9 +1449,7 @@ theorem worldStep_of_region_writes {F : Type} {s post : PanSemStateFiniteExact 6
       NoExtra s r post := by
   have hAs := hWOK.1
   have hgP : GuestInv post := guestInv_congr hmeta.1 hmeta.2.1 hmeta.2.2.1 hmeta.2.2.2.1 hAs.1
-  have hAp : ArenaReady post := by
-    refine ⟨hgP, ?_⟩
-    unfold ArenaOK; simp only [globN_congr hmeta.2.2.2.2.2]; exact hAs.2
+  have hAp : ArenaReady post := ⟨hgP, arenaOK_congr hmeta.2.2.2.2.2 hAs.2⟩
   have hag : AllocatorGrows s post := by
     unfold AllocatorGrows; simp only [globN_congr hmeta.2.2.2.2.2]; exact ⟨le_rfl, le_rfl⟩
   have hgw : GlobalsKept [] s post := fun _ _ => by rw [hmeta.2.2.2.2.2]
