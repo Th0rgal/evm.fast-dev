@@ -607,7 +607,7 @@ theorem initEff_decCall_alloc_local {F : Type}
       have hsp_n : globN nextExplicit "scratch_ptr" = globN cur "scratch_ptr" := by
         simp [nextExplicit, globN, HolFiniteMapExact.lookup_update, FUPDATE,
           show (ofString "heap_ptr" == ofString "scratch_ptr") = false by decide]
-      obtain ⟨ha1, ha2, ha3, ha4, ha5, ha6, ha7, ha8⟩ := heff.arena.2
+      obtain ⟨ha1, ha2, ha3, ha4, ha5, ha6, ha7, ha8, ha9⟩ := heff.arena.2
       refine ⟨⟨guestInv_congr (s := cur) rfl rfl rfl rfl heff.arena.1,
         ⟨by rw [hhp_n]; rw [hpw_glob] at ha1; exact le_trans ha1 hq_ge_pw,
          by rw [hhp_n]; exact hbnds.2.1,
@@ -616,7 +616,8 @@ theorem initEff_decCall_alloc_local {F : Type}
          by rw [hsp_n]; exact ha5,
          by rw [hhp_n]; exact hbnds.2.2.1,
          by rw [hfmp_n]; exact ha7,
-         by rw [hsp_n]; exact ha8⟩⟩,
+         by rw [hsp_n]; exact ha8,
+         globalsWord_update (s := cur) (t := nextExplicit) (ofString "heap_ptr") q rfl ha9⟩⟩,
         heff.code, heff.memaddrs, heff.be, heff.eshapes,
         ⟨q, by simp [nextExplicit, HolFiniteMapExact.lookup_update, FUPDATE]⟩,
         by rw [hhp_n]; have := heff.hp_lo; rw [hpw_glob] at this; exact le_trans this hq_ge_pw,
@@ -724,12 +725,13 @@ theorem initEff_seq_heap_release {F : Type}
   have hsp_m : globN mid "scratch_ptr" = globN cur "scratch_ptr" := by
     simp [mid, globN, HolFiniteMapExact.lookup_update, FUPDATE, show (ofString "heap_ptr" == ofString "scratch_ptr") = false by decide]
   have hsb_lo : sourceBase ≤ mw.toNat := le_trans hAs.1 hm_lo
-  obtain ⟨_, _, ha3, ha4, ha5, _, ha7, ha8⟩ := heff.arena.2
+  obtain ⟨_, _, ha3, ha4, ha5, _, ha7, ha8, ha9⟩ := heff.arena.2
   have heff_mid : InitEff s mid Rl B gw := by
     refine ⟨⟨guestInv_congr (s := cur) rfl rfl rfl rfl heff.arena.1,
       ⟨by rw [hhp_m]; exact hsb_lo, by rw [hhp_m]; exact hm_hi,
        by rw [hfmp_m]; exact ha3, by rw [hfmp_m, hsp_m]; exact ha4, by rw [hsp_m]; exact ha5,
-       by rw [hhp_m]; exact hm8, by rw [hfmp_m]; exact ha7, by rw [hsp_m]; exact ha8⟩⟩,
+       by rw [hhp_m]; exact hm8, by rw [hfmp_m]; exact ha7, by rw [hsp_m]; exact ha8,
+       globalsWord_update (s := cur) (t := mid) (ofString "heap_ptr") mw rfl ha9⟩⟩,
       heff.code, heff.memaddrs, heff.be, heff.eshapes,
       ⟨mw, by simp [mid, HolFiniteMapExact.lookup_update, FUPDATE]⟩,
       by rw [hhp_m]; exact hm_lo,

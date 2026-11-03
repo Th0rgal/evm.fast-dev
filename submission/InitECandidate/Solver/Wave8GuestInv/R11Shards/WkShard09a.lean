@@ -75,7 +75,7 @@ theorem «wk_block_rlp_length» :
   have hbv0 : (BitVec.ofNat 64 0).toNat = 0 := rfl
   omega
 
-example : (type_of% @«wk_block_rlp_length») =
-    (type_of% @InitECandidate.Solver.Wave8GuestInv.«wk_block_rlp_length») := rfl
+example (P : Primitives) : (type_of% @«wk_block_rlp_length») =
+    (type_of% P.«wk_block_rlp_length») := rfl
 
 end InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard09a

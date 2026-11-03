@@ -1,7 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.FrameGlue
 import InitECandidate.Solver.Wave8GuestInv.Shards.S06.StateRestore
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M08.Base
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M19.htab_truncate_spec
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.TruncateSpec
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M23.EvmLemmas
 
 /-! `IvlUnhit`, `Hoare` fallthrough combinators, and `StateRestoreLoopInv` (`< 350` LOC). -/

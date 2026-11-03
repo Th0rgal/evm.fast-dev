@@ -438,7 +438,7 @@ private theorem alloc_body_heap_mono {F : Type} (s : PanSemStateFiniteExact 64 F
               (.seq
                 (.assign .global (ofString "heap_ptr") (.var .local (ofString "q")))
                 (.return (.var .local (ofString "p"))))))) := rfl
-  rcases hA with ⟨hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al, hgw_s⟩
+  rcases hA with ⟨hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al⟩
   have hp_word : ∃ p : BitVec 64, s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) := by
     rcases hg : s.globals.lookup (ofString "heap_ptr") with _ | gv
     · simp [globN, hg, sourceBase] at hp_lo
@@ -451,7 +451,8 @@ private theorem alloc_body_heap_mono {F : Type} (s : PanSemStateFiniteExact 64 F
   have hsame : ∀ t : PanSemStateFiniteExact 64 F, t.globals = s.globals →
       ArenaOK t ∧ globN s "heap_ptr" ≤ globN t "heap_ptr" := by
     intro t hg
-    exact ⟨arenaOK_congr hg ⟨hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al, hgw_s⟩,
+    exact ⟨by simpa only [ArenaOK, globN, hg] using
+      (⟨hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al⟩ : ArenaOK s),
       by simp [globN, hg]⟩
   have htrap_globals : ∀ t : PanSemStateFiniteExact 64 F, t.code = originalRuntimeCode →
       (evaluateHOLFiniteState t (.call (some (none, none)) (ofString "trap_with") [.const 1])).2.globals = t.globals := by
@@ -602,8 +603,7 @@ private theorem alloc_body_heap_mono {F : Type} (s : PanSemStateFiniteExact 64 F
           have hfin_ok : ArenaOK fin := by
             unfold ArenaOK
             rw [hfin_hp, hfin_fm, hfin_sp]
-            exact ⟨by omega, by omega, hfm_lo, hfm_hi, hsp_hi, by omega, hfm_al, hsp_al,
-              globalsWord_update (s := s) (t := fin) (ofString "heap_ptr") q rfl hgw_s⟩
+            exact ⟨by omega, by omega, hfm_lo, hfm_hi, hsp_hi, by omega, hfm_al, hsp_al⟩
           have hfin_le : globN s "heap_ptr" ≤ globN fin "heap_ptr" := by
             rw [hp_glob, hfin_hp]; omega
           exact ⟨hfin_ok, hfin_le⟩
@@ -662,8 +662,8 @@ private theorem encoding_body_heapSafe (f : MlS) (hf : encodingGood f = true)
   · right; have hb := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup _ _ _ body _ rs values callee lookup_trap_with hl; subst hb; rfl
 
 private theorem arenaOK_congr_globals {F : Type} {s t : PanSemStateFiniteExact 64 F}
-    (hg : t.globals = s.globals) (h : ArenaOK s) : ArenaOK t :=
-  arenaOK_congr hg h
+    (hg : t.globals = s.globals) (h : ArenaOK s) : ArenaOK t := by
+  simpa only [ArenaOK, globN, hg] using h
 
 private theorem evaluate_heapSafeProg {F : Type} (program : ProgHOL 64)
     (supported : heapSafeProg program = true)
@@ -1010,9 +1010,7 @@ theorem «rt_mpt_new» :
     have hA_post : ArenaOK post := by
       unfold ArenaOK
       rw [hpost_hp, hpost_fp, hpost_sp]
-      exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-        hA.2.2.2.2.2.2.2.1,
-        globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+      exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2⟩
     have hAG : AllocatorGrows s post := by
       refine ⟨?_, by rw [hpost_sp]⟩
       rw [hpost_hp, ← hhp_eq]; exact hp_le_q
@@ -1947,9 +1945,7 @@ private theorem decCall_alloc_resumes_inv {F : Type}
             simp [globN, HolFiniteMapExact.lookup_update, FUPDATE, show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
           rw [h1, h2, h3]
           have hsb : sourceBase ≤ hp.toNat := by rw [hhp_eq]; exact hA.1
-          exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-            hA.2.2.2.2.2.2.2.1,
-            globalsWord_update (s := s) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+          exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2⟩
         refine ⟨hp, sz, q, mid, hhp, hhp_eq, hsz_ev, rfl, hq_eq, hp_le_q, hq_hi, hq_al,
           by rw [hmid_eq]; exact hc, hmid_AR,
           by rw [hmid_eq], by rw [hmid_eq], by rw [hmid_eq], by rw [hmid_eq],
@@ -2086,7 +2082,7 @@ theorem «ww_mpt_nibble_key» :
           have hm_AR : ArenaReady { m_after with locals := m_after.locals.resVarEq (ofString "nb2", s.locals.lookup (ofString "nb2")) } :=
             localsFree_arenaReady m_after (m_after.locals.resVarEq (ofString "nb2", s.locals.lookup (ofString "nb2"))) m_after.clock
               ⟨guestInv_congr heff_ktn.code heff_ktn.memaddrs heff_ktn.shMemaddrs heff_ktn.baseAddr hmid_AR.1,
-               arenaOK_congr heff_ktn.globals hmid_AR.2⟩
+               by simpa only [ArenaOK, globN, heff_ktn.globals] using hmid_AR.2⟩
           refine ⟨hm_AR, ?_, ?_, ?_, ?_⟩
           · rw [← hhp_eq]; simp [globN, heff_ktn.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL]; exact hp_le_q
           · simp [globN, heff_ktn.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL,
@@ -2108,7 +2104,7 @@ theorem «ww_mpt_nibble_key» :
           have hm_AR : ArenaReady { fin with locals := fin.locals.resVarEq (ofString "nb2", s.locals.lookup (ofString "nb2")) } :=
             localsFree_arenaReady fin (fin.locals.resVarEq (ofString "nb2", s.locals.lookup (ofString "nb2"))) fin.clock
               ⟨guestInv_congr heff_tot.code heff_tot.memaddrs heff_tot.shMemaddrs heff_tot.baseAddr hmid_AR.1,
-               arenaOK_congr heff_tot.globals hmid_AR.2⟩
+               by simpa only [ArenaOK, globN, heff_tot.globals] using hmid_AR.2⟩
           refine ⟨hm_AR, ?_, ?_, ?_, ?_⟩
           · rw [← hhp_eq]; simp [globN, heff_tot.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL]; exact hp_le_q
           · simp [globN, heff_tot.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL,
@@ -2208,7 +2204,7 @@ theorem «ww_mpt_nibble_key» :
             rw [hkec] at heff1; dsimp only at heff1
             have hm1_AR : ArenaReady p_yes :=
               ⟨guestInv_congr heff1.code heff1.memaddrs heff1.shMemaddrs heff1.baseAddr hAR.1,
-               arenaOK_congr heff1.globals hAR.2⟩
+               by simpa only [ArenaOK, globN, heff1.globals] using hAR.2⟩
             exact finish_ww p_yes hm1_AR
               (by simp [globN, heff1.globals])
               (fun k _ => by rw [heff1.globals])
@@ -2221,7 +2217,7 @@ theorem «ww_mpt_nibble_key» :
             have hm1_c : m1.code = originalRuntimeCode := heff1.code.trans hc
             have hm1_AR : ArenaReady m1 :=
               ⟨guestInv_congr heff1.code heff1.memaddrs heff1.shMemaddrs heff1.baseAddr hAR.1,
-               arenaOK_congr heff1.globals hAR.2⟩
+               by simpa only [ArenaOK, globN, heff1.globals] using hAR.2⟩
             have hdc_nt : (evaluateHOLFiniteState m1 dc_nb).1 ≠ some .timeOut := by
               rw [hyes]; exact hnt
             have hdc_res : Resumes (evaluateHOLFiniteState m1 dc_nb).1 := by
@@ -2276,7 +2272,7 @@ theorem «ww_mpt_nibble_key» :
               have hm_AR : ArenaReady { m_after with locals := m_after.locals.resVarEq (ofString "nb", m1.locals.lookup (ofString "nb")) } :=
                 localsFree_arenaReady m_after (m_after.locals.resVarEq (ofString "nb", m1.locals.lookup (ofString "nb"))) m_after.clock
                   ⟨guestInv_congr heff_ktn.code heff_ktn.memaddrs heff_ktn.shMemaddrs heff_ktn.baseAddr hmid_AR.1,
-                   arenaOK_congr heff_ktn.globals hmid_AR.2⟩
+                   by simpa only [ArenaOK, globN, heff_ktn.globals] using hmid_AR.2⟩
               refine ⟨hm_AR, ?_, ?_, ?_, ?_⟩
               · rw [← hhp_s, ← hhp_eq]; simp [globN, heff_ktn.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL]; exact hp_le_q
               · simp [globN, heff_ktn.globals, hmid_glob, heff1.globals, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL,
@@ -2305,7 +2301,7 @@ theorem «ww_mpt_nibble_key» :
               have hm_AR : ArenaReady { fin with locals := fin.locals.resVarEq (ofString "nb", m1.locals.lookup (ofString "nb")) } :=
                 localsFree_arenaReady fin (fin.locals.resVarEq (ofString "nb", m1.locals.lookup (ofString "nb"))) fin.clock
                   ⟨guestInv_congr heff_tot.code heff_tot.memaddrs heff_tot.shMemaddrs heff_tot.baseAddr hmid_AR.1,
-                   arenaOK_congr heff_tot.globals hmid_AR.2⟩
+                   by simpa only [ArenaOK, globN, heff_tot.globals] using hmid_AR.2⟩
               refine ⟨hm_AR, ?_, ?_, ?_, ?_⟩
               · rw [← hhp_s, ← hhp_eq]; simp [globN, heff_tot.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL]; exact hp_le_q
               · simp [globN, heff_tot.globals, hmid_glob, heff1.globals, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL,
@@ -2420,7 +2416,7 @@ private theorem stepFrame_of_byteEff_heap {F : Type} {s post : PanSemStateFinite
     (heff : ByteEff s post [(globN s "heap_ptr", heapLimit - globN s "heap_ptr")]) :
     StepFrame s post := by
   refine ⟨⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1,
-           arenaOK_congr heff.globals hAR.2⟩,
+           by simpa only [ArenaOK, globN, heff.globals] using hAR.2⟩,
     by simp [globN, heff.globals],
     by simp [globN, heff.globals],
     by simp [globN, heff.globals],
@@ -3018,7 +3014,7 @@ private theorem ww_node_new_hashed_aux :
   have hfin_AR : ArenaReady { fin with locals := fin.locals.resVarEq (ofString "nd", s.locals.lookup (ofString "nd")) } :=
     localsFree_arenaReady fin _ fin.clock
       ⟨guestInv_congr hpmf.code hpmf.memaddrs hpmf.shMemaddrs hpmf.baseAddr hmid_AR.1,
-       arenaOK_congr hpmf.globals hmid_AR.2⟩
+       by simpa only [ArenaOK, globN, hpmf.globals] using hmid_AR.2⟩
   refine ⟨hfin_AR, ?_, ?_, ?_, ?_⟩
   · rw [← hhp_eq]; simp [globN, hpmf.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL]; exact hp_le_q
   · simp [globN, hpmf.globals, hmid_glob, HolFiniteMapExact.lookup_update, FUPDATE, FUPDATE_HOL,
@@ -3099,9 +3095,7 @@ private theorem rt_node_new_hashed_aux :
     have hlim_le_he : heapLimit ≤ heapEnd := by decide
     have hA_post : ArenaOK post := by
       unfold ArenaOK; rw [hpost_hp, hpost_fp, hpost_sp]
-      exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-        hA.2.2.2.2.2.2.2.1,
-        globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+      exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2⟩
     refine ⟨⟨hG_post, hA_post⟩, ⟨by rw [hpost_hp, ← hhp_eq]; exact hp_le_q, by rw [hpost_sp]⟩,
       hhp_al, ?_, ?_⟩
     · change Inside (hp.toNat, 32) (globN s "heap_ptr") (globN post "heap_ptr")

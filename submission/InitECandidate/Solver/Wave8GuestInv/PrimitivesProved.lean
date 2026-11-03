@@ -42,6 +42,18 @@ import InitECandidate.Solver.Wave8GuestInv.R11Adapters.FbClosure4
 import InitECandidate.Solver.Wave8GuestInv.R11Adapters.ReadOnlyLeaves
 import InitECandidate.Solver.Wave8GuestInv.R11Adapters.Sha256
 import InitECandidate.Solver.Wave8GuestInv.R11Adapters.BalRlp
+import InitECandidate.Solver.Wave8GuestInv.R11Adapters.FbStaticCall
+import InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard08
+import InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard09a
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard06b
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.GbodyPayloadStateInitShard
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_NodeRlp
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_NodeHash
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptRoot
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfDeleteExtFinish
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -90,7 +102,7 @@ theorem primitives : Primitives where
   «fb_node_invalidate» := Merged.fb_node_invalidate
   «fb_scratch_alloc» := Merged.fb_scratch_alloc
   «nf__collapse_branch» := «nf__collapse_branch»
-  «nf__delete_ext_finish» := «nf__delete_ext_finish»
+  «nf__delete_ext_finish» := R16Shards.«nf__delete_ext_finish»
   «ro_common_prefix_length» := R10Ports.ro_common_prefix_length
   «rv_common_prefix_length» := Merged.rv_common_prefix_length
   «ro_memeq» := Wave8Contracts.M15.«ro_memeq»
@@ -114,16 +126,16 @@ theorem primitives : Primitives where
   «ak__node_rlp_begin» := «ak__node_rlp_begin»
   «ak__node_rlp_finish» := «ak__node_rlp_finish»
   «gbody__node_rlp_fill» := «gbody__node_rlp_fill»
-  «gbody_node_rlp» := «gbody_node_rlp»
+  «gbody_node_rlp» := P3NodeRlp.gbody_node_rlp_proof
   «fb_alloc» := Merged.fb_alloc
   «fb_keccak256» := PrimShardP10P30.fb_keccak256
-  «gbody_node_hash» := «gbody_node_hash»
+  «gbody_node_hash» := P3NodeHash.gbody_node_hash_proof
   «fb_memcpy» := Merged.fb_memcpy
-  «gbody_mpt_root» := «gbody_mpt_root»
+  «gbody_mpt_root» := P3MptRoot.gbody_mpt_root_proof
   «fb_mpt_nibble_key» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_mpt_nibble_key»
   «ww_mpt_nibble_key» := «ww_mpt_nibble_key»
   «nk_mpt_nibble_key» := «nk_mpt_nibble_key»
-  «gbody_mpt_set» := «gbody_mpt_set»
+  «gbody_mpt_set» := P3MptSet.gbody_mpt_set_proof
   «fb_heap_mark» := PrimShardP10P30.fb_heap_mark
   «fb_heap_release» := PrimShardP10P30.fb_heap_release
   «fb_mpt_new» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_mpt_new»
@@ -261,8 +273,8 @@ theorem primitives : Primitives where
   «fb_op_blobhash» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_blobhash»
   «fb_op_blockhash» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_blockhash»
   «fb_op_byte» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_byte»
-  «fb_op_call» := R10Shards.P11.fb_op_call «fb_stack_pop» «fb_to_address_masked» «fb_extend_memory_cost2» «fb_is_warm_address» «fb_u256_is_zero» «fb_add_sat» «fb_charge_gas» «fb_warm_address» «fb_calculate_delegation_cost» «fb_ext_code_of» «fb_sat_word» «fb_calculate_message_call_gas» «fb_extend_memory» «fb_get_account» «fb_u256_lt» «fb_stack_push» «fb_set_retdata» «fb_credit_state_gas_refund» «fb_is_account_alive» «fb_charge_state_gas» «fb_generic_call» «fb_pc_add»
-  «fb_op_callcode» := R10Shards.P11.fb_op_callcode «fb_stack_pop» «fb_to_address_masked» «fb_extend_memory_cost2» «fb_is_warm_address» «fb_u256_is_zero» «fb_add_sat» «fb_charge_gas» «fb_warm_address» «fb_calculate_delegation_cost» «fb_ext_code_of» «fb_sat_word» «fb_calculate_message_call_gas» «fb_extend_memory» «fb_get_account» «fb_u256_lt» «fb_stack_push» «fb_set_retdata» «fb_generic_call» «fb_pc_add»
+  «fb_op_call» := R11Adapters.StaticCall.«fb_op_call»
+  «fb_op_callcode» := R11Adapters.StaticCall.«fb_op_callcode»
   «fb_op_calldatacopy» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_calldatacopy»
   «fb_op_calldataload» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_calldataload»
   «fb_op_calldatasize» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_calldatasize»
@@ -327,7 +339,7 @@ theorem primitives : Primitives where
   «fb_op_slotnum» := Merged.fb_op_slotnum
   «fb_op_slt» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_slt»
   «fb_op_smod» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_smod»
-  «fb_op_staticcall» := «fb_op_staticcall»
+  «fb_op_staticcall» := R11Adapters.StaticCall.«fb_op_staticcall»
   «fb_op_stop» := Merged.fb_op_stop
   «fb_op_sub» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_op_sub»
   «fb_op_swap» := Merged.fb_op_swap
@@ -366,17 +378,17 @@ theorem primitives : Primitives where
   «wk_account_deployable» := «wk_account_deployable»
   «wk_memzero» := Merged.wk_memzero
   «zv_memzero» := Merged.zv_memzero
-  «gbody_process_message_call» := «gbody_process_message_call»
+  «gbody_process_message_call» := R10Shards.Fast_GbodyC17ToC21.«gbody_process_message_call»
   «fb_ext_code_of» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ext_code_of»
   «fb_msg_new» := Wave8Leaves.S03.fb_msg_new Merged.fb_alloc Merged.fb_memzero
   «fb_state_fresh_tx» := Merged.fb_state_fresh_tx
   «fb_te_new» := Merged.fb_te_new
   «wk_ext_code_of» := «wk_ext_code_of»
-  «wk_msg_new» := «wk_msg_new»
+  «wk_msg_new» := R13Wk06b.«wk_msg_new»
   «rt_msg_new» := Merged.rt_msg_new
   «wk_process_message_call» := «wk_process_message_call»
   «wk_state_fresh_tx» := «wk_state_fresh_tx»
-  «wk_te_new» := «wk_te_new»
+  «wk_te_new» := R13Wk06b.«wk_te_new»
   «rt_te_new» := Merged.rt_te_new
   «gbody_process_unchecked_system_transaction» := «gbody_process_unchecked_system_transaction»
   «fb_extract_deposit_data» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_extract_deposit_data»
@@ -384,7 +396,7 @@ theorem primitives : Primitives where
   «wk_extract_deposit_data» := Merged.wk_extract_deposit_data
   «wk_process_checked_system_transaction» := «wk_process_checked_system_transaction»
   «wk_requests_append» := «wk_requests_append»
-  «gbody_process_general_purpose_requests» := «gbody_process_general_purpose_requests»
+  «gbody_process_general_purpose_requests» := R10Shards.Fast_GbodyC17ToC21.«gbody_process_general_purpose_requests»
   «fb_calculate_blob_gas_price» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_calculate_blob_gas_price»
   «fb_calculate_total_blob_gas» := Merged.fb_calculate_total_blob_gas
   «fb_check_transaction» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_check_transaction»
@@ -417,7 +429,7 @@ theorem primitives : Primitives where
   «ro_fee_mul» := R10Ports.ro_fee_mul
   «wk_get_account» := «wk_get_account»
   «wk_keccak256» := «wk_keccak256»
-  «wk_lst_new» := «wk_lst_new»
+  «wk_lst_new» := R13Wk06b.«wk_lst_new»
   «rt_lst_new» := Merged.rt_lst_new
   «wk_lst_push» := «wk_lst_push»
   «dm_memcpy» := EvmFrameSpecs.dm_memcpy
@@ -436,7 +448,7 @@ theorem primitives : Primitives where
   «gbody_process_transaction» := «gbody_process_transaction»
   «fb_u256_mul» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_mul»
   «ro_u256_mul» := Wave8Contracts.M18.«ro_u256_mul»
-  «gbody_process_withdrawals» := «gbody_process_withdrawals»
+  «gbody_process_withdrawals» := R16Shards.«gbody_process_withdrawals»
   «fb_bal_init» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_bal_init»
   «fb_build_block_access_list_rlp» := R11Adapters.BalRlp.fb_build_block_access_list_rlp
   «fb_compute_requests_hash» := R11Adapters.Sha.fb_compute_requests_hash
@@ -455,17 +467,17 @@ theorem primitives : Primitives where
   «wk_process_transaction» := «wk_process_transaction»
   «wk_process_unchecked_system_transaction» := «wk_process_unchecked_system_transaction»
   «wk_process_withdrawals» := «wk_process_withdrawals»
-  «wk_track_ancestor_access» := «wk_track_ancestor_access»
+  «wk_track_ancestor_access» := R11Shards.WkShard08.«wk_track_ancestor_access»
   «ro_validate_block_access_list_gas_limit» := Wave8Contracts.M18.«ro_validate_block_access_list_gas_limit»
   «gbody_execute_block» := «gbody_execute_block»
   «fb_block_rlp_length» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_block_rlp_length»
   «fb_encode_execution_requests» := Merged.fb_encode_execution_requests
   «fb_encode_withdrawal_rlp» := Merged.fb_encode_withdrawal_rlp
-  «wk_block_rlp_length» := «wk_block_rlp_length»
+  «wk_block_rlp_length» := R11Shards.WkShard09a.«wk_block_rlp_length»
   «wk_encode_withdrawal_rlp» := «wk_encode_withdrawal_rlp»
   «dm_encode_withdrawal_rlp» := EvmFrameSpecs.dm_encode_withdrawal_rlp
   «gbody_payload_header» := «gbody_payload_header»
-  «gbody_state_init» := «gbody_state_init»
+  «gbody_state_init» := R13Shards.gbody_state_init
   «fb_check_gas_limit» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_check_gas_limit»
   «fb_header_hash» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_header_hash»
   «fb_is_valid_versioned_hashes» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_is_valid_versioned_hashes»
@@ -515,6 +527,6 @@ theorem primitives : Primitives where
   «wk_sha256_init» := R10Shards.P26_P28.wk_sha256_init
   «wk_ssz_init» := R10Shards.P26_P28.wk_ssz_init
   «wk_u256_ws_init» := R10Shards.P26_P28.wk_u256_ws_init
-  «gbody_main» := «gbody_main»
+  «gbody_main» := R10Shards.Fast_GbodyC17ToC21.«gbody_main»
 
 end InitECandidate.Solver.Wave8GuestInv
