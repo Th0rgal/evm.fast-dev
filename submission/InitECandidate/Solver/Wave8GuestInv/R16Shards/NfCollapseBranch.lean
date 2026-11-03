@@ -61,31 +61,34 @@ private def noResumesProg : ProgHOL 64 → Bool
   | _ => false
 
 private theorem evaluate_noResumesProg {F : Type} (p : ProgHOL 64) (hp : noResumesProg p = true)
-    (s : PanSemStateFiniteExact 64 F) (r : PanSemResultExact 64)
-    (hr : (evaluateHOLFiniteState s p).1 = some r) :
-    ¬ Resumes (some r) := by
+    (s : PanSemStateFiniteExact 64 F) (r : PanSemResultExact 64) :
+    (evaluateHOLFiniteState s p).1 = some r → ¬ Resumes (some r) := by
   cases shape : p with
-  | skip => rw [evaluateHOLFiniteState_skip] at hr; simp at hr
+  | skip => intro hr; rw [evaluateHOLFiniteState_skip] at hr; simp at hr
   | «break» =>
-    rw [evaluateHOLFiniteState_break] at hr; injection hr with h; subst h
+    intro hr; rw [evaluateHOLFiniteState_break] at hr; injection hr with h; subst h
     rintro (⟨_, h⟩ | ⟨_, _, h, _⟩) <;> cases h
   | «continue» =>
-    rw [evaluateHOLFiniteState_continue] at hr; injection hr with h; subst h
+    intro hr; rw [evaluateHOLFiniteState_continue] at hr; injection hr with h; subst h
     rintro (⟨_, h⟩ | ⟨_, _, h, _⟩) <;> cases h
-  | annot _ _ => rw [evaluateHOLFiniteState_annot] at hr; simp at hr
-  | assign _ _ _ =>
-    rcases hev : evaluateHOLFiniteState s p with ⟨ro, to⟩
-    rw [shape] at hev; rw [shape, hev] at hr; dsimp only at hr; subst hr
+  | annot _ _ => intro hr; rw [evaluateHOLFiniteState_annot] at hr; simp at hr
+  | assign k x e =>
+    intro hr
+    rcases hev : evaluateHOLFiniteState s (.assign k x e) with ⟨ro, t_out⟩
+    rw [hev] at hr; dsimp only at hr; subst hr
     exact assign_res_not_resumes hev
-  | store _ _ =>
-    rcases hev : evaluateHOLFiniteState s p with ⟨ro, to⟩
-    rw [shape] at hev; rw [shape, hev] at hr; dsimp only at hr; subst hr
+  | store d e =>
+    intro hr
+    rcases hev : evaluateHOLFiniteState s (.store d e) with ⟨ro, t_out⟩
+    rw [hev] at hr; dsimp only at hr; subst hr
     exact store_res_not_resumes hev
-  | storeByte _ _ =>
-    rcases hev : evaluateHOLFiniteState s p with ⟨ro, to⟩
-    rw [shape] at hev; rw [shape, hev] at hr; dsimp only at hr; subst hr
+  | storeByte d e =>
+    intro hr
+    rcases hev : evaluateHOLFiniteState s (.storeByte d e) with ⟨ro, t_out⟩
+    rw [hev] at hr; dsimp only at hr; subst hr
     exact storeByte_res_not_resumes hev
   | dec x sh init b =>
+    intro hr
     have hb : noResumesProg b = true := by simpa [shape, noResumesProg] using hp
     rw [evaluateHOLFiniteState_dec_total] at hr
     dsimp only at hr
@@ -95,6 +98,7 @@ private theorem evaluate_noResumesProg {F : Type} (p : ProgHOL 64) (hp : noResum
       · exact evaluate_noResumesProg b hb _ r hr
       · injection hr with h; subst h; exact not_resumes_error
   | seq a b =>
+    intro hr
     have hab : noResumesProg a = true ∧ noResumesProg b = true := by
       simpa [shape, noResumesProg, Bool.and_eq_true] using hp
     have rem := evaluateHOLFiniteState_clock_le s a
@@ -108,6 +112,7 @@ private theorem evaluate_noResumesProg {F : Type} (p : ProgHOL 64) (hp : noResum
       dsimp only at hr; injection hr with h; subst h
       exact evaluate_noResumesProg a hab.1 s ra' (congrArg Prod.fst hra)
   | ite _ a b =>
+    intro hr
     have hab : noResumesProg a = true ∧ noResumesProg b = true := by
       simpa [shape, noResumesProg, Bool.and_eq_true] using hp
     rw [evaluateHOLFiniteState_ite] at hr
@@ -117,6 +122,7 @@ private theorem evaluate_noResumesProg {F : Type} (p : ProgHOL 64) (hp : noResum
       · exact evaluate_noResumesProg a hab.1 s r hr
     · injection hr with h; subst h; exact not_resumes_error
   | «while» cond body =>
+    intro hr
     have hb : noResumesProg body = true := by simpa [shape, noResumesProg] using hp
     rw [evaluateHOLFiniteState_while_total] at hr
     split at hr
@@ -170,22 +176,22 @@ private def neverNoneProg : ProgHOL 64 → Bool
 private theorem evaluate_neverNoneProg {F : Type} (p : ProgHOL 64) (hp : neverNoneProg p = true)
     (s : PanSemStateFiniteExact 64 F) :
     (evaluateHOLFiniteState s p).1 ≠ none := by
-  induction p generalizing s with
+  cases shape : p with
   | call ret fname args =>
     cases ret with
     | none => exact call_none_ne_none s fname args
-    | some _ => simp [neverNoneProg] at hp
-  | dec x sh init b ih =>
-    have hb : neverNoneProg b = true := by simpa [neverNoneProg] using hp
+    | some _ => simp [shape, neverNoneProg] at hp
+  | dec x sh init b =>
+    have hb : neverNoneProg b = true := by simpa [shape, neverNoneProg] using hp
     rw [evaluateHOLFiniteState_dec_total]
     dsimp only
     split
     · simp
     · split
-      · exact ih hb _
+      · exact evaluate_neverNoneProg b hb _
       · simp
-  | decCall x sh fn args b ih =>
-    have hb : neverNoneProg b = true := by simpa [neverNoneProg] using hp
+  | decCall x sh fn args b =>
+    have hb : neverNoneProg b = true := by simpa [shape, neverNoneProg] using hp
     rw [evaluateHOLFiniteState_decCall_total]
     split
     · simp
@@ -199,17 +205,18 @@ private theorem evaluate_neverNoneProg {F : Type} (p : ProgHOL 64) (hp : neverNo
           · simp
           · simp
           · split
-            · exact ih hb _
+            · exact evaluate_neverNoneProg b hb _
             · simp
           · simp
-  | seq a b _ ihb =>
-    have hb : neverNoneProg b = true := by simpa [neverNoneProg] using hp
+  | seq a b =>
+    have hb : neverNoneProg b = true := by simpa [shape, neverNoneProg] using hp
     rw [evaluateHOLFiniteState_seq_line780]
     rcases evaluateHOLFiniteState s a with ⟨ra, sa⟩
     cases ra with
-    | none => exact ihb hb sa
+    | none => exact evaluate_neverNoneProg b hb sa
     | some _ => simp
-  | _ => simp [neverNoneProg] at hp
+  | _ => simp [shape, neverNoneProg] at hp
+termination_by sizeOf p
 
 private theorem nodeStep_of_locFrame {F : Type}
     {s t post : PanSemStateFiniteExact 64 F} {Nd Nd' : List Nat}
@@ -582,11 +589,11 @@ theorem «nf__collapse_branch» :
       ∃ L_outer, (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn__collapse_branch)).2 =
         { (evaluateHOLFiniteState s_init (.seq cbLoop afterLoop)).2 with locals := L_outer } := by
     rw [hbody, evaluateHOLFiniteState_dec_total]
-    dsimp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
+    simp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
     rw [evaluateHOLFiniteState_dec_total]
-    dsimp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
+    simp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
     rw [evaluateHOLFiniteState_dec_total]
-    dsimp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
+    simp only [evalHOLExact, shapeEqHOL, shapeOfHOLExact, ↓reduceIte]
     exact ⟨rfl, _, rfl⟩
   obtain ⟨hres_eq_init, L_outer, hpost_eq_init⟩ := hdecs
   have hinit_res : Resumes (evaluateHOLFiniteState s_init (.seq cbLoop afterLoop)).1 := by
@@ -916,7 +923,7 @@ theorem «nf__collapse_branch» :
       have hev_ck : @evalHOLExact 64 F _ s_ch.toExact (fun a => Classical.propDecidable (s_ch.memaddrs a))
           (.load .one (.op .add [.var .local (ofString "child"), .const (BitVec.ofNat 64 0)])) =
           some (.val (.word wck)) :=
-        hload_ch_off s_ch 0 (fun _ _ => hsvl_mem) hsvl_ma hsch_ch (by omega) (by decide)
+        hload_ch_off s_ch 0 (fun c _ => congrFun hsvl_mem c) hsvl_ma hsch_ch (by omega) (by decide)
       set s_ck := setVarHOLFinite (ofString "ck") (.val (.word wck)) s_ch
       set cont_nib : ProgHOL 64 :=
         .seq
@@ -1020,10 +1027,11 @@ theorem «nf__collapse_branch» :
           rw [evaluateHOLFiniteState_ite, hc_ck0, if_neg hck0]; simp [evaluateHOLFiniteState_skip]
         have hck_eq_nib : evaluateHOLFiniteState s_ck ck_body =
             evaluateHOLFiniteState s_ck
-              (.decCall (ofString "nib") .one (ofString "alloc") [.const (BitVec.ofNat 64 8)]
+              (.decCall (ofString "nib") .one (ofString "alloc") [.const 8]
                 (.seq (.storeByte (.var .local (ofString "nib")) (.var .local (ofString "idx"))) cont_nib)) := by
           dsimp only [ck_body]
           rw [evaluateHOLFiniteState_seq_line780, hite_ck0_skip]
+          rfl
         rw [hck_eq_nib] at hsck_res
         obtain ⟨wnib, s_nib, hs_nib_code, hstep_nib_ck, hKey_nib, hmem_lt_nib_ck, hs_nib_nib,
             hs_nib_other, hs_nib_res, hnib_r_eq, hnib_p_eq⟩ :=
@@ -1104,7 +1112,9 @@ theorem «nf__collapse_branch» :
               intro h3; apply hck3; apply BitVec.eq_of_toNat_eq; rw [hwck_nat]; simpa using h3
             omega
           have hsz_ch56 : 56 ≤ nodeSize (memW s wchild.toNat) := by
-            rcases hwck_12 with hk1 | hk2 <;> simp [nodeSize, *]
+            rcases hwck_12 with hk1 | hk2
+            · simp [nodeSize, hk1]
+            · simp [nodeSize, hk2]
           have hite_ck3_skip : evaluateHOLFiniteState s_nib
               (.ite (.cmp .equal (.var .local (ofString "ck")) (.const (BitVec.ofNat 64 3)))
                 (.call none (ofString "node_new_ext")
@@ -1186,7 +1196,7 @@ theorem «nf__collapse_branch» :
                 (ofString "bl", .val (.word wch40)))
             have hc_spec := nibbles_concat_body_spec centry Nd wnib 1 wch32 wch40
               hs_nib_code (localsFree_arenaReady s_nib _ _ hs_nib_AR) hs_nib_Nd
-              (by simpa using hKey_nib) hkey_ch_nib
+              hKey_nib hkey_ch_nib
               (by simp [centry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
                     show ofString "bl" ≠ ofString "a" by decide,
                     show ofString "b" ≠ ofString "a" by decide,
@@ -1211,9 +1221,10 @@ theorem «nf__collapse_branch» :
             have hscat_Nd : NodeHeap s_cat Nd := hstep_cat.heap
             have hmem_lt_scat : ∀ c : BitVec 64, c.toNat < globN s "heap_ptr" → s_cat.memory c = s.memory c := by
               intro c hlt
-              have hle_hp := hstep_nib_s.hp_le
+              have hle_hp : globN s "heap_ptr" ≤ globN centry "heap_ptr" := hstep_nib_s.hp_le
               change cpost.memory c = s.memory c
-              rw [hmem_lt_cpost c (lt_of_lt_of_le hlt hle_hp), hmem_lt_nib c hlt]
+              rw [hmem_lt_cpost c (lt_of_lt_of_le hlt hle_hp)]
+              exact hmem_lt_nib c hlt
             have hscat_cat : s_cat.locals.lookup (ofString "cat") = some (.val (.word wcat)) := by
               simp [s_cat, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
             have hscat_ck : s_cat.locals.lookup (ofString "ck") = some (.val (.word wck)) := by
@@ -1224,7 +1235,7 @@ theorem «nf__collapse_branch» :
                 show ofString "cat" ≠ ofString "child" by decide]
             set wcl : BitVec 64 := (1 : BitVec 64) + wch40
             have hKey_cat_cl : KeyIn s_cat Nd wcat.toNat wcl.toNat := by
-              dsimp only [wcl]; rw [hcl_sum]; simpa using hKey_cat
+              dsimp only [wcl]; rw [hcl_sum]; exact hKey_cat
             have hev_cl : @evalHOLExact 64 F _ s_cat.toExact (fun a => Classical.propDecidable (s_cat.memaddrs a))
                 (.op .add [.const (BitVec.ofNat 64 1),
                   .load .one (.op .add [.var .local (ofString "child"), .const (BitVec.ofNat 64 40)])]) =
@@ -1374,12 +1385,12 @@ theorem «nf__collapse_branch» :
             .cmp .notEqual (.const (BitVec.ofNat 64 0))
               (.cmp .equal (.var .local (ofString "vl")) (.const (BitVec.ofNat 64 0)))]) =
           some (.val (.word 0)) := by
-        by_cases hc1 : wcount = 1
-        · have hvl_ne0 : wvl ≠ 0 := fun hz => hcond ⟨hc1, hz⟩
+        by_cases hc1 : wcount = BitVec.ofNat 64 1
+        · have hvl_ne0 : wvl ≠ BitVec.ofNat 64 0 := fun hz => hcond ⟨hc1, hz⟩
           simp [evalHOLExact, evalListHOLExact, hsvl_cnt, hsvl_vl, hc1, hvl_ne0,
             Compiler.Encoders.Asm.wordCmpHOL, valueIsWord, valueWord, wordOpHOL, wordOp,
             List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr]
-        · by_cases hvl0 : wvl = 0 <;>
+        · by_cases hvl0 : wvl = BitVec.ofNat 64 0 <;>
             simp [evalHOLExact, evalListHOLExact, hsvl_cnt, hsvl_vl, hc1, hvl0,
               Compiler.Encoders.Asm.wordCmpHOL, valueIsWord, valueWord, wordOpHOL, wordOp,
               List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr]
