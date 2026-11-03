@@ -109,6 +109,7 @@ theorem arenaReady_update_scratch_ptr {F : Type} {s post : PanSemStateFiniteExac
 structure HeapByteEff {F : Type} (s post : PanSemStateFiniteExact 64 F)
     (Rl : List Ivl) (gw : List String) : Prop where
   arena      : ArenaReady post
+  memaddrs   : post.memaddrs = s.memaddrs
   hp_le      : globN s "heap_ptr" ≤ globN post "heap_ptr"
   fp_eq      : globN post "frame_mem_ptr" = globN s "frame_mem_ptr"
   sp_le      : globN post "scratch_ptr" ≤ globN s "scratch_ptr"
@@ -127,14 +128,14 @@ structure HeapByteEff {F : Type} (s post : PanSemStateFiniteExact 64 F)
 theorem HeapByteEff.refl {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hAR : ArenaReady s) (Rl : List Ivl) (gw : List String) :
     HeapByteEff s s Rl gw :=
-  ⟨hAR, le_rfl, rfl, le_rfl, rfl, fun _ _ => rfl,
+  ⟨hAR, rfl, le_rfl, rfl, le_rfl, rfl, fun _ _ => rfl,
    fun _ h => absurd rfl h, fun _ h => absurd rfl h, fun _ _ h => absurd rfl h⟩
 
 theorem HeapByteEff.locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Rl : List Ivl} {gw : List String}
     (h : HeapByteEff s post Rl gw) (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
     HeapByteEff s { post with locals := L, clock := k } Rl gw :=
-  ⟨localsFree_arenaReady post L k h.arena, h.hp_le, h.fp_eq, h.sp_le, h.be, h.globals,
+  ⟨localsFree_arenaReady post L k h.arena, h.memaddrs, h.hp_le, h.fp_eq, h.sp_le, h.be, h.globals,
    h.out_dom, h.cell_frame, h.byte_frame⟩
 
 theorem HeapByteEff.trans {F : Type} {a b c : PanSemStateFiniteExact 64 F}
@@ -163,15 +164,13 @@ theorem HeapByteEff.trans {F : Type} {a b c : PanSemStateFiniteExact 64 F}
     unfold heapFree at hx1 hx2 ⊢
     have := h1.hp_le
     exact ⟨by dsimp only at *; omega, by dsimp only at *; omega⟩
-  refine ⟨h2.arena, le_trans h1.hp_le h2.hp_le, h2.fp_eq.trans h1.fp_eq,
-    le_trans h2.sp_le h1.sp_le, h2.be.trans h1.be,
+  refine ⟨h2.arena, h2.memaddrs.trans h1.memaddrs, le_trans h1.hp_le h2.hp_le,
+    h2.fp_eq.trans h1.fp_eq, le_trans h2.sp_le h1.sp_le, h2.be.trans h1.be,
     fun k hk => (h1.globals k hk).trans (h2.globals k hk), ?_, ?_, ?_⟩
   · intro x hne
     by_cases hcb : c.memory x = b.memory x
     · rw [hcb] at hne; exact h1.out_dom x hne
-    · rw [h1.arena.1.memaddrs.symm]; rw [← h2.arena.1.memaddrs]
-      have hmb : b.memaddrs x := h2.out_dom x hcb
-      rwa [h2.arena.1.memaddrs]
+    · rw [← h1.memaddrs]; exact h2.out_dom x hcb
   · intro x hne
     by_cases hcb : c.memory x = b.memory x
     · rw [hcb] at hne; exact h1.cell_frame x hne
@@ -196,7 +195,7 @@ theorem HeapByteEff.mono {F : Type} {s post : PanSemStateFiniteExact 64 F}
       (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
     (hgw : ∀ g ∈ gw1, g ∈ gw2) :
     HeapByteEff s post R2 gw2 := by
-  refine ⟨h.arena, h.hp_le, h.fp_eq, h.sp_le, h.be, ?_, h.out_dom, ?_, ?_⟩
+  refine ⟨h.arena, h.memaddrs, h.hp_le, h.fp_eq, h.sp_le, h.be, ?_, h.out_dom, ?_, ?_⟩
   · intro k hk
     apply h.globals k
     intro hm
@@ -224,10 +223,12 @@ theorem HeapByteEff.of_locFrame {F : Type} {s post : PanSemStateFiniteExact 64 F
     HeapByteEff s post Rl gw := by
   have hg := hlf.globals
   have hm := hlf.memory
-  refine ⟨hlf.arenaReady hAR, by simp [globN, hg], by simp [globN, hg], by simp [globN, hg],
-    hlf.be, fun _ _ => hg.symm,
-    fun _ h => absurd hm h, fun _ h => absurd hm h, fun b _ h => absurd ?_ h⟩
-  unfold memB; rw [hm, hlf.be]
+  have hma : post.memaddrs = s.memaddrs := by unfold M13.LocFrame at hlf; rw [hlf]
+  refine ⟨hlf.arenaReady hAR, hma, by simp [globN, hg], by simp [globN, hg], by simp [globN, hg],
+    hlf.be, fun k _ => by rw [hg],
+    fun a h => False.elim (h (by rw [hm])),
+    fun a h => False.elim (h (by rw [hm])),
+    fun b _ h => False.elim (h (by unfold memB; rw [hm, hlf.be]))⟩
 
 theorem HeapByteEff.of_byteEff {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Rl : List Ivl} {gw : List String}
@@ -237,54 +238,10 @@ theorem HeapByteEff.of_byteEff {F : Type} {s post : PanSemStateFiniteExact 64 F}
     guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
   have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
   have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  refine ⟨⟨hG, hA⟩, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
-    fun _ _ => heff.globals.symm, heff.out_dom,
+  refine ⟨⟨hG, hA⟩, heff.memaddrs, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
+    fun k _ => by rw [heff.globals], heff.out_dom,
     fun a hne => Or.inl (heff.cell_frame a hne),
     fun b hb hne => Or.inl (heff.byte_frame b hb hne)⟩
-
-theorem HeapByteEff.of_m13_bre {F : Type} {s post : PanSemStateFiniteExact 64 F}
-    {Rl : List Ivl} {gw : List String}
-    (hAR : ArenaReady s) (heff : M13.ByteRegionEffect s post Rl) :
-    HeapByteEff s post Rl gw := by
-  have hG : GuestInv post :=
-    guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
-  have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
-  have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  refine ⟨⟨hG, hA⟩, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
-    fun _ _ => heff.globals.symm, ?_, ?_, ?_⟩
-  · intro a hne; by_contra hna; exact hne (heff.out_dom a hna)
-  · intro a hne; left
-    by_contra hno
-    apply hne; apply heff.cell_frame a
-    intro i hi hch
-    exact hno ⟨i, hi, by obtain ⟨_, _⟩ := hch; omega, hch⟩
-  · intro b hb hne; left
-    by_contra hno
-    apply hne; apply heff.byte_frame b hb
-    intro i hi hin; exact hno ⟨i, hi, hin⟩
-
-theorem HeapByteEff.of_m11_bre {F : Type} {s post : PanSemStateFiniteExact 64 F}
-    {Rl : List Ivl} {gw : List String}
-    (hAR : ArenaReady s) (heff : M11.ByteRegionEffect s post Rl) :
-    HeapByteEff s post Rl gw := by
-  have hG : GuestInv post :=
-    guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
-  have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
-  have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
-  refine ⟨⟨hG, hA⟩, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
-    fun _ _ => heff.globals.symm, ?_, ?_, ?_⟩
-  · intro a hne; by_contra hna; exact hne (heff.out_dom a hna)
-  · intro a hne; left
-    by_contra hno
-    apply hne; apply heff.cell_frame a
-    intro i hi hch
-    exact hno ⟨i, hi, by obtain ⟨_, _⟩ := hch; omega, hch⟩
-  · intro b hb hne; left
-    by_contra hno
-    apply hne; apply heff.byte_frame b hb
-    intro i hi hin; exact hno ⟨i, hi, hin⟩
-
-/-! ## 2. Master `HeapByteEff.to_worldStep` -/
 
 theorem mem_eq_of_bytes_eq {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hbe : post.be = s.be) (a : BitVec 64) (ha_dom : ordinaryDomain a)
@@ -292,8 +249,7 @@ theorem mem_eq_of_bytes_eq {F : Type} {s post : PanSemStateFiniteExact 64 F}
     post.memory a = s.memory a := by
   have ha_ord := (ordinaryDomain_iff a).1 ha_dom
   have hhe_lt : heapEnd ≤ 2 ^ 64 := by rw [heapEnd_val]; decide
-  have hhe_8 : heapEnd % 8 = 0 := by rw [heapEnd_val]; decide
-  have ha_hi : a.toNat + 8 ≤ 2 ^ 64 := by omega
+  have ha_hi : a.toNat + 8 ≤ 2 ^ 64 := by rw [heapEnd_val] at ha_ord; omega
   rcases hp_m : post.memory a with ⟨wp⟩
   rcases hs_m : s.memory a with ⟨ws⟩
   congr 1
@@ -342,6 +298,62 @@ theorem mem_eq_of_bytes_eq {F : Type} {s post : PanSemStateFiniteExact 64 F}
   rw [hpow_eq 0 (by omega), hpow_eq 1 (by omega), hpow_eq 2 (by omega), hpow_eq 3 (by omega),
       hpow_eq 4 (by omega), hpow_eq 5 (by omega), hpow_eq 6 (by omega), hpow_eq 7 (by omega)]
 
+theorem HeapByteEff.of_m13_bre {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {gw : List String}
+    (hAR : ArenaReady s) (heff : M13.ByteRegionEffect s post Rl) :
+    HeapByteEff s post Rl gw := by
+  have hG : GuestInv post :=
+    guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
+  have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
+  have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
+  refine ⟨⟨hG, hA⟩, heff.memaddrs, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
+    fun k _ => by rw [heff.globals], ?_, ?_, ?_⟩
+  · intro a hne; by_contra hna; exact hne (heff.out_dom a hna)
+  · intro a hne; left
+    have hdom : ordinaryDomain a := by
+      rw [← hAR.1.memaddrs]; by_contra hna; exact hne (heff.out_dom a hna)
+    have ha_ord := (ordinaryDomain_iff a).1 hdom
+    have hhe_lt : heapEnd ≤ 2 ^ 64 := by rw [heapEnd_val]; decide
+    by_contra hno
+    apply hne
+    apply mem_eq_of_bytes_eq heff.be a hdom
+    intro k hk
+    apply heff.byte_frame (a.toNat + k) (by omega)
+    intro i hi ⟨hb1, hb2⟩
+    exact hno ⟨i, hi, by omega, by omega, by omega⟩
+  · intro b hb hne; left
+    by_contra hno
+    apply hne; apply heff.byte_frame b hb
+    intro i hi hin; exact hno ⟨i, hi, hin⟩
+
+theorem HeapByteEff.of_m11_bre {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {gw : List String}
+    (hAR : ArenaReady s) (heff : M11.ByteRegionEffect s post Rl) :
+    HeapByteEff s post Rl gw := by
+  have hG : GuestInv post :=
+    guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
+  have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
+  have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
+  refine ⟨⟨hG, hA⟩, heff.memaddrs, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
+    fun k _ => by rw [heff.globals], ?_, ?_, ?_⟩
+  · intro a hne; by_contra hna; exact hne (heff.out_dom a hna)
+  · intro a hne; left
+    have hdom : ordinaryDomain a := by
+      rw [← hAR.1.memaddrs]; by_contra hna; exact hne (heff.out_dom a hna)
+    have ha_ord := (ordinaryDomain_iff a).1 hdom
+    have hhe_lt : heapEnd ≤ 2 ^ 64 := by rw [heapEnd_val]; decide
+    by_contra hno
+    apply hne
+    apply mem_eq_of_bytes_eq heff.be a hdom
+    intro k hk
+    apply heff.byte_frame (a.toNat + k) (by omega)
+    intro i hi ⟨hb1, hb2⟩
+    exact hno ⟨i, hi, by omega, by omega, by omega⟩
+  · intro b hb hne; left
+    by_contra hno
+    apply hne; apply heff.byte_frame b hb
+    intro i hi hin; exact hno ⟨i, hi, hin⟩
+
 theorem allocated_not_in_free {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hA : ArenaOK s) {i : Ivl} (hal : i.2 = 0 ∨ Allocated s i) {b : Nat} (hb : InIvl b i) :
     ¬ InIvl b (freeGap s) ∧ ¬ InIvl b (heapFree s) := by
@@ -354,7 +366,7 @@ theorem allocated_not_in_free {F : Type} {s : PanSemStateFiniteExact 64 F}
     · dsimp [heapFree] at f1; omega
   · refine ⟨fun ⟨_, g2⟩ => ?_, fun ⟨_, f2⟩ => ?_⟩
     · dsimp [freeGap] at g2; have := hA.2.2.2.1; omega
-    · dsimp [heapFree] at f2; have := hA.1; have := hA.2.2.1; have := hA.2.2.2.1; omega
+    · dsimp [heapFree] at f2; have := hA.1; have := hA.2.1; have := hA.2.2.1; have := hA.2.2.2.1; omega
 
 theorem HeapByteEff.to_worldStep {F : Type}
     {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
@@ -463,7 +475,14 @@ theorem HeapByteEff.to_worldStep {F : Type}
       · by_contra hne
         exact hdom (hAs.1.memaddrs ▸ heff.out_dom _ hne)
   have hfeq := M13.fixedObjects_eq_of_nonHeapGlobalsKept hAs.2 hWT.1 hWT.2.2.1 hcell
-    (fun name h1 h2 h3 => (hnonheap name h1 h2 h3).symm)
+    (fun name h1 h2 _ => heff.globals (ofString name) (by
+      intro hm
+      obtain ⟨g, hg, heq⟩ := List.mem_map.1 hm
+      have hstr : name = g := by
+        simpa [Flapjack.Basis.Pure.MlString.toString_ofString] using congrArg Flapjack.Basis.Pure.MlString.toString heq.symm
+      rcases hgw_ok g hg with rfl | rfl
+      · exact h1 hstr
+      · exact h2 hstr))
   have hFT_post := M13.fixedTyped_of_eq heff.arena hWT.2.2.1 heff.hp_le heff.sp_le hfeq
   have hcore_eq : ∀ g ∈ M13.coreWorldGlobals, globN post g = globN s g := by
     intro g hg
@@ -719,14 +738,15 @@ theorem eval_decCall_alloc_resumes {F : Type}
            locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
              (ofString lname, s.locals.lookup (ofString lname)) }) := by
   obtain ⟨hp, hhp, hhp_nat⟩ := global_heap_ptr_word s hAR.2
-  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hres ⊢
   rcases hnv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) nExp with _ | nv
-  · simp [evalListHOLFinite, evalListHOLExact, hnv] at hres
+  · rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hres
+    simp [evalListHOLFinite, evalListHOLExact, hnv] at hres
     exact False.elim (not_resumes_error hres)
   · have hnw_ex : ∃ nw : BitVec 64, nv = .val (.word nw) := by
       rcases nv with ⟨⟨nw⟩⟩ | fields | ⟨nm, fields⟩
       · exact ⟨nw, rfl⟩
-      · have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [nExp] =
+      · rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hres
+        have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [nExp] =
             some [.rStruct fields] := by simp [evalListHOLFinite, evalListHOLExact, hnv]
         have hlk : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup (ofString "alloc") [.rStruct fields] = none := by
           unfold PanSemStateFiniteExact.lookupCodeHOLFinite; split
@@ -735,7 +755,8 @@ theorem eval_decCall_alloc_resumes {F : Type}
             simp [lookupCodeHOLExact, lookup_alloc, shapeOfHOLExact, shapeEqHOL] at hraw
         rw [ha] at hres; dsimp only at hres; rw [hlk] at hres
         exact False.elim (not_resumes_error hres)
-      · have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [nExp] =
+      · rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hres
+        have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [nExp] =
             some [.nStruct nm fields] := by simp [evalListHOLFinite, evalListHOLExact, hnv]
         have hlk : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup (ofString "alloc") [.nStruct nm fields] = none := by
           unfold PanSemStateFiniteExact.lookupCodeHOLFinite; split
@@ -745,6 +766,7 @@ theorem eval_decCall_alloc_resumes {F : Type}
         rw [ha] at hres; dsimp only at hres; rw [hlk] at hres
         exact False.elim (not_resumes_error hres)
     obtain ⟨n, rfl⟩ := hnw_ex
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hres ⊢
     have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) [nExp] =
         some [.val (.word n)] := by simp [evalListHOLFinite, evalListHOLExact, hnv]
     have hlk := pan_one_word_lookup s.code.lookup (ofString "alloc") (ofString "n")
@@ -753,28 +775,30 @@ theorem eval_decCall_alloc_resumes {F : Type}
     by_cases hcz : s.clock = 0
     · simp [hcz] at hnt
     · simp only [hcz, ↓reduceIte] at hnt hres ⊢
-      let cmap := HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word n))
-      let ent := callEntryStateHOLFinite s cmap
+      set cmap := HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word n))
+      set ent := callEntryStateHOLFinite s cmap
+      have hent_g : ent.globals = s.globals := rfl
+      have hent_m : ent.memory = s.memory := rfl
       have hent_n : ent.locals.lookup (ofString "n") = some (.val (.word n)) := by
         simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
       rcases hal : evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc) with ⟨ra, sa⟩
       have hres_ent : Resumes ra := by
         cases ra with
-        | none => simp [ent, cmap, hal] at hres; exact False.elim (not_resumes_error hres)
+        | none => simp [hal] at hres; exact False.elim (not_resumes_error hres)
         | some r =>
           cases r with
           | returned rv => exact Or.inl ⟨rv, rfl⟩
           | exception eid ev =>
-            simp only [ent, cmap, hal] at hres
+            simp only [hal] at hres
             rcases hres with ⟨_, h⟩ | ⟨e', v', h, hne⟩
             · simp at h
             · injection h with h'; injection h' with he1 he2; subst he1 he2
               exact Or.inr ⟨eid, ev, rfl, hne⟩
-          | timeOut => simp [ent, cmap, hal] at hnt
+          | timeOut => simp [hal] at hnt
           | finalFfi _ =>
-            simp only [ent, cmap, hal] at hres
+            simp only [hal] at hres
             rcases hres with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
-          | _ => simp [ent, cmap, hal] at hres; exact False.elim (not_resumes_error hres)
+          | _ => simp [hal] at hres; exact False.elim (not_resumes_error hres)
       obtain ⟨rv, hrv⟩ := evaluate_alloc_body_resumes ent hp n hcode hhp hent_n (by rw [hal]; exact hres_ent)
       have hp_le_cmax : hp.toNat ≤ cMax.toNat := by
         have : cMax.toNat = heapLimit := rfl
@@ -786,15 +810,12 @@ theorem eval_decCall_alloc_resumes {F : Type}
       have hra : ra = some (.returned (.val (.word hp))) := hrv
       subst hra
       set q : BitVec 64 := (hp + (n + 7)) &&& ((0 : BitVec 64) - 8)
+      have hg_sa_s : sa.globals = s.globals.update (ofString "heap_ptr", .val (.word q)) := hg_sa
+      have hm_sa_s : sa.memory = s.memory := hm_sa
       have hsh : (shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one &&
           shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one) = true := by
         simp [shapeOfHOLExact, shapeEqHOL]
-      change (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _) = _
-      change (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _).1 ≠ _ at hnt
-      change Resumes (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _).1 at hres
-      rw [hal] at hnt hres ⊢
-      dsimp only at hnt hres ⊢
-      rw [if_pos hsh] at hnt hres ⊢
+      simp only [hal, hsh, ↓reduceIte] at hnt hres ⊢
       let mid := setVarHOLFinite (ofString lname) (.val (.word hp)) { sa with locals := s.locals }
       have hgb := M13.evaluateHOLFiniteState_guestInv_be ent (sourceFnBody Guest.Software.guestFn_alloc)
         (guestInv_callEntry s cmap hAR.1)
@@ -805,39 +826,47 @@ theorem eval_decCall_alloc_resumes {F : Type}
       have hq_lo : sourceBase ≤ q.toNat := by
         have := hAR.2.1; rw [← hhp_nat] at this; omega
       have hAR_mid : ArenaReady mid :=
-        arenaReady_update_heap_ptr hG_mid hAR.2 hg_sa hq_lo hq_hi hq8
+        arenaReady_update_heap_ptr hG_mid hAR.2 hg_sa_s hq_lo hq_hi hq8
       have hq_nat : q.toNat = (hp.toNat + n.toNat + 7) / 8 * 8 := by
         have hhl264 : heapLimit < 2 ^ 64 := by decide
-        have hn_lt : hp.toNat + n.toNat + 7 < 2 ^ 64 := by omega
+        have hn_lt : hp.toNat + (n.toNat + 7) < 2 ^ 64 := by omega
         have h1 : (n + 7).toNat = n.toNat + 7 := by
           rw [BitVec.toNat_add]; change (n.toNat + 7) % 2 ^ 64 = _; exact Nat.mod_eq_of_lt (by omega)
         have h2 : (hp + (n + 7)).toNat = hp.toNat + n.toNat + 7 := by
-          rw [BitVec.toNat_add, h1, Nat.mod_eq_of_lt hn_lt]
+          rw [BitVec.toNat_add, h1, Nat.mod_eq_of_lt hn_lt]; omega
         have h3 := and_neg8_toNat (hp + (n + 7))
         change q.toNat = _ at h3
         rw [h3, h2]
       have hmid_hp : globN mid "heap_ptr" = q.toNat := by
         change globN sa "heap_ptr" = q.toNat
-        unfold globN; rw [hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+        unfold globN; rw [hg_sa_s]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
       have hmid_fp : globN mid "frame_mem_ptr" = globN s "frame_mem_ptr" := by
         change globN sa "frame_mem_ptr" = globN s "frame_mem_ptr"
-        unfold globN; rw [hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+        unfold globN; rw [hg_sa_s]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
           show ofString "heap_ptr" ≠ ofString "frame_mem_ptr" by decide]
       have hmid_sp : globN mid "scratch_ptr" = globN s "scratch_ptr" := by
         change globN sa "scratch_ptr" = globN s "scratch_ptr"
-        unfold globN; rw [hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+        unfold globN; rw [hg_sa_s]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
           show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
       have heff_mid : HeapByteEff s mid Rl gw := by
-        refine ⟨hAR_mid, by rw [← hhp_nat, hmid_hp]; omega, hmid_fp, by rw [hmid_sp], hgb.2, ?_,
-          fun _ h => absurd hm_sa h, fun _ h => absurd hm_sa h,
-          fun b _ h => absurd (by unfold memB; change _ = _; rw [hm_sa, hgb.2]) h⟩
+        refine ⟨hAR_mid, hG_mid.memaddrs.trans hAR.1.memaddrs.symm,
+          by rw [← hhp_nat, hmid_hp]; omega, hmid_fp, by rw [hmid_sp], hgb.2, ?_,
+          fun a h => False.elim (h (by change sa.memory a = s.memory a; rw [hm_sa_s])),
+          fun a h => False.elim (h (by change sa.memory a = s.memory a; rw [hm_sa_s])),
+          fun b _ h => False.elim (h (by
+            unfold memB
+            have hm_b : mid.memory (panByteAlignHOL (BitVec.ofNat 64 b)) =
+                s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+              change sa.memory _ = s.memory _; rw [hm_sa_s]
+            have hbe_b : mid.be = s.be := hgb.2
+            rw [hm_b, hbe_b]))⟩
         intro k hk
         have hne : k ≠ ofString "heap_ptr" := fun heq =>
           hk (List.mem_map.2 ⟨"heap_ptr", hgw, heq.symm⟩)
         change s.globals.lookup k = sa.globals.lookup k
-        rw [hg_sa]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
-      exact ⟨hp, n, q, mid, hnv, hhp_nat, by rw [hhp_nat]; exact hAR.2.2.2.2.2.1,
-        hq_nat, hpq, hq_hi, hq8, hmid_hp, hg_sa, hm_sa, rfl, heff_mid, hnt, hres, rfl⟩
+        rw [hg_sa_s]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+      exact ⟨hp, n, q, mid, rfl, hhp_nat, by rw [hhp_nat]; exact hAR.2.2.2.2.2.1,
+        hq_nat, hpq, hq_hi, hq8, hmid_hp, hg_sa_s, hm_sa_s, rfl, heff_mid, hnt, hres, rfl⟩
 
 /-- `decCall lname .one "heap_mark" [] cont` binds `lname = hp` (`hp.toNat = globN s "heap_ptr"`). -/
 theorem eval_decCall_heap_mark {F : Type}
@@ -988,7 +1017,7 @@ theorem eval_call_heap_release {F : Type}
         unfold globN; rw [hg_post]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
           show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
       rw [this]; exact heff0.sp_le
-    refine ⟨rfl, rfl, rfl, rfl, hAR_post, by rw [hhp_post]; exact hm_lo, hfp_post, hsp_post,
+    refine ⟨rfl, rfl, rfl, rfl, hAR_post, heff0.memaddrs, by rw [hhp_post]; exact hm_lo, hfp_post, hsp_post,
       heff0.be, ?_, heff0.out_dom, heff0.cell_frame, heff0.byte_frame⟩
     intro k hk
     have hne : k ≠ ofString "heap_ptr" := fun heq =>

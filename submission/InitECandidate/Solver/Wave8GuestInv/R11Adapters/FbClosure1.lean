@@ -6,7 +6,6 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M08.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M11.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M12.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.IndividualAudit
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M14.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M17.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.Axioms

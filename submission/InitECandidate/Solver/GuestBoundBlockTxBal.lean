@@ -3966,6 +3966,5 @@ theorem funBounded_tx_put_to : FunBounded (ofString "tx_put_to") (2 ^ 64 + 21) :
     (progBounded_rlp_encode_bytes_tail_const _ _ 20#64 (by decide)) ?_
   have h20 : (20#64).toNat = 20 := rfl
   rw [h20]
-  omega
 
 end InitECandidate.Solver.GuestBoundBlockTxBal
