@@ -187,6 +187,6 @@ theorem subCarry384_no_borrow (a b : Limbs384) (h : b.toNat ≤ a.toNat) :
 
 
 theorem inverseRank_limbs384_le (u v : Limbs384) : inverseRank u.toNat v.toNat ≤ 1537 :=
-  inverseRank_384_le u.toNat_lt v.toNat_lt
+  Nat.le_trans (inverseRank_384_le u.toNat_lt v.toNat_lt) (by omega)
 
 end InitECandidate.Solver.Wave8GuestInv.Arith

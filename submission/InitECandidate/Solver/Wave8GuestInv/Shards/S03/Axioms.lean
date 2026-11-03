@@ -377,15 +377,6 @@ theorem fb_destroy_account
     TerminatingFunBoundedOn GuestInv (ofString "destroy_account") K.«destroy_account» := by
   fb_prove 390 Guest.Software.guestFn_destroy_account K.«destroy_account»
 
-theorem fb_destroy_storage
-    (h_htab_get : TerminatingFunBoundedOn GuestInv (ofString "htab_get") K.«htab_get»)
-    (h_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»)
-    (h_htab_set : TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set»)
-    (h_jdel : TerminatingFunBoundedOn GuestInv (ofString "jdel") K.«jdel»)
-    (h_sk_make : TerminatingFunBoundedOn GuestInv (ofString "sk_make") K.«sk_make») :
-    TerminatingFunBoundedOn GuestInv (ofString "destroy_storage") K.«destroy_storage» := by
-  fb_prove 389 Guest.Software.guestFn_destroy_storage K.«destroy_storage»
-
 theorem fb_frame_halt :
     TerminatingFunBoundedOn GuestInv (ofString "frame_halt") K.«frame_halt» := by
   fb_prove 586 Guest.Software.guestFn_frame_halt K.«frame_halt»
@@ -505,7 +496,6 @@ example : (type_of% @fb_charge_gas) = ((type_of% @InitECandidate.Solver.Wave8Gue
 example : (type_of% @fb_charge_state_gas) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_add_sat) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_charge_state_gas)) := rfl
 example : (type_of% @fb_create_finish) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_alloc) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_charge_gas) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_charge_state_gas) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_memcpy) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_set_code) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_words_of) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_create_finish)) := rfl
 example : (type_of% @fb_destroy_account) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_destroy_storage) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_set_account) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_destroy_account)) := rfl
-example : (type_of% @fb_destroy_storage) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_htab_get) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_htab_item) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_htab_set) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_jdel) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_sk_make) → (type_of% @InitECandidate.Solver.Wave8GuestInv.fb_destroy_storage)) := rfl
 example : (type_of% @fb_frame_halt) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_frame_halt)) := rfl
 example : (type_of% @fb_frame_mem_release) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_frame_mem_release)) := rfl
 example : (type_of% @fb_frame_state_gas_used) = ((type_of% @InitECandidate.Solver.Wave8GuestInv.fb_frame_state_gas_used)) := rfl

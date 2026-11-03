@@ -1,18 +1,16 @@
+import InitECandidate.Solver.Wave8GuestInv.Contracts
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.GBODY_RUNFRAMES_SOL.Axioms
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.HTAB_DEL.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.HTAB_LEAVES.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M05.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M08.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M11.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M12.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.IndividualAudit
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M14.Axioms
+import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M17.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.Axioms
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M19.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M21.IndividualAudit
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M22.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M23.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M25.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.IndividualAudit
@@ -20,6 +18,12 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M28.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M29.IndividualAudit
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.RLP.Axioms
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.DelSpecs
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.TruncateSpec
+import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbCore
+import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbHtab
+import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbRlp
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
 import InitECandidate.Solver.Wave8GuestInv.Shards.S00.Compatibility
 import InitECandidate.Solver.Wave8GuestInv.Shards.S01.Axioms
 import InitECandidate.Solver.Wave8GuestInv.Shards.S02.Axioms
@@ -40,6 +44,8 @@ namespace InitECandidate.Solver.Wave8GuestInv.Merged
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
+set_option maxHeartbeats 2000000
+set_option linter.style.nameCheck false
 
 instance : InitECandidate.Solver.Wave8GuestInv.S01.IsGuestInv (@InitECandidate.Solver.Wave8GuestInv.GuestInv) where
   eval s prog h := InitECandidate.Solver.Wave8GuestInv.guestInv_evaluate s prog h
@@ -55,7 +61,7 @@ theorem ek_charge_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«ek_charge
   InitECandidate.Solver.Wave8GuestInv.M21.ek_charge_gas
 
 theorem ek_is_warm_storage_key : type_of% InitECandidate.Solver.Wave8GuestInv.«ek_is_warm_storage_key» :=
-  InitECandidate.Solver.Wave8Contracts.M22.ek_is_warm_storage_key
+  InitECandidate.Solver.Wave8GuestInv.EvmFrameSpecs.ek_is_warm_storage_key
 
 theorem ek_stack_pop : type_of% InitECandidate.Solver.Wave8GuestInv.«ek_stack_pop» :=
   InitECandidate.Solver.Wave8Contracts.M23.ek_stack_pop
@@ -145,7 +151,7 @@ theorem fb__resolve_step : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__re
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb__resolve_step fb_mpt_fail fb_node_new_hashed fb_nodedb_lookup InitECandidate.Solver.Wave8GuestInv.«fb_rlp_item»
 
 theorem fb__rlp_validate_items_body : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__rlp_validate_items_body» :=
-  InitECandidate.Solver.Wave8Leaves.Rlp.fb__rlp_validate_items_body
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb__rlp_validate_items_body
 
 theorem fb__split_extension : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__split_extension» :=
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb__split_extension fb_mpt_fail InitECandidate.Solver.Wave8GuestInv.«fb_node_new_branch» fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.«fb_node_new_leaf»
@@ -163,7 +169,7 @@ theorem fb_access_list_payload_len : type_of% InitECandidate.Solver.Wave8GuestIn
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_access_list_payload_len fb_rlp_list_header_len
 
 theorem fb_htab_set : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_set» :=
-  InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_set_of fb_memcpy fb_memeq
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_htab_set
 
 theorem fb_record_pre_state_read : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_record_pre_state_read» :=
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_record_pre_state_read fb_htab_set
@@ -358,7 +364,7 @@ theorem fb_jdel : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_jdel» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_jdel fb_alloc fb_htab_del fb_htab_get fb_memcpy fb_trap_with
 
 theorem fb_destroy_storage : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_destroy_storage» :=
-  InitECandidate.Solver.Wave8Leaves.S03.fb_destroy_storage fb_htab_get fb_htab_item fb_htab_set fb_jdel InitECandidate.Solver.Wave8GuestInv.«fb_sk_make»
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_destroy_storage
 
 theorem fb_jset : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_jset» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_jset fb_alloc fb_htab_get fb_htab_set fb_memcpy fb_trap_with
@@ -655,7 +661,7 @@ theorem fb_htab_find_leaf : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ht
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_find_leaf
 
 theorem fb_htab_first_diff : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_first_diff» :=
-  InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_first_diff
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_htab_first_diff
 
 theorem fb_htab_grow : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_grow» :=
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_grow_of fb_memcpy
@@ -673,7 +679,7 @@ theorem fb_htab_new_node : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_hta
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_new_node_of fb_memcpy
 
 theorem fb_htab_union_into : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_union_into» :=
-  InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_union_into_of fb_memcpy fb_memeq
+  InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_union_into_of fb_memcpy fb_htab_set
 
 theorem fb_pack_bytes : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pack_bytes» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_pack_bytes
@@ -961,7 +967,7 @@ theorem fb_rlp_item_header : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_r
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_item_header
 
 theorem fb_rlp_item_total : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_item_total» :=
-  InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_item_total
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_rlp_item_total
 
 theorem fb_rlp_item_total_unchecked : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_item_total_unchecked» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_item_total_unchecked
@@ -973,7 +979,7 @@ theorem fb_rlp_read_length : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_r
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_read_length
 
 theorem fb_rlp_validate_items : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_validate_items» :=
-  InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_validate_items
+  InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_rlp_validate_items
 
 theorem fb_rlp_write_header : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_write_header» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_write_header
@@ -1069,13 +1075,13 @@ theorem gbody_run_frames : type_of% InitECandidate.Solver.Wave8GuestInv.«gbody_
   InitECandidate.Solver.Wave8GuestInv.RunFramesRace.gbody_run_frames
 
 theorem htab_del_progress_spec : type_of% InitECandidate.Solver.Wave8GuestInv.«htab_del_progress_spec» :=
-  InitECandidate.Solver.Wave8GuestInv.HtabAstra.htab_del_progress_spec_proof
+  InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.htab_del_progress_spec
 
 theorem htab_del_spec : type_of% InitECandidate.Solver.Wave8GuestInv.«htab_del_spec» :=
-  InitECandidate.Solver.Wave8GuestInv.HtabAstra.htab_del_spec_proof
+  InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.htab_del_spec
 
 theorem htab_truncate_spec : type_of% InitECandidate.Solver.Wave8GuestInv.«htab_truncate_spec» :=
-  InitECandidate.Solver.Wave8GuestInv.M19.htab_truncate_spec
+  InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.htab_truncate_spec
 
 theorem iz_node_invalidate : type_of% InitECandidate.Solver.Wave8GuestInv.«iz_node_invalidate» :=
   InitECandidate.Solver.Wave8Contracts.M23.iz_node_invalidate
@@ -1087,22 +1093,22 @@ theorem nz_htab_set : type_of% InitECandidate.Solver.Wave8GuestInv.«nz_htab_set
   InitECandidate.Solver.Wave8Contracts.M25.nz_htab_set
 
 theorem ro_calculate_total_blob_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_calculate_total_blob_gas» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_calculate_total_blob_gas
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_calculate_total_blob_gas
 
 theorem ro_check_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_check_gas» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_check_gas
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_check_gas
 
 theorem ro_check_gas_limit : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_check_gas_limit» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_check_gas_limit
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_check_gas_limit
 
 theorem ro_common_prefix_length : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_common_prefix_length» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_common_prefix_length
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_common_prefix_length
 
 theorem ro_fee_mul : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_fee_mul» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_fee_mul
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_fee_mul
 
 theorem ro_heap_mark : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_heap_mark» :=
-  InitECandidate.Solver.Wave8Contracts.M14.ro_heap_mark
+  InitECandidate.Solver.Wave8GuestInv.R10Ports.ro_heap_mark
 
 theorem ro_htab_get : type_of% InitECandidate.Solver.Wave8GuestInv.«ro_htab_get» :=
   InitECandidate.Solver.Wave8Contracts.M15.ro_htab_get
@@ -1207,7 +1213,7 @@ theorem wk_rlp_encode_word : type_of% InitECandidate.Solver.Wave8GuestInv.«wk_r
   InitECandidate.Solver.Wave8GuestInv.M11.wk_rlp_encode_word
 
 theorem wk_sk_make : type_of% InitECandidate.Solver.Wave8GuestInv.«wk_sk_make» :=
-  InitECandidate.Solver.Wave8GuestInv.M11.wk_sk_make
+  InitECandidate.Solver.Wave8GuestInv.EvmFrameSpecs.wk_sk_make
 
 theorem wk_st_le64 : type_of% InitECandidate.Solver.Wave8GuestInv.«wk_st_le64» :=
   InitECandidate.Solver.Wave8Contracts.M12.wk_st_le64

@@ -760,21 +760,21 @@ theorem eval_decCall_alloc_resumes {F : Type}
       rcases hal : evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc) with ⟨ra, sa⟩
       have hres_ent : Resumes ra := by
         cases ra with
-        | none => simp [hal] at hres; exact False.elim (not_resumes_error hres)
+        | none => simp [ent, cmap, hal] at hres; exact False.elim (not_resumes_error hres)
         | some r =>
           cases r with
           | returned rv => exact Or.inl ⟨rv, rfl⟩
           | exception eid ev =>
-            simp only [hal] at hres
+            simp only [ent, cmap, hal] at hres
             rcases hres with ⟨_, h⟩ | ⟨e', v', h, hne⟩
             · simp at h
             · injection h with h'; injection h' with he1 he2; subst he1 he2
               exact Or.inr ⟨eid, ev, rfl, hne⟩
-          | timeOut => simp [hal] at hnt
+          | timeOut => simp [ent, cmap, hal] at hnt
           | finalFfi _ =>
-            simp only [hal] at hres
+            simp only [ent, cmap, hal] at hres
             rcases hres with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
-          | _ => simp [hal] at hres; exact False.elim (not_resumes_error hres)
+          | _ => simp [ent, cmap, hal] at hres; exact False.elim (not_resumes_error hres)
       obtain ⟨rv, hrv⟩ := evaluate_alloc_body_resumes ent hp n hcode hhp hent_n (by rw [hal]; exact hres_ent)
       have hp_le_cmax : hp.toNat ≤ cMax.toNat := by
         have : cMax.toNat = heapLimit := rfl
@@ -783,14 +783,18 @@ theorem eval_decCall_alloc_resumes {F : Type}
       rw [hal] at hrv hgen
       dsimp only at hgen
       obtain ⟨rfl, hg_sa, hm_sa, hpq, hqc, hq8⟩ := hgen
-      injection hrv with hrv'; subst hrv'
+      have hra : ra = some (.returned (.val (.word hp))) := hrv
+      subst hra
       set q : BitVec 64 := (hp + (n + 7)) &&& ((0 : BitVec 64) - 8)
       have hsh : (shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one &&
           shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one) = true := by
         simp [shapeOfHOLExact, shapeEqHOL]
-      have hal' : evaluateHOLFiniteState (s.callEntryStateHOLFinite cmap)
-          (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned (.val (.word hp))), sa) := hal
-      simp only [hal', hsh, ↓reduceIte] at hnt hres ⊢
+      change (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _) = _
+      change (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _).1 ≠ _ at hnt
+      change Resumes (let bodyOutput := evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_alloc); _).1 at hres
+      rw [hal] at hnt hres ⊢
+      dsimp only at hnt hres ⊢
+      rw [if_pos hsh] at hnt hres ⊢
       let mid := setVarHOLFinite (ofString lname) (.val (.word hp)) { sa with locals := s.locals }
       have hgb := M13.evaluateHOLFiniteState_guestInv_be ent (sourceFnBody Guest.Software.guestFn_alloc)
         (guestInv_callEntry s cmap hAR.1)
@@ -863,20 +867,20 @@ theorem eval_decCall_heap_mark {F : Type}
       some (sourceFnBody Guest.Software.guestFn_heap_mark, HolFiniteMapExact.empty, .one) := by
     have hraw : lookupCodeHOLExact s.code.lookup (ofString "heap_mark") [] =
         some (sourceFnBody Guest.Software.guestFn_heap_mark, FEMPTY, .one) := by
-      rw [hcode]; simp [lookupCodeHOLExact, lookup_heap_mark, FEMPTY]
+      rw [hcode]; simp [lookupCodeHOLExact, lookup_heap_mark]; rfl
     unfold PanSemStateFiniteExact.lookupCodeHOLFinite; split
     · rename_i hm; rw [hraw] at hm; simp at hm
     · rename_i b l r hf
       have hinj := Option.some.inj (hf.symm.trans hraw)
       obtain ⟨rfl, hr⟩ := Prod.mk.inj hinj
       obtain ⟨hl_eq, rfl⟩ := Prod.mk.inj hr
-      congr 2; apply HolFiniteMapExact.ext; funext x; change l x = FEMPTY x; rw [hl_eq]
+      subst hl_eq; rfl
   simp only [ha, hlk] at hnt ⊢
   by_cases hcz : s.clock = 0
   · simp [hcz] at hnt
   · simp only [hcz, ↓reduceIte] at hnt ⊢
-    let ent := s.callEntryStateHOLFinite HolFiniteMapExact.empty
-    have hm_eval : evaluateHOLFiniteState (s.callEntryStateHOLFinite HolFiniteMapExact.empty)
+    set ent := s.callEntryStateHOLFinite HolFiniteMapExact.empty
+    have hm_eval : evaluateHOLFiniteState ent
         (sourceFnBody Guest.Software.guestFn_heap_mark) =
         (some (.returned (.val (.word hp))), ent.emptyLocalsHOLFinite) := by
       have hb : sourceFnBody Guest.Software.guestFn_heap_mark =
@@ -889,7 +893,9 @@ theorem eval_decCall_heap_mark {F : Type}
     have hsh : (shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one &&
         shapeEqHOL (shapeOfHOLExact (.val (.word hp) : ValueHOL 64)) .one) = true := by
       simp [shapeOfHOLExact, shapeEqHOL]
-    simp only [hm_eval, hsh, ↓reduceIte] at hnt ⊢
+    rw [hm_eval] at hnt ⊢
+    dsimp only at hnt ⊢
+    rw [if_pos hsh] at hnt ⊢
     let mid := setVarHOLFinite (ofString lname) (.val (.word hp))
       { ent.emptyLocalsHOLFinite with locals := s.locals }
     have hlf : M13.LocFrame s mid := by cases s; rfl
@@ -930,10 +936,10 @@ theorem eval_call_heap_release {F : Type}
   · simp [hcz] at hnt
   · simp only [hcz, ↓reduceIte] at hnt ⊢
     let cmap := HolFiniteMapExact.empty.update (ofString "m", ValueHOL.val (.word mw))
-    let ent := s.callEntryStateHOLFinite cmap
+    set ent := s.callEntryStateHOLFinite cmap
     have hent_m : ent.locals.lookup (ofString "m") = some (.val (.word mw)) := by
       simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
-    have hbody_eval : evaluateHOLFiniteState (s.callEntryStateHOLFinite cmap)
+    have hbody_eval : evaluateHOLFiniteState ent
         (sourceFnBody Guest.Software.guestFn_heap_release) =
         (some (.returned (.val (.word 0#64))),
           emptyLocalsHOLFinite (setGlobalHOLFinite (ofString "heap_ptr") (.val (.word mw)) ent)) := by
@@ -946,21 +952,27 @@ theorem eval_call_heap_release {F : Type}
           some (.val (.word mw)) := hent_m
       have hg_ent : ent.globals.lookup (ofString "heap_ptr") = some (.val (.word hp_cur)) := hhp_cur
       rw [hev]
-      simp only [isValidValueHOLFinite, lookupKvarHOLFinite, hg_ent, shapeOfHOLExact, shapeEqHOL,
-        ↓reduceIte, setKvarHOLFinite, setGlobalHOLFinite, evaluateHOLFiniteState_return]
+      dsimp only
+      have hvalid : ent.isValidValueHOLFinite .global (ofString "heap_ptr") (.val (.word mw)) = true := by
+        simp [PanSemStateFiniteExact.isValidValueHOLFinite, lookupKvarHOLExact, hg_ent, shapeOfHOLExact, shapeEqHOL]
+      rw [hvalid]
+      simp only [↓reduceIte, setKvarHOLFinite, setGlobalHOLFinite, evaluateHOLFiniteState_return]
       have hc0 : @evalHOLExact 64 F _
           (setGlobalHOLFinite (ofString "heap_ptr") (.val (.word mw)) ent).toExact
           (fun a => Classical.propDecidable (ent.memaddrs a)) (.const 0#64) =
           some (.val (.word 0#64)) := rfl
+      dsimp only [setGlobalHOLFinite] at hc0 ⊢
       rw [hc0]; simp [shapeOfHOLExact]
     have hsh0 : shapeEqHOL (shapeOfHOLExact (.val (.word 0#64) : ValueHOL 64)) .one = true := by
       simp [shapeOfHOLExact, shapeEqHOL]
-    simp only [hbody_eval, hsh0, ↓reduceIte]
+    rw [hbody_eval]
+    dsimp only
+    rw [if_pos hsh0]
     set post : PanSemStateFiniteExact 64 F :=
       { (emptyLocalsHOLFinite (setGlobalHOLFinite (ofString "heap_ptr") (.val (.word mw)) ent)) with
         locals := s.locals }
     have hG_post : GuestInv post :=
-      guestInv_congr rfl rfl rfl rfl heff0.arena.1
+      guestInv_congr (s := s) (t := post) rfl rfl rfl rfl heff0.arena.1
     have hg_post : post.globals = s.globals.update (ofString "heap_ptr", .val (.word mw)) := rfl
     have hAR_post : ArenaReady post :=
       arenaReady_update_heap_ptr hG_post heff0.arena.2 hg_post hm_lo_sb hm_hi hm8

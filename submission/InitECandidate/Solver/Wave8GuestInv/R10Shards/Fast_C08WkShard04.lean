@@ -6,7 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M11.RlpMemcpyLemmas
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.Exec
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.rt_lst_new
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.rt_msg_new
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M19.htab_del_spec
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.DelSpecs
 
 set_option Elab.async false
 set_option autoImplicit false

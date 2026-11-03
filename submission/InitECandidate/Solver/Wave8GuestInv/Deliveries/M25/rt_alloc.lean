@@ -360,8 +360,7 @@ private theorem alloc_returned_props {F : Type}
           show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
       have hpost_ginv : GuestInv post := ⟨hginv.code, hginv.memaddrs, hginv.shMemaddrs, hginv.baseAddr⟩
       have hpost_arena : ArenaOK post := by
-        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-          globalsWord_update (ofString "heap_ptr") q rfl harena.2.2.2.2.2.2.2.2⟩
+        refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
         · rw [hpost_hp]; omega
         · rw [hpost_hp]; exact hq_le_hl
         · rw [hpost_fm]; exact hfm_lo
@@ -369,7 +368,8 @@ private theorem alloc_returned_props {F : Type}
         · rw [hpost_sp]; exact hsp_hi
         · rw [hpost_hp]; omega
         · rw [hpost_fm]; exact hfm_al
-        · rw [hpost_sp]; exact hsp_al
+        · rw [hpost_sp]; exact hsp_al.1
+        · exact globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hsp_al.2
       have hgrows : AllocatorGrows s post := by
         refine ⟨?_, ?_⟩
         · rw [hp_glob, hpost_hp]; omega

@@ -21,17 +21,59 @@ theorem memW_eq_light : @memW = @Wave8HtabAstra.memW := rfl
 theorem htabFootprint_eq_light : @htabFootprint = @Wave8HtabAstra.htabFootprint := rfl
 theorem Inside_eq_light : @Inside = @Wave8HtabAstra.Inside := rfl
 theorem WordsOK_eq_light : @WordsOK = @Wave8HtabAstra.WordsOK := rfl
-theorem Disj_eq_light : @Disj = @Wave8HtabAstra.Disj := rfl
-theorem maxKeyLen_eq_light : @maxKeyLen = @Wave8HtabAstra.maxKeyLen := rfl
+theorem Disj_iff_light_of_pos {i j : Ivl} (hi : 0 < i.2) (hj : 0 < j.2) :
+    Disj i j ↔ Wave8HtabAstra.Disj i j := by
+  simp only [Disj, Wave8HtabAstra.Disj]
+  omega
+
+theorem htabFootprint_pos {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat)
+    (hk1 : 1 ≤ hdr s t 0) (hst : hdr s t 1 = (hdr s t 0 + 7) / 8 * 8) :
+    ∀ i ∈ htabFootprint s t, 0 < i.2 := by
+  have hstpos : 8 ≤ hdr s t 1 := by omega
+  have h1 : 0 < (hdr s t 10 + 1) * hdr s t 1 := Nat.mul_pos (Nat.succ_pos _) (by omega)
+  intro i hi
+  simp only [htabFootprint, List.mem_cons, List.not_mem_nil, or_false] at hi
+  rcases hi with rfl | rfl | rfl | rfl
+  · dsimp only; omega
+  · exact h1
+  · dsimp only; omega
+  · dsimp only; omega
+
+theorem pairwise_disj_iff_light {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat)
+    (hk1 : 1 ≤ hdr s t 0) (hst : hdr s t 1 = (hdr s t 0 + 7) / 8 * 8) :
+    (htabFootprint s t).Pairwise Disj ↔ (Wave8HtabAstra.htabFootprint s t).Pairwise Wave8HtabAstra.Disj := by
+  have hpos := htabFootprint_pos s t hk1 hst
+  rw [← htabFootprint_eq_light]
+  constructor
+  · intro hp
+    exact List.Pairwise.imp_of_mem
+      (fun {i j} hi hj h => (Disj_iff_light_of_pos (hpos i hi) (hpos j hj)).mp h) hp
+  · intro hp
+    exact List.Pairwise.imp_of_mem
+      (fun {i j} hi hj h => (Disj_iff_light_of_pos (hpos i hi) (hpos j hj)).mpr h) hp
 
 theorem htabWF_iff_light {F : Type} (s : PanSemStateFiniteExact 64 F) (t : Nat) :
     HtabWF s t ↔ Wave8HtabAstra.HtabWF s t := by
   have hfree : FreeChain s = Wave8HtabAstra.FreeChain s := by
     funext nodes head Fr
     exact propext (freeChain_iff_light s nodes head Fr)
-  unfold HtabWF Wave8HtabAstra.HtabWF
-  simp only [hfree, hdr_eq_light, nodeF_eq_light, memW_eq_light, htabFootprint_eq_light,
-    Inside_eq_light, WordsOK_eq_light, Disj_eq_light, maxKeyLen_eq_light]
+  constructor
+  · intro h
+    obtain ⟨hfp, hdisj, hk1, hk60, hst, rest⟩ := h
+    have hp := (pairwise_disj_iff_light s t hk1 hst).mp hdisj
+    unfold Wave8HtabAstra.HtabWF
+    simp only [← hfree, ← hdr_eq_light, ← nodeF_eq_light, ← memW_eq_light,
+      ← htabFootprint_eq_light, ← Inside_eq_light, ← WordsOK_eq_light, ← maxKeyLen_eq_light]
+    exact ⟨hfp, hp, hk1, hk60, hst, rest⟩
+  · intro h
+    obtain ⟨hfp, hdisj, hk1, hk60, hst, rest⟩ := h
+    have hk1' : 1 ≤ hdr s t 0 := hk1
+    have hst' : hdr s t 1 = (hdr s t 0 + 7) / 8 * 8 := hst
+    have hp := (pairwise_disj_iff_light s t hk1' hst').mpr hdisj
+    unfold HtabWF
+    simp only [hfree, hdr_eq_light, nodeF_eq_light, memW_eq_light,
+      htabFootprint_eq_light, Inside_eq_light, WordsOK_eq_light, maxKeyLen_eq_light]
+    exact ⟨hfp, hp, hk1, hk60, hst, rest⟩
 
 theorem globN_eq_light : @globN = @Wave8HtabAstra.globN := rfl
 theorem locN_eq_light : @locN = @Wave8HtabAstra.locN := rfl
