@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28_Inits
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_C08WkShard03
 
 /-! Master relational lifting lemma `MptEff.to_mptObjStep` for `mk_mpt_root` and `mk_mpt_set`
 (`R13-M4b-MptKeepsTwin`). -/
@@ -21,7 +21,7 @@ open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
-open InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
+open InitECandidate.Solver.Wave8GuestInv.Fast_C08WkShard03
 
 /-- Execution effect of a trie-object operation (`mpt_root` or `mpt_set`) on `m = locN s "m"`:
 1. `arena`, `grows`, `gw_kept`, `dom_wr`: preserves arenas, grows allocator (`heap_ptr` grows,

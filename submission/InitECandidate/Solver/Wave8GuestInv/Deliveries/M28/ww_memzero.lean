@@ -908,10 +908,7 @@ theorem «ww_memzero» :
   have hG_post : GuestInv post := guestInv_congr hc hm hsh hba hG
   have hglob_eq : ∀ nm : String, globN post nm = globN s nm := fun nm => by
     unfold globN; rw [hg]
-  have hA_post : ArenaOK post := by
-    unfold ArenaOK
-    simp only [hglob_eq]
-    exact hA
+  have hA_post : ArenaOK post := arenaOK_congr hg hA
   refine ⟨⟨hG_post, hA_post⟩, ?_, ?_, ?_, ?_⟩
   · rw [hglob_eq]
   · rw [hglob_eq]

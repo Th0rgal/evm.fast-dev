@@ -2704,7 +2704,7 @@ theorem funByteEff_keccak256 :
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards.Keccak256
 
-namespace InitECandidate.Solver.Wave8GuestInv
+namespace InitECandidate.Solver.Wave8GuestInv.R13Shards
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -2712,8 +2712,9 @@ open InitE
 open InitECandidate.Solver.GuestCodeLookup
 open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.PanRunBounded
+open InitECandidate.Solver.Wave8GuestInv
 
-theorem «wk_keccak256» :
+theorem wk_keccak256_impl :
     WorldKeeps WorldOK
       (fun s => [(locN s "out", 32),
         (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
@@ -2723,7 +2724,7 @@ theorem «wk_keccak256» :
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
        ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       NoExtra (ofString "keccak256") := by
-  obtain ⟨params, body, retShape, hlook, hspec⟩ := R13Shards.Keccak256.funByteEff_keccak256
+  obtain ⟨params, body, retShape, hlook, hspec⟩ := Keccak256.funByteEff_keccak256
   refine ⟨params, body, retShape, hlook, fun {F} s hcode hWOK ⟨vals, hl⟩ hnt hres => ?_⟩
   have heff := hspec s vals hcode hWOK.1.1 hl hnt hres
   have hlook_eq : originalRuntimeCode.lookup (ofString "keccak256") =
@@ -2776,4 +2777,4 @@ theorem «wk_keccak256» :
     (r := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_keccak256)).1)
     hWOK (fun _ hx => by cases hx) hbre
 
-end InitECandidate.Solver.Wave8GuestInv
+end InitECandidate.Solver.Wave8GuestInv.R13Shards

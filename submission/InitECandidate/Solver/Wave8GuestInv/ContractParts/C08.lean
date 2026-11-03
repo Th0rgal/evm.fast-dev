@@ -1,5 +1,14 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M25.nf_node_invalidate
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.MptNibbleKey
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.NodeRlpKeep
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.NfNodeNewLeaf
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.NfNodeNewExt
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.NfInsertIntoLeaf
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.NfSplitExtension
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01HtabCopy
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
 
 /-! Guarded contracts and proved glue, bounded compilation unit.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on ae2c240b83a9aa7d4af2d71a3ba479500e711f8e).
@@ -25,10 +34,12 @@ open InitECandidate.Solver.PanRunBounded
 
 /-- `_node_rlp_begin` (AST line 10890): keeps `ArenaReady`. -/
 theorem «ak__node_rlp_begin» :
-    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_begin") := by sorry
+    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_begin") :=
+  R13NodeRlpKeep.ak__node_rlp_begin
 /-- `_node_rlp_finish` (AST line 10930): keeps `ArenaReady`. -/
 theorem «ak__node_rlp_finish» :
-    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_finish") := by sorry
+    KeepsOn ArenaReady ArenaReady (ofString "_node_rlp_finish") :=
+  R13NodeRlpKeep.ak__node_rlp_finish
 /-- `encode_withdrawal_rlp` (AST line 32114): resumes only on an in-domain record (`loadByte(wd)`, AST 32123). -/
 theorem «dm_encode_withdrawal_rlp» :
     ResumesInDomain (fun s => (locN s "wd", 1)) (ofString "encode_withdrawal_rlp") :=
@@ -123,34 +134,40 @@ theorem «nf__insert_into_leaf» :
     NodeFn ["node"]
     (fun s Nd =>
       NodeKind s Nd "node" 1 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40)
-    (ofString "_insert_into_leaf") := by sorry
+    (ofString "_insert_into_leaf") :=
+  R14Shards.«nf__insert_into_leaf»
 /-- `_split_extension` (AST line 10561): typed nodes in, typed nodes out (MPT tier); requirement: `NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧ locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl"`. -/
 theorem «nf__split_extension» :
     NodeFn ["node"]
     (fun s Nd =>
       NodeKind s Nd "node" 2 ∧ KeyIn s Nd (locN s "rk") (locN s "rl") ∧
       locN s "vlen" < 2 ^ 40 ∧ locN s "pl" < memW s (locN s "node" + 40) ∧ locN s "pl" ≤ locN s "rl")
-    (ofString "_split_extension") := by sorry
+    (ofString "_split_extension") :=
+  R14Shards.«nf__split_extension»
 /-- `node_invalidate` (AST line 10061): typed nodes in, typed nodes out (MPT tier); requirement: none. -/
 theorem «nf_node_invalidate» :
     NodeFn ["nd"]
     (fun _ _ => True)
-    (ofString "node_invalidate") := by sorry
+    (ofString "node_invalidate") :=
+  InitECandidate.Solver.Wave8Contracts.M25.«nf_node_invalidate»
 /-- `node_new_ext` (AST line 10021): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen")`. -/
 theorem «nf_node_new_ext» :
     NodeFn ["child"]
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen"))
-    (ofString "node_new_ext") := by sorry
+    (ofString "node_new_ext") :=
+  R14Shards.«nf_node_new_ext»
 /-- `node_new_leaf` (AST line 9994): typed nodes in, typed nodes out (MPT tier); requirement: `KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40`. -/
 theorem «nf_node_new_leaf» :
     NodeFn []
     (fun s Nd =>
       KeyIn s Nd (locN s "nib") (locN s "nlen") ∧ locN s "vlen" < 2 ^ 40)
-    (ofString "node_new_leaf") := by sorry
+    (ofString "node_new_leaf") :=
+  R14Shards.«nf_node_new_leaf»
 /-- `mpt_nibble_key` (AST line 10470): returns a fresh heap nibble array (value contract). -/
 theorem «nk_mpt_nibble_key» :
-    RetNibbles (ofString "mpt_nibble_key") := by sorry
+    RetNibbles (ofString "mpt_nibble_key") :=
+  R13MptKeepsTwin.nk_mpt_nibble_key_proof
 /-- `htab_set` (AST line 5149): resumes only on a nonzero table (`load(t + 0)` errors at `0`, AST 5156). -/
 theorem «nz_htab_set» :
     ArgNonNull "t" (ofString "htab_set") :=
@@ -273,7 +290,8 @@ theorem «rt_htab_copy» :
       (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
         HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
         ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
-    (ofString "htab_copy") := by sorry
+    (ofString "htab_copy") :=
+  R13Shards.rt_htab_copy_impl
 /-- `lst_new` (AST line 13804): returns a fresh empty list (`LstOK`): header and backing array fresh and disjoint. -/
 theorem «rt_lst_new» :
     Returns ArenaReady (fun s post l =>
@@ -286,7 +304,8 @@ theorem «rt_lst_new» :
 theorem «rt_mpt_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
-    (ofString "mpt_new") := by sorry
+    (ofString "mpt_new") :=
+  R13Shards.rt_mpt_new_impl
 /-- `msg_new` (AST line 15344): returns a fresh zeroed 176-byte message record (`alloc(176)`, `memzero`). -/
 theorem «rt_msg_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 176 ∧
@@ -362,7 +381,8 @@ theorem «wk_alloc» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc") := by sorry
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc") :=
+  R13Shards.wk_alloc_impl
 /-- `bal_init` (AST line 13863): relational world step. -/
 theorem «wk_bal_init» :
     WorldKeeps WorldOK (fun _ => [])
@@ -552,7 +572,8 @@ theorem «wk_htab_copy» :
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
         ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
-      (fun _ post w => htabFootprint post w)) (ofString "htab_copy") := by sorry
+      (fun _ post w => htabFootprint post w)) (ofString "htab_copy") :=
+  R13Shards.wk_htab_copy_impl
 /-- `htr_new_payload_request` (AST line 9053): relational world step with output region. -/
 theorem «wk_htr_new_payload_request» :
     WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
@@ -588,7 +609,8 @@ theorem «wk_keccak256» :
     WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "keccak256") := by sorry
+    NoExtra (ofString "keccak256") :=
+  R13Shards.wk_keccak256_impl
 /-- `keccak_init` (AST line 3974): relational world step with output region. -/
 theorem «wk_keccak_init» :
     WorldKeeps WorldOK (fun s => [(globN s "keccak_rc", if globN s "keccak_rc" = 0 then 0 else 192)])
@@ -650,7 +672,8 @@ theorem «wk_mpt_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new") := by sorry
+    (RetAvoids (fun _ _ w => [(w, 16)])) (ofString "mpt_new") :=
+  R13Shards.wk_mpt_new_impl
 /-- `msg_new` (AST line 15344): relational world step and extra `(RetAvoids (fun _ _ w => [(w, 176)]))`. -/
 theorem «wk_msg_new» :
     WorldKeeps WorldOK (fun _ => [])

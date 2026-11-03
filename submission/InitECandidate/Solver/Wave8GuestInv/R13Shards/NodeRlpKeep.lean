@@ -10,7 +10,7 @@ set_option maxHeartbeats 2000000
 set_option linter.unusedSimpArgs false
 set_option linter.style.nameCheck false
 
-namespace InitECandidate.Solver.Wave8GuestInv
+namespace InitECandidate.Solver.Wave8GuestInv.R13NodeRlpKeep
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -20,6 +20,7 @@ open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.HeapPotential
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
+open InitECandidate.Solver.Wave8GuestInv
 
 namespace R13NodeRlp
 
@@ -257,9 +258,10 @@ private theorem alloc_body_heap_mono {F : Type} (s : PanSemStateFiniteExact 64 F
             · exact ⟨q, by simp [fin, GlobalWord, emptyLocalsHOLFinite, setGlobalHOLFinite,
                 HolFiniteMapExact.lookup_update, FUPDATE, hgn_hp]⟩
             · obtain ⟨wg, hwg⟩ := hgw0 gn hgn
+              have hne : ofString "heap_ptr" ≠ ofString gn := Ne.symm hgn_hp
               exact ⟨wg, by simpa [fin, qState, pState, GlobalWord, emptyLocalsHOLFinite,
                 setGlobalHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
-                Ne.symm hgn_hp] using hwg⟩
+                hne] using hwg⟩
           have hfin_ok : ArenaOK fin := by
             unfold ArenaOK
             rw [hfin_hp, hfin_fm, hfin_sp]
@@ -566,4 +568,4 @@ theorem ak__node_rlp_finish : KeepsOn ArenaReady ArenaReady (ofString "_node_rlp
   intro F s hc hAR _ _ _
   exact ⟨guestInv_evaluate s _ hAR.1, (R13NodeRlp.evaluate_heapSafeProg _ rfl s hc hAR.2).1⟩
 
-end InitECandidate.Solver.Wave8GuestInv
+end InitECandidate.Solver.Wave8GuestInv.R13NodeRlpKeep
