@@ -11,7 +11,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -3030,4 +3030,4 @@ theorem wk_state_fresh_tx :
     hWT_post, hOG_post, ?_, trivial⟩
   exact frameOutside_sp0_to_world hAR0.2 hAR9.2 hhp_09 hk_sp0 hfr_09
   
-end InitECandidate.Solver.Wave8GuestInv.R16Shards
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal

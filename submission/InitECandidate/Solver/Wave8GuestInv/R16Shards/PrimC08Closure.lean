@@ -26,6 +26,10 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.IncorporateTxIntoBlock
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ResolveDecodeStep
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
 /-! Direct standalone aggregator (`PrimC08Closure`) wiring verified 0-sorry `C00`, `C08`, and
@@ -56,6 +60,9 @@ theorem htab_union_into_spec : type_of% @InitECandidate.Solver.Wave8GuestInv.hta
 
 theorem mpt_insert_node_spec : type_of% @InitECandidate.Solver.Wave8GuestInv.mpt_insert_node_spec :=
   InitECandidate.Solver.Wave8GuestInv.R16Shards.mpt_insert_node_spec_proof
+
+theorem frame_epilogue_spec : type_of% @InitECandidate.Solver.Wave8GuestInv.frame_epilogue_spec :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue.frame_epilogue_spec
 
 theorem frame_exception_spec : type_of% @InitECandidate.Solver.Wave8GuestInv.frame_exception_spec :=
   InitECandidate.Solver.Wave8GuestInv.frame_exception_spec
@@ -246,6 +253,54 @@ theorem «wk_block_rlp_length» :
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       NoExtra (ofString "block_rlp_length") :=
   InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard09a.«wk_block_rlp_length»
+
+theorem «ek_state_restore» :
+    EvmKeeps EvmInv ["heap_ptr", "journal_n"] (ofString "state_restore") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue.ek_state_restore
+
+theorem «wk_encode_account» :
+    WorldKeeps WorldOK
+      (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "encode_account") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.«wk_encode_account»
+
+theorem «wk_bal_init» :
+    WorldKeeps WorldOK (fun _ => [])
+      ["bal_accounts", "bal_idx_accts", "bal_idx_stor", "bal_index", "bal_key_buf", "heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "bal_init") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal.wk_bal_init
+
+theorem «wk_state_fresh_tx» :
+    WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr", "journal_n", "ts"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "state_fresh_tx") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal.wk_state_fresh_tx
+
+theorem «wk_compute_contract_address» :
+    WorldKeeps WorldOK
+      (fun s => [(locN s "out", 20),
+                 (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "compute_contract_address") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.«wk_compute_contract_address»
+
+theorem «wk_encode_withdrawal_rlp» :
+    WorldKeeps WorldOK (fun _ => [])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "encode_withdrawal_rlp") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.«wk_encode_withdrawal_rlp»
 
 /-! ## 3. `C09..C21` Guarded Body (`gbody_*`) Closure -/
 
