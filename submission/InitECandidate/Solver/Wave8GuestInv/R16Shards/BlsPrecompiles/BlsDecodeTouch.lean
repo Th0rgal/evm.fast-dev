@@ -135,7 +135,8 @@ macro "bls_counter_step" : tactic => `(tactic| repeat (first
   | exact CounterStep.sub_one _
   | apply CounterStep.dec _ _ _ _ _ (by decide)
   | apply CounterStep.decCall _ _ _ _ _ _ (by decide)
-  | apply CounterStep.seq _ _ _ (by decide) (by decide)))
+  | apply CounterStep.seq _ _ _ rfl rfl
+  | apply CounterStep.seq _ _ _ (by decide) rfl))
 
 /-! ### 2. `ReadFailure` propagation across `is_zero_bytes` -> `bls_fp_decode64` -> `g1/g2_decode` -/
 
