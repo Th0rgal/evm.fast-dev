@@ -13,7 +13,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -24,6 +24,7 @@ open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
+open InitECandidate.Solver.Wave8GuestInv.R16Shards
 open InitECandidate.Solver.Wave8GuestInv.HtabC00Ports (htab_del_spec)
 open InitECandidate.Solver.Wave8GuestInv.SoloHtabSet (htab_set_spec_proof three_word_params_of_lookupCode)
 open InitECandidate.Solver.Wave8Contracts.M08 (globN_eq_of_lookup ivl_allocated_bound
@@ -1307,5 +1308,5 @@ theorem frame_epilogue_spec :
         · rw [hm1_cpost, evmR_lc cpost1 _ cpost1.clock, hR_cp]
     · simp
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 

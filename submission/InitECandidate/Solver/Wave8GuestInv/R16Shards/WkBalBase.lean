@@ -6,7 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M12.wk_st_le64
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.WorldFrame
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.Exec
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_get
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M19.htab_del_spec
+import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.DelSpecs
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M25.nz_htab_set
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01AllocMpt
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.rt_lst_new
@@ -26,7 +26,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -1185,4 +1185,4 @@ theorem decCall_htab_get_resumes {F : Type}
               rcases hres with ⟨_, hh⟩ | ⟨_, _, hh, _⟩ <;> simp at hh
         · simp at hx
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal
