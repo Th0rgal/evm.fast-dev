@@ -435,7 +435,7 @@ def noCatchableRaise (good : MlS → Bool) : ProgHOL 64 → Bool
   | .raise eid _ => eid == ofString "TrapErr"
   | .skip | .break | .continue | .annot _ _ | .return _
   | .assign _ _ _ | .store _ _ | .storeByte _ _ | .store32 _ _
-  | .shMemStore _ _ _ => true
+  | .shMemStore _ _ _ | .extCall _ _ _ _ _ => true
   | _ => false
 
 private theorem lex_ncr {a1 a2 b1 b2 : Nat} (h : a1 < a2 ∨ a1 = a2 ∧ b1 < b2) :
@@ -495,6 +495,13 @@ theorem evaluate_noCatchableRaise {F : Type} (good : MlS → Bool)
       split <;> split
       all_goals simp [ofExact, toExact]
       all_goals split <;> simp
+    · simp
+  | extCall _ _ _ _ _ =>
+    rw [evaluateHOLFiniteState_extCall_source]
+    split
+    · split
+      · split <;> simp
+      · simp
     · simp
   | raise name _ =>
     have htrap : name = ofString "TrapErr" := by
