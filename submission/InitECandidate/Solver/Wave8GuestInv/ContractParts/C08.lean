@@ -499,7 +499,7 @@ theorem «wk_encode_account» :
     NoExtra (ofString "encode_account") := by sorry
 /-- `encode_receipt` (AST line 32051): relational world step with output region and extra `RetReceiptBounded`. -/
 theorem «wk_encode_receipt» :
-    WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetReceiptBounded (ofString "encode_receipt") := by sorry
@@ -680,12 +680,12 @@ theorem «wk_msg_new» :
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     (RetAvoids (fun _ _ w => [(w, 176)])) (ofString "msg_new") := by sorry
-/-- `nodedb_build` (AST line 9937): relational world step with output region. -/
+/-- `nodedb_build` (AST line 9937): relational world step with output region and extra `RetNodeDb`. -/
 theorem «wk_nodedb_build» :
     WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "nodedb_build") := by sorry
+    RetNodeDb (ofString "nodedb_build") := by sorry
 /-- `payload_header` (AST line 32645): relational world step with output region and extra `RetHeader`. -/
 theorem «wk_payload_header» :
     WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
@@ -807,9 +807,9 @@ theorem «wk_state_fresh_tx» :
     ["heap_ptr", "journal_n", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "state_fresh_tx") := by sorry
-/-- `state_init` (AST line 12708): relational world step and extra `RetStateInit`. -/
+/-- `state_init` (AST line 12708): relational world step on normal return and extra `RetStateInit`. -/
 theorem «wk_state_init» :
-    WorldKeeps WorldOK (fun _ => [])
+    WorldReturnsIn StateInitReady (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetStateInit (ofString "state_init") := by sorry

@@ -98,7 +98,7 @@ private theorem alloc_returned_props {F : Type}
               (.seq
                 (.assign .global (ofString "heap_ptr") (.var .local (ofString "q")))
                 (.return (.var .local (ofString "p"))))))) := rfl
-  rcases harena : hP with ⟨hginv, hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al⟩
+  rcases hP with ⟨hginv, hp_lo, hp_hi, hfm_lo, hfm_hi, hsp_hi, hp_al, hfm_al, hsp_al, hgw⟩
   -- `heap_ptr` must be a word because `sourceBase > 0` and `globN s "heap_ptr" ≥ sourceBase`
   have hp_word : ∃ p : BitVec 64, s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) := by
     rcases hg : s.globals.lookup (ofString "heap_ptr") with _ | gv
@@ -361,7 +361,7 @@ private theorem alloc_returned_props {F : Type}
       have hpost_ginv : GuestInv post := ⟨hginv.code, hginv.memaddrs, hginv.shMemaddrs, hginv.baseAddr⟩
       have hpost_arena : ArenaOK post := by
         refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-          globalsWord_update (ofString "heap_ptr") q rfl harena.2.2.2.2.2.2.2.2⟩
+          globalsWord_update (ofString "heap_ptr") q rfl hgw⟩
         · rw [hpost_hp]; omega
         · rw [hpost_hp]; exact hq_le_hl
         · rw [hpost_fm]; exact hfm_lo

@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.Contracts
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_get
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_has
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_htab_item

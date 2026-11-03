@@ -27,42 +27,11 @@ open InitECandidate.Solver.Wave8GuestInv.FastGen
 
 local syntax "fg_auto" : tactic
 local macro_rules
-  | `(tactic| fg_auto) => `(tactic| first
-      | exact straightOn _ rfl
-      | (apply TerminatingProgBoundedOn.seq_guestInv
-         · fg_auto
-         · fg_auto)
-      | (apply TerminatingProgBoundedOn.ite_on
-         · fg_auto
-         · fg_auto)
-      | (apply dec_guestInv; fg_auto)
-      | (apply call_guestInv'; exact_fb_hyp)
-      | (apply decCall_guestInv'
-         · exact_fb_hyp
-         · fg_auto)
-      | (apply callHandle_guestInv'
-         · exact_fb_hyp
-         · fg_auto)
-      | (apply tailCall_guestInv'; exact_fb_hyp))
+  | `(tactic| fg_auto) => `(tactic| fg_step_auto)
 
 local syntax "fg_auto_loops" : tactic
 local macro_rules
-  | `(tactic| fg_auto_loops) => `(tactic| first
-      | fg_auto
-      | (apply TerminatingProgBoundedOn.seq_guestInv
-         · fg_auto_loops
-         · fg_auto_loops)
-      | (apply TerminatingProgBoundedOn.ite_on
-         · fg_auto_loops
-         · fg_auto_loops)
-      | (apply dec_guestInv; fg_auto_loops)
-      | (apply decCall_guestInv'
-         · exact_fb_hyp
-         · fg_auto_loops)
-      | (apply callHandle_guestInv'
-         · exact_fb_hyp
-         · fg_auto_loops)
-      | skip)
+  | `(tactic| fg_auto_loops) => `(tactic| fg_step_loops)
 
 local syntax "fg_prove " num ident ident : tactic
 local macro_rules

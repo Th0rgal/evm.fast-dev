@@ -82,12 +82,12 @@ def GBody.«run_attempt» : Prop :=
   (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    NoExtra (ofString "nodedb_build")) →
+    RetNodeDb (ofString "nodedb_build")) →
   (WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
     ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetHeader (ofString "payload_header")) →
-  (WorldKeeps WorldOK (fun _ => [])
+  (WorldReturnsIn StateInitReady (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
     ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
     [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetStateInit (ofString "state_init")) →

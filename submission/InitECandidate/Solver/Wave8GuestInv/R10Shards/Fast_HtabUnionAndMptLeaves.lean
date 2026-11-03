@@ -246,8 +246,7 @@ theorem decCall_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rename_i values hargs
     split
     · intro hf; rcases hf with h | h | h <;> cases h
-    · rename_i entry hl
-      rcases entry with ⟨body', callee, ret⟩
+    · rename_i body' callee ret hl
       split
       · intro hf; rcases hf with h | h | h <;> cases h
       · dsimp only
@@ -286,7 +285,7 @@ theorem seq_flow_split {F : Type} (s : PanSemStateFiniteExact 64 F) (a b : ProgH
       evaluateHOLFiniteState s (.seq a b) = evaluateHOLFiniteState s a) := by
   rw [evaluateHOLFiniteState_seq_line780] at hflow ⊢
   rcases ha : evaluateHOLFiniteState s a with ⟨r, mid⟩
-  rw [ha] at hflow ⊢
+  simp only [ha] at hflow ⊢
   cases r with
   | none => exact Or.inl ⟨mid, rfl, hflow, rfl⟩
   | some r' => exact Or.inr ⟨by simp, hflow, rfl⟩
@@ -352,7 +351,7 @@ theorem call_htab_set_step
   have hx' : ExitR (locN (callEntryStateHOLFinite st callee) "t")
       (callEntryStateHOLFinite st callee) cpost := hx v rfl
   rw [htE] at hx'
-  have hpost : post = { cpost with locals := st.locals } := heq
+  have hpost : post = { cpost with locals := st.locals } := congrArg Prod.snd heq
   have hxR : ExitR (locN st "dst") st post := by
     have h2 : ExitR (locN st "dst") { st with locals := callee, clock := st.clock - 1 }
         { cpost with locals := cpost.locals, clock := cpost.clock } := hx'
@@ -362,7 +361,7 @@ theorem call_htab_set_step
       { cpost with locals := st.locals, clock := cpost.clock }
     rw [exitR_locals]
     exact h2
-  obtain ⟨hAR, hWF, _, _, _, hfoot, _, _⟩ := hxR
+  have ⟨hAR, hWF, _, _, _, hfoot, _, _⟩ := hxR
   have hcodeP : post.code = originalRuntimeCode :=
     (PanRunBounded.evaluateHOLFiniteState_metadata st _).1.trans hcode
   refine ⟨hcodeP, by rw [hpost], ?_, hxR⟩
@@ -457,18 +456,27 @@ theorem union_iter
   · have hmid_inv := h_ite_step mid (Or.inl (by rw [hmid_none])) (by rw [hmid_none])
     obtain ⟨hm_code, hm_loc, hm_U, hm_R⟩ := hmid_inv
     obtain ⟨iv, _, hasg_eq⟩ := assign_local_flow mid _ _ hbf
-    set fin := (evaluateHOLFiniteState (decClockHOLFinite x) _).2
-    have hfin_eq : fin = { (setVarHOLFinite (ofString "i") iv mid) with
+    let fin := (evaluateHOLFiniteState (decClockHOLFinite x)
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq
+          (.ite cond
+            (.call (some (none, none)) (ofString "htab_set")
+              (.var .local (ofString "dst") :: setRest))
+            .skip)
+          (.assign .local (ofString "i") incExp)))).2
+    let midSet := setVarHOLFinite (ofString "i") iv mid
+    have hs1' : setVarHOLFinite (ofString "s") rv { cpost with locals := (decClockHOLFinite x).locals } = s1 := rfl
+    have hfin_eq : fin = { midSet with
         locals := HolFiniteMapExact.resVarEq
-          (setVarHOLFinite (ofString "i") iv mid).locals
+          midSet.locals
           (ofString "s", x.locals.lookup (ofString "s")) } := by
-      show (evaluateHOLFiniteState (decClockHOLFinite x) _).2 = _
-      rw [hpost, hseq_eq, hasg_eq]
+      dsimp only [fin, midSet]
+      rw [hpost, hs1', hseq_eq, hasg_eq]
       rfl
     have hfin_code : fin.code = originalRuntimeCode := by rw [hfin_eq]; exact hm_code
     have hfin_dst : fin.locals.lookup (ofString "dst") = s0.locals.lookup (ofString "dst") := by
       rw [hfin_eq, PanRunBounded.resVarEq_lookup]
-      simp [show ofString "dst" ≠ ofString "s" by decide, setVarHOLFinite,
+      simp [midSet, show ofString "dst" ≠ ofString "s" by decide, setVarHOLFinite,
         HolFiniteMapExact.lookup_update, FUPDATE, show ofString "i" ≠ ofString "dst" by decide,
         hm_loc, hs1_dst]
     have hfin_U : UnionArgWF fin := by
@@ -476,34 +484,41 @@ theorem union_iter
       exact localsOnly_unionArgWF mid _ _ (fun n hn => by
         simp at hn; subst hn
         rw [PanRunBounded.resVarEq_lookup]
-        simp [show ofString "dst" ≠ ofString "s" by decide, setVarHOLFinite,
+        simp [midSet, show ofString "dst" ≠ ofString "s" by decide, setVarHOLFinite,
           HolFiniteMapExact.lookup_update, FUPDATE, show ofString "i" ≠ ofString "dst" by decide]) hm_U
     have hfin_R : ExitR (locN s0 "dst") s0 fin := by
       rw [hfin_eq]
       have h2 : ExitR (locN s0 "dst") { s0 with locals := s0.locals, clock := s0.clock }
-          { mid with locals := HolFiniteMapExact.resVarEq
-              (setVarHOLFinite (ofString "i") iv mid).locals
-              (ofString "s", x.locals.lookup (ofString "s")), clock := mid.clock } := by
+          { mid with
+            locals := HolFiniteMapExact.resVarEq
+              midSet.locals
+              (ofString "s", x.locals.lookup (ofString "s"))
+            clock := mid.clock } := by
         rw [exitR_locals]; exact hm_R
       exact h2
     exact ⟨hfin_code, hfin_dst, hfin_U, hfin_R⟩
-  · have hmid_inv := h_ite_step _ hif rfl
-    obtain ⟨hm_code, hm_loc, hm_U, hm_R⟩ := hmid_inv
-    set fin := (evaluateHOLFiniteState (decClockHOLFinite x) _).2
-    have hfin_eq : fin = { (evaluateHOLFiniteState s1
+  · let midIte := (evaluateHOLFiniteState s1
         (.ite cond
           (.call (some (none, none)) (ofString "htab_set")
             (.var .local (ofString "dst") :: setRest))
-          .skip)).2 with
+          .skip)).2
+    have hmid_inv := h_ite_step midIte hif rfl
+    obtain ⟨hm_code, hm_loc, hm_U, hm_R⟩ := hmid_inv
+    let fin := (evaluateHOLFiniteState (decClockHOLFinite x)
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq
+          (.ite cond
+            (.call (some (none, none)) (ofString "htab_set")
+              (.var .local (ofString "dst") :: setRest))
+            .skip)
+          (.assign .local (ofString "i") incExp)))).2
+    have hs1' : setVarHOLFinite (ofString "s") rv { cpost with locals := (decClockHOLFinite x).locals } = s1 := rfl
+    have hfin_eq : fin = { midIte with
         locals := HolFiniteMapExact.resVarEq
-          (evaluateHOLFiniteState s1
-            (.ite cond
-              (.call (some (none, none)) (ofString "htab_set")
-                (.var .local (ofString "dst") :: setRest))
-              .skip)).2.locals
+          midIte.locals
           (ofString "s", x.locals.lookup (ofString "s")) } := by
-      show (evaluateHOLFiniteState (decClockHOLFinite x) _).2 = _
-      rw [hpost, hseq_eq]
+      dsimp only [fin, midIte]
+      rw [hpost, hs1', hseq_eq]
       rfl
     have hfin_code : fin.code = originalRuntimeCode := by rw [hfin_eq]; exact hm_code
     have hfin_dst : fin.locals.lookup (ofString "dst") = s0.locals.lookup (ofString "dst") := by
@@ -511,14 +526,18 @@ theorem union_iter
       simp [show ofString "dst" ≠ ofString "s" by decide, hm_loc, hs1_dst]
     have hfin_U : UnionArgWF fin := by
       rw [hfin_eq]
-      exact localsOnly_unionArgWF _ _ _ (fun n hn => by
+      exact localsOnly_unionArgWF midIte _ _ (fun n hn => by
         simp at hn; subst hn
         rw [PanRunBounded.resVarEq_lookup]
         simp [show ofString "dst" ≠ ofString "s" by decide]) hm_U
     have hfin_R : ExitR (locN s0 "dst") s0 fin := by
       rw [hfin_eq]
       have h2 : ExitR (locN s0 "dst") { s0 with locals := s0.locals, clock := s0.clock }
-          { (evaluateHOLFiniteState s1 _).2 with locals := _, clock := (evaluateHOLFiniteState s1 _).2.clock } := by
+          { midIte with
+            locals := HolFiniteMapExact.resVarEq
+              midIte.locals
+              (ofString "s", x.locals.lookup (ofString "s"))
+            clock := midIte.clock } := by
         rw [exitR_locals]; exact hm_R
       exact h2
     exact ⟨hfin_code, hfin_dst, hfin_U, hfin_R⟩
@@ -697,7 +716,7 @@ theorem NoExn.seq {a b : ProgHOL 64}
   have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s a).1
   rw [evaluateHOLFiniteState_seq_line780] at hr ⊢
   rcases h1 : evaluateHOLFiniteState s a with ⟨r1, mid⟩
-  rw [h1] at hr hmeta ⊢
+  simp only [h1] at hr hmeta ⊢
   cases r1 with
   | none => exact hb mid (hmeta.trans hc) hr
   | some r' => exact False.elim (ha s hc (by rw [h1]; exact hr))
@@ -712,15 +731,15 @@ theorem alloc_body_noExn {F : Type} (st : PanSemStateFiniteExact 64 F)
     have hbody : sourceFnBody Guest.Software.guestFn_alloc =
         .dec (ofString "p") .one (.var .global (ofString "heap_ptr"))
           (.seq
-            (.ite (.cmp .lower (.op .sub [.const Wave8Contracts.M26.cMax, .var .local (ofString "p")])
+            (.ite (.cmp .lower (.op .sub [.const (BitVec.ofNat 64 2952790016), .var .local (ofString "p")])
                 (.var .local (ofString "n")))
               (.call (some (none, none)) (ofString "trap_with") [.const 1])
               .skip)
             (.dec (ofString "q") .one
-              (.op .and [.op .add [.var .local (ofString "p"), .op .add [.var .local (ofString "n"), .const 7]],
+              (.op .and [.op .add [.var .local (ofString "p"), .var .local (ofString "n"), .const 7],
                 .op .sub [.const 0, .const 8]])
               (.seq
-                (.ite (.cmp .lower (.const Wave8Contracts.M26.cMax) (.var .local (ofString "q")))
+                (.ite (.cmp .lower (.const (BitVec.ofNat 64 2952790016)) (.var .local (ofString "q")))
                   (.call (some (none, none)) (ofString "trap_with") [.const 1])
                   .skip)
                 (.seq
@@ -763,14 +782,20 @@ theorem alloc_body_noExn {F : Type} (st : PanSemStateFiniteExact 64 F)
       · rename_i pv _ _
         set s1 := setVarHOLFinite (ofString "p") pv st
         rw [evaluateHOLFiniteState_seq_line780] at hex
-        rcases hi1 : evaluateHOLFiniteState s1
-            (.ite (.cmp .lower (.op .sub [.const Wave8Contracts.M26.cMax, .var .local (ofString "p")])
+        let ite1 : ProgHOL 64 :=
+          .ite (.cmp .lower (.op .sub [.const (BitVec.ofNat 64 2952790016), .var .local (ofString "p")])
+              (.var .local (ofString "n")))
+            (.call (some (none, none)) (ofString "trap_with") [.const 1]) .skip
+        rcases hi1 : evaluateHOLFiniteState s1 ite1 with ⟨r1, m1⟩
+        have hi1' : evaluateHOLFiniteState s1
+            (.ite (.cmp .lower (.op .sub [.const (BitVec.ofNat 64 2952790016), .var .local (ofString "p")])
                 (.var .local (ofString "n")))
-              (.call (some (none, none)) (ofString "trap_with") [.const 1]) .skip) with ⟨r1, m1⟩
-        rw [hi1] at hex
+              (.call (some (none, none)) (ofString "trap_with") [.const 1]) .skip) = (r1, m1) := hi1
+        simp only [hi1'] at hex
         cases r1 with
         | some r1' =>
-          dsimp only at hex
+          try dsimp only at hex
+          injection hex with hex
           subst hex
           rw [evaluateHOLFiniteState_ite] at hi1
           split at hi1
@@ -780,11 +805,11 @@ theorem alloc_body_noExn {F : Type} (st : PanSemStateFiniteExact 64 F)
           · simp at hi1
         | none =>
           have hm1 : m1.code = originalRuntimeCode := by
-            have := (PanRunBounded.evaluateHOLFiniteState_metadata s1 _).1
+            have := (PanRunBounded.evaluateHOLFiniteState_metadata s1 ite1).1
             rw [hi1] at this; exact this.trans hc
-          dsimp only at hex
+          try dsimp only at hex
           rw [evaluateHOLFiniteState_dec_total] at hex
-          dsimp only at hex
+          try dsimp only at hex
           split at hex
           · simp at hex
           · split at hex
@@ -792,12 +817,13 @@ theorem alloc_body_noExn {F : Type} (st : PanSemStateFiniteExact 64 F)
               set s2 := setVarHOLFinite (ofString "q") qv m1
               rw [evaluateHOLFiniteState_seq_line780] at hex
               rcases hi2 : evaluateHOLFiniteState s2
-                  (.ite (.cmp .lower (.const Wave8Contracts.M26.cMax) (.var .local (ofString "q")))
+                  (.ite (.cmp .lower (.const (BitVec.ofNat 64 2952790016)) (.var .local (ofString "q")))
                     (.call (some (none, none)) (ofString "trap_with") [.const 1]) .skip) with ⟨r2, m2⟩
-              rw [hi2] at hex
+              simp only [hi2] at hex
               cases r2 with
               | some r2' =>
-                dsimp only at hex
+                try dsimp only at hex
+                injection hex with hex
                 subst hex
                 rw [evaluateHOLFiniteState_ite] at hi2
                 split at hi2
@@ -806,18 +832,18 @@ theorem alloc_body_noExn {F : Type} (st : PanSemStateFiniteExact 64 F)
                   · exact htrap_exn s2 hm1 (congrArg Prod.fst hi2)
                 · simp at hi2
               | none =>
-                dsimp only at hex
+                try dsimp only at hex
                 rw [evaluateHOLFiniteState_seq_line780] at hex
                 rcases ha : evaluateHOLFiniteState m2 (.assign .global (ofString "heap_ptr") (.var .local (ofString "q"))) with ⟨ra, ma⟩
-                rw [ha] at hex
+                simp only [ha] at hex
                 cases ra with
                 | some _ =>
                   rw [evaluateHOLFiniteState_assign] at ha
                   split at ha
-                  · rw [ha] at hex; simp at hex
-                  · split at ha <;> (rw [ha] at hex; simp at hex)
+                  · simp_all
+                  · split at ha <;> simp_all
                 | none =>
-                  dsimp only at hex
+                  try dsimp only at hex
                   rw [evaluateHOLFiniteState_return] at hex
                   split at hex
                   · simp at hex

@@ -100,7 +100,7 @@ structure PtxCallees : Prop where
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "create_ether")
-  wk_encode_receipt : WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+  wk_encode_receipt : WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetReceiptBounded (ofString "encode_receipt")
@@ -251,7 +251,7 @@ def GBodyProcessTransactionR11 : Prop :=
     ["heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "create_ether")) →
-  (WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+  (WorldKeeps ((fun s => WorldOK s ∧ LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs"))) (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
     ["heap_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     RetReceiptBounded (ofString "encode_receipt")) →

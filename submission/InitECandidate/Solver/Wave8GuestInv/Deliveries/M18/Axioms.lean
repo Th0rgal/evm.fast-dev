@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.Contracts
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_is_zero
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_mul
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_sub

@@ -253,6 +253,48 @@ def RetReceiptBounded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (
     a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
     memW post (locN s "logs" + 8) < 2 ^ 28 ∧ LogsListOK post (locN s "logs")
 
+/-- Receipt encoding allocates on the heap and runs `logs_bloom` (`keccak_pad`, `keccak_st`),
+so the list's backing array is allocated and the list header, backing array, and owned log
+intervals avoid `fixedObjects`. -/
+def LogsDisjFixed {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  logs = 0 ∨ (Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
+    IvlsDisj ([(logs, 24), (memW s logs, 8 * memW s (logs + 8))] ++
+      (List.range (memW s (logs + 8))).flatMap
+        (fun i => logOwnedIvls s (memW s (memW s logs + 8 * i))))
+      (fixedObjects s))
+
+/-- `nodedb_build` returns a fresh well-formed keylen-32 crit-bit table outside the exit world. -/
+def RetNodeDb : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+    PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S' Nd' => ∀ v, r = some (.returned v) → ∃ w : BitVec 64, v = .val (.word w) ∧
+    HtabWF post w.toNat ∧ hdr post w.toNat 0 = 32 ∧
+    (∀ i ∈ htabFootprint post w.toNat, Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+    IvlsDisj (htabFootprint post w.toNat) (worldOwned post S' Nd')
+
+/-- Entry guard of `state_init`: `WorldOK` and `codedb` is null or a well-formed heap keylen-32
+table outside the world. -/
+def StateInitReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+    (locN s "codedb" = 0 ∨
+      (HtabWF s (locN s "codedb") ∧ hdr s (locN s "codedb") 0 = 32 ∧
+       (∀ i ∈ htabFootprint s (locN s "codedb"), Inside i sourceBase (globN s "heap_ptr")) ∧
+       IvlsDisj (htabFootprint s (locN s "codedb")) (worldOwned s S Nd)))
+
+theorem stateInitReady_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F) (h : StateInitReady s) :
+    WorldOK s := by
+  obtain ⟨hA, S, Nd, hT, -⟩ := h
+  exact ⟨hA, S, (worldTyped_iff_with s S).2 ⟨Nd, hT⟩⟩
+
+/-- From a `P` entry, every normal return is a `WorldStepIn T` (`state_init` may raise `MptErr`
+from `decode_witness_to_mpt` after partially initializing `ws`, which `attempt_l*` catches). -/
+def WorldReturnsIn (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl) (gw : List String)
+    (keep : List (String × List Nat))
+    (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop) (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => (∃ v, r = some (.returned v)) → WorldStepIn T R gw keep Q s r post) fname
+
 /-- state_init installs the journal before execute_block begins. -/
 def RetStateInit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
     PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=

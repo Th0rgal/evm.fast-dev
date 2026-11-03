@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.Contracts
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C08
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M14.ro_calculate_total_blob_gas
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M14.ro_check_gas
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M14.ro_check_gas_limit

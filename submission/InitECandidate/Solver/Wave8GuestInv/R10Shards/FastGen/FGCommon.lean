@@ -37,7 +37,7 @@ open InitECandidate.Solver.Wave8GuestInv.FastU256Core
 open InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves
 open InitECandidate.Solver.Wave8GuestInv.FastU256MulExp
 
-def expCounterGap (op : Cmp) (i : MlS) (limitExp : ExpHOL 64) {F : Type}
+noncomputable def expCounterGap (op : Cmp) (i : MlS) (limitExp : ExpHOL 64) {F : Type}
     (s : PanSemStateFiniteExact 64 F) : Nat :=
   match s.locals.lookup i,
       @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) limitExp with
@@ -141,9 +141,15 @@ theorem while_down_signed_guestInv (counter : MlS) {body : ProgHOL 64} {B : Nat}
       exact hnz hword
     have hlt : (0 : Int) < w.toInt := by
       have hlt0 := cmpRank_lt .less (Or.inl rfl) 0#64 w hcmp
+      have hc0 : cmpRank .less 0#64 = 2 ^ 63 := by decide
+      rw [hc0] at hlt0
+      unfold cmpRank at hlt0
+      dsimp only at hlt0
       have hwlt := w.isLt
-      simp only [cmpRank, BitVec.toInt_eq_msb_cond, BitVec.msb_eq_decide] at hlt0 ⊢
-      split_ifs <;> omega
+      have hw_pos : 0 < w.toNat ∧ w.toNat < 2 ^ 63 := by omega
+      have hmsb : w.msb = false := BitVec.msb_eq_false_iff_two_mul_lt.mpr (by omega)
+      rw [BitVec.toInt_eq_msb_cond, hmsb]
+      simp; omega
     have hwmax := BitVec.toInt_le (x := w)
     have hnext : (w + (-1 : BitVec 64)).toInt = w.toInt - 1 := by
       have hm1 : (-1 : BitVec 64).toInt = -1 := by decide
@@ -168,6 +174,178 @@ theorem while_counter_guestInv_step (op : Cmp) (hop : op = .less ∨ op = .lower
       ((2 ^ 64 + 1) * (B + 1)) :=
   while_up_exp_guestInv op hop i (.var .local X) hbody hstep hX
 
+open Lean Elab Tactic Meta in
+def fgExactFbHyp : TacticM Unit := withMainContext do
+  let goalType ← instantiateMVars (← getMainTarget)
+  let args := goalType.getAppArgs
+  if args.size < 2 then throwError "not TerminatingFunBoundedOn"
+  let fnameExpr := args[1]!
+  for ldecl in ← getLCtx do
+    if ldecl.isImplementationDetail then continue
+    let hty ← instantiateMVars ldecl.type
+    let hargs := hty.getAppArgs
+    if hargs.size >= 2 && hargs[1]! == fnameExpr then
+      let s ← saveState
+      try
+        let goal ← getMainGoal
+        let rest ← goal.apply ldecl.toExpr
+        if rest.isEmpty then
+          replaceMainGoal []
+          return
+        restoreState s
+      catch _ =>
+        restoreState s
+  let fnArgs := fnameExpr.getAppArgs
+  if let some lastArg := fnArgs.back? then
+    if let .lit (.strVal fnStr) := lastArg then
+      let env ← getEnv
+      let pfxList : List Name := [
+        `InitECandidate.Solver.Wave8GuestInv.FastGen,
+        `InitECandidate.Solver.Wave8GuestInv.P13.Callees,
+        `InitECandidate.Solver.Wave8GuestInv.P13.DivMod,
+        `InitECandidate.Solver.Wave8GuestInv.FastBitOps,
+        `InitECandidate.Solver.Wave8GuestInv.FastSmodSar,
+        `InitECandidate.Solver.Wave8GuestInv.FastSha256,
+        `InitECandidate.Solver.Wave8GuestInv.FastU256Core,
+        `InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves,
+        `InitECandidate.Solver.Wave8GuestInv.FastU256MulExp
+      ]
+      for pfx in pfxList do
+        let declName := pfx ++ Name.mkSimple s!"fb_{fnStr}"
+        if env.contains declName then
+          let s ← saveState
+          try
+            let e ← mkConstWithFreshMVarLevels declName
+            let goal ← getMainGoal
+            let rest ← goal.apply e
+            if rest.isEmpty then
+              replaceMainGoal []
+              return
+            restoreState s
+          catch _ =>
+            restoreState s
+      let fbDecl := `InitECandidate.Solver.GuestBoundBlockTxBal ++ Name.mkSimple s!"funBounded_{fnStr}"
+      if env.contains fbDecl then
+        let s ← saveState
+        try
+          evalTactic (← `(tactic|
+            exact TerminatingFunBoundedOn.of_unconditional
+              (terminatingFunBounded_of_funBounded $(mkIdent fbDecl))))
+          if (← getUnsolvedGoals).isEmpty then
+            return
+          restoreState s
+        catch _ =>
+          restoreState s
+  throwError m!"no matching fb hypothesis for {fnameExpr}"
+
+open Lean Elab Tactic Meta in
+elab_rules : tactic
+  | `(tactic| exact_fb_hyp) => fgExactFbHyp
+
+open Lean Elab Tactic Meta in
+partial def isStraightExpr (e : Expr) : Bool :=
+  match e.getAppFn.constName? with
+  | some ``ProgHOL.call | some ``ProgHOL.decCall | some ``ProgHOL.while => false
+  | some ``ProgHOL.seq =>
+      let a := e.getAppArgs
+      a.size >= 3 && isStraightExpr a[1]! && isStraightExpr a[2]!
+  | some ``ProgHOL.ite =>
+      let a := e.getAppArgs
+      a.size >= 4 && isStraightExpr a[2]! && isStraightExpr a[3]!
+  | some ``ProgHOL.dec =>
+      let a := e.getAppArgs
+      a.size >= 5 && isStraightExpr a[4]!
+  | some _ => true
+  | none => false
+
+open Lean Elab Tactic Meta in
+partial def fgWalkProg (allowOpen : Bool) : TacticM Unit := withMainContext do
+  let tgt ← instantiateMVars (← getMainTarget)
+  let targs := tgt.getAppArgs
+  if targs.size < 3 then
+    if allowOpen then return else throwError m!"fgWalkProg: unexpected goal {tgt}"
+  let prog0 ← instantiateMVars targs[1]!
+  let prog ← if prog0.getAppFn.constName?.isSome then pure prog0 else whnfR prog0
+  if isStraightExpr prog then
+    let s0 ← saveState
+    try
+      evalTactic (← `(tactic| exact straightOn _ rfl))
+      if (← getUnsolvedGoals).isEmpty then
+        return
+      restoreState s0
+    catch _ =>
+      restoreState s0
+  let fnName := prog.getAppFn.constName?
+  if fnName == some ``ProgHOL.seq then
+    evalTactic (← `(tactic| apply TerminatingProgBoundedOn.seq_guestInv))
+    let g1 :: g2 :: rest ← getUnsolvedGoals | throwError "fgWalkProg: seq goals"
+    setGoals [g1]; fgWalkProg allowOpen; let gs1 ← getUnsolvedGoals
+    setGoals [g2]; fgWalkProg allowOpen; let gs2 ← getUnsolvedGoals
+    let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+    setGoals (gs1 ++ gs2 ++ rem)
+  else if fnName == some ``ProgHOL.ite then
+    evalTactic (← `(tactic| apply TerminatingProgBoundedOn.ite_on))
+    let g1 :: g2 :: rest ← getUnsolvedGoals | throwError "fgWalkProg: ite goals"
+    setGoals [g1]; fgWalkProg allowOpen; let gs1 ← getUnsolvedGoals
+    setGoals [g2]; fgWalkProg allowOpen; let gs2 ← getUnsolvedGoals
+    let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+    setGoals (gs1 ++ gs2 ++ rem)
+  else if fnName == some ``ProgHOL.dec then
+    evalTactic (← `(tactic| apply dec_guestInv))
+    let g1 :: rest ← getUnsolvedGoals | throwError "fgWalkProg: dec goals"
+    setGoals [g1]; fgWalkProg allowOpen; let gs1 ← getUnsolvedGoals
+    let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+    setGoals (gs1 ++ rem)
+  else if fnName == some ``ProgHOL.decCall then
+    evalTactic (← `(tactic| apply decCall_guestInv'))
+    let g1 :: g2 :: rest ← getUnsolvedGoals | throwError "fgWalkProg: decCall goals"
+    setGoals [g1]; fgExactFbHyp
+    setGoals [g2]; fgWalkProg allowOpen; let gs2 ← getUnsolvedGoals
+    let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+    setGoals (gs2 ++ rem)
+  else if fnName == some ``ProgHOL.call then
+    let stCall ← saveState
+    try
+      evalTactic (← `(tactic| apply tailCall_guestInv'))
+      let g1 :: rest ← getUnsolvedGoals | throwError "tailCall"
+      setGoals [g1]; fgExactFbHyp
+      let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+      setGoals rem
+    catch _ =>
+      restoreState stCall
+      let stCall2 ← saveState
+      try
+        evalTactic (← `(tactic| apply call_guestInv'))
+        let g1 :: rest ← getUnsolvedGoals | throwError "call"
+        setGoals [g1]; fgExactFbHyp
+        let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+        setGoals rem
+      catch _ =>
+        restoreState stCall2
+        evalTactic (← `(tactic| apply callHandle_guestInv'))
+        let g1 :: g2 :: rest ← getUnsolvedGoals | throwError "fgWalkProg: callHandle goals"
+        setGoals [g1]; fgExactFbHyp
+        setGoals [g2]; fgWalkProg allowOpen; let gs2 ← getUnsolvedGoals
+        let rem ← rest.filterM (fun m => not <$> m.isAssigned)
+        setGoals (gs2 ++ rem)
+  else
+    if allowOpen then
+      evalTactic (← `(tactic|
+        try dsimp only [
+          InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+          InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+          InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural,
+          InitECandidate.Solver.FrontendCodecComputation.expFieldToHOLStructural,
+          List.map]))
+      return
+    else throwError m!"fgWalkProg: unhandled {prog}"
+
+open Lean Elab Tactic Meta in
+elab "fg_step_auto" : tactic => fgWalkProg false
+
+open Lean Elab Tactic Meta in
+elab "fg_step_loops" : tactic => fgWalkProg true
+
 syntax "fg_unfold " num ident : tactic
 macro_rules
   | `(tactic| fg_unfold $idx $fn) => `(tactic|
@@ -175,13 +353,9 @@ macro_rules
           (extractFn $fn) rfl, ?_⟩
        dsimp only [extractFn, $fn:ident,
          InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
-         InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
-         InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
-         InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural,
-         InitECandidate.Solver.FrontendCodecComputation.expFieldToHOLStructural,
          InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
          InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
-         List.map, Option.map]))
+         Option.map]))
 
 syntax "fg_arith " ident : tactic
 macro_rules
@@ -191,6 +365,6 @@ macro_rules
        generalize_K
        generalize domainBytes = D at hD ⊢
        try simp only [nat_max_eq]
-       first | omega | (simp only [Nat.max_def, max_def]; (try split_ifs) <;> omega)))
+       first | omega | (try simp only [BitVec.toNat_ofNat, Nat.max_def, max_def]; (try split_ifs) <;> omega)))
 
 end InitECandidate.Solver.Wave8GuestInv.FastGen
