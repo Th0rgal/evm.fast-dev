@@ -304,18 +304,16 @@ theorem evmInv_of_head_stack_push {F : Type}
       hAs.1.memaddrs hWT (fun _ h => by simp at h) hwrite_disj_wti (by simpa using heff.to_bre_dummy)
   have hcell : SameTypedCells s post S Nd_at := hcellG
   have hfeq : fixedObjects post = fixedObjects s := by
-    have hgb_eq : (globalBuffers.map fun gn => (globN post gn.1, if globN post gn.1 = 0 then 0 else gn.2)) =
-        (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
-      apply List.map_congr_left
-      intro gn hgn
-      have hne : ofString gn.1 ≠ ofString "scratch_ptr" := by clear * - hgn; revert gn hgn; decide
-      rw [hglob_eq gn.1 hne]
     unfold fixedObjects
-    rw [hgb_eq,
-        blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hglob_eq "bo" (by decide)),
+    rw [blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hglob_eq "bo" (by decide)),
         balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell (hglob_eq "bal_accounts" (by decide)),
         hglob_eq "journal" (by decide),
         hglob_eq "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "scratch_ptr" := by clear * - hgn; revert gn hgn; decide
+    rw [hglob_eq gn.1 hne]
   have hFT_post := fixedTyped_of_eq hApost hWT.2.2.1 hh hsc_le hfeq
   have hcg : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
     intro g hg

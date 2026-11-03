@@ -1,6 +1,3 @@
-import InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA.Common
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.rt_scratch_alloc
-import InitECandidate.Solver.Wave8GuestInv.Deliveries.M11.RlpMemcpyLemmas
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.StackPushInv
 
 /-! # `EvmPreservingSpec` for `stack_push`, `stack_push_word`, and `stack_push_bool` -/
@@ -8,7 +5,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.StackPushInv
 set_option Elab.async false
 set_option autoImplicit false
 set_option maxRecDepth 100000
-set_option maxHeartbeats 8000000
+set_option maxHeartbeats 4000000
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
@@ -196,92 +193,32 @@ private theorem raise3_unchanged_post {F : Type}
   dsimp only
   rw [evaluateHOLFiniteState_raise]; dsimp only [evalHOLExact]
   cases ht_esh : t.eshapes.lookup (ofString "EvmErr") with
-  | none =>
-    dsimp only
-    exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-  | some sh =>
-    dsimp only
-    by_cases hcond : shapeOfHOLExact (.val (.word 3#64)) = sh ∧
-        sizeOfShapeWithContextHOL t.structs (shapeOfHOLExact (.val (.word 3#64))) ≤ 32
-    · rw [if_pos hcond]; dsimp only
-      let post := { t.emptyLocalsHOLFinite with locals := L_wrap t.emptyLocalsHOLFinite.locals }
-      have hp_eq : post = { s with locals := post.locals, clock := t.clock } := by
-        dsimp only [post, emptyLocalsHOLFinite]; conv_lhs => rw [ht_eq]
-      have hInv_p : EvmInv post := by
-        have h := localsFree_evmInv s post.locals t.clock hInv
-        rwa [← hp_eq] at h
-      have hm : post.memory = s.memory := by rw [hp_eq]
-      have hg : post.globals = s.globals := by rw [hp_eq]
-      have hc := evm_congr hm hg
-      exact ⟨fun _ h => (by cases h), fun _ => ⟨hInv_p, evmChain_congr (s := s) (t := post) hm hg, le_of_eq hc.2.1⟩⟩
-    · rw [if_neg hcond]; dsimp only
-      exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-
-private theorem eval_decCall_word {F : Type}
-    (st : PanSemStateFiniteExact 64 F) (nm fname param : MlS)
-    (args : List (ExpHOL 64)) (body cont : ProgHOL 64) (argw : BitVec 64)
-    (hargs : evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a)) args =
-      some [.val (.word argw)])
-    (hlk : st.code.lookup fname = some ([(param, .one)], body, .one))
-    (out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F)
-    (hout : evaluateHOLFiniteState
-      (callEntryStateHOLFinite st (HolFiniteMapExact.empty.update (param, .val (.word argw)))) body = out) :
-    evaluateHOLFiniteState st (.decCall nm .one fname args cont) =
-      (if st.clock = 0 then (some .timeOut, st.emptyLocalsHOLFinite)
-       else
-         match out.1 with
-         | none => (some .error, out.2)
-         | some (.returned retval) =>
-           if (shapeEqHOL (shapeOfHOLExact retval) .one && shapeEqHOL (shapeOfHOLExact retval) .one) = true then
-             let cOut := evaluateHOLFiniteState
-               (setVarHOLFinite nm retval { out.2 with locals := st.locals }) cont
-             (cOut.1, { cOut.2 with locals := cOut.2.locals.resVarEq (nm, st.locals.lookup nm) })
-           else (some .error, out.2)
-         | some .break => (some .error, out.2)
-         | some .continue => (some .error, out.2)
-         | some res => (some res, out.2.emptyLocalsHOLFinite)) := by
-  subst hout
-  have hlk_c := pan_one_word_lookup st.code.lookup fname param body argw hlk
-  rw [evaluateHOLFiniteState_decCall_fixClockRewrite, hargs]
-  dsimp only
-  rw [hlk_c]
-  dsimp only
-  by_cases hz : st.clock = 0
-  · simp [hz]
-  · simp only [hz, ↓reduceIte]
-    rcases evaluateHOLFiniteState
-      (callEntryStateHOLFinite st (HolFiniteMapExact.empty.update (param, .val (.word argw)))) body with ⟨r, p⟩
-    cases r with
-    | none => rfl
-    | some r0 => cases r0 <;> rfl
-
-private theorem scratch_alloc_run_step {F : Type}
-    (s4 : PanSemStateFiniteExact 64 F) (sp_g_w fp_w n : BitVec 64)
-    (hs4_code : s4.code = originalRuntimeCode)
-    (hsp_lk : s4.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp_g_w)))
-    (hfp_lk : s4.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp_w)))
-    (out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F)
-    (hout : evaluateHOLFiniteState
-      (callEntryStateHOLFinite s4 (HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word n))))
-      (sourceFnBody Guest.Software.guestFn_scratch_alloc) = out) :
-    let saCallee := HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word n))
-    let saEntry := callEntryStateHOLFinite s4 saCallee
-    ¬ IsEvmErr out.1 ∧
-    (∀ vsa, out.1 = some (.returned vsa) →
-      let q := (sp_g_w - n) &&& (0#64 - 8)
-      vsa = .val (.word q) ∧ ¬ ((sp_g_w - fp_w).toNat < n.toNat) ∧ ¬ (q.toNat < fp_w.toNat) ∧
-      out.2 = { saEntry with
-        globals := saEntry.globals.update (ofString "scratch_ptr", .val (.word q))
-        locals := out.2.locals }) := by
-  subst hout
-  dsimp only
-  let saCallee := HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word n))
-  let saEntry := callEntryStateHOLFinite s4 saCallee
-  have hsa_code : saEntry.code = originalRuntimeCode := hs4_code
-  have hn_lk : saEntry.locals.lookup (ofString "n") = some (.val (.word n)) := by
-    simp [saEntry, saCallee, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
-  exact ⟨scratch_alloc_body_no_evmErr saEntry hsa_code,
-    Wave8Contracts.M26.scratch_alloc_body_run saEntry sp_g_w fp_w n hsa_code hsp_lk hfp_lk hn_lk⟩
+    | none =>
+      dsimp only
+      constructor
+      · intro _ h; cases h
+      · rintro ⟨_, h⟩; cases h
+    | some sh =>
+      dsimp only
+      by_cases hcond : shapeOfHOLExact (.val (.word 3#64)) = sh ∧
+          sizeOfShapeWithContextHOL t.structs (shapeOfHOLExact (.val (.word 3#64))) ≤ 32
+      · rw [if_pos hcond]; dsimp only
+        let post := { t.emptyLocalsHOLFinite with locals := L_wrap t.emptyLocalsHOLFinite.locals }
+        have hp_eq : post = { s with locals := post.locals, clock := t.clock } := by
+          dsimp only [post, emptyLocalsHOLFinite]; conv_lhs => rw [ht_eq]
+        have hInv_p : EvmInv post := by
+          have h := localsFree_evmInv s post.locals t.clock hInv
+          rwa [← hp_eq] at h
+        have hm : post.memory = s.memory := by rw [hp_eq]
+        have hg : post.globals = s.globals := by rw [hp_eq]
+        have hc := evm_congr hm hg
+        constructor
+        · intro _ h; cases h
+        · intro _; exact ⟨hInv_p, evmChain_congr hm hg, le_of_eq hc.2.1⟩
+      · rw [if_neg hcond]; dsimp only
+        constructor
+        · intro _ h; cases h
+        · rintro ⟨_, h⟩; cases h
 
 theorem eps_stack_push :
     EvmPreservingSpec (fun _ => True)
@@ -305,31 +242,30 @@ theorem eps_stack_push :
         rcases Prod.mk.inj hrest with ⟨hloc, _⟩
         have hsh : shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact v0) = true := by
           simpa [List.map] using hcond
+        rw [shapeEqHOL_eq_true] at hsh
         have hfn : s.locals.lookup (ofString "v") = some v0 := by
           have := congrFun hloc.symm (ofString "v")
           simpa [FUPDATE_LIST, FUPDATE] using this
         rcases v0 with _ | fs | _
-        · simp [shapeOfHOLExact, shapeEqHOL] at hsh
-        · rcases fs with _ | ⟨f0, _ | ⟨f1, _ | ⟨f2, _ | ⟨f3, _ | _⟩⟩⟩⟩
-          · simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-          · simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-          · simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-          · simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-          · rcases f0 with ⟨⟨w0⟩⟩ | _ | _ <;>
-              try simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-            rcases f1 with ⟨⟨w1⟩⟩ | _ | _ <;>
-              try simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-            rcases f2 with ⟨⟨w2⟩⟩ | _ | _ <;>
-              try simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-            rcases f3 with ⟨⟨w3⟩⟩ | _ | _ <;>
-              try simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
+        · simp [shapeOfHOLExact] at hsh
+        · simp only [shapeOfHOLExact, ShapeHOL.comb.injEq] at hsh
+          rcases fs with _ | ⟨f0, _ | ⟨f1, _ | ⟨f2, _ | ⟨f3, _ | _⟩⟩⟩⟩
+          · simp at hsh
+          · simp at hsh
+          · simp at hsh
+          · simp at hsh
+          · simp only [List.map, List.cons.injEq] at hsh
+            obtain ⟨h0, h1, h2, h3, _⟩ := hsh
+            rcases f0 with ⟨⟨w0⟩⟩ | _ | _ <;> simp [shapeOfHOLExact] at h0
+            rcases f1 with ⟨⟨w1⟩⟩ | _ | _ <;> simp [shapeOfHOLExact] at h1
+            rcases f2 with ⟨⟨w2⟩⟩ | _ | _ <;> simp [shapeOfHOLExact] at h2
+            rcases f3 with ⟨⟨w3⟩⟩ | _ | _ <;> simp [shapeOfHOLExact] at h3
             exact ⟨w0, w1, w2, w3, hfn⟩
-          · simp [shapeOfHOLExact, shapeEqHOL, shapeEqHOL.shapeEqListHOL] at hsh
-        · simp [shapeOfHOLExact, shapeEqHOL] at hsh
+          · simp at hsh
+        · simp [shapeOfHOLExact] at hsh
       · cases hx
     · simp at hx
   obtain ⟨vw0, vw1, vw2, vw3, hv_loc⟩ := hv_struct
-  clear hlk_entry vals
   have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by simp [evmChain, evmChainFrom]
   have hFW0 := hInv.2.choose_spec.2.2.2.2.1 _ hhead_mem
   have hb_ev := (frameWF_bounds hInv.1.2 hFW0).1
@@ -341,10 +277,12 @@ theorem eps_stack_push :
   obtain ⟨evw, hevw, hevw_nat⟩ := global_word_of_pos s "ev" hev_pos
   obtain ⟨hp_w, fp_w, sp_g_w, hhp_lk, hhp_nat, hfp_lk, hfp_nat, hsp_g_lk, hsp_g_nat⟩ :=
     Wave8Contracts.M26.arenaOK_globals s hInv.1.2
-  have herr_triv {P1 P2 : Prop} :
+  have herr_triv : ∀ {P1 P2 : Prop},
       (∀ v, (some PanSemResultExact.error : Option (PanSemResultExact 64)) = some (.returned v) → P1) ∧
-      (IsEvmErr (some PanSemResultExact.error) → P2) :=
-    ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+      (IsEvmErr (some PanSemResultExact.error) → P2) := by
+    intro _ _; constructor
+    · intro _ h; cases h
+    · rintro ⟨_, h⟩; cases h
   let growBranch : ProgHOL 64 :=
     .seq
       (.ite (.cmp .notLower (.var .local (ofString "cap")) (.const 1024#64))
@@ -390,13 +328,11 @@ theorem eps_stack_push :
             tailProg)) := rfl
   dsimp only
   rw [hbody] at hnt ⊢
-  clear hbody
   rw [evaluateHOLFiniteState_dec_total] at hnt ⊢; dsimp only at hnt ⊢
-  revert hnt
-  split
-  · intro _; exact herr_triv
-  · rename_i vsp hload_sp
-    intro hnt
+  rcases hload_sp : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ev"), .const 16#64])) with _ | vsp
+  · exact herr_triv
+  · simp only [hload_sp] at hnt ⊢
     obtain ⟨spw, rfl, hspw_eq⟩ := evalAt_loadG_word s "ev" 16#64 vsp hload_sp
     have h16_n : (16#64 : BitVec 64).toNat = 16 := rfl
     rw [h16_n] at hspw_eq
@@ -405,11 +341,10 @@ theorem eps_stack_push :
     rw [if_pos hsh_sp] at hnt ⊢; dsimp only at hnt ⊢
     set s1 := setVarHOLFinite (ofString "sp") (.val (.word spw)) s with hs1
     rw [evaluateHOLFiniteState_dec_total] at hnt ⊢; dsimp only at hnt ⊢
-    revert hnt
-    split
-    · intro _; exact herr_triv
-    · rename_i vcap hload_cap
-      intro hnt
+    rcases hload_cap : @evalHOLExact 64 F _ s1.toExact (fun a => Classical.propDecidable (s1.memaddrs a))
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 232#64])) with _ | vcap
+    · exact herr_triv
+    · simp only [hload_cap] at hnt ⊢
       obtain ⟨capw, rfl, hcapw_eq⟩ := evalAt_loadG_word s1 "ev" 232#64 vcap hload_cap
       have h232_n : (232#64 : BitVec 64).toNat = 232 := rfl
       have hs1_gm : memW s1 (globN s1 "ev" + 232) = memW s (globN s "ev" + 232) := rfl
@@ -433,6 +368,7 @@ theorem eps_stack_push :
       have run_tail : ∀ (m : PanSemStateFiniteExact 64 F) (freshIvl : Ivl),
           ArenaReady m →
           globN m "scratch_ptr" ≤ globN s "scratch_ptr" →
+          (∀ g : String, ofString g ≠ ofString "scratch_ptr" → m.globals.lookup (ofString g) = s.globals.lookup (ofString g)) →
           ScratchByteEff s m [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] →
           (freshIvl = (0, 0) ∨
             (freshIvl.1 % 8 = 0 ∧ freshIvl.2 % 8 = 0 ∧
@@ -457,10 +393,10 @@ theorem eps_stack_push :
             (∀ g : String, ofString g ≠ ofString "scratch_ptr" → globN post g = globN s g)) ∧
           (IsEvmErr out.1 →
             EvmInv post ∧ evmChain post = evmChain s ∧ evmR post ≤ evmR s) := by
-        intro m freshIvl' hAm hsc_m heff_m hfresh_m he0_m hnew_m hsp_lt_mcap hmcap_le _hm_sp16 hm_sp hm_v
+        intro m freshIvl hAm hsc_m hm_glob_other heff_m hfresh_m he0_m hnew_m hsp_lt_mcap hmcap_le _hm_sp16 hm_sp hm_v
         dsimp only [tailProg]
         have hm_ev : m.globals.lookup (ofString "ev") = some (.val (.word evw)) := by
-          rw [heff_m.glob_other "ev" (by decide)]; exact hevw
+          rw [hm_glob_other "ev" (by decide)]; exact hevw
         have hsp_ne1024 : spw ≠ 1024#64 := by
           intro heq; subst heq
           have : (1024#64 : BitVec 64).toNat = 1024 := rfl
@@ -469,16 +405,16 @@ theorem eps_stack_push :
         have hcmp_sp : @evalHOLExact 64 F _ m.toExact (fun a => Classical.propDecidable (m.memaddrs a))
             (.cmp .equal (.var .local (ofString "sp")) (.const 1024#64)) = some (.val (.word 0#64)) := by
           simp [evalHOLExact, hm_sp, Compiler.Encoders.Asm.wordCmpHOL, hsp_ne1024]
-        rw [hcmp_sp]; dsimp only
-        have h0eq0 : (0#64 : BitVec 64) = 0 := rfl
-        rw [if_pos h0eq0, evaluateHOLFiniteState_skip]; dsimp only
+        rw [hcmp_sp]; simp only [↓reduceIte, evaluateHOLFiniteState_skip]
+        have h0_eq : (0#64 : BitVec 64) = 0 := rfl
+        simp only [h0_eq, ↓reduceIte, evaluateHOLFiniteState_skip]
         rw [evaluateHOLFiniteState_seq_line780]
         let dstStkExp : ExpHOL 64 :=
           .op .add
             [.load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
              .panop .mul [.var .local (ofString "sp"), .const 32#64]]
-        generalize hst_v : evaluateHOLFiniteState m (.store dstStkExp (.var .local (ofString "v"))) = stvOut
-        rcases stvOut with ⟨rv_st, m1⟩
+        rcases hst_v : evaluateHOLFiniteState m (.store dstStkExp (.var .local (ofString "v"))) with ⟨rv_st, m1⟩
+        simp only [hst_v]
         cases rv_st with
         | some res_v =>
           have herr := store_some_eq_error' hst_v; subst herr; dsimp only; exact herr_triv
@@ -494,58 +430,49 @@ theorem eps_stack_push :
               · have h4 := hInv.1.2.2.2.2.2.1; rw [R11Shards.scratchEnd_val] at h4
                 rw [← hstk_eq] at hfin2; dsimp only at hfin2; omega
           have hd_v_stk := ScratchByteEff.of_store_struct4
-            (Rl := [freshIvl', (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))])
+            (Rl := [freshIvl, (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))])
             hAm.1.memaddrs hst_v
             (fun v hv => by
               change m.locals.lookup (ofString "v") = some v at hv
               rw [hm_v] at hv; injection hv with hv'; exact ⟨vw0, vw1, vw2, vw3, hv'.symm⟩)
             (fun addr hdst => by
               dsimp only [dstStkExp] at hdst
+              have hmem_load8 : ∃ stkw : BitVec 64, m.memory (evw + 8#64) = .word stkw ∧
+                  addr = stkw + spw * 32#64 := by
+                rcases hm8 : m.memory (evw + 8#64) with ⟨stkw⟩
+                refine ⟨stkw, rfl, ?_⟩
+                simp [evalHOLExact, evalListHOLExact, hm_ev, hm_sp,
+                  wordOpHOL, wordOp, panOpHOL, valueIsWord, valueWord, memLoadHOLExact, hm8] at hdst
+                by_cases hdm8 : m.memaddrs (evw + 8#64)
+                · simp [hdm8, valueIsWord, valueWord] at hdst; exact hdst.symm
+                · simp [hdm8] at hdst
+              obtain ⟨stkw, hm8, haddr_eq⟩ := hmem_load8
               have hev8_eq : evw + 8#64 = BitVec.ofNat 64 (globN s "ev" + 8) := by
                 apply BitVec.eq_of_toNat_eq
                 have : (8#64 : BitVec 64).toNat = 8 := rfl
                 rw [BitVec.toNat_add, hevw_nat, this, BitVec.toNat_ofNat]
-              rcases hm8 : m.memory (evw + 8#64) with ⟨stkw⟩
-              have hma_8 : m.memaddrs (evw + 8#64) := by
-                rw [hAm.1.memaddrs, ← hInv.1.1.memaddrs, hev8_eq]
-                have hal0 := (hFW0.1 (globN s "ev", 280) (by simp)).1
-                have he0_8 : (globN s "ev") % 8 = 0 := (hFW0.1 (globN s "ev", 280) (by simp)).2.1
-                have h280_8 : (280 : Nat) % 8 = 0 := by decide
-                have hwo := R16Shards.OpHandlers.wordsOK_of_allocated_scr hInv.1
-                  (i := (globN s "ev", 280)) (Or.inr hal0) he0_8 h280_8
-                obtain ⟨_, hdom, _⟩ := hwo.2.2 1 (by dsimp only; omega)
-                simpa only [Nat.mul_one] using hdom
-              have hdst_eval : @evalHOLExact 64 F _ m.toExact (fun a => Classical.propDecidable (m.memaddrs a))
-                  (.op .add
-                    [.load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
-                     .panop .mul [.var .local (ofString "sp"), .const 32#64]]) =
-                  some (.val (.word (stkw + spw * 32#64))) := by
-                simp [evalHOLExact, evalListHOLExact, hm_ev, hm_sp, wordOpHOL, wordOp, panOpHOL,
-                  valueIsWord, valueWord, memLoadHOLExact, isWfShapeExactHOL, hma_8, hm8]
-              rw [hdst_eval] at hdst
-              injection hdst with h1; injection h1 with h2; injection h2 with hdst_eq'
               have hstkw_nat : stkw.toNat = memW m (globN s "ev" + 8) := by
                 unfold memW; rw [← hev8_eq, hm8]
               have hsp32_nat : (spw * 32#64).toNat = 32 * spw.toNat := by
                 have : (32#64 : BitVec 64).toNat = 32 := rfl
                 rw [BitVec.toNat_mul, this, Nat.mod_eq_of_lt (by omega)]; omega
               have haddr_nat : addr.toNat = memW m (globN s "ev" + 8) + 32 * spw.toNat := by
-                rw [← hdst_eq', BitVec.toNat_add, hstkw_nat, hsp32_nat, Nat.mod_eq_of_lt (by omega)]
+                rw [haddr_eq, BitVec.toNat_add, hstkw_nat, hsp32_nat, Nat.mod_eq_of_lt (by omega)]
               refine ⟨by omega, ?_⟩
               rcases hnew_m with ⟨_, h8_eq, h232_eq⟩ | ⟨_, hstk_eq⟩
               · exact ⟨(memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232)),
                   by simp, by dsimp only; omega, by dsimp only; omega⟩
-              · refine ⟨freshIvl', by simp, ?_, ?_⟩
+              · refine ⟨freshIvl, by simp, ?_, ?_⟩
                 · rw [← hstk_eq]; dsimp only; omega
                 · rw [← hstk_eq]; dsimp only; omega)
           obtain ⟨heff_st_v_stk, hm1_loc, hm1_glob⟩ := hd_v_stk
           have heff_st_v : ScratchByteEff m m1
-              [freshIvl', (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
+              [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
             heff_st_v_stk.mono (fun x hx => by
               simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
               rcases hx with hx1 | hx2
-              · rw [hx1]; exact ⟨freshIvl', by simp, le_refl _, le_refl _⟩
-              · rw [hx2]; exact ⟨(memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232)), by simp, le_refl _, le_refl _⟩)
+              · rw [hx1]; exact ⟨_, List.mem_cons_self, le_refl _, le_refl _⟩
+              · rw [hx2]; exact ⟨_, List.mem_cons_of_mem _ (List.mem_cons_of_mem _ List.mem_cons_self), le_refl _, le_refl _⟩)
           have hm1_e0_eq : ∀ off, off + 8 ≤ 280 → off % 8 = 0 →
               memW m1 (globN s "ev" + off) = memW m (globN s "ev" + off) := by
             intro off hoff hoff8
@@ -558,16 +485,14 @@ theorem eps_stack_push :
             have he0_8 : (globN s "ev") % 8 = 0 := (hFW0.1 (globN s "ev", 280) (by simp)).2.1
             have ha8 : (globN s "ev" + off) % 8 = 0 := by omega
             simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
-            rcases hx with hx1 | hx2
-            · rw [hx1]
-              rcases hfresh_m with hfr0 | ⟨hf8, _, _, hfin2⟩
-              · rw [hfr0]; intro ⟨_, hc2⟩; dsimp only at hc2; omega
+            rcases hx with rfl | rfl
+            · rcases hfresh_m with rfl | ⟨hf8, _, _, hfin2⟩
+              · intro ⟨_, hc2⟩; dsimp only at hc2; omega
               · obtain ⟨he0_scr, _⟩ := (hFW0.1 (globN s "ev", 280) (by simp)).1
                 exact not_cellHits_of_disj_aligned (i := (globN s "ev", 280)) ha8 hf8
                   (Nat.le_add_right _ off) (Nat.add_le_add_left hoff _)
                   (Or.inr (Or.inr (Or.inr (by dsimp only at he0_scr ⊢; omega))))
-            · rw [hx2]
-              have hold_8 : (memW s (globN s "ev" + 8)) % 8 = 0 :=
+            · have hold_8 : (memW s (globN s "ev" + 8)) % 8 = 0 :=
                 (hFW0.1 (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232)) (by simp)).2.1
               have hpw_fo := hInv.2.choose_spec.2.2.2.2.2.2.2.1
               have hch_s : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl := ⟨_, rfl⟩
@@ -579,10 +504,10 @@ theorem eps_stack_push :
               exact not_cellHits_of_disj_aligned (i := (globN s "ev", 280)) ha8 hold_8
                 (Nat.le_add_right _ off) (Nat.add_le_add_left hoff _) hd_stk
           rw [evaluateHOLFiniteState_seq_line780]
-          generalize hst_sp : evaluateHOLFiniteState m1
+          rcases hst_sp : evaluateHOLFiniteState m1
               (.store (.op .add [.var .global (ofString "ev"), .const 16#64])
-                (.op .add [.var .local (ofString "sp"), .const 1#64])) = stspOut
-          rcases stspOut with ⟨rsp_st, m2⟩
+                (.op .add [.var .local (ofString "sp"), .const 1#64])) with ⟨rsp_st, m2⟩
+          simp only [hst_sp]
           cases rsp_st with
           | some res_sp =>
             have herr := store_some_eq_error' hst_sp; subst herr; dsimp only; exact herr_triv
@@ -614,19 +539,27 @@ theorem eps_stack_push :
                 exact ⟨(globN s "ev", 280), by simp, by rw [← hdst, h16_eq]; dsimp only; omega,
                   by rw [← hdst, h16_eq]; dsimp only; omega⟩)).1
             have heff_st_sp_sbe : ScratchByteEff m1 m2
-                [freshIvl', (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
+                [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
               (ScratchByteEff.of_bre heff_st_sp).mono (fun x hx => by
                 simp at hx; subst hx; exact ⟨(globN s "ev", 280), by simp, le_refl _, le_refl _⟩)
-            rw [evaluateHOLFiniteState_return]; dsimp only [evalHOLExact]
+            rw [evaluateHOLFiniteState_return]
+            have hc0_m2 : @evalHOLExact 64 F _ m2.toExact (fun a => Classical.propDecidable (m2.memaddrs a)) (.const (0 : BitVec 64)) =
+                some (.val (.word 0)) := rfl
+            have hc0_m2' : @evalHOLExact 64 F _ m2.toExact (fun a => Classical.propDecidable (m2.memaddrs a)) (.const 0#64) =
+                some (.val (.word 0#64)) := rfl
+            simp only [hc0_m2, hc0_m2']
             have hsz0 : sizeOfShapeWithContextHOL m2.structs
+                (shapeOfHOLExact (.val (.word (0 : BitVec 64)))) ≤ 32 := by
+              simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
+            have hsz0' : sizeOfShapeWithContextHOL m2.structs
                 (shapeOfHOLExact (.val (.word 0#64))) ≤ 32 := by
               simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
-            rw [if_pos hsz0]; dsimp only
+            simp only [hsz0, hsz0', ↓reduceIte]
             let post := { m2.emptyLocalsHOLFinite with
               locals := (m2.emptyLocalsHOLFinite.locals.resVarEq (ofString "cap", s1.locals.lookup (ofString "cap"))).resVarEq
                 (ofString "sp", s.locals.lookup (ofString "sp")) }
             have heff_total : ScratchByteEff s post
-                [freshIvl', (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
+                [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
               ((heff_m.trans heff_st_v).trans heff_st_sp_sbe).with_locals_clock post.locals m2.clock
             have hpost_glob_m : post.globals = m.globals := by
               simp [post, emptyLocalsHOLFinite, hm2_eq, hm1_glob]
@@ -638,9 +571,9 @@ theorem eps_stack_push :
                arenaOK_congr hpost_glob_m hAm.2⟩
             have hsc_post : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
               unfold globN; rw [hpost_glob_m]; exact hsc_m
-            have hfresh_post : freshIvl' = (0, 0) ∨
-                (freshIvl'.1 % 8 = 0 ∧ freshIvl'.2 % 8 = 0 ∧
-                  Inside freshIvl' (globN post "scratch_ptr") (globN s "scratch_ptr")) := by
+            have hfresh_post : freshIvl = (0, 0) ∨
+                (freshIvl.1 % 8 = 0 ∧ freshIvl.2 % 8 = 0 ∧
+                  Inside freshIvl (globN post "scratch_ptr") (globN s "scratch_ptr")) := by
               unfold globN; rw [hpost_glob_m]; exact hfresh_m
             have hm2_memW_ne16 : ∀ off, off + 8 ≤ 280 → off % 8 = 0 → off ≠ 16 →
                 memW post (globN s "ev" + off) = memW m (globN s "ev" + off) := by
@@ -658,9 +591,9 @@ theorem eps_stack_push :
               intro off hoff hoff8 h8 h16 h232
               rw [hm2_memW_ne16 off hoff hoff8 h16, he0_m off hoff hoff8 h8 h16 h232]
             have hnew_post :
-                (freshIvl'.2 = 0 ∧ memW post (globN s "ev" + 8) = memW s (globN s "ev" + 8) ∧
+                (freshIvl.2 = 0 ∧ memW post (globN s "ev" + 8) = memW s (globN s "ev" + 8) ∧
                   memW post (globN s "ev" + 232) = memW s (globN s "ev" + 232)) ∨
-                (freshIvl'.2 ≠ 0 ∧ (memW post (globN s "ev" + 8), 32 * memW post (globN s "ev" + 232)) = freshIvl') := by
+                (freshIvl.2 ≠ 0 ∧ (memW post (globN s "ev" + 8), 32 * memW post (globN s "ev" + 232)) = freshIvl) := by
               rw [hm2_memW_ne16 8 (by omega) (by omega) (by omega),
                   hm2_memW_ne16 232 (by omega) (by omega) (by omega)]
               exact hnew_m
@@ -672,9 +605,11 @@ theorem eps_stack_push :
               exact ⟨by omega, by omega, hmcap_le⟩
             obtain ⟨hInv_p, hch_p, hR_p⟩ := evmInv_of_head_stack_push hInv hApost hsc_post
               heff_total hfresh_post he0_post hnew_post hcap_post
-            exact ⟨fun _ _ => ⟨hInv_p, hch_p, le_of_eq hR_p,
-              fun g hg => R16Shards.OpHandlers.globN_eq_of_lookup_eq (heff_total.glob_other g hg)⟩,
-              by rintro ⟨_, h⟩; cases h⟩
+            constructor
+            · intro _ _
+              refine ⟨hInv_p, hch_p, le_of_eq hR_p, fun g hg => ?_⟩
+              unfold globN; rw [hpost_glob_m, hm_glob_other g hg]
+            · rintro ⟨_, h⟩; cases h
       rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt ⊢
       have hcmp_grow : @evalHOLExact 64 F _ s2.toExact (fun a => Classical.propDecidable (s2.memaddrs a))
           (.cmp .notLower (.var .local (ofString "sp")) (.var .local (ofString "cap"))) =
@@ -708,8 +643,8 @@ theorem eps_stack_push :
         · simp only [hcap1024, ↓reduceIte, h10] at hnt ⊢
           rcases hr3 : evaluateHOLFiniteState s2 (.raise (ofString "EvmErr") (.const 3#64)) with ⟨rr3, sr3⟩
           have hr3_nn : rr3 ≠ none := by
-            intro h; subst h
-            exact raise_ne_none s2 _ (.const 3#64) (congrArg Prod.fst hr3)
+            intro h; subst h; exact raise_ne_none s2 _ (.const 3#64) (by rw [hr3])
+          simp only [hr3]
           cases rr3 with
           | none => exact absurd rfl hr3_nn
           | some _ =>
@@ -760,14 +695,13 @@ theorem eps_stack_push :
               have hval1024 : s3.isValidValueHOLFinite .local (ofString "ncap") (.val (.word 1024#64)) = true := by
                 simp [isValidValueHOLFinite, isValidValueHOLExact, lookupKvarHOLExact, hs3_ncap, shapeOfHOLExact, shapeEqHOL]
               rw [hev1024]; dsimp only; rw [if_pos hval1024]
-              set s4 := setKvarHOLFinite .local (ofString "ncap") (.val (.word 1024#64)) s3 with hs4_def
-              clear_value s4
+              let s4 := setKvarHOLFinite .local (ofString "ncap") (.val (.word 1024#64)) s3
               have h1024_n : (1024#64 : BitVec 64).toNat = 1024 := rfl
-              refine ⟨s4, 1024#64, rfl, by rw [hs4_def]; cases s; rfl, ?_, ?_, ?_, by omega, by omega⟩
-              · rw [hs4_def]; simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
-              · rw [hs4_def]; simp [hs3, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs2_sp,
+              refine ⟨s4, 1024#64, rfl, by cases s; rfl, ?_, ?_, ?_, by omega, by omega⟩
+              · simp [s4, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+              · simp [s4, hs3, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs2_sp,
                   show ofString "ncap" ≠ ofString "sp" by decide]
-              · rw [hs4_def]; simp [hs3, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs2_v,
+              · simp [s4, hs3, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs2_v,
                   show ofString "ncap" ≠ ofString "v" by decide]
             · simp only [hgt1024, ↓reduceIte, evaluateHOLFiniteState_skip]
               have hle1024 : (capw * 2#64).toNat ≤ 1024 := by
@@ -781,81 +715,91 @@ theorem eps_stack_push :
                   show ofString "ncap" ≠ ofString "v" by decide]
           obtain ⟨s4, ncapw, hs4_run, hs4_eq, hs4_ncap, hs4_sp, hs4_v, hncap_gt, hncap_le1024⟩ := hite_ncap
           rw [evaluateHOLFiniteState_seq_line780, hs4_run] at hnt ⊢; dsimp only at hnt ⊢
+          rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt ⊢
           have hargs_sa : evalListHOLFinite s4 (h := fun a => Classical.propDecidable (s4.memaddrs a))
               [.panop .mul [.var .local (ofString "ncap"), .const 32#64]] =
               some [.val (.word (ncapw * 32#64))] := by
             simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hs4_ncap, panOpHOL, valueIsWord, valueWord]
           have hs4_code : s4.code = originalRuntimeCode := by rw [hs4_eq]; exact hcode
-          let saOut := evaluateHOLFiniteState
-            (callEntryStateHOLFinite s4
-              (HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word (ncapw * 32#64)))))
-            (sourceFnBody Guest.Software.guestFn_scratch_alloc)
-          have hsa_out_eq : evaluateHOLFiniteState
-            (callEntryStateHOLFinite s4
-              (HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word (ncapw * 32#64)))))
-            (sourceFnBody Guest.Software.guestFn_scratch_alloc) = saOut := rfl
-          clear_value saOut
-          rcases saOut with ⟨rsa, saPost⟩
-          have hdec_sa := eval_decCall_word s4 (ofString "ns") (ofString "scratch_alloc") (ofString "n")
-            [.panop .mul [.var .local (ofString "ncap"), .const 32#64]]
-            (sourceFnBody Guest.Software.guestFn_scratch_alloc)
-            (.seq
-              (.call (some (none, none)) (ofString "memcpy")
-                [.var .local (ofString "ns"),
-                 .load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
-                 .panop .mul [.var .local (ofString "sp"), .const 32#64]])
-              (.seq
-                (.store (.op .add [.var .global (ofString "ev"), .const 8#64]) (.var .local (ofString "ns")))
-                (.store (.op .add [.var .global (ofString "ev"), .const 232#64]) (.var .local (ofString "ncap")))))
-            (ncapw * 32#64) hargs_sa (hs4_code ▸ scratch_alloc_lookup_pub) (rsa, saPost) hsa_out_eq
-          rw [hdec_sa] at hnt ⊢
+          have hlk_sa := pan_one_word_lookup s4.code.lookup (ofString "scratch_alloc") (ofString "n")
+            (sourceFnBody Guest.Software.guestFn_scratch_alloc) (ncapw * 32#64)
+            (by rw [hs4_code]; exact scratch_alloc_lookup_pub)
+          rw [hargs_sa] at hnt ⊢; dsimp only at hnt ⊢
+          rw [hlk_sa] at hnt ⊢; dsimp only at hnt ⊢
           by_cases hs4_clk0 : s4.clock = 0
           · rw [if_pos hs4_clk0] at hnt; simp at hnt
           · rw [if_neg hs4_clk0] at hnt ⊢
-            have hs4_sp_lk : s4.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp_g_w)) := by
-              rw [hs4_eq]; exact hsp_g_lk
-            have hs4_fp_lk : s4.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp_w)) := by
-              rw [hs4_eq]; exact hfp_lk
-            obtain ⟨hsa_no_evmErr, hsa_ret⟩ := scratch_alloc_run_step s4 sp_g_w fp_w (ncapw * 32#64)
-              hs4_code hs4_sp_lk hs4_fp_lk (rsa, saPost) hsa_out_eq
-            dsimp only at hnt hsa_no_evmErr hsa_ret ⊢
+            let saCallee := HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word (ncapw * 32#64)))
+            let saEntry := callEntryStateHOLFinite s4 saCallee
+            have hsa_code : saEntry.code = originalRuntimeCode := hs4_code
+            have hsa_no_evmErr := scratch_alloc_body_no_evmErr saEntry hsa_code
+            rcases hsa_run : evaluateHOLFiniteState saEntry
+                (sourceFnBody Guest.Software.guestFn_scratch_alloc) with ⟨rsa, saPost⟩
+            rw [hsa_run] at hsa_no_evmErr
+            have hsa_run_raw : evaluateHOLFiniteState
+                (callEntryStateHOLFinite s4 (HolFiniteMapExact.empty.update (ofString "n", ValueHOL.val (.word (ncapw * 32#64)))))
+                (sourceFnBody Guest.Software.guestFn_scratch_alloc) = (rsa, saPost) := hsa_run
+            simp only [hsa_run_raw] at hnt ⊢
             cases rsa with
-            | none => dsimp only; exact herr_triv
+            | none => exact herr_triv
             | some rsa0 =>
               cases rsa0 with
               | timeOut => simp at hnt
               | exception eid ev =>
-                dsimp only
+                dsimp only at hnt ⊢
                 by_cases heid : eid = ofString "EvmErr"
                 · subst heid; exact absurd ⟨ev, rfl⟩ hsa_no_evmErr
-                · refine ⟨fun _ h => (by cases h), ?_⟩
-                  rintro ⟨_, h⟩; injection h with h'; injection h' with h1 _; exact False.elim (heid h1)
-              | «break» => dsimp only; exact herr_triv
-              | «continue» => dsimp only; exact herr_triv
-              | finalFfi _ => dsimp only; exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-              | error => dsimp only; exact herr_triv
+                · constructor
+                  · intro _ h; cases h
+                  · rintro ⟨_, h⟩; injection h with h'; injection h' with h1 _; exact (heid h1).elim
+              | «break» => exact herr_triv
+              | «continue» => exact herr_triv
+              | finalFfi _ =>
+                constructor
+                · intro _ h; cases h
+                · rintro ⟨_, h⟩; cases h
+              | error => exact herr_triv
               | returned vsa =>
-                dsimp only at hnt ⊢
-                obtain ⟨rfl, hcmp1_sa, hcmp2_sa, hsaPost_eq⟩ := hsa_ret vsa rfl
-                let nsw : BitVec 64 := (sp_g_w - ncapw * 32#64) &&& (0#64 - 8)
+                have hsa_sp_lk : saEntry.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp_g_w)) := by
+                  change s4.globals.lookup _ = _; rw [hs4_eq]; exact hsp_g_lk
+                have hsa_fp_lk : saEntry.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp_w)) := by
+                  change s4.globals.lookup _ = _; rw [hs4_eq]; exact hfp_lk
+                have hsa_n_lk : saEntry.locals.lookup (ofString "n") = some (.val (.word (ncapw * 32#64))) := by
+                  simp [saEntry, saCallee, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+                obtain ⟨rfl, hcmp1_sa, hcmp2_sa, hsaPost_eq_raw⟩ :=
+                  Wave8Contracts.M26.scratch_alloc_body_run saEntry sp_g_w fp_w (ncapw * 32#64)
+                    hsa_code hsa_sp_lk hsa_fp_lk hsa_n_lk vsa (by rw [hsa_run])
+                have hsaPost_eq : saPost = { saEntry with
+                    globals := saEntry.globals.update (ofString "scratch_ptr", .val (.word ((sp_g_w - ncapw * 32#64) &&& ((0 : BitVec 64) - 8)))),
+                    locals := saPost.locals } := by
+                  rw [hsa_run] at hsaPost_eq_raw; exact hsaPost_eq_raw
+                dsimp only [saEntry] at hsaPost_eq
+                set nsw : BitVec 64 := (sp_g_w - ncapw * 32#64) &&& ((0 : BitVec 64) - 8)
                 have hsh_ns : (shapeEqHOL (shapeOfHOLExact (.val (.word nsw) : ValueHOL 64)) .one &&
                     shapeEqHOL (shapeOfHOLExact (.val (.word nsw) : ValueHOL 64)) .one) = true := by
                   simp [shapeEqHOL, shapeOfHOLExact]
-                change _ at hnt
-                rw [if_pos hsh_ns] at hnt ⊢; dsimp only at hnt ⊢
+                have hsh_ns' : (shapeEqHOL (shapeOfHOLExact (.val (.word nsw) : ValueHOL 64)) .one &&
+                    shapeEqHOL .one (shapeOfHOLExact (.val (.word nsw) : ValueHOL 64))) = true := by
+                  simp [shapeEqHOL, shapeOfHOLExact]
+                dsimp only at hnt ⊢
+                simp only [hsh_ns, hsh_ns', ↓reduceIte] at hnt ⊢
                 have hn_bytes : (ncapw * 32#64).toNat = 32 * ncapw.toNat := by
                   have : (32#64 : BitVec 64).toNat = 32 := rfl
                   rw [BitVec.toNat_mul, this, Nat.mod_eq_of_lt (by omega)]; omega
                 have hsub_pf : (sp_g_w - fp_w).toNat = sp_g_w.toNat - fp_w.toNat := by
-                  rw [BitVec.toNat_sub]; have := hInv.1.2.2.2.2.1; omega
-                have hsp_g_al : sp_g_w.toNat % 8 = 0 := by rw [hsp_g_nat]; exact hInv.1.2.2.2.2.2.2.2.2.1
+                  rw [BitVec.toNat_sub]
+                  have hle_fp_sp : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hInv.1.2.2.2.2.1
+                  omega
+                have hsp_g_al : sp_g_w.toNat % 8 = 0 := by
+                  have h8 : globN s "scratch_ptr" % 8 = 0 := hInv.1.2.2.2.2.2.2.2.2.1
+                  rw [hsp_g_nat]; exact h8
                 have hn_le_sp_g : (ncapw * 32#64).toNat ≤ sp_g_w.toNat := by
                   have := sp_g_w.isLt; have := fp_w.isLt; omega
                 have hsub_pn : (sp_g_w - ncapw * 32#64).toNat = sp_g_w.toNat - 32 * ncapw.toNat := by
                   rw [BitVec.toNat_sub, hn_bytes]; omega
                 have hnsw_nat : nsw.toNat = sp_g_w.toNat - 32 * ncapw.toNat := by
-                  have hand : nsw.toNat = (sp_g_w - ncapw * 32#64).toNat / 8 * 8 :=
-                    InitECandidate.Solver.GuestTrapAndLookup.and_neg8_toNat (sp_g_w - ncapw * 32#64)
+                  have hand := and_neg8_toNat (sp_g_w - ncapw * 32#64)
+                  change nsw.toNat = (sp_g_w - ncapw * 32#64).toNat / 8 * 8 at hand
                   rw [hsub_pn] at hand; omega
                 have hnsw_al : nsw.toNat % 8 = 0 := by omega
                 have hnsw_ge_fp : globN s "frame_mem_ptr" ≤ nsw.toNat := by
@@ -863,33 +807,26 @@ theorem eps_stack_push :
                 have hnsw_end : nsw.toNat + 32 * ncapw.toNat = globN s "scratch_ptr" := by
                   rw [← hsp_g_nat]; omega
                 set s5 := setVarHOLFinite (ofString "ns") (.val (.word nsw)) { saPost with locals := s4.locals } with hs5
-                clear_value s5
                 have hs5_ns : s5.locals.lookup (ofString "ns") = some (.val (.word nsw)) := by
-                  rw [hs5]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+                  simp [hs5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
                 have hs5_ncap : s5.locals.lookup (ofString "ncap") = some (.val (.word ncapw)) := by
-                  rw [hs5]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_ncap,
+                  simp [hs5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_ncap,
                     show ofString "ns" ≠ ofString "ncap" by decide]
                 have hs5_sp : s5.locals.lookup (ofString "sp") = some (.val (.word spw)) := by
-                  rw [hs5]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_sp,
+                  simp [hs5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_sp,
                     show ofString "ns" ≠ ofString "sp" by decide]
                 have hs5_v : s5.locals.lookup (ofString "v") =
                     some (.rStruct [.val (.word vw0), .val (.word vw1), .val (.word vw2), .val (.word vw3)]) := by
-                  rw [hs5]; simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_v,
+                  simp [hs5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hs4_v,
                     show ofString "ns" ≠ ofString "v" by decide]
                 have hs5_mem : s5.memory = s.memory := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
+                  change saPost.memory = s.memory; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
                 have hs5_glob : s5.globals = s.globals.update (ofString "scratch_ptr", .val (.word nsw)) := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
+                  change saPost.globals = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
                 have hs5_code : s5.code = originalRuntimeCode := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; exact hs4_code
+                  change saPost.code = _; rw [hsaPost_eq]; exact hsa_code
                 have hs5_ma : s5.memaddrs = ordinaryDomain := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]; exact hInv.1.1.memaddrs
-                have hs5_sh : s5.shMemaddrs = s.shMemaddrs := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
-                have hs5_ba : s5.baseAddr = s.baseAddr := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
-                have hs5_be : s5.be = s.be := by
-                  rw [hs5]; dsimp only [setVarHOLFinite]; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
+                  change saPost.memaddrs = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]; exact hInv.1.1.memaddrs
                 have hs5_ev : s5.globals.lookup (ofString "ev") = some (.val (.word evw)) := by
                   rw [hs5_glob]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hevw,
                     show ofString "scratch_ptr" ≠ ofString "ev" by decide]
@@ -903,24 +840,19 @@ theorem eps_stack_push :
                 let st232Prog : ProgHOL 64 :=
                   .store (.op .add [.var .global (ofString "ev"), .const 232#64]) (.var .local (ofString "ncap"))
                 rcases hs5_m8 : s5.memory (evw + 8#64) with ⟨oldStkw⟩
-                have hs5_ma8 : s5.memaddrs (evw + 8#64) := by
+                have hs5_dom8 : s5.memaddrs (evw + 8#64) := by
+                  rw [hs5_ma, hInv.1.1.memaddrs.symm]
                   have hev8_eq : evw + 8#64 = BitVec.ofNat 64 (globN s "ev" + 8) := by
                     apply BitVec.eq_of_toNat_eq
                     have : (8#64 : BitVec 64).toNat = 8 := rfl
                     rw [BitVec.toNat_add, hevw_nat, this, BitVec.toNat_ofNat]
-                  rw [hs5_ma, ← hInv.1.1.memaddrs, hev8_eq]
-                  have hal0 := (hFW0.1 (globN s "ev", 280) (by simp)).1
-                  have he0_8 : (globN s "ev") % 8 = 0 := (hFW0.1 (globN s "ev", 280) (by simp)).2.1
-                  have h280_8 : (280 : Nat) % 8 = 0 := by decide
-                  have hwo := R16Shards.OpHandlers.wordsOK_of_allocated_scr hInv.1
-                    (i := (globN s "ev", 280)) (Or.inr hal0) he0_8 h280_8
-                  obtain ⟨_, hdom, _⟩ := hwo.2.2 1 (by dsimp only; omega)
-                  simpa only [Nat.mul_one] using hdom
+                  rw [hev8_eq]
+                  exact ((hFW0.1 (globN s "ev", 280) (by simp)).2.2.2 1 (by omega)).choose_spec.1
                 have hev_mc_src : @evalHOLExact 64 F _ s5.toExact (fun a => Classical.propDecidable (s5.memaddrs a))
                     (.load .one (.op .add [.var .global (ofString "ev"), .const 8#64])) =
                     some (.val (.word oldStkw)) := by
                   simp [evalHOLExact, evalListHOLExact, hs5_ev, wordOpHOL, wordOp, valueIsWord, valueWord,
-                    memLoadHOLExact, isWfShapeExactHOL, hs5_ma8, hs5_m8]
+                    memLoadHOLExact, hs5_dom8, hs5_m8]
                 have hev_mc_dst : @evalHOLExact 64 F _ s5.toExact (fun a => Classical.propDecidable (s5.memaddrs a))
                     (.var .local (ofString "ns")) = some (.val (.word nsw)) := hs5_ns
                 have hev_mc_n : @evalHOLExact 64 F _ s5.toExact (fun a => Classical.propDecidable (s5.memaddrs a))
@@ -931,25 +863,31 @@ theorem eps_stack_push :
                   have : (32#64 : BitVec 64).toNat = 32 := rfl
                   rw [BitVec.toNat_mul, this, Nat.mod_eq_of_lt (by omega)]; omega
                 let freshIvl : Ivl := (nsw.toNat, 32 * ncapw.toNat)
-                rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
                 have hnt_mc : (evaluateHOLFiniteState s5 mcCall).1 ≠ some .timeOut := by
                   intro hto
-                  dsimp only [mcCall] at hto
-                  rcases hmc_pair : evaluateHOLFiniteState s5
-                    (.call (some (none, none)) (ofString "memcpy")
-                      [.var .local (ofString "ns"),
-                       .load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
-                       .panop .mul [.var .local (ofString "sp"), .const 32#64]]) with ⟨rmc0, s6_0⟩
-                  rw [hmc_pair] at hto hnt
-                  dsimp only at hto
-                  subst hto
-                  exact hnt rfl
+                  rcases hmc_to : evaluateHOLFiniteState s5
+                      (.call (some (none, none)) (ofString "memcpy")
+                        [.var .local (ofString "ns"),
+                         .load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
+                         .panop .mul [.var .local (ofString "sp"), .const 32#64]]) with ⟨rmc_to, smc_to⟩
+                  have hto' : rmc_to = some .timeOut := by
+                    dsimp only [mcCall] at hto; rw [hmc_to] at hto; exact hto
+                  subst hto'
+                  rw [evaluateHOLFiniteState_seq_line780] at hnt
+                  simp [hmc_to] at hnt
                 have hmc := M11.eval_call_memcpy_bre s5 _ _ _ nsw oldStkw (spw * 32#64) [freshIvl]
                   hs5_code hs5_ma hev_mc_dst hev_mc_src hev_mc_n
                   (fun _ => ⟨freshIvl, by simp, le_refl _, by dsimp only [freshIvl]; omega⟩) hnt_mc
                 dsimp only at hmc
-                generalize hmc_run : evaluateHOLFiniteState s5 mcCall = mcOut at hnt hmc ⊢
-                rcases mcOut with ⟨rmc, s6⟩
+                rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+                rcases hmc_run : evaluateHOLFiniteState s5 mcCall with ⟨rmc, s6⟩
+                rw [hmc_run] at hmc
+                have hmc_run_raw : evaluateHOLFiniteState s5
+                    (.call (some (none, none)) (ofString "memcpy")
+                      [.var .local (ofString "ns"),
+                       .load .one (.op .add [.var .global (ofString "ev"), .const 8#64]),
+                       .panop .mul [.var .local (ofString "sp"), .const 32#64]]) = (rmc, s6) := hmc_run
+                simp only [hmc_run_raw] at hnt ⊢
                 cases rmc with
                 | some rmc0 =>
                   dsimp only at hnt ⊢
@@ -963,8 +901,10 @@ theorem eps_stack_push :
                   obtain ⟨heff_mc_m11, hs6_loc⟩ := hmc.1 rfl
                   have heff_mc : ScratchByteEff s5 s6 [freshIvl] := ScratchByteEff.of_m11_bre heff_mc_m11
                   rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
-                  generalize hst8 : evaluateHOLFiniteState s6 st8Prog = st8Out at hnt ⊢
-                  rcases st8Out with ⟨rst8, s7⟩
+                  rcases hst8 : evaluateHOLFiniteState s6 st8Prog with ⟨rst8, s7⟩
+                  have hst8_raw : evaluateHOLFiniteState s6
+                      (.store (.op .add [.var .global (ofString "ev"), .const 8#64]) (.var .local (ofString "ns"))) = (rst8, s7) := hst8
+                  simp only [hst8_raw] at hnt ⊢
                   cases rst8 with
                   | some res8 =>
                     have herr := store_some_eq_error' hst8; subst herr; dsimp only; exact herr_triv
@@ -979,11 +919,11 @@ theorem eps_stack_push :
                       (fun v hv => by
                         change s6.locals.lookup (ofString "ns") = some v at hv
                         rw [hs6_ns] at hv; injection hv with hv'; exact ⟨nsw, hv'.symm⟩) hst8
-                    have hw_ns_val : w_ns' = nsw := by
+                    have hw_ns_val : nsw = w_ns' := by
                       change s6.locals.lookup (ofString "ns") = some (.val (.word w_ns')) at hw_ns_ev
-                      rw [hs6_ns] at hw_ns_ev; injection hw_ns_ev with h1; injection h1 with h2; injection h2 with h3; exact h3.symm
-                    rw [hw_ns_val] at hs7_eq
-                    clear hw_ns_val hw_ns_ev w_ns'
+                      rw [hs6_ns] at hw_ns_ev
+                      injection hw_ns_ev with h1; injection h1 with h2; injection h2 with h3
+                    subst w_ns'
                     have heff_st8 := (ByteRegionEffect.of_store_word (Rl := [(globN s "ev", 280)])
                       (heff_mc_m11.memaddrs.trans hs5_ma) hst8
                       (fun v hv => by
@@ -996,8 +936,10 @@ theorem eps_stack_push :
                           rw [BitVec.toNat_add, hevw_nat, this, Nat.mod_eq_of_lt (by omega)]
                         exact ⟨(globN s "ev", 280), by simp, by rw [← hdst, h8_eq]; dsimp only; omega,
                           by rw [← hdst, h8_eq]; dsimp only; omega⟩)).1
-                    generalize hst232 : evaluateHOLFiniteState s7 st232Prog = st232Out at hnt ⊢
-                    rcases st232Out with ⟨rst232, s8⟩
+                    rcases hst232 : evaluateHOLFiniteState s7 st232Prog with ⟨rst232, s8⟩
+                    have hst232_raw : evaluateHOLFiniteState s7
+                        (.store (.op .add [.var .global (ofString "ev"), .const 232#64]) (.var .local (ofString "ncap"))) = (rst232, s8) := hst232
+                    simp only [hst232_raw] at hnt ⊢
                     cases rst232 with
                     | some res232 =>
                       have herr := store_some_eq_error' hst232; subst herr; dsimp only; exact herr_triv
@@ -1012,11 +954,11 @@ theorem eps_stack_push :
                         (fun v hv => by
                           change s7.locals.lookup (ofString "ncap") = some v at hv
                           rw [hs7_ncap] at hv; injection hv with hv'; exact ⟨ncapw, hv'.symm⟩) hst232
-                      have hw_ncap_val : w_ncap' = ncapw := by
+                      have hw_ncap_val : ncapw = w_ncap' := by
                         change s7.locals.lookup (ofString "ncap") = some (.val (.word w_ncap')) at hw_ncap_ev
-                        rw [hs7_ncap] at hw_ncap_ev; injection hw_ncap_ev with h1; injection h1 with h2; injection h2 with h3; exact h3.symm
-                      rw [hw_ncap_val] at hs8_eq
-                      clear hw_ncap_val hw_ncap_ev w_ncap'
+                        rw [hs7_ncap] at hw_ncap_ev
+                        injection hw_ncap_ev with h1; injection h1 with h2; injection h2 with h3
+                      subst w_ncap'
                       have heff_st232 := (ByteRegionEffect.of_store_word (Rl := [(globN s "ev", 280)])
                         (by rw [hs7_eq]; exact heff_mc_m11.memaddrs.trans hs5_ma) hst232
                         (fun v hv => by
@@ -1033,10 +975,6 @@ theorem eps_stack_push :
                         { s8 with
                           locals := (s8.locals.resVarEq (ofString "ns", s4.locals.lookup (ofString "ns"))).resVarEq
                             (ofString "ncap", s2.locals.lookup (ofString "ncap")) }
-                      have hm_def : m =
-                        { s8 with
-                          locals := (s8.locals.resVarEq (ofString "ns", s4.locals.lookup (ofString "ns"))).resVarEq
-                            (ofString "ncap", s2.locals.lookup (ofString "ncap")) } := rfl
                       change (let out := evaluateHOLFiniteState m tailProg
                         let post := { out.2 with
                           locals := (out.2.locals.resVarEq (ofString "cap", s1.locals.lookup (ofString "cap"))).resVarEq
@@ -1046,9 +984,8 @@ theorem eps_stack_push :
                           (∀ g : String, ofString g ≠ ofString "scratch_ptr" → globN post g = globN s g)) ∧
                         (IsEvmErr out.1 →
                           EvmInv post ∧ evmChain post = evmChain s ∧ evmR post ≤ evmR s))
-                      clear_value m
                       have hm_glob : m.globals = s.globals.update (ofString "scratch_ptr", .val (.word nsw)) := by
-                        rw [hm_def]; dsimp only; rw [hs8_eq, hs7_eq]; dsimp only; rw [heff_mc_m11.globals, hs5_glob]
+                        dsimp only [m]; rw [hs8_eq, hs7_eq]; dsimp only; rw [heff_mc_m11.globals, hs5_glob]
                       have hm_sp_glob : globN m "scratch_ptr" = nsw.toNat := by
                         unfold globN; rw [hm_glob]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
                       have hm_other_glob : ∀ g : String, ofString g ≠ ofString "scratch_ptr" →
@@ -1057,17 +994,21 @@ theorem eps_stack_push :
                         simp [HolFiniteMapExact.lookup_update, FUPDATE, hg, Ne.symm hg]
                       have hm_G : GuestInv m := by
                         have hcode_m : m.code = s.code := by
-                          rw [hm_def]; dsimp only; rw [hs8_eq, hs7_eq]; dsimp only
-                          exact heff_mc_m11.code.trans (hs5_code.trans hcode.symm)
+                          dsimp only [m]; rw [hs8_eq, hs7_eq]; dsimp only
+                          rw [heff_mc_m11.code, hs5_code, hcode]
                         have hma_m : m.memaddrs = s.memaddrs := by
-                          rw [hm_def]; dsimp only; rw [hs8_eq, hs7_eq]; dsimp only
-                          exact heff_mc_m11.memaddrs.trans (hs5_ma.trans hInv.1.1.memaddrs.symm)
+                          dsimp only [m]; rw [hs8_eq, hs7_eq]; dsimp only
+                          rw [heff_mc_m11.memaddrs, hs5_ma, hInv.1.1.memaddrs]
                         have hsh_m : m.shMemaddrs = s.shMemaddrs := by
-                          rw [hm_def]; dsimp only; rw [hs8_eq, hs7_eq]; dsimp only
-                          exact heff_mc_m11.shMemaddrs.trans hs5_sh
+                          dsimp only [m]; rw [hs8_eq, hs7_eq]; dsimp only
+                          rw [heff_mc_m11.shMemaddrs]
+                          change saPost.shMemaddrs = s.shMemaddrs
+                          rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
                         have hba_m : m.baseAddr = s.baseAddr := by
-                          rw [hm_def]; dsimp only; rw [hs8_eq, hs7_eq]; dsimp only
-                          exact heff_mc_m11.baseAddr.trans hs5_ba
+                          dsimp only [m]; rw [hs8_eq, hs7_eq]; dsimp only
+                          rw [heff_mc_m11.baseAddr]
+                          change saPost.baseAddr = s.baseAddr
+                          rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
                         exact guestInv_congr hcode_m hma_m hsh_m hba_m hInv.1.1
                       have hsc_m : globN m "scratch_ptr" ≤ globN s "scratch_ptr" := by
                         rw [hm_sp_glob]; omega
@@ -1087,16 +1028,20 @@ theorem eps_stack_push :
                       have heff_s_s5 : ScratchByteEff s s5 [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] :=
                         ⟨hs5_code.trans hcode.symm,
                          hs5_ma.trans hInv.1.1.memaddrs.symm,
-                         hs5_sh,
-                         hs5_ba,
-                         hs5_be,
+                         by change saPost.shMemaddrs = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq],
+                         by change saPost.baseAddr = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq],
+                         by change saPost.be = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq],
                          fun g hg => by
-                           rw [hs5_glob]
+                           change saPost.globals.lookup (ofString g) = _; rw [hsaPost_eq]
+                           dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
                            simp [HolFiniteMapExact.lookup_update, FUPDATE, hg, Ne.symm hg],
                          fun a _ => by rw [hs5_mem],
                          fun a _ => by rw [hs5_mem],
                          fun b _ _ => by
-                           unfold memB; rw [hs5_mem, hs5_be]⟩
+                           unfold memB; rw [hs5_mem]
+                           have hbe5 : s5.be = s.be := by
+                             change saPost.be = _; rw [hsaPost_eq]; dsimp only [callEntryStateHOLFinite]; rw [hs4_eq]
+                           rw [hbe5]⟩
                       have heff_m : ScratchByteEff s m
                           [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] := by
                         have h1 := heff_mc.mono (R2 := [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))])
@@ -1107,8 +1052,7 @@ theorem eps_stack_push :
                         have h3 := (ScratchByteEff.of_bre heff_st232).mono
                           (R2 := [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))])
                           (fun x hx => by simp at hx; subst hx; exact ⟨(globN s "ev", 280), by simp, le_refl _, le_refl _⟩)
-                        have h4 := (((heff_s_s5.trans h1).trans h2).trans h3).with_locals_clock m.locals s8.clock
-                        rw [hm_def] at h4 ⊢; exact h4
+                        exact (((heff_s_s5.trans h1).trans h2).trans h3).with_locals_clock m.locals s8.clock
                       have hs6_e0_eq : ∀ off, off + 8 ≤ 280 → off % 8 = 0 →
                           memW s6 (globN s "ev" + off) = memW s (globN s "ev" + off) := by
                         intro off hoff hoff8
@@ -1124,21 +1068,20 @@ theorem eps_stack_push :
                         exact not_cellHits_of_disj_aligned (i := (globN s "ev", 280)) ha8 hnsw_al
                           (Nat.le_add_right _ off) (Nat.add_le_add_left hoff _)
                           (Or.inr (Or.inr (Or.inr (by dsimp only [freshIvl] at he0_scr ⊢; omega))))
-                      have hm_mem_s8 : m.memory = s8.memory := by rw [hm_def]
                       have hm_e0_other : ∀ off, off + 8 ≤ 280 → off % 8 = 0 → off ≠ 8 → off ≠ 232 →
                           memW m (globN s "ev" + off) = memW s (globN s "ev" + off) := by
                         intro off hoff hoff8 hne8 hne232
-                        have hms8 : memW m (globN s "ev" + off) = memW s8 (globN s "ev" + off) := by unfold memW; rw [hm_mem_s8]
-                        rw [hms8, hs8_eq, memW_updW_ne s7 (globN s "ev" + 232) (globN s "ev" + off) _ (by omega) (by omega) (by omega),
+                        change memW s8 (globN s "ev" + off) = memW s (globN s "ev" + off)
+                        rw [hs8_eq, memW_updW_ne s7 (globN s "ev" + 232) (globN s "ev" + off) _ (by omega) (by omega) (by omega),
                             hs7_eq, memW_updW_ne s6 (globN s "ev" + 8) (globN s "ev" + off) _ (by omega) (by omega) (by omega),
                             hs6_e0_eq off hoff hoff8]
                       have hm_e0_8 : memW m (globN s "ev" + 8) = nsw.toNat := by
-                        have hms8 : memW m (globN s "ev" + 8) = memW s8 (globN s "ev" + 8) := by unfold memW; rw [hm_mem_s8]
-                        rw [hms8, hs8_eq, memW_updW_ne s7 (globN s "ev" + 232) (globN s "ev" + 8) _ (by omega) (by omega) (by omega),
+                        change memW s8 (globN s "ev" + 8) = nsw.toNat
+                        rw [hs8_eq, memW_updW_ne s7 (globN s "ev" + 232) (globN s "ev" + 8) _ (by omega) (by omega) (by omega),
                             hs7_eq, memW_updW_same s6 (globN s "ev" + 8) nsw]
                       have hm_e0_232 : memW m (globN s "ev" + 232) = ncapw.toNat := by
-                        have hms8 : memW m (globN s "ev" + 232) = memW s8 (globN s "ev" + 232) := by unfold memW; rw [hm_mem_s8]
-                        rw [hms8, hs8_eq, memW_updW_same s7 (globN s "ev" + 232) ncapw]
+                        change memW s8 (globN s "ev" + 232) = ncapw.toNat
+                        rw [hs8_eq, memW_updW_same s7 (globN s "ev" + 232) ncapw]
                       have hfresh_m : freshIvl = (0, 0) ∨
                           (freshIvl.1 % 8 = 0 ∧ freshIvl.2 % 8 = 0 ∧
                             Inside freshIvl (globN m "scratch_ptr") (globN s "scratch_ptr")) := by
@@ -1162,14 +1105,12 @@ theorem eps_stack_push :
                           | some v => simp [HolFiniteMapExact.updateEq, FUPDATE_HOL, hne.symm]
                         have hs8_l : s8.locals = s5.locals := by
                           rw [hs8_eq, hs7_eq]; exact hs6_loc
-                        have hs5_l_ne : s5.locals.lookup k = s4.locals.lookup k := by
-                          rw [hs5]
-                          simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk1, Ne.symm hk1]
-                        rw [hm_def]; dsimp only
+                        dsimp only [m]
                         rw [hres_ne _ _ _ _ hk2.symm,
                             hres_ne _ _ _ _ hk1.symm,
-                            hs8_l, hs5_l_ne]
-                      exact run_tail m freshIvl hAm hsc_m heff_m hfresh_m
+                            hs8_l]
+                        simp [hs5, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk1, Ne.symm hk1]
+                      exact run_tail m freshIvl hAm hsc_m hm_other_glob heff_m hfresh_m
                         (fun off hoff hoff8 h8 _ h232 => hm_e0_other off hoff hoff8 h8 h232)
                         hnew_m
                         (by rw [hm_e0_232]; omega)
@@ -1183,6 +1124,7 @@ theorem eps_stack_push :
         exact run_tail s2 (0, 0)
           ⟨guestInv_congr (s := s) rfl rfl rfl rfl hInv.1.1, hInv.1.2⟩
           (le_refl _)
+          (fun _ _ => rfl)
           ((ScratchByteEff.refl s _).with_locals_clock s2.locals s.clock)
           (Or.inl rfl)
           (fun _ _ _ _ _ _ => rfl)
@@ -1193,19 +1135,6 @@ theorem eps_stack_push :
           hs2_sp hs2_v
 
 /-! ## 3. Wrapper specs: `eps_stack_push_word` and `eps_stack_push_bool` -/
-
-private theorem lookup_body_ret_eq {code : HolFiniteMapExact MlS (List (MlS × ShapeHOL) × ProgHOL 64 × ShapeHOL)}
-    {fname : MlS} {params : List (MlS × ShapeHOL)} {body body' : ProgHOL 64}
-    {retShape ret' : ShapeHOL} {vals : List (ValueHOL 64)} {callee : HolFiniteMapExact MlS (ValueHOL 64)}
-    (hlk : code.lookup fname = some (params, body, retShape))
-    (hl : lookupCodeHOLFinite code.lookup fname vals = some (body', callee, ret')) :
-    body' = body ∧ ret' = retShape := by
-  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some code.lookup fname vals body' callee ret' hl
-  simp only [Flapjack.lookupCodeHOLExact, hlk] at hx
-  split at hx
-  · have hinj := Option.some.inj hx
-    exact ⟨(congrArg Prod.fst hinj).symm, (congrArg (fun x => x.2.2) hinj).symm⟩
-  · cases hx
 
 theorem eps_seq_call_ret0 {fname : MlS}
     (hf : EvmPreservingSpec (fun _ => True)
@@ -1221,73 +1150,98 @@ theorem eps_seq_call_ret0 {fname : MlS}
     (IsEvmErr r →
       EvmInv post ∧ evmChain post = evmChain s ∧ evmR post ≤ evmR s) := by
   dsimp only
+  have herr_triv : ∀ {P1 P2 : Prop},
+      (∀ v, (some PanSemResultExact.error : Option (PanSemResultExact 64)) = some (.returned v) → P1) ∧
+      (IsEvmErr (some PanSemResultExact.error) → P2) := by
+    intro _ _; constructor
+    · intro _ h; cases h
+    · rintro ⟨_, h⟩; cases h
   obtain ⟨params, body, retShape, hlk, hspec⟩ := hf
   rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_call] at hnt ⊢
   rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
-  · exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+  · exact herr_triv
   · simp only [hargs] at hnt ⊢
     rcases hl : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨body', callee, ret'⟩
-    · exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+    · exact herr_triv
     · simp only [hl] at hnt ⊢
       by_cases hz : s.clock = 0
       · simp [hz] at hnt
       · simp only [hz, ↓reduceIte] at hnt ⊢
-        have hl_s : s.code.lookup fname = some (params, body, retShape) := hcode ▸ hlk
-        obtain ⟨hb_eq, hr_eq⟩ := lookup_body_ret_eq hl_s hl
-        subst hb_eq; subst hr_eq
-        have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (body', callee, ret') :=
-          hcode ▸ hl
+        have hbody_eq : body' = body :=
+          lookupCodeHOLFinite_installed_body s.code.lookup fname params body body' retShape ret' vals callee
+            (by rw [hcode]; exact hlk) hl
+        subst body'
+        have hret_eq : ret' = retShape := by
+          have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some s.code.lookup fname vals body callee ret' hl
+          rw [hcode] at hx; simp only [Flapjack.lookupCodeHOLExact, hlk] at hx
+          split at hx
+          · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+          · cases hx
+        subst ret'
+        have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (body, callee, retShape) := by
+          rwa [← hcode]
         have hInv_ce : EvmInv (callEntryStateHOLFinite s callee) := localsFree_evmInv s callee (s.clock - 1) hInv
         have hc_ce := evm_congr (s := s) (t := callEntryStateHOLFinite s callee) rfl rfl
-        have hch_ce : evmChain (callEntryStateHOLFinite s callee) = evmChain s := evmChain_congr rfl rfl
-        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, cpost⟩
-        simp only [hrun] at hnt ⊢
-        have hQ (hsafe : res ≠ some .timeOut) :=
-          hspec (callEntryStateHOLFinite s callee) hcode hInv_ce trivial ⟨vals, hl_orig⟩ (by rw [hrun]; exact hsafe)
+        have hs_spec := hspec (callEntryStateHOLFinite s callee) hcode hInv_ce trivial ⟨vals, hl_orig⟩
+        dsimp only at hs_spec
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, cpost⟩
+        simp only [hrun] at hnt hs_spec ⊢
         cases res with
-        | none => exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+        | none => exact herr_triv
         | some r0 =>
           cases r0 with
           | timeOut => simp at hnt
           | returned vr =>
-            by_cases hsh : shapeEqHOL (shapeOfHOLExact vr) ret' = true
+            by_cases hsh : shapeEqHOL (shapeOfHOLExact vr) retShape = true
             · simp only [hsh, ↓reduceIte]
-              have hs := hQ (by simp); dsimp only at hs; rw [hrun] at hs
-              obtain ⟨hInv_cp, hch_cp, hR_cp, hg_cp⟩ := hs.1 vr rfl
+              obtain ⟨hInv_cp, hch_cp, hR_cp, hg_cp⟩ := (hs_spec (by simp)).1 vr rfl
               rw [evaluateHOLFiniteState_return]; dsimp only [evalHOLExact]
               have hsz0 : sizeOfShapeWithContextHOL cpost.structs
                   (shapeOfHOLExact (.val (.word 0#64))) ≤ 32 := by
-                simp [shapeOfHOLExact]
+                simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
               rw [if_pos hsz0]; dsimp only
               let post := ({ cpost with locals := s.locals } : PanSemStateFiniteExact 64 F).emptyLocalsHOLFinite
               have hInv_p : EvmInv post := localsFree_evmInv cpost post.locals cpost.clock hInv_cp
               have hc_p := evm_congr (s := cpost) (t := post) rfl rfl
-              have hch_p : evmChain post = evmChain cpost := evmChain_congr (s := cpost) (t := post) rfl rfl
-              refine ⟨fun _ _ => ⟨hInv_p, hch_p.trans (hch_cp.trans hch_ce),
-                  by rw [hc_p.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp,
-                  fun g hg => hg_cp g hg⟩, ?_⟩
-              rintro ⟨_, h⟩; cases h
+              have hch_final : evmChain post = evmChain s := by
+                have h1 : evmChain post = evmChain cpost := evmChain_congr rfl rfl
+                have h2 : evmChain (callEntryStateHOLFinite s callee) = evmChain s := evmChain_congr rfl rfl
+                exact h1.trans (hch_cp.trans h2)
+              have hR_final : evmR post ≤ evmR s := by
+                rw [hc_p.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp
+              have hg_final : ∀ g : String, ofString g ≠ ofString "scratch_ptr" → globN post g = globN s g :=
+                fun g hg => hg_cp g hg
+              constructor
+              · intro _ _; exact ⟨hInv_p, hch_final, hR_final, hg_final⟩
+              · rintro ⟨_, h⟩; cases h
             · simp only [hsh, Bool.false_eq_true, ↓reduceIte]
-              exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+              exact herr_triv
           | exception eid ev =>
             dsimp only
             by_cases heid : eid = ofString "EvmErr"
             · subst heid
-              have hs := hQ (by simp); dsimp only at hs; rw [hrun] at hs
-              obtain ⟨hInv_cp, hch_cp, hR_cp⟩ := hs.2 ⟨ev, rfl⟩
+              obtain ⟨hInv_cp, hch_cp, hR_cp⟩ := (hs_spec (by simp)).2 ⟨ev, rfl⟩
               have hInv_el : EvmInv cpost.emptyLocalsHOLFinite := localsFree_evmInv cpost _ cpost.clock hInv_cp
               have hc_el := evm_congr (s := cpost) (t := cpost.emptyLocalsHOLFinite) rfl rfl
-              have hch_el : evmChain cpost.emptyLocalsHOLFinite = evmChain cpost :=
-                evmChain_congr (s := cpost) (t := cpost.emptyLocalsHOLFinite) rfl rfl
-              exact ⟨fun _ h => (by cases h), fun _ =>
-                ⟨hInv_el, hch_el.trans (hch_cp.trans hch_ce),
-                  by rw [hc_el.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp⟩⟩
-            · refine ⟨fun _ h => (by cases h), ?_⟩
-              rintro ⟨_, h⟩; injection h with h'; injection h' with h1 _; exact False.elim (heid h1)
-          | «break» => exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-          | «continue» => exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-          | finalFfi _ => exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
-          | error => exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+              have hch_final : evmChain cpost.emptyLocalsHOLFinite = evmChain s := by
+                have h1 : evmChain cpost.emptyLocalsHOLFinite = evmChain cpost := evmChain_congr rfl rfl
+                have h2 : evmChain (callEntryStateHOLFinite s callee) = evmChain s := evmChain_congr rfl rfl
+                exact h1.trans (hch_cp.trans h2)
+              have hR_final : evmR cpost.emptyLocalsHOLFinite ≤ evmR s := by
+                rw [hc_el.2.1]; rw [hc_ce.2.1] at hR_cp; exact hR_cp
+              constructor
+              · intro _ h; cases h
+              · intro _; exact ⟨hInv_el, hch_final, hR_final⟩
+            · constructor
+              · intro _ h; cases h
+              · rintro ⟨_, h⟩; injection h with h'; injection h' with h1 _; exact (heid h1).elim
+          | «break» => exact herr_triv
+          | «continue» => exact herr_triv
+          | finalFfi _ =>
+            constructor
+            · intro _ h; cases h
+            · rintro ⟨_, h⟩; cases h
+          | error => exact herr_triv
 
 theorem lookup_stack_push_word :
     originalRuntimeCode.lookup (ofString "stack_push_word") =
@@ -1341,6 +1295,9 @@ theorem eps_stack_push_bool :
     · simp only [hcw0, ↓reduceIte]
       rw [← evaluateHOLFiniteState_seq_line780]
       intro hnt; exact eps_seq_call_ret0 eps_stack_push s _ hcode hInv hnt
-  · intro _; exact ⟨fun _ h => (by cases h), by rintro ⟨_, h⟩; cases h⟩
+  · intro _
+    constructor
+    · intro _ h; cases h
+    · rintro ⟨_, h⟩; cases h
 
 end InitECandidate.Solver.Wave8GuestInv.R14Shards.OpHandlersA
