@@ -1990,5 +1990,52 @@ theorem eval_loadByte_nibble {F : Type}
   · rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
     exact hn0
 
+theorem ro_common_prefix_length_spec : ReadOnlyFn (ofString "common_prefix_length") := by
+  let good : MlS → Bool := fun f => f == ofString "min"
+  have hgood : ∀ function, good function = true → ∀ values body callee rs,
+      PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup function values =
+        some (body, callee, rs) →
+      Wave8Contracts.M15.readOnlyProg good body = true := by
+    intro function hfn values body callee rs hfound
+    simp only [good, beq_iff_eq] at hfn
+    subst hfn
+    have hsame := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup (ofString "min")
+      _ _ _ _ _ values callee Wave8Contracts.M27.lookup_min hfound
+    subst hsame
+    rfl
+  exact Wave8Contracts.M15.readOnlyFn_of_guestAst 251 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_common_prefix_length rfl good hgood rfl
+
+theorem cpl_body_no_nonTrap_exn {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hcode : s.code = originalRuntimeCode)
+    (eid : MlS) (ev : ValueHOL 64) (hne : eid ≠ ofString "TrapErr") :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_common_prefix_length)).1 ≠
+      some (.exception eid ev) := by
+  intro hexn
+  have hbody : sourceFnBody Guest.Software.guestFn_common_prefix_length =
+      .decCall (ofString "n") .one (ofString "min")
+        [.var .local (ofString "al"), .var .local (ofString "bl")]
+        (.dec (ofString "i") .one (.const 0)
+          (.seq
+            (.while (.cmp .lower (.var .local (ofString "i")) (.var .local (ofString "n")))
+              (.seq
+                (.ite (.cmp .notEqual
+                    (.loadByte (.op .add [.var .local (ofString "a"), .var .local (ofString "i")]))
+                    (.loadByte (.op .add [.var .local (ofString "b"), .var .local (ofString "i")])))
+                  (.return (.var .local (ofString "i")))
+                  .skip)
+                (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+            (.return (.var .local (ofString "n"))))) := rfl
+  rw [hbody] at hexn
+  obtain ⟨mvals, mbody, mc, _, _, _, hl, hmexn | ⟨mrv, mpost, _, _, _, hcont_eq, _⟩⟩ :=
+    decCall_resumes_inv (Or.inr ⟨eid, ev, hexn, hne⟩)
+  · obtain ⟨meid, mev, hme, _, _⟩ := hmexn
+    have hsame := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "min")
+      _ _ _ _ _ mvals mc (by rw [hcode]; exact Wave8Contracts.M27.lookup_min) hl
+    subst hsame
+    exact evaluate_noExnProg _ (by decide) _ meid mev (congrArg Prod.fst hme)
+  · rw [hexn] at hcont_eq
+    exact evaluate_noExnProg _ (by decide) _ eid ev hcont_eq.symm
+
 
 end InitECandidate.Solver.Wave8GuestInv.R14Shards
