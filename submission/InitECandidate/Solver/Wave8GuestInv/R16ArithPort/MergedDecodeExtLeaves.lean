@@ -287,4 +287,21 @@ theorem fb_calculate_delegation_cost_of
   have h4 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memcpy»
   fb_prove2 573 Guest.Software.guestFn_calculate_delegation_cost K.«calculate_delegation_cost»
 
+theorem fb_generic_call_of
+    (h_credit_state_gas_refund : TerminatingFunBoundedOn GuestInv (ofString "credit_state_gas_refund") K.«credit_state_gas_refund»)
+    (h_frame_mem_mark : TerminatingFunBoundedOn GuestInv (ofString "frame_mem_mark") K.«frame_mem_mark»)
+    (h_scratch_mark : TerminatingFunBoundedOn GuestInv (ofString "scratch_mark") K.«scratch_mark»)
+    (h_set_retdata : TerminatingFunBoundedOn GuestInv (ofString "set_retdata") K.«set_retdata»)
+    (h_stack_push : TerminatingFunBoundedOn GuestInv (ofString "stack_push") K.«stack_push»)
+    (h_start_child : TerminatingFunBoundedOn GuestInv (ofString "start_child") K.«start_child») :
+    TerminatingFunBoundedOn GuestInv (ofString "generic_call") K.«generic_call» := by
+  have h0 := h_set_retdata
+  have h1 := h_credit_state_gas_refund
+  have h2 := h_scratch_mark
+  have h3 := h_frame_mem_mark
+  have h4 := InitECandidate.Solver.Wave8GuestInv.FastGen.fb_child_message
+  have h5 := h_stack_push
+  have h6 := h_start_child
+  fb_prove2 601 Guest.Software.guestFn_generic_call K.«generic_call»
+
 end InitECandidate.Solver.Wave8GuestInv.R16ArithPort
