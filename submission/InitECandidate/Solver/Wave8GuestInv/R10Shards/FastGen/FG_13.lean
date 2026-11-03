@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FGCommon
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.BlsFpBase
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_00
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_01
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_02
@@ -41,9 +42,8 @@ local macro_rules
        · fg_arith $k))
 
 theorem fb_bls_fp_mul :
-    TerminatingFunBoundedOn GuestInv (ofString "bls_fp_mul") K.bls_fp_mul := by
-  have _ := fb_bls_fp_sub_raw
-  fg_prove 706 Guest.Software.guestFn_bls_fp_mul K.bls_fp_mul
+    TerminatingFunBoundedOn GuestInv (ofString "bls_fp_mul") K.bls_fp_mul :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_fp_mul
 
 theorem fb_bls_fp_neg :
     TerminatingFunBoundedOn GuestInv (ofString "bls_fp_neg") K.bls_fp_neg := by
@@ -56,6 +56,56 @@ theorem fb_bls_fp_sub :
   have _ := fb_bls_fp_sub_raw
   have _ := fb_bls_fp_add_raw
   fg_prove 703 Guest.Software.guestFn_bls_fp_sub K.bls_fp_sub
+
+theorem fb_modexp_helper (hm al bfb dl mz hr bmax bm btb mc bmu btb2 W : Nat) :
+    hm +
+      (al +
+        (bfb + 1 +
+          (dl +
+            (max (mz + 1 + (hr + 1 + 0)) 0 +
+              (bmax +
+                (al +
+                  (al +
+                    (al +
+                      (al +
+                        (al +
+                          (al +
+                            (al +
+                              (bfb + 1 +
+                                (bm + 1 +
+                                  (btb +
+                                    (max (mz + 1 + 0)
+                                        (mc + 1 +
+                                          W *
+                                            (0 +
+                                              (bmu + 1 +
+                                                (bm + 1 +
+                                                  max (bmu + 1 + (bm + 1)) 0)) +
+                                              1)) +
+                                      (btb2 + 1 + (hr + 1 + 0))) +
+                                    1))) +
+                              1) +
+                            1) +
+                          1) +
+                        1) +
+                      1) +
+                    1) +
+                  1) +
+                1)) +
+            1)) +
+        1) +
+      1 ≤
+    (hm + 1) + (al + 1) + (bfb + 1) + (dl + 1) + Nat.max ((mz + 1) + (hr + 1)) 0 +
+      (bmax + 1) + (al + 1) + (al + 1) + (al + 1) + (al + 1) + (al + 1) + (al + 1) + (al + 1) +
+      (bfb + 1) + (bm + 1) + (btb + 1) +
+      Nat.max (mz + 1) ((mc + 1) + W * ((bmu + 1) + (bm + 1) + Nat.max ((bmu + 1) + (bm + 1)) 0 + 1)) +
+      (btb2 + 1) + (hr + 1) := by
+  have hmul : W * (0 + (bmu + 1 + (bm + 1 + max (bmu + 1 + (bm + 1)) 0)) + 1) =
+      W * (bmu + 1 + (bm + 1) + Nat.max (bmu + 1 + (bm + 1)) 0 + 1) := by
+    simp only [Nat.zero_add, nat_max_eq, Nat.add_assoc]
+  rw [hmul]
+  simp only [Nat.add_zero, nat_max_eq]
+  omega
 
 theorem fb_modexp_of
     (h_bn_mod : TerminatingFunBoundedOn GuestInv (ofString "bn_mod") K.bn_mod)
@@ -71,8 +121,10 @@ theorem fb_modexp_of
   · fg_auto_loops
     · apply while_down_signed_guestInv (ofString "t")
       · fg_auto
-      · refine CounterStep.suffix _ _ _ ?_ rfl; exact CounterStep.sub_one _
-  · fg_arith K.modexp
+      · apply CounterStep.suffix _ _ _ (CounterStep.sub_one _)
+        rfl
+  · unfold K.modexp
+    apply fb_modexp_helper
 
 theorem fb_u256_addmod_of
     (h_digits_divmod : TerminatingFunBoundedOn GuestInv (ofString "digits_divmod") K.digits_divmod) :
@@ -98,7 +150,8 @@ theorem fb_fq12_pow_words_of
   · fg_auto_loops
     · apply while_down_unsigned_guestInv (ofString "i")
       · fg_auto
-      · refine CounterStep.suffix _ _ _ ?_ rfl; exact CounterStep.sub_one _
+      · apply CounterStep.suffix _ _ _ (CounterStep.sub_one _)
+        rfl
   · fg_arith K.fq12_pow_words
 
 theorem fb_ecp_set_inf :
