@@ -23,6 +23,26 @@ import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.TruncateSpec
 import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbCore
 import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbHtab
 import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbRlp
+import InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.FbSetStorage
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_01
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_02
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_06
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_07
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_10
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_11
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_16
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_BitOps
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_Sha256
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_StateHostLeaves
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_U256Core
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_U256MulExp
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P02
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P12_P15Callees
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.P13DivMod
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.MissingFb5.FbRipemd160
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.MergedDecodeExtLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.SigningRecoveryLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.BlsG2
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
 import InitECandidate.Solver.Wave8GuestInv.Shards.S00.Compatibility
 import InitECandidate.Solver.Wave8GuestInv.Shards.S01.Axioms
@@ -82,16 +102,16 @@ theorem fb_node_new_ext : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_node
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_node_new_ext fb_alloc
 
 theorem fb__collapse_branch : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__collapse_branch» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__collapse_branch fb_alloc fb_mpt_fail fb_nibbles_concat fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.«fb_node_new_leaf»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__collapse_branch fb_alloc fb_mpt_fail fb_nibbles_concat fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.fb_node_new_leaf
 
 theorem fb__create_branch_from_two_leaves : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__create_branch_from_two_leaves» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__create_branch_from_two_leaves InitECandidate.Solver.Wave8GuestInv.«fb_node_new_branch» InitECandidate.Solver.Wave8GuestInv.«fb_node_new_leaf»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__create_branch_from_two_leaves InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_node_new_branch InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.fb_node_new_leaf
 
 theorem fb__delete_ext_finish : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__delete_ext_finish» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__delete_ext_finish fb_mpt_fail fb_nibbles_concat fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.«fb_node_new_leaf»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__delete_ext_finish fb_mpt_fail fb_nibbles_concat fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.fb_node_new_leaf
 
 theorem fb_common_prefix_length : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_common_prefix_length» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb_common_prefix_length InitECandidate.Solver.Wave8GuestInv.«fb_min»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb_common_prefix_length InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_min
 
 theorem fb_memeq : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_memeq» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_memeq
@@ -121,7 +141,7 @@ theorem fb_memcpy : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_memcpy» :
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_memcpy
 
 theorem fb_node_hash_cached : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_node_hash_cached» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb_node_hash_cached fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_mpt_fail
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb_node_hash_cached fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_mpt_fail
 
 theorem fb_node_write_ref : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_node_write_ref» :=
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_node_write_ref fb_memcpy fb_mpt_fail fb_node_hash_cached
@@ -148,13 +168,13 @@ theorem fb_nodedb_lookup : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_nod
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_nodedb_lookup fb_htab_get
 
 theorem fb__resolve_step : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__resolve_step» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__resolve_step fb_mpt_fail fb_node_new_hashed fb_nodedb_lookup InitECandidate.Solver.Wave8GuestInv.«fb_rlp_item»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__resolve_step fb_mpt_fail fb_node_new_hashed fb_nodedb_lookup InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_rlp_item
 
 theorem fb__rlp_validate_items_body : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__rlp_validate_items_body» :=
   InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb__rlp_validate_items_body
 
 theorem fb__split_extension : type_of% InitECandidate.Solver.Wave8GuestInv.«fb__split_extension» :=
-  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__split_extension fb_mpt_fail InitECandidate.Solver.Wave8GuestInv.«fb_node_new_branch» fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.«fb_node_new_leaf»
+  InitECandidate.Solver.Wave8Leaves.S00Verified.fb__split_extension fb_mpt_fail InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_node_new_branch fb_node_new_ext InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.fb_node_new_leaf
 
 theorem fb_htab_has : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_has» :=
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_has_of fb_memeq
@@ -184,10 +204,10 @@ theorem fb_trie_lookup : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_trie_
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_trie_lookup fb_key_to_nibbles fb_trie_walk
 
 theorem fb_ws_account_leaf : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ws_account_leaf» :=
-  InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_account_leaf_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_trie_lookup
+  InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_account_leaf_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_trie_lookup
 
 theorem fb_ws_get_account_optional : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ws_get_account_optional» :=
-  InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_get_account_optional_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_ws_account_leaf InitECandidate.Solver.Wave8GuestInv.«fb_decode_account_from_leaf»
+  InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_get_account_optional_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_ws_account_leaf InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_decode_account_from_leaf
 
 theorem fb_get_pre_state_account_optional : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_get_pre_state_account_optional» :=
   InitECandidate.Solver.Wave8GuestInv.S01.fb_get_pre_state_account_optional_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_htab_set fb_htab_get fb_record_pre_state_read fb_ws_get_account_optional
@@ -197,6 +217,15 @@ theorem fb_get_account_optional : type_of% InitECandidate.Solver.Wave8GuestInv.�
 
 theorem fb_get_account : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_get_account» :=
   InitECandidate.Solver.Wave8GuestInv.S01.fb_get_account_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_get_account_optional
+
+theorem fb_get_code : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_get_code» :=
+  InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_get_code_of fb_nodedb_lookup
+
+theorem fb_ext_code_of : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ext_code_of» :=
+  InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_ext_code_of_of fb_get_account fb_get_code
+
+theorem fb_calculate_delegation_cost : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_delegation_cost» :=
+  InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_calculate_delegation_cost_of fb_ext_code_of fb_is_warm_address
 
 theorem fb_ws_storage_root_of : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ws_storage_root_of» :=
   InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_storage_root_of_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_ws_get_account_optional
@@ -253,7 +282,7 @@ theorem fb_add_storage_write : type_of% InitECandidate.Solver.Wave8GuestInv.«fb
   InitECandidate.Solver.Wave8GuestInv.S01.fb_add_storage_write_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_bal_ensure_account fb_htab_get fb_htab_set fb_lst_upsert_idx
 
 theorem fb_add_to_bloom : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_add_to_bloom» :=
-  InitECandidate.Solver.Wave8GuestInv.S01.fb_add_to_bloom_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.«fb_keccak256»
+  InitECandidate.Solver.Wave8GuestInv.S01.fb_add_to_bloom_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256
 
 theorem fb_add_touched_account : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_add_touched_account» :=
   InitECandidate.Solver.Wave8GuestInv.S01.fb_add_touched_account_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_bal_ensure_account
@@ -262,10 +291,10 @@ theorem fb_addr_from_words : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_a
   InitECandidate.Solver.Wave8GuestInv.S01.fb_addr_from_words (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_address_to_u256 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_address_to_u256» :=
-  InitECandidate.Solver.Wave8GuestInv.S02.fb_address_to_u256 InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be»
+  InitECandidate.Solver.Wave8GuestInv.S02.fb_address_to_u256 InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be
 
 theorem fb_tx_u256_encoded_len : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_u256_encoded_len» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_tx_u256_encoded_len_of InitECandidate.Solver.Wave8GuestInv.«fb_u256_byte_length»
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_tx_u256_encoded_len_of InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_byte_length
 
 theorem fb_rlp_word_encoded_len : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_word_encoded_len» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_word_encoded_len
@@ -289,7 +318,7 @@ theorem fb_rlp_encode_word : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_r
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_rlp_encode_word
 
 theorem fb_rlp_put_u256 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_rlp_put_u256» :=
-  InitECandidate.Solver.Wave8GuestInv.S02.fb_rlp_put_u256 InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be_min» fb_rlp_encode_bytes InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S02.fb_rlp_put_u256 InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_to_be_min fb_rlp_encode_bytes InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_encode_header : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_encode_header» :=
   InitECandidate.Solver.Wave8Leaves.S13.certified_fb_encode_header fb_alloc fb_rlp_encode_bytes fb_rlp_encode_list_header fb_rlp_encode_word fb_rlp_list_header_len fb_rlp_put_u256
@@ -298,7 +327,7 @@ theorem fb_withdrawal_rlp_len : type_of% InitECandidate.Solver.Wave8GuestInv.«f
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_withdrawal_rlp_len
 
 theorem fb_block_rlp_length : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_block_rlp_length» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_block_rlp_length fb_encode_header InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» fb_rlp_bytes_encoded_len fb_rlp_list_header_len fb_withdrawal_rlp_len
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_block_rlp_length fb_encode_header InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release fb_rlp_bytes_encoded_len fb_rlp_list_header_len fb_withdrawal_rlp_len
 
 theorem fb_memzero : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_memzero» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_memzero
@@ -307,25 +336,25 @@ theorem fb_buffer_read : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_buffe
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_buffer_read fb_memcpy fb_memzero
 
 theorem fb_calculate_base_fee_per_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_base_fee_per_gas» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_base_fee_per_gas InitECandidate.Solver.Wave8GuestInv.«fb_check_gas_limit» InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» InitECandidate.Solver.Wave8GuestInv.«fb_u256_div» InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_word» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» InitECandidate.Solver.Wave8GuestInv.«fb_u256_mul» InitECandidate.Solver.Wave8GuestInv.«fb_u256_sub»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_base_fee_per_gas InitECandidate.Solver.Wave8GuestInv.FastGen.fb_check_gas_limit InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add InitECandidate.Solver.Wave8GuestInv.FastGen.fb_u256_div InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_from_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_mul InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_sub
 
 theorem fb_trap_with : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_trap_with» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_trap_with
 
 theorem fb_taylor_exponential : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_taylor_exponential» :=
-  InitECandidate.Solver.Wave8GuestInv.S06.fb_taylor_exponential_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_word» InitECandidate.Solver.Wave8GuestInv.«fb_u256_mul» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» InitECandidate.Solver.Wave8GuestInv.«fb_u256_mul_full» fb_trap_with InitECandidate.Solver.Wave8GuestInv.«fb_u256_div»
+  InitECandidate.Solver.Wave8GuestInv.S06.fb_taylor_exponential_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_from_word InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_mul InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_mul_full fb_trap_with InitECandidate.Solver.Wave8GuestInv.FastGen.fb_u256_div
 
 theorem fb_calculate_blob_gas_price : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_blob_gas_price» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_calculate_blob_gas_price_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_taylor_exponential
 
 theorem fb_calculate_excess_blob_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_excess_blob_gas» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_excess_blob_gas fb_calculate_blob_gas_price InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_word» InitECandidate.Solver.Wave8GuestInv.«fb_u256_gt» InitECandidate.Solver.Wave8GuestInv.«fb_u256_mul» InitECandidate.Solver.Wave8GuestInv.«fb_udiv»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_excess_blob_gas fb_calculate_blob_gas_price InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_from_word InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_gt InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_mul InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_udiv
 
 theorem fb_count_tokens_in_data : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_count_tokens_in_data» :=
   InitECandidate.Solver.Wave8Leaves.S12.fb_count_tokens_in_data
 
 theorem fb_calculate_intrinsic_cost : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_intrinsic_cost» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_intrinsic_cost fb_count_tokens_in_data fb_memeq InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_intrinsic_cost fb_count_tokens_in_data fb_memeq InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero
 
 theorem fb_calculate_total_blob_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_calculate_total_blob_gas» :=
   InitECandidate.Solver.Wave8GuestInv.S11.fb_calculate_total_blob_gas
@@ -346,13 +375,13 @@ theorem fb_check_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_check_g
   InitECandidate.Solver.Wave8Leaves.S10.fb_check_gas
 
 theorem fb_fee_mul : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_fee_mul» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_fee_mul_of InitECandidate.Solver.Wave8GuestInv.«fb_u256_mul_full»
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_fee_mul_of InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_mul_full
 
 theorem fb_is_valid_delegation : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_is_valid_delegation» :=
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_is_valid_delegation
 
 theorem fb_check_transaction : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_check_transaction» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_check_transaction_of InitECandidate.Solver.Wave8GuestInv.«fb_min» fb_calculate_total_blob_gas fb_get_account InitECandidate.Solver.Wave8GuestInv.«fb_u256_lt» InitECandidate.Solver.Wave8GuestInv.«fb_u256_sub» InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» fb_fee_mul fb_calculate_blob_gas_price InitECandidate.Solver.Wave8GuestInv.«fb_u256_add_carry» InitECandidate.Solver.Wave8GuestInv.«fb_u256_fits_word» InitECandidate.Solver.Wave8GuestInv.«fb_get_code» fb_memeq fb_is_valid_delegation
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_check_transaction_of InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_min fb_calculate_total_blob_gas fb_get_account InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_lt InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_sub InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add fb_fee_mul fb_calculate_blob_gas_price InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_add_carry InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_fits_word fb_get_code fb_memeq fb_is_valid_delegation
 
 theorem fb_htab_item : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_item» :=
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_item
@@ -388,10 +417,10 @@ theorem fb_compact_to_nibbles : type_of% InitECandidate.Solver.Wave8GuestInv.«f
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_compact_to_nibbles
 
 theorem fb_compute_contract_address : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_compute_contract_address» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_compute_contract_address_of fb_rlp_encode_bytes fb_rlp_encode_word fb_rlp_list_header_len fb_rlp_encode_list_header InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memcpy
+  InitECandidate.Solver.Wave8Leaves.S08.fb_compute_contract_address_of fb_rlp_encode_bytes fb_rlp_encode_word fb_rlp_list_header_len fb_rlp_encode_list_header InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memcpy
 
 theorem fb_compute_create2_contract_address : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_compute_create2_contract_address» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_compute_create2_contract_address_of fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_keccak256»
+  InitECandidate.Solver.Wave8Leaves.S08.fb_compute_create2_contract_address_of fb_memcpy InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256
 
 theorem fb_scratch_alloc : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_scratch_alloc» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_scratch_alloc
@@ -400,10 +429,10 @@ theorem fb_compute_jumpdests : type_of% InitECandidate.Solver.Wave8GuestInv.«fb
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_compute_jumpdests fb_memzero fb_scratch_alloc
 
 theorem fb_create_ether : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_create_ether» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_create_ether_of fb_get_account fb_acct_copy InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» fb_modify_state_commit
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_create_ether_of fb_get_account fb_acct_copy InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add fb_modify_state_commit
 
 theorem fb_set_code : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_set_code» :=
-  InitECandidate.Solver.Wave8Leaves.S03.fb_set_code fb_acct_copy fb_alloc fb_get_account fb_jset InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memeq fb_modify_state_commit
+  InitECandidate.Solver.Wave8Leaves.S03.fb_set_code fb_acct_copy fb_alloc fb_get_account fb_jset InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memeq fb_modify_state_commit
 
 theorem fb_words_of : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_words_of» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_words_of fb_ceil32
@@ -415,31 +444,31 @@ theorem fb_credit_state_gas_refund : type_of% InitECandidate.Solver.Wave8GuestIn
   Campaign.Leaves.S05.fb_credit_state_gas_refund (P := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_ssz_split_var_list : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ssz_split_var_list» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_split_var_list fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_split_var_list fb_alloc InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail
 
 theorem fb_decode_bytes_list : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_decode_bytes_list» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_bytes_list InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail» fb_ssz_split_var_list
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_bytes_list InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail fb_ssz_split_var_list
 
 theorem fb_ssz_check_offsets : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ssz_check_offsets» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail
 
 theorem fb_ssz_fixed_list_count : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fixed_list_count» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_fixed_list_count InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail» InitECandidate.Solver.Wave8GuestInv.«fb_udivmod»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_ssz_fixed_list_count InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod
 
 theorem fb_decode_payload : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_decode_payload» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_payload fb_alloc fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail» fb_ssz_fixed_list_count fb_ssz_split_var_list
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_payload fb_alloc fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail fb_ssz_fixed_list_count fb_ssz_split_var_list
 
 theorem fb_decode_requests : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_decode_requests» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_requests fb_alloc fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail» fb_ssz_fixed_list_count
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_requests fb_alloc fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail fb_ssz_fixed_list_count
 
 theorem fb_decode_stateless_input : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_decode_stateless_input» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_stateless_input fb_alloc fb_decode_bytes_list fb_decode_payload fb_decode_requests fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail» fb_ssz_fixed_list_count
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_stateless_input fb_alloc fb_decode_bytes_list fb_decode_payload fb_decode_requests fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail fb_ssz_fixed_list_count
 
 theorem fb_input_blob : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_input_blob» :=
   InitECandidate.Solver.Wave8Leaves.S13.certified_fb_input_blob fb_alloc fb_trap_with
 
 theorem fb_precheck_host_ssz_header : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_precheck_host_ssz_header» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_precheck_host_ssz_header InitECandidate.Solver.Wave8GuestInv.«fb_host_input_byte» InitECandidate.Solver.Wave8GuestInv.«fb_host_input_le32» fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.«fb_ssz_fail»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_precheck_host_ssz_header InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_host_input_byte InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_host_input_le32 fb_ssz_check_offsets InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_ssz_fail
 
 theorem fb_decode_host_input : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_decode_host_input» :=
   InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_host_input fb_decode_stateless_input fb_input_blob fb_precheck_host_ssz_header
@@ -463,7 +492,7 @@ theorem fb_warm_address : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_warm
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_warm_address fb_htab_set
 
 theorem fb_prepare_dispatch : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_prepare_dispatch» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_prepare_dispatch fb_acct_is_empty fb_alloc fb_charge_gas fb_charge_state_gas fb_compute_jumpdests InitECandidate.Solver.Wave8GuestInv.«fb_ext_code_of» fb_get_delegated_code_address fb_get_pre_state_account fb_is_account_alive fb_is_warm_address fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» fb_warm_address
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_prepare_dispatch fb_acct_is_empty fb_alloc fb_charge_gas fb_charge_state_gas fb_compute_jumpdests fb_ext_code_of fb_get_delegated_code_address fb_get_pre_state_account fb_is_account_alive fb_is_warm_address fb_memcpy InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero fb_warm_address
 
 theorem fb_htab_new : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htab_new» :=
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_htab_new
@@ -472,13 +501,13 @@ theorem fb_increment_nonce : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_i
   InitECandidate.Solver.Wave8Leaves.S03.fb_increment_nonce fb_acct_copy fb_get_account fb_modify_state_commit
 
 theorem fb_recover_authority : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_recover_authority» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_recover_authority fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memcpy fb_rlp_encode_bytes fb_rlp_encode_list_header fb_rlp_encode_word fb_rlp_list_header_len fb_rlp_put_u256 InitECandidate.Solver.Wave8GuestInv.«fb_secp256k1_recover» InitECandidate.Solver.Wave8GuestInv.«fb_u256_gt» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» InitECandidate.Solver.Wave8GuestInv.«fb_u256_lt»
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_recover_authority fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memcpy fb_rlp_encode_bytes fb_rlp_encode_list_header fb_rlp_encode_word fb_rlp_list_header_len fb_rlp_put_u256 InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_secp256k1_recover InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_gt InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_lt
 
 theorem fb_validate_authorization_checks : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_validate_authorization_checks» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_validate_authorization_checks fb_get_account InitECandidate.Solver.Wave8GuestInv.«fb_get_code» fb_is_valid_delegation
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_validate_authorization_checks fb_get_account fb_get_code fb_is_valid_delegation
 
 theorem fb_set_delegation : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_set_delegation» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_set_delegation fb_account_exists fb_alloc fb_charge_gas fb_charge_state_gas InitECandidate.Solver.Wave8GuestInv.«fb_get_code» fb_get_pre_state_account fb_htab_has fb_htab_new fb_htab_set fb_increment_nonce fb_is_valid_delegation fb_memcpy fb_memeq fb_recover_authority fb_set_code InitECandidate.Solver.Wave8GuestInv.«fb_u256_fits_word» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» fb_validate_authorization_checks fb_warm_address
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_set_delegation fb_account_exists fb_alloc fb_charge_gas fb_charge_state_gas fb_get_code fb_get_pre_state_account fb_htab_has fb_htab_new fb_htab_set fb_increment_nonce fb_is_valid_delegation fb_memcpy fb_memeq fb_recover_authority fb_set_code InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_fits_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero fb_validate_authorization_checks fb_warm_address
 
 theorem fb_depth0_prepare : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_depth0_prepare» :=
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_depth0_prepare fb_frame_state_gas_used fb_prepare_dispatch fb_set_delegation
@@ -487,7 +516,7 @@ theorem fb_log_append : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_log_ap
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_log_append fb_lst_push
 
 theorem fb_emit_transfer_log : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_emit_transfer_log» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_emit_transfer_log fb_alloc fb_log_append fb_memcpy fb_memzero InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be32»
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_emit_transfer_log fb_alloc fb_log_append fb_memcpy fb_memzero InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_to_be32
 
 theorem fb_encode_execution_requests : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_encode_execution_requests» :=
   InitECandidate.Solver.Wave8Leaves.S13.certified_fb_encode_execution_requests fb_alloc fb_memcpy
@@ -502,19 +531,19 @@ theorem fb_logs_encoded_bound : type_of% InitECandidate.Solver.Wave8GuestInv.«f
   InitECandidate.Solver.Wave8GuestInv.S11.fb_logs_encoded_bound
 
 theorem fb_encode_receipt : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_encode_receipt» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_encode_receipt_of fb_logs_encoded_bound fb_alloc fb_rlp_encode_word InitECandidate.Solver.Wave8GuestInv.«fb_logs_bloom» fb_rlp_encode_bytes fb_encode_logs fb_rlp_finish_list
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_encode_receipt_of fb_logs_encoded_bound fb_alloc fb_rlp_encode_word InitECandidate.Solver.Wave8GuestInv.FastSha256.fb_logs_bloom fb_rlp_encode_bytes fb_encode_logs fb_rlp_finish_list
 
 theorem fb_encode_transaction : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_encode_transaction» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_encode_transaction InitECandidate.Solver.Wave8GuestInv.«fb_tx_encode_generic»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_encode_transaction InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_tx_encode_generic
 
 theorem fb_encode_withdrawal_rlp : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_encode_withdrawal_rlp» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_encode_withdrawal_rlp
 
 theorem fb_evm_init : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_evm_init» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_evm_init_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memzero
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_evm_init_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memzero
 
 theorem fb_fork_init : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_fork_init» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_fork_init_of fb_alloc fb_memzero fb_addr_from_words InitECandidate.Solver.Wave8GuestInv.«fb_st_be64»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_fork_init_of fb_alloc fb_memzero fb_addr_from_words InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_st_be64
 
 theorem fb_state_restore : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_state_restore» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_state_restore_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_htab_set fb_htab_del
@@ -559,76 +588,76 @@ theorem fb_frame_open : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_frame_
   InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_frame_open fb_frame_new fb_memzero fb_scratch_alloc
 
 theorem fb_move_ether : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_move_ether» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_move_ether fb_acct_copy fb_get_account fb_modify_state_commit InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» InitECandidate.Solver.Wave8GuestInv.«fb_u256_lt» InitECandidate.Solver.Wave8GuestInv.«fb_u256_sub»
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_move_ether fb_acct_copy fb_get_account fb_modify_state_commit InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_lt InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_sub
 
 theorem fb_precompile_index : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_precompile_index» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_precompile_index InitECandidate.Solver.Wave8GuestInv.«fb_is_zero_bytes»
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_precompile_index InitECandidate.Solver.Wave8GuestInv.FastGen.fb_is_zero_bytes
 
 theorem fb_pre_ecrecover : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_ecrecover» :=
-  Campaign.Leaves.S05.fb_pre_ecrecover fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_buffer_read InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» InitECandidate.Solver.Wave8GuestInv.«fb_u256_fits_word» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» InitECandidate.Solver.Wave8GuestInv.«fb_secp256k1_ecrecover» fb_memzero
+  Campaign.Leaves.S05.fb_pre_ecrecover fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_buffer_read InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_fits_word InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_secp256k1_ecrecover fb_memzero
 
 theorem fb_pre_sha256 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_sha256» :=
-  Campaign.Leaves.S05.fb_pre_sha256 fb_words_of fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_sha256»
+  Campaign.Leaves.S05.fb_pre_sha256 fb_words_of fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.FastSha256.fb_sha256
 
 theorem fb_pre_ripemd160 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_ripemd160» :=
-  Campaign.Leaves.S05.fb_pre_ripemd160 fb_words_of fb_charge_gas fb_alloc fb_memzero InitECandidate.Solver.Wave8GuestInv.«fb_ripemd160»
+  Campaign.Leaves.S05.fb_pre_ripemd160 fb_words_of fb_charge_gas fb_alloc fb_memzero InitECandidate.Solver.Wave8GuestInv.R14Shards.MissingFb5.fb_ripemd160
 
 theorem fb_pre_identity : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_identity» :=
   Campaign.Leaves.S05.fb_pre_identity (P := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_pre_alt_bn128_add : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_alt_bn128_add» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_pre_alt_bn128_add fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bn254_g1_add» fb_buffer_read fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_pre_alt_bn128_add fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_bn254_g1_add fb_buffer_read fb_charge_gas InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_pre_alt_bn128_mul : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_alt_bn128_mul» :=
-  Campaign.Leaves.S05.fb_pre_alt_bn128_mul fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bn254_g1_mul» fb_buffer_read fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  Campaign.Leaves.S05.fb_pre_alt_bn128_mul fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_bn254_g1_mul fb_buffer_read fb_charge_gas InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_pre_alt_bn128_pairing_check : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_alt_bn128_pairing_check» :=
-  Campaign.Leaves.S05.fb_pre_alt_bn128_pairing_check InitECandidate.Solver.Wave8GuestInv.«fb_udivmod» fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_bn254_pairing_check» fb_alloc fb_memzero
+  Campaign.Leaves.S05.fb_pre_alt_bn128_pairing_check InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_bn254_pairing_check» fb_alloc fb_memzero
 
 theorem fb_sat_word : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_sat_word» :=
   Campaign.Leaves.S05.fb_sat_word (P := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_pre_modexp : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_modexp» :=
-  Campaign.Leaves.S05.fb_pre_modexp fb_buffer_read InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_min» InitECandidate.Solver.Wave8GuestInv.«fb_modexp_gas» fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_modexp» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  Campaign.Leaves.S05.fb_pre_modexp fb_buffer_read InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_sat_word InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_min InitECandidate.Solver.Wave8GuestInv.FastGen.fb_modexp_gas fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.«fb_modexp» InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_st_le64 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_st_le64» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_st_le64
 
 theorem fb_pre_blake2f : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_blake2f» :=
-  Campaign.Leaves.S05.fb_pre_blake2f fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_blake2b_f» fb_st_le64 InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  Campaign.Leaves.S05.fb_pre_blake2f fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_blake2b_f fb_st_le64 InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_pre_kzg_point_evaluation : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_kzg_point_evaluation» :=
-  Campaign.Leaves.S05.fb_pre_kzg_point_evaluation fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_kzg_point_evaluation_exec»
+  Campaign.Leaves.S05.fb_pre_kzg_point_evaluation fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_kzg_point_evaluation_exec
 
 theorem fb_pre_bls_g1_add : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_g1_add» :=
-  Campaign.Leaves.S05.fb_pre_bls_g1_add fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_g1_add_exec»
+  Campaign.Leaves.S05.fb_pre_bls_g1_add fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_g1_add_exec
 
 theorem fb_pre_bls_g1_msm : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_g1_msm» :=
-  Campaign.Leaves.S05.fb_pre_bls_g1_msm InitECandidate.Solver.Wave8GuestInv.«fb_udivmod» InitECandidate.Solver.Wave8GuestInv.«fb_bls_g1_msm_discount» fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_g1_msm_exec»
+  Campaign.Leaves.S05.fb_pre_bls_g1_msm InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod InitECandidate.Solver.Wave8GuestInv.FastGen.fb_bls_g1_msm_discount fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_g1_msm_exec
 
 theorem fb_pre_bls_g2_add : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_g2_add» :=
-  Campaign.Leaves.S05.fb_pre_bls_g2_add fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_g2_add_exec»
+  Campaign.Leaves.S05.fb_pre_bls_g2_add fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_g2_add_exec
 
 theorem fb_pre_bls_g2_msm : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_g2_msm» :=
-  Campaign.Leaves.S05.fb_pre_bls_g2_msm InitECandidate.Solver.Wave8GuestInv.«fb_udivmod» InitECandidate.Solver.Wave8GuestInv.«fb_bls_g2_msm_discount» fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_g2_msm_exec»
+  Campaign.Leaves.S05.fb_pre_bls_g2_msm InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod InitECandidate.Solver.Wave8GuestInv.FastGen.fb_bls_g2_msm_discount fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_g2_msm_exec
 
 theorem fb_pre_bls_pairing : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_pairing» :=
-  Campaign.Leaves.S05.fb_pre_bls_pairing InitECandidate.Solver.Wave8GuestInv.«fb_udivmod» fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_pairing_exec»
+  Campaign.Leaves.S05.fb_pre_bls_pairing InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_bls_pairing_exec
 
 theorem fb_pre_bls_map_fp_to_g1 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_map_fp_to_g1» :=
-  Campaign.Leaves.S05.fb_pre_bls_map_fp_to_g1 fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_map_fp_to_g1_exec»
+  Campaign.Leaves.S05.fb_pre_bls_map_fp_to_g1 fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_map_fp_to_g1_exec
 
 theorem fb_pre_bls_map_fp2_to_g2 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_bls_map_fp2_to_g2» :=
-  Campaign.Leaves.S05.fb_pre_bls_map_fp2_to_g2 fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_bls_map_fp2_to_g2_exec»
+  Campaign.Leaves.S05.fb_pre_bls_map_fp2_to_g2 fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.fb_bls_map_fp2_to_g2_exec
 
 theorem fb_pre_p256verify : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_p256verify» :=
-  Campaign.Leaves.S05.fb_pre_p256verify fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» InitECandidate.Solver.Wave8GuestInv.«fb_p256_verify» fb_memzero
+  Campaign.Leaves.S05.fb_pre_p256verify fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_p256_verify fb_memzero
 
 theorem fb_run_precompile : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_run_precompile» :=
   Campaign.Leaves.S05.fb_run_precompile fb_pre_ecrecover fb_pre_sha256 fb_pre_ripemd160 fb_pre_identity fb_pre_alt_bn128_add fb_pre_alt_bn128_mul fb_pre_alt_bn128_pairing_check fb_pre_modexp fb_pre_blake2f fb_pre_kzg_point_evaluation fb_pre_bls_g1_add fb_pre_bls_g1_msm fb_pre_bls_g2_add fb_pre_bls_g2_msm fb_pre_bls_pairing fb_pre_bls_map_fp_to_g1 fb_pre_bls_map_fp2_to_g2 fb_pre_p256verify
 
 theorem fb_frame_prologue : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_frame_prologue» :=
-  Campaign.Leaves.S05.fb_frame_prologue InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» fb_move_ether fb_memeq fb_emit_transfer_log fb_precompile_index fb_run_precompile
+  Campaign.Leaves.S05.fb_frame_prologue InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero fb_move_ether fb_memeq fb_emit_transfer_log fb_precompile_index fb_run_precompile
 
 theorem fb_frame_start : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_frame_start» :=
   Campaign.Leaves.S05.fb_frame_start fb_frame_prologue fb_frame_exception
@@ -639,17 +668,26 @@ theorem fb_set_retdata : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_set_r
 theorem fb_stack_push : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_stack_push» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_stack_push_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_memcpy
 
+theorem fb_mark_account_created : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_mark_account_created» :=
+  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_mark_account_created fb_htab_set
+
+theorem fb_start_child : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_start_child» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_start_child_of fb_destroy_storage fb_frame_open fb_frame_start fb_increment_nonce fb_mark_account_created
+
+theorem fb_generic_call : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_generic_call» :=
+  InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_generic_call_of fb_credit_state_gas_refund fb_frame_mem_mark fb_scratch_mark fb_set_retdata fb_stack_push fb_start_child
+
 theorem fb_generic_create : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_generic_create» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_generic_create_of fb_set_retdata fb_get_account InitECandidate.Solver.Wave8GuestInv.«fb_u256_lt» fb_stack_push fb_warm_address fb_is_account_alive fb_charge_state_gas fb_account_deployable fb_increment_nonce fb_credit_state_gas_refund InitECandidate.Solver.Wave8GuestInv.«fb_child_message» InitECandidate.Solver.Wave8GuestInv.«fb_start_child»
+  InitECandidate.Solver.Wave8Leaves.S08.fb_generic_create_of fb_set_retdata fb_get_account InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_lt fb_stack_push fb_warm_address fb_is_account_alive fb_charge_state_gas fb_account_deployable fb_increment_nonce fb_credit_state_gas_refund InitECandidate.Solver.Wave8GuestInv.FastGen.fb_child_message fb_start_child
 
 theorem fb_get_pre_tx_account : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_get_pre_tx_account» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_get_pre_tx_account fb_htab_get fb_record_pre_state_read fb_ws_get_account_optional
 
 theorem fb_get_transient_storage : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_get_transient_storage» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_get_transient_storage_of InitECandidate.Solver.Wave8GuestInv.«fb_sk_make» fb_htab_get
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_get_transient_storage_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_sk_make fb_htab_get
 
 theorem fb_header_hash : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_header_hash» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_header_hash fb_encode_header InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_header_hash fb_encode_header InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256
 
 theorem fb_header_init : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_header_init» :=
   InitECandidate.Solver.Wave8GuestInv.S14.fb_header_init_of fb_alloc fb_memzero
@@ -685,61 +723,61 @@ theorem fb_pack_bytes : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pack_b
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_pack_bytes
 
 theorem fb_merkleize : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_merkleize» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_merkleize_of fb_ceil_log2 InitECandidate.Solver.Wave8GuestInv.«fb_max» fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_memzero InitECandidate.Solver.Wave8GuestInv.«fb_sha256_pair» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_merkleize_of fb_ceil_log2 InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_max fb_memcpy InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_memzero InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_sha256_pair InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_bytes_vector : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_bytes_vector» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bytes_vector_of fb_memzero fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_pack_bytes fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bytes_vector_of fb_memzero fb_memcpy InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_pack_bytes fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_u64_at : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_u64_at» :=
   InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_u64_at_of fb_memzero fb_memcpy
 
 theorem fb_htr_bdep : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_bdep» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bdep_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_bytes_vector fb_memcpy fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bdep_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_bytes_vector fb_memcpy fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_bexit : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_bexit» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bexit_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bexit_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_mix_in_length : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_mix_in_length» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_mix_in_length_of fb_memzero fb_st_le64 InitECandidate.Solver.Wave8GuestInv.«fb_sha256_pair»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_mix_in_length_of fb_memzero fb_st_le64 InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_sha256_pair
 
 theorem fb_htr_bytes_list : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_bytes_list» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bytes_list_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_pack_bytes fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» fb_mix_in_length
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_bytes_list_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_pack_bytes fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release fb_mix_in_length
 
 theorem fb_htr_cons : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_cons» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_cons_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_cons_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_deposit : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_deposit» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_deposit_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_bytes_vector fb_memcpy fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_deposit_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_bytes_vector fb_memcpy fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_merkleize_progressive : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_merkleize_progressive» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_merkleize_progressive_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_merkleize fb_memzero InitECandidate.Solver.Wave8GuestInv.«fb_sha256_pair» fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_merkleize_progressive_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_merkleize fb_memzero InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_sha256_pair fb_memcpy InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_plist_chunks : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_plist_chunks» :=
   InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_plist_chunks_of fb_merkleize_progressive fb_mix_in_length
 
 theorem fb_htr_pbytes : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_pbytes» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_pbytes_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_pack_bytes fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_pbytes_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_pack_bytes fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_withdrawal : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_withdrawal» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_withdrawal_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_u64_at fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_withdrawal_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_u64_at fb_htr_bytes_vector fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_pcontainer : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_pcontainer» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_pcontainer_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_merkleize_progressive fb_memzero InitECandidate.Solver.Wave8GuestInv.«fb_sha256_pair» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_pcontainer_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_merkleize_progressive fb_memzero InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_sha256_pair InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_payload : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_payload» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_payload_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_memcpy fb_htr_bytes_vector fb_htr_u64_at fb_htr_bytes_list fb_htr_pbytes fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» fb_htr_withdrawal fb_htr_pcontainer
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_payload_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_memcpy fb_htr_bytes_vector fb_htr_u64_at fb_htr_bytes_list fb_htr_pbytes fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release fb_htr_withdrawal fb_htr_pcontainer
 
 theorem fb_htr_wdreq : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_wdreq» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_wdreq_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_bytes_vector fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_wdreq_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_bytes_vector fb_htr_u64_at fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_request_list : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_request_list» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_request_list_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_deposit fb_htr_wdreq fb_htr_cons fb_htr_bdep fb_htr_bexit fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_request_list_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_deposit fb_htr_wdreq fb_htr_cons fb_htr_bdep fb_htr_bexit fb_htr_plist_chunks InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_requests : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_requests» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_requests_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_request_list fb_htr_pcontainer InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_requests_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_request_list fb_htr_pcontainer InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_htr_new_payload_request : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_htr_new_payload_request» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_new_payload_request_of InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_htr_payload fb_htr_plist_chunks fb_memcpy fb_htr_requests fb_merkleize InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_htr_new_payload_request_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_htr_payload fb_htr_plist_chunks fb_memcpy fb_htr_requests fb_merkleize InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_idx_start_account : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_idx_start_account» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_idx_start_account fb_alloc fb_get_pre_tx_account fb_htab_get fb_htab_set fb_memcpy fb_memzero fb_st_le64
@@ -757,16 +795,13 @@ theorem fb_tx_is_blob : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_is_
   InitECandidate.Solver.Wave8Leaves.S12.fb_tx_is_blob
 
 theorem fb_is_valid_versioned_hashes : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_is_valid_versioned_hashes» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_is_valid_versioned_hashes InitECandidate.Solver.Wave8GuestInv.«fb_decode_transaction» fb_memeq fb_tx_is_blob
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_is_valid_versioned_hashes InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_decode_transaction fb_memeq fb_tx_is_blob
 
 theorem fb_ld_be64 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_ld_be64» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_ld_be64
 
 theorem fb_lst_new : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_lst_new» :=
   InitECandidate.Solver.Wave8GuestInv.Htab.fb_lst_new
-
-theorem fb_mark_account_created : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_mark_account_created» :=
-  InitECandidate.Solver.Wave8Leaves.S04.Verified.fb_mark_account_created fb_htab_set
 
 theorem fb_mem_init : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_mem_init» :=
   InitECandidate.Solver.Wave8GuestInv.S14.fb_mem_init_of
@@ -775,7 +810,7 @@ theorem fb_merge_tx_into_block : type_of% InitECandidate.Solver.Wave8GuestInv.«
   InitECandidate.Solver.Wave8Leaves.S03.fb_merge_tx_into_block fb_htab_get fb_htab_item fb_htab_new fb_htab_set fb_htab_union_into
 
 theorem fb_mpt_init : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_mpt_init» :=
-  InitECandidate.Solver.Wave8GuestInv.S14.fb_mpt_init_of fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_keccak256»
+  InitECandidate.Solver.Wave8GuestInv.S14.fb_mpt_init_of fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256
 
 theorem fb_msg_new : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_msg_new» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_msg_new fb_alloc fb_memzero
@@ -784,7 +819,7 @@ theorem fb_node_invalidate : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_n
   InitECandidate.Solver.Wave8Leaves.S00Verified.fb_node_invalidate
 
 theorem fb_nodedb_build : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_nodedb_build» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_nodedb_build fb_htab_new fb_htab_set InitECandidate.Solver.Wave8GuestInv.«fb_keccak256»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_nodedb_build fb_htab_new fb_htab_set InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256
 
 theorem fb_stack_pop : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_stack_pop» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_stack_pop (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
@@ -793,10 +828,10 @@ theorem fb_pc_add : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pc_add» :
   InitECandidate.Solver.Wave8GuestInv.S06.fb_pc_add (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_op_add : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_add» :=
-  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_add_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop InitECandidate.Solver.Wave8GuestInv.«fb_u256_add» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_add_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_add fb_stack_push fb_pc_add
 
 theorem fb_op_addmod : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_addmod» :=
-  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_addmod_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop InitECandidate.Solver.Wave8GuestInv.«fb_u256_addmod» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_addmod_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_u256_addmod fb_stack_push fb_pc_add
 
 theorem fb_op_address : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_address» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_op_address_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_address_to_u256 fb_stack_push fb_pc_add
@@ -820,28 +855,28 @@ theorem fb_op_blobbasefee : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op
   InitECandidate.Solver.Wave8GuestInv.S06.fb_op_blobbasefee_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_block_env fb_calculate_blob_gas_price fb_stack_push fb_pc_add
 
 theorem fb_op_blobhash : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_blobhash» :=
-  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_blobhash_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_blobhash_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_stack_push fb_pc_add
 
 theorem fb_track_ancestor_access : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_track_ancestor_access» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_track_ancestor_access (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_op_blockhash : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_blockhash» :=
-  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_blockhash_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_stack_pop fb_charge_gas fb_block_env fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» fb_track_ancestor_access fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S06.fb_op_blockhash_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_stack_pop fb_charge_gas fb_block_env fb_sat_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_track_ancestor_access fb_stack_push fb_pc_add
 
 theorem fb_op_coinbase : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_coinbase» :=
   InitECandidate.Solver.Wave8Leaves.S08.fb_op_coinbase fb_charge_gas fb_block_env fb_address_to_u256 fb_stack_push fb_pc_add
 
 theorem fb_op_create : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_create» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_create_of fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory_cost1» fb_words_of fb_add_sat fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory» fb_get_account fb_compute_contract_address fb_generic_create fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_create_of fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory_cost1 fb_words_of fb_add_sat fb_charge_gas InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory fb_get_account fb_compute_contract_address fb_generic_create fb_pc_add
 
 theorem fb_op_create2 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_create2» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_create2_of fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory_cost1» fb_words_of fb_add_sat fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be32» InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory» fb_compute_create2_contract_address fb_generic_create fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_create2_of fb_stack_pop fb_sat_word InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory_cost1 fb_words_of fb_add_sat fb_charge_gas InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_to_be32 InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory fb_compute_create2_contract_address fb_generic_create fb_pc_add
 
 theorem fb_op_delegatecall : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_delegatecall» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_delegatecall fb_stack_pop fb_to_address_masked InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory_cost2» fb_is_warm_address fb_add_sat fb_charge_gas fb_warm_address InitECandidate.Solver.Wave8GuestInv.«fb_calculate_delegation_cost» InitECandidate.Solver.Wave8GuestInv.«fb_ext_code_of» fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_calculate_message_call_gas» InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory» InitECandidate.Solver.Wave8GuestInv.«fb_generic_call» fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_delegatecall fb_stack_pop fb_to_address_masked InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory_cost2 fb_is_warm_address fb_add_sat fb_charge_gas fb_warm_address fb_calculate_delegation_cost fb_ext_code_of fb_sat_word InitECandidate.Solver.Wave8GuestInv.FastStateHostLeaves.fb_calculate_message_call_gas InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory fb_generic_call fb_pc_add
 
 theorem fb_op_div : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_div» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_div fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_div» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_div fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.FastGen.fb_u256_div fb_stack_push fb_pc_add
 
 theorem fb_op_dup : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_dup» :=
   InitECandidate.Solver.Wave8Leaves.S08.fb_op_dup fb_charge_gas fb_stack_push fb_pc_add
@@ -850,25 +885,25 @@ theorem fb_op_dupn : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_dupn»
   InitECandidate.Solver.Wave8Leaves.S08.fb_op_dupn_of fb_charge_gas fb_stack_push fb_pc_add
 
 theorem fb_op_eq : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_eq» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_eq_of fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_eq» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_eq_of fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_eq fb_stack_push fb_pc_add
 
 theorem fb_op_exchange : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_exchange» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_exchange_of fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_max» fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_exchange_of fb_charge_gas InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_max fb_pc_add
 
 theorem fb_op_exp : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_exp» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_exp fb_stack_pop InitECandidate.Solver.Wave8GuestInv.«fb_u256_byte_length» fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_exp» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_exp fb_stack_pop InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_byte_length fb_charge_gas InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_exp fb_stack_push fb_pc_add
 
 theorem fb_op_extcodecopy : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_extcodecopy» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodecopy fb_stack_pop fb_to_address_masked fb_sat_word fb_words_of InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory_cost1» fb_access_gas_cost fb_add_sat fb_charge_gas fb_warm_after_charge InitECandidate.Solver.Wave8GuestInv.«fb_extend_memory» InitECandidate.Solver.Wave8GuestInv.«fb_ext_code_of» fb_buffer_read fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodecopy fb_stack_pop fb_to_address_masked fb_sat_word fb_words_of InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory_cost1 fb_access_gas_cost fb_add_sat fb_charge_gas fb_warm_after_charge InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_extend_memory fb_ext_code_of fb_buffer_read fb_pc_add
 
 theorem fb_op_extcodehash : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_extcodehash» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodehash fb_stack_pop fb_to_address_masked fb_access_gas_cost fb_charge_gas fb_warm_after_charge fb_get_account fb_acct_is_empty fb_stack_push InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodehash fb_stack_pop fb_to_address_masked fb_access_gas_cost fb_charge_gas fb_warm_after_charge fb_get_account fb_acct_is_empty fb_stack_push InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_pc_add
 
 theorem fb_stack_push_word : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_stack_push_word» :=
   InitECandidate.Solver.Wave8GuestInv.S06.fb_stack_push_word_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_stack_push
 
 theorem fb_op_extcodesize : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_extcodesize» :=
-  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodesize fb_stack_pop fb_to_address_masked fb_access_gas_cost fb_charge_gas fb_warm_after_charge InitECandidate.Solver.Wave8GuestInv.«fb_ext_code_of» fb_stack_push_word fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S08.fb_op_extcodesize fb_stack_pop fb_to_address_masked fb_access_gas_cost fb_charge_gas fb_warm_after_charge fb_ext_code_of fb_stack_push_word fb_pc_add
 
 theorem fb_op_gas : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_gas» :=
   InitECandidate.Solver.Wave8Leaves.S08.fb_op_gas fb_charge_gas fb_stack_push_word fb_pc_add
@@ -883,22 +918,22 @@ theorem fb_stack_push_bool : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_s
   InitECandidate.Solver.Wave8Leaves.S08.fb_stack_push_bool fb_stack_push
 
 theorem fb_op_gt : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_gt» :=
-  InitECandidate.Solver.Wave8Leaves.S09.fb_op_gt (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_pc_add fb_stack_pop fb_stack_push_bool InitECandidate.Solver.Wave8GuestInv.«fb_u256_gt»
+  InitECandidate.Solver.Wave8Leaves.S09.fb_op_gt (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_pc_add fb_stack_pop fb_stack_push_bool InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_gt
 
 theorem fb_op_iszero : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_iszero» :=
-  InitECandidate.Solver.Wave8Leaves.S09.fb_op_iszero (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_pc_add fb_stack_pop fb_stack_push_bool InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero»
+  InitECandidate.Solver.Wave8Leaves.S09.fb_op_iszero (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_pc_add fb_stack_pop fb_stack_push_bool InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero
 
 theorem fb_op_jump : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_jump» :=
   InitECandidate.Solver.Wave8Leaves.S09.fb_op_jump (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) fb_charge_gas fb_is_valid_jumpdest fb_stack_pop
 
 theorem fb_op_prevrandao : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_prevrandao» :=
-  InitECandidate.Solver.Wave8Leaves.S10.fb_op_prevrandao fb_charge_gas fb_block_env InitECandidate.Solver.Wave8GuestInv.«fb_u256_from_be» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S10.fb_op_prevrandao fb_charge_gas fb_block_env InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_stack_push fb_pc_add
 
 theorem fb_op_returndatasize : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_returndatasize» :=
   InitECandidate.Solver.Wave8Leaves.S10.fb_op_returndatasize fb_charge_gas fb_stack_push_word fb_pc_add
 
 theorem fb_op_shl : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_shl» :=
-  InitECandidate.Solver.Wave8Leaves.S10.fb_op_shl fb_stack_pop fb_charge_gas fb_sat_word InitECandidate.Solver.Wave8GuestInv.«fb_u256_shl» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S10.fb_op_shl fb_stack_pop fb_charge_gas fb_sat_word InitECandidate.Solver.Wave8GuestInv.FastBitOps.fb_u256_shl fb_stack_push fb_pc_add
 
 theorem fb_op_slotnum : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_slotnum» :=
   InitECandidate.Solver.Wave8Leaves.S10.fb_op_slotnum fb_charge_gas fb_block_env fb_stack_push_word fb_pc_add
@@ -907,7 +942,7 @@ theorem fb_op_stop : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_stop»
   InitECandidate.Solver.Wave8Leaves.S10.fb_op_stop fb_pc_add
 
 theorem fb_op_sub : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_sub» :=
-  InitECandidate.Solver.Wave8Leaves.S10.fb_op_sub fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_sub» fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8Leaves.S10.fb_op_sub fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_sub fb_stack_push fb_pc_add
 
 theorem fb_stack_swap_positions : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_stack_swap_positions» :=
   InitECandidate.Solver.Wave8Leaves.S08.fb_stack_swap_positions
@@ -922,16 +957,16 @@ theorem fb_op_timestamp : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_t
   InitECandidate.Solver.Wave8GuestInv.S11.fb_op_timestamp_of fb_charge_gas fb_block_env fb_stack_push_word fb_pc_add
 
 theorem fb_op_tload : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_tload» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_op_tload_of fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be32» fb_get_transient_storage fb_stack_push fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_op_tload_of fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_to_be32 fb_get_transient_storage fb_stack_push fb_pc_add
 
 theorem fb_require_not_static : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_require_not_static» :=
   InitECandidate.Solver.Wave8Leaves.S08.fb_require_not_static
 
 theorem fb_set_transient_storage : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_set_transient_storage» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_set_transient_storage_of InitECandidate.Solver.Wave8GuestInv.«fb_sk_make» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero» fb_jdel fb_alloc fb_jset
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_set_transient_storage_of InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_sk_make InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero fb_jdel fb_alloc fb_jset
 
 theorem fb_op_tstore : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_tstore» :=
-  InitECandidate.Solver.Wave8GuestInv.S11.fb_op_tstore_of fb_require_not_static fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be32» fb_set_transient_storage fb_pc_add
+  InitECandidate.Solver.Wave8GuestInv.S11.fb_op_tstore_of fb_require_not_static fb_stack_pop fb_charge_gas InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_to_be32 fb_set_transient_storage fb_pc_add
 
 theorem fb_op_xor : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_op_xor» :=
   InitECandidate.Solver.Wave8GuestInv.S11.fb_op_xor_of fb_stack_pop fb_charge_gas fb_stack_push fb_pc_add
@@ -940,13 +975,13 @@ theorem fb_output_write : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_outp
   InitECandidate.Solver.Wave8GuestInv.S15.fb_output_write_of
 
 theorem fb_recover_transaction_public_key : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_recover_transaction_public_key» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_recover_transaction_public_key InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_signature_recovery_parameters» InitECandidate.Solver.Wave8GuestInv.«fb_secp256k1_recover» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_recover_transaction_public_key InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_signature_recovery_parameters InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_secp256k1_recover InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_sender_address_from_public_key : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_sender_address_from_public_key» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_sender_address_from_public_key InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memcpy InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_sender_address_from_public_key InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memcpy InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_recover_sender_with_chain_id : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_recover_sender_with_chain_id» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_recover_sender_with_chain_id InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc fb_recover_transaction_public_key fb_sender_address_from_public_key InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_recover_sender_with_chain_id InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc fb_recover_transaction_public_key fb_sender_address_from_public_key InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_remove_storage_write : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_remove_storage_write» :=
   InitECandidate.Solver.Wave8Leaves.S03.fb_remove_storage_write fb_bal_list_remove_idx fb_htab_del fb_htab_get
@@ -994,7 +1029,7 @@ theorem fb_set_account_balance : type_of% InitECandidate.Solver.Wave8GuestInv.«
   InitECandidate.Solver.Wave8Leaves.S12.fb_set_account_balance fb_get_account fb_acct_copy fb_modify_state_commit
 
 theorem fb_tx_signing_hash_mode : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_signing_hash_mode» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_signing_hash_mode InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_tx_encode_generic» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_signing_hash_mode InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_tx_encode_generic InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_signing_hash_155 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_signing_hash_155» :=
   InitECandidate.Solver.Wave8Leaves.S12.fb_signing_hash_155 fb_tx_signing_hash_mode
@@ -1030,7 +1065,7 @@ theorem fb_te_new : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_te_new» :
   InitECandidate.Solver.Wave8GuestInv.S11.fb_te_new_of fb_alloc fb_memzero
 
 theorem fb_tx_chain_id : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_chain_id» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_chain_id InitECandidate.Solver.Wave8GuestInv.«fb_u256_fits_word» InitECandidate.Solver.Wave8GuestInv.«fb_u256_sub» InitECandidate.Solver.Wave8GuestInv.«fb_u256_shr»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_chain_id InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_fits_word InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_sub InitECandidate.Solver.Wave8GuestInv.FastBitOps.fb_u256_shr
 
 theorem fb_tx_encode_bound : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_encode_bound» :=
   InitECandidate.Solver.Wave8GuestInv.S11.fb_tx_encode_bound_of fb_access_list_payload_len fb_auth_list_payload_len
@@ -1051,22 +1086,22 @@ theorem fb_tx_put_to : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_put_
   InitECandidate.Solver.Wave8Leaves.S12.fb_tx_put_to fb_rlp_encode_bytes
 
 theorem fb_tx_put_u256 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_tx_put_u256» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_put_u256 InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_u256_to_be_min» fb_rlp_encode_bytes InitECandidate.Solver.Wave8GuestInv.«fb_heap_release»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_tx_put_u256 InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark fb_alloc InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_to_be_min fb_rlp_encode_bytes InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_udiv_small5 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_udiv_small5» :=
-  InitECandidate.Solver.Wave8Leaves.S12.fb_udiv_small5 InitECandidate.Solver.Wave8GuestInv.«fb_udiv»
+  InitECandidate.Solver.Wave8Leaves.S12.fb_udiv_small5 InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_udiv
 
 theorem fb_validate_block_access_list_gas_limit : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_validate_block_access_list_gas_limit» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_block_access_list_gas_limit fb_htab_has fb_htab_item InitECandidate.Solver.Wave8GuestInv.«fb_udiv»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_block_access_list_gas_limit fb_htab_has fb_htab_item InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_udiv
 
 theorem fb_validate_header : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_validate_header» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_header fb_alloc fb_calculate_base_fee_per_gas fb_calculate_excess_blob_gas fb_header_hash InitECandidate.Solver.Wave8GuestInv.«fb_heap_mark» InitECandidate.Solver.Wave8GuestInv.«fb_heap_release» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memeq InitECandidate.Solver.Wave8GuestInv.«fb_u256_eq» InitECandidate.Solver.Wave8GuestInv.«fb_u256_is_zero»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_header fb_alloc fb_calculate_base_fee_per_gas fb_calculate_excess_blob_gas fb_header_hash InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memeq InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_eq InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_is_zero
 
 theorem fb_validate_headers : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_validate_headers» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_headers fb_alloc InitECandidate.Solver.Wave8GuestInv.«fb_decode_header» InitECandidate.Solver.Wave8GuestInv.«fb_keccak256» fb_memeq
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_headers fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_decode_header InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_keccak256 fb_memeq
 
 theorem fb_validate_transaction : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_validate_transaction» :=
-  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_transaction fb_calculate_intrinsic_cost InitECandidate.Solver.Wave8GuestInv.«fb_u256_fits_word»
+  InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_transaction fb_calculate_intrinsic_cost InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_fits_word
 
 theorem gbody_op_dispatch : type_of% InitECandidate.Solver.Wave8GuestInv.«gbody_op_dispatch» :=
   InitECandidate.Solver.Wave8GuestInv.RunFramesRace.gbody_op_dispatch
