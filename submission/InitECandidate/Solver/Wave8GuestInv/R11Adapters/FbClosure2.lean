@@ -1,4 +1,11 @@
 import InitECandidate.Solver.Wave8GuestInv.R11Adapters.FbClosure1
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_00
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_02
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_11
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_12
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_16
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_21
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.Composed
 
 set_option autoImplicit false
 set_option linter.unusedTactic false
@@ -18,99 +25,91 @@ open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
-open InitECandidate.Solver.Wave8GuestInv.P12_P15.Common
+open InitECandidate.Solver.Wave8GuestInv.P13.Common
 
 theorem «fb_u256_add» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_add") K.«u256_add» := by
-  fb_prove2 56 Guest.Software.guestFn_u256_add K.«u256_add»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_add") K.«u256_add» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_add
 
 theorem «fb_u256_add_carry» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_add_carry") K.«u256_add_carry» := by
-  fb_prove2 55 Guest.Software.guestFn_u256_add_carry K.«u256_add_carry»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_add_carry") K.«u256_add_carry» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_add_carry
 
 theorem «fb_u256_and» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_and") K.«u256_and» := by
-  fb_prove2 52 Guest.Software.guestFn_u256_and K.«u256_and»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_and") K.«u256_and» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_and
 
 theorem «fb_u256_byte_length» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_byte_length") K.«u256_byte_length» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.«fb_u256_bit_length»
-  fb_prove2 79 Guest.Software.guestFn_u256_byte_length K.«u256_byte_length»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_byte_length") K.«u256_byte_length» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_byte_length
 
 theorem «fb_u256_div» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_div") K.«u256_div» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P13.DivMod.«fb_u256_divmod»
-  fb_prove2 70 Guest.Software.guestFn_u256_div K.«u256_div»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_div") K.«u256_div» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_u256_div
 
 theorem «fb_u256_eq» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_eq") K.«u256_eq» := by
-  fb_prove2 45 Guest.Software.guestFn_u256_eq K.«u256_eq»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_eq") K.«u256_eq» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_eq
 
 theorem «fb_u256_fits_word» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_fits_word") K.«u256_fits_word» := by
-  fb_prove2 41 Guest.Software.guestFn_u256_fits_word K.«u256_fits_word»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_fits_word") K.«u256_fits_word» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_fits_word
 
 theorem «fb_u256_from_word» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_from_word") K.«u256_from_word» := by
-  fb_prove2 39 Guest.Software.guestFn_u256_from_word K.«u256_from_word»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_from_word") K.«u256_from_word» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_from_word
 
 theorem «fb_u256_gt» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_gt") K.«u256_gt» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.«fb_u256_lt»
-  fb_prove2 47 Guest.Software.guestFn_u256_gt K.«u256_gt»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_gt") K.«u256_gt» :=
+  InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_u256_gt
 
 theorem «fb_u256_limb» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_limb") K.«u256_limb» := by
-  fb_prove2 43 Guest.Software.guestFn_u256_limb K.«u256_limb»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_limb") K.«u256_limb» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_limb
 
 theorem «fb_u256_mul» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_mul") K.«u256_mul» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.«fb_mul64x64»
-  fb_prove2 60 Guest.Software.guestFn_u256_mul K.«u256_mul»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_mul") K.«u256_mul» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_mul
 
 theorem «fb_u256_mul_full» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_mul_full") K.«u256_mul_full» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.«fb_mul64x64»
-  fb_prove2 61 Guest.Software.guestFn_u256_mul_full K.«u256_mul_full»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_mul_full") K.«u256_mul_full» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_mul_full
 
 theorem «fb_u256_neg» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_neg") K.«u256_neg» := by
-  fb_prove2 58 Guest.Software.guestFn_u256_neg K.«u256_neg»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_neg") K.«u256_neg» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_neg
 
 theorem «fb_u256_not» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_not") K.«u256_not» := by
-  fb_prove2 51 Guest.Software.guestFn_u256_not K.«u256_not»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_not") K.«u256_not» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_not
 
 theorem «fb_u256_or» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_or") K.«u256_or» := by
-  fb_prove2 53 Guest.Software.guestFn_u256_or K.«u256_or»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_or") K.«u256_or» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_or
 
 theorem «fb_u256_shl» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_shl") K.«u256_shl» := by
-  fb_prove2 81 Guest.Software.guestFn_u256_shl K.«u256_shl»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_shl") K.«u256_shl» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_shl
 
 theorem «fb_u256_shr» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_shr") K.«u256_shr» := by
-  fb_prove2 82 Guest.Software.guestFn_u256_shr K.«u256_shr»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_shr") K.«u256_shr» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_shr
 
 theorem «fb_u256_slt» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_slt") K.«u256_slt» := by
-  fb_prove2 48 Guest.Software.guestFn_u256_slt K.«u256_slt»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_slt") K.«u256_slt» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_slt
 
 theorem «fb_u256_sub» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_sub") K.«u256_sub» := by
-  fb_prove2 57 Guest.Software.guestFn_u256_sub K.«u256_sub»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_sub") K.«u256_sub» :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_u256_sub
 
 theorem «fb_u256_to_be_min» :
-    TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_byte_length»
-  have h1 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_limb»
-  fb_prove2 88 Guest.Software.guestFn_u256_to_be_min K.«u256_to_be_min»
+    TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min» :=
+  InitECandidate.Solver.Wave8GuestInv.FastU256MulExp.fb_u256_to_be_min
 
 theorem «fb_udiv» :
-    TerminatingFunBoundedOn GuestInv (ofString "udiv") K.«udiv» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.P13.DivMod.«fb_udivmod»
-  fb_prove2 34 Guest.Software.guestFn_udiv K.«udiv»
+    TerminatingFunBoundedOn GuestInv (ofString "udiv") K.«udiv» :=
+  InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_udiv
 
 theorem «fb_udiv_small5» :
     TerminatingFunBoundedOn GuestInv (ofString "udiv_small5") K.«udiv_small5» := by
@@ -122,10 +121,10 @@ theorem «fb_validate_transaction» :
     TerminatingFunBoundedOn GuestInv (ofString "validate_transaction") K.«validate_transaction» := by
   exact InitECandidate.Solver.Wave8Leaves.S13.certified_fb_validate_transaction InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_calculate_intrinsic_cost» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_fits_word»
 theorem «fb_ws_get_code» :
-    TerminatingFunBoundedOn GuestInv (ofString "ws_get_code") K.«ws_get_code» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memeq»
-  have h1 := InitECandidate.Solver.Wave8GuestInv.Merged.fb_nodedb_lookup
-  fb_prove2 370 Guest.Software.guestFn_ws_get_code K.«ws_get_code»
+    TerminatingFunBoundedOn GuestInv (ofString "ws_get_code") K.«ws_get_code» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_ws_get_code_of
+    InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memeq»
+    InitECandidate.Solver.Wave8GuestInv.Merged.fb_nodedb_lookup
 
 theorem «fb_ws_storage_root_of» :
     TerminatingFunBoundedOn GuestInv (ofString "ws_storage_root_of") K.«ws_storage_root_of» := by
@@ -247,16 +246,14 @@ theorem «fb_ws_account_has_storage» :
   exact InitECandidate.Solver.Wave8GuestInv.S01.fb_ws_account_has_storage_of (GuestInv := @InitECandidate.Solver.Wave8GuestInv.GuestInv) InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ws_storage_root_of» InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memeq»
 
 theorem «fb__decode_step» :
-    TerminatingFunBoundedOn GuestInv (ofString "_decode_step") K.«_decode_step» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_compact_to_nibbles»
-  have h1 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_mpt_fail»
-  have h2 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_node_new_branch»
-  have h3 := InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.«fb_node_new_leaf»
-  have h4 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_decode_fully»
-  have h5 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
-  have h6 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
-  have h7 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_scratch_alloc»
-  fb_prove2 261 Guest.Software.guestFn__decode_step K.«_decode_step»
+    TerminatingFunBoundedOn GuestInv (ofString "_decode_step") K.«_decode_step» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb__decode_step_of
+    InitECandidate.Solver.Wave8Leaves.Rlp.«fb_compact_to_nibbles»
+    InitECandidate.Solver.Wave8Leaves.Rlp.«fb_mpt_fail»
+    InitECandidate.Solver.Wave8GuestInv.R10Shards.P02.«fb_node_new_leaf»
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_decode_fully»
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
 
 theorem «fb__insert_into_leaf» :
     TerminatingFunBoundedOn GuestInv (ofString "_insert_into_leaf") K.«_insert_into_leaf» := by
@@ -268,10 +265,10 @@ theorem «fb_auth_payload_len» :
     TerminatingFunBoundedOn GuestInv (ofString "auth_payload_len") K.«auth_payload_len» := by
   exact InitECandidate.Solver.Wave8GuestInv.S11.fb_auth_payload_len_of InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_u256_encoded_len» InitECandidate.Solver.Wave8GuestInv.Merged.fb_rlp_word_encoded_len
 theorem «fb_cache_get_root» :
-    TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_htab_has»
-  have h1 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ws_storage_root_of»
-  fb_prove2 842 Guest.Software.guestFn_cache_get_root K.«cache_get_root»
+    TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_cache_get_root_of
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_htab_has»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ws_storage_root_of»
 
 theorem «fb_calculate_blob_gas_price» :
     TerminatingFunBoundedOn GuestInv (ofString "calculate_blob_gas_price") K.«calculate_blob_gas_price» := by
@@ -280,37 +277,31 @@ theorem «fb_calculate_excess_blob_gas» :
     TerminatingFunBoundedOn GuestInv (ofString "calculate_excess_blob_gas") K.«calculate_excess_blob_gas» := by
   exact InitECandidate.Solver.Wave8Leaves.S13.certified_fb_calculate_excess_blob_gas InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_calculate_blob_gas_price» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_from_word» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_gt» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_mul» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_udiv»
 theorem «fb_check_gas_limit» :
-    TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit» := by
-  have h0 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_udiv»
-  fb_prove2 235 Guest.Software.guestFn_check_gas_limit K.«check_gas_limit»
+    TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_check_gas_limit
 
 theorem «fb_decode_access_list» :
-    TerminatingFunBoundedOn GuestInv (ofString "decode_access_list") K.«decode_access_list» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_alloc»
-  have h1 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memcpy»
-  have h2 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
-  have h3 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
-  have h4 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
-  have h5 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_list_item»
-  fb_prove2 303 Guest.Software.guestFn_decode_access_list K.«decode_access_list»
+    TerminatingFunBoundedOn GuestInv (ofString "decode_access_list") K.«decode_access_list» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_decode_access_list_of
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_list_item»
 
 theorem «fb_decode_authorizations» :
-    TerminatingFunBoundedOn GuestInv (ofString "decode_authorizations") K.«decode_authorizations» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_alloc»
-  have h1 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
-  have h2 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
-  have h3 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
-  have h4 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_u256»
-  have h5 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_word»
-  fb_prove2 305 Guest.Software.guestFn_decode_authorizations K.«decode_authorizations»
+    TerminatingFunBoundedOn GuestInv (ofString "decode_authorizations") K.«decode_authorizations» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_decode_authorizations_of
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_item»
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_u256»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_word»
 
 theorem «fb_decode_blob_hashes» :
-    TerminatingFunBoundedOn GuestInv (ofString "decode_blob_hashes") K.«decode_blob_hashes» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_alloc»
-  have h1 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memcpy»
-  have h2 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
-  have h3 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
-  fb_prove2 304 Guest.Software.guestFn_decode_blob_hashes K.«decode_blob_hashes»
+    TerminatingFunBoundedOn GuestInv (ofString "decode_blob_hashes") K.«decode_blob_hashes» :=
+  InitECandidate.Solver.Wave8GuestInv.FastGen.fb_decode_blob_hashes_of
+    InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
+    InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
 
 theorem «fb_decode_payload» :
     TerminatingFunBoundedOn GuestInv (ofString "decode_payload") K.«decode_payload» := by
@@ -321,22 +312,129 @@ theorem «fb_decode_requests» :
 theorem «fb_decode_stateless_input» :
     TerminatingFunBoundedOn GuestInv (ofString "decode_stateless_input") K.«decode_stateless_input» := by
   exact InitECandidate.Solver.Wave8Leaves.S13.certified_fb_decode_stateless_input InitECandidate.Solver.Wave8GuestInv.Merged.fb_alloc InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_bytes_list» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_payload» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_requests» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ssz_check_offsets» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ssz_fail» InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ssz_fixed_list_count»
-set_option maxHeartbeats 40000000 in
+
 theorem «fb_decode_transaction_rlp» :
     TerminatingFunBoundedOn GuestInv (ofString "decode_transaction_rlp") K.«decode_transaction_rlp» := by
-  have h0 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_alloc»
-  have h1 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_access_list»
-  have h2 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_authorizations»
-  have h3 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_blob_hashes»
-  have h4 := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memzero»
-  have h5 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_decode_fully»
-  have h6 := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
-  have h7 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_bytes_item»
-  have h8 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
-  have h9 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_list_item»
-  have h10 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_u256»
-  have h11 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_word»
-  have h12 := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_to_item»
-  fb_prove2 306 Guest.Software.guestFn_decode_transaction_rlp K.«decode_transaction_rlp»
+  have h_alloc := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_alloc»
+  have h_dal := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_access_list»
+  have h_da := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_authorizations»
+  have h_dbh := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_decode_blob_hashes»
+  have h_mz := InitECandidate.Solver.Wave8Leaves.Rlp.«fb_memzero»
+  have h_rdf := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_decode_fully»
+  have h_rlts := InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.«fb_rlp_list_to_slices»
+  have h_tbi := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_bytes_item»
+  have h_tfb := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_fixed_bytes»
+  have h_tli := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_list_item»
+  have h_tsu := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_u256»
+  have h_tsw := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_scalar_word»
+  have h_tti := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_tx_to_item»
+  refine ⟨_, _, _, lookup_of_guestAst_getElem 306 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_decode_transaction_rlp) rfl, ?_⟩
+  dsimp only [extractFn, Guest.Software.guestFn_decode_transaction_rlp,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply TerminatingProgBoundedOn.weaken'
+  · apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply dec_guestInv
+    apply decCall_guestInv' h_alloc
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_mz
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply dec_guestInv
+    apply dec_guestInv
+    apply dec_guestInv
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_rdf
+        · exact straightOn _ rfl
+      · apply TerminatingProgBoundedOn.ite_on
+        · exact call_guestInv' h_rdf
+        · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply decCall_guestInv' h_rlts
+    apply dec_guestInv
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply dec_guestInv
+    apply dec_guestInv
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_tsw
+        · exact straightOn _ rfl
+      · exact straightOn _ rfl
+    apply dec_guestInv
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_tsw
+        · exact straightOn _ rfl
+      · exact call_guestInv' h_tsu
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_tsu
+        · exact straightOn _ rfl
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_tsu
+        · apply TerminatingProgBoundedOn.seq_guestInv
+          · exact straightOn _ rfl
+          · apply TerminatingProgBoundedOn.seq_guestInv
+            · exact call_guestInv' h_tsu
+            · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_tsw
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · exact call_guestInv' h_tfb
+      · exact call_guestInv' h_tti
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_tsu
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply decCall_guestInv' h_tbi
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply decCall_guestInv' h_tli
+        apply decCall_guestInv' h_dal
+        exact straightOn _ rfl
+      · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply TerminatingProgBoundedOn.seq_guestInv
+        · exact call_guestInv' h_tsu
+        · apply TerminatingProgBoundedOn.seq_guestInv
+          · exact straightOn _ rfl
+          · apply decCall_guestInv' h_tli
+            apply decCall_guestInv' h_dbh
+            exact straightOn _ rfl
+      · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv
+    · apply TerminatingProgBoundedOn.ite_on
+      · apply decCall_guestInv' h_tli
+        apply decCall_guestInv' h_da
+        exact straightOn _ rfl
+      · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_tsu
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_tsu
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact straightOn _ rfl
+    apply TerminatingProgBoundedOn.seq_guestInv; · exact call_guestInv' h_tsu
+    exact straightOn _ rfl
+  · unfold K.«decode_transaction_rlp»
+    generalize_K
+    simp only [nat_max_eq, Nat.add_zero, Nat.zero_add, Nat.max_zero]
+    exact Nat.le_of_eq (by ac_rfl)
 
 end InitECandidate.Solver.Wave8GuestInv.R11Adapters
