@@ -781,17 +781,16 @@ theorem frame_exception_exec {F : Type} (s : PanSemStateFiniteExact 64 F)
       (.call (some (none, none)) (ofString "refill_frame_state_gas") [])).1
     rw [hs1_call] at hm; exact hm.trans hcode
   -- Step 2: `ite (err != 1) ... ...`
-  have hite_noret := ite_ne_returned (s := s1)
-    (c := .cmp .notEqual (.var .local (ofString "err")) (.const 1))
-    (y := .seq
-      (.call (some (none, none)) (ofString "frame_halt") [.var .local (ofString "err")])
-      (.seq
-        (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .global (ofString "evm_empty")))
-        (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const 0))))
-    (n := .store (.op .add [.var .global (ofString "ev"), .const 160]) (.var .local (ofString "err")))
-    (seq_ne_returned (fun t u => call0_ne_returned t _ _ u)
-      (seq_ne_returned (fun t u => store_ne_returned t _ _ u) (fun t u => store_ne_returned t _ _ u)))
-    (fun t u => store_ne_returned t _ _ u)
+  have hite_noret : ∀ u, (evaluateHOLFiniteState s1
+      (.ite (.cmp .notEqual (.var .local (ofString "err")) (.const 1))
+        (.seq (.call (some (none, none)) (ofString "frame_halt") [.var .local (ofString "err")])
+          (.seq (.store (.op .add [.var .global (ofString "ev"), .const 120]) (.var .global (ofString "evm_empty")))
+            (.store (.op .add [.var .global (ofString "ev"), .const 128]) (.const 0))))
+        (.store (.op .add [.var .global (ofString "ev"), .const 160]) (.var .local (ofString "err"))))).1 ≠ some (.returned u) :=
+    ite_ne_returned
+      (seq_ne_returned (fun t u => call0_ne_returned t _ _ u)
+        (seq_ne_returned (fun t u => store_ne_returned t _ _ u) (fun t u => store_ne_returned t _ _ u)))
+      (fun t u => store_ne_returned t _ _ u)
   obtain ⟨s2, hs2_ite, hrest2⟩ := seq_returned_inv hv hite_noret
   have hpost_eq2 := congrArg Prod.snd hrest2.symm
   rw [← hrest2] at hv; rw [hpost_eq2]; clear hrest2 hpost_eq2

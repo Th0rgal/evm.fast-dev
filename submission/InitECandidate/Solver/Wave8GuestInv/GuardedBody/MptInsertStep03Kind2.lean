@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.GuardedBody.MptCuts
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.MptInsertKind2Normal
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 4000000
@@ -15,6 +15,11 @@ open InitECandidate.Solver.PanRunBounded
 Prove the bound and the continuing-state effect. No other kind shard is imported. -/
 theorem mptInsert_kind2 (h : MptInsertCallees) :
     MptStepAt MptInsertActive MptInsertHead MptInsertEffect mptInsertBody mptInsertCost 2 := by
-  sorry
+  intro F s hc ha hk
+  refine ⟨mptInsert_body_bound h s hc ha.1.1.1, ?_⟩
+  intro hflow
+  have hnormal : (evaluateHOLFiniteState s mptInsertBody).1 = none :=
+    hflow.resolve_right (MptInsertKind2.insert_noContinue s)
+  exact MptInsertKind2.normal_run h ha hk (Prod.ext hnormal rfl)
 
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody
