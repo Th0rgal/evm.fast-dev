@@ -474,15 +474,20 @@ theorem HeapByteEff.to_worldStep {F : Type}
         exact hbyte_wti (a + k) (by omega) ⟨i, hi, by omega, by omega⟩
       · by_contra hne
         exact hdom (hAs.1.memaddrs ▸ heff.out_dom _ hne)
-  have hfeq := M13.fixedObjects_eq_of_nonHeapGlobalsKept hAs.2 hWT.1 hWT.2.2.1 hcell
-    (fun name h1 h2 _ => heff.globals (ofString name) (by
-      intro hm
-      obtain ⟨g, hg, heq⟩ := List.mem_map.1 hm
-      have hstr : name = g := by
-        simpa [Flapjack.Basis.Pure.MlString.toString_ofString] using congrArg Flapjack.Basis.Pure.MlString.toString heq.symm
-      rcases hgw_ok g hg with rfl | rfl
-      · exact h1 hstr
-      · exact h2 hstr))
+  have hfeq : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [M13.blockOutObjects_eq hAs.2 hWT.2.2.1 hcell
+          ((M13.globN_eq_of_lookup_eq (hnonheap "bo" (by decide) (by decide) (by decide))).symm),
+        M13.balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell
+          ((M13.globN_eq_of_lookup_eq (hnonheap "bal_accounts" (by decide) (by decide) (by decide))).symm),
+        (M13.globN_eq_of_lookup_eq (hnonheap "journal" (by decide) (by decide) (by decide))).symm,
+        (M13.globN_eq_of_lookup_eq (hnonheap "journal_cap" (by decide) (by decide) (by decide))).symm]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" ∧ ofString gn.1 ≠ ofString "scratch_ptr" ∧
+        ofString gn.1 ≠ ofString "frame_mem_ptr" := by revert gn hgn; decide
+    rw [(M13.globN_eq_of_lookup_eq (hnonheap gn.1 hne.1 hne.2.1 hne.2.2)).symm]
   have hFT_post := M13.fixedTyped_of_eq heff.arena hWT.2.2.1 heff.hp_le heff.sp_le hfeq
   have hcore_eq : ∀ g ∈ M13.coreWorldGlobals, globN post g = globN s g := by
     intro g hg
@@ -865,7 +870,7 @@ theorem eval_decCall_alloc_resumes {F : Type}
           hk (List.mem_map.2 ⟨"heap_ptr", hgw, heq.symm⟩)
         change s.globals.lookup k = sa.globals.lookup k
         rw [hg_sa_s]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
-      exact ⟨hp, n, q, mid, rfl, hhp_nat, by rw [hhp_nat]; exact hAR.2.2.2.2.2.1,
+      exact ⟨hp, n, q, mid, rfl, hhp_nat, by rw [hhp_nat]; exact hAR.2.2.2.2.2.2.1,
         hq_nat, hpq, hq_hi, hq8, hmid_hp, hg_sa_s, hm_sa_s, rfl, heff_mid, hnt, hres, rfl⟩
 
 /-- `decCall lname .one "heap_mark" [] cont` binds `lname = hp` (`hp.toNat = globN s "heap_ptr"`). -/

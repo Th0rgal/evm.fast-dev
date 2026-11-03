@@ -117,43 +117,48 @@ theorem ScratchByteEff.of_store_struct4 {F : Type} {s post : PanSemStateFiniteEx
         split
         · rename_i m' hst
           obtain ⟨hbnd32, i, hi, hi1, hi2⟩ := hin addr hdst
-          have hbw : Flapjack.Compiler.Backend.StackRemove.bytesInWord 64 = (8 : BitVec 64) := rfl
-          simp only [flattenHOL, List.flatMap, panMemStoresHOL, panMemStoreHOL, hbw] at hst
+          have hbw : panBytesInWord 64 = 8#64 := rfl
+          have hfl4 : flattenHOL (.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]) =
+              [.word w0, .word w1, .word w2, .word w3] := by
+            simp [flattenHOL]
+          rw [hfl4] at hst
+          simp only [panMemStoresHOL, panMemStoreHOL] at hst
+          rw [hbw] at hst
           by_cases hd0 : s.memaddrs addr
           · simp only [hd0, ↓reduceIte] at hst
-            by_cases hd1 : s.memaddrs (addr + 8)
+            by_cases hd1 : s.memaddrs (addr + 8#64)
             · simp only [hd1, ↓reduceIte] at hst
-              by_cases hd2 : s.memaddrs (addr + 8 + 8)
+              by_cases hd2 : s.memaddrs (addr + 8#64 + 8#64)
               · simp only [hd2, ↓reduceIte] at hst
-                by_cases hd3 : s.memaddrs (addr + 8 + 8 + 8)
+                by_cases hd3 : s.memaddrs (addr + 8#64 + 8#64 + 8#64)
                 · simp only [hd3, ↓reduceIte, Option.some.injEq] at hst
                   subst hst
                   intro hrun; injection hrun with _ hpost; subst hpost
                   have ha8 : addr.toNat % 8 = 0 := by
                     have hdom' := hma_ord ▸ hd0
                     rw [ordinaryDomain_iff] at hdom'; exact hdom'.2.2
-                  have ha8_nat : (addr + 8).toNat = addr.toNat + 8 := by
-                    have : (8 : BitVec 64).toNat = 8 := rfl
+                  have ha8_nat : (addr + 8#64).toNat = addr.toNat + 8 := by
+                    have : (8#64 : BitVec 64).toNat = 8 := rfl
                     rw [BitVec.toNat_add, this, Nat.mod_eq_of_lt (by omega)]
-                  have ha16_nat : (addr + 8 + 8).toNat = addr.toNat + 16 := by
-                    have : (8 : BitVec 64).toNat = 8 := rfl
+                  have ha16_nat : (addr + 8#64 + 8#64).toNat = addr.toNat + 16 := by
+                    have : (8#64 : BitVec 64).toNat = 8 := rfl
                     rw [BitVec.toNat_add, ha8_nat, this, Nat.mod_eq_of_lt (by omega)]
-                  have ha24_nat : (addr + 8 + 8 + 8).toNat = addr.toNat + 24 := by
-                    have : (8 : BitVec 64).toNat = 8 := rfl
+                  have ha24_nat : (addr + 8#64 + 8#64 + 8#64).toNat = addr.toNat + 24 := by
+                    have : (8#64 : BitVec 64).toNat = 8 := rfl
                     rw [BitVec.toNat_add, ha16_nat, this, Nat.mod_eq_of_lt (by omega)]
                   refine ⟨⟨rfl, rfl, rfl, rfl, rfl, fun _ _ => rfl, ?_, ?_, ?_⟩, rfl, rfl⟩
                   · intro a hna; dsimp only
-                    have hne3 : a ≠ addr + 8 + 8 + 8 := by rintro rfl; exact hna hd3
-                    have hne2 : a ≠ addr + 8 + 8 := by rintro rfl; exact hna hd2
-                    have hne1 : a ≠ addr + 8 := by rintro rfl; exact hna hd1
+                    have hne3 : a ≠ addr + 8#64 + 8#64 + 8#64 := by rintro rfl; exact hna hd3
+                    have hne2 : a ≠ addr + 8#64 + 8#64 := by rintro rfl; exact hna hd2
+                    have hne1 : a ≠ addr + 8#64 := by rintro rfl; exact hna hd1
                     have hne0 : a ≠ addr := by rintro rfl; exact hna hd0
                     simp [hne3, hne2, hne1, hne0]
                   · intro a hna; dsimp only
-                    have hne3 : a ≠ addr + 8 + 8 + 8 := by
+                    have hne3 : a ≠ addr + 8#64 + 8#64 + 8#64 := by
                       rintro rfl; exact hna i hi ⟨by rw [ha24_nat]; omega, by rw [ha24_nat]; omega⟩
-                    have hne2 : a ≠ addr + 8 + 8 := by
+                    have hne2 : a ≠ addr + 8#64 + 8#64 := by
                       rintro rfl; exact hna i hi ⟨by rw [ha16_nat]; omega, by rw [ha16_nat]; omega⟩
-                    have hne1 : a ≠ addr + 8 := by
+                    have hne1 : a ≠ addr + 8#64 := by
                       rintro rfl; exact hna i hi ⟨by rw [ha8_nat]; omega, by rw [ha8_nat]; omega⟩
                     have hne0 : a ≠ addr := by
                       rintro rfl; exact hna i hi ⟨by omega, by omega⟩
@@ -162,23 +167,23 @@ theorem ScratchByteEff.of_store_struct4 {F : Type} {s post : PanSemStateFiniteEx
                     unfold memB; dsimp only
                     have hal_b : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
                       rw [panByteAlign_toNat64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
-                    have hne3 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8 + 8 + 8 := by
+                    have hne3 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8#64 + 8#64 + 8#64 := by
                       intro heq; have := congrArg BitVec.toNat heq; rw [hal_b, ha24_nat] at this
                       exact hno i hi ⟨by omega, by omega⟩
-                    have hne2 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8 + 8 := by
+                    have hne2 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8#64 + 8#64 := by
                       intro heq; have := congrArg BitVec.toNat heq; rw [hal_b, ha16_nat] at this
                       exact hno i hi ⟨by omega, by omega⟩
-                    have hne1 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8 := by
+                    have hne1 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr + 8#64 := by
                       intro heq; have := congrArg BitVec.toNat heq; rw [hal_b, ha8_nat] at this
                       exact hno i hi ⟨by omega, by omega⟩
                     have hne0 : panByteAlignHOL (BitVec.ofNat 64 b) ≠ addr := by
                       intro heq; have := congrArg BitVec.toNat heq; rw [hal_b] at this
                       exact hno i hi ⟨by omega, by omega⟩
-                    simp [hne3, hne2, hne1, hne0]
-                · simp [hd3] at hst
-              · simp [hd2] at hst
-            · simp [hd1] at hst
-          · simp [hd0] at hst
+                    rw [if_neg hne3, if_neg hne2, if_neg hne1, if_neg hne0]
+                · rw [if_neg hd3] at hst; simp at hst
+              · rw [if_neg hd2] at hst; simp at hst
+            · rw [if_neg hd1] at hst; simp at hst
+          · rw [if_neg hd0] at hst; simp at hst
         · simp
     · simp
     · simp
@@ -218,7 +223,7 @@ theorem evmInv_of_head_stack_push {F : Type}
     (hApost : ArenaReady post)
     (hsc_le : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
     (heff : ScratchByteEff s post [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))])
-    (hfresh : freshIvl.2 = 0 ∨
+    (hfresh : freshIvl = (0, 0) ∨
       (freshIvl.1 % 8 = 0 ∧ freshIvl.2 % 8 = 0 ∧
         Inside freshIvl (globN post "scratch_ptr") (globN s "scratch_ptr")))
     (he0_other : ∀ off, off + 8 ≤ 280 → off % 8 = 0 → off ≠ 8 → off ≠ 16 → off ≠ 232 →
@@ -246,14 +251,14 @@ theorem evmInv_of_head_stack_push {F : Type}
   dsimp only at hb1
   have he0_8 : e0 % 8 = 0 := (hhead_FW.1 (e0, 280) (by simp)).2.1
   have holdStk_8 : oldStk.1 % 8 = 0 := (hhead_FW.1 oldStk (by simp [oldStk])).2.1
-  have hRl_list : ∀ x ∈ ([freshIvl, (e0, 280), oldStk] : List Ivl), x.1 % 8 = 0 ∨ x.2 = 0 := by
+  have hRl_list : ∀ x ∈ ([freshIvl, (e0, 280), oldStk] : List Ivl), x.1 % 8 = 0 := by
     intro x hx; simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
     rcases hx with rfl | rfl | rfl
-    · rcases hfresh with h0 | ⟨h8, _⟩
-      · exact Or.inr h0
-      · exact Or.inl h8
-    · exact Or.inl he0_8
-    · exact Or.inl holdStk_8
+    · rcases hfresh with rfl | ⟨h8, _⟩
+      · rfl
+      · exact h8
+    · exact he0_8
+    · exact holdStk_8
   have hdom_eq : post.memaddrs = s.memaddrs := heff.memaddrs
   have hglob_eq : ∀ g, g ≠ "scratch_ptr" → globN post g = globN s g :=
     fun g hg => globN_eq_of_lookup_eq (heff.glob_other g hg)
@@ -275,22 +280,21 @@ theorem evmInv_of_head_stack_push {F : Type}
     · exact Or.inr (hAT_at o (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨_, hhead_mem, rfl⟩, ho⟩) i h6)
   have hfresh_disj_alloc : ∀ i : Ivl, Allocated s i → Disj freshIvl i := by
     intro i hal
-    rcases hfresh with hf0 | ⟨_, _, hfin⟩
-    · exact Or.inl hf0
-    · rcases hal with ⟨_, hhi⟩ | ⟨hlo, _⟩
-      · have h1 := hAs.2.2.1; have h2 := hAs.2.2.2.1; have h3 := hApost.2.2.2.1
+    rcases hfresh with rfl | ⟨_, _, hfin⟩
+    · exact Or.inl rfl
+    · obtain ⟨hfin1, hfin2⟩ := hfin
+      rcases hal with hheap | hscr
+      · obtain ⟨_, hhi2⟩ := hheap
+        have h1 := hAs.2.2.1; have h2 := hApost.2.2.2.1; have h3 := hApost.2.2.2.2.1
         rw [R11Shards.heapLimit_val] at h1; rw [R11Shards.scratchStart_val] at h2
-        obtain ⟨hfin1, _⟩ := hfin
-        obtain ⟨_, hhi2⟩ := hhi
-        exact Or.inr (Or.inr (Or.inr (by dsimp only; omega)))
-      · obtain ⟨_, hfin2⟩ := hfin
-        obtain ⟨hlo1, _⟩ := hlo
-        exact Or.inr (Or.inr (Or.inl (by dsimp only; omega)))
+        exact Or.inr (Or.inr (Or.inr (by omega)))
+      · obtain ⟨hlo1, _⟩ := hscr
+        exact Or.inr (Or.inr (Or.inl (by omega)))
   have hwrite_disj_wti : ∀ x ∈ ([freshIvl, (e0, 280), oldStk] : List Ivl),
       ∀ i ∈ worldTypedIvls s S Nd_at, i.2 = 0 ∨ Disj x i := by
     intro x hx i hi; simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
     rcases hx with rfl | rfl | rfl
-    · rcases worldTypedIvls_allocated hWT i hi with hi0 | hal
+    · rcases worldTypedIvls_allocated hWT hi with hi0 | hal
       · exact Or.inl hi0
       · exact Or.inr (hfresh_disj_alloc i hal)
     · exact hfo_disj_wti (e0, 280) (by simp [frameObjects]) i hi
@@ -316,13 +320,12 @@ theorem evmInv_of_head_stack_push {F : Type}
     intro base sz k hbnd hb8 hk8 hk hdj
     unfold memW
     have ha : base + k < 2 ^ 64 := by omega
+    have hbk8 : (base + k) % 8 = 0 := by omega
     have hbit : (BitVec.ofNat 64 (base + k)).toNat = base + k := Nat.mod_eq_of_lt ha
     rw [heff.cell_frame (BitVec.ofNat 64 (base + k))]
     intro x hx; rw [hbit]
-    rcases hRl_list x hx with hx8 | hx0
-    · exact not_cellHits_of_disj_aligned (i := (base, sz)) (by omega) hx8
-        (by dsimp only; omega) (by dsimp only; omega) (R11Shards.Disj.symm (hdj x hx))
-    · intro ⟨_, hc2⟩; rw [hx0] at hc2; omega
+    exact not_cellHits_of_disj_aligned (i := (base, sz)) hbk8 (hRl_list x hx)
+      (Nat.le_add_right base k) (Nat.add_le_add_left hk base) (R11Shards.Disj.symm (hdj x hx))
   have hpw_head_tail :
       (frameObjects s (e0, c0)).Pairwise Disj ∧
       (∀ o1 ∈ frameObjects s (e0, c0),
@@ -333,13 +336,14 @@ theorem evmInv_of_head_stack_push {F : Type}
     exact List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, ho2⟩
   have hfresh_disj_fo : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj freshIvl o := by
     intro ec hec o ho
-    rcases hfresh with hf0 | ⟨_, _, hfin⟩
-    · exact Or.inl hf0
+    rcases hfresh with rfl | ⟨_, _, hfin⟩
+    · exact Or.inl rfl
     · obtain ⟨hfin1, hfin2⟩ := hfin
       have hFW := hFW_all ec hec
-      have h1 := hAs.2.2.1; have h2 := hAs.2.2.2.1; have h3 := hApost.2.2.2.1
+      have h1 := hAs.2.2.1; have h2 := hApost.2.2.2.1; have h3 := hApost.2.2.2.2.1
       rw [R11Shards.heapLimit_val] at h1; rw [R11Shards.scratchStart_val] at h2
-      have hsb_hl : globN s "heap_ptr" ≤ 2952790016 := h1
+      have hfp_eq : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := hglob_eq "frame_mem_ptr" (by decide)
+      rw [hfp_eq] at h2 h3
       unfold frameObjects at ho
       rcases List.mem_append.1 ho with ho7 | holog
       · simp only [List.mem_cons, List.not_mem_nil, or_false] at ho7
@@ -351,17 +355,15 @@ theorem evmInv_of_head_stack_push {F : Type}
         · obtain ⟨hin1, _⟩ := (hFW.1 (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)) (by simp)).1
           exact Or.inr (Or.inr (Or.inl (by dsimp only at hin1 ⊢; omega)))
         · obtain ⟨_, hin2⟩ := hFW.2.1
-          have hfp_eq : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := hglob_eq "frame_mem_ptr" (by decide)
-          rw [hfp_eq] at h3
           exact Or.inr (Or.inr (Or.inr (by dsimp only at hin2 ⊢; omega)))
         · obtain ⟨hin1, _⟩ := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1
           exact Or.inr (Or.inr (Or.inl (by dsimp only at hin1 ⊢; omega)))
         · rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.1 with ⟨_, hin2⟩ | ⟨hin1, _⟩
-          · exact Or.inr (Or.inr (Or.inr (by dsimp only; omega)))
-          · exact Or.inr (Or.inr (Or.inl (by dsimp only; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by omega)))
+          · exact Or.inr (Or.inr (Or.inl (by omega)))
         · rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with ⟨hz, _⟩ | ⟨⟨_, hin2⟩, _⟩
           · unfold frameRet; simp [hz]; exact Or.inr (Or.inl rfl)
-          · exact Or.inr (Or.inr (Or.inr (by dsimp only; omega)))
+          · exact Or.inr (Or.inr (Or.inr (by omega)))
       · unfold frameLogObjects at holog; dsimp only at holog
         obtain ⟨idx, hidx_mem, ho_own⟩ := List.mem_flatMap.1 holog
         rw [List.mem_range] at hidx_mem
@@ -505,11 +507,6 @@ theorem evmInv_of_head_stack_push {F : Type}
       simpa using h88_eq 0 (by omega) (by omega)
     have hl8 := h88_eq 8 (by omega) (by omega)
     have hl16 := h88_eq 16 (by omega) (by omega)
-    have harr_eq : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
-        memW post (memW s (memW s (ec.1 + 88)) + 8 * i) = memW s (memW s (ec.1 + 88) + 8 * i) := by
-      intro i _; unreachable!
-    -- Wait: let's state `harr_eq` with the exact parenthesization `memW s (memW s (ec.1 + 88)) + 8 * i`!
-    clear harr_eq
     have harr_eq : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
         memW post ((memW s (memW s (ec.1 + 88))) + 8 * i) = memW s ((memW s (memW s (ec.1 + 88))) + 8 * i) := by
       intro i hi
@@ -718,9 +715,9 @@ theorem evmInv_of_head_stack_push {F : Type}
         · rw [h8_eq, h232_eq]
           exact ⟨inside_scr_mono (c1 _ (by simp)).1, (wordsOK_congr_dom hdom_eq).2 (c1 _ (by simp)).2⟩
         · rw [hstk_eq]
-          rcases hfresh with hf0 | ⟨hf8, hfsz8, hfin⟩
-          · exact absurd hf0 hnz
-          · have hhi_se : freshIvl.1 + freshIvl.2 ≤ scratchEnd := le_trans hfin.2 hAs.2.2.2.2.1
+          rcases hfresh with rfl | ⟨hf8, hfsz8, hfin⟩
+          · exact absurd rfl hnz
+          · have hhi_se : freshIvl.1 + freshIvl.2 ≤ scratchEnd := le_trans hfin.2 hAs.2.2.2.2.2.1
             have hal_f : Allocated post freshIvl := Or.inr ⟨hfin.1, hhi_se⟩
             exact ⟨⟨hfin.1, hhi_se⟩, wordsOK_of_allocated_scr hApost hal_f hf8 hfsz8⟩
       · exact ⟨inside_scr_mono (c1 _ (by simp)).1, (wordsOK_congr_dom hdom_eq).2 (c1 _ (by simp)).2⟩
@@ -813,14 +810,17 @@ theorem evmInv_of_head_stack_push {F : Type}
     obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hfo_map
     rcases hfo_post_cases ec hec o ho_in with ho_old | ⟨_, _, rfl⟩
     · exact hAT_at o (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec, rfl⟩, ho_old⟩) j hj
-    · rcases worldTypedIvls_allocated hWT j (mem_worldTypedIvls_nodeExtents hj) with hj0 | hal_j
+    · rcases worldTypedIvls_allocated hWT (mem_worldTypedIvls_nodeExtents hj) with hj0 | hal_j
       · exact Or.inr (Or.inl hj0)
       · exact hfresh_disj_alloc j hal_j
   · have hworldRefs_eq : worldTableRefs post S = worldTableRefs s S := by
       unfold worldTableRefs recordSlots
       rw [hglob_eq "ws" (by decide), hglob_eq "bs" (by decide), hglob_eq "ts" (by decide),
           show globalTableRoots.map (globN post) = globalTableRoots.map (globN s) by
-            simp only [globalTableRoots, List.map, hglob_eq _ (by decide)],
+            simp only [globalTableRoots, List.map,
+              hglob_eq "bal_accounts" (by decide),
+              hglob_eq "bal_idx_accts" (by decide),
+              hglob_eq "bal_idx_stor" (by decide)],
           balRecords_eq hWT.1 hcell (hglob_eq "bal_accounts" (by decide)),
           hglob_eq "journal_n" (by decide), hglob_eq "journal" (by decide)]
       have hws_sl : (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW post (globN s "ws" + k)) =
@@ -925,8 +925,8 @@ theorem evmInv_of_head_stack_push {F : Type}
         · rcases hnew_stk with ⟨_, h8_eq, h232_eq⟩ | ⟨hnz, hstk_eq⟩
           · rw [h8_eq, h232_eq]; exact m6 _ (by simp [frameScratch])
           · rw [hstk_eq]
-            rcases hfresh with hf0 | ⟨_, _, _, hfin2⟩
-            · exact absurd hf0 hnz
+            rcases hfresh with rfl | ⟨_, _, _, hfin2⟩
+            · exact absurd rfl hnz
             · have he0_m : e0 + 280 ≤ memW s (c0 + 48) := m6 (e0, 280) (by simp [frameScratch])
               obtain ⟨he0_scr, _⟩ := (hhead_FW.1 (e0, 280) (by simp)).1
               dsimp only at he0_m he0_scr ⊢
