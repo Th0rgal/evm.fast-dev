@@ -3,7 +3,7 @@ import InitECandidate.Solver.Wave8GuestInv.EntryDefs
 import InitECandidate.Solver.Wave8GuestInv.Expressions
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.WorldFrame
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.Exec
-import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.DelSpecs
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M19.htab_del_spec
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M25.nz_htab_set
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M25.rt_alloc
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M26.rt_scratch_alloc
