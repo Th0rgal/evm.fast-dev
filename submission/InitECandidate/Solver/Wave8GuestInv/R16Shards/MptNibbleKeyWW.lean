@@ -377,7 +377,7 @@ private theorem eval_out_2i_c {F : Type} (s : PanSemStateFiniteExact 64 F) (out0
       some (.val (.word (out0 + 2#64 * iw + BitVec.ofNat 64 d))) := by
   simp [evalHOLExact, evalListHOLExact, ho, hi, valueIsWord, valueWord, panOpHOL, wordOpHOL, wordOp, BitVec.add_assoc]
 
-theorem key_to_nibbles_body_eff {F : Type}
+private theorem key_to_nibbles_body_eff {F : Type}
     (s0 : PanSemStateFiniteExact 64 F) (key0 n0 out0 : BitVec 64)
     (hc : s0.code = originalRuntimeCode) (hG : GuestInv s0)
     (hk0 : s0.locals.lookup (ofString "key") = some (.val (.word key0)))

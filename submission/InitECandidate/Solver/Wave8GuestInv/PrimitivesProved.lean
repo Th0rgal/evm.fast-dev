@@ -45,6 +45,7 @@ import InitECandidate.Solver.Wave8GuestInv.R11Adapters.BalRlp
 import InitECandidate.Solver.Wave8GuestInv.R11Adapters.FbStaticCall
 import InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard08
 import InitECandidate.Solver.Wave8GuestInv.R11Shards.WkShard09a
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard06b
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.GbodyPayloadStateInitShard
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_NodeRlp
@@ -53,8 +54,13 @@ import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptRoot
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfCollapseBranch
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfDeleteExtFinish
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfNodeNewExt
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfNodeNewLeaf
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfInsertIntoLeaf
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfSplitExtension
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptNibbleKeyWW
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
@@ -92,7 +98,7 @@ theorem primitives : Primitives where
   «sp__resolve_step» := «sp__resolve_step»
   «ro_mpt_fail» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.ReadOnlyLeaves.«ro_mpt_fail»
   «ww_node_new_ext» := R10Shards.P02.ww_node_new_ext
-  «rt_node_new_ext» := Merged.rt_node_new_ext
+  «rt_node_new_ext» := R16Shards.«rt_node_new_ext»
   «ww_rlp_item» := R10Shards.P02.ww_rlp_item
   «gbody__decode_witness_node_body» := «gbody__decode_witness_node_body»
   «fb_scratch_release» := Merged.fb_scratch_release
@@ -117,10 +123,10 @@ theorem primitives : Primitives where
   «fb__insert_into_leaf» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb__insert_into_leaf»
   «fb__split_extension» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb__split_extension»
   «fb_node_new_leaf» := R10Shards.P02.fb_node_new_leaf
-  «nf__insert_into_leaf» := «nf__insert_into_leaf»
-  «nf__split_extension» := «nf__split_extension»
-  «nf_node_new_ext» := «nf_node_new_ext»
-  «nf_node_new_leaf» := «nf_node_new_leaf»
+  «nf__insert_into_leaf» := R16Shards.«nf__insert_into_leaf»
+  «nf__split_extension» := R16Shards.«nf__split_extension»
+  «nf_node_new_ext» := R16Shards.«nf_node_new_ext»
+  «nf_node_new_leaf» := R16Shards.«nf_node_new_leaf»
   «gbody__mpt_insert_node» := «gbody__mpt_insert_node»
   «fb__node_needs_rlp» := Merged.fb__node_needs_rlp
   «fb__node_rlp_begin» := Merged.fb__node_rlp_begin
@@ -144,8 +150,8 @@ theorem primitives : Primitives where
   «fb_mpt_new» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_mpt_new»
   «fb_rlp_encode_word» := Merged.fb_rlp_encode_word
   «ro_heap_mark» := R10Ports.ro_heap_mark
-  «wk_mpt_new» := «wk_mpt_new»
-  «rt_mpt_new» := «rt_mpt_new»
+  «wk_mpt_new» := R13Shards.WkShard01.«wk_mpt_new»
+  «rt_mpt_new» := R13Shards.WkShard01.«rt_mpt_new»
   «mk_mpt_set» := «mk_mpt_set»
   «wk_rlp_encode_word» := Merged.wk_rlp_encode_word
   «gbody_build_mpt_indexed» := «gbody_build_mpt_indexed»
@@ -164,12 +170,12 @@ theorem primitives : Primitives where
   «fb_u256_to_be_min» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_to_be_min»
   «fb_ws_get_account_optional» := PrimShardP10P30.fb_ws_get_account_optional
   «fb_ws_storage_root_of» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_ws_storage_root_of»
-  «wk_alloc» := «wk_alloc»
-  «rt_alloc» := Merged.rt_alloc
-  «wk_cache_get_root» := «wk_cache_get_root»
+  «wk_alloc» := R13Shards.WkShard01.«wk_alloc»
+  «rt_alloc» := R13Shards.WkShard01.«rt_alloc»
+  «wk_cache_get_root» := R13Shards.WkShard01.«wk_cache_get_root»
   «wk_encode_account» := «wk_encode_account»
-  «wk_htab_copy» := «wk_htab_copy»
-  «rt_htab_copy» := «rt_htab_copy»
+  «wk_htab_copy» := R13Shards.WkShard01.«wk_htab_copy»
+  «rt_htab_copy» := R13Shards.WkShard01.«rt_htab_copy»
   «ro_htab_get» := Wave8Contracts.M15.«ro_htab_get»
   «ro_htab_has» := Wave8Contracts.M15.«ro_htab_has»
   «ro_htab_item» := Wave8Contracts.M15.«ro_htab_item»
@@ -183,15 +189,15 @@ theorem primitives : Primitives where
   «ro_u256_is_zero» := Wave8Contracts.M18.«ro_u256_is_zero»
   «wk_u256_to_be_min» := Merged.wk_u256_to_be_min
   «rv_u256_to_be_min» := Merged.rv_u256_to_be_min
-  «wk_ws_get_account_optional» := «wk_ws_get_account_optional»
-  «wk_ws_storage_root_of» := «wk_ws_storage_root_of»
+  «wk_ws_get_account_optional» := R13Shards.WkShard01.«wk_ws_get_account_optional»
+  «wk_ws_storage_root_of» := R13Shards.WkShard01.«wk_ws_storage_root_of»
   «gbody_compute_state_root» := «gbody_compute_state_root»
   «fb_rlp_decode_fully» := PrimShardP10P30.fb_rlp_decode_fully
   «fb_trie_lookup» := Merged.fb_trie_lookup
   «fb_u256_from_be» := P12_P15.Callees.fb_u256_from_be
   «fb_record_pre_state_read» := Merged.fb_record_pre_state_read
   «fb_stor_lookup» := Wave8Leaves.S03.fb_stor_lookup Merged.fb_htab_get
-  «wk_record_pre_state_read» := «wk_record_pre_state_read»
+  «wk_record_pre_state_read» := R16Shards.«wk_record_pre_state_read»
   «ro_stor_lookup» := M17.«ro_stor_lookup»
   «fb_st_le64» := Merged.fb_st_le64
   «wk_st_le64» := Merged.wk_st_le64
@@ -210,7 +216,7 @@ theorem primitives : Primitives where
   «wk_add_nonce_change» := «wk_add_nonce_change»
   «wk_add_storage_write» := «wk_add_storage_write»
   «wk_bal_remove_change» := «wk_bal_remove_change»
-  «wk_get_code» := «wk_get_code»
+  «wk_get_code» := R16Shards.«wk_get_code»
   «wk_idx_start_account» := «wk_idx_start_account»
   «wk_idx_start_storage» := «wk_idx_start_storage»
   «wk_remove_storage_write» := «wk_remove_storage_write»
