@@ -208,8 +208,7 @@ theorem rt_te_new :
     simp [HolFiniteMapExact.lookup_update, FUPDATE,
       show ofString "heap_ptr" ≠ ofString "scratch_ptr" by decide]
   have hAR_post : ArenaReady post := by
-    refine ⟨hpost_gi, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
-      globalsWord_update (ofString "heap_ptr") q hpost_glob hA.2.2.2.2.2.2.2.2⟩
+    refine ⟨hpost_gi, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
     · rw [hg_hp, hq_nat, hhp_eq]; have := hA.1; omega
     · rw [hg_hp]; exact hq_le
     · rw [hg_fp]; exact hA.2.2.1
@@ -218,6 +217,7 @@ theorem rt_te_new :
     · rw [hg_hp, hq_nat]; omega
     · rw [hg_fp]; exact hA.2.2.2.2.2.2.1
     · rw [hg_sp]; exact hA.2.2.2.2.2.2.2.1
+    · exact globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q hpost_glob hA.2.2.2.2.2.2.2.2
   refine ⟨hp, hv_eq, hAR_post, ?_, ?_, ?_⟩
   · refine ⟨?_, ?_⟩
     · rw [hg_hp, hq_nat, hhp_eq]; omega

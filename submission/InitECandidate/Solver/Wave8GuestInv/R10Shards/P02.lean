@@ -1014,7 +1014,8 @@ theorem rt_node_new_ext :
       unfold ArenaOK
       rw [hpost_hp, hpost_fp, hpost_sp]
       refine ⟨?_, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-        hA.2.2.2.2.2.2.2.1, globalsWord_update (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+        hA.2.2.2.2.2.2.2.1,
+        globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
       have hsb_le : sourceBase ≤ hp.toNat := by rw [hhp_eq]; exact hA.1
       omega
     have hAG : AllocatorGrows s post := by
@@ -1040,7 +1041,7 @@ theorem ww_scratch_alloc : WritesWithin (fun s => []) ["scratch_ptr"] (ofString 
   obtain ⟨hG, hA⟩ := hArena
   have hA' := hA
   unfold ArenaOK at hA'
-  obtain ⟨hbase, hlimit, hsstart, hframe, hsend, hpalign, hfpalign, hspalign, hgw⟩ := hA'
+  obtain ⟨hbase, hlimit, hsstart, hframe, hsend, hpalign, hfpalign, hspalign, hgw_s⟩ := hA'
   obtain ⟨hp, fp, sp, hhp, hhp_eq, hfp, hfp_eq, hsp, hsp_eq⟩ := arenaOK_globals s hA
   have hbody : sourceFnBody Guest.Software.guestFn_scratch_alloc =
       InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
@@ -1062,19 +1063,14 @@ theorem ww_scratch_alloc : WritesWithin (fun s => []) ["scratch_ptr"] (ofString 
   rw [hpost]
   refine ⟨?_, ?_, ?_, ?_, ?_⟩
   · refine ⟨⟨hG.code, hG.memaddrs, hG.shMemaddrs, hG.baseAddr⟩, ?_⟩
-    have hgw_post : GlobalsWord { s with
-        locals := (emptyLocalsHOLFinite s).locals
-        globals := s.globals.update (ofString "scratch_ptr", .val (.word q)) } :=
-      globalsWord_update (ofString "scratch_ptr") q rfl hgw
     unfold ArenaOK
-    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hgw_post⟩
-    all_goals (
-      dsimp [q] at hq
-      simp [globN, HolFiniteMapExact.lookup_update, FUPDATE, hhp, hfp, hsp, hsp_hp, hsp_fp] at hq ⊢
-      try rw [← hhp_eq] at hbase hlimit hpalign
-      try rw [← hfp_eq] at hsstart hframe hfpalign
-      try rw [← hsp_eq] at hframe hsend hspalign
-      omega)
+    dsimp [q] at hq
+    simp [globN, HolFiniteMapExact.lookup_update, FUPDATE, hhp, hfp, hsp, hsp_hp, hsp_fp] at hq ⊢
+    rw [← hhp_eq] at hbase hlimit hpalign
+    rw [← hfp_eq] at hsstart hframe hfpalign
+    rw [← hsp_eq] at hframe hsend hspalign
+    exact ⟨by omega, by omega, by omega, by omega, by omega, by omega, by omega, by omega,
+      globalsWord_update (s := s) (ofString "scratch_ptr") q rfl hgw_s⟩
   · simp [globN, HolFiniteMapExact.lookup_update, FUPDATE, hhp, hsp_hp]
   · simp [globN, HolFiniteMapExact.lookup_update, FUPDATE, hsp, hsp_hp]
     dsimp [q] at hq
@@ -1415,7 +1411,8 @@ theorem ww_node_new_ext :
       rw [hpost_hp, hpost_fp, hpost_sp]
       have hsb_le : sourceBase ≤ hp.toNat := by rw [hhp_eq]; exact hA.1
       exact ⟨by omega, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-        hA.2.2.2.2.2.2.2.1, globalsWord_update (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+        hA.2.2.2.2.2.2.2.1,
+        globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
     · rw [hpost_hp, ← hhp_eq]; exact hp_le_q
     · rw [hpost_sp]
     · intro a _ hfresh
@@ -2470,7 +2467,7 @@ private theorem rff_vib_push {F : Type} (s : PanSemStateFiniteExact 64 F)
             rw [hout_hp, hout_fp, hout_sp]
             exact ⟨hA.1, hA.2.1, hA.2.2.1, by rw [← hfp_eq]; exact hfp_q, by omega,
               hA.2.2.2.2.2.1, hA.2.2.2.2.2.2.1, hq_al,
-              globalsWord_update (ofString "scratch_ptr") q hout_g hA.2.2.2.2.2.2.2.2⟩
+              globalsWord_update (s := s) (t := outSt) (ofString "scratch_ptr") q hout_g hA.2.2.2.2.2.2.2.2⟩
           · rw [hout_sp, ← hsp_eq]; exact hq_sp
           · intro a ha _
             have hne_q : a ≠ q := by
@@ -3205,9 +3202,9 @@ private theorem spec_rlp_validate_items :
         hout_hp, hout_fp, le_of_eq hout_sp, hF.2.2.2.2.1, ?_⟩
       · unfold ArenaOK
         rw [hout_hp, hout_fp, hout_sp]
-        exact ⟨hA.1, hA.2.1, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1,
-          hA.2.2.2.2.2.1, hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2.1,
-          globalsWord_update (ofString "scratch_ptr") sp rfl hF.1.2.2.2.2.2.2.2.2.2⟩
+        exact ⟨hA.1, hA.2.1, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hA.2.2.2.2.2.1,
+          hA.2.2.2.2.2.2.1, hA.2.2.2.2.2.2.2.1,
+          globalsWord_update (s := st) (t := outSt) (ofString "scratch_ptr") sp rfl hF.1.2.2.2.2.2.2.2.2.2⟩
       · intro k hk
         have hks : k ≠ ofString "scratch_ptr" := by simpa using hk
         have hlk : outSt.globals.lookup k = st.globals.lookup k := by
@@ -3511,15 +3508,6 @@ theorem ww_rlp_item : WritesWithin (fun _s => []) ["scratch_ptr"] (ofString "rlp
                             (RlpFlowProg.call0 spec_rlp_list_count _)
                             (RlpFlowProg.of_ro (ReadOnlyProg.ret _)))))))))))))
   have hout := hf s hcode hAR hnt (Or.inr (Or.inr (Or.inr hres)))
-  refine ⟨hout.1, le_of_eq hout.2.1.symm, hout.2.2.2.1, ?_, hout.2.2.2.2.2⟩
-  intro a hkeep _
-  exact hout.2.2.2.2.1 a hkeep (fun hch => by unfold CellHits at hch; omega)
-
-theorem ww_rlp_list_count : WritesWithin (fun _s => []) ["scratch_ptr"] (ofString "rlp_list_count") := by
-  obtain ⟨params, body, ret, hlook, hspec⟩ := spec_rlp_list_count
-  refine ⟨params, body, ret, hlook, ?_⟩
-  intro F s hcode hAR hlookup hnt hres
-  have hout := hspec s hcode hAR hlookup hnt hres
   refine ⟨hout.1, le_of_eq hout.2.1.symm, hout.2.2.2.1, ?_, hout.2.2.2.2.2⟩
   intro a hkeep _
   exact hout.2.2.2.2.1 a hkeep (fun hch => by unfold CellHits at hch; omega)
@@ -5030,7 +5018,7 @@ theorem nodeHeap_mono_fresh {F : Type} {s post : PanSemStateFiniteExact 64 F}
         simp only [List.mem_singleton] at hi; subst hi
         have hk_hp := keyIn_in_heap (hpath hk12) hpos hA_s
         refine ⟨hA_s.2.2.2.2.2.2.1, ?_, ?_⟩
-        · dsimp only; have := hA_s.2.2.2.2.2.2.1; have := hA_s.2.2.2.2.2.2.2.1; omega
+        · dsimp only; have := hA_s.2.2.2.2.2.2.1; have := hA_s.2.2.2.2.2.2.2; omega
         · unfold Disj Inside at *; have := hA_s.2.1; have := hA_s.2.2.1; omega
       · intro hpos
         have hk_hp := keyIn_in_heap (hpath hk12) hpos hA_s

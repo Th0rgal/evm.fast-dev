@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxCuts
+import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_PtxPhase5
 set_option autoImplicit false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 4000000
@@ -13,7 +14,7 @@ open InitECandidate.Solver.PanRunBounded
 
 /-- Phase 5: native HOL spine depths 139–144. -/
 theorem ptxPhase5_cut (h : PtxCallees) :
-    TerminatingProgBoundedOn PtxReceiptsDone ptxPhase5 ptxCost5 := by
-  sorry
+    TerminatingProgBoundedOn PtxReceiptsDone ptxPhase5 ptxCost5 :=
+  FastPhase5.ptxPhase5_cut h
 
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10

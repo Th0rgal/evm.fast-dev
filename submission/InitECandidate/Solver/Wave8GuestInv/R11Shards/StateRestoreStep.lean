@@ -21,7 +21,7 @@ open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.S06
 open InitECandidate.Solver.Wave8Contracts.M08 (globN_eq_of_lookup ivl_allocated_bound
   htabFootprint_eq_of_hdr_unhit htabWF_congr_unhit)
-open InitECandidate.Solver.Wave8GuestInv.M19 (lookup_htab_del)
+open InitECandidate.Solver.Wave8GuestInv.HtabC00Ports (lookup_htab_del)
 open InitECandidate.Solver.Wave8M19.Htab (call0_flow evalList_cons_inv lookupCodeHOLFinite_param_at)
 
 theorem hoare_call_htab_in_S (m0 : BitVec 64 → HolWordLab 64) (S : List Nat) (FO : List Ivl)

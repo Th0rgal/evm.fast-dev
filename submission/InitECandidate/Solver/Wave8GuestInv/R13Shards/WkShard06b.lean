@@ -1026,8 +1026,6 @@ theorem lst_new_worldStep {F : Type}
     · exact InitECandidate.Solver.Wave8Contracts.M08.disj_allocated_fresh_heap hWOK.1.2 hA_post.2 hal_o
         ⟨by dsimp; omega, by dsimp; rw [hhp_post]; omega⟩
 
-end R13Wk06b
-
 theorem «wk_msg_new» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
@@ -1040,7 +1038,7 @@ theorem «wk_msg_new» :
     lookup_of_guestAst_getElem 465 (by rw [guestAst_len]; decide)
       (extractFn Guest.Software.guestFn_msg_new) rfl
   refine ⟨_, _, _, hlook, fun {F} s hcode hWOK _ _ hres => ?_⟩
-  exact R13Wk06b.alloc_memzero_return_worldStep s (ofString "m") 176
+  exact alloc_memzero_return_worldStep s (ofString "m") 176
     (by decide) (by decide) (by decide) hcode hWOK hres
 
 theorem «wk_te_new» :
@@ -1055,7 +1053,7 @@ theorem «wk_te_new» :
     lookup_of_guestAst_getElem 869 (by rw [guestAst_len]; decide)
       (extractFn Guest.Software.guestFn_te_new) rfl
   refine ⟨_, _, _, hlook, fun {F} s hcode hWOK _ _ hres => ?_⟩
-  exact R13Wk06b.alloc_memzero_return_worldStep s (ofString "te") 200
+  exact alloc_memzero_return_worldStep s (ofString "te") 200
     (by decide) (by decide) (by decide) hcode hWOK hres
 
 theorem «wk_lst_new» :
@@ -1072,5 +1070,7 @@ theorem «wk_lst_new» :
     lookup_of_guestAst_getElem 408 (by rw [guestAst_len]; decide)
       (extractFn Guest.Software.guestFn_lst_new) rfl
   refine ⟨_, _, _, hlook, fun {F} s hcode hWOK _ _ hres => ?_⟩
-  exact R13Wk06b.lst_new_worldStep s hcode hWOK hres
+  exact lst_new_worldStep s hcode hWOK hres
+
+end R13Wk06b
 end InitECandidate.Solver.Wave8GuestInv

@@ -143,7 +143,7 @@ theorem rt_scratch_alloc :
         unfold ArenaOK
         rw [hpost_hp, hpost_fp, hpost_sp]
         refine ⟨hA.1, hA.2.1, hA.2.2.1, ?_, ?_, hA.2.2.2.2.2.1, hA.2.2.2.2.2.2.1, hq_al,
-          globalsWord_update (ofString "scratch_ptr") q hpost_g hA.2.2.2.2.2.2.2.2⟩
+          globalsWord_update (s := s) (t := post) (ofString "scratch_ptr") q hpost_g hA.2.2.2.2.2.2.2.2⟩
         · rw [← hfp_eq]; exact hq_ge_fp
         · have hsp_le_se := hA.2.2.2.2.1
           rw [← hsp_eq] at hsp_le_se
