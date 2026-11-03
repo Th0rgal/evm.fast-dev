@@ -1,0 +1,110 @@
+import InitECandidate.Solver.Wave8GuestInv.Expressions
+import InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith.FqInverseSource
+
+set_option autoImplicit false
+set_option linter.unusedSimpArgs false
+set_option linter.unusedTactic false
+set_option linter.unnecessarySeqFocus false
+set_option maxRecDepth 1000000
+set_option maxHeartbeats 4000000
+set_option exponentiation.threshold 2000
+namespace InitECandidate.Solver.Wave8GuestInv.Arith
+
+def montRadix8 (a : Fin 8 → Nat) : Nat :=
+  a 0 * 1 + a 1 * 4294967296 + a 2 * 18446744073709551616 + a 3 * 79228162514264337593543950336 + a 4 * 340282366920938463463374607431768211456 + a 5 * 1461501637330902918203684832716283019655932542976 + a 6 * 6277101735386680763835789423207666416102355444464034512896 + a 7 * 26959946667150639794667015087019630673637144422540572481103610249216
+
+def fqConvolution0 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 0 + m 0 * 3632069959
+
+def fqConvolution1 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 1 + a 1 * b 0 + m 0 * 1008765974 + m 1 * 3632069959
+
+def fqConvolution2 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 2 + a 1 * b 1 + a 2 * b 0 + m 0 * 1752287885 + m 1 * 1008765974 + m 2 * 3632069959
+
+def fqConvolution3 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 3 + a 1 * b 2 + a 2 * b 1 + a 3 * b 0 + m 0 * 2541841041 + m 1 * 1752287885 + m 2 * 1008765974 + m 3 * 3632069959
+
+def fqConvolution4 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 4 + a 1 * b 3 + a 2 * b 2 + a 3 * b 1 + a 4 * b 0 + m 0 * 2172737629 + m 1 * 2541841041 + m 2 * 1752287885 + m 3 * 1008765974 + m 4 * 3632069959
+
+def fqConvolution5 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 5 + a 1 * b 4 + a 2 * b 3 + a 3 * b 2 + a 4 * b 1 + a 5 * b 0 + m 0 * 3092268470 + m 1 * 2172737629 + m 2 * 2541841041 + m 3 * 1752287885 + m 4 * 1008765974 + m 5 * 3632069959
+
+def fqConvolution6 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 6 + a 1 * b 5 + a 2 * b 4 + a 3 * b 3 + a 4 * b 2 + a 5 * b 1 + a 6 * b 0 + m 0 * 3778125865 + m 1 * 3092268470 + m 2 * 2172737629 + m 3 * 2541841041 + m 4 * 1752287885 + m 5 * 1008765974 + m 6 * 3632069959
+
+def fqConvolution7 (a b m : Fin 8 → Nat) : Nat :=
+  a 0 * b 7 + a 1 * b 6 + a 2 * b 5 + a 3 * b 4 + a 4 * b 3 + a 5 * b 2 + a 6 * b 1 + a 7 * b 0 + m 0 * 811880050 + m 1 * 3778125865 + m 2 * 3092268470 + m 3 * 2172737629 + m 4 * 2541841041 + m 5 * 1752287885 + m 6 * 1008765974 + m 7 * 3632069959
+
+def fqConvolution8 (a b m : Fin 8 → Nat) : Nat :=
+  a 1 * b 7 + a 2 * b 6 + a 3 * b 5 + a 4 * b 4 + a 5 * b 3 + a 6 * b 2 + a 7 * b 1 + m 1 * 811880050 + m 2 * 3778125865 + m 3 * 3092268470 + m 4 * 2172737629 + m 5 * 2541841041 + m 6 * 1752287885 + m 7 * 1008765974
+
+def fqConvolution9 (a b m : Fin 8 → Nat) : Nat :=
+  a 2 * b 7 + a 3 * b 6 + a 4 * b 5 + a 5 * b 4 + a 6 * b 3 + a 7 * b 2 + m 2 * 811880050 + m 3 * 3778125865 + m 4 * 3092268470 + m 5 * 2172737629 + m 6 * 2541841041 + m 7 * 1752287885
+
+def fqConvolution10 (a b m : Fin 8 → Nat) : Nat :=
+  a 3 * b 7 + a 4 * b 6 + a 5 * b 5 + a 6 * b 4 + a 7 * b 3 + m 3 * 811880050 + m 4 * 3778125865 + m 5 * 3092268470 + m 6 * 2172737629 + m 7 * 2541841041
+
+def fqConvolution11 (a b m : Fin 8 → Nat) : Nat :=
+  a 4 * b 7 + a 5 * b 6 + a 6 * b 5 + a 7 * b 4 + m 4 * 811880050 + m 5 * 3778125865 + m 6 * 3092268470 + m 7 * 2172737629
+
+def fqConvolution12 (a b m : Fin 8 → Nat) : Nat :=
+  a 5 * b 7 + a 6 * b 6 + a 7 * b 5 + m 5 * 811880050 + m 6 * 3778125865 + m 7 * 3092268470
+
+def fqConvolution13 (a b m : Fin 8 → Nat) : Nat :=
+  a 6 * b 7 + a 7 * b 6 + m 6 * 811880050 + m 7 * 3778125865
+
+def fqConvolution14 (a b m : Fin 8 → Nat) : Nat :=
+  a 7 * b 7 + m 7 * 811880050
+
+def fqWeightedColumns (cols : Fin 15 → Nat) : Nat :=
+  cols 0 * 1 + cols 1 * 4294967296 + cols 2 * 18446744073709551616 + cols 3 * 79228162514264337593543950336 + cols 4 * 340282366920938463463374607431768211456 + cols 5 * 1461501637330902918203684832716283019655932542976 + cols 6 * 6277101735386680763835789423207666416102355444464034512896 + cols 7 * 26959946667150639794667015087019630673637144422540572481103610249216 + cols 8 * 115792089237316195423570985008687907853269984665640564039457584007913129639936 + cols 9 * 497323236409786642155382248146820840100456150797347717440463976893159497012533375533056 + cols 10 * 2135987035920910082395021706169552114602704522356652769947041607822219725780640550022962086936576 + cols 11 * 9173994463960286046443283581208347763186259956673124494950355357547691504353939232280074212440502746218496 + cols 12 * 39402006196394479212279040100143613805079739270465446667948293404245721771497210611414266254884915640806627990306816 + cols 13 * 169230328010303641331690318856389386196071598838855992136870091590247882556495704531248437872567112920983350278405979725889536 + cols 14 * 726838724295606890549323807888004534353641360687318060281490199180639288113397923326191050713763565560762521606266177933534601628614656
+
+theorem fqConvolution_eq (a b m : Fin 8 → Nat) :
+    montRadix8 a * montRadix8 b + montRadix8 m * fqModulus.toNat =
+      fqConvolution0 a b m * 1 +
+      fqConvolution1 a b m * 4294967296 +
+      fqConvolution2 a b m * 18446744073709551616 +
+      fqConvolution3 a b m * 79228162514264337593543950336 +
+      fqConvolution4 a b m * 340282366920938463463374607431768211456 +
+      fqConvolution5 a b m * 1461501637330902918203684832716283019655932542976 +
+      fqConvolution6 a b m * 6277101735386680763835789423207666416102355444464034512896 +
+      fqConvolution7 a b m * 26959946667150639794667015087019630673637144422540572481103610249216 +
+      fqConvolution8 a b m * 115792089237316195423570985008687907853269984665640564039457584007913129639936 +
+      fqConvolution9 a b m * 497323236409786642155382248146820840100456150797347717440463976893159497012533375533056 +
+      fqConvolution10 a b m * 2135987035920910082395021706169552114602704522356652769947041607822219725780640550022962086936576 +
+      fqConvolution11 a b m * 9173994463960286046443283581208347763186259956673124494950355357547691504353939232280074212440502746218496 +
+      fqConvolution12 a b m * 39402006196394479212279040100143613805079739270465446667948293404245721771497210611414266254884915640806627990306816 +
+      fqConvolution13 a b m * 169230328010303641331690318856389386196071598838855992136870091590247882556495704531248437872567112920983350278405979725889536 +
+      fqConvolution14 a b m * 726838724295606890549323807888004534353641360687318060281490199180639288113397923326191050713763565560762521606266177933534601628614656 := by
+  have hp : fqModulus.toNat = 21888242871839275222246405745257275088696311157297823662689037894645226208583 := by decide
+  rw [hp]
+  norm_num only [montRadix8,
+    fqConvolution0, fqConvolution1, fqConvolution2, fqConvolution3, fqConvolution4, fqConvolution5, fqConvolution6, fqConvolution7, fqConvolution8, fqConvolution9, fqConvolution10, fqConvolution11, fqConvolution12, fqConvolution13, fqConvolution14]
+  ring
+
+/-- Combining the fifteen actual column equations cancels all intermediate
+carries. Low columns cancel; high columns emit seven digits and a final carry. -/
+theorem fqColumns_telescope (cols : Fin 15 → Nat) (carry : Fin 16 → Nat) (digits : Fin 7 → Nat)
+    (hzero : carry 0 = 0)
+    (h0 : 4294967296 * carry 1 = carry 0 + cols 0)
+    (h1 : 4294967296 * carry 2 = carry 1 + cols 1)
+    (h2 : 4294967296 * carry 3 = carry 2 + cols 2)
+    (h3 : 4294967296 * carry 4 = carry 3 + cols 3)
+    (h4 : 4294967296 * carry 5 = carry 4 + cols 4)
+    (h5 : 4294967296 * carry 6 = carry 5 + cols 5)
+    (h6 : 4294967296 * carry 7 = carry 6 + cols 6)
+    (h7 : 4294967296 * carry 8 = carry 7 + cols 7)
+    (h8 : digits 0 + 4294967296 * carry 9 = carry 8 + cols 8)
+    (h9 : digits 1 + 4294967296 * carry 10 = carry 9 + cols 9)
+    (h10 : digits 2 + 4294967296 * carry 11 = carry 10 + cols 10)
+    (h11 : digits 3 + 4294967296 * carry 12 = carry 11 + cols 11)
+    (h12 : digits 4 + 4294967296 * carry 13 = carry 12 + cols 12)
+    (h13 : digits 5 + 4294967296 * carry 14 = carry 13 + cols 13)
+    (h14 : digits 6 + 4294967296 * carry 15 = carry 14 + cols 14)
+    : 2 ^ 256 * (digits 0 * 1 + digits 1 * 4294967296 + digits 2 * 18446744073709551616 + digits 3 * 79228162514264337593543950336 + digits 4 * 340282366920938463463374607431768211456 + digits 5 * 1461501637330902918203684832716283019655932542976 + digits 6 * 6277101735386680763835789423207666416102355444464034512896 + carry 15 * 26959946667150639794667015087019630673637144422540572481103610249216) = fqWeightedColumns cols := by
+  unfold fqWeightedColumns
+  omega
+
+end InitECandidate.Solver.Wave8GuestInv.Arith
