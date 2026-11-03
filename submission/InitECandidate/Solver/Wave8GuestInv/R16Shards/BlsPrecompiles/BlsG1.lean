@@ -242,9 +242,10 @@ theorem fb_bls_g1_msm_exec :
     · rfl
     · decide
     · decide
-  · unfold K.«bls_g1_msm_exec»
+  · clear * -
+    unfold K.«bls_g1_msm_exec»
     rw [domainBytes_eq]
-    generalize_K
+    fast_generalize_K
     simp only [Nat.add_zero, nat_max_eq]
     omega
 

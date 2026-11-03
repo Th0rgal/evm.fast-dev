@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FGCommon
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.Composed
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_04
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FG_05
 
@@ -56,14 +57,12 @@ theorem fb_g2_set_inf :
   fg_prove 770 Guest.Software.guestFn_g2_set_inf K.g2_set_inf
 
 theorem fb_fp_mul :
-    TerminatingFunBoundedOn GuestInv (ofString "fp_mul") K.fp_mul := by
-  have _ := fb_fp_reduce
-  fg_prove 153 Guest.Software.guestFn_fp_mul K.fp_mul
+    TerminatingFunBoundedOn GuestInv (ofString "fp_mul") K.fp_mul :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_fp_mul
 
 theorem fb_fp_sqr :
-    TerminatingFunBoundedOn GuestInv (ofString "fp_sqr") K.fp_sqr := by
-  have _ := fb_fp_reduce
-  fg_prove 154 Guest.Software.guestFn_fp_sqr K.fp_sqr
+    TerminatingFunBoundedOn GuestInv (ofString "fp_sqr") K.fp_sqr :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_fp_sqr
 
 theorem fb_fq_from_mont :
     TerminatingFunBoundedOn GuestInv (ofString "fq_from_mont") K.fq_from_mont := by

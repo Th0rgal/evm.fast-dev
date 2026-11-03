@@ -303,13 +303,33 @@ macro_rules
          InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
          List.map, Option.map]))
 
+open Lean Elab Tactic Meta in
+elab "fast_generalize_K" : tactic => do
+  let mut g ← getMainGoal
+  let t ← g.withContext do instantiateMVars (← g.getType)
+  let cs := t.foldConsts #[] fun c acc =>
+    if c.getPrefix == `InitECandidate.Solver.Wave8GuestInv.K && !acc.contains c then acc.push c else acc
+  let mut idx := 0
+  for c in cs do
+    idx := idx + 1
+    g ← g.withContext do
+      let tgt ← instantiateMVars (← g.getType)
+      let abst ← withReducible <| kabstract tgt (mkConst c)
+      let nm := Name.mkSimple s!"kg{idx}"
+      let newTgt := mkForall nm BinderInfo.default (mkConst ``Nat) abst
+      let m ← mkFreshExprSyntheticOpaqueMVar newTgt
+      g.assign (mkApp m (mkConst c))
+      let (_, g') ← m.mvarId!.intro1P
+      pure g'
+  replaceMainGoal [g]
+
 syntax "bls_arith " ident : tactic
 macro_rules
   | `(tactic| bls_arith $k) => `(tactic|
-      (have hD : domainBytes + 1 + 1 ≤ 2 ^ 64 + 1 := by rw [domainBytes_eq]; decide
+      (clear * -
        unfold $k:ident
-       generalize_K
-       generalize domainBytes = D at hD ⊢
+       try rw [domainBytes_eq]
+       fast_generalize_K
        try simp only [Nat.zero_add, Nat.add_zero, nat_max_eq, max_self]
        first | omega | (simp only [Nat.max_def, max_def]; (try split_ifs) <;> omega)))
 

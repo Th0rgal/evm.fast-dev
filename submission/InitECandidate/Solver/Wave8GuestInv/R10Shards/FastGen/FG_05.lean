@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.FastGen.FGCommon
+import InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith.FqPolyLeaves
 
 
 set_option autoImplicit false
@@ -60,8 +61,8 @@ theorem fb_fq_add :
   fg_prove 649 Guest.Software.guestFn_fq_add K.fq_add
 
 theorem fb_fq_mul :
-    TerminatingFunBoundedOn GuestInv (ofString "fq_mul") K.fq_mul := by
-  fg_prove 652 Guest.Software.guestFn_fq_mul K.fq_mul
+    TerminatingFunBoundedOn GuestInv (ofString "fq_mul") K.fq_mul :=
+  InitECandidate.Solver.Wave8GuestInv.Arith.fb_fq_mul
 
 theorem fb_fq_neg :
     TerminatingFunBoundedOn GuestInv (ofString "fq_neg") K.fq_neg := by
