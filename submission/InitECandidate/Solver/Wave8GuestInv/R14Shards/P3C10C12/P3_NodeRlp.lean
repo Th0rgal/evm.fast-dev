@@ -1,4 +1,4 @@
-import InitECandidate.Solver.Wave8GuestInv.ContractParts.C09
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -6,7 +6,7 @@ set_option maxHeartbeats 2000000
 set_option exponentiation.threshold 2000
 set_option linter.unusedSimpArgs false
 
-namespace InitECandidate.Solver.Wave8GuestInv.P3NodeRlp
+namespace InitECandidate.Solver.Wave8GuestInv.P3C10C12
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -18,6 +18,14 @@ open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
+
+def GBody.«node_rlp» : Prop :=
+  (TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill») →
+  (TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail») →
+  (ReadOnlyFn (ofString "mpt_fail")) →
+  TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp»
+
+namespace P3NodeRlp
 
 private theorem localsOnly : LocalsOnly ["node"] NodeRlpReady := by
   intro F s locals k hl hP
@@ -69,12 +77,11 @@ private theorem lookup_rlp : originalRuntimeCode.lookup (ofString "node_rlp") =
   originalRuntimeCode_lookup_of_guestAst_getElem 285 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_node_rlp) rfl
 
-theorem gbody_node_rlp_proof
-    (hf : TerminatingFunBoundedOn NodeRlpReady (ofString "_node_rlp_fill") K.«_node_rlp_fill»)
-    (hm : TerminatingFunBoundedOn GuestInv (ofString "mpt_fail") K.«mpt_fail»)
-    (hr : ReadOnlyFn (ofString "mpt_fail")) :
-    TerminatingFunBoundedOn NodeRlpReady (ofString "node_rlp") K.«node_rlp» := by
-  refine ⟨_, _, _, lookup_rlp, ?_⟩
+end P3NodeRlp
+
+theorem «gbody_node_rlp» : GBody.«node_rlp» := by
+  intro hf hm hr
+  refine ⟨_, _, _, P3NodeRlp.lookup_rlp, ?_⟩
   simp only [sourceFunctionEntry, Guest.Software.guestFn_node_rlp,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
     InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
@@ -84,24 +91,24 @@ theorem gbody_node_rlp_proof
     InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
     Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   refine TerminatingProgBoundedOn.mono_bound
-    (TerminatingProgBoundedOn.dec_onLocals localsOnly _ (by decide) _ _
+    (TerminatingProgBoundedOn.dec_onLocals P3NodeRlp.localsOnly _ (by decide) _ _
       (TerminatingProgBoundedOn.seq_hoare
-        (weakenGuard (straight _ rfl) (fun s h => h.1.1))
+        (P3NodeRlp.weakenGuard (P3NodeRlp.straight _ rfl) (fun s h => h.1.1))
         (Hoare.ite_return_skip _ _)
         (TerminatingProgBoundedOn.seq_hoare
           (TerminatingProgBoundedOn.ite_on
             (TerminatingProgBoundedOn.call_on hm _ _
               (callEntryOn_of_imp localsFree_guestInv (fun s h => h.1.1) _ _))
-            (weakenGuard (straight _ rfl) (fun s h => h.1.1)))
+            (P3NodeRlp.weakenGuard (P3NodeRlp.straight _ rfl) (fun s h => h.1.1)))
           (Hoare.ite
-            (Hoare.mono (call_ro localsOnly (fun s h => h.1.1) hr _) (fun s h => h.1))
+            (Hoare.mono (P3NodeRlp.call_ro P3NodeRlp.localsOnly (fun s h => h.1.1) hr _) (fun s h => h.1))
             (Hoare.skip (fun s h _ => h.1)) (fun _ _ h => absurd h (by simp)))
           (TerminatingProgBoundedOn.seq_guestInv_after
-            (TerminatingProgBoundedOn.call_on hf _ _ (entry lookup_fill (by rfl)))
+            (TerminatingProgBoundedOn.call_on hf _ _ (P3NodeRlp.entry P3NodeRlp.lookup_fill (by rfl)))
             (fun s h => h.1.1)
             (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))) ?_
   unfold K.«node_rlp»
   simp only [Nat.max_def]
   split <;> omega
 
-end InitECandidate.Solver.Wave8GuestInv.P3NodeRlp
+end InitECandidate.Solver.Wave8GuestInv.P3C10C12
