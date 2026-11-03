@@ -51,7 +51,10 @@ import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_NodeRlp
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_NodeHash
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptRoot
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfCollapseBranch
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.NfDeleteExtFinish
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptNibbleKeyWW
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
@@ -101,7 +104,7 @@ theorem primitives : Primitives where
   «fb_memeq» := Merged.fb_memeq
   «fb_node_invalidate» := Merged.fb_node_invalidate
   «fb_scratch_alloc» := Merged.fb_scratch_alloc
-  «nf__collapse_branch» := «nf__collapse_branch»
+  «nf__collapse_branch» := R16Shards.«nf__collapse_branch»
   «nf__delete_ext_finish» := R16Shards.«nf__delete_ext_finish»
   «ro_common_prefix_length» := R10Ports.ro_common_prefix_length
   «rv_common_prefix_length» := Merged.rv_common_prefix_length
@@ -126,16 +129,16 @@ theorem primitives : Primitives where
   «ak__node_rlp_begin» := «ak__node_rlp_begin»
   «ak__node_rlp_finish» := «ak__node_rlp_finish»
   «gbody__node_rlp_fill» := «gbody__node_rlp_fill»
-  «gbody_node_rlp» := P3NodeRlp.gbody_node_rlp_proof
+  «gbody_node_rlp» := P3C10C12.«gbody_node_rlp»
   «fb_alloc» := Merged.fb_alloc
   «fb_keccak256» := PrimShardP10P30.fb_keccak256
-  «gbody_node_hash» := P3NodeHash.gbody_node_hash_proof
+  «gbody_node_hash» := P3C10C12.«gbody_node_hash»
   «fb_memcpy» := Merged.fb_memcpy
-  «gbody_mpt_root» := P3MptRoot.gbody_mpt_root_proof
+  «gbody_mpt_root» := P3C10C12.«gbody_mpt_root»
   «fb_mpt_nibble_key» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_mpt_nibble_key»
-  «ww_mpt_nibble_key» := «ww_mpt_nibble_key»
+  «ww_mpt_nibble_key» := R16Shards.ww_mpt_nibble_key
   «nk_mpt_nibble_key» := «nk_mpt_nibble_key»
-  «gbody_mpt_set» := P3MptSet.gbody_mpt_set_proof
+  «gbody_mpt_set» := P3C10C12.«gbody_mpt_set»
   «fb_heap_mark» := PrimShardP10P30.fb_heap_mark
   «fb_heap_release» := PrimShardP10P30.fb_heap_release
   «fb_mpt_new» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_mpt_new»
@@ -370,7 +373,7 @@ theorem primitives : Primitives where
   «fb_mark_account_created» := Merged.fb_mark_account_created
   «wk_destroy_storage» := «wk_destroy_storage»
   «wk_increment_nonce» := «wk_increment_nonce»
-  «wk_mark_account_created» := «wk_mark_account_created»
+  «wk_mark_account_created» := R16WkMarkAccountCreated.«wk_mark_account_created»
   «gbody_process_create_message» := «gbody_process_create_message»
   «fb_account_deployable» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_account_deployable»
   «fb_frame_state_gas_used» := Wave8Leaves.S03.fb_frame_state_gas_used

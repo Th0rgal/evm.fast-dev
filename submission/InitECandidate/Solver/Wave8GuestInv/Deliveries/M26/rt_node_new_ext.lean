@@ -116,7 +116,8 @@ theorem rt_node_new_ext :
       unfold ArenaOK
       rw [hpost_hp, hpost_fp, hpost_sp]
       refine ⟨?_, hq_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq_al, hA.2.2.2.2.2.2.1,
-        hA.2.2.2.2.2.2.2.1, globalsWord_update (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
+        hA.2.2.2.2.2.2.2.1,
+        globalsWord_update (s := s) (t := post) (ofString "heap_ptr") q rfl hA.2.2.2.2.2.2.2.2⟩
       have hsb_le : sourceBase ≤ hp.toNat := by rw [hhp_eq]; exact hA.1
       omega
     have hAG : AllocatorGrows s post := by

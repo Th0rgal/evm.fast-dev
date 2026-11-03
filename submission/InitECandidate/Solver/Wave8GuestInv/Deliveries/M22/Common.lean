@@ -235,8 +235,8 @@ theorem globN_eq_of_lookup_eq {F : Type} {s t : PanSemStateFiniteExact 64 F} {n 
     globN s n = globN t n := by
   simp only [globN, h]
 
-theorem Disj.symm {i j : Ivl} (h : Disj i j) : Disj j i :=
-  h.elim Or.inr Or.inl
+theorem Disj.symm {i j : Ivl} (h : Disj i j) : Disj j i := by
+  unfold Disj at h ⊢; omega
 
 theorem cellHits_of_inIvl {a : Nat} {i : Ivl} (h : InIvl a i) : CellHits a i :=
   ⟨by have := h.1; omega, h.2⟩
@@ -248,7 +248,7 @@ theorem cellHits_word_of_inIvl {a : Nat} {i : Ivl} (h1 : i.1 ≤ a) (h2 : a + 8 
 theorem not_cellHits_of_disj_aligned {a : Nat} {i j : Ivl}
     (ha1 : i.1 ≤ a) (ha2 : a + 8 ≤ i.1 + i.2) (hd : Disj i j) : ¬ CellHits a j := by
   rintro ⟨hc1, hc2⟩
-  rcases hd with h | h <;> omega
+  unfold Disj at hd; omega
 
 theorem allocated_mono {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")

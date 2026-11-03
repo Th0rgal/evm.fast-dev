@@ -76,6 +76,4 @@ theorem copyWords_append {width : Nat} [NeZero width]
     rw [getElem!_pos (bitmaps ++ extra) i lowLarge,List.getElem_append_left low,← patternEq,same]
     simpa only [sign,Bool.false_eq_true,if_false] using run
 
-set_option pp.fullNames true in
-set_option pp.fullNames true in
 end InitECandidate.Solver.Wave8Stage.StackBitmapPrefix

@@ -231,9 +231,10 @@ theorem rt_lst_new :
       rw [hpost_hp, hpost_fp, hpost_sp]
       refine ⟨by omega, hq2_hi, hA.2.2.1, hA.2.2.2.1, hA.2.2.2.2.1, hq2_al, hA.2.2.2.2.2.2.1,
         hA.2.2.2.2.2.2.2.1,
-        globalsWord_update (s := { s with globals := G1 }) (t := post) (ofString "heap_ptr") q2 rfl
-          (globalsWord_update (s := s) (t := { s with globals := G1 }) (ofString "heap_ptr") q1 rfl
-            hA.2.2.2.2.2.2.2.2)⟩
+        globalsWord_update (s := NS s L1 G1 s.memory (s.clock - 1)) (t := post)
+          (ofString "heap_ptr") q2 rfl
+          (globalsWord_update (s := s) (t := NS s L1 G1 s.memory (s.clock - 1))
+            (ofString "heap_ptr") q1 rfl hA.2.2.2.2.2.2.2.2)⟩
     have hAG : AllocatorGrows s post := by
       refine ⟨?_, by rw [hpost_sp]⟩
       rw [hpost_hp, ← hhp_eq]

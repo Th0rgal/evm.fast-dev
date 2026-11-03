@@ -297,7 +297,7 @@ private theorem worldStep_of_bs56_effect {F : Type}
         hsNoBs_other "scratch_ptr" (by decide)]
       exact ⟨hW.1.2.1, hW.1.2.2.1, hW.1.2.2.2.1, hW.1.2.2.2.2.1, hW.1.2.2.2.2.2.1,
         hW.1.2.2.2.2.2.2.1, hW.1.2.2.2.2.2.2.2.1, hW.1.2.2.2.2.2.2.2.2.1,
-        globalsWord_update (ofString "bs") 0#64 rfl hW.1.2.2.2.2.2.2.2.2.2⟩
+        globalsWord_update (s := s) (t := sNoBs) (ofString "bs") 0#64 rfl hW.1.2.2.2.2.2.2.2.2.2⟩
     have hF_sNoBs : FixedTyped sNoBs := by
       let tailIvls := [(if globN s "journal_cap" = 0 then 0 else globN s "journal", 32 * globN s "journal_cap")] ++
         blockOutObjects s ++ balObjects s

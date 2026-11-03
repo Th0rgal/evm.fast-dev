@@ -239,8 +239,6 @@ theorem resume_pmc (h : PtxCallees) :
     rw [hout_loc]
     exact (logsListOK_with_locals post resumed.locals post.clock _).mpr hll_out
 
-end Phase3
-
 /-- Phase 3: native HOL spine depths 98–99. -/
 theorem ptxPhase3_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn PtxMessageDone tail b) :
@@ -256,5 +254,7 @@ theorem ptxPhase3_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   rw [he] at hb
   intro F s hc hp
   exact hb s hc hp
+
+end Phase3
 
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10

@@ -20,6 +20,11 @@ theorem «wk_alloc» :
     (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc") :=
   InitECandidate.Solver.Wave8GuestInv.R13Shards.wk_alloc_impl
 
+theorem «rt_alloc» :
+    Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
+    (ofString "alloc") :=
+  InitECandidate.Solver.Wave8GuestInv.R13Shards.rt_alloc_impl
+
 theorem «rt_mpt_new» :
     Returns ArenaReady (fun s post m => FreshBlock s post m 16 ∧
       memW post m = locN s "root_node" ∧ memW post (m + 8) = locN s "secured")
