@@ -433,6 +433,7 @@ theorem eps_stack_push :
       have run_tail : ∀ (m : PanSemStateFiniteExact 64 F) (freshIvl : Ivl),
           ArenaReady m →
           globN m "scratch_ptr" ≤ globN s "scratch_ptr" →
+          (∀ g : String, ofString g ≠ ofString "scratch_ptr" → m.globals.lookup (ofString g) = s.globals.lookup (ofString g)) →
           ScratchByteEff s m [freshIvl, (globN s "ev", 280), (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232))] →
           (freshIvl = (0, 0) ∨
             (freshIvl.1 % 8 = 0 ∧ freshIvl.2 % 8 = 0 ∧
@@ -621,7 +622,10 @@ theorem eps_stack_push :
             have hsz0 : sizeOfShapeWithContextHOL m2.structs
                 (shapeOfHOLExact (.val (.word 0#64))) ≤ 32 := by
               simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
-            rw [if_pos hsz0]; dsimp only
+            have hsz0' : sizeOfShapeWithContextHOL m2.structs
+                (shapeOfHOLExact (.val (.word 0#64))) ≤ 32 := by
+              simp [shapeOfHOLExact, sizeOfShapeWithContextHOL]
+            simp only [hsz0, hsz0', ↓reduceIte]
             let post := { m2.emptyLocalsHOLFinite with
               locals := (m2.emptyLocalsHOLFinite.locals.resVarEq (ofString "cap", s1.locals.lookup (ofString "cap"))).resVarEq
                 (ofString "sp", s.locals.lookup (ofString "sp")) }
@@ -979,7 +983,7 @@ theorem eps_stack_push :
                       (fun v hv => by
                         change s6.locals.lookup (ofString "ns") = some v at hv
                         rw [hs6_ns] at hv; injection hv with hv'; exact ⟨nsw, hv'.symm⟩) hst8
-                    have hw_ns_val : w_ns' = nsw := by
+                    have hw_ns_val : nsw = w_ns' := by
                       change s6.locals.lookup (ofString "ns") = some (.val (.word w_ns')) at hw_ns_ev
                       rw [hs6_ns] at hw_ns_ev; injection hw_ns_ev with h1; injection h1 with h2; injection h2 with h3; exact h3.symm
                     rw [hw_ns_val] at hs7_eq
@@ -1012,7 +1016,7 @@ theorem eps_stack_push :
                         (fun v hv => by
                           change s7.locals.lookup (ofString "ncap") = some v at hv
                           rw [hs7_ncap] at hv; injection hv with hv'; exact ⟨ncapw, hv'.symm⟩) hst232
-                      have hw_ncap_val : w_ncap' = ncapw := by
+                      have hw_ncap_val : ncapw = w_ncap' := by
                         change s7.locals.lookup (ofString "ncap") = some (.val (.word w_ncap')) at hw_ncap_ev
                         rw [hs7_ncap] at hw_ncap_ev; injection hw_ncap_ev with h1; injection h1 with h2; injection h2 with h3; exact h3.symm
                       rw [hw_ncap_val] at hs8_eq
@@ -1183,6 +1187,7 @@ theorem eps_stack_push :
         exact run_tail s2 (0, 0)
           ⟨guestInv_congr (s := s) rfl rfl rfl rfl hInv.1.1, hInv.1.2⟩
           (le_refl _)
+          (fun _ _ => rfl)
           ((ScratchByteEff.refl s _).with_locals_clock s2.locals s.clock)
           (Or.inl rfl)
           (fun _ _ _ _ _ _ => rfl)
@@ -1221,6 +1226,12 @@ theorem eps_seq_call_ret0 {fname : MlS}
     (IsEvmErr r →
       EvmInv post ∧ evmChain post = evmChain s ∧ evmR post ≤ evmR s) := by
   dsimp only
+  have herr_triv : ∀ {P1 P2 : Prop},
+      (∀ v, (some PanSemResultExact.error : Option (PanSemResultExact 64)) = some (.returned v) → P1) ∧
+      (IsEvmErr (some PanSemResultExact.error) → P2) := by
+    intro _ _; constructor
+    · intro _ h; cases h
+    · rintro ⟨_, h⟩; cases h
   obtain ⟨params, body, retShape, hlk, hspec⟩ := hf
   rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_call] at hnt ⊢
   rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
@@ -1252,8 +1263,7 @@ theorem eps_seq_call_ret0 {fname : MlS}
           | returned vr =>
             by_cases hsh : shapeEqHOL (shapeOfHOLExact vr) ret' = true
             · simp only [hsh, ↓reduceIte]
-              have hs := hQ (by simp); dsimp only at hs; rw [hrun] at hs
-              obtain ⟨hInv_cp, hch_cp, hR_cp, hg_cp⟩ := hs.1 vr rfl
+              obtain ⟨hInv_cp, hch_cp, hR_cp, hg_cp⟩ := (hs_spec (by simp)).1 vr rfl
               rw [evaluateHOLFiniteState_return]; dsimp only [evalHOLExact]
               have hsz0 : sizeOfShapeWithContextHOL cpost.structs
                   (shapeOfHOLExact (.val (.word 0#64))) ≤ 32 := by
@@ -1273,8 +1283,7 @@ theorem eps_seq_call_ret0 {fname : MlS}
             dsimp only
             by_cases heid : eid = ofString "EvmErr"
             · subst heid
-              have hs := hQ (by simp); dsimp only at hs; rw [hrun] at hs
-              obtain ⟨hInv_cp, hch_cp, hR_cp⟩ := hs.2 ⟨ev, rfl⟩
+              obtain ⟨hInv_cp, hch_cp, hR_cp⟩ := (hs_spec (by simp)).2 ⟨ev, rfl⟩
               have hInv_el : EvmInv cpost.emptyLocalsHOLFinite := localsFree_evmInv cpost _ cpost.clock hInv_cp
               have hc_el := evm_congr (s := cpost) (t := cpost.emptyLocalsHOLFinite) rfl rfl
               have hch_el : evmChain cpost.emptyLocalsHOLFinite = evmChain cpost :=

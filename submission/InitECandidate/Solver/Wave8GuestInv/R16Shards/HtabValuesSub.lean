@@ -148,8 +148,10 @@ private theorem del_inner_values_sub {F : Type} (s post : PanSemStateFiniteExact
         rcases hgB with h | h
         · rw [h]; omega
         · exact fun e => hLI _ hmvL (e ▸ h)
-      have hc8p : nf (nf lw.toNat 0) 8 ≠ nf lw.toNat 0 := fun h => hgp (by rw [← h]; exact hp8p)
-      have hc16p : nf (nf lw.toNat 0) 16 ≠ nf lw.toNat 0 := fun h => hgp (by rw [← h]; exact hp16p)
+      have hc8p : nf (nf lw.toNat 0) 8 ≠ nf lw.toNat 0 := by
+        intro h; apply hgp; have := hp8p; rw [h] at this; exact this
+      have hc16p : nf (nf lw.toNat 0) 16 ≠ nf lw.toNat 0 := by
+        intro h; apply hgp; have := hp16p; rw [h] at this; exact this
       rcases hp0 : s.memory (nd + lw * 32 + 0) with ⟨p0⟩
       have ep0 : nf lw.toNat 0 = p0.toNat := nodeF_of s nd lw p0 0 hp0
       simp only [ep0] at hpB hp816 hp8p hp16p hc8B hc16B hcl hlp hmvp hgN hgp hmvg hc8p hc16p hgB
@@ -210,42 +212,115 @@ private theorem del_inner_values_sub {F : Type} (s post : PanSemStateFiniteExact
         clear * - hfp0 hfp2 hdA hhe hsvB hgN hMh rfr
         apply BitVec.eq_of_toNat_eq; rdsimp [hMh, rfr]
       simp only [fn_ite_apply, wv_ite, v6a, v6b, v6c, ite_self] at hpe
-      refine ⟨?_, ?_, ?_, ?_, ?_⟩
-      · change Wave8M19.memW post (tw.toNat + 8 * 3) = _
-        rw [memW_rdN, hpe, NS_memory]
-        by_cases hg : g0 = 0 <;> by_cases hl : g8 = p0 <;>
-          simp only [hg, hl, if_true, if_false] <;> rdsimp []
-      · change Wave8M19.memW post (tw.toNat + 8 * 5) = _
-        rw [memW_rdN, hpe, NS_memory]
-        by_cases hg : g0 = 0 <;> by_cases hl : g8 = p0 <;>
-          simp only [hg, hl, if_true, if_false] <;> rdsimp [hMh, e5_rd]
-      · change Wave8M19.memW post (tw.toNat + 8 * 6) = _
-        rw [memW_rdN, hpe, NS_memory]
-        by_cases hg : g0 = 0 <;> by_cases hl : g8 = p0 <;>
-          simp only [hg, hl, if_true, if_false] <;> rdsimp [hMh, e6_rd]
+      have hnaddr : ∀ m k, m < Wave8M19.hdr s tw.toNat 10 + 1 → k < 32 →
+          nd.toNat + 32 * m + k < 2 ^ 64 := by
+        clear * - hfp2 hhe; intro m k hm hk; omega
+      have hhaddr : ∀ c, c < 88 → tw.toNat + c < 2 ^ 64 := by
+        clear * - hfp0 hhe; intro c hc; omega
+      have hhdr_k : ∀ k, k < 11 → k ≠ 7 → k ≠ 9 →
+          Wave8M19.hdr post tw.toNat k = if k = 3 then cw.toNat else Wave8M19.hdr s tw.toNat k := by
+        intro k hk hk7 hk9
+        have hc : 8 * k < 88 := by omega
+        have hread : tw.toNat + 8 * k < 2 ^ 64 := hhaddr (8 * k) hc
+        have hsepN : ∀ m j, m < Wave8M19.hdr s tw.toNat 10 + 1 → j < 32 →
+            tw.toNat + 8 * k ≠ nd.toNat + 32 * m + j := by
+          clear * - hdA hc; intro m j hm hj; omega
+        have he3 : tw.toNat + 8 * k = tw.toNat + 24 ↔ k = 3 := by omega
+        have he7 : tw.toNat + 8 * k ≠ tw.toNat + 56 := by omega
+        have he9 : tw.toNat + 8 * k ≠ tw.toNat + 72 := by omega
+        by_cases hg : g0.toNat = 0 <;> by_cases hl : g8.toNat = p0.toNat
+        all_goals
+          simp only [← BitVec.toNat_inj, bv0_toNat, hg, hl, if_true, if_false] at hpe
+          simp only [Wave8M19.hdr, memW_rdN, hpe, NS_memory]
+          clear * - hread hnaddr hhaddr hsepN he3 he7 he9 hc hgN hpB hlwB hsvB hMh
+          simp only [an0, an8, an16, ah24, ah56, ah72, rdN_upd,
+            Nat.mod_eq_of_lt hread,
+            Nat.mod_eq_of_lt (hnaddr lw.toNat 0 hlwB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr p0.toNat 0 hpB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr sv.toNat 0 hsvB.2.1 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 8 hgN (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 16 hgN (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 24 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 56 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 72 (by decide)),
+            if_neg (hsepN lw.toNat 0 hlwB.2 (by decide)),
+            if_neg (hsepN p0.toNat 0 hpB.2 (by decide)),
+            if_neg (hsepN sv.toNat 0 hsvB.2.1 (by decide)),
+            if_neg (hsepN g0.toNat 8 hgN (by decide)),
+            if_neg (hsepN g0.toNat 16 hgN (by decide)),
+            if_neg he7, if_neg he9, he3, hMh (8 * k) hc]
+      refine ⟨hhdr_k 3 (by decide) (by decide) (by decide),
+              (hhdr_k 5 (by decide) (by decide) (by decide)).trans h5,
+              (hhdr_k 6 (by decide) (by decide) (by decide)).trans h6, ?_, ?_⟩
       · intro i hi
-        have hiB : i < Wave8M19.hdr s tw.toNat 10 + 1 := by omega
+        have hiN : i < Wave8M19.hdr s tw.toNat 10 + 1 := by clear * - hi hcw hlen hLlen hnx; omega
+        have hread : ow.toNat + 8 * i < 2 ^ 64 := by clear * - hfp3 hhe hiN; omega
+        have hsepN : ∀ m k, m < Wave8M19.hdr s tw.toNat 10 + 1 → k < 32 →
+            ow.toNat + 8 * i ≠ nd.toNat + 32 * m + k := by
+          clear * - hdC hiN; intro m k hm hk; omega
+        have hsepH : ∀ c, c < 88 → ow.toNat + 8 * i ≠ tw.toNat + c := by
+          clear * - hdB hiN; intro c hc; omega
         change Wave8M19.memW post (ow.toNat + 8 * i) = _
-        rw [memW_rdN, hpe, NS_memory]
-        by_cases hg : g0 = 0 <;> by_cases hl : g8 = p0 <;>
-          simp only [hg, hl, if_true, if_false] <;> rdsimp []
+        by_cases hg : g0.toNat = 0 <;> by_cases hl : g8.toNat = p0.toNat
+        all_goals
+          simp only [← BitVec.toNat_inj, bv0_toNat, hg, hl, if_true, if_false] at hpe
+          simp only [memW_rdN, hpe, NS_memory]
+          clear * - hread hnaddr hhaddr hsepN hsepH hiN hgN hpB hlwB hsvB
+          simp only [an0, an8, an16, ah24, ah56, ah72, rdN_upd,
+            Nat.mod_eq_of_lt hread,
+            Nat.mod_eq_of_lt (hnaddr lw.toNat 0 hlwB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr p0.toNat 0 hpB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr sv.toNat 0 hsvB.2.1 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 8 hgN (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 16 hgN (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 24 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 56 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 72 (by decide)),
+            if_neg (hsepH 24 (by decide)), if_neg (hsepH 56 (by decide)),
+            if_neg (hsepH 72 (by decide)),
+            if_neg (hsepN lw.toNat 0 hlwB.2 (by decide)),
+            if_neg (hsepN p0.toNat 0 hpB.2 (by decide)),
+            if_neg (hsepN sv.toNat 0 hsvB.2.1 (by decide)),
+            if_neg (hsepN g0.toNat 8 hgN (by decide)),
+            if_neg (hsepN g0.toNat 16 hgN (by decide))]
       · intro z hz
         have hzB := hLIF z (mL z hz)
         have hzg : z ≠ g0.toNat := by
           rcases hgB with h0 | hI
           · omega
           · exact fun e => hLI z hz (e ▸ hI)
+        have hsep : ∀ c, c < 88 → nd.toNat + 32 * z + 8 ≠ tw.toNat + c := by
+          clear * - hzB hdA; intro c hc; omega
         change Wave8M19.memW post (nd.toNat + 32 * z + 8) = _
-        rw [memW_rdN, hpe, NS_memory]
-        by_cases hg : g0 = 0 <;> by_cases hl : g8 = p0 <;>
-          simp only [hg, hl, if_true, if_false] <;> rdsimp []
+        by_cases hg : g0.toNat = 0 <;> by_cases hl : g8.toNat = p0.toNat
+        all_goals
+          simp only [← BitVec.toNat_inj, bv0_toNat, hg, hl, if_true, if_false] at hpe
+          simp only [memW_rdN, hpe, NS_memory]
+          clear * - hnaddr hhaddr hsep hzB hgN hpB hlwB hsvB hzg
+          simp only [an0, an8, an16, ah24, ah56, ah72, rdN_upd,
+            Nat.mod_eq_of_lt (hnaddr z 8 hzB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr lw.toNat 0 hlwB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr p0.toNat 0 hpB.2 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr sv.toNat 0 hsvB.2.1 (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 8 hgN (by decide)),
+            Nat.mod_eq_of_lt (hnaddr g0.toNat 16 hgN (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 24 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 56 (by decide)),
+            Nat.mod_eq_of_lt (hhaddr 72 (by decide)),
+            if_neg (hsep 24 (by decide)), if_neg (hsep 56 (by decide)),
+            if_neg (hsep 72 (by decide)),
+            node_addr_eq_iff nd.toNat z lw.toNat 8 0 (by decide) (by decide),
+            node_addr_eq_iff nd.toNat z p0.toNat 8 0 (by decide) (by decide),
+            node_addr_eq_iff nd.toNat z sv.toNat 8 0 (by decide) (by decide),
+            node_addr_eq_iff nd.toNat z g0.toNat 8 8 (by decide) (by decide),
+            node_addr_eq_iff nd.toNat z g0.toNat 8 16 (by decide) (by decide),
+            hzg, show ¬((8 : Nat) = 0) by decide, and_false, false_and, if_false]
   obtain ⟨hh3_p, hh5_p, hh6_p, hord_p, hnd8_p⟩ := hpost_reads
   intro x hx
   unfold htabValues at hx ⊢
   rw [hh3_p, hh5_p, hh6_p] at hx
   obtain ⟨i, hi_mem, hxi⟩ := List.mem_map.mp hx
   have hi_lt : i < cw.toNat := List.mem_range.mp hi_mem
-  dsimp only at hxi
   obtain ⟨j, hj_lt, hMo_ij, hj_L⟩ := hMo i hi_lt
   have hord_eq : memW post (ow.toNat + 8 * i) = memW s (ow.toNat + 8 * j) := by
     rw [hord_p i hi_lt, hMo_ij]
@@ -262,8 +337,9 @@ private theorem del_inner_values_sub {F : Type} (s post : PanSemStateFiniteExact
     change _ = Wave8M19.nodeF s nd.toNat z 8
     rw [Wave8M19.nodeF, memW_rdN]
   rw [← hxi, hord_eq, hnd_eq]
-  change nodeF s (Wave8M19.hdr s tw.toNat 5) (memW s (Wave8M19.hdr s tw.toNat 6 + 8 * j)) 8 ∈ _
-  rw [h5, h6]
+  have h5' : hdr s tw.toNat 5 = nd.toNat := h5
+  have h6' : hdr s tw.toNat 6 = ow.toNat := h6
+  rw [h5', h6']
   exact List.mem_map.mpr ⟨j, List.mem_range.mpr hj_lt, rfl⟩
 
 theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -286,7 +362,7 @@ theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
             FrontendCodecComputation.shapeToHOLStructural (extractFn Guest.Software.guestFn_htab_del).returnShape) :=
         lookup_of_guestAst_getElem 139 (by rw [guestAst_len]; decide)
           (extractFn Guest.Software.guestFn_htab_del) rfl
-      rw [hl] at h1; injection h1 with h1; injection h1 with _ h2; injection h2 with hb _; exact hb
+      rw [hl] at h1; injection h1 with h1; injection h1 with _ h2; exact (Prod.mk.inj h2).1
     subst hbody_eq
     have hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).1 ≠ some .timeOut := by
       rw [hv]; simp
@@ -339,6 +415,10 @@ theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp only [Wave8M19.Inside] at hfp0
   have hLIb : ∀ n ∈ L ++ I ++ Fr, 1 ≤ n ∧ n < Wave8M19.hdr s tw.toNat 10 + 1 := fun n hn => by
     have := (hmemr n).1 hn; omega
+  have hndLI := List.nodup_append.mp (List.nodup_append.mp hnodup).1
+  have hLlen' : L.length ≤ Wave8M19.hdr s tw.toNat 8 - 1 :=
+    nodup_len_le L _ hndLI.1 (fun x hx => (hmemr x).1 (by simp [hx]))
+  have hmk : Wave8M19.maxKeyLen = 60 := rfl
   have hres := (del_walk2 s hcode tw ht (0 :: (L ++ I))
     (fun u hu => by
       rw [hrt] at hu; simp only [HolWordLab.word.injEq] at hu; subst hu
@@ -358,7 +438,6 @@ theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
         have := (hord i hi).2.1
         rw [hiw] at this
         apply hne
-        have hmk : maxKeyLen = 60 := rfl
         have h8 : (k * 8).toNat = k.toNat * 8 := by rw [BitVec.toNat_mul]; simp; omega
         rw [h8]; unfold Wave8M19.nodeF at this; omega
       · obtain ⟨_, h8, h16, _⟩ := hint _ hwI
@@ -367,8 +446,9 @@ theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
     nd ow cntw hnd how hcnt).run v hv
   rcases hres with heq | ⟨lw, pw, mv, hlwS, hlw0, hcrit, hpw, hmv0, hcase⟩
   · intro x hx
-    have hmem_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.memory = s.memory :=
-      congrArg PanSemStateFiniteExact.memory heq
+    have hmem_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.memory = s.memory := by
+      have hm := congrArg PanSemStateFiniteExact.memory heq
+      exact hm
     have hveq : htabValues (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2 tw.toNat =
         htabValues s tw.toNat := by
       simp [htabValues, hdr, nodeF, memW, hmem_eq]
@@ -383,7 +463,6 @@ theorem htab_del_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
       · exfalso
         have hc := hcrit nd k hnd hk
         have h24 := (hint _ h).1
-        have hmk : maxKeyLen = 60 := rfl
         have h8 : (k * 8).toNat = k.toNat * 8 := by rw [BitVec.toNat_mul]; simp; omega
         rw [h8] at hc; unfold Wave8M19.nodeF at h24; omega
     have hL0 : 0 < L.length := List.length_pos_of_mem hleaf
@@ -524,12 +603,15 @@ private theorem set_branch_empty_values {F : Type}
   have hsep1 := htabBlocks_cell_sep hB1
   have hh3_end : hdr s_end t 3 = 1 := by
     have h1 : hdr s_end t 3 = hdr s1 t 3 := memW_updW_other s1 _ _ _ (hne_hdr 3 (by omega) (by omega))
+    have h2 : hdr s1 t 3 = hdr s t 3 + 1 := hh3_1
     omega
   have hh5_end : hdr s_end t 5 = hdr s1 t 5 := memW_updW_other s1 _ _ _ (hne_hdr 5 (by omega) (by omega))
   have hh6_end : hdr s_end t 6 = hdr s1 t 6 := memW_updW_other s1 _ _ _ (hne_hdr 6 (by omega) (by omega))
   have hnl_rng : 1 ≤ nlw.toNat ∧ nlw.toNat < hdr s1 t 8 :=
     (hmem1 nlw.toNat).mp (List.mem_append_left _ (by simp))
-  have hnl_lt_nc1 : nlw.toNat < hdr s1 t 10 + 1 := by have := hB1.2.2.2.2.2.2.2; omega
+  have hnl_lt_nc1 : nlw.toNat < hdr s1 t 10 + 1 := by
+    have : hdr s1 t 8 ≤ hdr s1 t 10 + 1 := hB1.2.2.2.2.2.2.2
+    omega
   have h0_lt_nc1 : 0 < hdr s1 t 10 + 1 := by omega
   have hord0_end : memW s_end (hdr s_end t 6 + 8 * 0) = nlw.toNat := by
     rw [hh6_end]
@@ -615,7 +697,7 @@ private theorem set_branch_overwrite_values {F : Type}
   apply Ret.ns_ret; intro _ _
   set addr := ndw + leafw * 32#64 + 8#64
   have haddr_eq : addr = BitVec.ofNat 64 (hdr s0 t 5 + 32 * leafw.toNat + 8) := by
-    dsimp [addr]; rw [← hndw_nat]; exact (ofNat_node_addr ndw leafw 8).symm
+    rw [← hndw_nat]; exact (ofNat_node_addr ndw leafw 8).symm
   let s_end := NS s0 HolFiniteMapExact.empty s0.globals (updW s0.memory addr valw) s.clock
   have hsep0 := htabBlocks_cell_sep hB0
   have hne_hdr : ∀ k < 11, BitVec.ofNat 64 (t + 8 * k) ≠ addr := by
@@ -639,7 +721,6 @@ private theorem set_branch_overwrite_values {F : Type}
   have hord_i : memW s_end (hdr s0 t 6 + 8 * i) = memW s0 (hdr s0 t 6 + 8 * i) := by
     apply memW_updW_other s0; rw [haddr_eq]
     exact hsep0.2.2.1 leafw.toNat hleaf_lt_nc0 8 (Or.inr (Or.inl rfl)) i (by omega)
-  dsimp only at hxi
   rw [hord_i] at hxi
   set z := memW s0 (hdr s0 t 6 + 8 * i)
   have hz_eq : z = L0[i] := (hT0.2.2.2.2.1 i hi_L0).1
@@ -727,14 +808,20 @@ private theorem set_splice_values {F : Type}
     intro xw off; rw [← hndw_nat]; exact (ofNat_node_addr ndw xw off).symm
   have hnd_all := (List.nodup_append.mp hnodup2).1
   have hnd_A1 := (List.nodup_append.mp hnd_all).1
+  have hnx2_le : hdr s2 t 8 ≤ hdr s2 t 10 + 1 := hB2.2.2.2.2.2.2.2
   have hLI_lt_nc2 : ∀ z ∈ L0 ++ I0, z < hdr s2 t 10 + 1 := by
     intro z hz
-    have := (hmem2 z).mp (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ hz)))
+    have hzr : 1 ≤ z ∧ z < hdr s2 t 8 :=
+      (hmem2 z).mp (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_left _ hz)))
     omega
   have hni_lt_nc2 : niw.toNat < hdr s2 t 10 + 1 := by
-    have := (hmem2 niw.toNat).mp (List.mem_append_left _ (List.mem_append_right _ (by simp))); omega
+    have hnir : 1 ≤ niw.toNat ∧ niw.toNat < hdr s2 t 8 :=
+      (hmem2 niw.toNat).mp (List.mem_append_left _ (List.mem_append_right _ (by simp)))
+    omega
   have hnl_lt_nc2 : nlw.toNat < hdr s2 t 10 + 1 := by
-    have := (hmem2 nlw.toNat).mp (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (by simp)))); omega
+    have hnlr : 1 ≤ nlw.toNat ∧ nlw.toNat < hdr s2 t 8 :=
+      (hmem2 nlw.toNat).mp (List.mem_append_left _ (List.mem_append_left _ (List.mem_append_right _ (by simp))))
+    omega
   have hnw_lt_nc2 : nw.toNat < hdr s2 t 10 + 1 := hLI_lt_nc2 nw.toNat hnw_LI
   have hnl_ne_ni : nlw.toNat ≠ niw.toNat := fun h =>
     (List.nodup_append.mp hnd_all).2.2 niw.toNat (List.mem_append_right _ (by simp [h])) niw.toNat (by simp) rfl
@@ -860,7 +947,6 @@ private theorem set_splice_values {F : Type}
     rw [hh3_end, hh5_end, hh6_end] at hx
     obtain ⟨i, hi_mem, hxi⟩ := List.mem_map.mp hx
     have hi_lt : i < hdr s0 t 3 + 1 := List.mem_range.mp hi_mem
-    dsimp only at hxi
     by_cases hi_eq : i = hdr s0 t 3
     · left
       subst hi_eq
@@ -965,7 +1051,7 @@ private theorem set_splice_values {F : Type}
       intro _
       apply Ret.ns_ret; intro _ _
       exact splice_mem_values ch_left (updW m5_val (tw + 56#64) niw)
-        (by dsimp only; rw [if_pos hpz, hm5_eq])
+        (by rw [if_pos hpz, hm5_eq])
     · have hpnz := hcwp_spec.2 hcwp_z
       have hpI : pw.toNat ∈ I0 := by
         rcases hpw_spec with ⟨h0, _⟩ | ⟨hI, _, _⟩
@@ -1026,7 +1112,7 @@ private theorem set_splice_values {F : Type}
         intro _
         apply Ret.ns_ret; intro _ _
         exact splice_mem_values ch_left (updW m5_val (ndw + pw * 32#64 + 8#64) niw)
-          (by dsimp only; rw [if_neg hpnz, if_pos hp8_eq, hm5_eq])
+          (by rw [if_neg hpnz, if_pos hp8_eq, hm5_eq])
       · have hp8_ne := hcw8_spec.2 hcw8_z
         refine Ret.ns_storeW (ndw + pw * 32#64 + 16#64) niw
           (eval_node_field_expr _ (ofString "p") ndw pw 16 hl_nd hl_p)
@@ -1034,7 +1120,7 @@ private theorem set_splice_values {F : Type}
         intro _
         apply Ret.ns_ret; intro _ _
         exact splice_mem_values ch_left (updW m5_val (ndw + pw * 32#64 + 16#64) niw)
-          (by dsimp only; rw [if_neg hpnz, if_neg hp8_ne, hm5_eq])
+          (by rw [if_neg hpnz, if_neg hp8_ne, hm5_eq])
   apply Ret.seq_ite
   intro cw_bit _
   refine ⟨fun _ => ?_, fun _ => ?_⟩
@@ -1163,6 +1249,10 @@ private theorem htab_set_body_values {F : Type}
       show ofString "keys" ≠ ofString "stride" by decide, show ofString "leaf" ≠ ofString "stride" by decide]
   refine Ret.ite_ret
     (fun _ => by
+      dsimp only [FrontendCodecComputation.progToHOLStructural,
+        FrontendCodecComputation.expToHOLStructural,
+        FrontendCodecComputation.expListToHOLStructural,
+        FrontendCodecComputation.shapeToHOLStructural]
       rw [evaluateHOLFiniteState_decCall_total]
       split
       · simp
@@ -1186,7 +1276,7 @@ private theorem htab_set_body_values {F : Type}
   intro cw_lf hcw_lf
   have hcw_lf_spec : (cw_lf ≠ 0 → leafw = 0) ∧ (cw_lf = 0 → leafw ≠ 0) := by
     obtain ⟨va, vb, hva, hvb, hcw_eq⟩ := evalAt_cmp s_k .equal _ _ cw_lf hcw_lf
-    simp [evalAt, evalHOLExact, hleaf_sk] at hva hvb
+    simp [FrontendCodecComputation.expToHOLStructural, evalAt, evalHOLExact, hleaf_sk] at hva hvb
     subst hva hvb
     constructor
     · intro hnz; by_contra hne
@@ -1226,7 +1316,8 @@ private theorem htab_set_body_values {F : Type}
       simp only [evalAt, PanSemStateFiniteExact.toExact, evalHOLExact, evalListHOLExact,
         hkeys_sk, hleaf_sk, hst_sk, List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr,
         valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL, Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq]
-      rw [BitVec.add_zero]
+      have hz : leafw * stridew + (0 : BitVec 64) = leafw * stridew := BitVec.add_zero _
+      rw [hz]
     refine Ret.decCall3_lf hLF hcode_sk (by decide) (by decide) (by decide)
       lookup_memeq_fn lkeyw keyw klenw hev_lkey
       (by simp [evalAt, evalHOLExact]; exact hkey_sk)
@@ -1263,7 +1354,7 @@ private theorem htab_set_body_values {F : Type}
     intro cw_eq hcw_eq
     have hcw_eq_spec : (cw_eq ≠ 0 → eqw ≠ 0) ∧ (cw_eq = 0 → eqw = 0) := by
       obtain ⟨va, vb, hva, hvb, hcwe⟩ := evalAt_cmp s_eq .notEqual _ _ cw_eq hcw_eq
-      simp [evalAt, evalHOLExact, heq_seq] at hva hvb
+      simp [FrontendCodecComputation.expToHOLStructural, evalAt, evalHOLExact, heq_seq] at hva hvb
       subst hva hvb
       constructor
       · intro hnz heq0
@@ -1320,7 +1411,8 @@ private theorem htab_set_body_values {F : Type}
         simp only [evalAt, PanSemStateFiniteExact.toExact, evalHOLExact, evalListHOLExact,
           hkeys_seq, hleaf_seq, hst_seq, List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr,
           valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL, Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq]
-        rw [BitVec.add_zero]
+        have hz : leafw * stridew + (0 : BitVec 64) = leafw * stridew := BitVec.add_zero _
+        rw [hz]
       refine Ret.decCall3_lf hLF hcode_seq (by decide) (by decide) (by decide)
         lookup_htab_first_diff keyw lkeyw klenw
         (by simp [evalAt, evalHOLExact]; exact hkey_seq)
@@ -1366,7 +1458,8 @@ private theorem htab_set_body_values {F : Type}
       obtain ⟨_, hvnd_eq⟩ := ev_field_load s_d (ofString "t") tw 40#64 ht_sd vnd hvnd
       rw [hs_d_fr.memory, hm0_t5] at hvnd_eq; subst hvnd_eq
       apply Ret.dec_lf hLF; intro vp0 hvp0
-      have hvp0_eq : vp0 = .val (.word 0#64) := by simp [evalAt, evalHOLExact] at hvp0; exact hvp0.symm
+      have hvp0_eq : vp0 = .val (.word 0#64) := by
+        simp [FrontendCodecComputation.expToHOLStructural, evalAt, evalHOLExact] at hvp0; exact hvp0.symm
       subst hvp0_eq
       apply Ret.dec_lf hLF; intro vr0 hvr0
       obtain ⟨_, hvr0_eq⟩ := ev_field_load _ (ofString "t") tw 56#64
@@ -1548,7 +1641,5 @@ theorem htab_set_values_sub {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact ⟨hExit, hbe, hvals⟩
 
 end HtabSetValues
-
-end InitECandidate.Solver.Wave8GuestInv.R16Shards
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
