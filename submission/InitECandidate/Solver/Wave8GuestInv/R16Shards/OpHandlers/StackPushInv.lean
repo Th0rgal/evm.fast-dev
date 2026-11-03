@@ -35,7 +35,7 @@ structure ScratchByteEff {F : Type} (s post : PanSemStateFiniteExact 64 F) (Rl :
   shMemaddrs : post.shMemaddrs = s.shMemaddrs
   baseAddr   : post.baseAddr = s.baseAddr
   be         : post.be = s.be
-  glob_other : ∀ g : String, g ≠ "scratch_ptr" → post.globals.lookup (ofString g) = s.globals.lookup (ofString g)
+  glob_other : ∀ g : String, ofString g ≠ ofString "scratch_ptr" → post.globals.lookup (ofString g) = s.globals.lookup (ofString g)
   out_dom    : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a
   cell_frame : ∀ a : BitVec 64, (∀ i ∈ Rl, ¬ CellHits a.toNat i) → post.memory a = s.memory a
   byte_frame : ∀ b : Nat, b < 2 ^ 64 → (∀ i ∈ Rl, ¬ InIvl b i) → memB post b = memB s b
@@ -260,7 +260,7 @@ theorem evmInv_of_head_stack_push {F : Type}
     · exact he0_8
     · exact holdStk_8
   have hdom_eq : post.memaddrs = s.memaddrs := heff.memaddrs
-  have hglob_eq : ∀ g, g ≠ "scratch_ptr" → globN post g = globN s g :=
+  have hglob_eq : ∀ g, ofString g ≠ ofString "scratch_ptr" → globN post g = globN s g :=
     fun g hg => globN_eq_of_lookup_eq (heff.glob_other g hg)
   have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hglob_eq "heap_ptr" (by decide)]
   have hfo_disj_wti : ∀ o ∈ frameObjects s (e0, c0), ∀ i ∈ worldTypedIvls s S Nd_at, i.2 = 0 ∨ Disj o i := by
@@ -303,12 +303,21 @@ theorem evmInv_of_head_stack_push {F : Type}
     ByteRegionEffect.sameTypedCells (Rl := []) (extra := [freshIvl, (e0, 280), oldStk])
       hAs.1.memaddrs hWT (fun _ h => by simp at h) hwrite_disj_wti (by simpa using heff.to_bre_dummy)
   have hcell : SameTypedCells s post S Nd_at := hcellG
-  have hfeq := fixedObjects_eq_of_nonHeapGlobalsKept hAs.2 hWT.1 hWT.2.2.1 hcell
-    (fun name _ h2 _ => (heff.glob_other name h2).symm)
+  have hfeq : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hglob_eq "bo" (by decide)),
+        balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell (hglob_eq "bal_accounts" (by decide)),
+        hglob_eq "journal" (by decide),
+        hglob_eq "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "scratch_ptr" := by clear * - hgn; revert gn hgn; decide
+    rw [hglob_eq gn.1 hne]
   have hFT_post := fixedTyped_of_eq hApost hWT.2.2.1 hh hsc_le hfeq
   have hcg : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
     intro g hg
-    have hne : g ≠ "scratch_ptr" := by clear * - hg; revert g hg; decide
+    have hne : ofString g ≠ ofString "scratch_ptr" := by clear * - hg; revert g hg; decide
     exact hglob_eq g hne
   obtain ⟨hWT_post, _⟩ := worldTypedWith_congr_w1 hAs hApost hh hsc_le hcg hcell hWT
     ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
