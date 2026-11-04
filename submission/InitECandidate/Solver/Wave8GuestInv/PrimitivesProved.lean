@@ -73,6 +73,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.ValidVers
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.DecodeStep
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.BlobGasPrice
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.LogsBloom
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
@@ -445,7 +446,7 @@ theorem primitives : Primitives where
   «wk_clear_account_preserving_balance» := «wk_clear_account_preserving_balance»
   «wk_compute_contract_address» := R16Shards.WkBlockTxEnc.«wk_compute_contract_address»
   «wk_create_ether» := «wk_create_ether»
-  «wk_encode_receipt» := «wk_encode_receipt»
+  «wk_encode_receipt» := R16Shards.WkBlockTxEnc.«wk_encode_receipt»
   «wk_encode_transaction» := «wk_encode_transaction»
   «ro_fee_mul» := R10Ports.ro_fee_mul
   «wk_get_account» := R16Shards.EvmEkFk.«wk_get_account»
