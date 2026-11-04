@@ -33,8 +33,8 @@ theorem worldTypedWith_htab_set_local {F : Type} {s post : PanSemStateFiniteExac
     (hfr : FrameOutside s post (htabFootprint s t)
       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
     (hbe : post.be = s.be)
-    (hg_kept : ∀ name, name ≠ "heap_ptr" →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) :
+    (hg_kept : ∀ name : MlS, name ∉ (["heap_ptr"] : List String).map ofString →
+      s.globals.lookup name = post.globals.lookup name) :
     WorldTypedWith post S Nd ∧
     worldRoleSlots post = worldRoleSlots s ∧
     journalRoleSlots post = journalRoleSlots s ∧
@@ -48,12 +48,16 @@ theorem worldTypedWith_htab_set_local {F : Type} {s post : PanSemStateFiniteExac
   have hW_er := worldTypedWith_erase_local hW hlocal
   obtain ⟨hT, hJ, hF, hTr⟩ := hW
   have hgs : WorldGlobalsSame s post :=
-    worldGlobalsSame_of_kept (gw := ["heap_ptr"])
-      (fun name hn => hg_kept name (by simpa using hn))
-      (fun name hn => by simp at hn; exact Or.inl hn)
+    ⟨fun gn hgn => globN_eq_of_lookup (hg_kept (ofString gn.1)
+        ((by decide : ∀ gn ∈ globalBuffers, ofString gn.1 ∉ (["heap_ptr"] : List String).map ofString) gn hgn)),
+     fun g hg => globN_eq_of_lookup (hg_kept (ofString g)
+        ((by decide : ∀ g ∈ globalTableRoots, ofString g ∉ (["heap_ptr"] : List String).map ofString) g hg)),
+     globN_eq_of_lookup (hg_kept (ofString "journal") (by decide)),
+     globN_eq_of_lookup (hg_kept (ofString "journal_cap") (by decide)),
+     globN_eq_of_lookup (hg_kept (ofString "journal_n") (by decide))⟩
   have hag : AllocatorGrows s post := by
     refine ⟨hhp, ?_⟩
-    rw [globN_eq_of_lookup (hg_kept "scratch_ptr" (by decide))]
+    rw [globN_eq_of_lookup (hg_kept (ofString "scratch_ptr") (by decide))]
   obtain ⟨hs_lo, _, _, _, _, hs_hp8, _, _⟩ := hAs.2
   obtain ⟨_, _, _, _, _, hp_hp8, _, _⟩ := hAp.2
   have hsb264 : sourceBase < 2 ^ 64 := by decide

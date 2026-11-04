@@ -126,8 +126,8 @@ theorem worldTypedWith_htab_new {F : Type} {s post : PanSemStateFiniteExact 64 F
       [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
       (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
     (hbe : post.be = s.be)
-    (hg_kept : ∀ name, name ∉ ["heap_ptr", "scratch_ptr"] →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name)) :
+    (hg_kept : ∀ name : MlS, name ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString →
+      s.globals.lookup name = post.globals.lookup name) :
     t ∉ S ∧ t ≠ 0 ∧
     (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t) ∧
     WorldTypedWith post (S ++ [t]) Nd ∧
@@ -140,11 +140,13 @@ theorem worldTypedWith_htab_new {F : Type} {s post : PanSemStateFiniteExact 64 F
       (∀ o ∈ worldOwned post (S ++ [t]) Nd, Disj b o) ∧
       IvlUnhit s post b) := by
   have hgs : WorldGlobalsSame s post :=
-    worldGlobalsSame_of_kept hg_kept (fun name hn => by
-      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
-      rcases hn with rfl | rfl
-      · exact Or.inl rfl
-      · exact Or.inr (Or.inl rfl))
+    ⟨fun gn hgn => globN_eq_of_lookup (hg_kept (ofString gn.1)
+        ((by decide : ∀ gn ∈ globalBuffers, ofString gn.1 ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString) gn hgn)),
+     fun g hg => globN_eq_of_lookup (hg_kept (ofString g)
+        ((by decide : ∀ g ∈ globalTableRoots, ofString g ∉ (["heap_ptr", "scratch_ptr"] : List String).map ofString) g hg)),
+     globN_eq_of_lookup (hg_kept (ofString "journal") (by decide)),
+     globN_eq_of_lookup (hg_kept (ofString "journal_cap") (by decide)),
+     globN_eq_of_lookup (hg_kept (ofString "journal_n") (by decide))⟩
   have hsb : 24 < sourceBase := by decide
   have hsb264 : sourceBase < 2 ^ 64 := by decide
   have hsep : heapLimit ≤ scratchStart := by decide
