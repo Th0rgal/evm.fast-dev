@@ -1,6 +1,8 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmGBody
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group04
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
+import InitECandidate.Solver.GuestGlobalKeep
+import InitECandidate.Solver.GuestFrameMemKeep
 
 /-! # `HeadMemAligned` as a frame-chain invariant through `run_frames`
 
@@ -2286,6 +2288,63 @@ theorem frame_mem_alloc_1024 (p sp : BitVec 64)
     ((p + ((1024 : BitVec 64) + 7)) &&& ((0 : BitVec 64) - 8)).toNat = p.toNat + 1024 := by
   have h := (R16Shards.OpHandlers.frame_mem_alloc_arith p sp 1024 hp_le_sp hsp_le hp_al hcmp1 hcmp2).1
   rw [h]; rfl
+
+/-! ## 3h. `frame_mem_ptr` is untouched by every helper outside `badFrameMem` -/
+
+section FmpKeep
+open InitECandidate.Solver.GuestCodeLookup
+
+/-- Whole-program check (with `GuestGlobalKeep.keepsG`): every function outside
+`GuestFrameMemKeep.badFrameMem` never assigns the global `frame_mem_ptr` and only calls such
+functions. -/
+theorem program_check_fmp_global :
+    (functionsHOL sourceDeclarations).all
+      (fun entry => !(InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem entry.1) ||
+        InitECandidate.Solver.GuestGlobalKeep.keepsG (ofString "frame_mem_ptr")
+          InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem entry.2.2.1) = true := by
+  unfold sourceDeclarations
+  rw [InitECandidate.Solver.FrontendCodecComputation.declToHOL_function_eq]
+  kernel_rfl
+
+theorem good_fmp_hgood : ∀ function,
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem function = true →
+    ∀ values body callee rs,
+      PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup function values =
+        some (body, callee, rs) →
+      InitECandidate.Solver.GuestGlobalKeep.keepsG (ofString "frame_mem_ptr")
+        InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem body = true := by
+  intro f hf values body callee rs h
+  obtain ⟨params, rs', hc⟩ := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed h
+  have hm := InitECandidate.Solver.GuestGlobalKeep.originalRuntimeCode_mem hc
+  have := List.all_eq_true.1 program_check_fmp_global _ hm
+  simpa [hf] using this
+
+/-- Calling any function outside `badFrameMem` (e.g. `compute_jumpdests`, `lst_new_scratch`,
+`htab_new_scratch`, `htab_count`, `state_snapshot`) leaves the global `frame_mem_ptr`
+unchanged, whatever the outcome. -/
+theorem good_body_keeps_fmp {F : Type} {function : MlS}
+    (hf : InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem function = true)
+    {values : List (ValueHOL 64)} {body : ProgHOL 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs : ShapeHOL}
+    (h : PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup function values =
+      some (body, callee, rs))
+    (state : PanSemStateFiniteExact 64 F) (code : state.code = originalRuntimeCode) :
+    (evaluateHOLFiniteState state body).2.globals.lookup (ofString "frame_mem_ptr") =
+      state.globals.lookup (ofString "frame_mem_ptr") :=
+  InitECandidate.Solver.GuestGlobalKeep.evaluate_keepsG _ _ good_fmp_hgood body
+    (good_fmp_hgood function hf values body callee rs h) state code
+
+theorem goodFrameMem_frame_new_helpers :
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "compute_jumpdests") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "lst_new_scratch") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "htab_new_scratch") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "htab_count") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "state_snapshot") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "depth0_prepare") = true ∧
+    InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem (ofString "frame_start") = true := by
+  decide
+
+end FmpKeep
 
 /-! ## 4. The required statement -/
 
