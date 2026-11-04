@@ -2465,6 +2465,145 @@ theorem htab_count_run {F : Type} (s : PanSemStateFiniteExact 64 F) :
 
 end HtabCount
 
+/-! ## 3k. `finish_child` leaves: `frame_mem_release`, `scratch_release`, `pc_add` -/
+
+section FinishLeaves
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem lookup_frame_mem_release :
+    originalRuntimeCode.lookup (ofString "frame_mem_release") =
+      some ([(ofString "m", .one)], sourceFnBody Guest.Software.guestFn_frame_mem_release, .one) :=
+  lookup_of_guestAst_getElem 12 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_frame_mem_release) rfl
+
+theorem lookup_scratch_release :
+    originalRuntimeCode.lookup (ofString "scratch_release") =
+      some ([(ofString "m", .one)], sourceFnBody Guest.Software.guestFn_scratch_release, .one) :=
+  lookup_of_guestAst_getElem 15 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_scratch_release) rfl
+
+theorem lookup_pc_add :
+    originalRuntimeCode.lookup (ofString "pc_add") =
+      some ([(ofString "n", .one)], sourceFnBody Guest.Software.guestFn_pc_add, .one) :=
+  lookup_of_guestAst_getElem 468 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_pc_add) rfl
+
+/-- A global assignment followed by `b`: on success the state is `setKvarHOLFinite .global`. -/
+theorem Ret.seq_assignGlobal {F : Type} {s : PanSemStateFiniteExact 64 F} {x : MlS} {e : ExpHOL 64}
+    {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hb : ∀ val, ev s e = some val → isValidValueHOLFinite s .global x val = true →
+      Ret (setKvarHOLFinite .global x val s) b Φ) :
+    Ret s (.seq (.assign .global x e) b) Φ := by
+  refine Ret.seq ?_ ?_
+  · intro v hv
+    rw [evaluateHOLFiniteState_assign] at hv
+    split at hv
+    · simp at hv
+    · split at hv <;> simp at hv
+  · intro t ht
+    rw [evaluateHOLFiniteState_assign] at ht
+    split at ht
+    · simp at ht
+    · rename_i val hval
+      split at ht
+      · rename_i hvld
+        injection ht with _ hteq; rw [← hteq]; exact hb val hval hvld
+      · simp at ht
+
+attribute [local irreducible] Ret in
+/-- `frame_mem_release(m)` is `frame_mem_ptr := m; return 0`: on return the globals are those of
+the entry state with `frame_mem_ptr` set to the argument; memory, code and domain unchanged. -/
+theorem frame_mem_release_run {F : Type} (s : PanSemStateFiniteExact 64 F) (m : ValueHOL 64)
+    (hm : s.locals.lookup (ofString "m") = some m) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_mem_release) (fun _ post =>
+      post.globals = s.globals.update (ofString "frame_mem_ptr", m) ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_mem_release =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_mem_release).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_mem_release,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.seq_assignGlobal fun val hval _ => ?_
+  have hv : val = m := by
+    simp [ev, evalHOLExact, hm] at hval; exact hval.symm
+  subst hv
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+attribute [local irreducible] Ret in
+/-- `scratch_release(m)` is `scratch_ptr := m; return 0`. -/
+theorem scratch_release_run {F : Type} (s : PanSemStateFiniteExact 64 F) (m : ValueHOL 64)
+    (hm : s.locals.lookup (ofString "m") = some m) :
+    Ret s (sourceFnBody Guest.Software.guestFn_scratch_release) (fun _ post =>
+      post.globals = s.globals.update (ofString "scratch_ptr", m) ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_scratch_release =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_scratch_release).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_scratch_release,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.seq_assignGlobal fun val hval _ => ?_
+  have hv : val = m := by
+    simp [ev, evalHOLExact, hm] at hval; exact hval.symm
+  subst hv
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+@[local simp] private theorem pcm1 : (ofString "n" = ofString "ev") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+
+attribute [local irreducible] Ret in
+/-- `pc_add(n)` is `st ev+0, ld(ev+0) + n; return 0`: one word store at `ev`. -/
+theorem pc_add_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e pc n : BitVec 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hpc : s.memory e = .word pc) (hdom : s.memaddrs e) :
+    Ret s (sourceFnBody Guest.Software.guestFn_pc_add) (fun _ post =>
+      post.globals = s.globals ∧ post.memory = updW s.memory e (pc + n) ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_pc_add =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_pc_add).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_pc_add,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply Ret.of_NS
+  apply Ret.ns_storeW e (pc + n)
+    (by simp [ev, evalHOLExact, evalListHOLExact, wordOpHOL, wordOp, valueIsWord, valueWord, he])
+    (by
+      simp [ev, evalHOLExact, evalListHOLExact, wordOpHOL, wordOp, valueIsWord, valueWord, he, hn]
+      have hl : ∀ inst : DecidablePred (NS s s.locals s.globals s.memory s.clock).toExact.memaddrs,
+          @memLoadHOLExact 64 _ ShapeHOL.one e (NS s s.locals s.globals s.memory s.clock).toExact.memaddrs inst
+          s.memory (NS s s.locals s.globals s.memory s.clock).structs =
+            some (ValueHOL.val (HolWordLab.word pc)) := by
+        intro inst
+        simp only [memLoadHOLExact]
+        rw [if_pos (show (NS s s.locals s.globals s.memory s.clock).memaddrs e from hdom), hpc]
+      erw [hl]
+      simp [valueWord])
+  intro _
+  apply Ret.ns_ret
+  intro _ _
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+end FinishLeaves
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
