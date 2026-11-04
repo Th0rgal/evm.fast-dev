@@ -74,4 +74,19 @@ theorem validated_struct_mgas {F : Type} (s : PanSemStateFiniteExact 64 F)
     exact h.2.2.1
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- The actual local expression used by the message gas store evaluates to
+the structured value, even when the entry predicate's numeric view is zero. -/
+theorem validated_mgas_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : PtxValidated s) :
+    let v : ValueHOL 64 := .rStruct [.val (.word (BitVec.ofNat 64 (2 ^ 63)))]
+    let t := setVarHOLFinite (ofString "mgas") v s
+    PtxValidated t ∧ locN t "mgas" = 0 ∧
+      InitECandidate.Solver.Wave8GuestInv.evalAt t
+        (.var .local (ofString "mgas")) = some v ∧
+      flattenHOL v = [.word (BitVec.ofNat 64 (2 ^ 63))] := by
+  refine ⟨(validated_struct_mgas s h _).1, ?_, ?_, (validated_struct_mgas s h _).2⟩
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [InitECandidate.Solver.Wave8GuestInv.evalAt, evalHOLExact,
+      setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase2
