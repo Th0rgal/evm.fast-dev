@@ -3,6 +3,11 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group06ControlF
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group07Transient
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group02
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group03
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group01
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group04
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group05
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.CalldataloadSpecs
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.StateAccountOps
 
 /-! # OpDispatch Router Assembly (`op_dispatch_spec_of_remaining`)
 
@@ -16,6 +21,17 @@ with all already-proved unconditional `OpHandlerSpec` leaves:
   `op_lt`, `op_gt`, `op_slt`, `op_sgt`, `op_eq`, `op_iszero` (6)
 - Group 03 bitwise & shift (`R16Shards.OpHandlers.Group03`):
   `op_and`, `op_or`, `op_xor`, `op_not`, `op_byte`, `op_shl`, `op_shr`, `op_sar`, `op_clz` (9)
+
+Shadow-cutover extension (`op_dispatch_spec_of'`): additionally wires
+- Group 01 arithmetic (`R16Shards.OpHandlers.Group01`):
+  `op_add`, `op_mul`, `op_sub`, `op_div`, `op_sdiv`, `op_mod`, `op_smod`, `op_addmod`, `op_mulmod`,
+  `op_exp`, `op_signextend` (11)
+- Group 04 environment (`R16Shards.OpHandlers.Group04` + `CalldataloadSpecs`):
+  `op_address`, `op_origin`, `op_caller`, `op_callvalue`, `op_calldataload`, `op_calldatasize` (6)
+- Group 05 (`R16Shards.OpHandlers.Group05`): `op_codesize`, `op_gasprice`, `op_returndatasize` (3)
+- State/account ops (`R16Shards.OpHandlersB.StateAccountOps`, under `WorldAccountSpecs`):
+  `op_balance`, `op_extcodesize`, `op_extcodehash`, `op_selfbalance`, `op_sload`, `op_sstore`,
+  `op_selfdestruct` (7)
 
 As each subsequent `OpHandlersB` group shard is completed, it is wired in here to monotonically
 shrink the remaining obligation bundle for `op_dispatch_spec`.
@@ -155,5 +171,94 @@ theorem op_dispatch_spec_of
     (hB : RemainingOpHandlersBSpec) :
     OpHandlerSpec (ofString "op_dispatch") :=
   op_dispatch_spec_of_handlers (allOpHandlersSpec_of_remaining hA hB)
+
+/-! ## Shadow-cutover: shrunken remaining bundles with Groups 01/04/05 + StateAccountOps wired -/
+
+/-- Remaining `OpHandlerSpec` leaves in `OpHandlers-A` scope after Groups 01, 04 (env), 05 are wired
+(still open: `op_keccak` (needs `HeadMemAligned` bridge), block-context, memory, stack ops). -/
+def RemainingOpHandlersASpec' : Prop :=
+  OpHandlerSpec (ofString "op_keccak") ∧
+  OpHandlerSpec (ofString "op_blockhash") ∧
+  OpHandlerSpec (ofString "op_coinbase") ∧
+  OpHandlerSpec (ofString "op_timestamp") ∧
+  OpHandlerSpec (ofString "op_number") ∧
+  OpHandlerSpec (ofString "op_prevrandao") ∧
+  OpHandlerSpec (ofString "op_gaslimit") ∧
+  OpHandlerSpec (ofString "op_chainid") ∧
+  OpHandlerSpec (ofString "op_basefee") ∧
+  OpHandlerSpec (ofString "op_blobhash") ∧
+  OpHandlerSpec (ofString "op_blobbasefee") ∧
+  OpHandlerSpec (ofString "op_slotnum") ∧
+  OpHandlerSpec (ofString "op_pop") ∧
+  OpHandlerSpec (ofString "op_mload") ∧
+  OpHandlerSpec (ofString "op_mstore") ∧
+  OpHandlerSpec (ofString "op_mstore8") ∧
+  OpHandlerSpec (ofString "op_msize") ∧
+  OpHandlerSpec (ofString "op_push") ∧
+  OpHandlerSpec (ofString "op_dup") ∧
+  OpHandlerSpec (ofString "op_swap") ∧
+  OpHandlerSpec (ofString "op_dupn") ∧
+  OpHandlerSpec (ofString "op_swapn") ∧
+  OpHandlerSpec (ofString "op_exchange")
+
+/-- Remaining `OpHandlerSpec` leaves in `OpHandlers-B` scope after `StateAccountOps` is wired. -/
+def RemainingOpHandlersBSpec' : Prop :=
+  OpHandlerSpec (ofString "op_calldatacopy") ∧
+  OpHandlerSpec (ofString "op_codecopy") ∧
+  OpHandlerSpec (ofString "op_extcodecopy") ∧
+  OpHandlerSpec (ofString "op_returndatacopy") ∧
+  OpHandlerSpec (ofString "op_mcopy") ∧
+  OpHandlerSpec (ofString "op_log") ∧
+  OpHandlerSpec (ofString "op_create") ∧
+  OpHandlerSpec (ofString "op_call") ∧
+  OpHandlerSpec (ofString "op_callcode") ∧
+  OpHandlerSpec (ofString "op_return") ∧
+  OpHandlerSpec (ofString "op_delegatecall") ∧
+  OpHandlerSpec (ofString "op_create2") ∧
+  OpHandlerSpec (ofString "op_staticcall") ∧
+  OpHandlerSpec (ofString "op_revert")
+
+theorem remainingOpHandlersASpec_of' (hA : RemainingOpHandlersASpec') : RemainingOpHandlersASpec := by
+  rcases hA with
+    ⟨h_op_keccak,
+     h_op_blockhash, h_op_coinbase, h_op_timestamp, h_op_number, h_op_prevrandao,
+     h_op_gaslimit, h_op_chainid, h_op_basefee, h_op_blobhash,
+     h_op_blobbasefee, h_op_slotnum,
+     h_op_pop, h_op_mload, h_op_mstore, h_op_mstore8, h_op_msize,
+     h_op_push, h_op_dup, h_op_swap, h_op_dupn, h_op_swapn, h_op_exchange⟩
+  exact
+    ⟨op_add_spec, op_mul_spec, op_sub_spec, op_div_spec, op_sdiv_spec, op_mod_spec, op_smod_spec,
+     op_addmod_spec, op_mulmod_spec, op_exp_spec, op_signextend_spec,
+     h_op_keccak, op_address_spec, op_origin_spec, op_caller_spec, op_callvalue_spec,
+     op_calldataload_spec, op_calldatasize_spec, op_codesize_spec, op_gasprice_spec,
+     op_returndatasize_spec,
+     h_op_blockhash, h_op_coinbase, h_op_timestamp, h_op_number, h_op_prevrandao,
+     h_op_gaslimit, h_op_chainid, h_op_basefee, h_op_blobhash,
+     h_op_blobbasefee, h_op_slotnum,
+     h_op_pop, h_op_mload, h_op_mstore, h_op_mstore8, h_op_msize,
+     h_op_push, h_op_dup, h_op_swap, h_op_dupn, h_op_swapn, h_op_exchange⟩
+
+theorem remainingOpHandlersBSpec_of' (hW : WorldAccountSpecs) (hB : RemainingOpHandlersBSpec') :
+    RemainingOpHandlersBSpec := by
+  rcases hB with
+    ⟨h_op_calldatacopy, h_op_codecopy, h_op_extcodecopy, h_op_returndatacopy,
+     h_op_mcopy, h_op_log,
+     h_op_create, h_op_call, h_op_callcode, h_op_return, h_op_delegatecall,
+     h_op_create2, h_op_staticcall, h_op_revert⟩
+  exact
+    ⟨op_balance_spec hW, h_op_calldatacopy, h_op_codecopy, op_extcodesize_spec hW,
+     h_op_extcodecopy, h_op_returndatacopy, op_extcodehash_spec hW, op_selfbalance_spec hW,
+     op_sload_spec hW, op_sstore_spec hW, h_op_mcopy, h_op_log,
+     h_op_create, h_op_call, h_op_callcode, h_op_return, h_op_delegatecall,
+     h_op_create2, h_op_staticcall, h_op_revert, op_selfdestruct_spec hW⟩
+
+/-- Parameterized `op_dispatch_spec` with Groups 01/02/03/04/05/06a/07a and `StateAccountOps` wired
+(50 of 87 handlers discharged; 23 A-side + 14 B-side obligations remain). -/
+theorem op_dispatch_spec_of'
+    (hW : WorldAccountSpecs)
+    (hA : RemainingOpHandlersASpec')
+    (hB : RemainingOpHandlersBSpec') :
+    OpHandlerSpec (ofString "op_dispatch") :=
+  op_dispatch_spec_of (remainingOpHandlersASpec_of' hA) (remainingOpHandlersBSpec_of' hW hB)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
