@@ -14,7 +14,7 @@ AST index 261) in the minimal Wave8 GuestInv cone.
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
-set_option maxHeartbeats 2400000
+set_option maxHeartbeats 6400000
 set_option exponentiation.threshold 2000
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
@@ -3803,14 +3803,14 @@ private theorem globN_eq_of_globals {F1 F2 : Type}
     globN s1 name = globN s2 name := by
   unfold globN; rw [h]
 
-private theorem wordsOK_of_same_guest {F1 F2 : Type}
-    (s : PanSemStateFiniteExact 64 F1) (t : PanSemStateFiniteExact 64 F2)
-    (hc : t.code = s.code) (he : t.eshapes = s.eshapes)
-    (hm : t.memaddrs = s.memaddrs) (hg : t.globals = s.globals)
+private theorem wordsOK_of_same_guest {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (t : PanSemStateFiniteExact 64 F)
+    (hc : t.code = s.code) (hm : t.memaddrs = s.memaddrs)
+    (hsh : t.shMemaddrs = s.shMemaddrs) (hb : t.baseAddr = s.baseAddr)
     (hG : GuestInv s) (p n : Nat) (hal : p % 8 = 0) (hn8 : n % 8 = 0)
     (hlo : sourceBase ≤ p) (hhi : p + n ≤ heapEnd) :
     WordsOK t (p, n) :=
-  Wave8Contracts.M26.wordsOK_of_guestInv t (guestInv_congr hc he hm hg hG) p n hal hn8 hlo hhi
+  Wave8Contracts.M26.wordsOK_of_guestInv t (guestInv_congr hc hm hsh hb hG) p n hal hn8 hlo hhi
 
 /-- `_decode_step` (`Guest/SoftwareAst.lean:10110`): a pushed record is a fresh 88-byte scratch
 block tagged 1 or 2, and a completed result is null or a fresh heap node. -/
@@ -4152,13 +4152,14 @@ theorem «sp__decode_step» :
       have hslf_n : slf.locals.lookup (ofString "n") = some (.val (.word wn)) := by
         simp [slf, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hsvi2_keep "n", hsvi_n,
           show ofString "lf" ≠ ofString "n" by decide]
-      refine Ret.seq_storeW (wlf + 8#64) wp
+      apply Ret.of_NS
+      refine Ret.ns_storeW (wlf + 8#64) wp
         (by simp [ev, evalHOLExact, evalListHOLExact, hslf_lf, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hslf_p]) (fun _ => ?_)
-      refine Ret.seq_storeW (wlf + 16#64) wn
+      refine Ret.ns_storeW (wlf + 16#64) wn
         (by simp [ev, evalHOLExact, evalListHOLExact, hslf_lf, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hslf_n]) (fun _ => ?_)
-      refine Ret.ret (fun val hval => ?_)
+      refine Ret.ns_ret (fun val hval => ?_)
       simp [ev, evalHOLExact, evalListHOLExact, hslf_lf] at hval
       subst hval
       refine ⟨0#64, wlf, rfl, fun _ => Or.inr ?_, fun h => absurd rfl h⟩
@@ -4173,11 +4174,13 @@ theorem «sp__decode_step» :
         omega
       refine ⟨hlf_fb.1, ?_, ?_⟩
       · rw [h32]
-        rw [Inside, globN_eq_of_globals "heap_ptr" (s2 := cpost_lf) rfl]
+        rw [Inside, show globN (NS slf (emptyLocalsHOLFinite _).locals slf.globals _ slf.clock) "heap_ptr" = globN cpost_lf "heap_ptr" from rfl]
         dsimp only [Inside] at hlf_fb
         omega
       · rw [h32]
-        exact wordsOK_of_same_guest slf _ rfl rfl rfl rfl hsf_lf.1.1 wlf.toNat 32 hlf_fb.1 (by decide) hsb_le hhi_le
+        exact wordsOK_of_same_guest slf
+          (NS slf (NS slf slf.locals slf.globals (updW (updW slf.memory (wlf + 8#64) wp) (wlf + 16#64) wn) slf.clock).emptyLocalsHOLFinite.locals slf.globals (updW (updW slf.memory (wlf + 8#64) wp) (wlf + 16#64) wn) slf.clock)
+          rfl rfl rfl rfl hsf_lf.1.1 wlf.toNat 32 hlf_fb.1 (by decide) hsb_le hhi_le
     · -- `ite (cn.2 != 0)` flowed with `none`
       rw [evaluateHOLFiniteState_ite] at hnone ⊢
       revert hnone
@@ -4189,9 +4192,9 @@ theorem «sp__decode_step» :
           rw [evaluateHOLFiniteState_decCall_total] at hnone_thn
           revert hnone_thn
           split <;> [simp; skip]
-          dsimp only
+          try dsimp only
           split <;> [simp; skip]
-          dsimp only
+          try dsimp only
           split <;> [simp; skip]
           rw [fixClockHOLFinite_evaluateState]
           rcases evaluateHOLFiniteState _ _ with ⟨r_v, _⟩
@@ -4210,9 +4213,9 @@ theorem «sp__decode_step» :
                 dsimp only
                 rw [evaluateHOLFiniteState_decCall_total]
                 split <;> [simp; skip]
-                dsimp only
+                try dsimp only
                 split <;> [simp; skip]
-                dsimp only
+                try dsimp only
                 split <;> [simp; skip]
                 rw [fixClockHOLFinite_evaluateState]
                 rcases evaluateHOLFiniteState _ _ with ⟨r_l, _⟩
@@ -4308,25 +4311,26 @@ theorem «sp__decode_step» :
         simp [srec0, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
           hsext2_keep "cn", hsext_keep (ofString "cn") (by decide) (by decide), hscn_cn,
           show ofString "rec" ≠ ofString "cn" by decide]
-      refine Ret.seq_storeW (wrec + 8#64) 1#64
+      apply Ret.of_NS
+      refine Ret.ns_storeW (wrec + 8#64) 1#64
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by rfl) (fun _ => ?_)
-      refine Ret.seq_storeW (wrec + 24#64) wsl0
+      refine Ret.ns_storeW (wrec + 24#64) wsl0
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hsrec0_arr]) (fun _ => ?_)
-      refine Ret.seq_storeW (wrec + 48#64) wp
+      refine Ret.ns_storeW (wrec + 48#64) wp
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hsrec0_p]) (fun _ => ?_)
-      refine Ret.seq_storeW (wrec + 56#64) wn
+      refine Ret.ns_storeW (wrec + 56#64) wn
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hsrec0_n]) (fun _ => ?_)
-      refine Ret.seq_storeW (wrec + 64#64) wcn0
+      refine Ret.ns_storeW (wrec + 64#64) wcn0
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hsrec0_cn]) (fun _ => ?_)
-      refine Ret.seq_storeW (wrec + 72#64) wcn1
+      refine Ret.ns_storeW (wrec + 72#64) wcn1
         (by simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec, wordOpHOL, wordOp, valueIsWord, valueWord])
         (by simp [ev, evalHOLExact, hsrec0_cn]) (fun _ => ?_)
-      refine Ret.ret (fun val hval => ?_)
+      refine Ret.ns_ret (fun val hval => ?_)
       simp [ev, evalHOLExact, evalListHOLExact, hsrec0_rec] at hval
       subst hval
       refine ⟨1#64, wrec, rfl, fun h => by simp at h, fun _ => ?_⟩
@@ -4344,18 +4348,21 @@ theorem «sp__decode_step» :
         omega
       refine ⟨⟨hrec_al, hrec_lo, ?_, ?_⟩, Or.inl ?_⟩
       · rw [h88]
-        rw [Inside, globN_eq_of_globals "scratch_ptr" (s2 := cpost_sa) rfl]
+        rw [Inside, show globN (NS srec0 (emptyLocalsHOLFinite _).locals srec0.globals _ srec0.clock) "scratch_ptr" = globN cpost_sa "scratch_ptr" from rfl]
         exact hrec_in
       · rw [h88]
-        exact wordsOK_of_same_guest srec0 _ rfl rfl rfl rfl hsf_rec.1.1 wrec.toNat 88 hrec_al (by decide) hsb_le hhi_le
-      · unfold memW; dsimp only [emptyLocalsHOLFinite]
+        let m1 := updW (updW (updW (updW (updW (updW srec0.memory (wrec + 8#64) 1#64) (wrec + 24#64) wsl0) (wrec + 48#64) wp) (wrec + 56#64) wn) (wrec + 64#64) wcn0) (wrec + 72#64) wcn1
+        exact wordsOK_of_same_guest srec0
+          (NS srec0 (NS srec0 srec0.locals srec0.globals m1 srec0.clock).emptyLocalsHOLFinite.locals srec0.globals m1 srec0.clock)
+          rfl rfl rfl rfl hsf_rec.1.1 wrec.toNat 88 hrec_al (by decide) hsb_le hhi_le
+      · unfold memW; dsimp only [NS]
         rw [memW_updW_other wcn1 (by omega) (by omega) (by decide),
             memW_updW_other wcn0 (by omega) (by omega) (by decide),
             memW_updW_other wn (by omega) (by omega) (by decide),
             memW_updW_other wp (by omega) (by omega) (by decide),
             memW_updW_other wsl0 (by omega) (by omega) (by decide)]
         have hbv8 : BitVec.ofNat 64 (wrec.toNat + 8) = wrec + BitVec.ofNat 64 8 := by
-          apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
+          apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; try omega
         rw [hbv8]; simp [updW]
   · -- `ite (sl.1 == 2)` flowed with `none`
     rw [evaluateHOLFiniteState_ite] at hnone ⊢
@@ -4368,9 +4375,9 @@ theorem «sp__decode_step» :
         rw [evaluateHOLFiniteState_decCall_total] at hnone_thn
         revert hnone_thn
         split <;> [simp; skip]
-        dsimp only
+        try dsimp only
         split <;> [simp; skip]
-        dsimp only
+        try dsimp only
         split <;> [simp; skip]
         rw [fixClockHOLFinite_evaluateState]
         rcases evaluateHOLFiniteState _ _ with ⟨r_pi, _⟩
@@ -4389,9 +4396,9 @@ theorem «sp__decode_step» :
               dsimp only
               rw [evaluateHOLFiniteState_decCall_total]
               split <;> [simp; skip]
-              dsimp only
+              try dsimp only
               split <;> [simp; skip]
-              dsimp only
+              try dsimp only
               split <;> [simp; skip]
               rw [fixClockHOLFinite_evaluateState]
               rcases evaluateHOLFiniteState _ _ with ⟨r_cn, _⟩
@@ -4416,9 +4423,9 @@ theorem «sp__decode_step» :
                       dsimp only
                       rw [evaluateHOLFiniteState_decCall_total]
                       split <;> [simp; skip]
-                      dsimp only
+                      try dsimp only
                       split <;> [simp; skip]
-                      dsimp only
+                      try dsimp only
                       split <;> [simp; skip]
                       rw [fixClockHOLFinite_evaluateState]
                       rcases evaluateHOLFiniteState _ _ with ⟨r_sa, _⟩
@@ -4515,7 +4522,7 @@ theorem «sp__decode_step» :
       rw [hrun_nb] at hspec_nb
       rcases hspec_nb with ⟨_, _, _, br_w, hret_br, hbr_eq, hbr_al, hhp_post, _⟩
       dsimp only at hret_br hhp_post
-      injection hret_br with h1; injection h1 with h2; injection h2 with h3; subst h3
+      injection hret_br with h1; injection h1 with h2; injection h2 with h3; injection h3 with h4; subst h4
       have hhp_ent : globN s "heap_ptr" ≤ globN (callEntryStateHOLFinite s_br2 cal_nb) "heap_ptr" :=
         hsf_br2.2.1
       dsimp only [Inside]
@@ -4546,28 +4553,29 @@ theorem «sp__decode_step» :
       simp [srec2, snb, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
         hsbr2_keep "n", hsbr_keep (ofString "n") (by decide) (by decide) (by decide) (by decide) (by decide), hs6_n,
         show ofString "rec2" ≠ ofString "n" by decide, show ofString "br" ≠ ofString "n" by decide]
-    refine Ret.seq_storeW (wrec2 + 8#64) 2#64
+    apply Ret.of_NS
+    refine Ret.ns_storeW (wrec2 + 8#64) 2#64
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by rfl) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 16#64) wbr
+    refine Ret.ns_storeW (wrec2 + 16#64) wbr
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by simp [ev, evalHOLExact, hsrec2_br]) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 24#64) wsl0
+    refine Ret.ns_storeW (wrec2 + 24#64) wsl0
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by simp [ev, evalHOLExact, hsrec2_arr]) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 32#64) 0#64
+    refine Ret.ns_storeW (wrec2 + 32#64) 0#64
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by rfl) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 40#64) 0#64
+    refine Ret.ns_storeW (wrec2 + 40#64) 0#64
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by rfl) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 48#64) wp
+    refine Ret.ns_storeW (wrec2 + 48#64) wp
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by simp [ev, evalHOLExact, hsrec2_p]) (fun _ => ?_)
-    refine Ret.seq_storeW (wrec2 + 56#64) wn
+    refine Ret.ns_storeW (wrec2 + 56#64) wn
       (by simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2, wordOpHOL, wordOp, valueIsWord, valueWord])
       (by simp [ev, evalHOLExact, hsrec2_n]) (fun _ => ?_)
-    refine Ret.ret (fun val hval => ?_)
+    refine Ret.ns_ret (fun val hval => ?_)
     simp [ev, evalHOLExact, evalListHOLExact, hsrec2_rec2] at hval
     subst hval
     refine ⟨1#64, wrec2, rfl, fun h => by simp at h, fun _ => ?_⟩
@@ -4592,13 +4600,27 @@ theorem «sp__decode_step» :
       have hhp_snb : globN snb "heap_ptr" = globN cpost_br "heap_ptr" := rfl
       dsimp only [Inside] at hbr_fb
       omega
+    let m2 := updW (updW (updW (updW (updW (updW (updW srec2.memory
+      (wrec2 + 8#64) 2#64) (wrec2 + 16#64) wbr) (wrec2 + 24#64) wsl0)
+      (wrec2 + 32#64) 0#64) (wrec2 + 40#64) 0#64) (wrec2 + 48#64) wp) (wrec2 + 56#64) wn
+    let st_end := NS srec2 (emptyLocalsHOLFinite (NS srec2 srec2.locals srec2.globals m2 srec2.clock)).locals srec2.globals m2 srec2.clock
+    have hmw16 : memW st_end (wrec2.toNat + 16) = wbr.toNat := by
+      unfold memW; dsimp only [st_end, NS, m2]
+      rw [memW_updW_other wn (by omega) (by omega) (by decide),
+          memW_updW_other wp (by omega) (by omega) (by decide),
+          memW_updW_other 0#64 (by omega) (by omega) (by decide),
+          memW_updW_other 0#64 (by omega) (by omega) (by decide),
+          memW_updW_other wsl0 (by omega) (by omega) (by decide)]
+      have hbv16 : BitVec.ofNat 64 (wrec2.toNat + 16) = wrec2 + BitVec.ofNat 64 16 := by
+        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; try omega
+      rw [hbv16]; simp [updW]
     refine ⟨⟨hrec2_al, hrec2_lo, ?_, ?_⟩, Or.inr ⟨?_, ?_, ?_, ?_⟩⟩
     · rw [h88]
-      rw [Inside, globN_eq_of_globals "scratch_ptr" (s2 := cpost_sa2) rfl]
+      rw [Inside, show globN st_end "scratch_ptr" = globN cpost_sa2 "scratch_ptr" from rfl]
       exact hrec2_in
     · rw [h88]
-      exact wordsOK_of_same_guest srec2 _ rfl rfl rfl rfl hsf_rec2.1.1 wrec2.toNat 88 hrec2_al (by decide) hsb_rec2 hhi_rec2
-    · unfold memW; dsimp only [emptyLocalsHOLFinite]
+      exact wordsOK_of_same_guest srec2 st_end rfl rfl rfl rfl hsf_rec2.1.1 wrec2.toNat 88 hrec2_al (by decide) hsb_rec2 hhi_rec2
+    · unfold memW; dsimp only [st_end, NS, m2]
       rw [memW_updW_other wn (by omega) (by omega) (by decide),
           memW_updW_other wp (by omega) (by omega) (by decide),
           memW_updW_other 0#64 (by omega) (by omega) (by decide),
@@ -4606,59 +4628,25 @@ theorem «sp__decode_step» :
           memW_updW_other wsl0 (by omega) (by omega) (by decide),
           memW_updW_other wbr (by omega) (by omega) (by decide)]
       have hbv8 : BitVec.ofNat 64 (wrec2.toNat + 8) = wrec2 + BitVec.ofNat 64 8 := by
-        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
+        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; try omega
       rw [hbv8]; simp [updW]
-    · unfold memW; dsimp only [emptyLocalsHOLFinite]
+    · unfold memW; dsimp only [st_end, NS, m2]
       rw [memW_updW_other wn (by omega) (by omega) (by decide),
           memW_updW_other wp (by omega) (by omega) (by decide),
           memW_updW_other 0#64 (by omega) (by omega) (by decide)]
       have hbv32 : BitVec.ofNat 64 (wrec2.toNat + 32) = wrec2 + BitVec.ofNat 64 32 := by
-        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
+        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; try omega
       rw [hbv32]; simp [updW]
-    · unfold memW; dsimp only [emptyLocalsHOLFinite]
+    · unfold memW; dsimp only [st_end, NS, m2]
       rw [memW_updW_other wn (by omega) (by omega) (by decide),
           memW_updW_other wp (by omega) (by omega) (by decide)]
       have hbv40 : BitVec.ofNat 64 (wrec2.toNat + 40) = wrec2 + BitVec.ofNat 64 40 := by
-        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
+        apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; try omega
       rw [hbv40]; simp [updW]
-    · refine ⟨by
-        unfold memW; dsimp only [emptyLocalsHOLFinite]
-        rw [memW_updW_other wn (by omega) (by omega) (by decide),
-            memW_updW_other wp (by omega) (by omega) (by decide),
-            memW_updW_other 0#64 (by omega) (by omega) (by decide),
-            memW_updW_other 0#64 (by omega) (by omega) (by decide),
-            memW_updW_other wsl0 (by omega) (by omega) (by decide)]
-        have hbv16 : BitVec.ofNat 64 (wrec2.toNat + 16) = wrec2 + BitVec.ofNat 64 16 := by
-          apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
-        rw [hbv16]; simp [updW]; exact hbr_fb.1, ?_, ?_⟩
-      · rw [h176, Inside, globN_eq_of_globals "heap_ptr" (s2 := cpost_sa2) rfl, hhp_sa2_eq]
-        unfold memW; dsimp only [emptyLocalsHOLFinite]
-        rw [memW_updW_other wn (by omega) (by omega) (by decide),
-            memW_updW_other wp (by omega) (by omega) (by decide),
-            memW_updW_other 0#64 (by omega) (by omega) (by decide),
-            memW_updW_other 0#64 (by omega) (by omega) (by decide),
-            memW_updW_other wsl0 (by omega) (by omega) (by decide)]
-        have hbv16 : BitVec.ofNat 64 (wrec2.toNat + 16) = wrec2 + BitVec.ofNat 64 16 := by
-          apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
-        rw [hbv16]; simp [updW]
+    · refine ⟨by rw [hmw16]; exact hbr_fb.1, ?_, ?_⟩
+      · rw [h176, Inside, show globN st_end "heap_ptr" = globN cpost_sa2 "heap_ptr" from rfl, hhp_sa2_eq, hmw16]
         exact hbr_fb.2
-      · rw [h176]
-        have hmw16_eq : ∀ {st : PanSemStateFiniteExact 64 F},
-            st.memory = updW (updW (updW (updW (updW (updW (updW srec2.memory
-              (wrec2 + 8#64) 2#64) (wrec2 + 16#64) wbr) (wrec2 + 24#64) wsl0)
-              (wrec2 + 32#64) 0#64) (wrec2 + 40#64) 0#64) (wrec2 + 48#64) wp) (wrec2 + 56#64) wn →
-            memW st (wrec2.toNat + 16) = wbr.toNat := by
-          intro st hst
-          unfold memW; rw [hst]
-          rw [memW_updW_other wn (by omega) (by omega) (by decide),
-              memW_updW_other wp (by omega) (by omega) (by decide),
-              memW_updW_other 0#64 (by omega) (by omega) (by decide),
-              memW_updW_other 0#64 (by omega) (by omega) (by decide),
-              memW_updW_other wsl0 (by omega) (by omega) (by decide)]
-          have hbv16 : BitVec.ofNat 64 (wrec2.toNat + 16) = wrec2 + BitVec.ofNat 64 16 := by
-            apply BitVec.eq_of_toNat_eq; simp only [BitVec.toNat_ofNat, BitVec.toNat_add]; omega
-          rw [hbv16]; simp [updW]
-        rw [hmw16_eq rfl]
-        exact wordsOK_of_same_guest srec2 _ rfl rfl rfl rfl hsf_rec2.1.1 wbr.toNat 176 hbr_fb.1 (by decide) hsb_br hhi_br
+      · rw [h176, hmw16]
+        exact wordsOK_of_same_guest srec2 st_end rfl rfl rfl rfl hsf_rec2.1.1 wbr.toNat 176 hbr_fb.1 (by decide) hsb_br hhi_br
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
