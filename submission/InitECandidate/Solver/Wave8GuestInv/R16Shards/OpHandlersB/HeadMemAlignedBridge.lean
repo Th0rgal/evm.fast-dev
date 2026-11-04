@@ -2113,6 +2113,45 @@ theorem frame_open_aligned (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "f
   exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
     ⟨hrun s hcode hP hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
 
+/-- Option A entry precondition: `FrameOpenReady` plus an explicit bound on the message's code
+length `msg+120` (EIP-170 / witness code lengths are `< 2^32`), which bounds the
+`compute_jumpdests` bitmap that `frame_new` carves from scratch. -/
+def FrameOpenReadyB : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => FrameOpenReady s ∧ memW s (locN s "msg" + 120) < 2 ^ 40
+
+/-- Bounded frame-memory effect of `frame_open(msg, 0)` (Option A). -/
+def FrameOpenMemSpecB : Prop :=
+  FunSpec FrameOpenReadyB
+    (fun _ r post => Resumes r →
+      memW post (globN post "cur_cont" + 16) = 0 ∧
+      memW post (globN post "ev" + 32) = 0 ∧ memW post (globN post "ev" + 40) = 1024 ∧
+      memW post (globN post "ev" + 24) + 1024 = globN post "frame_mem_ptr")
+    (ofString "frame_open")
+
+/-- The unbounded spec implies the bounded one. -/
+theorem frameOpenMemSpecB_of (hm : FrameOpenMemSpec) : FrameOpenMemSpecB := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hm
+  exact ⟨_, _, _, hl, fun s hcode hP hex hnt => hrun s hcode hP.1 hex hnt⟩
+
+/-- Entry establishment at `frame_open` from the bounded spec. -/
+theorem frame_open_headMemChainWF_B (hm : FrameOpenMemSpecB) :
+    KeepsOn FrameOpenReadyB HeadMemChainWF (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hm
+  refine ⟨_, _, _, hl, fun s hcode hP hex hnt hr => ?_⟩
+  obtain ⟨hk, h32, h40, hend⟩ := hrun s hcode hP hex hnt hr
+  refine headMemChainWF_depth0 _ hk (by rw [h32]) (by rw [h40]) ?_
+  rw [h40]; exact hend
+
+/-- `frame_open` aligned under the Option A bound: `fk_frame_open` plus the bounded effect. -/
+theorem frame_open_aligned_B (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open"))
+    (hm : FrameOpenMemSpecB) :
+    KeepsOn FrameOpenReadyB (fun s => EvmMsgReady s ∧ HeadMemChainWF s) (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hk
+  obtain ⟨ps', b', rt', hl', hrun'⟩ := frame_open_headMemChainWF_B hm
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body hl hl'
+  exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
+    ⟨hrun s hcode hP.1 hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
+
 /-! ## 3f. Head-safe stores and the `process_message` entry composition -/
 
 /-- An address the invariant never reads: a head-record word other than `+24/+32/+40`, or a
@@ -2603,6 +2642,138 @@ theorem pc_add_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e pc n : BitVec
   exact ⟨rfl, rfl, rfl, rfl⟩
 
 end FinishLeaves
+
+/-! ## 3l. Call combinators and the `finish_child` release tail -/
+
+section FinishTail
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem call00_noRet {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fname : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp
+  · dsimp only
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨fb, cl, rs⟩
+    · simp
+    · dsimp only
+      by_cases hcz : s.clock = 0
+      · rw [if_pos hcz]; simp
+      · rw [if_neg hcz]
+        rcases evaluateHOLFiniteState _ _ with ⟨r, _⟩
+        cases r with
+        | none => simp
+        | some r =>
+          cases r with
+          | returned rv =>
+            try dsimp only
+            by_cases hsh : shapeEqHOL (shapeOfHOLExact rv) rs = true
+            · rw [if_pos hsh]; simp
+            · rw [if_neg hsh]; simp
+          | _ => simp
+
+/-- A plain call `f(args)` followed by `cont`: on resumption the state is the callee's returned
+state with the caller's locals restored. -/
+theorem Ret.seq_call00 {F : Type} {s : PanSemStateFiniteExact 64 F} {fname : MlS}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hk : ∀ values body callee ret v cpost,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args =
+        some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned v), cpost) →
+      Ret { cpost with locals := s.locals } cont Φ) :
+    Ret s (.seq (.call (some (none, none)) fname args) cont) Φ := by
+  refine Ret.seq (fun v hv => False.elim (call00_noRet s fname args v hv)) ?_
+  intro t ht
+  obtain ⟨values, body, callee, ret, v, cpost, h1, h2, h3, h4⟩ :=
+    Wave8M19.Htab.call0_flow s fname args (Or.inl (by rw [ht]))
+  rw [ht] at h4
+  injection h4 with _ h5
+  rw [h5]
+  exact hk values body callee ret v cpost h1 h2 h3
+
+@[local simp] private theorem ftm1 : (ofString "scratch_ptr" = ofString "ev") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem ftm2 : (ofString "frame_mem_ptr" = ofString "ev") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+
+/-- Run a one-word-argument call whose body `Ret`-spec is given. -/
+theorem Ret.seq_call1W {F : Type} {s : PanSemStateFiniteExact 64 F} {fname p : MlS}
+    {e : ExpHOL 64} {fbody cont : ProgHOL 64} {w : BitVec 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode)
+    (hlook : originalRuntimeCode.lookup fname = some ([(p, .one)], fbody, .one))
+    (he : ev s e = some (.val (.word w)))
+    (Ψ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hbody : Ret (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update (p, .val (.word w))))
+      fbody Ψ)
+    (hk : ∀ v cpost, Ψ v cpost → Ret { cpost with locals := s.locals } cont Φ) :
+    Ret s (.seq (.call (some (none, none)) fname [e]) cont) Φ := by
+  refine Ret.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  have hv : values = [.val (.word w)] := by
+    simp only [evalListHOLFinite, evalListHOLExact] at h1
+    unfold ev at he
+    rw [he] at h1; simp at h1; exact h1.symm
+  subst hv
+  have hl := pan_one_word_lookup s.code.lookup fname p fbody w (by rw [hcode]; exact hlook)
+  rw [hl] at h2
+  simp only [Option.some.injEq, Prod.mk.injEq] at h2
+  obtain ⟨rfl, rfl, rfl⟩ := h2
+  exact hk v cpost (by have := hbody v (by rw [h3]); rw [h3] at this; exact this)
+
+@[local simp] private theorem ftm3 : (ofString "child_mark" = ofString "child_mem_mark") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+
+/-- The tail of `finish_child`: `scratch_release(child_mark); frame_mem_release(child_mem_mark);
+pc_add(1); return 0`. On return `frame_mem_ptr = child_mem_mark`, `scratch_ptr = child_mark`,
+`ev` is unchanged and memory changes only at `ev` (the pc word). -/
+theorem finish_child_tail {F : Type} (t : PanSemStateFiniteExact 64 F)
+    (hcode : t.code = originalRuntimeCode) (cm cmm e pc : BitVec 64)
+    (hcm : t.locals.lookup (ofString "child_mark") = some (.val (.word cm)))
+    (hcmm : t.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmm)))
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hpc : t.memory e = .word pc) (hdom : t.memaddrs e) :
+    Ret t (.seq (.call (some (none, none)) (ofString "scratch_release")
+        [.var .local (ofString "child_mark")])
+      (.seq (.call (some (none, none)) (ofString "frame_mem_release")
+          [.var .local (ofString "child_mem_mark")])
+        (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1])
+          (.return (.const 0))))) (fun _ post =>
+      post.globals = (t.globals.update (ofString "scratch_ptr", .val (.word cm))).update
+        (ofString "frame_mem_ptr", .val (.word cmm)) ∧
+      post.memory = updW t.memory e (pc + 1) ∧ post.code = t.code ∧
+      post.memaddrs = t.memaddrs) := by
+  refine Ret.seq_call1W (w := cm) hcode lookup_scratch_release
+    (by simp [ev, evalHOLExact, hcm]) _ (scratch_release_run _ (.val (.word cm)) (by
+      simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])) ?_
+  rintro _ c1 ⟨hg1, hm1, hc1, hd1⟩
+  simp only [callEntryStateHOLFinite] at hg1 hm1 hc1 hd1
+  refine Ret.seq_call1W (w := cmm) (by simp [hc1, hcode]) lookup_frame_mem_release
+    (by simp [ev, evalHOLExact, hcmm]) _ (frame_mem_release_run _ (.val (.word cmm)) (by
+      simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])) ?_
+  rintro _ c2 ⟨hg2, hm2, hc2, hd2⟩
+  simp only [callEntryStateHOLFinite] at hg2 hm2 hc2 hd2
+  refine Ret.seq_call1W (w := 1) (by simp [hc2, hc1, hcode]) lookup_pc_add
+    (by simp [ev, evalHOLExact]) _ (pc_add_run _ e pc 1 (by
+      simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by simp [callEntryStateHOLFinite, hg2, hg1, HolFiniteMapExact.lookup_update, FUPDATE, he])
+      (by simp [callEntryStateHOLFinite, hm2, hm1, hpc])
+      (by simp [callEntryStateHOLFinite, hd2, hd1, hdom])) ?_
+  rintro _ c3 ⟨hg3, hm3, hc3, hd3⟩
+  simp only [callEntryStateHOLFinite] at hg3 hm3 hc3 hd3
+  refine Ret.ret fun _ _ => ?_
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · simp [emptyLocalsHOLFinite, hg3, hg2, hg1]
+  · simp [emptyLocalsHOLFinite, hm3, hm2, hm1]
+  · simp [emptyLocalsHOLFinite, hc3, hc2, hc1]
+  · simp [emptyLocalsHOLFinite, hd3, hd2, hd1]
+
+end FinishTail
 
 /-! ## 4. The required statement -/
 
