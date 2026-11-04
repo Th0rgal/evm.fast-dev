@@ -68,7 +68,12 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.ValidVersionedHashes
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.DecodeStep
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.BlobGasPrice
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.LogsBloom
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
@@ -99,8 +104,8 @@ theorem primitives : Primitives where
   «fb_mpt_fail» := Merged.fb_mpt_fail
   «fb_node_new_ext» := Merged.fb_node_new_ext
   «fb_rlp_item» := PrimShardP10P30.fb_rlp_item
-  «ww__decode_step» := «ww__decode_step»
-  «sp__decode_step» := «sp__decode_step»
+  «ww__decode_step» := R16Shards.MptC10C12.«ww__decode_step»
+  «sp__decode_step» := R16Shards.MptC10C12.«sp__decode_step»
   «ww__resolve_step» := R16Shards.ResolveDecodeStep.«ww__resolve_step»
   «sp__resolve_step» := R16Shards.ResolveDecodeStep.«sp__resolve_step»
   «ro_mpt_fail» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.ReadOnlyLeaves.«ro_mpt_fail»
@@ -391,7 +396,7 @@ theorem primitives : Primitives where
   «fb_account_deployable» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_account_deployable»
   «fb_frame_state_gas_used» := Wave8Leaves.S03.fb_frame_state_gas_used
   «fb_memzero» := Merged.fb_memzero
-  «wk_account_deployable» := «wk_account_deployable»
+  «wk_account_deployable» := R16Shards.EvmEkFk.«wk_account_deployable»
   «wk_memzero» := Merged.wk_memzero
   «zv_memzero» := Merged.zv_memzero
   «gbody_process_message_call» := R10Shards.Fast_GbodyC17ToC21.«gbody_process_message_call»
@@ -399,7 +404,7 @@ theorem primitives : Primitives where
   «fb_msg_new» := Wave8Leaves.S03.fb_msg_new Merged.fb_alloc Merged.fb_memzero
   «fb_state_fresh_tx» := Merged.fb_state_fresh_tx
   «fb_te_new» := Merged.fb_te_new
-  «wk_ext_code_of» := «wk_ext_code_of»
+  «wk_ext_code_of» := R16Shards.EvmEkFk.«wk_ext_code_of»
   «wk_msg_new» := R13Wk06b.«wk_msg_new»
   «rt_msg_new» := Merged.rt_msg_new
   «wk_process_message_call» := «wk_process_message_call»
@@ -434,7 +439,7 @@ theorem primitives : Primitives where
   «fb_u256_sub» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_sub»
   «fb_udiv_small5» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_udiv_small5»
   «fb_validate_transaction» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_transaction»
-  «wk_calculate_blob_gas_price» := «wk_calculate_blob_gas_price»
+  «wk_calculate_blob_gas_price» := R16Shards.WkBlockTxEnc.«wk_calculate_blob_gas_price»
   «ro_calculate_total_blob_gas» := R10Ports.ro_calculate_total_blob_gas
   «wk_check_transaction» := «wk_check_transaction»
   «wk_clear_account_preserving_balance» := «wk_clear_account_preserving_balance»
@@ -443,7 +448,7 @@ theorem primitives : Primitives where
   «wk_encode_receipt» := «wk_encode_receipt»
   «wk_encode_transaction» := «wk_encode_transaction»
   «ro_fee_mul» := R10Ports.ro_fee_mul
-  «wk_get_account» := «wk_get_account»
+  «wk_get_account» := R16Shards.EvmEkFk.«wk_get_account»
   «wk_keccak256» := R16Shards.PrimC08Closure.«wk_keccak256»
   «wk_lst_new» := R13Wk06b.«wk_lst_new»
   «rt_lst_new» := Merged.rt_lst_new
@@ -477,7 +482,7 @@ theorem primitives : Primitives where
   «wk_build_mpt_indexed» := «wk_build_mpt_indexed»
   «wk_compute_state_root» := «wk_compute_state_root»
   «wk_decode_transaction» := «wk_decode_transaction»
-  «wk_logs_bloom» := «wk_logs_bloom»
+  «wk_logs_bloom» := R16Shards.WkBlockTxEnc.«wk_logs_bloom»
   «ww_memzero» := Merged.ww_memzero
   «wk_process_general_purpose_requests» := «wk_process_general_purpose_requests»
   «wk_process_transaction» := «wk_process_transaction»
@@ -502,7 +507,7 @@ theorem primitives : Primitives where
   «fb_validate_headers» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_headers»
   «ro_check_gas_limit» := R10Ports.ro_check_gas_limit
   «wk_header_hash» := «wk_header_hash»
-  «wk_is_valid_versioned_hashes» := «wk_is_valid_versioned_hashes»
+  «wk_is_valid_versioned_hashes» := R16Shards.HeaderHashRecover.«wk_is_valid_versioned_hashes»
   «wk_nodedb_build» := «wk_nodedb_build»
   «wk_payload_header» := «wk_payload_header»
   «wk_state_init» := «wk_state_init»
