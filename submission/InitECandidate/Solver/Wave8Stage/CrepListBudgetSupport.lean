@@ -1,4 +1,4 @@
-import InitECandidate.Proofs.CrepKernelComputation
+import InitECandidate.Solver.CrepKernelComputation
 import InitECandidate.Solver.Wave8Stage.ConcreteCompilerCrep
 import InitECandidate.Solver.Wave8Stage.FrontendStaticBudget
 
@@ -324,7 +324,7 @@ theorem progCostStruct_eq {width : Nat} [NeZero width] :
 noncomputable def fnRawCost
     (fn : Flapjack.Pancake.PanLang.MlS × List (Flapjack.Pancake.PanLang.MlS × Flapjack.Pancake.PanLang.ShapeHOL) ×
       Flapjack.Pancake.PanLang.ProgHOL 64 × Flapjack.Pancake.PanLang.ShapeHOL) : Nat :=
-  progCostStruct (InitECandidate.Proofs.CrepKernelComputation.compFuncExactHOLW
+  progCostStruct (InitECandidate.Solver.CrepKernelComputation.compFuncExactHOLW
     ConcreteCompilerCrepContext.functionMap ConcreteCompilerCrepContext.exceptions fn.2.1 fn.2.2.1)
 
 theorem foldr_max_mono : ∀ (xs ys : List Nat) (init : Nat),
@@ -368,7 +368,7 @@ theorem listBudget_le_raw :
   rw [List.forall₂_map_left_iff, List.forall₂_map_right_iff, List.forall₂_same]
   intro fn _
   dsimp only [Function.comp_def, fnRawCost]
-  rw [← InitECandidate.Proofs.CrepKernelComputation.compFunc_function_eq, ← progCostStruct_eq]
+  rw [← InitECandidate.Solver.CrepKernelComputation.compFunc_function_eq, ← progCostStruct_eq]
   exact progCost_simp _
 
 end InitECandidate.Solver.Wave8Stage.CrepListBudgetSupport
