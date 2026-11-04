@@ -269,6 +269,85 @@ theorem headMemChainWF_extend {F : Type} {s post : PanSemStateFiniteExact 64 F}
       · have h1 := hk ec hec
         exact ⟨h1.1, h1.2.2, hc ec (List.mem_cons_of_mem _ hec)⟩
 
+/-- Head status/gas updates (the write footprint of `refill_frame_state_gas`, `frame_halt`,
+`frame_exception`: `R11Shards.headAllowedOffsets`, i.e. head-record words `ev+64…ev+200` and
+`cur_cont+32`) never touch a cell read by `HeadMemChainWF`: under `EvmInv` the head record and
+continuation are disjoint from each other and from every other frame's blocks, so the invariant
+is preserved. -/
+theorem headMemChainWF_of_headAllowed {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hE : EvmInv s) (hs : HeadMemChainWF s)
+    (hglob : post.globals = s.globals)
+    (hchain : evmChain post = evmChain s)
+    (hmem_out : ∀ x : BitVec 64,
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        x ≠ BitVec.ofNat 64 addr) →
+      post.memory x = s.memory x) :
+    HeadMemChainWF post := by
+  have hev : globN post "ev" = globN s "ev" := by simp [globN, hglob]
+  have hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by simp [globN, hglob]
+  obtain ⟨_, S, _, hrest⟩ := hE
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFWF, _, _, hPair, _⟩ := hrest
+  obtain ⟨tl, hcs⟩ : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl :=
+    ⟨_, evmChain_cons s⟩
+  have hSE : scratchEnd = 2965299200 := rfl
+  have hhead := hFWF _ (head_mem_evmChain s)
+  have he_in := (hhead.1 (globN s "ev", 280) (by simp)).1.2
+  have hc_in := (hhead.1 (globN s "cur_cont", 104) (by simp)).1.2
+  dsimp only at he_in hc_in
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdec : Disj (globN s "ev", 280) (globN s "cur_cont", 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  have hsafe : ∀ a : Nat, a < 2 ^ 64 →
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"), a ≠ addr) →
+      memW post a = memW s a := by
+    intro a hlt hne
+    unfold memW
+    rw [hmem_out (BitVec.ofNat 64 a)]
+    intro addr haddr heq
+    have hal : addr < 2 ^ 64 := by
+      simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+      rw [hSE] at he_in hc_in
+      rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+    have := congrArg BitVec.toNat heq
+    rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, Nat.mod_eq_of_lt hal] at this
+    exact hne addr haddr this
+  refine headMemChainWF_of_agree hs hchain ?_ hev hfmp
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | htl
+  · unfold Disj at hdec; dsimp only at hdec
+    rw [hSE] at he_in hc_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try dsimp only) <;> (try omega) <;>
+      (intro addr haddr
+       simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+       rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+  · have hFec := hFWF ec (by rw [hcs]; exact List.mem_cons_of_mem _ htl)
+    have hr_in := (hFec.1 (ec.1, 280) (by simp)).1.2
+    have hk_in := (hFec.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hr_in hk_in
+    have hmemb : ∀ o ∈ [(ec.1, 280), (ec.2, 104)],
+        o ∈ ((tl.map (frameObjects s)).flatten) := by
+      intro o ho
+      exact List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map_of_mem htl,
+        by unfold frameObjects; simp only [List.mem_cons, List.mem_append] at ho ⊢; tauto⟩
+    have hA : (globN s "ev", 280) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have hB : (globN s "cur_cont", 104) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have d1 := hcross _ hA _ (hmemb (ec.1, 280) (by simp))
+    have d2 := hcross _ hB _ (hmemb (ec.1, 280) (by simp))
+    have d3 := hcross _ hA _ (hmemb (ec.2, 104) (by simp))
+    have d4 := hcross _ hB _ (hmemb (ec.2, 104) (by simp))
+    unfold Disj at d1 d2 d3 d4; dsimp only at d1 d2 d3 d4
+    rw [hSE] at he_in hc_in hr_in hk_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try omega) <;>
+      (intro addr haddr
+       simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+       rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+
 /-! ## 2. The aligned invariant and the aligned frame contracts -/
 
 def EvmInvA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
