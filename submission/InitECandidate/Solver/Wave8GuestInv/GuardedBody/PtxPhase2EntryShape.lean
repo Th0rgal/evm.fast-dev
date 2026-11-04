@@ -102,4 +102,22 @@ theorem structured_word_store {F : Type} (s : PanSemStateFiniteExact 64 F)
     (by simpa [flattenHOL] using hst)
   simp [memW, hw.2.1]
 
+/-- The continuation predicate excludes precisely the high gas word that
+the current entry predicate permits inside a one-field structure. -/
+theorem messageReady_gas_lt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : PtxMessageReady s) : memW s (locN s "m" + 40) < 2 ^ 63 := by
+  obtain ⟨_, S, _, _, _, _, _, _, _, _, hgas, _⟩ := h.2
+  have hm : locN (setVarHOLFinite (ofString "msg")
+      (.val (.word (BitVec.ofNat 64 (locN s "m")))) s) "msg" = locN s "m" := by
+    have hlt : locN s "m" < 2 ^ 64 := by
+      unfold locN
+      split
+      · exact BitVec.isLt _
+      · omega
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    exact hlt
+  change memW s (locN (setVarHOLFinite (ofString "msg")
+    (.val (.word (BitVec.ofNat 64 (locN s "m")))) s) "msg" + 40) < 2 ^ 63 at hgas
+  simpa only [hm] using hgas
+
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase2
