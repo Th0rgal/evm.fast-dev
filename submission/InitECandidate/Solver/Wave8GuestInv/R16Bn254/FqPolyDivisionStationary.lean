@@ -592,4 +592,142 @@ theorem polyDivLoop_stationary_none {F : Type} (s post : PanSemStateFiniteExact 
         exact ⟨hi, ⟨degree, hlocal, hlt⟩, fun _ _ _ => rfl⟩
   exact hall s.clock s (Nat.le_refl _) hc hi hr
 
+/-- Generalized entry context for `polyDivPrepare` without `CanonicalPolynomial B`. -/
+structure PolyDivGenEntryContext (a b quotient : BitVec 64) (d1 : Nat) (B : Nat → Limbs256) : Prop where
+  positive : 0 < d1
+  bound : d1 < 13
+  degree : PolynomialDegreeValue B (.val (.word (BitVec.ofNat 64 d1)))
+  separateAB : PolynomialDisjoint a b
+  separateAQ : PolynomialDisjoint a quotient
+  separateQB : PolynomialDisjoint quotient b
+  aligned : a.toNat % 8 = 0
+  nonwrapping : a.toNat + 416 ≤ 2 ^ 64
+
+/-- Generalized entry invariant for `polyDivPrepare` without `CanonicalPolynomial` on `A`, `B`, `Q`. -/
+structure PolyDivGenEntryInvariant {F : Type} (a b quotient : BitVec 64) (d1 : Nat)
+    (B : Nat → Limbs256) (s : PanSemStateFiniteExact 64 F) : Prop where
+  r0 : s.locals.lookup (ofString "r0") = some (.val (.word a))
+  r1 : s.locals.lookup (ofString "r1") = some (.val (.word b))
+  q : s.locals.lookup (ofString "q") = some (.val (.word quotient))
+  degree1 : s.locals.lookup (ofString "d1") = some (.val (.word (BitVec.ofNat 64 d1)))
+  domainA : DomainPolynomial s.memaddrs a
+  domainB : DomainPolynomial s.memaddrs b
+  domainQ : DomainPolynomial s.memaddrs quotient
+  divisor : MemoryPolynomial s.memory b B
+  dividend : ∃ (A Q : Nat → Limbs256) (degree : BitVec 64),
+    MemoryPolynomial s.memory a A ∧ MemoryPolynomial s.memory quotient Q ∧
+    PolynomialDegreeValue A (.val (.word degree)) ∧
+    s.locals.lookup (ofString "d0") = some (.val (.word degree))
+
+/-- `polyDivPrepare` establishes `PolyDivGenContext` and `PolyDivGenInvariant` without canonicality. -/
+theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 64 F)
+    (a b quotient : BitVec 64) (d1 : Nat) (B : Nat → Limbs256) (cont : ProgHOL 64)
+    (ctx : PolyDivGenEntryContext a b quotient d1 B)
+    (hc : state.code = originalRuntimeCode) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
+    (hr : evaluateHOLFiniteState state (polyDivPrepare cont) = (none, post)) :
+    ∃ (inverse : Limbs256) (resumed inner : PanSemStateFiniteExact 64 F),
+      PolyDivGenContext a b quotient d1 B inverse ∧
+      PolyDivGenInvariant a b quotient d1 B inverse resumed ∧
+      resumed.code = state.code ∧ resumed.memory = state.memory ∧ resumed.memaddrs = state.memaddrs ∧
+      (∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
+        resumed.locals.lookup name = state.locals.lookup name) ∧
+      evaluateHOLFiniteState resumed cont = (none, inner) ∧ post.memory = inner.memory ∧
+      ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
+        post.locals.lookup name = inner.locals.lookup name := by
+  unfold polyDivPrepare at hr
+  obtain ⟨lead, postLead, hinit, _, hinverse, hrestore⟩ := arith_dec_none_state hr
+  have haddr : arithEval state polyDivLeadAddress = some (.val (.word (coefficientAddress b d1))) := by
+    rw [← coefficientAddress_source]
+    simp [arithEval, polyDivLeadAddress, polyDivVar, evalHOLExact, evalListHOLExact, hi.r1, hi.degree1,
+      wordOpHOL, wordOp, panOpHOL, valueIsWord, valueWord]
+  have hload := eval_load_u256 state polyDivLeadAddress (coefficientAddress b d1) (B d1)
+    haddr (hi.domainB d1 ctx.bound) (hi.divisor d1 ctx.bound)
+  have hlead : lead = (B d1).toValue := Option.some.inj (hinit.symm.trans hload)
+  subst lead
+  let declared := setVarHOLFinite (ofString "lead") (B d1).toValue state
+  have hleadD : declared.locals.lookup (ofString "lead") = some (B d1).toValue := by
+    simp [declared, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  obtain ⟨inverse, resumed, inner, hcanon, hinv, hlocals, hcode, hmem, hdomain, hcont, hpostLocals, hpostMem⟩ :=
+    fqInverse_decCall_none_frame (s := declared) (post := postLead) (ofString "linv")
+      [polyDivVar "lead"] cont (B d1) hc (polynomialDegreeValue_at_index B d1 ctx.bound ctx.degree)
+      (by simp [polyDivVar, evalListHOLFinite, evalListHOLExact, evalHOLExact, hleadD]) hinverse
+  have hkeep : ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
+      resumed.locals.lookup name = state.locals.lookup name := by
+    intro name hnLead hnInv
+    simp [hlocals, declared, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      Ne.symm hnLead, Ne.symm hnInv]
+  have hInvLocal : resumed.locals.lookup (ofString "linv") = some inverse.toValue := by
+    simp [hlocals, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hinvariant : PolyDivGenInvariant a b quotient d1 B inverse resumed := by
+    refine ⟨(hkeep _ (by decide) (by decide)).trans hi.r0,
+      (hkeep _ (by decide) (by decide)).trans hi.r1,
+      (hkeep _ (by decide) (by decide)).trans hi.q,
+      (hkeep _ (by decide) (by decide)).trans hi.degree1,
+      hInvLocal, hdomain ▸ hi.domainA, hdomain ▸ hi.domainB, hdomain ▸ hi.domainQ,
+      hmem ▸ hi.divisor, ?_⟩
+    obtain ⟨A, Q, degree, hmA, hmQ, hdA, hlocal⟩ := hi.dividend
+    exact ⟨A, Q, degree, hmem ▸ hmA, hmem ▸ hmQ, hdA, (hkeep _ (by decide) (by decide)).trans hlocal⟩
+  have hcontext : PolyDivGenContext a b quotient d1 B inverse :=
+    ⟨ctx.positive, ctx.bound, ctx.degree, hcanon, hinv,
+      ctx.separateAB, ctx.separateAQ, ctx.separateQB, ctx.aligned, ctx.nonwrapping⟩
+  refine ⟨inverse, resumed, inner, hcontext, hinvariant, hcode, hmem, hdomain, hkeep, hcont, ?_, ?_⟩
+  · rw [hrestore]; exact hpostMem
+  · intro name hnLead hnInv
+    rw [hrestore, InitECandidate.Solver.PanRunBounded.resVarEq_lookup]
+    simp only [hnLead, ↓reduceIte]
+    rw [hpostLocals, InitECandidate.Solver.PanRunBounded.resVarEq_lookup]
+    simp [hnInv]
+
+/-- Combined `polyDivPrepare (.seq polyDivLoop cont)` normal-exit step under `PolyDivGenEntryInvariant`. -/
+theorem polyDivPreparedLoop_gen_none {F : Type} (state post : PanSemStateFiniteExact 64 F)
+    (a b quotient : BitVec 64) (d1 : Nat) (B : Nat → Limbs256) (cont : ProgHOL 64)
+    (ctx : PolyDivGenEntryContext a b quotient d1 B)
+    (hc : state.code = originalRuntimeCode) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
+    (hr : evaluateHOLFiniteState state (polyDivPrepare (.seq polyDivLoop cont)) = (none, post)) :
+    ∃ (inverse : Limbs256) (resumed inner : PanSemStateFiniteExact 64 F),
+      PolyDivGenContext a b quotient d1 B inverse ∧
+      PolyDivGenInvariant a b quotient d1 B inverse resumed ∧
+      (∃ degree : BitVec 64, resumed.locals.lookup (ofString "d0") = some (.val (.word degree)) ∧
+        degree.toInt < (d1 : Int)) ∧
+      resumed.code = state.code ∧
+      (∀ name, name ∈ [ofString "r0", ofString "r1", ofString "s0", ofString "s1", ofString "tmp", ofString "q"] →
+        resumed.locals.lookup name = state.locals.lookup name) ∧
+      (∀ x, PolynomialOutside a x → PolynomialOutside quotient x → resumed.memory x = state.memory x) ∧
+      evaluateHOLFiniteState resumed cont = (none, inner) ∧ post.memory = inner.memory ∧
+      ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
+        post.locals.lookup name = inner.locals.lookup name := by
+  obtain ⟨inverse, entry, inner, hctx, hentry, hcode, hmem, _, hkeep, hseq, hfinalMem, hfinalLocals⟩ :=
+    polyDivPrepare_gen_none state post a b quotient d1 B (.seq polyDivLoop cont) ctx hc hi hr
+  obtain ⟨resumed, hloop, hcont⟩ := arith_seq_none hseq
+  obtain ⟨hinv, hexit, hframe⟩ :=
+    polyDivLoop_stationary_none entry resumed a b quotient d1 B inverse hctx (hcode.trans hc) hentry hloop
+  have hmeta := evaluateHOLFiniteState_metadata entry polyDivLoop
+  rw [hloop] at hmeta
+  have hkeepLoop : ∀ name, name ∈ [ofString "r0", ofString "r1", ofString "s0", ofString "s1", ofString "tmp", ofString "q"] →
+      resumed.locals.lookup name = state.locals.lookup name := by
+    intro name hmem_n
+    have havoid : avoidsLocal name polyDivLoop = true := by
+      rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+      · decide
+      · rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+        · decide
+        · rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+          · decide
+          · rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+            · decide
+            · rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+              · decide
+              · rcases List.mem_cons.mp hmem_n with rfl | hmem_n
+                · decide
+                · cases hmem_n
+    have hfl := evaluate_avoidsLocal_flowing name polyDivLoop havoid entry
+    rw [hloop] at hfl
+    have heq_entry : resumed.locals.lookup name = entry.locals.lookup name := hfl (Or.inl rfl)
+    refine heq_entry.trans (hkeep name ?_ ?_)
+    · rintro rfl; exact absurd hmem_n (by decide)
+    · rintro rfl; exact absurd hmem_n (by decide)
+  refine ⟨inverse, resumed, inner, hctx, hinv, hexit, hmeta.1.trans hcode, hkeepLoop, ?_, hcont, hfinalMem, hfinalLocals⟩
+  intro x hxa hxq
+  rw [hframe x hxa hxq, hmem]
+
 end InitECandidate.Solver.Wave8GuestInv.Arith

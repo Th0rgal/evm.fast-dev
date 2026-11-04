@@ -30,6 +30,9 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkRequestsAppend
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
 /-! Direct standalone aggregator (`PrimC08Closure`) wiring verified 0-sorry `C00`, `C08`, and
@@ -258,6 +261,11 @@ theorem «ek_state_restore» :
     EvmKeeps EvmInv ["heap_ptr", "journal_n"] (ofString "state_restore") :=
   InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue.ek_state_restore
 
+theorem «ek_warm_storage_key» :
+    EvmKeeps (EvmAvoids (fun s => [(globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
+      ["heap_ptr"] (ofString "warm_storage_key") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.«ek_warm_storage_key»
+
 theorem «wk_encode_account» :
     WorldKeeps WorldOK
       (fun s => [(locN s "out", 110), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
@@ -301,6 +309,30 @@ theorem «wk_encode_withdrawal_rlp» :
        ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
       NoExtra (ofString "encode_withdrawal_rlp") :=
   InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.«wk_encode_withdrawal_rlp»
+
+theorem «wk_bal_remove_change» :
+    WorldKeeps BalChangeArg (fun _ => [])
+      []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "bal_remove_change") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal.wk_bal_remove_change
+
+theorem «wk_remove_storage_write» :
+    WorldKeeps WorldOK (fun _ => [])
+      []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "remove_storage_write") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal.wk_remove_storage_write
+
+theorem «wk_requests_append» :
+    WorldKeeps ReqRoom (fun _ => [])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]
+      ReqCountInc (ofString "requests_append") :=
+  InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.«wk_requests_append»
 
 /-! ## 3. `C09..C21` Guarded Body (`gbody_*`) Closure -/
 

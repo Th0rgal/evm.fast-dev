@@ -41,6 +41,7 @@ import InitECandidate.Solver.Wave8GuestInv.R10Shards.P12_P15Callees
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.P13DivMod
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.MissingFb5.FbRipemd160
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.MergedDecodeExtLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.ModexpLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.SigningRecoveryLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.BlsG2
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
@@ -618,7 +619,7 @@ theorem fb_sat_word : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_sat_word
   Campaign.Leaves.S05.fb_sat_word (P := @InitECandidate.Solver.Wave8GuestInv.GuestInv)
 
 theorem fb_pre_modexp : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_modexp» :=
-  Campaign.Leaves.S05.fb_pre_modexp fb_buffer_read InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_sat_word InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_min InitECandidate.Solver.Wave8GuestInv.FastGen.fb_modexp_gas fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.«fb_modexp» InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
+  Campaign.Leaves.S05.fb_pre_modexp fb_buffer_read InitECandidate.Solver.Wave8GuestInv.P12_P15.Callees.fb_u256_from_be fb_sat_word InitECandidate.Solver.Wave8GuestInv.FastU256Core.fb_min InitECandidate.Solver.Wave8GuestInv.FastGen.fb_modexp_gas fb_charge_gas fb_alloc InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_modexp InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_st_le64 : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_st_le64» :=
   InitECandidate.Solver.Wave8Leaves.Rlp.fb_st_le64
