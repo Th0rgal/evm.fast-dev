@@ -2111,6 +2111,141 @@ theorem frame_open_aligned (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "f
   exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
     ⟨hrun s hcode hP hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
 
+/-! ## 3f. Head-safe stores and the `process_message` entry composition -/
+
+/-- An address the invariant never reads: a head-record word other than `+24/+32/+40`, or a
+head-continuation word other than `+56`. -/
+def HeadSafeAddr (e0 c0 a : Nat) : Prop :=
+  (∃ k, a = e0 + k ∧ k < 280 ∧ k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40) ∨ (∃ k, a = c0 + k ∧ k < 104 ∧ k ≠ 56)
+
+/-- Generalised `headMemChainWF_of_headAllowed`: writes confined to `HeadSafeAddr` addresses
+(e.g. `process_message`'s `cur_cont+24 := snapshot`, `ev+200 := 0`) keep the invariant. -/
+theorem headMemChainWF_of_headSafe {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hE : EvmInv s) (hs : HeadMemChainWF s)
+    (hglob : post.globals = s.globals)
+    (hchain : evmChain post = evmChain s)
+    (hmem_out : ∀ x : BitVec 64, ¬ HeadSafeAddr (globN s "ev") (globN s "cur_cont") x.toNat →
+      post.memory x = s.memory x) :
+    HeadMemChainWF post := by
+  have hev : globN post "ev" = globN s "ev" := by simp [globN, hglob]
+  have hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by simp [globN, hglob]
+  obtain ⟨_, S, _, hrest⟩ := hE
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFWF, _, _, hPair, _⟩ := hrest
+  obtain ⟨tl, hcs⟩ : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl :=
+    ⟨_, evmChain_cons s⟩
+  have hSE : scratchEnd = 2965299200 := rfl
+  have hhead := hFWF _ (head_mem_evmChain s)
+  have he_in := (hhead.1 (globN s "ev", 280) (by simp)).1.2
+  have hc_in := (hhead.1 (globN s "cur_cont", 104) (by simp)).1.2
+  dsimp only at he_in hc_in
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdec : Disj (globN s "ev", 280) (globN s "cur_cont", 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  have hsafe : ∀ a : Nat, a < 2 ^ 64 →
+      ¬ HeadSafeAddr (globN s "ev") (globN s "cur_cont") a → memW post a = memW s a := by
+    intro a hlt hne
+    unfold memW
+    rw [hmem_out (BitVec.ofNat 64 a)]
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]; exact hne
+  refine headMemChainWF_of_agree hs hchain ?_ hev hfmp
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | htl
+  · unfold Disj at hdec; dsimp only at hdec
+    rw [hSE] at he_in hc_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try dsimp only) <;> (try omega) <;>
+      (rintro (⟨k, hk, _⟩ | ⟨k, hk, _⟩) <;> omega)
+  · have hFec := hFWF ec (by rw [hcs]; exact List.mem_cons_of_mem _ htl)
+    have hr_in := (hFec.1 (ec.1, 280) (by simp)).1.2
+    have hk_in := (hFec.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hr_in hk_in
+    have hmemb : ∀ o ∈ [(ec.1, 280), (ec.2, 104)],
+        o ∈ ((tl.map (frameObjects s)).flatten) := by
+      intro o ho
+      exact List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map_of_mem htl,
+        by unfold frameObjects; simp only [List.mem_cons, List.mem_append] at ho ⊢; tauto⟩
+    have hA : (globN s "ev", 280) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have hB : (globN s "cur_cont", 104) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have d1 := hcross _ hA _ (hmemb (ec.1, 280) (by simp))
+    have d2 := hcross _ hB _ (hmemb (ec.1, 280) (by simp))
+    have d3 := hcross _ hA _ (hmemb (ec.2, 104) (by simp))
+    have d4 := hcross _ hB _ (hmemb (ec.2, 104) (by simp))
+    unfold Disj at d1 d2 d3 d4; dsimp only at d1 d2 d3 d4
+    rw [hSE] at he_in hc_in hr_in hk_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try omega) <;>
+      (rintro (⟨k, hk, _⟩ | ⟨k, hk, _⟩) <;> omega)
+
+/-- A single word store at a head-safe address (`process_message`'s `cur_cont+24 := snapshot`). -/
+theorem headMemChainWF_store_headSafe {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hE : EvmInv s) (hs : HeadMemChainWF s) {x : BitVec 64}
+    (hx : HeadSafeAddr (globN s "ev") (globN s "cur_cont") x.toNat)
+    (hglob : post.globals = s.globals)
+    (hchain : evmChain post = evmChain s)
+    (hmem : ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    HeadMemChainWF post :=
+  headMemChainWF_of_headSafe hE hs hglob hchain fun a ha =>
+    hmem a (fun h => ha (h ▸ hx))
+
+theorem headSafe_cur_cont_24 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    HeadSafeAddr (globN s "ev") (globN s "cur_cont") (globN s "cur_cont" + 24) :=
+  Or.inr ⟨24, rfl, by omega, by omega⟩
+
+theorem headSafe_ev_200 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    HeadSafeAddr (globN s "ev") (globN s "cur_cont") (globN s "ev" + 200) :=
+  Or.inl ⟨200, rfl, by omega, by omega, by omega, by omega⟩
+
+/-- State-level entry composition along `process_message` (`Guest/SoftwareAst.lean:18803`):
+`frame_open` gives the depth-0 facts at `s1`; `depth0_prepare` (`s1 → s2`) and `frame_start`
+(`s3 → s4`) are `EvmStep`s keeping `ev`/`frame_mem_ptr` and the chain cells; the store
+`cur_cont+24 := snapshot` (`s2 → s3`) is head-safe. Then `run_frames` is entered with
+`HeadMemChainWF s4`. -/
+theorem process_message_entry_headMemChainWF {F : Type}
+    {s1 s2 s3 s4 : PanSemStateFiniteExact 64 F} {gw1 gw2 : List String}
+    (hk : memW s1 (globN s1 "cur_cont" + 16) = 0)
+    (h32 : memW s1 (globN s1 "ev" + 32) = 0) (h40 : memW s1 (globN s1 "ev" + 40) = 1024)
+    (hend : memW s1 (globN s1 "ev" + 24) + 1024 = globN s1 "frame_mem_ptr")
+    (hst1 : EvmStep gw1 s1 s2)
+    (hev1 : ofString "ev" ∉ gw1.map ofString) (hfm1 : ofString "frame_mem_ptr" ∉ gw1.map ofString)
+    (hc1 : ∀ ec ∈ evmChain s1, memW s2 (ec.1 + 24) = memW s1 (ec.1 + 24) ∧
+      memW s2 (ec.1 + 32) = memW s1 (ec.1 + 32) ∧ memW s2 (ec.1 + 40) = memW s1 (ec.1 + 40) ∧
+      memW s2 (ec.2 + 56) = memW s1 (ec.2 + 56))
+    {x : BitVec 64} (hx : x.toNat = globN s2 "cur_cont" + 24)
+    (hg2 : s3.globals = s2.globals) (hch2 : evmChain s3 = evmChain s2)
+    (hm2 : ∀ a : BitVec 64, a ≠ x → s3.memory a = s2.memory a)
+    (hst3 : EvmStep gw2 s3 s4)
+    (hev3 : ofString "ev" ∉ gw2.map ofString) (hfm3 : ofString "frame_mem_ptr" ∉ gw2.map ofString)
+    (hc3 : ∀ ec ∈ evmChain s3, memW s4 (ec.1 + 24) = memW s3 (ec.1 + 24) ∧
+      memW s4 (ec.1 + 32) = memW s3 (ec.1 + 32) ∧ memW s4 (ec.1 + 40) = memW s3 (ec.1 + 40) ∧
+      memW s4 (ec.2 + 56) = memW s3 (ec.2 + 56)) :
+    EvmInv s4 ∧ HeadMemChainWF s4 := by
+  have hw1 : HeadMemChainWF s1 :=
+    headMemChainWF_depth0 _ hk (by rw [h32]) (by rw [h40]) (by rw [h40]; exact hend)
+  have hw2 := headMemChainWF_of_evmStep hw1 hst1 hev1 hfm1 hc1
+  have hw3 : HeadMemChainWF s3 :=
+    headMemChainWF_store_headSafe hst1.1 hw2 (by rw [hx]; exact headSafe_cur_cont_24 s2) hg2 hch2 hm2
+  exact ⟨hst3.1, headMemChainWF_of_evmStep hw3 hst3 hev3 hfm3 hc3⟩
+
+theorem ev_not_mem_depth0_gw :
+    ofString "ev" ∉ (["heap_ptr", "journal_n", "scratch_ptr"] : List String).map ofString := by
+  decide
+
+theorem fmp_not_mem_depth0_gw :
+    ofString "frame_mem_ptr" ∉ (["heap_ptr", "journal_n", "scratch_ptr"] : List String).map ofString := by
+  decide
+
+theorem ev_not_mem_frameStart_gw :
+    ofString "ev" ∉ (["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] : List String).map ofString := by
+  decide
+
+theorem fmp_not_mem_frameStart_gw :
+    ofString "frame_mem_ptr" ∉ (["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] : List String).map ofString := by
+  decide
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
