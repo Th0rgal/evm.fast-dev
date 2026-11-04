@@ -69,6 +69,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockTxProcess
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.ValidVersionedHashes
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.DecodeStep
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure
@@ -390,8 +392,8 @@ theorem primitives : Primitives where
   «fb_destroy_storage» := PrimShardP10P30.fb_destroy_storage
   «fb_increment_nonce» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_increment_nonce»
   «fb_mark_account_created» := Merged.fb_mark_account_created
-  «wk_destroy_storage» := «wk_destroy_storage»
-  «wk_increment_nonce» := «wk_increment_nonce»
+  «wk_destroy_storage» := R16Shards.EvmEkFk.«wk_destroy_storage»
+  «wk_increment_nonce» := R16Shards.EvmEkFk.«wk_increment_nonce»
   «wk_mark_account_created» := R16WkMarkAccountCreated.«wk_mark_account_created»
   «gbody_process_create_message» := R16Shards.PrimC08Closure.«gbody_process_create_message»
   «fb_account_deployable» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_account_deployable»
@@ -442,10 +444,10 @@ theorem primitives : Primitives where
   «fb_validate_transaction» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_transaction»
   «wk_calculate_blob_gas_price» := R16Shards.WkBlockTxEnc.«wk_calculate_blob_gas_price»
   «ro_calculate_total_blob_gas» := R10Ports.ro_calculate_total_blob_gas
-  «wk_check_transaction» := «wk_check_transaction»
-  «wk_clear_account_preserving_balance» := «wk_clear_account_preserving_balance»
+  «wk_check_transaction» := R16Shards.TopGbodyWk.«wk_check_transaction»
+  «wk_clear_account_preserving_balance» := R16Shards.EvmEkFk.«wk_clear_account_preserving_balance»
   «wk_compute_contract_address» := R16Shards.WkBlockTxEnc.«wk_compute_contract_address»
-  «wk_create_ether» := «wk_create_ether»
+  «wk_create_ether» := R16Shards.EvmEkFk.«wk_create_ether»
   «wk_encode_receipt» := R16Shards.WkBlockTxEnc.«wk_encode_receipt»
   «wk_encode_transaction» := «wk_encode_transaction»
   «ro_fee_mul» := R10Ports.ro_fee_mul
@@ -458,7 +460,7 @@ theorem primitives : Primitives where
   «ro_min» := Wave8Contracts.M15.«ro_min»
   «rv_min» := Merged.rv_min
   «wk_recover_sender_with_chain_id» := «wk_recover_sender_with_chain_id»
-  «wk_set_account_balance» := «wk_set_account_balance»
+  «wk_set_account_balance» := R16Shards.EvmEkFk.«wk_set_account_balance»
   «ro_tx_chain_id» := M17.«ro_tx_chain_id»
   «ro_tx_has_access_list» := M17.«ro_tx_has_access_list»
   «ro_tx_is_blob» := M17.«ro_tx_is_blob»
