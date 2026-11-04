@@ -2428,6 +2428,43 @@ theorem lst_new_scratch_run {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end LstNew
 
+/-! ## 3j. `htab_count`: read-only run -/
+
+section HtabCount
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem lookup_htab_count :
+    originalRuntimeCode.lookup (ofString "htab_count") =
+      some ([(ofString "t", .one)], sourceFnBody Guest.Software.guestFn_htab_count, .one) :=
+  lookup_of_guestAst_getElem 141 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_htab_count) rfl
+
+attribute [local irreducible] Ret in
+/-- `htab_count(t)` is the single load `return ld(t+24)`: on return, memory, globals, code and
+the domain are unchanged (only locals are emptied). -/
+theorem htab_count_run {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    Ret s (sourceFnBody Guest.Software.guestFn_htab_count) (fun _ post =>
+      post.globals = s.globals ∧ post.memory = s.memory ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_htab_count =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_htab_count).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_htab_count,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply Ret.of_NS
+  apply Ret.ns_ret
+  intro _ _
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+end HtabCount
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
