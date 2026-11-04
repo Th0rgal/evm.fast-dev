@@ -1996,6 +1996,121 @@ theorem frame_exception_spec_aligned : FrameExceptionSpecA := by
 
 end ExceptionA
 
+/-! ## 3d. Aligned `finish_child` from its unaligned contract and its frame-memory footprint -/
+
+/-- The unaligned `finish_child` contract (`ContractParts.C00.finish_child_spec`, shape only). -/
+def FinishChildSpecU : Prop :=
+  FunSpec FinishReady
+    (fun s r post => ((∃ v, r = some (.returned v)) ∨ IsEvmErr r) →
+      EvmInv post ∧ (evmChain post).length + 1 = (evmChain s).length ∧
+        Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s)
+    (ofString "finish_child")
+
+/-- Frame-memory footprint of `finish_child` (`Guest/SoftwareAst.lean:18572`): the chain loses
+its head, `ev := ld(rec)`, `frame_mem_release(ld(rec+56))` sets `frame_mem_ptr` to the child's
+recorded mark, and no `+24/+32/+40` frame cell or `+56` continuation cell of a surviving frame
+is written (`memcpy` writes inside the parent's EVM memory, `stack_push` the parent's stack). -/
+def FinishChildMemSpec : Prop :=
+  FunSpec FinishReadyA
+    (fun s r post => ((∃ v, r = some (.returned v)) ∨ IsEvmErr r) →
+      evmChain post = (evmChain s).tail ∧
+      (∀ ec ∈ evmChain post, memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+        memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧ memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+        memW post (ec.2 + 56) = memW s (ec.2 + 56)) ∧
+      globN post "ev" = memW s (globN s "cur_cont") ∧
+      globN post "frame_mem_ptr" = memW s (globN s "cur_cont" + 56))
+    (ofString "finish_child")
+
+theorem funSpec_same_body {fname : MlS} {ps ps' : List (MlS × ShapeHOL)} {b b' : ProgHOL 64} {rt rt' : ShapeHOL}
+    (hl : originalRuntimeCode.lookup fname = some (ps, b, rt))
+    (hl' : originalRuntimeCode.lookup fname = some (ps', b', rt')) :
+    ps' = ps ∧ b' = b ∧ rt' = rt := by
+  rw [hl] at hl'
+  simp only [Option.some.injEq, Prod.mk.injEq] at hl'
+  exact ⟨hl'.1.symm, hl'.2.1.symm, hl'.2.2.symm⟩
+
+/-- `FinishChildSpecA` from the unaligned contract and the footprint, via `headMemChainWF_pop`. -/
+theorem finish_child_spec_aligned (hu : FinishChildSpecU) (hm : FinishChildMemSpec) :
+    FinishChildSpecA := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hu
+  obtain ⟨ps', b', rt', hl', hrun'⟩ := hm
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body hl hl'
+  refine ⟨_, _, _, hl, fun s hc hP hex hnt hr => ?_⟩
+  have h1 := hrun s hc ⟨hP.1.1, hP.2.1, hP.2.2⟩ hex hnt hr
+  obtain ⟨hch, hmem, hev, hfmp⟩ := hrun' s hc hP hex hnt hr
+  exact ⟨⟨h1.1, headMemChainWF_pop hP.1.2 hP.2.2 hch hmem hev hfmp⟩, h1.2.1, h1.2.2⟩
+
+/-! ## 3e. Entry establishment -/
+
+/-- An `EvmStep` that keeps `ev` and `frame_mem_ptr` (not in its write set `gw`) and the cells
+read by the invariant preserves it (`depth0_prepare`, `frame_start`). -/
+theorem headMemChainWF_of_evmStep {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {gw : List String} (hs : HeadMemChainWF s) (hstep : EvmStep gw s post)
+    (hev_gw : ofString "ev" ∉ gw.map ofString)
+    (hfmp_gw : ofString "frame_mem_ptr" ∉ gw.map ofString)
+    (hcells : ∀ ec ∈ evmChain s, memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧ memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW post (ec.2 + 56) = memW s (ec.2 + 56)) :
+    HeadMemChainWF post := by
+  obtain ⟨_, _, hkept, hchain⟩ := hstep
+  have hev : globN post "ev" = globN s "ev" := by
+    unfold globN; rw [hkept _ hev_gw]
+  have hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+    unfold globN; rw [hkept _ hfmp_gw]
+  exact headMemChainWF_of_agree hs hchain hcells hev hfmp
+
+/-- The invariant's cells are kept by `fname` on every resuming outcome from a `P` entry. -/
+def ChainCellsKept (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) (fname : MlS) : Prop :=
+  FunSpec P (fun s r post => Resumes r → ∀ ec ∈ evmChain s,
+      memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧ memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧
+      memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧ memW post (ec.2 + 56) = memW s (ec.2 + 56))
+    fname
+
+/-- Aligned `EvmKeeps`: an `EvmKeeps` callee whose write set omits `ev`/`frame_mem_ptr` and that
+keeps the chain cells carries `HeadMemChainWF`. -/
+theorem evmKeeps_aligned {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {gw : List String} {fname : MlS} (hk : EvmKeeps P gw fname) (hc : ChainCellsKept P fname)
+    (hev_gw : ofString "ev" ∉ gw.map ofString)
+    (hfmp_gw : ofString "frame_mem_ptr" ∉ gw.map ofString) :
+    FunSpec (fun s => P s ∧ HeadMemChainWF s)
+      (fun s r post => Resumes r → EvmStep gw s post ∧ HeadMemChainWF post) fname := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hk
+  obtain ⟨ps', b', rt', hl', hrun'⟩ := hc
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body hl hl'
+  refine ⟨_, _, _, hl, fun s hcode hP hex hnt hr => ?_⟩
+  have hst := hrun s hcode hP.1 hex hnt hr
+  exact ⟨hst, headMemChainWF_of_evmStep hP.2 hst hev_gw hfmp_gw (hrun' s hcode hP.1 hex hnt hr)⟩
+
+/-- Frame-memory effect of `frame_open(msg, 0)` (`frame_new`, `Guest/SoftwareAst.lean:15370`):
+the new head `e` has `e+32 = 0` (`memzero`), `e+40 = 1024` and `e+24 = frame_mem_alloc(1024)`,
+which leaves `frame_mem_ptr = e+24 + 1024`; the new continuation has kind `cur_cont+16 = 0`. -/
+def FrameOpenMemSpec : Prop :=
+  FunSpec FrameOpenReady
+    (fun _ r post => Resumes r →
+      memW post (globN post "cur_cont" + 16) = 0 ∧
+      memW post (globN post "ev" + 32) = 0 ∧ memW post (globN post "ev" + 40) = 1024 ∧
+      memW post (globN post "ev" + 24) + 1024 = globN post "frame_mem_ptr")
+    (ofString "frame_open")
+
+/-- Entry establishment at `frame_open`: on every resuming outcome the depth-0 invariant holds. -/
+theorem frame_open_headMemChainWF (hm : FrameOpenMemSpec) :
+    KeepsOn FrameOpenReady HeadMemChainWF (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hm
+  refine ⟨_, _, _, hl, fun s hcode hP hex hnt hr => ?_⟩
+  obtain ⟨hk, h32, h40, hend⟩ := hrun s hcode hP hex hnt hr
+  refine headMemChainWF_depth0 _ hk (by rw [h32]) (by rw [h40]) ?_
+  rw [h40]; exact hend
+
+/-- `frame_open` aligned: `fk_frame_open` plus the frame-memory effect. -/
+theorem frame_open_aligned (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open"))
+    (hm : FrameOpenMemSpec) :
+    KeepsOn FrameOpenReady (fun s => EvmMsgReady s ∧ HeadMemChainWF s) (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hk
+  obtain ⟨ps', b', rt', hl', hrun'⟩ := frame_open_headMemChainWF hm
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body hl hl'
+  exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
+    ⟨hrun s hcode hP hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
@@ -2035,6 +2150,18 @@ theorem gbody_run_frames_aligned''
       K.«run_frames» :=
   gbody_run_frames_aligned bf be bx bd hf frame_epilogue_spec_aligned
     frame_exception_spec_aligned hd
+
+/-- `gbody_run_frames_aligned''` with the aligned `finish_child` contract derived from the
+unaligned `finish_child_spec` shape and its frame-memory footprint (`FinishChildMemSpec`). -/
+theorem gbody_run_frames_aligned_fc
+    (bf : TerminatingFunBoundedOn FinishReadyA (ofString "finish_child") K.«finish_child»)
+    (be : TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue»)
+    (bx : TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception»)
+    (bd : TerminatingFunBoundedOn EvmRunA (ofString "op_dispatch") K.«op_dispatch»)
+    (hfu : FinishChildSpecU) (hfm : FinishChildMemSpec) (hd : OpDispatchSpecA) :
+    TerminatingFunBoundedOn (fun s => EvmInv s ∧ HeadMemChainWF s) (ofString "run_frames")
+      K.«run_frames» :=
+  gbody_run_frames_aligned'' bf be bx bd (finish_child_spec_aligned hfu hfm) hd
 
 /-- Every frame-function bound that holds under the unaligned guard also holds under the
 aligned one. -/
