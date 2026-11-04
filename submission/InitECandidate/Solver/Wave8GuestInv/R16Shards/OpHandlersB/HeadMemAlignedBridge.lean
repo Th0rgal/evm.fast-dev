@@ -2113,6 +2113,45 @@ theorem frame_open_aligned (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "f
   exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
     ⟨hrun s hcode hP hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
 
+/-- Option A entry precondition: `FrameOpenReady` plus an explicit bound on the message's code
+length `msg+120` (EIP-170 / witness code lengths are `< 2^32`), which bounds the
+`compute_jumpdests` bitmap that `frame_new` carves from scratch. -/
+def FrameOpenReadyB : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => FrameOpenReady s ∧ memW s (locN s "msg" + 120) < 2 ^ 40
+
+/-- Bounded frame-memory effect of `frame_open(msg, 0)` (Option A). -/
+def FrameOpenMemSpecB : Prop :=
+  FunSpec FrameOpenReadyB
+    (fun _ r post => Resumes r →
+      memW post (globN post "cur_cont" + 16) = 0 ∧
+      memW post (globN post "ev" + 32) = 0 ∧ memW post (globN post "ev" + 40) = 1024 ∧
+      memW post (globN post "ev" + 24) + 1024 = globN post "frame_mem_ptr")
+    (ofString "frame_open")
+
+/-- The unbounded spec implies the bounded one. -/
+theorem frameOpenMemSpecB_of (hm : FrameOpenMemSpec) : FrameOpenMemSpecB := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hm
+  exact ⟨_, _, _, hl, fun s hcode hP hex hnt => hrun s hcode hP.1 hex hnt⟩
+
+/-- Entry establishment at `frame_open` from the bounded spec. -/
+theorem frame_open_headMemChainWF_B (hm : FrameOpenMemSpecB) :
+    KeepsOn FrameOpenReadyB HeadMemChainWF (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hm
+  refine ⟨_, _, _, hl, fun s hcode hP hex hnt hr => ?_⟩
+  obtain ⟨hk, h32, h40, hend⟩ := hrun s hcode hP hex hnt hr
+  refine headMemChainWF_depth0 _ hk (by rw [h32]) (by rw [h40]) ?_
+  rw [h40]; exact hend
+
+/-- `frame_open` aligned under the Option A bound: `fk_frame_open` plus the bounded effect. -/
+theorem frame_open_aligned_B (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open"))
+    (hm : FrameOpenMemSpecB) :
+    KeepsOn FrameOpenReadyB (fun s => EvmMsgReady s ∧ HeadMemChainWF s) (ofString "frame_open") := by
+  obtain ⟨ps, b, rt, hl, hrun⟩ := hk
+  obtain ⟨ps', b', rt', hl', hrun'⟩ := frame_open_headMemChainWF_B hm
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body hl hl'
+  exact ⟨_, _, _, hl, fun s hcode hP hex hnt hres =>
+    ⟨hrun s hcode hP.1 hex hnt hres, hrun' s hcode hP hex hnt hres⟩⟩
+
 /-! ## 3f. Head-safe stores and the `process_message` entry composition -/
 
 /-- An address the invariant never reads: a head-record word other than `+24/+32/+40`, or a
