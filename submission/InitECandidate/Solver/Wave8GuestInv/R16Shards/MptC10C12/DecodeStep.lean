@@ -1845,7 +1845,7 @@ private theorem shape_one_word_ds {v : ValueHOL 64}
   rcases v with ⟨⟨w⟩⟩ | _ | _ <;> simp [shapeOfHOLExact, shapeEqHOL] at h
   exact ⟨w, rfl⟩
 
-private theorem ww_rlp_list_to_slices :
+theorem «ww_rlp_list_to_slices» :
     WritesWithin (fun _ => []) ["heap_ptr", "scratch_ptr"] (ofString "rlp_list_to_slices") := by
   refine ⟨_, _, _, lookup_rlp_list_to_slices_ds, ?_⟩
   intro F s hc hAR ⟨vals, hvals⟩ hnt hres
