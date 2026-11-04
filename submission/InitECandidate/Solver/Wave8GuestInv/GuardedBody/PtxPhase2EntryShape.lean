@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase1Invariant
+import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase1Expressions
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -88,5 +89,17 @@ theorem validated_mgas_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · simp [InitECandidate.Solver.Wave8GuestInv.evalAt, evalHOLExact,
       setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- The store primitive accepts a one-field structure exactly as a one-word
+write. Successful storage does not provide a missing scalar-shape check. -/
+theorem structured_word_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x w : BitVec 64) (mem' : BitVec 64 → HolWordLab 64)
+    (hst : @panMemStoresHOL 64 _ x
+      (flattenHOL (.rStruct [.val (.word w)])) s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem') :
+    memW { s with memory := mem' } x.toNat = w.toNat := by
+  have hw := panMemStoresHOL_word_spec (s := s) (x := x) (w := .word w)
+    (by simpa [flattenHOL] using hst)
+  simp [memW, hw.2.1]
 
 end InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase2
