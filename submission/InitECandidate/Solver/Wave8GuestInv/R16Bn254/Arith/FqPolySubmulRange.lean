@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 def SubmulRange (q : Limbs256) (shift first last : Nat)
     (A B C : Nat → Limbs256) : Prop :=
@@ -51,4 +52,4 @@ theorem polynomialFrame_trans (before middle after : BitVec 64 → Flapjack.HolW
   intro x hx
   exact (hsecond x hx).trans (hfirst x hx)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

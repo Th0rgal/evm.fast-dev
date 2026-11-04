@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 def fqCorrectionWord (digit : BitVec 64) : BitVec 64 := montLow32 (digit * 3834012553#64)
 
@@ -87,4 +88,4 @@ theorem montLowerCarryWord_conserve (low high carry : BitVec 64)
   rw [montLowerCarryWord_toNat low high carry hl hh hc]
   exact fqLowerCarry_conserve _ _ _
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

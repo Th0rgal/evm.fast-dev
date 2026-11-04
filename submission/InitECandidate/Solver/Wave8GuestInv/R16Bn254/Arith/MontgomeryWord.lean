@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- The actual fq_mul kernel splits machine words into radix-2^32 digits. -/
 def montLow32 (x : BitVec 64) : BitVec 64 := x &&& 4294967295#64
@@ -71,4 +72,4 @@ theorem montPack32_toNat (lo hi : BitVec 64)
     ← Nat.two_pow_add_eq_or_of_lt hlo hi.toNat]
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

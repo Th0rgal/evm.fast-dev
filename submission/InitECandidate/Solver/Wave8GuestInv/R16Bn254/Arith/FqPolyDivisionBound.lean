@@ -10,7 +10,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -69,4 +70,4 @@ theorem polyDivLoop_bounded (a b quotient : BitVec 64) (d1 : Nat)
   exact TerminatingProgBoundedOn.while_measure (n := 13) polyDivisionRank polyDivGuard polyDivBody hs
     s hc ⟨hp,polyDivInvariant_rank_bound s a b quotient d1 B inverse hp.2⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

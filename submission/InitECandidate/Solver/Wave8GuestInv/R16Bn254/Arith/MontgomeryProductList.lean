@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -101,4 +102,4 @@ theorem montAccProducts_eval_of_trace {F : Type} {s final : PanSemStateFiniteExa
     rw [montAccProduct_eval _ _ _ _ oldPr low high a b ha hb hpr hl hh]
     exact ih
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

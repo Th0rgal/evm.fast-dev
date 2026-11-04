@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -77,4 +78,4 @@ theorem while_inverse_half_positive (counter : MlS) {tail : ProgHOL 64} {B : Nat
   rw [inverseHalfRank_lookup s counter a hl]
   exact Nat.size_le.mpr a.toNat_lt
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

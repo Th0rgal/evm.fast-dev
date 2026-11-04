@@ -7,7 +7,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 1000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Sharp binary-inverse rank (`≤ 513` on 256-bit operands). Each normalization +
 subtraction drops `u.size + v.size` by at least `1`, except an odd/odd step (`ku = 0 ∧ kv = 0`),
@@ -83,4 +84,4 @@ theorem inverseRank_256_le (u v : Limbs256) : inverseRank u.toNat v.toNat ≤ 51
 theorem inverseRank_384_le {u v : Nat} (hu : u < 2 ^ 384) (hv : v < 2 ^ 384) :
     inverseRank u v ≤ 769 := inverseRank_bound hu hv
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 /-- Six arbitrary little-endian words; no field-normalization assumption. -/
@@ -189,4 +190,4 @@ theorem subCarry384_no_borrow (a b : Limbs384) (h : b.toNat ≤ a.toNat) :
 theorem inverseRank_limbs384_le (u v : Limbs384) : inverseRank u.toNat v.toNat ≤ 1537 :=
   Nat.le_trans (inverseRank_384_le u.toNat_lt v.toNat_lt) (by decide)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -13,7 +13,8 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 4000000
 
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open Flapjack.Compiler.Encoders.Asm
@@ -623,9 +624,10 @@ structure PolyDivGenEntryInvariant {F : Type} (a b quotient : BitVec 64) (d1 : N
 theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 64 F)
     (a b quotient : BitVec 64) (d1 : Nat) (B : Nat → Limbs256) (cont : ProgHOL 64)
     (ctx : PolyDivGenEntryContext a b quotient d1 B)
-    (hc : state.code = originalRuntimeCode) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
+    (hG : GuestInv state) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
     (hr : evaluateHOLFiniteState state (polyDivPrepare cont) = (none, post)) :
     ∃ (inverse : Limbs256) (resumed inner : PanSemStateFiniteExact 64 F),
+      GuestInv resumed ∧
       PolyDivGenContext a b quotient d1 B inverse ∧
       PolyDivGenInvariant a b quotient d1 B inverse resumed ∧
       resumed.code = state.code ∧ resumed.memory = state.memory ∧ resumed.memaddrs = state.memaddrs ∧
@@ -634,6 +636,7 @@ theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 
       evaluateHOLFiniteState resumed cont = (none, inner) ∧ post.memory = inner.memory ∧
       ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
         post.locals.lookup name = inner.locals.lookup name := by
+  have hc := hG.code
   unfold polyDivPrepare at hr
   obtain ⟨lead, postLead, hinit, _, hinverse, hrestore⟩ := arith_dec_none_state hr
   have haddr : arithEval state polyDivLeadAddress = some (.val (.word (coefficientAddress b d1))) := by
@@ -645,12 +648,38 @@ theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 
   have hlead : lead = (B d1).toValue := Option.some.inj (hinit.symm.trans hload)
   subst lead
   let declared := setVarHOLFinite (ofString "lead") (B d1).toValue state
+  have hG_decl : GuestInv declared := guestInv_setVar _ _ _ hG
   have hleadD : declared.locals.lookup (ofString "lead") = some (B d1).toValue := by
     simp [declared, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
-  obtain ⟨inverse, resumed, inner, hcanon, hinv, hlocals, hcode, hmem, hdomain, hcont, hpostLocals, hpostMem⟩ :=
-    fqInverse_decCall_none_frame (s := declared) (post := postLead) (ofString "linv")
-      [polyDivVar "lead"] cont (B d1) hc (polynomialDegreeValue_at_index B d1 ctx.bound ctx.degree)
-      (by simp [polyDivVar, evalListHOLFinite, evalListHOLExact, evalHOLExact, hleadD]) hinverse
+  have hargs_inv : evalListHOLFinite declared (h := fun x => Classical.propDecidable (declared.memaddrs x))
+      [polyDivVar "lead"] = some [(B d1).toValue] := by
+    simp [polyDivVar, evalListHOLFinite, evalListHOLExact, evalHOLExact, hleadD]
+  obtain ⟨values, body, callee, rs, value, bpost, resumed, inner,
+    he, hlk, _, hrun, _, hlocals0, hcode, hcont, hpostLocals, hresumed, hpostMem0⟩ :=
+    arith_decCall_none_state hinverse
+  have hv : values = [(B d1).toValue] := Option.some.inj (he.symm.trans hargs_inv)
+  subst values
+  obtain ⟨inverse, hret, hcanon, hinv⟩ := fqInverse_callee_returned (B d1) value hc
+    (polynomialDegreeValue_at_index B d1 ctx.bound ctx.degree) hlk hrun
+  have hlk_orig : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "fq_inv") [(B d1).toValue] =
+      some (body, callee, rs) := by
+    rw [← hG_decl.code]; exact hlk
+  have hpbody : MemoryPure body := fqInverse_function_memoryPure [(B d1).toValue] body callee rs hlk_orig
+  have hmem0 := hpbody (callEntryStateHOLFinite declared callee) hc
+  have hdomain0 := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite declared callee) body).2.1
+  rw [hrun] at hmem0 hdomain0
+  have hG_bpost : GuestInv bpost := by
+    have := guestInv_evaluate (callEntryStateHOLFinite declared callee) body
+      (guestInv_callEntry declared callee hG_decl)
+    rw [hrun] at this; exact this
+  have hG_resumed : GuestInv resumed := by
+    rw [hresumed]
+    exact guestInv_setVar _ _ _ (guestInv_with_locals_clock bpost declared.locals bpost.clock hG_bpost)
+  have hlocals : resumed.locals = declared.locals.update (ofString "linv", inverse.toValue) := by
+    simpa only [hret] using hlocals0
+  have hmem : resumed.memory = state.memory := by rw [hresumed]; exact hmem0
+  have hdomain : resumed.memaddrs = state.memaddrs := by rw [hresumed]; exact hdomain0
+  have hpostMem : postLead.memory = inner.memory := by rw [hpostMem0]
   have hkeep : ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
       resumed.locals.lookup name = state.locals.lookup name := by
     intro name hnLead hnInv
@@ -670,7 +699,7 @@ theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 
   have hcontext : PolyDivGenContext a b quotient d1 B inverse :=
     ⟨ctx.positive, ctx.bound, ctx.degree, hcanon, hinv,
       ctx.separateAB, ctx.separateAQ, ctx.separateQB, ctx.aligned, ctx.nonwrapping⟩
-  refine ⟨inverse, resumed, inner, hcontext, hinvariant, hcode, hmem, hdomain, hkeep, hcont, ?_, ?_⟩
+  refine ⟨inverse, resumed, inner, hG_resumed, hcontext, hinvariant, hcode, hmem, hdomain, hkeep, hcont, ?_, ?_⟩
   · rw [hrestore]; exact hpostMem
   · intro name hnLead hnInv
     rw [hrestore, InitECandidate.Solver.PanRunBounded.resVarEq_lookup]
@@ -682,9 +711,10 @@ theorem polyDivPrepare_gen_none {F : Type} (state post : PanSemStateFiniteExact 
 theorem polyDivPreparedLoop_gen_none {F : Type} (state post : PanSemStateFiniteExact 64 F)
     (a b quotient : BitVec 64) (d1 : Nat) (B : Nat → Limbs256) (cont : ProgHOL 64)
     (ctx : PolyDivGenEntryContext a b quotient d1 B)
-    (hc : state.code = originalRuntimeCode) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
+    (hG : GuestInv state) (hi : PolyDivGenEntryInvariant a b quotient d1 B state)
     (hr : evaluateHOLFiniteState state (polyDivPrepare (.seq polyDivLoop cont)) = (none, post)) :
     ∃ (inverse : Limbs256) (resumed inner : PanSemStateFiniteExact 64 F),
+      GuestInv resumed ∧
       PolyDivGenContext a b quotient d1 B inverse ∧
       PolyDivGenInvariant a b quotient d1 B inverse resumed ∧
       (∃ degree : BitVec 64, resumed.locals.lookup (ofString "d0") = some (.val (.word degree)) ∧
@@ -696,11 +726,14 @@ theorem polyDivPreparedLoop_gen_none {F : Type} (state post : PanSemStateFiniteE
       evaluateHOLFiniteState resumed cont = (none, inner) ∧ post.memory = inner.memory ∧
       ∀ name, name ≠ ofString "lead" → name ≠ ofString "linv" →
         post.locals.lookup name = inner.locals.lookup name := by
-  obtain ⟨inverse, entry, inner, hctx, hentry, hcode, hmem, _, hkeep, hseq, hfinalMem, hfinalLocals⟩ :=
-    polyDivPrepare_gen_none state post a b quotient d1 B (.seq polyDivLoop cont) ctx hc hi hr
+  obtain ⟨inverse, entry, inner, hG_entry, hctx, hentry, hcode, hmem, _, hkeep, hseq, hfinalMem, hfinalLocals⟩ :=
+    polyDivPrepare_gen_none state post a b quotient d1 B (.seq polyDivLoop cont) ctx hG hi hr
   obtain ⟨resumed, hloop, hcont⟩ := arith_seq_none hseq
+  have hG_resumed : GuestInv resumed := by
+    have := guestInv_evaluate entry polyDivLoop hG_entry
+    rw [hloop] at this; exact this
   obtain ⟨hinv, hexit, hframe⟩ :=
-    polyDivLoop_stationary_none entry resumed a b quotient d1 B inverse hctx (hcode.trans hc) hentry hloop
+    polyDivLoop_stationary_none entry resumed a b quotient d1 B inverse hctx (hcode.trans hG.code) hentry hloop
   have hmeta := evaluateHOLFiniteState_metadata entry polyDivLoop
   rw [hloop] at hmeta
   have hkeepLoop : ∀ name, name ∈ [ofString "r0", ofString "r1", ofString "s0", ofString "s1", ofString "tmp", ofString "q"] →
@@ -726,8 +759,8 @@ theorem polyDivPreparedLoop_gen_none {F : Type} (state post : PanSemStateFiniteE
     refine heq_entry.trans (hkeep name ?_ ?_)
     · rintro rfl; exact absurd hmem_n (by decide)
     · rintro rfl; exact absurd hmem_n (by decide)
-  refine ⟨inverse, resumed, inner, hctx, hinv, hexit, hmeta.1.trans hcode, hkeepLoop, ?_, hcont, hfinalMem, hfinalLocals⟩
+  refine ⟨inverse, resumed, inner, hG_resumed, hctx, hinv, hexit, hmeta.1.trans hcode, hkeepLoop, ?_, hcont, hfinalMem, hfinalLocals⟩
   intro x hxa hxq
   rw [hframe x hxa hxq, hmem]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -9,7 +9,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -119,4 +120,4 @@ theorem polyOuterRank_represented {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp only [polyOuterRank,hl]
   exact polynomialMemoryRank_represented s.memory base A degree hm hd
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

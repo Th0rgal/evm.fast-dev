@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Phase 2 permits degree descent or residue cancellation, phase 1 permits
 quotient-slot cleanup, and phase 0 is reserved for the stationary case.
@@ -55,4 +56,4 @@ theorem divisionStationaryPhase_zero_iff (top slot : Nat) :
   unfold divisionStationaryPhase
   by_cases ht : top % fqModulus.toNat = 0 <;> by_cases hs : slot = 0 <;> simp [ht,hs]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

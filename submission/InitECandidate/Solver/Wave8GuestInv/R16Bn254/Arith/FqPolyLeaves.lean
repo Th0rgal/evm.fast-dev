@@ -11,7 +11,8 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
 
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -165,4 +166,4 @@ theorem fb_fq_poly_submul : TerminatingFunBoundedOn GuestInv (ofString "fq_poly_
         (by decide))
       (fun s hc _ => TerminatingProgBounded.straight _ rfl s hc)))
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

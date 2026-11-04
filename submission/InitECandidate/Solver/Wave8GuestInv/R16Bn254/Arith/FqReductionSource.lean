@@ -10,7 +10,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -81,4 +82,4 @@ theorem fqReduction_returned_exact {F : Type} {s post : PanSemStateFiniteExact 6
     · rw [if_neg hsmall] at hfirst
       exact False.elim (arith_tailCall_not_none resumed _ _ (congrArg Prod.fst hfirst))
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

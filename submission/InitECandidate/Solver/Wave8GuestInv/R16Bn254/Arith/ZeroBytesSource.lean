@@ -7,7 +7,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -62,4 +63,4 @@ theorem zeroBytes_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [arithEval, zeroBytesLoad, evalHOLExact, evalListHOLExact, hp, hi,
     wordOpHOL, wordOp, valueIsWord, valueWord, hr]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

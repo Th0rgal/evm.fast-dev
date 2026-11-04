@@ -12,7 +12,8 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
 
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -366,4 +367,4 @@ theorem polySubmul_exact_call_none {F : Type} (state post : PanSemStateFiniteExa
     hqCanon hdA hdB hmA hmB hsep hrun
   simpa only [hpost] using ⟨C, hmemC, hmemB, hrange, hframe⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

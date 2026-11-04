@@ -7,7 +7,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -86,4 +87,4 @@ theorem polyCofactorSwap_progress {F : Type} (state post : PanSemStateFiniteExac
     simpa only [degreeIndex_toInt d1 hd1] using hsmall
   · rw [hmem]; exact hframe
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

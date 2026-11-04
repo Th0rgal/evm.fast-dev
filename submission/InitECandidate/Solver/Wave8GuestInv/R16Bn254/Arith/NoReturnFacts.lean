@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -53,4 +54,4 @@ theorem inverseSubtractTail_not_returned {F : Type} (s : PanSemStateFiniteExact 
       (arith_call_local_not_returned resumed _ _ _ ret)
       (fun mid => arith_call_local_not_returned mid _ _ _ ret) (congrArg Prod.fst hn)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

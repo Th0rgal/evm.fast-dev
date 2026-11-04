@@ -10,7 +10,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -49,4 +50,4 @@ theorem fqInverse_decCall_none_frame {F : Type} {s post : PanSemStateFiniteExact
   · rw [hresumed]; exact hdomain
   · rw [hfinal]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

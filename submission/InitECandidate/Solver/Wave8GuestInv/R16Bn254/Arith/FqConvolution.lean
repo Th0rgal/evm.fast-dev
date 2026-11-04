@@ -8,7 +8,8 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 4000000
 set_option exponentiation.threshold 2000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 def montRadix8 (a : Fin 8 → Nat) : Nat :=
   a 0 * 1 + a 1 * 4294967296 + a 2 * 18446744073709551616 + a 3 * 79228162514264337593543950336 + a 4 * 340282366920938463463374607431768211456 + a 5 * 1461501637330902918203684832716283019655932542976 + a 6 * 6277101735386680763835789423207666416102355444464034512896 + a 7 * 26959946667150639794667015087019630673637144422540572481103610249216
@@ -107,4 +108,4 @@ theorem fqColumns_telescope (cols : Fin 15 → Nat) (carry : Fin 16 → Nat) (di
   unfold fqWeightedColumns
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

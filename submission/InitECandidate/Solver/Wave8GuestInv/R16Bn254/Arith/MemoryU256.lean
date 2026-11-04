@@ -7,7 +7,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 /-- The four words used by the actual U256 load, with machine-word addresses. -/
@@ -67,4 +68,4 @@ theorem writeU256_value (memory : BitVec 64 → HolWordLab 64) (address : BitVec
     (value : Limbs256) : MemoryU256 (writeU256 memory address value) address value := by
   simp [MemoryU256, writeU256, BitVec.add_left_inj]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

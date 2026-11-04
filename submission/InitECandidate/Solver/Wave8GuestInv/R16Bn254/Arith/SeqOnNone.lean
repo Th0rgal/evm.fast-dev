@@ -5,7 +5,8 @@ set_option autoImplicit false
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open InitECandidate.Solver.GuestCodeLookup
 open InitECandidate.Solver.PanTerminatingBounded
@@ -43,4 +44,4 @@ theorem TerminatingProgBoundedOn.seq_on_none
     dsimp only at s1 k1
     exact ⟨by omega, k1⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

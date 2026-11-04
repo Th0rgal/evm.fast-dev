@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- The low-column correction digit used literally by fq_mul. -/
 def fqCorrectionDigit (digit : Nat) : Nat := (digit * 3834012553) % 2 ^ 32
@@ -68,4 +69,4 @@ theorem montUpperCarry_lt (low high carry : Nat)
   unfold montUpperCarry
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

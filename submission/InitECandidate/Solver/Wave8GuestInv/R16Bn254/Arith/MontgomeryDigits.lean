@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 def limbs256Digits (a : Limbs256) : Fin 8 → Nat := fun i =>
   if i.val = 0 then (montLow32 a.l0).toNat else
@@ -44,4 +45,4 @@ theorem montRadix8_lt (a : Fin 8 → Nat) (ha : ∀ i, a i < 2 ^ 32) :
   unfold montRadix8
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

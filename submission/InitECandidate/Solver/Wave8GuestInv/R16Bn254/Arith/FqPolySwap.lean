@@ -9,7 +9,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.PanRunBounded
@@ -121,4 +122,4 @@ theorem polySwap_none {F : Type} (s post : PanSemStateFiniteExact 64 F) (a b c d
   rw [polySwap_eval s a b c d e ha hb hc hd he] at hr
   exact (Prod.mk.inj hr).2.symm
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

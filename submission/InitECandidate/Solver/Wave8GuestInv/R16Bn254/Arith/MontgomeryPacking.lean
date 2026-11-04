@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 1000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Four machine limbs packed exactly as in the final fq_mul declaration. -/
 def montPackLimbs (d : Fin 8 → BitVec 64) : Limbs256 :=
@@ -32,4 +33,4 @@ theorem montFinalDigit_lt (d : Fin 8 → Nat)
   unfold montRadix8 at hraw
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

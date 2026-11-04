@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang
 
 def fqProducts0 : List (MontFactor × MontFactor) :=
@@ -186,4 +187,4 @@ theorem fqColumnFactors_bounded (i : Fin 15) :
   fin_cases i <;> simp [fqColumnFactors, montFactorBounded,
     fqProducts0, fqProducts1, fqProducts2, fqProducts3, fqProducts4, fqProducts5, fqProducts6, fqProducts7, fqProducts8, fqProducts9, fqProducts10, fqProducts11, fqProducts12, fqProducts13, fqProducts14]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

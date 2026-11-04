@@ -6,7 +6,8 @@ set_option autoImplicit false
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- The coefficient relation maintained by the binary modular inverse. -/
 def InverseCongruence (input modulus operand coefficient : Nat) : Prop :=
@@ -50,4 +51,4 @@ theorem inverseCongruence_one (input modulus coefficient : Nat)
     (h : InverseCongruence input modulus 1 coefficient) :
     (input * coefficient) % modulus = 1 % modulus := h
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

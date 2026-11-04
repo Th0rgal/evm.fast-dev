@@ -8,7 +8,8 @@ set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 1000000
 set_option exponentiation.threshold 2000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 theorem fqRadix_coprime : Nat.gcd fqModulus.toNat (2 ^ 256) = 1 := by decide
 
@@ -45,4 +46,4 @@ theorem montInverse_cancel (p R lead divisor inverse quotient product : Nat)
   exact Nat.ModEq.cancel_left_of_coprime hcop
     (Nat.ModEq.cancel_left_of_coprime hcop (h1.trans (h2.trans h3)))
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

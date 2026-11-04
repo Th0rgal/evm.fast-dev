@@ -7,7 +7,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 
 /-- Byte access within a nonwrapping aligned word selects that word. -/
@@ -71,4 +72,4 @@ theorem getByte_zero_iff_word (base word : BitVec 64) (be : Bool)
     rw [getByte_word_offset base word i be ha hb hi, hz]
     simp
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

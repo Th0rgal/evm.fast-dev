@@ -9,7 +9,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Numeric contract of a complete bounded product list starting from zero. -/
 theorem montAccWords_zero_correct (products : List (BitVec 64 × BitVec 64))
@@ -81,4 +82,4 @@ theorem montUpperProducts_correct (products : List (BitVec 64 × BitVec 64))
   · rw [montUpperCarryWord_conserve low high carry hl hh hc]
     exact congrArg (fun x => x + carry.toNat) hs.2.2
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

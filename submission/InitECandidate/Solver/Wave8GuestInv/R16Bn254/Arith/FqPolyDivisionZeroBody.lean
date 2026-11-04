@@ -9,7 +9,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -86,4 +87,4 @@ theorem polyDivBody_zero_none {F : Type} (state post : PanSemStateFiniteExact 64
       · simp [PanRunBounded.resVarEq_lookup,declared,setVarHOLFinite,
           HolFiniteMapExact.lookup_update,FUPDATE,ht,hf,Ne.symm ht,Ne.symm hf]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

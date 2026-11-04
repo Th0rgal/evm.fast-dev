@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 def writeMemoryWord (memory : BitVec 64 → HolWordLab 64) (address word : BitVec 64) :
@@ -54,4 +55,4 @@ theorem writeMemoryWord_four (memory : BitVec 64 → HolWordLab 64) (address : B
       (writeMemoryWord (writeMemoryWord (writeMemoryWord memory address v.l0) (address+8) v.l1)
         (address+16) v.l2) (address+24) v.l3 = writeU256 memory address v := rfl
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

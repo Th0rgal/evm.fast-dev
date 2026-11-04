@@ -9,7 +9,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Compiler.Encoders.Asm
 
@@ -121,4 +122,4 @@ theorem polynomialDegree_signed_progress (C : Nat → Limbs256) (after : BitVec 
   exact ⟨by simpa only [wordCmpHOL, signed_less_eq, BitVec.slt_iff_toInt_lt] using hlt,
     polynomialDegreeRank_lt C _ after hafter hlt⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

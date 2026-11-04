@@ -9,7 +9,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -55,4 +56,4 @@ theorem modSub_call_exact_none {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, show ofString "lt" ≠ ofString "x" by decide, show ofString "lt" ≠ ofString "y" by decide, show ofString "lt" ≠ ofString "m" by decide, show ofString "d" ≠ ofString "lt" by decide, show ofString "d" ≠ ofString "m" by decide, show ofString "y" ≠ ofString "x" by decide, show ofString "m" ≠ ofString "x" by decide, show ofString "m" ≠ ofString "y" by decide]) hrun
   simpa [hv] using hlocals
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

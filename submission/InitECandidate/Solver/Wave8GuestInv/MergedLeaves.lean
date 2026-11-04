@@ -43,6 +43,7 @@ import InitECandidate.Solver.Wave8GuestInv.R14Shards.MissingFb5.FbRipemd160
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.MergedDecodeExtLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.ModexpLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.SigningRecoveryLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.Bn254PairingCheck
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.BlsG2
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
 import InitECandidate.Solver.Wave8GuestInv.Shards.S00.Compatibility
@@ -613,7 +614,7 @@ theorem fb_pre_alt_bn128_mul : type_of% InitECandidate.Solver.Wave8GuestInv.«fb
   Campaign.Leaves.S05.fb_pre_alt_bn128_mul fb_alloc InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_bn254_g1_mul fb_buffer_read fb_charge_gas InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_mark InitECandidate.Solver.Wave8GuestInv.PrimShardP10P30.fb_heap_release
 
 theorem fb_pre_alt_bn128_pairing_check : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_pre_alt_bn128_pairing_check» :=
-  Campaign.Leaves.S05.fb_pre_alt_bn128_pairing_check InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod fb_charge_gas InitECandidate.Solver.Wave8GuestInv.«fb_bn254_pairing_check» fb_alloc fb_memzero
+  Campaign.Leaves.S05.fb_pre_alt_bn128_pairing_check InitECandidate.Solver.Wave8GuestInv.P13.DivMod.fb_udivmod fb_charge_gas InitECandidate.Solver.Wave8GuestInv.R16ArithPort.fb_bn254_pairing_check fb_alloc fb_memzero
 
 theorem fb_sat_word : type_of% InitECandidate.Solver.Wave8GuestInv.«fb_sat_word» :=
   Campaign.Leaves.S05.fb_sat_word (P := @InitECandidate.Solver.Wave8GuestInv.GuestInv)

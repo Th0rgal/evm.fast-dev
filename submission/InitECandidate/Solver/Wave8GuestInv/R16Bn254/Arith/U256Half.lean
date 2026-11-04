@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 800000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- The cross-word shift used by the binary-inverse loop. -/
 def halfWord256 (lo hi : BitVec 64) : BitVec 64 :=
@@ -41,4 +42,4 @@ theorem half256_lt (a : Limbs256) (h : 0 < a.toNat) : (half256 a).toNat < a.toNa
 theorem half256_zero (a : Limbs256) (h : a.toNat = 0) : (half256 a).toNat = 0 := by
   rw [half256_toNat, h]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

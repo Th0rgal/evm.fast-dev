@@ -6,7 +6,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 
 def limbWord (value : Limbs256) (j : Nat) : BitVec 64 :=
@@ -98,4 +99,4 @@ theorem memByte_zero_iff_u256 (memory : BitVec 64 → HolWordLab 64)
       (domainU256_limb domain base hd _ hj) (memoryU256_limb memory base value hm _ hj)).mpr (h _ hj)
     simpa only [byteAddress_decompose, he] using hh (i % 8) hk
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

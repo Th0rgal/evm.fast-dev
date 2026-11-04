@@ -6,7 +6,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Round-5 review b3963b8f8 phase, parameterized by the field modulus so
 its arithmetic can be checked without importing the Montgomery proof cone. -/
@@ -58,4 +59,4 @@ theorem reviewedDivisionRank_degree (p d0 d1 next linv top slot nextTop nextSlot
   simp only [reviewedDivisionRank,if_neg hi,hphase]
   omega
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

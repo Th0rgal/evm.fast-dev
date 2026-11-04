@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 1000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 
 /-- A non-returning read-only prefix leaves its input state unchanged. -/
@@ -44,4 +45,4 @@ theorem NoChangeOnNone.seq {first second : ProgHOL 64}
   obtain ⟨mid, h1, h2⟩ := arith_seq_none h
   exact (hsecond mid post h2).trans (hfirst s mid h1)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

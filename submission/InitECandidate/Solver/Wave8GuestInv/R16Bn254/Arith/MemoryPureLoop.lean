@@ -6,7 +6,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.GuestCodeLookup
@@ -45,4 +46,4 @@ theorem MemoryPure.loop (e : ExpHOL 64) {p : ProgHOL 64}
       · rfl
   exact hall s.clock s rfl hc
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

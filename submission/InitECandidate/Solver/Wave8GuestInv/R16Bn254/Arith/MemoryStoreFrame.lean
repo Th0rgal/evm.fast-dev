@@ -5,7 +5,8 @@ set_option autoImplicit false
 set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 
 /-- Exact sequential store footprint, including machine-address wraparound. -/
@@ -36,4 +37,4 @@ theorem memStores_frame {width : Nat} [NeZero width]
       · simp only [panMemStoresHOL, panMemStoreHOL, if_neg hd] at run
         cases run
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack.Basis.Pure.MlString
 
 theorem montAName_scratch_all (i : Fin 8) :
@@ -73,4 +74,4 @@ theorem montUName_injective : Function.Injective montUName := by
   intro i j
   fin_cases i <;> fin_cases j <;> decide
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

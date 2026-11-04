@@ -2,10 +2,11 @@ import InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.BlsPrecompiles.BlsDecodeTouch
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.BitFqSmallLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16ArithPort.CappedLoopLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16Bn254.Fq12Inv
 
 /-! Standalone bounded termination proof on `GuestInv` for `bn254_pairing_check`
 (parameterized only by `fb_fq12_inv`) and `pre_alt_bn128_pairing_check`.
-Zero `LeafStatements.lean` dependency, zero `sorry`. -/
+Zero `LeafStatements.lean` dependency, standard Lean kernel foundations only. -/
 
 set_option autoImplicit false
 set_option linter.unusedTactic false
@@ -372,5 +373,14 @@ theorem fb_pre_alt_bn128_pairing_check_of
   have _ := fb_alloc
   have _ := fb_memzero
   bls_prove 694 Guest.Software.guestFn_pre_alt_bn128_pairing_check K.«pre_alt_bn128_pairing_check»
+
+theorem fb_bn254_pairing_check :
+    TerminatingFunBoundedOn GuestInv (ofString "bn254_pairing_check") K.«bn254_pairing_check» :=
+  fb_bn254_pairing_check_of InitECandidate.Solver.Wave8GuestInv.R16Bn254.fb_fq12_inv
+
+theorem fb_pre_alt_bn128_pairing_check :
+    TerminatingFunBoundedOn GuestInv
+      (ofString "pre_alt_bn128_pairing_check") K.«pre_alt_bn128_pairing_check» :=
+  fb_pre_alt_bn128_pairing_check_of fb_bn254_pairing_check
 
 end InitECandidate.Solver.Wave8GuestInv.R16ArithPort

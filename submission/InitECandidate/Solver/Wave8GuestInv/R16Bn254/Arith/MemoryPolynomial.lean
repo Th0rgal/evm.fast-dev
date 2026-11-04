@@ -6,7 +6,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 
 def coefficientAddress (base : BitVec 64) (i : Nat) : BitVec 64 :=
@@ -62,4 +63,4 @@ theorem writeCoefficient_polynomial (memory : BitVec 64 → HolWordLab 64)
     exact writeU256_preserves memory _ _ value (coefficients j)
       (coefficientWords_disjoint base i j hi hj (Ne.symm he)) (hm j hj)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

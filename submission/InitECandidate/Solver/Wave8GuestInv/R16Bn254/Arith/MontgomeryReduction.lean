@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 def montFinalReduce (raw modulus : Nat) : Nat :=
   if raw < modulus then raw else raw - modulus
@@ -65,4 +66,4 @@ theorem fqMontReduction_correct (a b correction raw : Nat)
   exact ⟨hraw.trans fqModulus_double_lt_radix,
     montReduction_correct _ _ _ _ _ _ (by decide) hp ha hb hk hidentity⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -9,7 +9,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 attribute [local irreducible] subCarry256
 
@@ -56,4 +57,4 @@ theorem fqSub_zero_toNat (a b : Limbs256) (hb : b.toNat = 0) :
   have hle : b.toNat ≤ a.toNat := by omega
   rw [modSub256,if_neg (Nat.not_lt.mpr hle),subCarry256_no_borrow a b hle,hb,Nat.sub_zero]
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

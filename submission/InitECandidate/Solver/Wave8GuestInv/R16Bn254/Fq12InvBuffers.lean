@@ -25,7 +25,7 @@ open InitECandidate.Solver.GuestCodeLookup
 open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
-open InitECandidate.Solver.Wave8GuestInv.Arith
+open InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
 
 theorem ordinaryDomain_iff_local (x : BitVec 64) :
     ordinaryDomain x ↔ x.toNat % 8 = 0 ∧ sourceBase ≤ x.toNat ∧ x.toNat < heapEnd := by

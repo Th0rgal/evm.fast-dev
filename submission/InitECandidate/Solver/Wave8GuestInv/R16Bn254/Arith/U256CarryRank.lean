@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 1000000
 set_option maxHeartbeats 800000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- Signed distance and a phase bit, with no restriction on the initial word. -/
 def negativeCarryWordRank (c : BitVec 64) (r : Limbs256) : Nat :=
@@ -66,4 +67,4 @@ theorem positiveCarryWordRank_decreases (c : BitVec 64) (r : Limbs256)
   rw [hnext, hd, hn]
   exact positiveCarryRank_decreases _ r (by omega)
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -58,4 +59,4 @@ theorem fqSub_returned_zero_of_equal_canonical {F : Type} {s post : PanSemStateF
   obtain ⟨out, hret, hbound, hsub⟩ := fqSub_returned_canonical a b ret hc ha hb haCanon hbCanon hr
   exact ⟨out, hret, fqCanonical_sub_eq_zero a.toNat b.toNat out.toNat hbound heq hsub⟩
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

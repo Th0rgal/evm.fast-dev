@@ -6,7 +6,8 @@ set_option linter.unusedSimpArgs false
 set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack
 
 theorem memByte_word_offset (memory : BitVec 64 → HolWordLab 64)
@@ -37,4 +38,4 @@ theorem memByte_zero_iff_word (memory : BitVec 64 → HolWordLab 64)
     apply UInt8.toNat_inj.mp
     exact h i hi
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

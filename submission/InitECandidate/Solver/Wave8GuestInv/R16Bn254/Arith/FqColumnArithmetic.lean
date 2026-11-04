@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang
 
 theorem montProductSum_cons (x y : BitVec 64) (rest : List (BitVec 64 × BitVec 64)) :
@@ -173,4 +174,4 @@ theorem fqProducts14_convolution (a b m : Fin 8 → BitVec 64) :
   all_goals simp only [Nat.add_zero, Nat.add_assoc]
 
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

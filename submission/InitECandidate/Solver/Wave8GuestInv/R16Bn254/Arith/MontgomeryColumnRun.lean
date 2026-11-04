@@ -9,7 +9,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -97,4 +98,4 @@ theorem montLowerColumn_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact montLowerFinish_eval accumulated dest tail _ _ carry oldCol oldDg lastPr oldCol2 oldDest
     hdcol hddg hdpr hdcol2 hdc hdL hdH hl' hh' hc' hcol' hdg' hpr' hcol2' hd'
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

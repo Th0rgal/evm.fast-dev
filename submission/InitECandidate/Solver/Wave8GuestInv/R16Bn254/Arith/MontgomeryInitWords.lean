@@ -7,7 +7,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 
@@ -58,4 +59,4 @@ theorem montSetWords_lookup {F : Type} (s : PanSemStateFiniteExact 64 F)
           simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
     · exact ih (setVarHOLFinite (ofString n) (.val (.word v)) s) hnd.2 hmem
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

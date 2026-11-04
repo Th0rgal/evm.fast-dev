@@ -10,7 +10,8 @@ set_option linter.unusedVariables false
 set_option linter.unreachableTactic false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 3000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.GuestCodeLookup
@@ -57,4 +58,4 @@ theorem polyDivBody_cleanup_progress {F : Type} (state post : PanSemStateFiniteE
     divisionHeadRank_represented state a b quotient d0 d1 (A d0) oldSlot h0 h1 hl (hmA d0 h0) hSlot]
   exact divisionStationaryRank_cleanup_drop d0 (A d0).toNat oldSlot.toNat hmultiple hSlotNZ
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith

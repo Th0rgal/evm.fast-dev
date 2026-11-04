@@ -8,7 +8,8 @@ set_option linter.unusedTactic false
 set_option linter.unnecessarySeqFocus false
 set_option maxRecDepth 10000
 set_option maxHeartbeats 2000000
-namespace InitECandidate.Solver.Wave8GuestInv.Arith
+namespace InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
+open InitECandidate.Solver.Wave8GuestInv
 
 /-- The fifteen convolution columns, including all correction products. -/
 def fqConvolutionColumns (a b m : Fin 8 → Nat) : Fin 15 → Nat :=
@@ -74,4 +75,4 @@ theorem fqColumns_correct (a b : Limbs256) (m : Fin 8 → Nat)
       montRadix8_lt (limbs256Digits a) (limbs256Digits_lt a))
     hb (montRadix8_lt m hm) ht
 
-end InitECandidate.Solver.Wave8GuestInv.Arith
+end InitECandidate.Solver.Wave8GuestInv.R16Bn254.Arith
