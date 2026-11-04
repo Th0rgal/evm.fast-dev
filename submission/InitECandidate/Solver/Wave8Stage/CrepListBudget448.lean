@@ -1,5 +1,5 @@
-import InitECandidate.Proofs.FrontendCodecComputation
-import InitECandidate.Proofs.GlobalsKernelComputation
+import InitECandidate.Solver.FrontendCodecComputation
+import InitECandidate.Solver.GlobalsKernelComputation
 import InitECandidate.Solver.Wave8Stage.CrepGuestAstGood
 import InitECandidate.Solver.Wave8Stage.CrepListBudgetSupport
 import InitECandidate.Solver.Wave8Stage.R12_Stage1To2BoundArgon
@@ -738,54 +738,54 @@ theorem fpermHOL_preserves {width : Nat} [NeZero width] (f g : MlS) :
       panProgCost (fpermHOL f g q) = panProgCost q ∧
       loadSafeProg (fpermHOL f g q) = loadSafeProg q ∧
       progNoGlobCall (fpermHOL f g q) = progNoGlobCall q at ih
-    rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq]
+    rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq]
     cases p with
     | dec _ _ _ b =>
       have ihb := ih b (by decreasing_trivial)
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at ihb
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
+      rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at ihb
+      simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
     | seq a b =>
       have iha := ih a (by decreasing_trivial)
       have ihb := ih b (by decreasing_trivial)
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at iha ihb
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, iha, ihb]
+      rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at iha ihb
+      simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, iha, ihb]
     | ite _ a b =>
       have iha := ih a (by decreasing_trivial)
       have ihb := ih b (by decreasing_trivial)
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at iha ihb
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, iha, ihb]
+      rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at iha ihb
+      simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, iha, ihb]
     | «while» _ b =>
       have ihb := ih b (by decreasing_trivial)
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at ihb
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
+      rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at ihb
+      simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
     | decCall _ _ _ _ b =>
       have ihb := ih b (by decreasing_trivial)
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at ihb
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
+      rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at ihb
+      simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
     | call info _ _ =>
       cases info with
-      | none => simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
+      | none => simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
       | some inf =>
         rcases inf with ⟨rk, hdl⟩
         cases hdl with
         | none =>
           cases rk with
-          | none => simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
+          | none => simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
           | some rkv =>
             rcases rkv with ⟨vk, _⟩
-            cases vk <;> simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
+            cases vk <;> simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
         | some hb =>
           rcases hb with ⟨eid, ev, body⟩
           have ihb := ih body (by simp_wf; omega)
-          rw [InitECandidate.Proofs.GlobalsKernelComputation.fperm_eq] at ihb
+          rw [InitECandidate.Solver.GlobalsKernelComputation.fperm_eq] at ihb
           cases rk with
-          | none => simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
+          | none => simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
           | some rkv =>
             rcases rkv with ⟨vk, _⟩
-            cases vk <;> simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
+            cases vk <;> simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall, ihb]
     | shMemLoad _ vk _ _ =>
-      cases vk <;> simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
-    | _ => simp [InitECandidate.Proofs.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
+      cases vk <;> simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
+    | _ => simp [InitECandidate.Solver.GlobalsKernelComputation.fpermHOL, panProgCost, loadSafeProg, progNoGlobCall]
 
 theorem globals_compileExp_preserves {width : Nat} [NeZero width]
     (ctx : PanGlobalsContextExact width) :
@@ -796,74 +796,74 @@ theorem globals_compileExp_preserves {width : Nat} [NeZero width]
       panExpsCost (Flapjack.compileExpExactHOLList ctx es) ≤ panExpsCost es ∧
       (loadSafeExps es = true → loadSafeExps (Flapjack.compileExpExactHOLList ctx es) = true)) := by
   have he : ∀ e : ExpHOL width,
-      panExpCost (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx e) ≤ panExpCost e ∧
-      (loadSafeExp e = true → loadSafeExp (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx e) = true) := by
+      panExpCost (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx e) ≤ panExpCost e ∧
+      (loadSafeExp e = true → loadSafeExp (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx e) = true) := by
     intro e
     induction e using (measure (sizeOf : ExpHOL width → Nat)).wf.induction with
     | h e ih =>
       change ∀ c, sizeOf c < sizeOf e →
-        panExpCost (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx c) ≤ panExpCost c ∧
-        (loadSafeExp c = true → loadSafeExp (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx c) = true) at ih
+        panExpCost (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx c) ≤ panExpCost c ∧
+        (loadSafeExp c = true → loadSafeExp (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx c) = true) at ih
       have ihm : ∀ es : List (ExpHOL width), (∀ x ∈ es, sizeOf x < sizeOf e) →
-          panExpsCost (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList ctx es) ≤ panExpsCost es ∧
-          (loadSafeExps es = true → loadSafeExps (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList ctx es) = true) := by
+          panExpsCost (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList ctx es) ≤ panExpsCost es ∧
+          (loadSafeExps es = true → loadSafeExps (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList ctx es) = true) := by
         intro es hes
         induction es with
-        | nil => simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps]
+        | nil => simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps]
         | cons x xs ihxs =>
           have ihx := ih x (hes x List.mem_cons_self)
           have ihrest := ihxs (fun y hy => hes y (List.mem_cons_of_mem _ hy))
-          simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps, Bool.and_eq_true_iff]
+          simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps, Bool.and_eq_true_iff]
           exact ⟨Nat.add_le_add ihx.1 ihrest.1, fun h => ⟨ihx.2 h.1, ihrest.2 h.2⟩⟩
       cases e with
       | const _ | baseAddr | bytesInWord =>
-        simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
+        simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
       | topAddr =>
-        simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, panExpsCost, loadSafeExp, loadSafeExps]
+        simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, panExpsCost, loadSafeExp, loadSafeExps]
       | var vk vn =>
         cases vk with
-        | «local» => simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
+        | «local» => simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
         | global =>
-          simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL]
+          simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL]
           cases ctx.globals.lookup vn with
           | none => simp [panExpCost, loadSafeExp]
           | some p => simp [panExpCost, panExpsCost, loadSafeExp, loadSafeExps]
       | nstruct _ _ | nfield _ _ =>
-        simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
+        simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp]
       | rstruct es | op _ es | panop _ es =>
         have h := ihm es (by intros; sizeOf_list_dec)
-        simpa [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp] using h
+        simpa [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp] using h
       | rfield _ v | load32 v | loadByte v =>
         have h := ih v (by decreasing_trivial)
-        simpa [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp] using h
+        simpa [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp] using h
       | load sh addr =>
         have h := ih addr (by decreasing_trivial)
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp,
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp,
           Bool.and_eq_true_iff, Bool.or_eq_true, decide_eq_true_eq]
         refine ⟨h.1, fun hs => ⟨?_, h.2 hs.2⟩⟩
         rcases hs.1 with hsh | hcost
         · exact Or.inl hsh
-        · have h0 : panExpCost (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx addr) = 0 := by
+        · have h0 : panExpCost (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx addr) = 0 := by
             have := h.1; omega
           exact Or.inr h0
       | cmp _ l r =>
         have hl := ih l (by decreasing_trivial)
         have hr := ih r (by decreasing_trivial)
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp, Bool.and_eq_true_iff]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp, Bool.and_eq_true_iff]
         exact ⟨by have := hl.1; have := hr.1; omega, fun h => ⟨hl.2 h.1, hr.2 h.2⟩⟩
       | shift _ l r =>
         have hl := ih l (by decreasing_trivial)
         have hr := ih r (by decreasing_trivial)
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp, Bool.and_eq_true_iff]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL, panExpCost, loadSafeExp, Bool.and_eq_true_iff]
         exact ⟨by have := hl.1; have := hr.1; omega, fun h => ⟨hl.2 h.1, hr.2 h.2⟩⟩
   refine ⟨fun e => ?_, fun es => ?_⟩
-  · rw [InitECandidate.Proofs.GlobalsKernelComputation.compileExp_eq]
+  · rw [InitECandidate.Solver.GlobalsKernelComputation.compileExp_eq]
     exact he e
-  · rw [InitECandidate.Proofs.GlobalsKernelComputation.compileExpList_function_eq]
+  · rw [InitECandidate.Solver.GlobalsKernelComputation.compileExpList_function_eq]
     induction es with
-    | nil => simp [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps]
+    | nil => simp [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps]
     | cons x xs ih =>
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOLList, panExpsCost, loadSafeExps, Bool.and_eq_true_iff]
       exact ⟨Nat.add_le_add (he x).1 ih.1, fun h => ⟨(he x).2 h.1, ih.2 h.2⟩⟩
 
 theorem globals_compileProg_preserves {width : Nat} [NeZero width]
@@ -874,31 +874,31 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
       panProgCost (Flapjack.compileProgExactHOL ctx p) ≤ panProgCost p ∧
       loadSafeProg (Flapjack.compileProgExactHOL ctx p) = true := by
   intro p
-  rw [InitECandidate.Proofs.GlobalsKernelComputation.compileProg_eq]
+  rw [InitECandidate.Solver.GlobalsKernelComputation.compileProg_eq]
   induction p using (measure (sizeOf : ProgHOL width → Nat)).wf.induction with
   | h p ih =>
     change ∀ q, sizeOf q < sizeOf p →
       progNoGlobCall q = true →
       loadSafeProg q = true →
-      panProgCost (InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL ctx q) ≤ panProgCost q ∧
-      loadSafeProg (InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL ctx q) = true at ih
+      panProgCost (InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL ctx q) ≤ panProgCost q ∧
+      loadSafeProg (InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL ctx q) = true at ih
     intro hng hls
     have he := (globals_compileExp_preserves ctx).1
     have hes := (globals_compileExp_preserves ctx).2
-    simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileExp_function_eq,
-      InitECandidate.Proofs.GlobalsKernelComputation.compileExpList_function_eq] at he hes
+    simp only [InitECandidate.Solver.GlobalsKernelComputation.compileExp_function_eq,
+      InitECandidate.Solver.GlobalsKernelComputation.compileExpList_function_eq] at he hes
     cases p with
     | skip | «break» | «continue» | tick | annot _ _ =>
-      simp [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+      simp [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
     | assign vk n v =>
       cases vk with
       | «local» =>
         simp only [loadSafeProg] at hls
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
         exact ⟨(he v).1, (he v).2 hls⟩
       | global =>
         simp only [loadSafeProg] at hls
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL]
         cases ctx.globals.lookup n with
         | none => simp [panProgCost, loadSafeProg]
         | some p =>
@@ -906,39 +906,39 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
           exact ⟨(he v).1, (he v).2 hls⟩
     | «return» v | raise _ v =>
       simp only [loadSafeProg] at hls
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
       exact ⟨(he v).1, (he v).2 hls⟩
     | shMemLoad s vk n a =>
       cases vk with
       | «local» =>
         simp only [loadSafeProg] at hls
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
         exact ⟨(he a).1, (he a).2 hls⟩
       | global => simp [progNoGlobCall] at hng
     | primitive _ _ args =>
       simp only [loadSafeProg] at hls
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
       exact ⟨(hes args).1, (hes args).2 hls⟩
     | store a b | store32 a b | storeByte a b | shMemStore _ a b =>
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       exact ⟨Nat.add_le_add (he a).1 (he b).1, (he a).2 hls.1, (he b).2 hls.2⟩
     | extCall _ e1 e2 e3 e4 =>
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       have h1 := he e1; have h2 := he e2; have h3 := he e3; have h4 := he e4
       exact ⟨by omega, ⟨⟨⟨h1.2 hls.1.1.1, h2.2 hls.1.1.2⟩, h3.2 hls.1.2⟩, h4.2 hls.2⟩⟩
     | dec _ _ e body =>
       simp only [progNoGlobCall] at hng
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ihb := ih body (by decreasing_trivial) hng hls.2
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       exact ⟨Nat.add_le_add (he e).1 ihb.1, (he e).2 hls.1, ihb.2⟩
     | decCall _ _ _ args body =>
       simp only [progNoGlobCall] at hng
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ihb := ih body (by decreasing_trivial) hng hls.2
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       have ha := (hes args).1; have hb := ihb.1
       exact ⟨by omega, (hes args).2 hls.1, ihb.2⟩
     | seq a b =>
@@ -946,28 +946,28 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have iha := ih a (by decreasing_trivial) hng.1 hls.1
       have ihb := ih b (by decreasing_trivial) hng.2 hls.2
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       exact ⟨Nat.add_le_add iha.1 ihb.1, iha.2, ihb.2⟩
     | ite c a b =>
       simp only [progNoGlobCall, Bool.and_eq_true_iff] at hng
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have iha := ih a (by decreasing_trivial) hng.1 hls.1.2
       have ihb := ih b (by decreasing_trivial) hng.2 hls.2
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       have hc := (he c).1; have ha := iha.1; have hb := ihb.1
       exact ⟨by omega, ⟨(he c).2 hls.1.1, iha.2⟩, ihb.2⟩
     | «while» c body =>
       simp only [progNoGlobCall] at hng
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ihb := ih body (by decreasing_trivial) hng hls.2
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
       have hc := (he c).1; have hb := ihb.1
       exact ⟨by omega, (he c).2 hls.1, ihb.2⟩
     | call info f args =>
       cases info with
       | none =>
         simp only [loadSafeProg] at hls
-        simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+        simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
         have ha := (hes args).1
         exact ⟨by omega, (hes args).2 hls⟩
       | some inf =>
@@ -977,7 +977,7 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
           cases hdl with
           | none =>
             simp only [loadSafeProg] at hls
-            simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+            simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
             have ha := (hes args).1
             exact ⟨by omega, (hes args).2 hls⟩
           | some hb =>
@@ -985,7 +985,7 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
             simp only [progNoGlobCall] at hng
             simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
             have ihb := ih body (by simp_wf; omega) hng hls.2
-            simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+            simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
             have ha := (hes args).1; have hb' := ihb.1
             exact ⟨by omega, (hes args).2 hls.1, ihb.2⟩
         | some rkv =>
@@ -996,7 +996,7 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
             | some _ => simp [progNoGlobCall] at hng
             | none =>
               simp only [loadSafeProg] at hls
-              simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL]
+              simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL]
               cases ctx.globals.lookup vn with
               | none =>
                 simp only [panProgCost, loadSafeProg]
@@ -1013,7 +1013,7 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
             cases hdl with
             | none =>
               simp only [loadSafeProg] at hls
-              simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
+              simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg]
               have ha := (hes args).1
               exact ⟨by omega, (hes args).2 hls⟩
             | some hb =>
@@ -1021,7 +1021,7 @@ theorem globals_compileProg_preserves {width : Nat} [NeZero width]
               simp only [progNoGlobCall] at hng
               simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
               have ihb := ih body (by simp_wf; omega) hng hls.2
-              simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
+              simp only [InitECandidate.Solver.GlobalsKernelComputation.compileProgExactHOL, panProgCost, loadSafeProg, Bool.and_eq_true_iff]
               have ha := (hes args).1; have hb' := ihb.1
               exact ⟨by omega, (hes args).2 hls.1, ihb.2⟩
 
@@ -1068,22 +1068,22 @@ theorem compileDecsExactHOL_preserves {width : Nat} [NeZero width] :
       (Flapjack.compileDecsExactHOL ctx decls).2.1.all fnPostGlobalsGood = true ∧
       (Flapjack.compileDecsExactHOL ctx decls).2.2.1.all fnPostGlobalsGood = true
   | [], _, _ => by
-    rw [InitECandidate.Proofs.GlobalsKernelComputation.compileDecs_eq]
-    simp [InitECandidate.Proofs.GlobalsKernelComputation.compileDecsExactHOL]
+    rw [InitECandidate.Solver.GlobalsKernelComputation.compileDecs_eq]
+    simp [InitECandidate.Solver.GlobalsKernelComputation.compileDecsExactHOL]
   | d :: ds, ctx, h => by
-    rw [InitECandidate.Proofs.GlobalsKernelComputation.compileDecs_eq]
+    rw [InitECandidate.Solver.GlobalsKernelComputation.compileDecs_eq]
     simp only [List.all_cons, Bool.and_eq_true_iff] at h
     rcases h with ⟨hd, hds⟩
     cases d with
     | name _ _ => simp [declGlobalsGood] at hd
     | exnDecl n sh =>
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileDecsExactHOL]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileDecsExactHOL]
       have ih := compileDecsExactHOL_preserves ds ctx hds
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.compileDecs_eq] at ih
+      rw [InitECandidate.Solver.GlobalsKernelComputation.compileDecs_eq] at ih
       refine ⟨ih.1, ih.2.1, ?_⟩
       simp [List.all_cons, fnPostGlobalsGood, ih.2.2]
     | decl sh n v =>
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileDecsExactHOL]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileDecsExactHOL]
       simp only [declGlobalsGood, Bool.and_eq_true_iff, decide_eq_true_eq] at hd
       let address := ctx.globalsSize + cakeBytesInWord width * BitVec.ofNat width (sizeOfShapeHOL sh)
       let nextCtx : PanGlobalsContextExact width := {
@@ -1092,24 +1092,24 @@ theorem compileDecsExactHOL_preserves {width : Nat} [NeZero width] :
         globalsSize := address
       }
       have ih := compileDecsExactHOL_preserves ds nextCtx hds
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.compileDecs_eq] at ih
+      rw [InitECandidate.Solver.GlobalsKernelComputation.compileDecs_eq] at ih
       refine ⟨?_, ih.2.1, ih.2.2⟩
       intro p hp
       rcases List.mem_cons.mp hp with rfl | htail
       · have he := (globals_compileExp_preserves ctx).1 v
-        rw [InitECandidate.Proofs.GlobalsKernelComputation.compileExp_eq] at he
-        have hcost0 : panExpCost (InitECandidate.Proofs.GlobalsKernelComputation.compileExpExactHOL ctx v) = 0 := by
+        rw [InitECandidate.Solver.GlobalsKernelComputation.compileExp_eq] at he
+        have hcost0 : panExpCost (InitECandidate.Solver.GlobalsKernelComputation.compileExpExactHOL ctx v) = 0 := by
           have := he.1; have := hd.2; omega
         simp [panProgCost, panExpCost, panExpsCost, loadSafeProg, loadSafeExp, loadSafeExps,
           hcost0, he.2 hd.1]
       · exact ih.1 p htail
     | function fn =>
-      simp only [InitECandidate.Proofs.GlobalsKernelComputation.compileDecsExactHOL]
+      simp only [InitECandidate.Solver.GlobalsKernelComputation.compileDecsExactHOL]
       simp only [declGlobalsGood, Bool.and_eq_true_iff, decide_eq_true_eq] at hd
       have ih := compileDecsExactHOL_preserves ds ctx hds
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.compileDecs_eq] at ih
+      rw [InitECandidate.Solver.GlobalsKernelComputation.compileDecs_eq] at ih
       have hp := globals_compileProg_preserves ctx fn.body hd.1.2 hd.1.1.2
-      rw [InitECandidate.Proofs.GlobalsKernelComputation.compileProg_eq] at hp
+      rw [InitECandidate.Solver.GlobalsKernelComputation.compileProg_eq] at hp
       refine ⟨ih.1, ?_, ih.2.2⟩
       simp only [List.all_cons, Bool.and_eq_true_iff, ih.2.1, and_true, fnPostGlobalsGood, decide_eq_true_eq]
       exact ⟨⟨hd.1.1.1, hp.2⟩, Nat.le_trans hp.1 hd.2⟩
@@ -1274,58 +1274,58 @@ theorem replicate_const_zero {width : Nat} [NeZero width] :
 theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contextWidth]
     (ctx : PanToCrepContextExact contextWidth) :
     (∀ e : ExpHOL width, loadSafeExp e = true →
-      expressionsCost (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e).1 ≤ panExpCost e) ∧
+      expressionsCost (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e).1 ≤ panExpCost e) ∧
     (∀ es : List (ExpHOL width), loadSafeExps es = true →
-      expressionsCost ((InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es).flatMap Prod.fst) ≤ panExpsCost es ∧
-      ((InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst).map expressionsCost).sum ≤ panExpsCost es) := by
+      expressionsCost ((InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es).flatMap Prod.fst) ≤ panExpsCost es ∧
+      ((InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst).map expressionsCost).sum ≤ panExpsCost es) := by
   have he : ∀ e : ExpHOL width, loadSafeExp e = true →
-      expressionsCost (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e).1 ≤ panExpCost e := by
+      expressionsCost (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e).1 ≤ panExpCost e := by
     intro e
     induction e using (measure (sizeOf : ExpHOL width → Nat)).wf.induction with
     | h e ih =>
       change ∀ c, sizeOf c < sizeOf e → loadSafeExp c = true →
-        expressionsCost (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx c).1 ≤ panExpCost c at ih
+        expressionsCost (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx c).1 ≤ panExpCost c at ih
       have ihm : ∀ es : List (ExpHOL width), (∀ x ∈ es, sizeOf x < sizeOf e) → loadSafeExps es = true →
-          expressionsCost ((InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es).flatMap Prod.fst) ≤ panExpsCost es ∧
-          ((InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst).map expressionsCost).sum ≤ panExpsCost es := by
+          expressionsCost ((InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es).flatMap Prod.fst) ≤ panExpsCost es ∧
+          ((InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst).map expressionsCost).sum ≤ panExpsCost es := by
         intro es hes hls
         induction es with
-        | nil => simp [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList, expressionsCost, panExpsCost]
+        | nil => simp [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList, expressionsCost, panExpsCost]
         | cons x xs ihxs =>
           simp only [loadSafeExps, Bool.and_eq_true_iff] at hls
           have ihx := ih x (hes x List.mem_cons_self) hls.1
           have ihrest := ihxs (fun y hy => hes y (List.mem_cons_of_mem _ hy)) hls.2
-          simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList,
+          simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList,
             List.flatMap_cons, expressionsCost_append, List.map_cons, List.sum_cons, panExpsCost]
           exact ⟨Nat.add_le_add ihx ihrest.1, Nat.add_le_add ihx ihrest.2⟩
       intro hls
       cases e with
       | const _ | baseAddr | topAddr | bytesInWord | nstruct _ _ | nfield _ _ =>
-        simp [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, expressionsCost, expressionCost, panExpCost]
+        simp [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, expressionsCost, expressionCost, panExpCost]
       | var vk vn =>
         cases vk with
-        | global => simp [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, expressionsCost, expressionCost, panExpCost]
+        | global => simp [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, expressionsCost, expressionCost, panExpCost]
         | «local» =>
-          simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+          simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
           cases ctx.vars.lookup vn with
           | none => simp [expressionsCost, expressionCost]
           | some p => simp [vars_map_zero]
       | rstruct es =>
         simp only [loadSafeExp] at hls
         have h := ihm es (by intros; sizeOf_list_dec) hls
-        simpa [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost] using h.1
+        simpa [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost] using h.1
       | rfield idx child =>
         simp only [loadSafeExp] at hls
         have hc := ih child (by decreasing_trivial) hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        cases hsh : (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx child).2 with
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        cases hsh : (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx child).2 with
         | comb shs => exact Nat.le_trans (compFieldHOL_cost idx shs _) hc
         | one | named _ => simp [expressionsCost, expressionCost]
       | load sh child =>
         simp only [loadSafeExp, Bool.and_eq_true_iff, Bool.or_eq_true, decide_eq_true_eq] at hls
         have hc := ih child (by decreasing_trivial) hls.2
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        rcases hcomp : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx child with ⟨vals, csh⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        rcases hcomp : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx child with ⟨vals, csh⟩
         rw [hcomp] at hc
         cases vals with
         | nil => simp [expressionsCost, expressionCost]
@@ -1338,8 +1338,8 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
       | load32 child | loadByte child =>
         simp only [loadSafeExp] at hls
         have hc := ih child (by decreasing_trivial) hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        rcases hcomp : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx child with ⟨vals, csh⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        rcases hcomp : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx child with ⟨vals, csh⟩
         rw [hcomp] at hc
         cases vals with
         | nil => simp [expressionsCost, expressionCost]
@@ -1350,8 +1350,8 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
       | op op es =>
         simp only [loadSafeExp] at hls
         have h := ihm es (by intros; sizeOf_list_dec) hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        cases hh : cexpHeads (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst) with
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        cases hh : cexpHeads (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst) with
         | none => simp [expressionsCost, expressionCost]
         | some hs =>
           have hch := cexpHeads_cost _ hs hh
@@ -1360,8 +1360,8 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
       | panop op es =>
         simp only [loadSafeExp] at hls
         have h := ihm es (by intros; sizeOf_list_dec) hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        cases hh : cexpHeads (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst) with
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        cases hh : cexpHeads (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx es |>.map Prod.fst) with
         | none => simp [expressionsCost, expressionCost]
         | some hs =>
           have hch := cexpHeads_cost _ hs hh
@@ -1371,9 +1371,9 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
         simp only [loadSafeExp, Bool.and_eq_true_iff] at hls
         have hl := ih l (by decreasing_trivial) hls.1
         have hr := ih r (by decreasing_trivial) hls.2
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        rcases hcl : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx l with ⟨vl, sl⟩
-        rcases hcr : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx r with ⟨vr, sr⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        rcases hcl : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx l with ⟨vl, sl⟩
+        rcases hcr : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx r with ⟨vr, sr⟩
         rw [hcl] at hl; rw [hcr] at hr
         cases vl with
         | nil => simp [expressionsCost, expressionCost]
@@ -1387,9 +1387,9 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
         simp only [loadSafeExp, Bool.and_eq_true_iff] at hls
         have hl := ih l (by decreasing_trivial) hls.1
         have hr := ih r (by decreasing_trivial) hls.2
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW, panExpCost]
-        rcases hcl : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx l with ⟨vl, sl⟩
-        rcases hcr : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx r with ⟨vr, sr⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW, panExpCost]
+        rcases hcl : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx l with ⟨vl, sl⟩
+        rcases hcr : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx r with ⟨vr, sr⟩
         rw [hcl] at hl; rw [hcr] at hr
         cases vl with
         | nil => simp [expressionsCost, expressionCost]
@@ -1401,12 +1401,12 @@ theorem crepExp_cost_le {width contextWidth : Nat} [NeZero width] [NeZero contex
             omega
   refine ⟨he, fun es hls => ?_⟩
   induction es with
-  | nil => simp [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList, expressionsCost, panExpsCost]
+  | nil => simp [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList, expressionsCost, panExpsCost]
   | cons x xs ih =>
     simp only [loadSafeExps, Bool.and_eq_true_iff] at hls
     have hx := he x hls.1
     have hxs := ih hls.2
-    simp only [InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList,
+    simp only [InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList,
       List.flatMap_cons, expressionsCost_append, List.map_cons, List.sum_cons, panExpsCost]
     exact ⟨Nat.add_le_add hx hxs.1, Nat.add_le_add hx hxs.2⟩
 
@@ -1488,27 +1488,27 @@ theorem expHdlExact_zero {width : Nat} [NeZero width]
 theorem crepProg_cost_le {width : Nat} [NeZero width] :
     ∀ (p : ProgHOL width) (ctx : PanToCrepContextExact width),
       loadSafeProg p = true →
-      programCost (InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW ctx p) ≤ panProgCost p := by
+      programCost (InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW ctx p) ≤ panProgCost p := by
   intro p
   induction p using (measure (sizeOf : ProgHOL width → Nat)).wf.induction with
   | h p ih =>
     change ∀ q, sizeOf q < sizeOf p → ∀ ctx, loadSafeProg q = true →
-      programCost (InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW ctx q) ≤ panProgCost q at ih
+      programCost (InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW ctx q) ≤ panProgCost q at ih
     intro ctx hls
     cases p with
     | skip | «break» | «continue» | tick | annot _ _ =>
-      simp [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW, programCost, panProgCost]
+      simp [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW, programCost, panProgCost]
     | assign vk name e =>
       cases vk with
       | global =>
-        simp [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-          InitECandidate.Proofs.CrepKernelComputation.compileGlobalAssignExactHOLW, programCost]
+        simp [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+          InitECandidate.Solver.CrepKernelComputation.compileGlobalAssignExactHOLW, programCost]
       | «local» =>
         simp only [loadSafeProg] at hls
         have he := (crepExp_cost_le ctx).1 e hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-          InitECandidate.Proofs.CrepKernelComputation.compileLocalAssignExactHOLW, panProgCost]
-        rcases hce : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨expressions, esh⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+          InitECandidate.Solver.CrepKernelComputation.compileLocalAssignExactHOLW, panProgCost]
+        rcases hce : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨expressions, esh⟩
         rw [hce] at he
         dsimp only at he ⊢
         cases hlookup : ctx.vars.lookup name with
@@ -1530,14 +1530,14 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
     | primitive name op args =>
       simp only [loadSafeProg] at hls
       have ha := ((crepExp_cost_le ctx).2 args hls).1
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compilePrimitiveExactHOLW, panProgCost]
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compilePrimitiveExactHOLW, panProgCost]
       cases hlookup : ctx.vars.lookup name with
       | none => simp [programCost]
       | some p =>
         rcases p with ⟨vsh, names⟩
         dsimp only
-        let vals := (InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLWList ctx args).flatMap Prod.fst
+        let vals := (InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLWList ctx args).flatMap Prod.fst
         let temps := (List.range vals.length).map (fun index => ctx.vmax + index + 1)
         have hnd := nestedDecsHOL_cost (width := width) temps vals (.primitive names op temps)
         simp only [programCost, Nat.add_zero] at hnd
@@ -1546,10 +1546,10 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ha := (crepExp_cost_le ctx).1 addr hls.1
       have hv := (crepExp_cost_le ctx).1 val hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileStoreExactHOLW, panProgCost]
-      rcases hca : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, sa⟩
-      rcases hcv : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, sv⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileStoreExactHOLW, panProgCost]
+      rcases hca : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, sa⟩
+      rcases hcv : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, sv⟩
       rw [hca] at ha; rw [hcv] at hv
       dsimp only at ha hv ⊢
       cases va with
@@ -1570,10 +1570,10 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ha := (crepExp_cost_le ctx).1 addr hls.1
       have hv := (crepExp_cost_le ctx).1 val hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileStore32ExactHOLW, panProgCost]
-      rcases hca : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
-      rcases hcv : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileStore32ExactHOLW, panProgCost]
+      rcases hca : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
+      rcases hcv : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
       rw [hca] at ha; rw [hcv] at hv
       cases va with
       | nil => simp [programCost]
@@ -1585,10 +1585,10 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have ha := (crepExp_cost_le ctx).1 addr hls.1
       have hv := (crepExp_cost_le ctx).1 val hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileStoreByteExactHOLW, panProgCost]
-      rcases hca : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
-      rcases hcv : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileStoreByteExactHOLW, panProgCost]
+      rcases hca : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
+      rcases hcv : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
       rw [hca] at ha; rw [hcv] at hv
       cases va with
       | nil => simp [programCost]
@@ -1599,9 +1599,9 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
     | «return» e =>
       simp only [loadSafeProg] at hls
       have he := (crepExp_cost_le ctx).1 e hls
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileReturnExactHOLW, panProgCost]
-      rcases hce : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨vals, sh⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileReturnExactHOLW, panProgCost]
+      rcases hce : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨vals, sh⟩
       rw [hce] at he
       dsimp only at he ⊢
       split
@@ -1610,12 +1610,12 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
     | raise exn e =>
       simp only [loadSafeProg] at hls
       have he := (crepExp_cost_le ctx).1 e hls
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileRaiseExactHOLW, panProgCost]
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileRaiseExactHOLW, panProgCost]
       cases hlookup : ctx.eids.lookup exn with
       | none => simp [programCost]
       | some code =>
-        rcases hce : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨vals, sh⟩
+        rcases hce : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨vals, sh⟩
         rw [hce] at he
         dsimp only at he ⊢
         split
@@ -1630,14 +1630,14 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
     | shMemLoad op vk name addr =>
       cases vk with
       | global =>
-        simp [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-          InitECandidate.Proofs.CrepKernelComputation.compileGlobalShMemLoadExactHOLW, programCost]
+        simp [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+          InitECandidate.Solver.CrepKernelComputation.compileGlobalShMemLoadExactHOLW, programCost]
       | «local» =>
         simp only [loadSafeProg] at hls
         have ha := (crepExp_cost_le ctx).1 addr hls
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-          InitECandidate.Proofs.CrepKernelComputation.compileShMemLoadExactHOLW, panProgCost]
-        rcases hca : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+          InitECandidate.Solver.CrepKernelComputation.compileShMemLoadExactHOLW, panProgCost]
+        rcases hca : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
         rw [hca] at ha
         cases va with
         | nil => simp [programCost]
@@ -1654,10 +1654,10 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have hv := (crepExp_cost_le ctx).1 val hls.1
       have ha := (crepExp_cost_le ctx).1 addr hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileShMemStoreExactHOLW, panProgCost]
-      rcases hcv : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
-      rcases hca : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileShMemStoreExactHOLW, panProgCost]
+      rcases hcv : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx val with ⟨vv, _⟩
+      rcases hca : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx addr with ⟨va, _⟩
       rw [hcv] at hv; rw [hca] at ha
       cases vv with
       | nil => simp [programCost]
@@ -1671,12 +1671,12 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       have h2 := (crepExp_cost_le ctx).1 e2 hls.1.1.2
       have h3 := (crepExp_cost_le ctx).1 e3 hls.1.2
       have h4 := (crepExp_cost_le ctx).1 e4 hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileExtCallExactHOLW, panProgCost]
-      rcases hc1 : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e1 with ⟨v1, s1⟩
-      rcases hc2 : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e2 with ⟨v2, s2⟩
-      rcases hc3 : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e3 with ⟨v3, s3⟩
-      rcases hc4 : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e4 with ⟨v4, s4⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileExtCallExactHOLW, panProgCost]
+      rcases hc1 : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e1 with ⟨v1, s1⟩
+      rcases hc2 : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e2 with ⟨v2, s2⟩
+      rcases hc3 : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e3 with ⟨v3, s3⟩
+      rcases hc4 : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e4 with ⟨v4, s4⟩
       rw [hc1] at h1; rw [hc2] at h2; rw [hc3] at h3; rw [hc4] at h4
       dsimp only
       split
@@ -1685,9 +1685,9 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
     | dec name sh e body =>
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have he := (crepExp_cost_le ctx).1 e hls.1
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileDecExactHOLW, panProgCost]
-      rcases hce : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨values, csh⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileDecExactHOLW, panProgCost]
+      rcases hce : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx e with ⟨values, csh⟩
       rw [hce] at he
       dsimp only at he ⊢
       split
@@ -1707,8 +1707,8 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
           vars := ctx.vars.update (name, (sh, (List.range (sizeOfShapeHOL sh)).map (fun index => ctx.vmax + index + 1)))
           vmax := ctx.vmax + sizeOfShapeHOL sh }
         hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileDecCallExactHOLW, panProgCost]
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileDecCallExactHOLW, panProgCost]
       refine Nat.le_trans (nestedDecsHOL_cost _ _ _) ?_
       rw [replicate_const_zero, Nat.zero_add]
       simp only [programCost, programCost_call]
@@ -1717,16 +1717,16 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have iha := ih a (by decreasing_trivial) ctx hls.1
       have ihb := ih b (by decreasing_trivial) ctx hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW, programCost, panProgCost]
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW, programCost, panProgCost]
       omega
     | ite c a b =>
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have hc := (crepExp_cost_le ctx).1 c hls.1.1
       have iha := ih a (by decreasing_trivial) ctx hls.1.2
       have ihb := ih b (by decreasing_trivial) ctx hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileIfExactHOLW, panProgCost]
-      rcases hcc : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx c with ⟨vc, _⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileIfExactHOLW, panProgCost]
+      rcases hcc : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx c with ⟨vc, _⟩
       rw [hcc] at hc
       cases vc with
       | nil => simp [programCost]
@@ -1735,9 +1735,9 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
       have hc := (crepExp_cost_le ctx).1 c hls.1
       have ihb := ih body (by decreasing_trivial) ctx hls.2
-      simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-        InitECandidate.Proofs.CrepKernelComputation.compileWhileExactHOLW, panProgCost]
-      rcases hcc : InitECandidate.Proofs.CrepKernelComputation.compileExpExactHOLW ctx c with ⟨vc, _⟩
+      simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+        InitECandidate.Solver.CrepKernelComputation.compileWhileExactHOLW, panProgCost]
+      rcases hcc : InitECandidate.Solver.CrepKernelComputation.compileExpExactHOLW ctx c with ⟨vc, _⟩
       rw [hcc] at hc
       cases vc with
       | nil => simp [programCost]
@@ -1747,8 +1747,8 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
       | none =>
         simp only [loadSafeProg] at hls
         have ha := ((crepExp_cost_le ctx).2 args hls).1
-        simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-          InitECandidate.Proofs.CrepKernelComputation.compileCallNoReturnExactHOLW, programCost_call, panProgCost]
+        simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+          InitECandidate.Solver.CrepKernelComputation.compileCallNoReturnExactHOLW, programCost_call, panProgCost]
         omega
       | some inf =>
         rcases inf with ⟨rk, hdl⟩
@@ -1758,8 +1758,8 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
           | none =>
             simp only [loadSafeProg] at hls
             have ha := ((crepExp_cost_le ctx).2 args hls).1
-            simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW,
-              InitECandidate.Proofs.CrepKernelComputation.compileCallResultNoHandlerExactHOLW, panProgCost]
+            simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW,
+              InitECandidate.Solver.CrepKernelComputation.compileCallResultNoHandlerExactHOLW, panProgCost]
             refine Nat.le_trans (nestedDecsHOL_cost _ _ _) ?_
             rw [replicate_const_zero, Nat.zero_add]
             simp only [programCost_call]
@@ -1768,16 +1768,16 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
             rcases hb with ⟨exn, evar, body⟩
             simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
             have ha := ((crepExp_cost_le ctx).2 args hls.1).1
-            simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW, panProgCost]
+            simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW, panProgCost]
             split
-            · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallHandlerMissingEidExactHOLW,
-                InitECandidate.Proofs.CrepKernelComputation.compileCallResultNoHandlerExactHOLW]
+            · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallHandlerMissingEidExactHOLW,
+                InitECandidate.Solver.CrepKernelComputation.compileCallResultNoHandlerExactHOLW]
               refine Nat.le_trans (nestedDecsHOL_cost _ _ _) ?_
               rw [replicate_const_zero, Nat.zero_add]
               simp only [programCost_call]
               omega
             · rename_i exceptionCode _
-              simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallHandlerPresentEidExactHOLW]
+              simp only [InitECandidate.Solver.CrepKernelComputation.compileCallHandlerPresentEidExactHOLW]
               have ihb := ih body (by simp_wf; omega) ctx hls.2
               refine Nat.le_trans (nestedDecsHOL_cost _ _ _) ?_
               rw [replicate_const_zero, Nat.zero_add]
@@ -1789,31 +1789,31 @@ theorem crepProg_cost_le {width : Nat} [NeZero width] :
           | none =>
             simp only [loadSafeProg] at hls
             have ha := ((crepExp_cost_le ctx).2 args hls).1
-            simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW, panProgCost]
+            simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW, panProgCost]
             split
-            · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultFallbackNoHandlerExactHOLW, programCost_call]
+            · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultFallbackNoHandlerExactHOLW, programCost_call]
               omega
-            · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultNoHandlerExactHOLW, programCost_call]
+            · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultNoHandlerExactHOLW, programCost_call]
               omega
           | some hb =>
             rcases hb with ⟨exn, evar, body⟩
             simp only [loadSafeProg, Bool.and_eq_true_iff] at hls
             have ha := ((crepExp_cost_le ctx).2 args hls.1).1
             have ihb := ih body (by simp_wf; omega) ctx hls.2
-            simp only [InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW, panProgCost]
+            simp only [InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW, panProgCost]
             split
             · split
-              · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultFallbackHandlerMissingEidExactHOLW,
-                  InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultFallbackNoHandlerExactHOLW, programCost_call]
+              · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultFallbackHandlerMissingEidExactHOLW,
+                  InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultFallbackNoHandlerExactHOLW, programCost_call]
                 omega
-              · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultFallbackHandlerPresentEidExactHOLW,
+              · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultFallbackHandlerPresentEidExactHOLW,
                   programCost_call, programCost, expHdlExact_zero, Nat.zero_add]
                 omega
             · split
-              · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultHandlerMissingEidExactHOLW,
-                  InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultNoHandlerExactHOLW, programCost_call]
+              · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultHandlerMissingEidExactHOLW,
+                  InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultNoHandlerExactHOLW, programCost_call]
                 omega
-              · simp only [InitECandidate.Proofs.CrepKernelComputation.compileCallWrappedResultHandlerPresentEidExactHOLW,
+              · simp only [InitECandidate.Solver.CrepKernelComputation.compileCallWrappedResultHandlerPresentEidExactHOLW,
                   programCost_call, programCost, expHdlExact_zero, Nat.zero_add]
                 omega
 
@@ -1895,13 +1895,13 @@ theorem listBudget_compileProgDeclsHOLW_le_448 {width : Nat} [NeZero width]
     (getEidsFromDeclsHOL decls) entry.2.1 entry.2.2.1)
   have hcf : compFuncExactHOLW (makeFuncsExactHOL (functionsHOL decls))
       (getEidsFromDeclsHOL decls) entry.2.1 entry.2.2.1 =
-      InitECandidate.Proofs.CrepKernelComputation.compileProgExactHOLW
+      InitECandidate.Solver.CrepKernelComputation.compileProgExactHOLW
         (mkCtxtExactHOL (panToCrepMakeVmapHOLExact entry.2.1)
           (makeFuncsExactHOL (functionsHOL decls))
           (sizeOfShapeHOL (ShapeHOL.comb (entry.2.1.map Prod.snd)) - 1)
           (getEidsFromDeclsHOL decls))
         entry.2.2.1 := by
-    rw [InitECandidate.Proofs.CrepKernelComputation.compFunc_function_eq]
+    rw [InitECandidate.Solver.CrepKernelComputation.compFunc_function_eq]
     rfl
   rw [hcf] at hsimp ⊢
   have hcrep := crepProg_cost_le entry.2.2.1
@@ -1915,104 +1915,104 @@ theorem listBudget_compileProgDeclsHOLW_le_448 {width : Nat} [NeZero width]
 /-! ## 6. Structural Source Codec Equivalence and `guestAst` Evaluation -/
 
 theorem sizeOfShapeS_eq :
-    (∀ s : Shape, sizeOfShapeHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = sizeOfShapeS s) ∧
-    (∀ ss : List Shape, sizeOfShapesHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = sizeOfShapesS ss) := by
-  have hs : ∀ s : Shape, sizeOfShapeHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = sizeOfShapeS s := by
+    (∀ s : Shape, sizeOfShapeHOL (InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural s) = sizeOfShapeS s) ∧
+    (∀ ss : List Shape, sizeOfShapesHOL (InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural ss) = sizeOfShapesS ss) := by
+  have hs : ∀ s : Shape, sizeOfShapeHOL (InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural s) = sizeOfShapeS s := by
     intro s
     induction s using (measure (sizeOf : Shape → Nat)).wf.induction with
     | h s ih =>
       have ihm : ∀ ss : List Shape, (∀ x ∈ ss, sizeOf x < sizeOf s) →
-          sizeOfShapesHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = sizeOfShapesS ss := by
+          sizeOfShapesHOL (InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural ss) = sizeOfShapesS ss := by
         intro ss hss
         induction ss with
         | nil => rfl
         | cons x xs ihxs =>
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
             sizeOfShapesHOL, sizeOfShapesS,
             ih x (hss x List.mem_cons_self), ihxs (fun y hy => hss y (List.mem_cons_of_mem _ hy))]
       cases s with
       | one => rfl
       | named _ => rfl
       | comb ss =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural, sizeOfShapeHOL, sizeOfShapeS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, sizeOfShapeHOL, sizeOfShapeS]
         exact ihm ss (by intro x hx; have := List.sizeOf_lt_of_mem hx; simp only [Shape.comb.sizeOf_spec]; omega)
   refine ⟨hs, fun ss => ?_⟩
   induction ss with
   | nil => rfl
   | cons x xs ih =>
-    simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
+    simp only [InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
       sizeOfShapesHOL, sizeOfShapesS, hs x, ih]
 
 theorem shapeFreeS_eq :
-    (∀ s : Shape, shapeFree (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = shapeFreeS s) ∧
-    (∀ ss : List Shape, shapesFree (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = shapesFreeS ss) := by
-  have hs : ∀ s : Shape, shapeFree (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = shapeFreeS s := by
+    (∀ s : Shape, shapeFree (InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural s) = shapeFreeS s) ∧
+    (∀ ss : List Shape, shapesFree (InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural ss) = shapesFreeS ss) := by
+  have hs : ∀ s : Shape, shapeFree (InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural s) = shapeFreeS s := by
     intro s
     induction s using (measure (sizeOf : Shape → Nat)).wf.induction with
     | h s ih =>
       have ihm : ∀ ss : List Shape, (∀ x ∈ ss, sizeOf x < sizeOf s) →
-          shapesFree (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = shapesFreeS ss := by
+          shapesFree (InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural ss) = shapesFreeS ss := by
         intro ss hss
         induction ss with
         | nil => rfl
         | cons x xs ihxs =>
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
             shapesFree, shapesFreeS,
             ih x (hss x List.mem_cons_self), ihxs (fun y hy => hss y (List.mem_cons_of_mem _ hy))]
       cases s with
       | one => rfl
       | named _ => rfl
       | comb ss =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural, shapeFree, shapeFreeS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, shapeFree, shapeFreeS]
         exact ihm ss (by intro x hx; have := List.sizeOf_lt_of_mem hx; simp only [Shape.comb.sizeOf_spec]; omega)
   refine ⟨hs, fun ss => ?_⟩
   induction ss with
   | nil => rfl
   | cons x xs ih =>
-    simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
+    simp only [InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
       shapesFree, shapesFreeS, hs x, ih]
 
 theorem panExpCostS_eq {width : Nat} [NeZero width] :
-    (∀ e : Exp (BitVec width), panExpCost (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = panExpCostS e) ∧
-    (∀ es : List (Exp (BitVec width)), panExpsCost (es.map InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural) = panExpsCostS es) := by
-  have he : ∀ e : Exp (BitVec width), panExpCost (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = panExpCostS e := by
+    (∀ e : Exp (BitVec width), panExpCost (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = panExpCostS e) ∧
+    (∀ es : List (Exp (BitVec width)), panExpsCost (es.map InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural) = panExpsCostS es) := by
+  have he : ∀ e : Exp (BitVec width), panExpCost (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = panExpCostS e := by
     intro e
     induction e using (measure (sizeOf : Exp (BitVec width) → Nat)).wf.induction with
     | h e ih =>
-      change ∀ c, sizeOf c < sizeOf e → panExpCost (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural c) = panExpCostS c at ih
+      change ∀ c, sizeOf c < sizeOf e → panExpCost (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural c) = panExpCostS c at ih
       have ihm : ∀ es : List (Exp (BitVec width)), (∀ x ∈ es, sizeOf x < sizeOf e) →
-          panExpsCost (InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural es) = panExpsCostS es := by
+          panExpsCost (InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural es) = panExpsCostS es := by
         intro es hes
         induction es with
         | nil => rfl
         | cons x xs ihxs =>
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
             panExpsCost, panExpsCostS, ih x (hes x List.mem_cons_self),
             ihxs (fun y hy => hes y (List.mem_cons_of_mem _ hy))]
       have ihn : ∀ fs : List (String × Exp (BitVec width)), (∀ p ∈ fs, sizeOf p.2 < sizeOf e) →
-          panNamedExpsCost (InitECandidate.Proofs.FrontendCodecComputation.expFieldListToHOLStructural fs) = panNamedExpsCostS fs := by
+          panNamedExpsCost (InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural fs) = panNamedExpsCostS fs := by
         intro fs hfs
         induction fs with
         | nil => rfl
         | cons p ps ihps =>
           rcases p with ⟨fn, fv⟩
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.expFieldListToHOLStructural,
-            InitECandidate.Proofs.FrontendCodecComputation.expFieldToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural,
+            InitECandidate.Solver.FrontendCodecComputation.expFieldToHOLStructural,
             panNamedExpsCost, panNamedExpsCostS, ih fv (hfs (fn, fv) List.mem_cons_self),
             ihps (fun q hq => hfs q (List.mem_cons_of_mem _ hq))]
       cases e with
       | const _ | var _ _ | baseAddr | topAddr | bytesInWord => rfl
       | rStruct es | op _ es | panOp _ es =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
         exact ihm es (by intros; sizeOf_list_dec)
       | nStruct _ fs =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
         exact ihn fs (by intro p hp; have := List.sizeOf_lt_of_mem hp; rcases p with ⟨_, _⟩; simp only [Exp.nStruct.sizeOf_spec]; simp +arith at this ⊢; omega)
       | rField _ v | nField _ v | load _ v | load32 v | loadByte v =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
         exact ih v (by decreasing_trivial)
       | cmp _ a b | shift _ a b =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, panExpCost, panExpCostS]
         rw [ih a (by decreasing_trivial), ih b (by decreasing_trivial)]
   refine ⟨he, fun es => ?_⟩
   induction es with
@@ -2020,35 +2020,35 @@ theorem panExpCostS_eq {width : Nat} [NeZero width] :
   | cons x xs ih => simp only [List.map_cons, panExpsCost, panExpsCostS, he x, ih]
 
 theorem expFreeS_eq {width : Nat} [NeZero width] :
-    (∀ e : Exp (BitVec width), expFree (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = expFreeS e) ∧
-    (∀ es : List (Exp (BitVec width)), expsFree (es.map InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural) = expsFreeS es) := by
-  have he : ∀ e : Exp (BitVec width), expFree (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = expFreeS e := by
+    (∀ e : Exp (BitVec width), expFree (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = expFreeS e) ∧
+    (∀ es : List (Exp (BitVec width)), expsFree (es.map InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural) = expsFreeS es) := by
+  have he : ∀ e : Exp (BitVec width), expFree (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = expFreeS e := by
     intro e
     induction e using (measure (sizeOf : Exp (BitVec width) → Nat)).wf.induction with
     | h e ih =>
-      change ∀ c, sizeOf c < sizeOf e → expFree (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural c) = expFreeS c at ih
+      change ∀ c, sizeOf c < sizeOf e → expFree (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural c) = expFreeS c at ih
       have ihm : ∀ es : List (Exp (BitVec width)), (∀ x ∈ es, sizeOf x < sizeOf e) →
-          expsFree (InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural es) = expsFreeS es := by
+          expsFree (InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural es) = expsFreeS es := by
         intro es hes
         induction es with
         | nil => rfl
         | cons x xs ihxs =>
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
             expsFree, expsFreeS, ih x (hes x List.mem_cons_self),
             ihxs (fun y hy => hes y (List.mem_cons_of_mem _ hy))]
       cases e with
       | const _ | var _ _ | baseAddr | topAddr | bytesInWord | nStruct _ _ | nField _ _ => rfl
       | rStruct es | op _ es | panOp _ es =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS]
         exact ihm es (by intros; sizeOf_list_dec)
       | rField _ v | load32 v | loadByte v =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS]
         exact ih v (by decreasing_trivial)
       | load sh v =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS,
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS,
           shapeFreeS_eq.1, ih v (by decreasing_trivial)]
       | cmp _ a b | shift _ a b =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS,
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, expFree, expFreeS,
           ih a (by decreasing_trivial), ih b (by decreasing_trivial)]
   refine ⟨he, fun es => ?_⟩
   induction es with
@@ -2056,49 +2056,49 @@ theorem expFreeS_eq {width : Nat} [NeZero width] :
   | cons x xs ih => simp only [List.map_cons, expsFree, expsFreeS, he x, ih]
 
 theorem loadSafeExpS_eq {width : Nat} [NeZero width] :
-    (∀ e : Exp (BitVec width), loadSafeExp (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = loadSafeExpS e) ∧
-    (∀ es : List (Exp (BitVec width)), loadSafeExps (es.map InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural) = loadSafeExpsS es) := by
-  have he : ∀ e : Exp (BitVec width), loadSafeExp (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = loadSafeExpS e := by
+    (∀ e : Exp (BitVec width), loadSafeExp (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = loadSafeExpS e) ∧
+    (∀ es : List (Exp (BitVec width)), loadSafeExps (es.map InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural) = loadSafeExpsS es) := by
+  have he : ∀ e : Exp (BitVec width), loadSafeExp (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural e) = loadSafeExpS e := by
     intro e
     induction e using (measure (sizeOf : Exp (BitVec width) → Nat)).wf.induction with
     | h e ih =>
-      change ∀ c, sizeOf c < sizeOf e → loadSafeExp (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural c) = loadSafeExpS c at ih
+      change ∀ c, sizeOf c < sizeOf e → loadSafeExp (InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural c) = loadSafeExpS c at ih
       have ihm : ∀ es : List (Exp (BitVec width)), (∀ x ∈ es, sizeOf x < sizeOf e) →
-          loadSafeExps (InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural es) = loadSafeExpsS es := by
+          loadSafeExps (InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural es) = loadSafeExpsS es := by
         intro es hes
         induction es with
         | nil => rfl
         | cons x xs ihxs =>
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.expListToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
             loadSafeExps, loadSafeExpsS, ih x (hes x List.mem_cons_self),
             ihxs (fun y hy => hes y (List.mem_cons_of_mem _ hy))]
       have ihn : ∀ fs : List (String × Exp (BitVec width)), (∀ p ∈ fs, sizeOf p.2 < sizeOf e) →
-          loadSafeNamed (InitECandidate.Proofs.FrontendCodecComputation.expFieldListToHOLStructural fs) = loadSafeNamedS fs := by
+          loadSafeNamed (InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural fs) = loadSafeNamedS fs := by
         intro fs hfs
         induction fs with
         | nil => rfl
         | cons p ps ihps =>
           rcases p with ⟨fn, fv⟩
-          simp only [InitECandidate.Proofs.FrontendCodecComputation.expFieldListToHOLStructural,
-            InitECandidate.Proofs.FrontendCodecComputation.expFieldToHOLStructural,
+          simp only [InitECandidate.Solver.FrontendCodecComputation.expFieldListToHOLStructural,
+            InitECandidate.Solver.FrontendCodecComputation.expFieldToHOLStructural,
             loadSafeNamed, loadSafeNamedS, ih fv (hfs (fn, fv) List.mem_cons_self),
             ihps (fun q hq => hfs q (List.mem_cons_of_mem _ hq))]
       cases e with
       | const _ | var _ _ | baseAddr | topAddr | bytesInWord => rfl
       | rStruct es | op _ es | panOp _ es =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
         exact ihm es (by intros; sizeOf_list_dec)
       | nStruct _ fs =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
         exact ihn fs (by intro p hp; have := List.sizeOf_lt_of_mem hp; rcases p with ⟨_, _⟩; simp only [Exp.nStruct.sizeOf_spec]; simp +arith at this ⊢; omega)
       | rField _ v | nField _ v | load32 v | loadByte v =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS]
         exact ih v (by decreasing_trivial)
       | load sh v =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS,
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS,
           sizeOfShapeS_eq.1, panExpCostS_eq.1, ih v (by decreasing_trivial)]
       | cmp _ a b | shift _ a b =>
-        simp only [InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS,
+        simp only [InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural, loadSafeExp, loadSafeExpS,
           ih a (by decreasing_trivial), ih b (by decreasing_trivial)]
   refine ⟨he, fun es => ?_⟩
   induction es with
@@ -2107,74 +2107,74 @@ theorem loadSafeExpS_eq {width : Nat} [NeZero width] :
 
 theorem progPredsS_eq {width : Nat} [NeZero width] :
     ∀ p : Prog (BitVec width),
-      panProgCost (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural p) = panProgCostS p ∧
-      progFree (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural p) = progFreeS p ∧
-      loadSafeProg (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural p) = loadSafeProgS p ∧
-      progNoGlobCall (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural p) = progNoGlobCallS p := by
+      panProgCost (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural p) = panProgCostS p ∧
+      progFree (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural p) = progFreeS p ∧
+      loadSafeProg (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural p) = loadSafeProgS p ∧
+      progNoGlobCall (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural p) = progNoGlobCallS p := by
   intro p
   induction p using (measure (sizeOf : Prog (BitVec width) → Nat)).wf.induction with
   | h p ih =>
     change ∀ q, sizeOf q < sizeOf p →
-      panProgCost (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural q) = panProgCostS q ∧
-      progFree (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural q) = progFreeS q ∧
-      loadSafeProg (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural q) = loadSafeProgS q ∧
-      progNoGlobCall (InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural q) = progNoGlobCallS q at ih
+      panProgCost (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural q) = panProgCostS q ∧
+      progFree (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural q) = progFreeS q ∧
+      loadSafeProg (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural q) = loadSafeProgS q ∧
+      progNoGlobCall (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural q) = progNoGlobCallS q at ih
     cases p with
     | skip | «break» | «continue» | tick | annot _ _ =>
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS]
     | assign _ _ e | «return» e | raise _ e =>
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1]
     | shMemLoad _ vk _ e =>
-      cases vk <;> simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      cases vk <;> simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1]
     | primitive _ _ es =>
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2]
     | store a b | store32 a b | storeByte a b | shMemStore _ a b =>
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1]
     | extCall _ e1 e2 e3 e4 =>
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1]
     | dec _ s e body =>
       have ihb := ih body (by decreasing_trivial)
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         shapeFreeS_eq.1, panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
     | decCall _ s _ args body =>
       have ihb := ih body (by decreasing_trivial)
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         shapeFreeS_eq.1, panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
     | seq a b =>
       have iha := ih a (by decreasing_trivial)
       have ihb := ih b (by decreasing_trivial)
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         iha.1, iha.2.1, iha.2.2.1, iha.2.2.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
     | ite c a b =>
       have iha := ih a (by decreasing_trivial)
       have ihb := ih b (by decreasing_trivial)
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1,
         iha.1, iha.2.1, iha.2.2.1, iha.2.2.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
     | «while» c body =>
       have ihb := ih body (by decreasing_trivial)
-      simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+      simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
         panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
         panExpCostS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
     | call info _ args =>
       cases info with
       | none =>
-        simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+        simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
           panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
           panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2]
       | some inf =>
@@ -2183,12 +2183,12 @@ theorem progPredsS_eq {width : Nat} [NeZero width] :
         | none =>
           cases rk with
           | none =>
-            simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+            simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
               panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
               panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2]
           | some rkv =>
             rcases rkv with ⟨vk, _⟩
-            cases vk <;> simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+            cases vk <;> simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
               panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
               panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2]
         | some hb =>
@@ -2196,39 +2196,39 @@ theorem progPredsS_eq {width : Nat} [NeZero width] :
           have ihb := ih body (by simp_wf; omega)
           cases rk with
           | none =>
-            simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+            simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
               panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
               panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
           | some rkv =>
             rcases rkv with ⟨vk, _⟩
-            cases vk <;> simp [InitECandidate.Proofs.FrontendCodecComputation.progToHOLStructural,
+            cases vk <;> simp [InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
               panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
               panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
 
 theorem params_shapeFree_eq :
     ∀ ps : List (String × Shape),
-      ((ps.map InitECandidate.Proofs.FrontendCodecComputation.paramToHOLStructural).all fun p => shapeFree p.2) =
+      ((ps.map InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural).all fun p => shapeFree p.2) =
       (ps.all fun p => shapeFreeS p.2)
   | [] => rfl
   | p :: ps => by
-    simp [InitECandidate.Proofs.FrontendCodecComputation.paramToHOLStructural,
+    simp [InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
       shapeFreeS_eq.1, params_shapeFree_eq ps]
 
 theorem declGood_declToHOL_eq {width : Nat} [NeZero width] (d : Decl (BitVec width)) :
     declGood (declToHOL d) = declGoodS d := by
-  rw [InitECandidate.Proofs.FrontendCodecComputation.declToHOL_eq]
+  rw [InitECandidate.Solver.FrontendCodecComputation.declToHOL_eq]
   cases d with
   | function fn =>
     have hp := progPredsS_eq fn.body
-    simp only [InitECandidate.Proofs.FrontendCodecComputation.declToHOLStructural,
-      InitECandidate.Proofs.FrontendCodecComputation.funDeclToHOLStructural,
+    simp only [InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
       declGood, declGoodS, declarationFree, params_shapeFree_eq,
       shapeFreeS_eq.1, hp.1, hp.2.1, hp.2.2.1, hp.2.2.2]
   | decl s n v =>
-    simp [InitECandidate.Proofs.FrontendCodecComputation.declToHOLStructural,
+    simp [InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
       declGood, declGoodS, shapeFreeS_eq.1, expFreeS_eq.1, loadSafeExpS_eq.1, panExpCostS_eq.1]
   | exnDecl n s =>
-    simp [InitECandidate.Proofs.FrontendCodecComputation.declToHOLStructural,
+    simp [InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
       declGood, declGoodS, shapeFreeS_eq.1]
   | name n fs => rfl
 
