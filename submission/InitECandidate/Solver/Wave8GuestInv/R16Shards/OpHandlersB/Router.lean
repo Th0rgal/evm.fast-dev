@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R11Shards.OpDispatchSpec.Router
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group06ControlFlow
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group07Transient
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group02
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group03
 
@@ -9,6 +10,8 @@ Pre-`C00` router shard assembling `op_dispatch_spec_of_handlers` (`R11Shards/OpD
 with all already-proved unconditional `OpHandlerSpec` leaves:
 - Group 06a control-flow (`R16Shards.OpHandlersB.Group06ControlFlow`):
   `op_stop`, `op_jump`, `op_jumpi`, `op_pc`, `op_gas`, `op_jumpdest` (6)
+- Group 07a transient storage (`R16Shards.OpHandlersB.Group07Transient`):
+  `op_tload`, `op_tstore` (2)
 - Group 02 comparisons (`R16Shards.OpHandlers.Group02`):
   `op_lt`, `op_gt`, `op_slt`, `op_sgt`, `op_eq`, `op_iszero` (6)
 - Group 03 bitwise & shift (`R16Shards.OpHandlers.Group03`):
@@ -92,8 +95,6 @@ def RemainingOpHandlersBSpec : Prop :=
   OpHandlerSpec (ofString "op_selfbalance") ∧
   OpHandlerSpec (ofString "op_sload") ∧
   OpHandlerSpec (ofString "op_sstore") ∧
-  OpHandlerSpec (ofString "op_tload") ∧
-  OpHandlerSpec (ofString "op_tstore") ∧
   OpHandlerSpec (ofString "op_mcopy") ∧
   OpHandlerSpec (ofString "op_log") ∧
   OpHandlerSpec (ofString "op_create") ∧
@@ -124,7 +125,7 @@ theorem allOpHandlersSpec_of_remaining
   rcases hB with
     ⟨h_op_balance, h_op_calldatacopy, h_op_codecopy, h_op_extcodesize,
      h_op_extcodecopy, h_op_returndatacopy, h_op_extcodehash, h_op_selfbalance,
-     h_op_sload, h_op_sstore, h_op_tload, h_op_tstore, h_op_mcopy, h_op_log,
+     h_op_sload, h_op_sstore, h_op_mcopy, h_op_log,
      h_op_create, h_op_call, h_op_callcode, h_op_return, h_op_delegatecall,
      h_op_create2, h_op_staticcall, h_op_revert, h_op_selfdestruct⟩
   exact
@@ -141,14 +142,14 @@ theorem allOpHandlersSpec_of_remaining
      h_op_blobbasefee, h_op_slotnum,
      h_op_pop, h_op_mload, h_op_mstore, h_op_mstore8, h_op_sload, h_op_sstore,
      op_jump_spec, op_jumpi_spec, op_pc_spec, h_op_msize, op_gas_spec, op_jumpdest_spec,
-     h_op_tload, h_op_tstore, h_op_mcopy, h_op_push,
+     op_tload_spec, op_tstore_spec, h_op_mcopy, h_op_push,
      h_op_dup, h_op_swap,
      h_op_log, h_op_dupn, h_op_swapn, h_op_exchange,
      h_op_create, h_op_call, h_op_callcode, h_op_return, h_op_delegatecall,
      h_op_create2, h_op_staticcall,
      h_op_revert, h_op_selfdestruct⟩
 
-/-- Parameterized `op_dispatch_spec` wired to all proved leaves in `Group06ControlFlow`, `Group02`, and `Group03`. -/
+/-- Parameterized `op_dispatch_spec` wired to all proved leaves in `Group06ControlFlow`, `Group07Transient`, `Group02`, and `Group03`. -/
 theorem op_dispatch_spec_of
     (hA : RemainingOpHandlersASpec)
     (hB : RemainingOpHandlersBSpec) :
