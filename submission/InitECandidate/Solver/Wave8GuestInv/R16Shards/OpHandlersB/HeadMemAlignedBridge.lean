@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmGBody
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.Group04
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 
 /-! # `HeadMemAligned` as a frame-chain invariant through `run_frames`
 
@@ -377,25 +378,25 @@ def OpDispatchSpecA : Prop :=
       ((∃ v, r = some (.returned v)) → (EvmInv post ∧ HeadMemChainWF post) ∧
         evmPot post < evmPot s) ∧
       (IsEvmErr r → (EvmInv post ∧ HeadMemChainWF post) ∧
-        (evmChain post).length = (evmChain s).length ∧ evmR post ≤ evmR s))
+        (evmChain post).length = (evmChain s).length ∧ Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s))
     (ofString "op_dispatch")
 
 def FrameExceptionSpecA : Prop :=
   FunSpec EvmInvA
     (OnReturn fun s post => EvmInvA post ∧ EvmDone post ∧
-      (evmChain post).length = (evmChain s).length ∧ evmR post ≤ evmR s)
+      (evmChain post).length = (evmChain s).length ∧ Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s)
     (ofString "frame_exception")
 
 def FrameEpilogueSpecA : Prop :=
   FunSpec (fun s => EvmInvA s ∧ EvmDone s)
     (OnReturn fun s post => EvmInvA post ∧ EvmDone post ∧
-      (evmChain post).length = (evmChain s).length ∧ evmR post ≤ evmR s)
+      (evmChain post).length = (evmChain s).length ∧ Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s)
     (ofString "frame_epilogue")
 
 def FinishChildSpecA : Prop :=
   FunSpec (fun s => EvmInvA s ∧ EvmDone s ∧ memW s (globN s "cur_cont" + 16) ≠ 0)
     (fun s r post => ((∃ v, r = some (.returned v)) ∨ IsEvmErr r) →
-      EvmInvA post ∧ (evmChain post).length + 1 = (evmChain s).length ∧ evmR post ≤ evmR s)
+      EvmInvA post ∧ (evmChain post).length + 1 = (evmChain s).length ∧ Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s)
     (ofString "finish_child")
 
 /-- `OpDispatchSpecA` in the `EvmInvA ∧ ¬ EvmDone` shape used by the walk. -/
@@ -404,7 +405,7 @@ def OpDispatchSpecW : Prop :=
     (fun s r post =>
       ((∃ v, r = some (.returned v)) → EvmInvA post ∧ evmPot post < evmPot s) ∧
       (IsEvmErr r → EvmInvA post ∧ (evmChain post).length = (evmChain s).length ∧
-        evmR post ≤ evmR s))
+        Wave8GuestInv.evmR post ≤ Wave8GuestInv.evmR s))
     (ofString "op_dispatch")
 
 theorem opDispatchSpecW_of_A (h : OpDispatchSpecA) : OpDispatchSpecW := by
@@ -419,7 +420,7 @@ variable (p0 R0 L0 F0 : Nat)
 
 /-- Loop-head facts carried through the body: the potential components of the head. -/
 def GPreA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun t => EvmInvA t ∧ evmPot t = p0 ∧ evmR t = R0 ∧ (evmChain t).length = L0 ∧ evmFp t = F0
+  fun t => EvmInvA t ∧ evmPot t = p0 ∧ Wave8GuestInv.evmR t = R0 ∧ (evmChain t).length = L0 ∧ evmFp t = F0
 
 def GQA : ∀ {F : Type}, Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
   fun r t => (r = none ∨ r = some .continue) → (EvmInvA t ∧ evmPot t < p0) ∨ locN t "go" = 0
@@ -510,7 +511,7 @@ def GPdispA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 /-- In the `EvmErr` handler of `op_dispatch`. -/
 def GPhA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun t => EvmInvA t ∧ (evmChain t).length = L0 ∧ evmR t ≤ R0 ∧ locN t "done" = 0 ∧
+  fun t => EvmInvA t ∧ (evmChain t).length = L0 ∧ Wave8GuestInv.evmR t ≤ R0 ∧ locN t "done" = 0 ∧
     F0 = 2 * L0 + 1
 
 /-- The done branch, before `frame_epilogue`. -/
@@ -519,7 +520,7 @@ def GPdoneA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 /-- After `frame_epilogue`. -/
 def GPepiA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun t => EvmInvA t ∧ EvmDone t ∧ (evmChain t).length = L0 ∧ evmR t ≤ R0 ∧ 2 * L0 ≤ F0
+  fun t => EvmInvA t ∧ EvmDone t ∧ (evmChain t).length = L0 ∧ Wave8GuestInv.evmR t ≤ R0 ∧ 2 * L0 ≤ F0
 
 /-- At the `finish_child` call. -/
 def GPfinA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -527,7 +528,7 @@ def GPfinA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 /-- In the `EvmErr` handler of `finish_child`. -/
 def GPh4A : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun t => EvmInvA t ∧ (evmChain t).length + 1 = L0 ∧ evmR t ≤ R0 ∧ 2 * L0 ≤ F0
+  fun t => EvmInvA t ∧ (evmChain t).length + 1 = L0 ∧ Wave8GuestInv.evmR t ≤ R0 ∧ 2 * L0 ≤ F0
 
 end RunFramesGlueA2
 
@@ -685,7 +686,7 @@ private theorem rf_firstwalk
     (h1 : OpDispatchSpecW)
     (h2 : FrameExceptionSpecA)
     (p0 R0 L0 F0 : Nat)
-    (hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → evmR t ≤ R0 →
+    (hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → Wave8GuestInv.evmR t ≤ R0 →
       evmFp t < F0 → evmPot t < p0) :
     BHoare (GP1A p0 R0 L0 F0) rfFirst (GAA p0 R0 L0 F0) := by
   simp only [rfFirst, rfSecond, rfBody, rfCode, sourceFunctionEntry,
@@ -829,7 +830,7 @@ private theorem rf_secondwalk
     (h3 : FrameEpilogueSpecA)
     (h4 : FinishChildSpecA)
     (p0 R0 L0 F0 : Nat)
-    (hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → evmR t ≤ R0 →
+    (hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → Wave8GuestInv.evmR t ≤ R0 →
       evmFp t < F0 → evmPot t < p0) :
     BHoare (GMidA p0 R0 L0 F0) rfSecond (GQA p0) := by
   simp only [rfFirst, rfSecond, rfBody, rfCode, sourceFunctionEntry,
@@ -967,13 +968,13 @@ private theorem rf_body_walk
     (h3 : FrameEpilogueSpecA)
     (h4 : FinishChildSpecA) :
     ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
-      BHoare (GPreA (evmPot s) (evmR s) (evmChain s).length (evmFp s)) rfBody (GQA (evmPot s)) := by
+      BHoare (GPreA (evmPot s) (Wave8GuestInv.evmR s) (evmChain s).length (evmFp s)) rfBody (GQA (evmPot s)) := by
   intro F s
   set p0 := evmPot s
-  set R0 := evmR s
+  set R0 := Wave8GuestInv.evmR s
   set L0 := (evmChain s).length
   set F0 := evmFp s
-  have hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → evmR t ≤ R0 →
+  have hfin : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), EvmInvA t → Wave8GuestInv.evmR t ≤ R0 →
       evmFp t < F0 → evmPot t < p0 := fun t ht hR hF =>
     lt_of_lt_of_le (evmPot_lt_bound t ht.1 hR hF) (evmPot_ge s)
   rw [rfBody_eq]
@@ -1002,11 +1003,11 @@ private theorem rf_sum_pair_le {F : Type} (s : PanSemStateFiniteExact 64 F) :
 private theorem rf_potential_bounded {F : Type} (s : PanSemStateFiniteExact 64 F) (hi : EvmInvA s) :
     evmPot s < evmPotMax := by
   have hlen := evmInv_len s hi.1
-  have hR : evmR s ≤ Wave8GuestInv.maxChain * (2 * (2 ^ 64 - 1)) :=
+  have hR : Wave8GuestInv.evmR s ≤ Wave8GuestInv.maxChain * (2 * (2 ^ 64 - 1)) :=
     (rf_sum_pair_le s (evmChain s)).trans (Nat.mul_le_mul_right _ hlen)
-  have hcap : evmR s ≤ 2 * Wave8GuestInv.maxChain * 2 ^ 64 := by
+  have hcap : Wave8GuestInv.evmR s ≤ 2 * Wave8GuestInv.maxChain * 2 ^ 64 := by
     have : 2 * (2 ^ 64 - 1) ≤ 2 * 2 ^ 64 := by omega
-    calc evmR s ≤ Wave8GuestInv.maxChain * (2 * (2 ^ 64 - 1)) := hR
+    calc Wave8GuestInv.evmR s ≤ Wave8GuestInv.maxChain * (2 * (2 ^ 64 - 1)) := hR
       _ ≤ Wave8GuestInv.maxChain * (2 * 2 ^ 64) := Nat.mul_le_mul_left _ this
       _ = 2 * Wave8GuestInv.maxChain * 2 ^ 64 := by omega
   have hp := evmPot_lt_bound s hi.1 hcap (evmFp_lt s hi.1)
@@ -1061,7 +1062,7 @@ theorem gbody_run_frames_w : GBodyRunFramesW := by
     · intro F s hc hi ha hflow
       have hnt : (evaluateHOLFiniteState (decClockHOLFinite s) rfBody).1 ≠ some .timeOut := by
         rcases hflow with h | h <;> rw [h] <;> simp
-      have hpre : GPreA (evmPot s) (evmR s) (evmChain s).length (evmFp s) (decClockHOLFinite s) := by
+      have hpre : GPreA (evmPot s) (Wave8GuestInv.evmR s) (evmChain s).length (evmFp s) (decClockHOLFinite s) := by
         obtain ⟨e1, e2, e3, e4⟩ := evm_congr (s := s) (t := decClockHOLFinite s) rfl rfl
         exact ⟨localsFree_evmInvA s s.locals (s.clock - 1) (rf_active_inv hi ha), e1, e2, e3, e4⟩
       have hs := (rf_body_walk bf be bx bd hd hx he hf s).hoare.run (decClockHOLFinite s) hc hpre hnt hflow
@@ -1090,6 +1091,169 @@ theorem gbody_run_frames_w : GBodyRunFramesW := by
 
 end RunFramesProofA
 
+/-! ## 3b. Aligned `frame_epilogue` (re-walk of `StateRestoreEpilogue.frame_epilogue_spec`)
+
+`frame_epilogue` only calls `state_restore`, whose proved body spec keeps every chain frame's
+`(ec.1,280)`/`(ec.2,104)` cells, the chain, `ev`, and `frame_mem_ptr`; hence `HeadMemChainWF`. -/
+
+section EpilogueA
+
+open InitECandidate.Solver.GuestGlobalKeep
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue (evmInv_lc evmChain_lc evmR_lc state_restore_body_spec)
+open InitECandidate.Solver.Wave8Contracts.M08 (globN_eq_of_lookup)
+open InitECandidate.Solver.Wave8Contracts.M23 (frameWF_bounds)
+open InitECandidate.Solver.Wave8GuestInv.R16Shards (IvlUnhit memW_eq_of_ivlUnhit)
+
+/-- `state_restore` keeps every chain frame's `(ec.1,280)`/`(ec.2,104)` cells, the chain, and all
+globals other than `heap_ptr`/`journal_n`, so it preserves `HeadMemChainWF`. -/
+theorem headMemChainWF_of_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hs : HeadMemChainWF s)
+    (hchain : evmChain post = evmChain s)
+    (hu : ∀ ec ∈ evmChain s, R16Shards.IvlUnhit s post (ec.1, 280) ∧
+      R16Shards.IvlUnhit s post (ec.2, 104))
+    (hev : globN post "ev" = globN s "ev")
+    (hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr") :
+    HeadMemChainWF post := by
+  obtain ⟨hAs, S, hInvAt⟩ := hInv
+  refine headMemChainWF_of_agree hs hchain ?_ hev hfmp
+  intro ec hec
+  have hwf := hInvAt.2.2.2.2.1 ec hec
+  obtain ⟨he_lt, hc_lt, _, _⟩ := Wave8Contracts.M23.frameWF_bounds hAs.2 hwf
+  have he8 : ec.1 % 8 = 0 := (hwf.1 (ec.1, 280) (by simp)).2.1
+  have hc8 : ec.2 % 8 = 0 := (hwf.1 (ec.2, 104) (by simp)).2.1
+  obtain ⟨hue, huc⟩ := hu ec hec
+  exact ⟨R16Shards.memW_eq_of_ivlUnhit hue (by omega) he_lt ⟨by omega, by omega⟩,
+    R16Shards.memW_eq_of_ivlUnhit hue (by omega) he_lt ⟨by omega, by omega⟩,
+    R16Shards.memW_eq_of_ivlUnhit hue (by omega) he_lt ⟨by omega, by omega⟩,
+    R16Shards.memW_eq_of_ivlUnhit huc (by omega) hc_lt ⟨by omega, by omega⟩⟩
+
+/-- Aligned `frame_epilogue` contract: `frame_epilogue_spec` plus `HeadMemChainWF`. -/
+theorem frame_epilogue_spec_aligned : FrameEpilogueSpecA := by
+  refine ⟨[], sourceFnBody Guest.Software.guestFn_frame_epilogue, .one, R16Shards.StateRestoreEpilogue.lookup_frame_epilogue, ?_⟩
+  intro F s hcode ⟨⟨hInv, hW⟩, hDone⟩ _ _ v hv
+  have hbody : sourceFnBody Guest.Software.guestFn_frame_epilogue =
+      .seq (.ite (.cmp .notEqual
+          (.load .one (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 160)]))
+          (.const (BitVec.ofNat 64 0)))
+        (.call (some (none, none)) (ofString "state_restore")
+          [.load .one (.op .add [.var .global (ofString "cur_cont"), .const (BitVec.ofNat 64 24)])])
+        .skip) (.return (.const 0)) := rfl
+  rw [hbody, evaluateHOLFiniteState_seq_line780] at hv
+  rcases hite : evaluateHOLFiniteState s
+      (.ite (.cmp .notEqual
+          (.load .one (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 160)]))
+          (.const (BitVec.ofNat 64 0)))
+        (.call (some (none, none)) (ofString "state_restore")
+          [.load .one (.op .add [.var .global (ofString "cur_cont"), .const (BitVec.ofNat 64 24)])])
+        .skip) with ⟨r_ite, m1⟩
+  rw [hite] at hv
+  cases r_ite with
+  | some ri =>
+    cases ri with
+    | returned u =>
+      exfalso; revert hite; rw [evaluateHOLFiniteState_ite]
+      split
+      · split
+        · rw [evaluateHOLFiniteState_skip]; simp
+        · rw [evaluateHOLFiniteState_call]
+          rcases evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) _ with _ | _
+          · simp
+          · dsimp only
+            rcases lookupCodeHOLFinite s.code.lookup _ _ with _ | ⟨_, _, _⟩
+            · simp
+            · dsimp only; split
+              · simp
+              · rcases evaluateHOLFiniteState _ _ with ⟨res, _⟩
+                rcases res with _ | r
+                · simp
+                · cases r <;> (dsimp only; try split) <;> simp
+      · simp
+    | _ => simp at hv
+  | none =>
+    have hpost_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2 =
+        emptyLocalsHOLFinite m1 := by
+      rw [hbody, evaluateHOLFiniteState_seq_line780, hite]; dsimp only
+      rw [evaluateHOLFiniteState_return]
+      have hc0 : @evalHOLExact 64 F _ m1.toExact (fun a => Classical.propDecidable (m1.memaddrs a))
+          (.const 0) = some (.val (.word 0)) := rfl
+      have hle32 : sizeOfShapeWithContextHOL m1.structs
+          (shapeOfHOLExact (ValueHOL.val (HolWordLab.word (0 : BitVec 64)))) ≤ 32 := by simp [shapeOfHOLExact]
+      rw [hc0]; dsimp only; rw [if_pos hle32]
+    change (EvmInv (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2 ∧
+      HeadMemChainWF (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2) ∧
+      EvmDone (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2 ∧
+      (evmChain (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2).length =
+        (evmChain s).length ∧
+      evmR (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_frame_epilogue)).2 ≤ evmR s
+    rw [hpost_eq]
+    rw [evaluateHOLFiniteState_ite] at hite
+    revert hite
+    split
+    · split
+      · rw [evaluateHOLFiniteState_skip]; intro hm1; injection hm1 with _ hm1_eq; subst hm1_eq
+        exact ⟨⟨(R16Shards.StateRestoreEpilogue.evmInv_lc s _ s.clock).2 hInv,
+          headMemChainWF_locals s _ _ hW⟩, hDone,
+          by rw [emptyLocalsHOLFinite, R16Shards.StateRestoreEpilogue.evmChain_lc s _ s.clock],
+          by rw [emptyLocalsHOLFinite, R16Shards.StateRestoreEpilogue.evmR_lc s _ s.clock]⟩
+      · intro hm1_call
+        obtain ⟨vals, body1, cal1, ret1, rv1, cpost1, _, hl1, hrun1, hm1_eq⟩ :=
+          Wave8M19.Htab.call0_flow s _ _ (Or.inl (congrArg Prod.fst hm1_call))
+        have hbody1 : body1 = sourceFnBody Guest.Software.guestFn_state_restore := by
+          obtain ⟨_, _, hinst⟩ := lookupCode_installed (by rwa [← hcode] : lookupCodeHOLFinite originalRuntimeCode.lookup _ _ = _)
+          rw [R16Shards.StateRestoreEpilogue.lookup_state_restore] at hinst
+          exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1.symm
+        subst hbody1
+        have hInv0 := hInv
+        obtain ⟨hAs, S, hInvAt⟩ := hInv
+        have hInv_ce : EvmInv (callEntryStateHOLFinite s cal1) :=
+          (evmInv_lc s cal1 (s.clock - 1)).2 ⟨hAs, S, hInvAt⟩
+        obtain ⟨hInv_cp, _, hg_cp, hch_cp, hR_cp, hu_cp⟩ :=
+          state_restore_body_spec (callEntryStateHOLFinite s cal1) hcode hInv_ce rv1 (by rw [hrun1])
+        have hcpost_eq : (evaluateHOLFiniteState (callEntryStateHOLFinite s cal1)
+            (sourceFnBody Guest.Software.guestFn_state_restore)).2 = cpost1 := by rw [hrun1]
+        rw [hcpost_eq] at hInv_cp hg_cp hch_cp hR_cp hu_cp
+        change evmChain cpost1 = evmChain { s with locals := cal1, clock := s.clock - 1 } at hch_cp
+        change ∀ ec ∈ evmChain { s with locals := cal1, clock := s.clock - 1 }, _ at hu_cp
+        change evmR cpost1 = evmR { s with locals := cal1, clock := s.clock - 1 } at hR_cp
+        rw [evmChain_lc s cal1 (s.clock - 1)] at hch_cp hu_cp
+        rw [evmR_lc s cal1 (s.clock - 1)] at hR_cp
+        have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by simp [evmChain, evmChainFrom]
+        obtain ⟨hu_ev, hu_cc⟩ := hu_cp _ hhead_mem
+        have hev_eq : globN cpost1 "ev" = globN s "ev" :=
+          globN_eq_of_lookup (hg_cp (ofString "ev") (by decide))
+        have hcc_eq : globN cpost1 "cur_cont" = globN s "cur_cont" :=
+          globN_eq_of_lookup (hg_cp (ofString "cur_cont") (by decide))
+        have hhead_wf := hInvAt.2.2.2.2.1 (globN s "ev", globN s "cur_cont") hhead_mem
+        obtain ⟨he_lt, hc_lt, _, _⟩ := frameWF_bounds hAs.2 hhead_wf
+        have hev8 : (globN s "ev") % 8 = 0 := (hhead_wf.1 (globN s "ev", 280) (by simp)).2.1
+        have hcc8 : (globN s "cur_cont") % 8 = 0 := (hhead_wf.1 (globN s "cur_cont", 104) (by simp)).2.1
+        have hm_cc32 := memW_eq_of_ivlUnhit hu_cc (a := globN s "cur_cont" + 32) (by omega) hc_lt ⟨by omega, by omega⟩
+        have hm_ev104 := memW_eq_of_ivlUnhit hu_ev (a := globN s "ev" + 104) (by omega) he_lt ⟨by omega, by omega⟩
+        have hm_ev56 := memW_eq_of_ivlUnhit hu_ev (a := globN s "ev" + 56) (by omega) he_lt ⟨by omega, by omega⟩
+        have hm_ev0 := memW_eq_of_ivlUnhit hu_ev (a := globN s "ev") (by omega) he_lt ⟨by omega, by omega⟩
+        have hm1_eq' : m1 = { cpost1 with locals := s.locals } :=
+          (Prod.mk.inj (hm1_call.symm.trans hm1_eq)).2
+        have hm1_cpost : emptyLocalsHOLFinite m1 = { cpost1 with locals := HolFiniteMapExact.empty, clock := cpost1.clock } := by
+          rw [hm1_eq']; rfl
+        have hDone_post : EvmDone (emptyLocalsHOLFinite m1) := by
+          rw [hm1_cpost]
+          unfold EvmDone at hDone ⊢
+          change memW cpost1 (globN cpost1 "cur_cont" + 32) ≠ 0 ∨
+            memW cpost1 (globN cpost1 "ev" + 104) = 0 ∨ memW cpost1 (globN cpost1 "ev" + 56) ≤ memW cpost1 (globN cpost1 "ev")
+          rw [hev_eq, hcc_eq, hm_cc32, hm_ev104, hm_ev56, hm_ev0]; exact hDone
+        have hfmp_eq : globN cpost1 "frame_mem_ptr" = globN s "frame_mem_ptr" :=
+          globN_eq_of_lookup (hg_cp (ofString "frame_mem_ptr") (by decide))
+        have hW_cp : HeadMemChainWF cpost1 :=
+          headMemChainWF_of_unhit hInv0 hW hch_cp hu_cp hev_eq hfmp_eq
+        refine ⟨⟨hm1_cpost ▸ (evmInv_lc cpost1 _ cpost1.clock).2 hInv_cp,
+          hm1_cpost ▸ headMemChainWF_locals cpost1 _ _ hW_cp⟩, hDone_post, ?_, ?_⟩
+        · rw [hm1_cpost, evmChain_lc cpost1 _ cpost1.clock, hch_cp]
+        · rw [hm1_cpost, evmR_lc cpost1 _ cpost1.clock, hR_cp]
+    · simp
+
+end EpilogueA
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
@@ -1105,6 +1269,17 @@ theorem gbody_run_frames_aligned
     TerminatingFunBoundedOn (fun s => EvmInv s ∧ HeadMemChainWF s) (ofString "run_frames")
       K.«run_frames» :=
   gbody_run_frames_w bf be bx bd hf he hx (opDispatchSpecW_of_A hd)
+
+/-- `gbody_run_frames_aligned` with the aligned epilogue contract discharged. -/
+theorem gbody_run_frames_aligned'
+    (bf : TerminatingFunBoundedOn FinishReadyA (ofString "finish_child") K.«finish_child»)
+    (be : TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue»)
+    (bx : TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception»)
+    (bd : TerminatingFunBoundedOn EvmRunA (ofString "op_dispatch") K.«op_dispatch»)
+    (hf : FinishChildSpecA) (hx : FrameExceptionSpecA) (hd : OpDispatchSpecA) :
+    TerminatingFunBoundedOn (fun s => EvmInv s ∧ HeadMemChainWF s) (ofString "run_frames")
+      K.«run_frames» :=
+  gbody_run_frames_aligned bf be bx bd hf frame_epilogue_spec_aligned hx hd
 
 /-- Every frame-function bound that holds under the unaligned guard also holds under the
 aligned one. -/
