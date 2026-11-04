@@ -205,6 +205,70 @@ theorem headMemChainWF_pop {F : Type} {s post : PanSemStateFiniteExact 64 F}
     exact chainLinks_transport (memW s) (memW post) _
       (fun ec hec => ⟨(hmem ec hec).1, (hmem ec hec).2.2.1, (hmem ec hec).2.2.2⟩) h1
 
+/-- Chain-stable preservation (`frame_exception`, `frame_epilogue`, non-frame opcodes): a step
+that keeps the chain, `ev`, `frame_mem_ptr`, and the `+24/+32/+40` frame cells and `+56`
+continuation cells of every chain frame preserves the invariant. -/
+theorem headMemChainWF_of_agree {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : HeadMemChainWF s)
+    (hchain : evmChain post = evmChain s)
+    (hmem : ∀ ec ∈ evmChain s, memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧ memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW post (ec.2 + 56) = memW s (ec.2 + 56))
+    (hev : globN post "ev" = globN s "ev")
+    (hfmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr") :
+    HeadMemChainWF post := by
+  obtain ⟨hal, hhd, hlk⟩ := hs
+  refine ⟨?_, ?_, ?_⟩
+  · intro ec hec
+    rw [hchain] at hec
+    have hm := hmem ec hec
+    rw [hm.2.1, hm.2.2.1]; exact hal ec hec
+  · have hm := hmem _ (head_mem_evmChain s)
+    rw [hev, hm.1, hm.2.2.1, hfmp]; exact hhd
+  · rw [hchain]
+    exact chainLinks_transport (memW s) (memW post) _
+      (fun ec hec => ⟨(hmem ec hec).1, (hmem ec hec).2.2.1, (hmem ec hec).2.2.2⟩) hlk
+
+/-- `extend_memory` preservation: the head's capacity grows to a new 8-aligned value, its
+length becomes a 32-aligned value, `mem` is unchanged, and `frame_mem_ptr` advances by exactly
+the growth; every other chain cell is kept. -/
+theorem headMemChainWF_extend {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : HeadMemChainWF s)
+    (hchain : evmChain post = evmChain s)
+    (hk : ∀ ec ∈ (evmChain s).tail, memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧ memW post (ec.1 + 40) = memW s (ec.1 + 40))
+    (hc : ∀ ec ∈ evmChain s, memW post (ec.2 + 56) = memW s (ec.2 + 56))
+    (hev : globN post "ev" = globN s "ev")
+    (hmem0 : memW post (globN s "ev" + 24) = memW s (globN s "ev" + 24))
+    (hlen0 : memW post (globN s "ev" + 32) % 32 = 0)
+    (hcap0 : memW post (globN s "ev" + 40) % 8 = 0)
+    (hfmp : memW s (globN s "ev" + 24) + memW post (globN s "ev" + 40) =
+      globN post "frame_mem_ptr") :
+    HeadMemChainWF post := by
+  obtain ⟨hal, _, hlk⟩ := hs
+  obtain ⟨tl, hcs⟩ : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl :=
+    ⟨_, evmChain_cons s⟩
+  rw [hcs] at hal hlk hk hc
+  rw [List.tail_cons] at hk
+  refine ⟨?_, ?_, ?_⟩
+  · intro ec hec
+    rw [hchain, hcs] at hec
+    rcases List.mem_cons.mp hec with rfl | hec'
+    · exact ⟨hlen0, hcap0⟩
+    · have hm := hk ec hec'
+      rw [hm.2.1, hm.2.2]; exact hal ec (List.mem_cons_of_mem _ hec')
+  · rw [hev, hmem0]; exact hfmp
+  · rw [hchain, hcs]
+    -- the head's own `+24/+40` cells are never read by `ChainLinks` (only parents' are)
+    cases tl with
+    | nil => trivial
+    | cons b rest =>
+      have hb := hk b List.mem_cons_self
+      refine ⟨?_, chainLinks_transport (memW s) (memW post) _ (fun ec hec => ?_) hlk.2⟩
+      · rw [hb.1, hb.2.2, hc _ List.mem_cons_self]; exact hlk.1
+      · have h1 := hk ec hec
+        exact ⟨h1.1, h1.2.2, hc ec (List.mem_cons_of_mem _ hec)⟩
+
 /-! ## 2. The aligned invariant and the aligned frame contracts -/
 
 def EvmInvA : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
