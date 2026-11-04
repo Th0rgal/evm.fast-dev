@@ -1,5 +1,6 @@
 import InitECandidate.Proofs.FrontendCodecComputation
 import InitECandidate.Proofs.GlobalsKernelComputation
+import InitECandidate.Solver.Wave8Stage.CrepGuestAstGood
 import InitECandidate.Solver.Wave8Stage.CrepListBudgetSupport
 import InitECandidate.Solver.Wave8Stage.R12_Stage1To2BoundArgon
 
@@ -31,6 +32,7 @@ open InitECandidate.Solver.Wave8Stage.CrepSourceCostBound
 open InitECandidate.Solver.Wave8Stage.FrontendCostTransfer
 open InitECandidate.Solver.Wave8Stage.FrontendStaticBudget
 open InitECandidate.Solver.Wave8Stage.CrepListBudgetSupport
+open InitECandidate.Solver.Wave8Stage.CrepGuestAstGood
 
 /-! ## 1. PanLang Syntactic Cost and Structural Invariants (HOL Carrier) -/
 
@@ -1912,19 +1914,6 @@ theorem listBudget_compileProgDeclsHOLW_le_448 {width : Nat} [NeZero width]
 
 /-! ## 6. Structural Source Codec Equivalence and `guestAst` Evaluation -/
 
-mutual
-  def sizeOfShapeS : Shape → Nat
-    | .one => 1
-    | .comb shapes => sizeOfShapesS shapes
-    | .named _ => 1
-  termination_by structural shape => shape
-
-  def sizeOfShapesS : List Shape → Nat
-    | [] => 0
-    | s :: ss => sizeOfShapeS s + sizeOfShapesS ss
-  termination_by structural ss => ss
-end
-
 theorem sizeOfShapeS_eq :
     (∀ s : Shape, sizeOfShapeHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = sizeOfShapeS s) ∧
     (∀ ss : List Shape, sizeOfShapesHOL (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = sizeOfShapesS ss) := by
@@ -1954,19 +1943,6 @@ theorem sizeOfShapeS_eq :
     simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
       sizeOfShapesHOL, sizeOfShapesS, hs x, ih]
 
-mutual
-  def shapeFreeS : Shape → Bool
-    | .one => true
-    | .comb shapes => shapesFreeS shapes
-    | .named _ => false
-  termination_by structural shape => shape
-
-  def shapesFreeS : List Shape → Bool
-    | [] => true
-    | s :: ss => shapeFreeS s && shapesFreeS ss
-  termination_by structural ss => ss
-end
-
 theorem shapeFreeS_eq :
     (∀ s : Shape, shapeFree (InitECandidate.Proofs.FrontendCodecComputation.shapeToHOLStructural s) = shapeFreeS s) ∧
     (∀ ss : List Shape, shapesFree (InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural ss) = shapesFreeS ss) := by
@@ -1995,27 +1971,6 @@ theorem shapeFreeS_eq :
   | cons x xs ih =>
     simp only [InitECandidate.Proofs.FrontendCodecComputation.shapeListToHOLStructural,
       shapesFree, shapesFreeS, hs x, ih]
-
-mutual
-  def panExpCostS {width : Nat} : (e : Exp (BitVec width)) → Nat
-    | .const _ | .var _ _ | .baseAddr | .topAddr | .bytesInWord => 0
-    | .rStruct es | .op _ es | .panOp _ es => panExpsCostS es
-    | .rField _ e | .load _ e | .load32 e | .loadByte e | .nField _ e => panExpCostS e
-    | .nStruct _ fs => panNamedExpsCostS fs
-    | .cmp _ a b => panExpCostS a + panExpCostS b + 1
-    | .shift _ a b => panExpCostS a + panExpCostS b
-  termination_by structural e => e
-
-  def panExpsCostS {width : Nat} : (es : List (Exp (BitVec width))) → Nat
-    | [] => 0
-    | e :: es => panExpCostS e + panExpsCostS es
-  termination_by structural es => es
-
-  def panNamedExpsCostS {width : Nat} : (fs : List (String × Exp (BitVec width))) → Nat
-    | [] => 0
-    | (_, e) :: fs => panExpCostS e + panNamedExpsCostS fs
-  termination_by structural fs => fs
-end
 
 theorem panExpCostS_eq {width : Nat} [NeZero width] :
     (∀ e : Exp (BitVec width), panExpCost (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = panExpCostS e) ∧
@@ -2064,24 +2019,6 @@ theorem panExpCostS_eq {width : Nat} [NeZero width] :
   | nil => rfl
   | cons x xs ih => simp only [List.map_cons, panExpsCost, panExpsCostS, he x, ih]
 
-mutual
-  def expFreeS {width : Nat} : (e : Exp (BitVec width)) → Bool
-    | .nStruct _ _ | .nField _ _ => false
-    | .rStruct fields => expsFreeS fields
-    | .rField _ value => expFreeS value
-    | .load shape address => shapeFreeS shape && expFreeS address
-    | .loadByte address | .load32 address => expFreeS address
-    | .op _ args | .panOp _ args => expsFreeS args
-    | .cmp _ left right | .shift _ left right => expFreeS left && expFreeS right
-    | .const _ | .var _ _ | .baseAddr | .topAddr | .bytesInWord => true
-  termination_by structural e => e
-
-  def expsFreeS {width : Nat} : (es : List (Exp (BitVec width))) → Bool
-    | [] => true
-    | e :: es => expFreeS e && expsFreeS es
-  termination_by structural es => es
-end
-
 theorem expFreeS_eq {width : Nat} [NeZero width] :
     (∀ e : Exp (BitVec width), expFree (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = expFreeS e) ∧
     (∀ es : List (Exp (BitVec width)), expsFree (es.map InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural) = expsFreeS es) := by
@@ -2117,27 +2054,6 @@ theorem expFreeS_eq {width : Nat} [NeZero width] :
   induction es with
   | nil => rfl
   | cons x xs ih => simp only [List.map_cons, expsFree, expsFreeS, he x, ih]
-
-mutual
-  def loadSafeExpS {width : Nat} : (e : Exp (BitVec width)) → Bool
-    | .const _ | .var _ _ | .baseAddr | .topAddr | .bytesInWord => true
-    | .rStruct es | .op _ es | .panOp _ es => loadSafeExpsS es
-    | .rField _ e | .load32 e | .loadByte e | .nField _ e => loadSafeExpS e
-    | .load shape e => (decide (sizeOfShapeS shape ≤ 1) || decide (panExpCostS e = 0)) && loadSafeExpS e
-    | .nStruct _ fs => loadSafeNamedS fs
-    | .cmp _ a b | .shift _ a b => loadSafeExpS a && loadSafeExpS b
-  termination_by structural e => e
-
-  def loadSafeExpsS {width : Nat} : (es : List (Exp (BitVec width))) → Bool
-    | [] => true
-    | e :: es => loadSafeExpS e && loadSafeExpsS es
-  termination_by structural es => es
-
-  def loadSafeNamedS {width : Nat} : (fs : List (String × Exp (BitVec width))) → Bool
-    | [] => true
-    | (_, e) :: fs => loadSafeExpS e && loadSafeNamedS fs
-  termination_by structural fs => fs
-end
 
 theorem loadSafeExpS_eq {width : Nat} [NeZero width] :
     (∀ e : Exp (BitVec width), loadSafeExp (InitECandidate.Proofs.FrontendCodecComputation.expToHOLStructural e) = loadSafeExpS e) ∧
@@ -2188,69 +2104,6 @@ theorem loadSafeExpS_eq {width : Nat} [NeZero width] :
   induction es with
   | nil => rfl
   | cons x xs ih => simp only [List.map_cons, loadSafeExps, loadSafeExpsS, he x, ih]
-
-def panProgCostS {width : Nat} : (p : Prog (BitVec width)) → Nat
-  | .skip | .break | .continue | .tick | .annot _ _ => 0
-  | .assign _ _ e | .return e | .raise _ e | .shMemLoad _ _ _ e => panExpCostS e
-  | .primitive _ _ es => panExpsCostS es
-  | .store a b | .store32 a b | .storeByte a b | .shMemStore _ a b => panExpCostS a + panExpCostS b
-  | .dec _ _ e body => panExpCostS e + panProgCostS body
-  | .decCall _ _ _ args body => panExpsCostS args + 3 + panProgCostS body
-  | .seq a b => panProgCostS a + panProgCostS b
-  | .ite c a b => panExpCostS c + 1 + panProgCostS a + panProgCostS b
-  | .while c body => panExpCostS c + 2 + panProgCostS body
-  | .extCall _ e1 e2 e3 e4 => panExpCostS e1 + panExpCostS e2 + panExpCostS e3 + panExpCostS e4
-  | .call none _ args => panExpsCostS args + 3
-  | .call (some (_, none)) _ args => panExpsCostS args + 3
-  | .call (some (_, some (_, _, body))) _ args => panExpsCostS args + 3 + panProgCostS body
-termination_by structural p => p
-
-def progFreeS {width : Nat} : (p : Prog (BitVec width)) → Bool
-  | .skip | .break | .continue | .tick | .annot _ _ => true
-  | .assign _ _ e | .return e | .raise _ e | .shMemLoad _ _ _ e => expFreeS e
-  | .primitive _ _ es => expsFreeS es
-  | .store a b | .store32 a b | .storeByte a b | .shMemStore _ a b => expFreeS a && expFreeS b
-  | .dec _ s e body => shapeFreeS s && expFreeS e && progFreeS body
-  | .decCall _ s _ args body => shapeFreeS s && expsFreeS args && progFreeS body
-  | .seq a b => progFreeS a && progFreeS b
-  | .ite c a b => expFreeS c && progFreeS a && progFreeS b
-  | .while c body => expFreeS c && progFreeS body
-  | .extCall _ e1 e2 e3 e4 => expFreeS e1 && expFreeS e2 && expFreeS e3 && expFreeS e4
-  | .call none _ args => expsFreeS args
-  | .call (some (_, none)) _ args => expsFreeS args
-  | .call (some (_, some (_, _, body))) _ args => expsFreeS args && progFreeS body
-termination_by structural p => p
-
-def loadSafeProgS {width : Nat} : (p : Prog (BitVec width)) → Bool
-  | .skip | .break | .continue | .tick | .annot _ _ => true
-  | .assign _ _ e | .return e | .raise _ e | .shMemLoad _ _ _ e => loadSafeExpS e
-  | .primitive _ _ es => loadSafeExpsS es
-  | .store a b | .store32 a b | .storeByte a b | .shMemStore _ a b => loadSafeExpS a && loadSafeExpS b
-  | .dec _ _ e body => loadSafeExpS e && loadSafeProgS body
-  | .decCall _ _ _ args body => loadSafeExpsS args && loadSafeProgS body
-  | .seq a b => loadSafeProgS a && loadSafeProgS b
-  | .ite c a b => loadSafeExpS c && loadSafeProgS a && loadSafeProgS b
-  | .while c body => loadSafeExpS c && loadSafeProgS body
-  | .extCall _ e1 e2 e3 e4 => loadSafeExpS e1 && loadSafeExpS e2 && loadSafeExpS e3 && loadSafeExpS e4
-  | .call none _ args => loadSafeExpsS args
-  | .call (some (_, none)) _ args => loadSafeExpsS args
-  | .call (some (_, some (_, _, body))) _ args => loadSafeExpsS args && loadSafeProgS body
-termination_by structural p => p
-
-def progNoGlobCallS {width : Nat} : (p : Prog (BitVec width)) → Bool
-  | .skip | .break | .continue | .tick | .annot _ _ => true
-  | .assign _ _ _ | .return _ | .raise _ _ | .primitive _ _ _ => true
-  | .store _ _ | .store32 _ _ | .storeByte _ _ | .shMemStore _ _ _ | .extCall _ _ _ _ _ => true
-  | .shMemLoad _ .local _ _ => true
-  | .shMemLoad _ .global _ _ => false
-  | .dec _ _ _ body | .decCall _ _ _ _ body | .while _ body => progNoGlobCallS body
-  | .seq a b | .ite _ a b => progNoGlobCallS a && progNoGlobCallS b
-  | .call none _ _ => true
-  | .call (some (_, none)) _ _ => true
-  | .call (some (none, some (_, _, body))) _ _ => progNoGlobCallS body
-  | .call (some (some (.local, _), some (_, _, body))) _ _ => progNoGlobCallS body
-  | .call (some (some (.global, _), some _)) _ _ => false
-termination_by structural p => p
 
 theorem progPredsS_eq {width : Nat} [NeZero width] :
     ∀ p : Prog (BitVec width),
@@ -2352,18 +2205,6 @@ theorem progPredsS_eq {width : Nat} [NeZero width] :
               panProgCost, panProgCostS, progFree, progFreeS, loadSafeProg, loadSafeProgS, progNoGlobCall, progNoGlobCallS,
               panExpCostS_eq.2, expFreeS_eq.2, loadSafeExpS_eq.2, ihb.1, ihb.2.1, ihb.2.2.1, ihb.2.2.2]
 
-def declGoodS {width : Nat} : Decl (BitVec width) → Bool
-  | .function fn =>
-      !fn.inline &&
-      ((fn.params.all fun p => shapeFreeS p.2) && progFreeS fn.body && shapeFreeS fn.returnShape) &&
-      loadSafeProgS fn.body &&
-      progNoGlobCallS fn.body &&
-      decide (panProgCostS fn.body ≤ 448)
-  | .decl shape _ value =>
-      shapeFreeS shape && expFreeS value && loadSafeExpS value && decide (panExpCostS value = 0)
-  | .exnDecl _ shape => shapeFreeS shape
-  | .name _ _ => false
-
 theorem params_shapeFree_eq :
     ∀ ps : List (String × Shape),
       ((ps.map InitECandidate.Proofs.FrontendCodecComputation.paramToHOLStructural).all fun p => shapeFree p.2) =
@@ -2397,14 +2238,12 @@ theorem all_declGood_map_declToHOL {width : Nat} [NeZero width] :
   | [] => rfl
   | d :: ds => by simp [declGood_declToHOL_eq, all_declGood_map_declToHOL ds]
 
-theorem guestAst_all_declGoodS : Guest.Software.guestAst.all declGoodS = true := rfl
-
 theorem sourceDeclarations_all_declGood :
     InitE.sourceDeclarations.all declGood = true := by
   unfold InitE.sourceDeclarations
   apply mainFirstHOL_good
   rw [all_declGood_map_declToHOL]
-  exact guestAst_all_declGoodS
+  exact CrepGuestAstGood.guestAst_all_declGoodS
 
 theorem crep_listBudget_le_448 :
     listBudget ConcreteCompilerCrep.source ≤ 448 := by
