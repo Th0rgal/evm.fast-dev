@@ -2,7 +2,7 @@ import InitECandidate.Proofs.CheckedCompilerConfig
 import InitECandidate.Proofs.ArtifactFacts
 import InitECandidate.Proofs.SourceStackCertificate
 import Flapjack.Pancake.Proofs.PanToTarget.ExecutableCompileProgMaxAsmWith
-import InitECandidate.Solver.SelfContainedConcretePipelineMaster
+import InitECandidate.Solver.ConcreteCompilationWitness
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
