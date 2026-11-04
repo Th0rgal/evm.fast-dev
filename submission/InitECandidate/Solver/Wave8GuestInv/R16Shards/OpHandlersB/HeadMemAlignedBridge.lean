@@ -60,9 +60,53 @@ theorem head_mem_evmChain {F : Type} (s : PanSemStateFiniteExact 64 F) :
     (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
   rw [evmChain_cons]; exact List.mem_cons_self
 
+/-! ### Local copies of the Group04 head-memory vocabulary
+
+Re-stated verbatim from `R16Shards/OpHandlers/Group04.lean` (staging `345f0f06d`) so this file's
+statements read standalone; each is proved definitionally equal to the Group04 original, so
+results transfer in both directions with no edit to Group04. -/
+
+def HeadMemAligned {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  memW s (globN s "ev" + 32) % 32 = 0 ∧
+  (memW s (globN s "ev" + 24) + memW s (globN s "ev" + 40) = globN s "frame_mem_ptr")
+
+def ExtendMemoryPre {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ ebw : BitVec 64, s.locals.lookup (ofString "expand_by") = some (.val (.word ebw)) ∧
+    (ebw = 0#64 ∨ (memW s (globN s "ev" + 32) + ebw.toNat < 2 ^ 37 ∧
+      (memW s (globN s "ev" + 32) + ebw.toNat) % 8 = 0 ∧
+      memW s (globN s "ev" + 24) + memW s (globN s "ev" + 40) = globN s "frame_mem_ptr"))
+
+theorem headMemAligned_iff_group04 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    HeadMemAligned s ↔ R16Shards.OpHandlers.HeadMemAligned s := Iff.rfl
+
+theorem extendMemoryPre_iff_group04 {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    ExtendMemoryPre s ↔ R16Shards.OpHandlers.ExtendMemoryPre s := Iff.rfl
+
+/-- Bridge of the proved Group04 `extend_memory` contract to the local precondition. -/
+theorem eps_extend_memory_aligned_local :
+    R14Shards.OpHandlersA.EvmPreservingSpec ExtendMemoryPre
+      (fun s _ post => ∀ g : String, ofString g ≠ ofString "frame_mem_ptr" →
+        globN post g = globN s g)
+      (ofString "extend_memory") :=
+  R16Shards.OpHandlers.eps_extend_memory_aligned
+
 theorem headMemChainWF_headMemAligned {F : Type} {s : PanSemStateFiniteExact 64 F}
-    (h : HeadMemChainWF s) : R16Shards.OpHandlers.HeadMemAligned s :=
+    (h : HeadMemChainWF s) : HeadMemAligned s :=
   ⟨(h.1 _ (head_mem_evmChain s)).1, h.2.1⟩
+
+theorem headMemChainWF_headMemAligned_group04 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : HeadMemChainWF s) : R16Shards.OpHandlers.HeadMemAligned s :=
+  (headMemAligned_iff_group04 s).1 (headMemChainWF_headMemAligned h)
+
+/-- A head-aligned frame whose next `extend_memory` grows by an 8-aligned amount that keeps the
+length below `2^37` meets `ExtendMemoryPre` (the `ebw ≠ 0` branch). -/
+theorem extendMemoryPre_of_headMemAligned {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : HeadMemAligned s) (ebw : BitVec 64)
+    (hl : s.locals.lookup (ofString "expand_by") = some (.val (.word ebw)))
+    (hb : memW s (globN s "ev" + 32) + ebw.toNat < 2 ^ 37)
+    (h8 : (memW s (globN s "ev" + 32) + ebw.toNat) % 8 = 0) :
+    ExtendMemoryPre s :=
+  ⟨ebw, hl, Or.inr ⟨hb, h8, h.2⟩⟩
 
 theorem headMemChainWF_congr {F : Type} {s t : PanSemStateFiniteExact 64 F}
     (hm : t.memory = s.memory) (hg : t.globals = s.globals) :
@@ -180,7 +224,7 @@ theorem evmInvA_guestInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmIn
   evmInv_guestInv s h.1
 
 theorem evmInvA_headMemAligned {F : Type} {s : PanSemStateFiniteExact 64 F} (h : EvmInvA s) :
-    R16Shards.OpHandlers.HeadMemAligned s :=
+    HeadMemAligned s :=
   headMemChainWF_headMemAligned h.2
 
 /-- Aligned `op_dispatch` contract (`op_dispatch_spec` with `HeadMemChainWF` carried). -/
