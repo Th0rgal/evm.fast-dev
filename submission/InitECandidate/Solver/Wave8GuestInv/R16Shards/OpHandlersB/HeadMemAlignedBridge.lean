@@ -3136,6 +3136,83 @@ theorem compute_jumpdests_run {F : Type} (s : PanSemStateFiniteExact 64 F)
     exact ⟨q, rfl, rfl, htF.trans ⟨rfl, rfl, rfl, fun _ _ => rfl⟩⟩
 end ComputeJumpdests
 
+/-! ## 3n. `frame_open` never raises a catchable exception -/
+
+section FrameOpenNoRaise
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue (noCatchableRaise evaluate_noCatchableRaise)
+open InitECandidate.Solver.GuestGlobalKeep (lookupCode_installed)
+
+def frameOpenCallees (f : MlS) : Bool :=
+  f == ofString "trap_with" || f == ofString "scratch_mark" || f == ofString "frame_mem_mark" ||
+  f == ofString "scratch_alloc" || f == ofString "memzero" || f == ofString "frame_mem_alloc" ||
+  f == ofString "compute_jumpdests" || f == ofString "lst_new_scratch" ||
+  f == ofString "htab_new_scratch" || f == ofString "htab_count" || f == ofString "frame_new" ||
+  f == ofString "frame_open"
+
+theorem frameOpenCallees_good :
+    ∀ f, frameOpenCallees f = true → ∀ values body callee rs,
+      PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup f values =
+        some (body, callee, rs) →
+      noCatchableRaise frameOpenCallees body = true := by
+  intro f hf values body callee rs hfound
+  obtain ⟨params, rs', hinst⟩ := lookupCode_installed hfound
+  simp only [frameOpenCallees, Bool.or_eq_true, beq_iff_eq] at hf
+  rcases hf with ((((((((((rfl | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl) | rfl
+  · have hl := lookup_of_guestAst_getElem 3 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_trap_with) rfl
+    change originalRuntimeCode.lookup (ofString "trap_with") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 14 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_scratch_mark) rfl
+    change originalRuntimeCode.lookup (ofString "scratch_mark") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 11 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_frame_mem_mark) rfl
+    change originalRuntimeCode.lookup (ofString "frame_mem_mark") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 13 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_scratch_alloc) rfl
+    change originalRuntimeCode.lookup (ofString "scratch_alloc") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 17 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_memzero) rfl
+    change originalRuntimeCode.lookup (ofString "memzero") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 10 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_frame_mem_alloc) rfl
+    change originalRuntimeCode.lookup (ofString "frame_mem_alloc") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 463 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_compute_jumpdests) rfl
+    change originalRuntimeCode.lookup (ofString "compute_jumpdests") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 409 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_lst_new_scratch) rfl
+    change originalRuntimeCode.lookup (ofString "lst_new_scratch") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 129 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_new_scratch) rfl
+    change originalRuntimeCode.lookup (ofString "htab_new_scratch") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 141 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_htab_count) rfl
+    change originalRuntimeCode.lookup (ofString "htab_count") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 467 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_frame_new) rfl
+    change originalRuntimeCode.lookup (ofString "frame_new") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+  · have hl := lookup_of_guestAst_getElem 578 (by rw [guestAst_len]; decide) (extractFn Guest.Software.guestFn_frame_open) rfl
+    change originalRuntimeCode.lookup (ofString "frame_open") = _ at hl
+    rw [hl] at hinst; rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]; rfl
+
+
+/-- A `frame_open` body run never ends in a catchable exception: every `Resumes` outcome is a
+return. -/
+theorem frame_open_resumes_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) {values body callee rs}
+    (hl : PanSemStateFiniteExact.lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "frame_open") values =
+      some (body, callee, rs))
+    (hres : Resumes (evaluateHOLFiniteState s body).1) :
+    ∃ v, (evaluateHOLFiniteState s body).1 = some (.returned v) := by
+  rcases hres with h | ⟨e, v, he, hne⟩
+  · exact h
+  · exact absurd he (evaluate_noCatchableRaise frameOpenCallees frameOpenCallees_good body
+      (frameOpenCallees_good _ (by decide) values body callee rs hl) s hcode e v hne)
+
+end FrameOpenNoRaise
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
