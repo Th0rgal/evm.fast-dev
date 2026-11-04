@@ -2246,6 +2246,47 @@ theorem fmp_not_mem_frameStart_gw :
     ofString "frame_mem_ptr" ∉ (["bn_expw", "bn_gamma", "heap_ptr", "journal_n", "scratch_ptr"] : List String).map ofString := by
   decide
 
+/-! ## 3g. `frame_mem_alloc`: the frame-memory step of `frame_new` and `extend_memory` -/
+
+/-- Entry of `frame_mem_alloc(n)`: `n`, `frame_mem_ptr`, `scratch_ptr` are words. -/
+def FrameMemAllocPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => (∃ n : BitVec 64, s.locals.lookup (ofString "n") = some (.val (.word n))) ∧
+    (∃ p : BitVec 64, s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word p))) ∧
+    (∃ sp : BitVec 64, s.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp)))
+
+/-- `frame_mem_alloc(n)` (`Guest/SoftwareAst.lean:~110`): on return, the result is the old
+`frame_mem_ptr`, and the only change is `frame_mem_ptr := (p + n + 7) & ~7` (with the two
+range checks passed). This is the frame-memory step of `frame_new` (`n = 1024`) and of
+`extend_memory`. -/
+theorem frame_mem_alloc_spec :
+    FunSpec FrameMemAllocPre
+      (OnReturn fun s post => ∃ n p sp : BitVec 64,
+        s.locals.lookup (ofString "n") = some (.val (.word n)) ∧
+        s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word p)) ∧
+        s.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp)) ∧
+        ¬ ((sp - p).toNat < n.toNat) ∧
+        ¬ (sp.toNat < ((p + (n + 7)) &&& ((0 : BitVec 64) - 8)).toNat) ∧
+        post = { s with
+          globals := s.globals.update (ofString "frame_mem_ptr",
+            .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8))))
+          locals := post.locals
+          clock := post.clock })
+      (ofString "frame_mem_alloc") := by
+  refine ⟨_, _, _, R16Shards.OpHandlers.lookup_frame_mem_alloc, fun s hc hP _ _ v hv => ?_⟩
+  obtain ⟨⟨n, hn⟩, ⟨p, hp⟩, ⟨sp, hsp⟩⟩ := hP
+  obtain ⟨_, h1, h2, h3⟩ := R16Shards.OpHandlers.frame_mem_alloc_body_run s p sp n hc hp hsp hn v hv
+  exact ⟨n, p, sp, hn, hp, hsp, h1, h2, h3⟩
+
+/-- Arithmetic of a `frame_mem_alloc(n)` from an 8-aligned `p ≤ sp ≤ scratchEnd`: the new
+pointer is `p + ⌈n⌉₈`; for `n = 1024` it is exactly `p + 1024`. -/
+theorem frame_mem_alloc_1024 (p sp : BitVec 64)
+    (hp_le_sp : p.toNat ≤ sp.toNat) (hsp_le : sp.toNat ≤ scratchEnd) (hp_al : p.toNat % 8 = 0)
+    (hcmp1 : ¬ ((sp - p).toNat < (1024 : BitVec 64).toNat))
+    (hcmp2 : ¬ (sp.toNat < ((p + ((1024 : BitVec 64) + 7)) &&& ((0 : BitVec 64) - 8)).toNat)) :
+    ((p + ((1024 : BitVec 64) + 7)) &&& ((0 : BitVec 64) - 8)).toNat = p.toNat + 1024 := by
+  have h := (R16Shards.OpHandlers.frame_mem_alloc_arith p sp 1024 hp_le_sp hsp_le hp_al hcmp1 hcmp2).1
+  rw [h]; rfl
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
