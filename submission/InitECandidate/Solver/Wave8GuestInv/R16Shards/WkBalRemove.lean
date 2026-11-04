@@ -11,7 +11,7 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -111,8 +111,8 @@ theorem evaluate_be_eq {F : Type} (s : PanSemStateFiniteExact 64 F) (p : ProgHOL
 
 section HtabDelValues
 
-open InitECandidate.Solver.Wave8M19.Htab
-open InitECandidate.Solver.Wave8GuestInv.M19 (arg_to_light exit_from_light)
+open Wave8M19.Htab
+open InitECandidate.Solver.Wave8GuestInv.HtabC00Ports (arg_to_light exit_from_light)
 
 theorem del_inner_values_subperm {F : Type} (s post : PanSemStateFiniteExact 64 F)
     (tw nd ow lw cw : BitVec 64)
@@ -472,7 +472,7 @@ theorem htab_del_values_subperm {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hv : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).1 =
       some (.returned v)) :
     let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2
-    HtabExit s post ∧ post.be = s.be ∧
+    HtabExit s post ∧ post.be = s.be ∧ post.globals = s.globals ∧
     ∃ f : Nat → Nat,
       (∀ i (hi : i < (htabValues post (locN s "t")).length),
         ∃ hj : f i < (htabValues s (locN s "t")).length,
@@ -572,11 +572,17 @@ theorem htab_del_values_subperm {F : Type} (s : PanSemStateFiniteExact 64 F)
   rcases hres with heq | ⟨lw, pw, mv, hlwS, hlw0, hcrit, hpw, hmv0, hcase⟩
   · have hmem_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.memory = s.memory := by
       have := congrArg PanSemStateFiniteExact.memory heq; exact this
+    have hg_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.globals = s.globals := by
+      have := congrArg PanSemStateFiniteExact.globals heq; exact this
     have hveq : htabValues (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2 tw.toNat =
         htabValues s tw.toNat := by
       simp [htabValues, hdr, nodeF, memW, hmem_eq]
-    refine ⟨id, fun i hi => ⟨by rwa [hveq] at hi, by simp [hveq]⟩, fun _ _ _ _ hne => hne⟩
-  · have hlwLI : lw.toNat ∈ L ++ I := by
+    exact ⟨hg_eq, id, fun i hi => ⟨by rwa [hveq] at hi, by simp [hveq]⟩, fun _ _ _ _ hne => hne⟩
+  · have hg_eq : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.globals = s.globals := by
+      rcases hcase with ⟨_, ⟨_, _, _, hpe⟩ | ⟨_, _, _, hpe⟩⟩ | ⟨_, ⟨_, _, _, hpe⟩ | ⟨_, _, _, hpe⟩⟩ <;>
+        (have := congrArg PanSemStateFiniteExact.globals hpe; rw [NS_globals] at this; exact this)
+    refine ⟨hg_eq, ?_⟩
+    have hlwLI : lw.toNat ∈ L ++ I := by
       rcases List.mem_cons.mp hlwS with h | h
       · exact absurd (word_eq_zero_of_toNat h) hlw0
       · exact h
@@ -2672,19 +2678,7 @@ theorem htab_del_values_subperm_full {F : Type} (s : PanSemStateFiniteExact 64 F
       (∀ i1 < (htabValues post (locN s "t")).length,
         ∀ i2 < (htabValues post (locN s "t")).length, i1 ≠ i2 → f i1 ≠ f i2) := by
   dsimp only
-  obtain ⟨hExit, hbe, hsub⟩ := htab_del_values_subperm s hcode hP v hv
-  have hg : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).2.globals =
-      s.globals := by
-    rcases InitECandidate.Solver.Wave8M19.Htab.htab_del_spec_proof with ⟨ps, body, ret, hl, hrun⟩
-    have hbody_eq : body = sourceFnBody Guest.Software.guestFn_htab_del := by
-      have h1 := lookup_htab_del
-      rw [hl] at h1
-      exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj h1)).2).1
-    subst hbody_eq
-    have hnt : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_del)).1 ≠
-        some .timeOut := by rw [hv]; simp
-    exact (hrun s hcode (InitECandidate.Solver.Wave8GuestInv.M19.arg_to_light s hP) hnt v hv).2.2.2
-  exact ⟨hExit, hbe, hg, hsub⟩
+  exact htab_del_values_subperm s hcode hP v hv
 
 theorem htabFootprint_len_pos_r16 {F : Type} {s : PanSemStateFiniteExact 64 F} {t : Nat}
     (hwf : HtabWF s t) {i : Ivl} (hi : i ∈ htabFootprint s t) : i.2 ≠ 0 := by
@@ -4265,4 +4259,4 @@ theorem wk_remove_storage_write :
         (fun _ _ _ => trivial) hws_inner
   · simp at hx
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBal
