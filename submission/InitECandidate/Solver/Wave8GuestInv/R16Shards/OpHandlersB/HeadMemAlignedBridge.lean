@@ -2346,6 +2346,88 @@ theorem goodFrameMem_frame_new_helpers :
 
 end FmpKeep
 
+/-! ## 3i. `lst_new_scratch`: exact run (frame-memory footprint for `frame_new`) -/
+
+section LstNew
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem lookup_lst_new_scratch :
+    originalRuntimeCode.lookup (ofString "lst_new_scratch") =
+      some ([(ofString "esz", .one), (ofString "cap", .one)],
+        sourceFnBody Guest.Software.guestFn_lst_new_scratch, .one) :=
+  lookup_of_guestAst_getElem 409 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_lst_new_scratch) rfl
+
+@[local simp] private theorem lnm1 : (ofString "l" = ofString "esz") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem lnm2 : (ofString "l" = ofString "cap") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem lnm3 : (ofString "p" = ofString "l") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem lnm4 : (ofString "p" = ofString "cap") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem lnm5 : (ofString "p" = ofString "esz") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+@[local simp] private theorem lnm6 : (ofString "scratch_ptr" = ofString "frame_mem_ptr") = False := by
+  simp only [eq_iff_iff, iff_false]; decide
+
+local macro "evs" : tactic => `(tactic| ((simp [ev, evalHOLExact, evalListHOLExact,
+  HolFiniteMapExact.lookup_update, FUPDATE, wordOpHOL, wordOp, valueIsWord, valueWord,
+  panOpHOL, lnm1, lnm2, lnm3, lnm4, lnm5, lnm6]) <;> first | assumption | rfl))
+
+attribute [local irreducible] Ret in
+/-- `lst_new_scratch(esz, cap)`: two scratch allocations (`24` bytes for the header `l`, then
+`esz*cap` bytes for the payload `p`) and three stores into the fresh header. Memory changes only
+at `l`, `l+8`, `l+16`; the only global that changes is `scratch_ptr`, which ends at `p`. -/
+theorem lst_new_scratch_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (esz cap p0 f : BitVec 64)
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p0)))
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_lst_new_scratch) (fun v post =>
+      ∃ l q : BitVec 64, v = .val (.word l) ∧
+        l = (p0 - 24) &&& ((0 : BitVec 64) - 8) ∧
+        q = (l - esz * cap) &&& ((0 : BitVec 64) - 8) ∧
+        f.toNat ≤ q.toNat ∧ f.toNat ≤ l.toNat ∧
+        ¬ ((p0 - f).toNat < (24 : BitVec 64).toNat) ∧
+        ¬ ((l - f).toNat < (esz * cap).toNat) ∧
+        post.globals = (s.globals.update (ofString "scratch_ptr", .val (.word l))).update
+          (ofString "scratch_ptr", .val (.word q)) ∧
+        post.memory = updW (updW (updW s.memory (l + 0) q) (l + 8) 0) (l + 16) cap ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_lst_new_scratch =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_lst_new_scratch).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_lst_new_scratch,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply Ret.of_NS
+  apply HtabC00Ports.ns_scratch_alloc hcode 24 (by evs) p0 f hp hf
+  intro hc1 hd1
+  generalize hL : (p0 - 24) &&& ((0 : BitVec 64) - 8) = l at *
+  apply HtabC00Ports.ns_scratch_alloc hcode (esz * cap)
+    (by simp [ev, evalHOLExact, evalListHOLExact, HolFiniteMapExact.lookup_update, FUPDATE,
+      panOpHOL, valueIsWord, valueWord, he, hc, lnm1, lnm2]) l f (by evs) (by evs)
+  intro hc2 hd2
+  generalize hQ : (l - esz * cap) &&& ((0 : BitVec 64) - 8) = q at *
+  apply Ret.ns_storeW (l + 0) q (by evs) (by evs); intro _
+  apply Ret.ns_storeW (l + 8) 0 (by evs) (by evs); intro _
+  apply Ret.ns_storeW (l + 16) cap (by evs) (by evs); intro _
+  apply Ret.ns_ret
+  intro val hval
+  simp [ev, evalHOLExact, HolFiniteMapExact.lookup_update, FUPDATE] at hval
+  subst hval
+  refine ⟨l, q, rfl, rfl, hQ.symm, by omega, by omega, hc1, hc2, ?_, ?_, rfl, rfl⟩ <;> rfl
+
+end LstNew
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
