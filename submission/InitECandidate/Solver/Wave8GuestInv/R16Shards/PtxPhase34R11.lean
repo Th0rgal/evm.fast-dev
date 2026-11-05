@@ -3591,6 +3591,24 @@ theorem stable_copy_source_address_eval {F : Type} (s : PanSemStateFiniteExact 6
   rw [← he, BitVec.ofNat_toNat, BitVec.setWidth_eq]
   simp
 
+/-- The copy source load returns the word at the indexed source cell. -/
+theorem stable_copy_source_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w p : BitVec 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hi : locN s "i" < locN s "nl") :
+    evalAt s phase4LogCopySrc = some (.val (.word
+      (BitVec.ofNat 64 (memW s (locN s "lp" + 8 * locN s "i"))))) := by
+  have he := stable_copy_source_address_eval s w p hp hw hl hi
+  obtain ⟨v, hd, hm⟩ := (stableCopyInv_source_word s hp hi).1
+  have hn : memW s (locN s "lp" + 8 * locN s "i") = v.toNat := by
+    simp [memW, hm]
+  unfold phase4LogCopySrc
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at he ⊢
+  rw [he]
+  simp [valueIsWord, valueWord, memLoadHOLExact, hd, hm, hn,
+    BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
