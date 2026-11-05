@@ -3258,7 +3258,8 @@ theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
         memW s (memW s (locN s "logs") + 8 * j))
     (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
     StableCopyInv (setVarHOLFinite (ofString "i") v s) := by
-  have hpost := LocalsOnly.setVar localsOnly_stableLengthPost (by decide) v s hp
+  have hpost : StableLengthPost (setVarHOLFinite (ofString "i") v s) :=
+    LocalsOnly.setVar localsOnly_stableLengthPost (by decide) v s hp
   have hinc := stable_copy_increment_nat s w v hw hi
     (stableLengthPost_length_bound s hp hn).1 he
   have hloc : ∀ name ∈ (["logs", "stable_logs", "nl", "stable_log_cap"] : List String),
