@@ -11071,4 +11071,54 @@ theorem log_append_of_lst_push_execution_g09 {F : Type}
   rw [log_append_store_return_exact_g09 _ slot log hs hlog hd]
   rfl
 
+theorem lst_push_alloc_copy_header_exact_g09 {F : Type}
+    (s allocPost copyPost : PanSemStateFiniteExact 64 F) (l esz cap np : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hclock : s.clock ≠ 0)
+    (halloc : evaluateHOLFiniteState
+      (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (esz * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) =
+        (some (.returned (.val (.word np))), allocPost))
+    (hcopy : evaluateHOLFiniteState
+      (setVarHOLFinite (ofString "np") (.val (.word np)) {allocPost with locals := s.locals})
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) =
+        (none, copyPost))
+    (hcl : copyPost.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcp : copyPost.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hcc : copyPost.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hd0 : copyPost.memaddrs l) (hd16 : copyPost.memaddrs (l + 16#64)) :
+    evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+            .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) =
+      (none, {copyPost with
+        locals := copyPost.locals.resVarEq (ofString "np", s.locals.lookup (ofString "np"))
+        memory := fun a => if a = l + 16#64 then .word (cap * 2#64)
+          else if a = l then .word np else copyPost.memory a}) := by
+  have hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]] =
+        some [.val (.word (esz * cap * 2#64))] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, he, hc, panOpHOL,
+      valueIsWord, valueWord]
+  have hlook := pan_one_word_lookup s.code.lookup (ofString "alloc") (ofString "n")
+    (sourceFnBody Guest.Software.guestFn_alloc) (esz * cap * 2#64)
+    (by rw [hcode]; exact OpHandlers.lookup_alloc)
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite, hargs]
+  dsimp only
+  rw [hlook]
+  simp only [hclock, ↓reduceIte, halloc, shapeOfHOLExact, shapeEqHOL, Bool.and_self]
+  rw [evaluateHOLFiniteState_seq_line780, hcopy]
+  dsimp only
+  rw [lst_push_growth_header_exact_g09 copyPost l np cap hcl hcp hcc hd0 hd16]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
