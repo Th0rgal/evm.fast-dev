@@ -1357,6 +1357,24 @@ theorem phase4Succeeded_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   simpa only [Nat.zero_add] using hb s hc hp
 
+/-- The Phase-4 prefix reaches receipt encoding with its full entry guard. -/
+theorem phase4BeforeReceipt_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 24 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + b)) := by
+  have hb := @phase4ThroughLogs_cut h _ _
+    (phase4NullLogs_cut h (phase4Succeeded_cut htail))
+  have he : spinePlug 24 (spineAt 99 ptxCode) tail =
+      spinePlug 21 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 120 ptxCode)
+          (spinePlug 2 (spineAt 121 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
