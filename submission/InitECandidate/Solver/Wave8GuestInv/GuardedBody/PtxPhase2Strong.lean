@@ -13453,4 +13453,24 @@ theorem phase2_message_table_stores_suffix_hoare {ι : Type} [Nonempty ι]
     exact ⟨hf.1, hf.2.trans hf.1.2.2.2.2.2.1⟩
   · exact phase2_message_ak_store_suffix buffers contents names aa ak hk
 
+/-- The two final table-pointer stores initialize the suffix without consuming clock. -/
+theorem phase2_message_table_stores_suffix_bound {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak")))) tail) b := by
+  have hb : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak")))) 0 :=
+    PtxP1.bound_of_clock (P := PtxMessageTableStoreReady buffers contents names aa ak)
+      (fun s => phase2_clock_seq (fun t => clock_store t _ _) (fun t => clock_store t _ _) s)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hb
+    (phase2_message_table_stores_suffix_hoare buffers contents names aa ak ha hk) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
