@@ -2394,6 +2394,286 @@ theorem phase4StableCap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hlu,
     show ofString "stable_log_cap" ≠ ofString "nl" from by decide]
 
+def Phase4StableCapReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    locN s "stable_log_cap" = max 1 (locN s "nl")
+
+theorem phase4StableCap_bounds {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableCapReady s) :
+    1 ≤ locN s "stable_log_cap" ∧ locN s "nl" ≤ locN s "stable_log_cap" ∧
+      8 * locN s "stable_log_cap" < 2 ^ 64 := by
+  have hn := hp.1.1.2.1
+  have hb := hp.1.1.1.2.2.1
+  rw [hp.2]
+  omega
+
+theorem hoare_phase4StableCap_adjust :
+    Hoare Phase4StableCapInit
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → Phase4StableCapReady t) := by
+  apply Hoare.ite
+  · apply Hoare.assign
+    · intro F s v hp he _
+      obtain ⟨w, hw, hn⟩ := hp.2
+      obtain ⟨a, b, ha, hb, hc⟩ := evalAt_cmp s .equal _ _ w hw
+      have hb0 : b = 0 := by cases hb; rfl
+      subst b
+      have ha0 : a = 0 := by
+        by_contra h
+        have hz : (0 : BitVec 64) = 0#64 := rfl
+        have h' : a ≠ 0#64 := h
+        simp [wordCmpHOL] at hc
+        rw [if_neg h'] at hc
+        exact hn hc
+      have hz : locN s "stable_log_cap" = 0 := by
+        change s.locals.lookup _ = some (.val (.word a)) at ha
+        simp [locN, ha, ha0]
+      have hv : v = .val (.word (1 : BitVec 64)) := by cases he; rfl
+      subst v
+      refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) _ s hp.1.1, ?_⟩
+      have hn0 : locN s "nl" = 0 := hp.1.2.symm.trans hz
+      simp [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "stable_log_cap" ≠ ofString "nl" from by decide] at hn0 ⊢
+      rw [hn0]
+      decide
+    · intro F s hp hr
+      cases hr
+  · apply Hoare.skip
+    intro F s hp _
+    obtain ⟨a, b, ha, hb, hc⟩ := evalAt_cmp s .equal _ _ 0 hp.2
+    have hb0 : b = 0 := by cases hb; rfl
+    subst b
+    have ha0 : a ≠ 0 := by
+      intro h
+      simp [wordCmpHOL, h] at hc
+    have hz : locN s "stable_log_cap" ≠ 0 := by
+      change s.locals.lookup _ = some (.val (.word a)) at ha
+      intro hz
+      apply ha0
+      apply BitVec.eq_of_toNat_eq
+      simpa [locN, ha] using hz
+    refine ⟨hp.1.1, ?_⟩
+    have he := hp.1.2
+    omega
+  · intro F s hp hr
+    cases hr
+
+theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 2 (spineAt 130 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 2 (spineAt 130 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine dec_bound_trans (fun s v hp he => phase4StableCap_init s v hp he) ?_
+    refine seq_bound_trans ?_ hoare_phase4StableCap_adjust htail
+    exact TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+      (TerminatingProgBoundedOn.of_clock clock_skip)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+theorem lst_new_stable_args {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret)) :
+    let ent := callEntryStateHOLFinite s callee
+    locN ent "esz" = 8 ∧ locN ent "cap" = locN s "stable_log_cap" ∧
+      1 ≤ locN ent "cap" ∧ locN ent "esz" * locN ent "cap" < 2 ^ 64 := by
+  have ha' := ha
+  rw [evalListHOLFinite_eq_toExact] at ha'
+  cases hv : s.locals.lookup (ofString "stable_log_cap") with
+  | none => simp [evalListHOLExact, evalHOLExact, hv] at ha'
+  | some v =>
+    have hlc := R13Shards.lookup_lst_new
+    rw [← hc] at hlc
+    obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+      (ofString "esz") (ofString "cap") .one .one _ _ hlc
+      (.const 8) (.var .local (ofString "stable_log_cap")) (.val (.word 8)) v
+      vs body callee ret rfl hv ha hl
+    have he8 : locN (callEntryStateHOLFinite s callee) "esz" = 8 := by
+      simp [locN, callEntryStateHOLFinite, he]
+    have hce : locN (callEntryStateHOLFinite s callee) "cap" = locN s "stable_log_cap" := by
+      simp [locN, callEntryStateHOLFinite, hcap, hv]
+    have hb := phase4StableCap_bounds s hp
+    exact ⟨he8, hce, hce.symm ▸ hb.1, by rw [he8, hce]; exact hb.2.2⟩
+
+theorem lst_new_stable_fresh (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post w.toNat 24 ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post (memW post w.toNat)
+        (8 * locN s "stable_log_cap") ∧ memW post (w.toNat + 8) = 0 ∧
+      ∃ S Nd, WorldTypedWith post S Nd ∧
+        IvlsDisj [(w.toNat, 24), (memW post w.toNat, 8 * locN s "stable_log_cap")]
+          (worldOwned post S Nd) := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have hW := hp.1.1.1.1.1.1
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, hWT⟩ := hW.2
+  obtain ⟨Nd, hTr⟩ := hWT.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr
+    ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr⟩
+  obtain ⟨S', Nd', _, hWT', _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+    (by intro i hi; cases hi)
+  obtain ⟨w, hv, hd⟩ := hret hargs.2.2.2 v rfl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w', hv', _, _, hf⟩ := ht v rfl
+  have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
+  subst w'
+  obtain ⟨hh, hb, _, hn, _⟩ := hf hargs.2.2.2 hargs.2.2.1
+  refine ⟨w, hv, hh, ?_, hn, S', Nd', hWT', ?_⟩
+  · simpa only [hargs.1, hargs.2.1] using hb
+  · simpa only [hargs.1, hargs.2.1] using hd
+
+theorem lst_new_stable_source_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableCapReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  have hp' := logPointers_heapStep hs' hp.1 hp.1.1.2.2
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _ hp', ?_⟩
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide,
+    show ofString "stable_logs" ≠ ofString "nl" from by decide] using hp.2
+
+theorem lst_new_stable_capacity (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      memW post (w.toNat + 16) = locN s "stable_log_cap" := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hv, _, _, hf⟩ := ht v rfl
+  obtain ⟨_, _, _, _, hcap⟩ := hf hargs.2.2.2 hargs.2.2.1
+  exact ⟨w, hv, hcap.trans hargs.2.1⟩
+
+theorem fresh_empty_stable_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs cap : Nat} (hA : ArenaOK s)
+    (hh : FreshBlock s post logs 24)
+    (hb : FreshBlock s post (memW post logs) (8 * cap))
+    (hd : IvlsDisj [(logs, 24), (memW post logs, 8 * cap)] (worldOwned post S Nd))
+    (hn : memW post (logs + 8) = 0) :
+    LogsListOK post logs ∧ LogsLiveOwned post S Nd logs ∧ LogsDisjFixed post logs := by
+  have hhi : Inside (logs, 24) sourceBase (globN post "heap_ptr") := by
+    have hi := hh.2.1
+    change Inside (logs, 24) (globN s "heap_ptr") (globN post "heap_ptr") at hi
+    exact ⟨hA.1.trans hi.1, hi.2⟩
+  have hbi : Inside (memW post logs, 0) sourceBase (globN post "heap_ptr") := by
+    have hi := hb.2.1
+    constructor
+    · exact hA.1.trans hi.1
+    · have := hi.2; dsimp [Inside] at this ⊢; omega
+  have ho := logsLiveOwned_empty (S := S) (Nd := Nd) (Or.inl hbi)
+    (fun j hj => hd _ (by simp) j hj) hn
+  exact ⟨logsListOK_empty hh.2.2 (Or.inl hhi) hn, ho, logsLiveOwned_disjFixed ho⟩
+
+theorem lst_new_stable_owned (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ LogsListOK post w.toNat ∧
+      LogsWorldOwned post w.toNat ∧ LogsDisjFixed post w.toNat := by
+  obtain ⟨w, hv, hh, hb, hn, S, Nd, hw, hd⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have ho := fresh_empty_stable_logs
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hh hb hd hn
+  exact ⟨w, hv, ho.1, ⟨S, Nd, hw, ho.2.1⟩, ho.2.2⟩
+
+def Phase4StableAllocated : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableCapReady s ∧ LogsListOK s (locN s "stable_logs") ∧
+    LogsWorldOwned s (locN s "stable_logs") ∧ LogsDisjFixed s (locN s "stable_logs")
+
+theorem lst_new_stable_allocated_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableAllocated (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hp' := lst_new_stable_source_resume h s vs body callee ret v post hc hp hl hr
+  obtain ⟨w, rfl, hlst, howned, hfixed⟩ :=
+    lst_new_stable_owned h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hp', ?_, ?_, ?_⟩
+  all_goals simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+    if_pos rfl, valueWord, Option.getD]
+  · exact hlst
+  · exact logsWorldOwned_with_locals _ _ howned
+  · exact hfixed
+
+theorem lst_new_stable_capacity_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Phase4StableAllocated resumed ∧
+      memW resumed (locN resumed "stable_logs" + 16) = locN resumed "stable_log_cap" := by
+  refine ⟨lst_new_stable_allocated_resume h s vs body callee ret v post hc hp ha hl hr, ?_⟩
+  obtain ⟨w, rfl, hw⟩ := lst_new_stable_capacity h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hw
+
+theorem stable_backing_allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p cap : Nat} (hA : ArenaOK s) (hb : FreshBlock s post p (8 * cap)) :
+    p % 8 = 0 ∧ Allocated post (p, 8 * cap) ∧ WordsOK post (p, 8 * cap) := by
+  have hround : (8 * cap + 7) / 8 * 8 = 8 * cap := by omega
+  obtain ⟨halign, hi, hw⟩ := hb
+  rw [hround] at hi hw
+  exact ⟨halign, Or.inl ⟨hA.1.trans hi.1, hi.2⟩, hw⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
