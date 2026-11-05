@@ -3014,6 +3014,22 @@ def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       ∀ i, i < memW s (locN s "logs" + 8) →
         Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
 
+/-- A positive natural local necessarily came from a word-shaped operand. -/
+theorem stable_positive_local_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String) (hp : 0 < locN s name) :
+    s.locals.lookup (ofString name) =
+      some (.val (.word (BitVec.ofNat 64 (locN s name)))) := by
+  unfold locN at hp ⊢
+  cases hlookup : s.locals.lookup (ofString name) with
+  | none => simp [hlookup] at hp
+  | some v =>
+    cases v with
+    | val value =>
+      cases value with
+      | word w => simp
+      | _ => simp [hlookup] at hp
+    | _ => simp [hlookup] at hp
+
 /-- The allocation return supplies the canonical word representation of the
 stable header pointer required by the length store. -/
 theorem lst_new_stable_pointer_resume (h : PtxCallees) {F : Type}
@@ -3940,6 +3956,19 @@ theorem stableCopyLoopInv_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
   refine ⟨hp, hshape, Nat.le_of_eq he, ?_⟩
   intro hi
   omega
+
+/-- Empty source lists enter the completed loop directly after zeroing the counter. -/
+theorem stableCopyLoopInv_init_empty {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hz : s.locals.lookup (ofString "nl") = some (.val (.word 0))) :
+    StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+  apply stableCopyLoopInv_complete _ (stableCopyInv_init s hp hn hh ha hcap)
+  · refine ⟨0, 0, ?_, ?_⟩ <;>
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hz]
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hz]
 
 /-- Clock decrement preserves the separated store contract. -/
 theorem stableCopyStorePre_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
