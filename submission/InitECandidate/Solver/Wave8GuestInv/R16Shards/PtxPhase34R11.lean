@@ -3239,6 +3239,23 @@ theorem stableCopyInv_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
 theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+/-- Hoare rule for the counter initialization before the stable-copy loop. -/
+theorem hoare_stableCopy_init :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap")
+      (.assign (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyInv t) := by
+  apply Hoare.assign
+  · intro s v hp hv _
+    have hv' : v = .val (.word 0) := by
+      simpa [evalAt, evalHOLExact] using hv.symm
+    subst v
+    exact stableCopyInv_init s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
+  · intro s hp hr
+    exact absurd hr (by simp)
+
+theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hj : locN s "i" < locN s "nl") :
     WordAt s (locN s "lp" + 8 * locN s "i") ∧
       LogEntryOK s (memW s (locN s "lp" + 8 * locN s "i")) := by
@@ -3519,6 +3536,26 @@ theorem stableCopyInv_store_post {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact stableLengthPost_copy_store s mem' hp.1
     ⟨worldOK_of_parts ⟨hg, hp.1.1.1.1.2⟩ hW', hE'⟩ hl' ⟨S, Nd, hW', ho'⟩
     hs0 hs8 hd0 hd8 hd16
+
+/-- Multiplication in the copy offset evaluates to the corresponding word. -/
+theorem stable_copy_mul_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w))) :
+    evalAt s (.panop .mul [.var .local (ofString "i"), .const 8]) =
+      some (.val (.word (w * 8))) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord, panOpHOL]
+
+/-- The copy offset has no modular wrap under the source length bound. -/
+theorem stable_copy_mul_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : locN s "i" < locN s "nl") :
+    (w * 8).toNat = 8 * locN s "i" := by
+  have hwi : locN s "i" = w.toNat := by simp [locN, hw]
+  have hn := (stableLengthPost_length_bound s hp.1 hp.2.1).1
+  rw [BitVec.toNat_mul]
+  change (w.toNat * 8) % 2 ^ 64 = 8 * locN s "i"
+  rw [Nat.mod_eq_of_lt (by omega), ← hwi, Nat.mul_comm]
 
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
