@@ -8445,6 +8445,158 @@ chain invariant explicitly, so callers can use `CreateFinishSpecs` without
 identifying two separately recursive definitions by reduction.
 -/
 
+/-- Before releasing the frame-memory mark, the surviving parent already has
+the original chain's alignment and links, and its end equals the saved mark.
+No relation to the current `frame_mem_ptr` is needed at this intermediate point. -/
+theorem finish_child_parent_alignment {F : Type}
+    {s st : PanSemStateFiniteExact 64 F} (hs : HeadMemChainWF s)
+    (hk : memW s (globN s "cur_cont" + 16) ≠ 0)
+    (hchain : evmChain st = (evmChain s).tail)
+    (hmem : ∀ ec ∈ evmChain st, memW st (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW st (ec.1 + 32) = memW s (ec.1 + 32) ∧
+      memW st (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW st (ec.2 + 56) = memW s (ec.2 + 56))
+    (hev : globN st "ev" = memW s (globN s "cur_cont")) :
+    (∀ ec ∈ evmChain st,
+      memW st (ec.1 + 32) % 32 = 0 ∧ memW st (ec.1 + 40) % 8 = 0) ∧
+    ChainLinks (memW st) (evmChain st) ∧
+    memW st (globN st "ev" + 24) + memW st (globN st "ev" + 40) =
+      memW s (globN s "cur_cont" + 56) := by
+  have hcs := evmChain_cons s
+  rw [if_neg hk] at hcs
+  refine ⟨?_, ?_, ?_⟩
+  · intro ec hec
+    have hm := hmem ec hec
+    rw [hm.2.1, hm.2.2.1]
+    exact hs.1 ec (List.mem_of_mem_tail (hchain ▸ hec))
+  · have hfull : evmChain s =
+        (globN s "ev", globN s "cur_cont") :: (evmChain s).tail := evmChain_cons s
+    have hl := hs.2.2
+    rw [hfull] at hl
+    have ht := chainLinks_tail _ _ _ hl
+    rw [← hchain] at ht
+    exact chainLinks_transport _ _ _ (fun ec hec =>
+      ⟨(hmem ec hec).1, (hmem ec hec).2.2.1, (hmem ec hec).2.2.2⟩) ht
+  · have hm := hmem _ (head_mem_evmChain st)
+    rw [hm.1, hm.2.2.1, hev]
+    have hl := hs.2.2
+    rw [hcs, maxChain_succ, evmChainFrom_succ] at hl
+    exact hl.1
+
+/-- Releasing the child's two arena marks establishes the aligned parent
+invariant before the final pc increment.  The memory/chain facts are those
+obtained after the finish-child branches; the restored head end is the saved
+child frame-memory mark. -/
+theorem finish_child_release_aligned {F : Type}
+    (st : PanSemStateFiniteExact 64 F) (cmw cmmw : BitVec 64) {S : List Nat}
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (halign : ∀ ec ∈ evmChain st,
+      memW st (ec.1 + 32) % 32 = 0 ∧ memW st (ec.1 + 40) % 8 = 0)
+    (hlinks : ChainLinks (memW st) (evmChain st))
+    (hend : memW st (globN st "ev" + 24) + memW st (globN st "ev" + 40) = cmmw.toNat)
+    (hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState st EvmEkFk.fcCleanup =
+        evaluateHOLFiniteState mid
+          (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+            (.return (.const 0#64))) ∧
+      EvmInvA mid ∧ mid.memory = st.memory ∧
+      evmChain mid = evmChain st ∧
+      globN mid "frame_mem_ptr" = cmmw.toNat ∧
+      R11Shards.OpDispatchSpec.evmR mid = R11Shards.OpDispatchSpec.evmR st := by
+  obtain ⟨mid, heval, _, hm, _, _, _, hfmp, hg, hAmid, hImid, hch, hR, _⟩ :=
+    EvmEkFk.release_pair_step st (.var .local (ofString "child_mark"))
+      (.var .local (ofString "child_mem_mark")) cmw cmmw hAs hInv hRel
+      (by simp [evalHOLExact, hcm]) (by intro g ck; simp [evalHOLExact, hcmm]) hnt
+  have hmw : memW mid = memW st := by
+    funext a; unfold memW; rw [hm]
+  have hev : globN mid "ev" = globN st "ev" := by
+    unfold globN
+    rw [hg _ (by decide) (by decide)]
+  have hAligned : HeadMemChainWF mid := by
+    unfold HeadMemChainWF
+    rw [hch, hmw, hev, hfmp]
+    exact ⟨halign, hend, hlinks⟩
+  exact ⟨mid, heval, ⟨⟨hAmid, S, hImid⟩, hAligned⟩, hm, hch, hfmp, hR⟩
+
+/-- Compose parent-cell transport with the concrete release pair. -/
+theorem finish_child_release_from_parent {F : Type}
+    {s st : PanSemStateFiniteExact 64 F} (cmw cmmw : BitVec 64) {S : List Nat}
+    (hs : HeadMemChainWF s) (hk : memW s (globN s "cur_cont" + 16) ≠ 0)
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (hchain : evmChain st = (evmChain s).tail)
+    (hmem : ∀ ec ∈ evmChain st, memW st (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW st (ec.1 + 32) = memW s (ec.1 + 32) ∧
+      memW st (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW st (ec.2 + 56) = memW s (ec.2 + 56))
+    (hev : globN st "ev" = memW s (globN s "cur_cont"))
+    (hmark : cmmw.toNat = memW s (globN s "cur_cont" + 56))
+    (hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState st EvmEkFk.fcCleanup =
+        evaluateHOLFiniteState mid
+          (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+            (.return (.const 0#64))) ∧
+      EvmInvA mid ∧
+      evmChain mid = (evmChain s).tail ∧
+      EvmEkFk.ChainCellsAgree st mid ∧
+      globN mid "ev" = memW s (globN s "cur_cont") ∧
+      globN mid "frame_mem_ptr" = memW s (globN s "cur_cont" + 56) ∧
+      R11Shards.OpDispatchSpec.evmR mid = R11Shards.OpDispatchSpec.evmR st := by
+  obtain ⟨halign, hlinks, hend⟩ := finish_child_parent_alignment hs hk hchain hmem hev
+  obtain ⟨mid, heval, hi, hm, hch, hfmp, hR⟩ :=
+    finish_child_release_aligned st cmw cmmw hAs hInv hRel hcm hcmm halign hlinks
+      (hend.trans hmark.symm) hnt
+  have hevMid : globN mid "ev" = globN st "ev" := by
+    have hh := congrArg List.head? hch
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).1
+  exact ⟨mid, heval, hi, hch.trans hchain,
+    EvmEkFk.chainCellsAgree_of_memory_eq hm, hevMid.trans hev, hfmp.trans hmark, hR⟩
+
+/-- The final pc increment preserves the aligned invariant and all chain cells. -/
+theorem pc_add_body_aligned {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hi : EvmInvA s) (hc : s.code = originalRuntimeCode)
+    (e pc n : BitVec 64) (v : ValueHOL 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : s.memory e = .word pc) (hd : s.memaddrs e)
+    (hex : ∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "pc_add") values =
+      some (sourceFnBody Guest.Software.guestFn_pc_add, s.locals, .one))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pc_add) =
+      (some (.returned v), post)) :
+    EvmInvA post ∧ evmChain post = evmChain s ∧
+    R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
+    EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals := by
+  obtain ⟨ps, body, rt, hl, hs⟩ := R14Shards.OpHandlersA.eps_pc_add
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body lookup_pc_add hl
+  have hspec := (hs s hc hi.1 trivial hex (by rw [hr]; simp)).1 v (by rw [hr])
+  rw [hr] at hspec
+  dsimp only at hspec
+  obtain ⟨hI, hch, hR, hg⟩ := hspec
+  obtain ⟨_, hm, _, _⟩ := Ret.apply (pc_add_run s e pc n hn he hp hd) hr
+  have heAddr : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have hsafe := chain_cells_ne_head_pc s hi.1
+  rw [heAddr] at hsafe
+  have hcells : EvmEkFk.ChainCellsAgree s post := by
+    intro ec hec
+    obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
+    have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e) : memW post a = memW s a := by
+      unfold memW; rw [hm, updW_ne _ _ _ _ ha]
+    exact ⟨hkeep _ h24, hkeep _ h32, hkeep _ h40, hkeep _ h56⟩
+  have hA := headMemChainWF_of_agree hi.2 hch hcells
+    (show globN post "ev" = globN s "ev" by simp [globN, hg])
+    (show globN post "frame_mem_ptr" = globN s "frame_mem_ptr" by simp [globN, hg])
+  exact ⟨⟨hI, hA⟩, hch, hR, hcells, hg⟩
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
