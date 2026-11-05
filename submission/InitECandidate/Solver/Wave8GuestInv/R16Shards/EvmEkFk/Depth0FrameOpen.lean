@@ -1719,6 +1719,151 @@ theorem hoare_depth0_auth_tail_step (gw : List String) (hp : Nat)
     (fun s h => ⟨h.1.1, h.2, h.1.2⟩)
   exact Hoare.decCall_fall_word (names := []) (by simp) hQ (fun {F} => @hres F) hcont
 
+/-! ## `Fall`: fall-through-or-resume postconditions, and `EvmKeeps` callee glue -/
+
+/-- Post shape for `EvmKeeps` bodies: on fall-through or any resuming result, `Q` holds. -/
+def Fall (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) :
+    ∀ {F : Type}, Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
+  fun r t => (r = none ∨ Resumes r) → Q t
+
+theorem Hoare.weaken {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Q Q' : ∀ {F : Type}, Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64} (h : Hoare P prog Q)
+    (hQQ : ∀ {F : Type} (r : Option (PanSemResultExact 64)) (t : PanSemStateFiniteExact 64 F),
+      Q r t → Q' r t) : Hoare P prog Q' :=
+  ⟨fun s hcode hP hnt => hQQ _ _ (h.run s hcode hP hnt)⟩
+
+theorem Hoare.fall_of_none {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64} (h : Hoare P prog (fun r t => r = none → Q t))
+    (hnr : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s →
+      ∀ r, Resumes r → (evaluateHOLFiniteState s prog).1 ≠ r) :
+    Hoare P prog (Fall Q) := by
+  refine ⟨fun {F} s hcode hP hnt hr => ?_⟩
+  rcases hr with hr | hr
+  · exact h.run s hcode hP hnt hr
+  · exact absurd rfl (hnr s hP _ hr)
+
+theorem Hoare.seq_fall' {P R Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {first second : ProgHOL 64}
+    (h1 : Hoare P first (Fall R)) (h2 : Hoare R second (Fall Q))
+    (hRQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), R s → Q s) :
+    Hoare P (.seq first second) (Fall Q) := by
+  refine Hoare.seq (R := R) (Hoare.weaken h1 ?_) h2
+  intro F r t h
+  refine ⟨fun hr => h (Or.inl hr), fun _ hr => hRQ t (h hr)⟩
+
+theorem Hoare.skip_fall {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} :
+    Hoare P .skip (Fall P) :=
+  Hoare.skip fun _ h _ => h
+
+theorem Hoare.ite_fall {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {yes no : ProgHOL 64}
+    (hyes : Hoare (fun s => P s ∧ CondTrue cond s) yes (Fall Q))
+    (hno : Hoare (fun s => P s ∧ CondFalse cond s) no (Fall Q)) :
+    Hoare P (.ite cond yes no) (Fall Q) :=
+  Hoare.ite hyes hno (fun _ _ h => by
+    rcases h with h | h
+    · cases h
+    · exact absurd h not_resumes_error)
+
+/-- `return (const c)` from a locals-free `P`. -/
+theorem Hoare.return_const_fall {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : LocalsFree P) (c : BitVec 64) :
+    Hoare P (.return (.const c)) (Fall P) := by
+  refine ⟨fun {F} s _ hs _ hr => ?_⟩
+  rw [evaluateHOLFiniteState_return] at hr ⊢
+  have hc : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.const c) = some (.val (.word c)) := by simp [evalHOLExact]
+  rw [hc] at hr ⊢
+  dsimp only at hr ⊢
+  split at hr
+  · rename_i hsz
+    rw [if_pos hsz]
+    exact hP s _ s.clock hs
+  · rename_i hsz
+    rw [if_neg hsz]
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+
+/-- A handler-free, destination-free call to an `EvmKeeps P' gw'` callee, between `StepFrom gw`
+states (`gw' ⊆ gw`): fall-through and every resuming exception land in a `StepFrom gw` state. -/
+theorem Hoare.call_evmKeeps_fall {P' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {gw gw' : List String} {hp : Nat} {G : MlS → Option (ValueHOL 64)} {ch : List Ivl}
+    {fname : MlS} (hk : EvmKeeps P' gw' fname) (hsub : ∀ g ∈ gw', g ∈ gw)
+    (hP' : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), StepFrom gw hp G ch s → P' s)
+    (hLF : LocalsFree P') (arguments : List (ExpHOL 64)) :
+    Hoare (StepFrom gw hp G ch) (.call (some (none, none)) fname arguments)
+      (Fall (StepFrom gw hp G ch)) := by
+  refine ⟨fun {F} s hcode hS hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hnt hr ⊢
+  rcases hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) arguments with
+    _ | values
+  · rw [hargs] at hr
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+  · simp only [hargs] at hnt hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hr
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+    · simp only [hl] at hnt hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        have hSe : StepFrom gw hp G ch (callEntryStateHOLFinite s callee) :=
+          localsFree_stepFrom gw hp G ch s callee (s.clock - 1) hS
+        have hPe : P' (callEntryStateHOLFinite s callee) := hP' _ hSe
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with
+          ⟨res, post⟩
+        simp only [hrun] at hnt hr ⊢
+        have hQc (hsafe : res ≠ some .timeOut) :
+            Resumes res → EvmStep gw' (callEntryStateHOLFinite s callee) post := by
+          have := FunSpec.at_lookup hk s hcode values body' callee ret' hl hPe (by rw [hrun]; exact hsafe)
+          rw [hrun] at this
+          exact this
+        cases res with
+        | none =>
+          rcases hr with hr | hr
+          · cases hr
+          · exact absurd hr not_resumes_error
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh]
+              have hSp : StepFrom gw hp G ch post :=
+                stepFrom_of_evmStep hsub hSe (hQc (by simp) (Or.inl ⟨v, rfl⟩))
+              exact localsFree_stepFrom gw hp G ch post s.locals post.clock hSp
+            · rename_i hsh
+              rw [if_neg hsh]
+              rcases hr with hr | hr
+              · cases hr
+              · exact absurd hr not_resumes_error
+          | timeOut => simp at hnt
+          | exception e v =>
+            dsimp only at hr ⊢
+            have hres : Resumes (some (.exception e v)) := by
+              rcases hr with hr | hr
+              · cases hr
+              · exact hr
+            have hSp : StepFrom gw hp G ch post :=
+              stepFrom_of_evmStep hsub hSe (hQc (by simp) hres)
+            exact localsFree_stepFrom gw hp G ch post _ post.clock hSp
+          | error =>
+            rcases hr with hr | hr
+            · cases hr
+            · exact absurd hr not_resumes_error
+          | _ =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
