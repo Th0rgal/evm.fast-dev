@@ -6345,4 +6345,21 @@ theorem phase2_packed_guarded_record_separation {F : Type}
   have hi := hp.2.2.1
   omega
 
+/-- Buffer/input separation persists when the copy preserves its scalar metadata. -/
+theorem phase2_packed_input_separation_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String), locN post n = locN s n)
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (ht : Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hr : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) :
+    Disj (locN post "tx", 384)
+      (locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+    Disj (memW post (locN post "tx" + 208), 24 * memW post (locN post "tx" + 216))
+      (locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  rw [hl "tx" (by simp), hl "al_keys" (by simp), hl "nkeys" (by simp), hh.1, hh.2]
+  exact ⟨ht, hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
