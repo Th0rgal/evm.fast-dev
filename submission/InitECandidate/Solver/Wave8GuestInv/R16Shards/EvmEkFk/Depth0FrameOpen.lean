@@ -4815,4 +4815,129 @@ theorem prepare_dispatch_common_ret {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro s4 hc4 h4
   exact prepare_dispatch_jumpdest_ret s4 gw hp G ch hc4 code code_n h4 hnb hsub
 
+/-- Compose a returning call with a continuation, excluding catchable
+exceptions from the callee and restoring the caller's local scope. -/
+theorem Hoare.decCall_returning_fall
+    {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {shape : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hQ : LocalsFree Q) (hres : DecCallResumeOn P R name fname args)
+    (hnox : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → P s →
+      PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      ∀ e v, e ≠ ofString "TrapErr" →
+        (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠ some (.exception e v))
+    (hcont : Hoare R cont (Fall Q)) :
+    Hoare P (.decCall name shape fname args cont) (Fall Q) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | values
+  · rw [ha] at hr
+    rcases hr with hr | hr
+    · cases hr
+    · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  · simp only [ha] at hnt hr ⊢
+    rcases hl : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body, callee, ret⟩
+    · rw [hl] at hr
+      rcases hr with hr | hr
+      · cases hr
+      · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+    · simp only [hl] at hnt hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body).1
+        have hnox' := hnox s values body callee ret hc hP hl
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hb] at hm hnox'
+        simp only [hb] at hnt hr ⊢
+        cases r with
+        | none =>
+          rcases hr with hr | hr
+          · cases hr
+          · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hnt hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh] at hnt ⊢
+              have hR := hres s values body callee ret v post hc hP ha hl hb
+              have hc' : (setVarHOLFinite name v {post with locals := s.locals}).code = originalRuntimeCode := hm.trans hc
+              have h := hcont.run _ hc' hR hnt hr
+              exact hQ _ _ _ h
+            · rw [if_neg ‹_›] at hnt ⊢
+              rcases hr with hr | hr
+              · cases hr
+              · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | timeOut => simp at hnt
+          | exception e v =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨e', v', he, hne⟩
+              · cases h
+              cases he
+              exact (hnox' e v hne rfl).elim
+          | error =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | _ =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- The jumpdest tail preserves readiness on every resuming outcome. -/
+theorem hoare_prepare_dispatch_jumpdest (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+        [.var .local (ofString "code"), .var .local (ofString "code_n")]
+        (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+          (.var .local (ofString "jd"))) (.return (.const 0#64))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  apply Hoare.decCall_returning_fall
+    (R := fun s => D0Pre gw hp G ch s ∧ ∃ jd : BitVec 64,
+      s.locals.lookup (ofString "jd") = some (.val (.word jd)))
+    (fun s locals k h => ⟨localsFree_evmMsgReady s locals k h.1,
+      localsFree_stepFrom gw hp G ch s locals k h.2⟩)
+    (fun {_} => compute_jumpdests_resume gw hp G ch code code_n hnb hsub)
+  · intro F s values body callee ret hc _ hl e v hne
+    rw [hc] at hl
+    exact StateRestoreEpilogue.evaluate_noCatchableRaise
+      frameOpenCallees frameOpenCallees_good body
+      (frameOpenCallees_good _ (by decide) values body callee ret hl)
+      (callEntryStateHOLFinite s callee) hc e v hne
+  · refine ⟨fun {F} s hc hR hnt hr => ?_⟩
+    obtain ⟨hD, jd, hjd⟩ := hR
+    exact (hoare_prepare_dispatch_jumpdest_finish gw hp G ch jd).run s hc ⟨hD, hjd⟩ hnt hr
+
+/-- All four common dispatch stores and the jumpdest call preserve the
+original step frame on every resuming outcome. -/
+theorem hoare_prepare_dispatch_common (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112#64])
+          (.var .local (ofString "code")))
+        (.seq (.store (.op .add [.var .local (ofString "msg"), .const 120#64])
+            (.var .local (ofString "code_n")))
+          (.seq (.store (.op .add [.var .global (ofString "ev"), .const 48#64])
+              (.var .local (ofString "code")))
+            (.seq (.store (.op .add [.var .global (ofString "ev"), .const 56#64])
+                (.var .local (ofString "code_n")))
+              (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+                [.var .local (ofString "code"), .var .local (ofString "code_n")]
+                (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+                  (.var .local (ofString "jd"))) (.return (.const 0#64))))))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  exact hoare_prepare_dispatch_common_stores gw hp G ch code code_n _ _
+    (fun _ h => h.1.1) (hoare_prepare_dispatch_jumpdest gw hp G ch code code_n hnb hsub)
+
 end HeadStore
