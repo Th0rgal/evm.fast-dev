@@ -10662,8 +10662,10 @@ theorem icsTail_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (harrE : ¬ CellHits (e + 96).toNat (memW s L.toNat, 8 * memW s (L.toNat + 16)))
     (harrT : ∀ j ∈ htabFootprint s T,
       Disj (memW s L.toNat, 8 * memW s (L.toNat + 16)) j)
-    (hlogE : ∀ log, LogEntryOK s log → ¬ CellHits (e + 96).toNat (log, 40))
-    (hlogT : ∀ log, LogEntryOK s log → ∀ j ∈ htabFootprint s T, Disj (log, 40) j) :
+    (hlogE : ∀ i, i < memW s (L.toNat + 8) →
+      ¬ CellHits (e + 96).toNat (memW s (memW s L.toNat + 8 * i), 40))
+    (hlogT : ∀ i, i < memW s (L.toNat + 8) → ∀ j ∈ htabFootprint s T,
+      Disj (memW s (memW s L.toNat + 8 * i), 40) j) :
     LogsListOK post L.toNat := by
   rcases hlogs with hz | ⟨hwords, _, hcount, hcap, hentries⟩
   · exact Or.inl hz
@@ -10690,7 +10692,7 @@ theorem icsTail_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
       memW s L.toNat + 8 * i + 8 ≤ memW s L.toNat + 8 * memW s (L.toNat + 16) by omega)
     (by omega) harrE harrT hwf
   rw [h0, hs]
-  refine ⟨?_, icsTail_logEntryOK h hA hlog (hlogE _ hlog) (hlogT _ hlog) hwf⟩
+  refine ⟨?_, icsTail_logEntryOK h hA hlog (hlogE i hi) (hlogT i hi) hwf⟩
   obtain ⟨_, _, hw⟩ := harrWp
   exact hw i (by dsimp only; omega)
 
