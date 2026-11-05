@@ -3931,6 +3931,25 @@ theorem stable_backing_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [evalAt, evalHOLExact, hw, valueIsWord, valueWord, memLoadHOLExact,
     hd, hm, hn, BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
+/-- The concrete backing load initializes its local with the header's word. -/
+theorem stable_backing_load_local {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+    (hp : WordAt s (locN s "stable_logs"))
+    (he : evalAt s (.load .one (.var .local (ofString "stable_logs"))) = some v) :
+    ∃ q : BitVec 64,
+      (setVarHOLFinite (ofString "stable_lp") v s).locals.lookup
+        (ofString "stable_lp") = some (.val (.word q)) ∧
+      q.toNat = memW s (locN s "stable_logs") := by
+  have hv := stable_backing_load_eval s w hw hp
+  rw [he] at hv
+  have hv' := Option.some.inj hv
+  subst v
+  obtain ⟨q, hd, hm⟩ := hp
+  have hn : memW s (locN s "stable_logs") = q.toNat := by simp [memW, hm]
+  refine ⟨q, ?_, hn.symm⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn]
+
 /-- A successful semantic copy store writes the indexed source value. -/
 theorem stable_copy_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
@@ -5459,6 +5478,32 @@ theorem lst_new_stable_resumed_record_separation (h : PtxCallees) {F : Type}
     lst_new_stable_post_record_separation h s vs body callee ret v post hc hp ha hl hr
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "stable_logs" ≠ ofString "logs" by decide] using he
+
+/-- Source ownership and fresh-header separation share allocator witnesses. -/
+theorem lst_new_stable_joint_owned (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ ∃ S Nd,
+      WorldTypedWith post S Nd ∧ LogsLiveOwned post S Nd (locN s "logs") ∧
+      ∀ o ∈ worldOwned post S Nd, Disj (w.toNat, 24) o := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  obtain ⟨a, b, _, _, _, _, ho⟩ := hp.1.1.1.2.2.2
+  have hLc := (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.1.1.1.2.1
+  have hOc := logsWorldOwned_with_locals callee (s.clock - 1) ho
+  obtain ⟨S, Nd, hW, hO, hQ⟩ := logsWorldOwned_heapStep_joint
+    (hw (Or.inl ⟨v, rfl⟩)) (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 hLc hOc
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  obtain ⟨w, hv, hd⟩ := hQ hargs.2.2.2 v rfl
+  exact ⟨w, hv, S, Nd, hW, hO, fun o ho => hd _ (by simp) o ho⟩
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
