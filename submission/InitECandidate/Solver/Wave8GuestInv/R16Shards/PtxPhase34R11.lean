@@ -2819,6 +2819,18 @@ theorem stable_length_address_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
     Nat.mod_eq_of_lt hl, show (8 : BitVec 64).toNat = 8 from rfl,
     Nat.mod_eq_of_lt hlt]
 
+theorem stable_length_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s)
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) =
+      .word (BitVec.ofNat 64 (locN s "nl"))) :
+    memW {s with memory := mem'} (locN s "stable_logs" + 8) = locN s "nl" := by
+  have hb := (stable_storage_length_fits s hp).2.1
+  have hn : locN s "nl" < 2 ^ 64 := by omega
+  change (valueWord (.val (mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8))))).toNat = _
+  rw [hm]
+  exact Nat.mod_eq_of_lt hn
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
