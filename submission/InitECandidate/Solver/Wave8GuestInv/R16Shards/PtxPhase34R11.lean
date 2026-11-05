@@ -4088,6 +4088,28 @@ theorem hoare_stableCopy_store_pre :
     apply harr j
     rwa [hinv.1.2.2.2.1]
 
+/-- The copy store retains the typed length operand for the increment rule. -/
+theorem hoare_stableCopy_store_length_shape :
+    Hoare (fun s => StableCopyStorePre s ∧
+      ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → ∃ n : BitVec 64,
+        t.locals.lookup (ofString "nl") = some (.val (.word n))) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  exact hp.2
+
+/-- The concrete store retains the typed length operand required by the
+full-invariant increment rule. -/
+theorem hoare_stableCopy_store_length_word :
+    Hoare (fun s => ∃ n : BitVec 64,
+      s.locals.lookup (ofString "nl") = some (.val (.word n)))
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → ∃ n : BitVec 64,
+        t.locals.lookup (ofString "nl") = some (.val (.word n))) := by
+  exact R13Shards.Hoare.store_fall (fun _ _ _ _ hp _ _ _ => hp)
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
