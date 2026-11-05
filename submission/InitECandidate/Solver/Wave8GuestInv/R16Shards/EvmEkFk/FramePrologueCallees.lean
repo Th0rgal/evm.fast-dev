@@ -7296,6 +7296,45 @@ theorem transfer_memW_of_accumulated_frame {F : Type}
       rcases hsep with hl | hh <;> omega)]
   · rw [hout _ (by rwa [hInv.1.1.memaddrs])]
 
+theorem transfer_sameTypedCells_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    SameTypedCells s post S Nd := by
+  have sep : ∀ i ∈ worldTypedIvls s S Nd,
+      i.2 = 0 ∨ globN post "heap_ptr" ≤ i.1 ∨ i.1 + i.2 ≤ globN s "heap_ptr" := by
+    intro i hi
+    rcases worldTypedIvls_allocated hWT hi with hz | hal
+    · exact Or.inl hz
+    · rcases hal with hh | hs
+      · exact Or.inr (Or.inr hh.2)
+      · have hp := hstep.1.1.1.2.2.1
+        have hlow := hs.1
+        have hf := hInv.1.2.2.2.1
+        have hg := hInv.1.2.2.2.2.1
+        rw [R11Shards.heapLimit_val] at hp
+        rw [R11Shards.scratchStart_val] at hf
+        exact Or.inr (Or.inl (by omega))
+  refine ⟨hbe, hstep.1.1.1.1.memaddrs.trans hInv.1.1.memaddrs.symm,
+    hInv.1.1.memaddrs, ?_, ?_, ?_⟩
+  · intro a ha
+    exact hout a (by rwa [hInv.1.1.memaddrs])
+  · intro a ha ha8 ⟨i, hi, hlo, hhi⟩
+    have hn : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt ha
+    by_cases hd : ordinaryDomain (BitVec.ofNat 64 a)
+    · apply R13Shards.mem_eq_of_bytes_eq_ord hbe _ hd
+      intro k hk
+      rw [hn]
+      apply hbyte _ (by omega)
+      rcases sep i hi with hz | hh | hh <;> omega
+    · exact hout _ (by rwa [hInv.1.1.memaddrs])
+  · intro b hb ⟨i, hi, hlo, hhi⟩
+    apply hbyte b hb
+    rcases sep i hi with hz | hh | hh <;> omega
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
