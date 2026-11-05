@@ -6435,4 +6435,34 @@ theorem ws_get_code_compare_return_of_tail {F : Type} (s : PanSemStateFiniteExac
     cases hw
     exact ⟨0, 0, rfl, by decide⟩
 
+/-- Full concrete `ws_get_code` return composition. Only calls reached after
+a zero hash comparison need the present-entry bound from `nodedb_lookup`. -/
+theorem ws_get_code_return_of_nodedb {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hlookup : ∀ values body callee ret post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word 0))), post) →
+      let st := setVarHOLFinite (ofString "eq") (.val (.word 0)) {post with locals := s.locals}
+      st.eshapes.lookup (ofString "StateErr") = some .one ∧
+      ∀ values' body' callee' ret' v' post',
+        evalListHOLFinite st (h := fun a => Classical.propDecidable (st.memaddrs a))
+          [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+            .var .local (ofString "code_hash")] = some values' →
+        lookupCodeHOLFinite st.code.lookup (ofString "nodedb_lookup") values' = some (body', callee', ret') →
+        evaluateHOLFiniteState (callEntryStateHOLFinite st callee') body' = (some (.returned v'), post') →
+        post'.eshapes = st.eshapes ∧ ∃ found code code_n : BitVec 64,
+          v' = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+          (found ≠ 0 → code_n.toNat < 2 ^ 40)) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [ws_get_code_body_eq]
+  apply ws_get_code_compare_return_of_tail
+  intro values body callee ret eqw post ha hl hb hz
+  subst eqw
+  obtain ⟨hs, hn⟩ := hlookup values body callee ret post ha hl hb
+  exact ws_get_code_nodedb_return _ _ hs hn
+
 end HeadStore
