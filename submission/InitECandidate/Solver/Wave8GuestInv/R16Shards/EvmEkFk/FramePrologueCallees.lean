@@ -2168,6 +2168,36 @@ theorem frameStartSysReady_of_preserved_log_count {F : Type}
   exact ⟨⟨⟨hAp, S, hinv⟩, hhp, hg, hchain⟩,
     chainCellsAgree_of_heap_step hAs hInv hAp hbe hout hbyte⟩
 
+theorem evmStepCC_of_allocated_heap_effect {F : Type}
+    {s allocated post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s allocated)
+    (hmem : allocated.memory = s.memory) (hbe : allocated.be = s.be)
+    (heff : InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect allocated post Rl)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    EvmStepCC ["heap_ptr"] s post := by
+  obtain ⟨hA, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+  have hAA : ArenaReady allocated := hstep.1.1.1
+  have hAP : ArenaReady post := ⟨guestInv_congr heff.code heff.memaddrs
+    heff.shMemaddrs heff.baseAddr hAA.1, arenaOK_congr heff.globals hAA.2⟩
+  have hhp : globN post "heap_ptr" = globN allocated "heap_ptr" := by
+    simp [globN, heff.globals]
+  apply evmStepCC_of_fresh_heap_step hA hAt hAP (heff.be.trans hbe)
+  · rw [hhp]; exact hstep.1.2.1
+  · intro k hk
+    rw [heff.globals]
+    exact hstep.1.2.2.1 k hk
+  · intro a ha
+    rw [heff.out_dom a (by simpa [hAA.1.memaddrs, hA.1.memaddrs] using ha), hmem]
+  · intro b hb hnot
+    rw [heff.byte_frame b hb (by
+      intro i hi hbi
+      have hi' := hin i hi
+      unfold Inside at hi'
+      unfold InIvl at hbi
+      exact hnot ⟨by omega, by rw [hhp]; omega⟩)]
+    unfold memB
+    rw [hmem, hbe]
+
 section HeadLogAppendInv
 
 open InitECandidate.Solver.Wave8GuestInv.R11Shards
