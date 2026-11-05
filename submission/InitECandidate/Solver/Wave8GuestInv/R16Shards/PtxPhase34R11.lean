@@ -12562,4 +12562,36 @@ theorem heapByteEff_encode_logs_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+theorem heapByteEff_rlp_finish_list_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw)
+    (lname : String) (dstExp endExp : ExpHOL 64) (dst pend : BitVec 64)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (he : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) endExp = some (.val (.word pend)))
+    (hle : dst.toNat + 9 ≤ pend.toNat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ pend.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "rlp_finish_list")
+        [dstExp, endExp]) = (none, post)) : HeapByteEff s post R gw := by
+  have ht := eval_call_local_rlp_finish_list mid lname dstExp endExp dst pend
+    (R ++ [(dst.toNat, pend.toNat - dst.toNat)]) gw hpre.arena.1.code hpre.arena hold hd he
+    hle (le_trans hfresh.2 (by decide))
+    ⟨(dst.toNat, pend.toNat - dst.toNat), List.mem_append_right _ (by simp), le_rfl, by omega⟩
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hw, hb, hg, hl, heff⟩ := ht.1 rfl
+  apply heapByteEff_trans_fresh hpre heff
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact ⟨hfresh.1, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
