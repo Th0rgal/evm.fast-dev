@@ -3027,8 +3027,8 @@ theorem stable_positive_local_word {F : Type} (s : PanSemStateFiniteExact 64 F)
     | val value =>
       cases value with
       | word w => simp
-      | _ => simp [hlookup] at hp
-    | _ => simp [hlookup] at hp
+    | rStruct _ => simp [hlookup] at hp
+    | nStruct _ _ => simp [hlookup] at hp
 
 /-- The allocation return supplies the canonical word representation of the
 stable header pointer required by the length store. -/
@@ -3969,6 +3969,24 @@ theorem stableCopyLoopInv_init_empty {F : Type} (s : PanSemStateFiniteExact 64 F
   · refine ⟨0, 0, ?_, ?_⟩ <;>
       simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hz]
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hz]
+
+/-- The concrete zero assignment establishes the empty-source loop invariant. -/
+theorem hoare_stableCopy_init_empty :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧
+      Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧
+      s.locals.lookup (ofString "nl") = some (.val (.word 0)))
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+    subst v
+    exact stableCopyLoopInv_init_empty s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2.1
+      hp.2.2.2.2.1 hp.2.2.2.2.2
+  · intro F s hp hr
+    cases hr
 
 /-- Clock decrement preserves the separated store contract. -/
 theorem stableCopyStorePre_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
