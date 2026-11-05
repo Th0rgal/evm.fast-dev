@@ -4767,6 +4767,22 @@ def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
     ∀ o ∈ worldOwned s S Nd,
       Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
 
+/-- Local initialization and clock changes preserve the coherent ownership frame. -/
+theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : locals.lookup (ofString "logs") = s.locals.lookup (ofString "logs"))
+    (hs : locals.lookup (ofString "stable_logs") = s.locals.lookup (ofString "stable_logs"))
+    (hc : locals.lookup (ofString "stable_log_cap") = s.locals.lookup (ofString "stable_log_cap"))
+    (hp : StableCopyOwnedFrame s) :
+    StableCopyOwnedFrame {s with locals := locals, clock := k} := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hp
+  have el := locN_congr s locals k "logs" hl
+  have es := locN_congr s locals k "stable_logs" hs
+  have ec := locN_congr s locals k "stable_log_cap" hc
+  refine ⟨S, Nd, (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hW, ?_⟩
+  simp only [el, es, ec]
+  exact ⟨ho, hh, hb⟩
+
 /-- The coherent ownership frame strengthens the copy exit postcondition. -/
 theorem stableCopyOwnedFrame_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hf : StableCopyOwnedFrame s)
