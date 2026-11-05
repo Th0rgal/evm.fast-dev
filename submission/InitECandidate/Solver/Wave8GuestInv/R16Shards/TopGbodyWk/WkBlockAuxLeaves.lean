@@ -5938,4 +5938,54 @@ theorem wkSc_htab_union_into_bs :
   · exfalso
     exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
 
+/-- Lift a callee world frame whose extra precondition is established at call entry. -/
+theorem progWStep_call0_of_entry {B : BufList} {gw : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)}
+    (hf : WorldKeepsSc P (bufRegions B) gw stdKeep NoExtra fname)
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → WorldOK s → ∀ vs body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vs →
+      lookupCodeHOLFinite s.code.lookup fname vs = some (body, callee, ret) →
+      P (callEntryStateHOLFinite s callee)) :
+    ProgWStep B gw (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, ha] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        have hP := hentry s hc hW vs body callee ret
+          (by rwa [evalListHOLFinite_eq_toExact]) hl
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hr] at hnt hfr ⊢
+        have hnc : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠
+            some .timeOut := by rw [hr]; rintro rfl; simp at hnt
+        have hs := FunSpec.at_lookup hf s hc vs body callee ret hl hP hnc
+        rw [hr] at hs
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · exact (hs (Or.inl ⟨v, rfl⟩)).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | h <;> try simp at h
+              exact h
+            exact (hs hres).from_entry
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
