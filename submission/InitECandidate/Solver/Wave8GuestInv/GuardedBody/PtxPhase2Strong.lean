@@ -10045,4 +10045,43 @@ theorem phase2_count_cases_packed_ready (h : PtxCallees) :
     simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "al_keys" ≠ ofString "nkeys" by decide] using hav
 
+/-- Packing entry separates the enabled input-count invariant from a disabled
+loop whose freshly allocated buffer is already ready. -/
+def PtxPackedInitCases {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedInitReady s ∨ (PtxPackedKeysReady s ∧
+    s.locals.lookup (ofString "nal") = some (.val (.word 0)))
+
+theorem phase2_count_cases_alloc_init (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit PtxPackedInitCases
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  rcases hp with hp | hp
+  · exact Or.inl (phase2_count_exit_alloc_ready h s vs body callee ret v post hc hp ha hl hb)
+  · refine Or.inr ⟨phase2_count_cases_packed_ready h s vs body callee ret v post
+      hc (Or.inr hp) ha hl hb, ?_⟩
+    have hn := phase2_local_zero_word s "nal" hp.1.1.1.1.2.1 hp.2.1
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nal" by decide] using hn
+
+/-- Resetting counters in the disabled case preserves the packed allocation and
+provides literal zero words for the source loop test. -/
+theorem phase2_packed_zero_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s)
+    (hn : s.locals.lookup (ofString "nal") = some (.val (.word 0))) :
+    let t := setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "k") (.val (.word 0)) s)
+    PtxPackedKeysReady t ∧
+      t.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+      t.locals.lookup (ofString "nal") = some (.val (.word 0)) := by
+  dsimp only
+  refine ⟨?_, ?_, ?_⟩
+  · apply phase2_packed_keys_with_locals s _ s.clock hp
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl <;>
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
