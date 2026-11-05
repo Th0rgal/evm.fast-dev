@@ -13501,4 +13501,22 @@ theorem phase2_message_table_init_call_suffix_bound (h : PtxCallees)
   exact phase2_message_empty8_call_suffix_bound h buffers contents aa ak ht s hc
     (phase2_message_suffix_restrict_names hp (by simp))
 
+/-- A framed message interval retains every initialized field across a call. -/
+theorem phase2_message_unhit_fields {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hu : IvlUnhit s post (locN s "m", 176)) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  intro k hk
+  apply R16Shards.memW_eq_of_ivlUnhit hu
+  · have hm := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hm]
+  · have hi := hp.2.2.2.1.2
+    have hh := hp.1.1.2.2.1
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    dsimp at hi ⊢
+    omega
+  · constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
