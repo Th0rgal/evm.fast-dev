@@ -11263,14 +11263,15 @@ array through reallocations while indexing both segments in the entry state. -/
 def LAContents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (L arr0 n0 : BitVec 64) (child : Nat → Nat) (i : Nat)
     (u : PanSemStateFiniteExact 64 F) : Prop :=
-  ∃ arr : BitVec 64, u.memory L = .word arr ∧
+  ∃ arr : BitVec 64, u.memory L = .word arr ∧ arr.toNat % 8 = 0 ∧
     (∀ k, k < n0.toNat → memW u (arr.toNat + 8 * k) = memW s (arr0.toNat + 8 * k)) ∧
     ∀ k, k < i → memW u (arr.toNat + 8 * (n0.toNat + k)) = child k
 
 theorem laContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
     (L arr0 n0 : BitVec 64) (child : Nat → Nat)
-    (hm : s.memory L = .word arr0) : LAContents s L arr0 n0 child 0 s := by
-  exact ⟨arr0, hm, fun _ _ => rfl, fun _ h => by omega⟩
+    (hm : s.memory L = .word arr0) (ha8 : arr0.toNat % 8 = 0) :
+    LAContents s L arr0 n0 child 0 s := by
+  exact ⟨arr0, hm, ha8, fun _ _ => rfl, fun _ h => by omega⟩
 
 theorem laContents_locals {F : Type} {s u : PanSemStateFiniteExact 64 F}
     {L arr0 n0 : BitVec 64} {child : Nat → Nat} {i : Nat}
@@ -11288,11 +11289,11 @@ theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
         memW post (next.toNat + 8 * k) = memW u (arr.toNat + 8 * k)) ∧
       memW post (next.toNat + 8 * n.toNat) = lg.toNat) :
     LAContents s L arr0 n0 child (i + 1) post := by
-  obtain ⟨old, hold, hprefix, hsuffix⟩ := h
+  obtain ⟨old, hold, _, hprefix, hsuffix⟩ := h
   have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
   subst old
-  obtain ⟨next, hnext, _, hkeep, hnew⟩ := hp
-  refine ⟨next, hnext, ?_⟩
+  obtain ⟨next, hnext, halign, hkeep, hnew⟩ := hp
+  refine ⟨next, hnext, halign, ?_⟩
   apply append_contents_step
     (fun k => memW s (arr0.toNat + 8 * k)) child
     (fun k => memW u (arr.toNat + 8 * k))
@@ -11314,11 +11315,12 @@ theorem laInvContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
     (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat)
     (h : LAInv s L arr0 cap0 n0 nc s)
     (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
-    (hm : s.memory L = .word arr0) : LAInvContents s L arr0 cap0 n0 nc child s := by
+    (hm : s.memory L = .word arr0) (ha8 : arr0.toNat % 8 = 0) :
+    LAInvContents s L arr0 cap0 n0 nc child s := by
   refine ⟨h, fun i hli => ?_⟩
   have heq : i = 0 := by have he := hli.symm.trans hi; cases he; rfl
   subst i
-  exact laContents_init s L arr0 n0 child hm
+  exact laContents_init s L arr0 n0 child hm ha8
 
 attribute [local irreducible] Ret in
 /-- The contents and footprint results describe the same deterministic append
@@ -11397,7 +11399,7 @@ theorem laContents_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hkeepC : ∀ i, i < nc →
       LogEntryOK post (memW s (memW s child + 8 * i))) :
     LogsListOK post L.toNat := by
-  obtain ⟨next, hm, hprefix, hsuffix⟩ := h
+  obtain ⟨next, hm, _, hprefix, hsuffix⟩ := h
   have hnext : memW post L.toNat = next.toNat := by
     simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using
       congrArg (fun w => match w with | .word v => v.toNat) hm
@@ -11547,5 +11549,14 @@ theorem laInv_array_copy_region {F : Type} {s u : PanSemStateFiniteExact 64 F}
     · left; omega
     · right; exact ⟨hold, by omega⟩
   · left; omega
+
+/-- Recover alignment of the current backing array directly from contents. -/
+theorem laContents_array_aligned {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 arr : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u) (hm : u.memory L = .word arr) :
+    arr.toNat % 8 = 0 := by
+  obtain ⟨old, hold, ha8, _⟩ := h
+  have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
+  simpa only [heq] using ha8
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
