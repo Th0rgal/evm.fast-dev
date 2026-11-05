@@ -10589,4 +10589,55 @@ private theorem heap_buffer_disj_after_head_mem_extend_g09 {F : Type}
       have hlim : heapLimit ≤ scratchStart := by decide
       exact Or.inr (Or.inr (Or.inl (by dsimp only at hlo ⊢; omega)))
 
+theorem logEntryOK_of_allocated_fields_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log address topics data nt n : Nat}
+    (hheap : globN s "heap_ptr" ≤ heapLimit)
+    (hwords : WordsOK s (log, 40))
+    (hlog : Inside (log, 40) sourceBase (globN s "heap_ptr"))
+    (haddress : Inside (address, 24) sourceBase (globN s "heap_ptr"))
+    (htopics : Inside (topics, 32 * nt + 8) sourceBase (globN s "heap_ptr"))
+    (hdata : Inside (data, n + 8) sourceBase (globN s "heap_ptr"))
+    (hnt : nt ≤ 4)
+    (h0 : memW s log = address)
+    (h8 : memW s (log + 8) = topics)
+    (h16 : memW s (log + 16) = nt)
+    (h24 : memW s (log + 24) = data)
+    (h32 : memW s (log + 32) = n) :
+    LogEntryOK s log := by
+  have hn : n < 2 ^ 32 := by
+    exact heap_alloc_size_lt_twoPow32 hdata.1
+      (by have := hdata.2; dsimp only at this ⊢; omega) hheap
+  unfold LogEntryOK
+  rw [h0, h8, h16, h24, h32]
+  exact ⟨hwords, hlog, hnt, hn,
+    ⟨haddress.1, by have := haddress.2; dsimp only at this ⊢; omega⟩,
+    ⟨htopics.1, by have := htopics.2; dsimp only at this ⊢; omega⟩,
+    ⟨hdata.1, by have := hdata.2; dsimp only at this ⊢; omega⟩⟩
+
+theorem logsListOK_append_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs log : Nat}
+    (hwords : WordsOK post (logs, 24))
+    (hallocated : Allocated post (logs, 24))
+    (hlen : memW post (logs + 8) = memW s (logs + 8) + 1)
+    (hlen_bound : memW s (logs + 8) + 1 < 2 ^ 28)
+    (hcap : memW s (logs + 8) + 1 ≤ memW post (logs + 16))
+    (hold : ∀ i, i < memW s (logs + 8) →
+      WordAt post (memW post logs + 8 * i) ∧
+      memW post (memW post logs + 8 * i) = memW s (memW s logs + 8 * i) ∧
+      LogEntryOK post (memW s (memW s logs + 8 * i)))
+    (hslot : WordAt post (memW post logs + 8 * memW s (logs + 8)))
+    (hstore : memW post (memW post logs + 8 * memW s (logs + 8)) = log)
+    (hlog : LogEntryOK post log) :
+    LogsListOK post logs := by
+  right
+  refine ⟨hwords, hallocated, by rw [hlen]; exact hlen_bound,
+    by rw [hlen]; exact hcap, fun i hi => ?_⟩
+  rw [hlen] at hi
+  by_cases hold_i : i < memW s (logs + 8)
+  · obtain ⟨hw, heq, hentry⟩ := hold i hold_i
+    exact ⟨hw, by rw [heq]; exact hentry⟩
+  · have hi_eq : i = memW s (logs + 8) := by omega
+    subst i
+    exact ⟨hslot, by rw [hstore]; exact hlog⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
