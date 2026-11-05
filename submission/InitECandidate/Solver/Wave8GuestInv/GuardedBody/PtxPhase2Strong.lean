@@ -14563,4 +14563,57 @@ theorem phase2_get_pre_state_account_optional_backing :
   exact phase2_lookup_hit_or_miss_backing _ _ _ (fun _ h => h.2.2)
     phase2_pre_state_account_tail_backing
 
+/-- Restore backing after the concrete pre-state account lookup. -/
+theorem phase2_get_pre_state_account_optional_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "get_pre_state_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_pre_state_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_pre_state_account_optional] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_pre_state_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional) =
+      (some (.returned v), post) at hr
+  have hb := phase2_get_pre_state_account_optional_backing.run (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+    (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
+/-- The outer optional account lookup preserves backing through insertion and both cache branches. -/
+theorem phase2_get_account_optional_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account_optional)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_call0_seq_backing (phase2_htab_set_ts8_world_backing _ _)
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_resume_ro_world_backing (name := ofString "w") EvmFrameSpecs.ro_htab_get (by decide) _)
+  apply phase2_lookup_hit_or_miss_backing _ _ _ (fun _ h => h.2.2)
+  exact phase2_decCall_backing (phase2_get_pre_state_account_optional_resume_backing _ _)
+    (phase2_return_backing _)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
