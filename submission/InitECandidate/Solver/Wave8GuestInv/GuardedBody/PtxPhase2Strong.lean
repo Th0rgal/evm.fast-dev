@@ -7001,4 +7001,87 @@ theorem phase2_packed_separated_of_copy_frame {F : Type}
     phase2_tx_header_world_frame s post S Nd _ _ 216 ha.2 hw ht
     (by decide) (by decide) hf htx' hz⟩
 
+/-- Concrete copy evaluation preserves the spatial invariant needed by a following copy. -/
+theorem phase2_memcpy_eval_separated (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hsep : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (htx : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  have step := hs hr
+  have hwe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw
+  obtain ⟨S', Nd', _, hw', ho, hf, _⟩ := step.2.2.2.2 S Nd hwe hd
+  exact phase2_packed_separated_of_copy_frame s post S Nd S' Nd' _ _ hi ha
+    step.1.1 step.2.2.1 hw hw' ht hsep ho hf htx hrec hlen
+
+/-- Concrete memcpy retains the separation needed by the following copy. -/
+theorem phase2_memcpy_eval_separated_from_frame (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hindex : PtxPackedSeparatedCopy s)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hsep : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (htx : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  have step := hs hr
+  have hwe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw
+  obtain ⟨S', Nd', _, hw', ho, hf, _⟩ := step.2.2.2.2 S Nd hwe hd
+  exact phase2_packed_separated_of_copy_frame s post S Nd S' Nd' _ _ hindex ha
+    step.1.1 step.2.2.1 hw hw' ht hsep ho hf htx hrec hlen
+
+/-- Both calls and readiness restoration use one common pre-copy world witness. -/
+theorem phase2_packed_copy_joint_witness {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s) :
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned s S Nd) ∧
+      IvlsDisj [(locN s "al_keys" + 52 * locN s "k", 20),
+        (locN s "al_keys" + 52 * locN s "k" + 20, 32)] (worldTypedIvls s S Nd) := by
+  obtain ⟨S, Nd, hw, ht, hd⟩ := hp.1.2.2.2.2
+  refine ⟨S, Nd, hw, ht, hd, phase2_packed_typed_of_owned s S Nd _ ?_⟩
+  intro dest hdest region hregion
+  have hb := hd (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+    (by simp) region hregion
+  have hs := phase2_packed_guarded_input_disjoint s hp region (disj_symm hb)
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hdest
+  rcases hdest with rfl | rfl
+  · exact disj_symm hs.1
+  · exact disj_symm hs.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
