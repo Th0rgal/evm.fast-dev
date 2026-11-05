@@ -2409,4 +2409,71 @@ theorem ek_depth0_prepare_of_ek {gw_sd gw_pd : List String}
     (fun hp G ch => hoare_call_d0CallPost_of_evmKeeps hsd hslot hsub_sd (by decide) hp G ch)
     hpd hsub_pd
 
+/-! ## Word writes in the owned message record
+
+The stores at offsets `104`, `112`, `120`, and `168` in `prepare_dispatch` all use
+this rule.  The frame's message-pointer slot is preserved separately from the
+message payload: subsequent calls can therefore retain the caller's `msg` local.
+-/
+
+theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      D0Pre gw hp G ch s → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (D0Pre gw hp G ch)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      (Fall (D0Pre gw hp G ch)) := by
+  apply Hoare.store_fall_of_none
+  refine ⟨fun {F} s _ hD _ hnone => ?_⟩
+  obtain ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ := hD
+  have hD : D0Pre gw hp G ch s := ⟨⟨hP, hS⟩, m, hm, hm_eq⟩
+  rcases hrun : evaluateHOLFiniteState s
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      with ⟨res, post⟩
+  rw [hrun] at hnone
+  dsimp only at hnone ⊢
+  subst res
+  have hm_bnd : m.toNat + 176 ≤ 2 ^ 64 := by
+    rw [hm_eq]
+    exact allocated_le_2pow64 hP.1.2 hP.2.choose_spec.2.1
+  obtain ⟨heff, hloc⟩ := M11.ByteRegionEffect.of_store_word
+    (Rl := [(m.toNat, 176)]) hP.1.1.memaddrs hrun
+    (fun v hv => hword s v hD (by simpa only [ev] using hv))
+    (fun addr hdst _ => by
+      refine ⟨(m.toNat, 176), List.mem_singleton.2 rfl, ?_⟩
+      have haddr : addr.toNat = m.toNat + off := by
+        simp [evalHOLExact, evalListHOLExact, hm, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+        subst hdst
+        simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
+        rw [Nat.mod_eq_of_lt (show off < 2 ^ 64 by omega), Nat.mod_eq_of_lt (by omega)]
+      dsimp only
+      omega)
+  have heff' : EvmStepLemmas.ByteRegionEffect s post
+      [(memW s (globN s "ev" + 112), 176)] := by
+    rw [← hm_eq]
+    exact m11Bre_to_evmBre (fun i hi => by
+      simp only [List.mem_singleton] at hi; subst hi; simp) heff
+  have hstep : EvmStep [] s post :=
+    ByteRegionEffect.to_evmStep_avoids (evmAvoids_msg_of_evmMsgReady s hP) heff'
+  have hslot : memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112) := by
+    have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+      unfold evmChain; exact List.mem_cons_self
+    have hd := hP.2.choose_spec.2.2.2.2.2.1 _ hhead (globN s "ev", 280)
+      (by simp [frameObjects])
+    have hb := frameWF_bounds (hP.2.choose_spec.1.2.2.2.2.1 _ hhead)
+    unfold memW
+    rw [heff'.cell_frame _ ?_]
+    intro i hi _ hhit
+    simp only [List.mem_singleton] at hi
+    subst i
+    unfold CellHits at hhit
+    have haddr : (BitVec.ofNat 64 (globN s "ev" + 112)).toNat = globN s "ev" + 112 :=
+      Nat.mod_eq_of_lt (by omega)
+    rw [haddr] at hhit
+    rcases hd with hd | hd | hd | hd <;> dsimp only at hd <;> omega
+  exact d0Pre_of_stepFrom gw hp G ch hD
+    (stepFrom_of_evmStep (fun g hg => by simp at hg) hS hstep) hloc
+    (congrArg (fun gs => gs.lookup (ofString "ev")) heff'.globals) hslot
+
 end HeadStore
