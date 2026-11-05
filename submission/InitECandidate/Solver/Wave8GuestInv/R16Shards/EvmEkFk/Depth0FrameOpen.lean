@@ -2541,4 +2541,25 @@ theorem hoare_prepare_dispatch_msg_stores (gw : List String) (hp : Nat)
       (fun _ h => h.2))
     (fun _ h => h)
 
+/-- The delegated-code branch marks the message and records the freshly copied
+address without invalidating its owned-record invariant or caller locals. -/
+theorem hoare_prepare_dispatch_delegated_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq
+        (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+        (.store (.op .add [.var .local (ofString "msg"), .const 104])
+          (.var .local (ofString "daddr"))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "daddr") = some (.val (.word daddr))
+  refine Hoare.seq_fall'
+    (hoare_store_msg_word_step_with gw hp G ch 168 (by decide) (.const 1) L ?_)
+    (hoare_store_msg_local_step gw hp G ch 104 (by decide) (ofString "daddr") daddr L
+      (fun _ h => h)) (fun _ h => h)
+  intro F s v _ _ hv
+  exact ⟨1, (Option.some.inj hv).symm⟩
+
 end HeadStore
