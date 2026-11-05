@@ -6564,4 +6564,39 @@ theorem merge_outer_get_ret_in_values {F : Type}
   obtain ⟨f0, f1, hv, hf⟩ := WkBal.htab_get_ret_in_values s tw kw hc ht hk htab v hret
   exact ⟨f0, f1, hv, by simpa only [houter] using hf⟩
 
+/-- Transfer the merge loop's owned `binner` local to the union callee's
+`dst` parameter, retaining the outer-table ownership witness. -/
+theorem union_bs_inner_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (houter : memW s (globN s "bs" + 32) ≠ 0)
+    (hinner : locN s "binner" ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (src : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.var .local (ofString "binner"), src] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_union_into") vs =
+      some (body, callee, ret)) :
+    WorldOK (callEntryStateHOLFinite s callee) ∧
+      globN (callEntryStateHOLFinite s callee) "bs" ≠ 0 ∧
+      memW (callEntryStateHOLFinite s callee)
+        (globN (callEntryStateHOLFinite s callee) "bs" + 32) ≠ 0 ∧
+      locN (callEntryStateHOLFinite s callee) "dst" ∈
+        htabValues (callEntryStateHOLFinite s callee)
+          (memW (callEntryStateHOLFinite s callee)
+            (globN (callEntryStateHOLFinite s callee) "bs" + 32)) := by
+  obtain ⟨dv, rest, rfl, hd⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+  obtain ⟨_, hp⟩ := Wave8M19.Htab.lookupCodeHOLFinite_param_at s.code.lookup
+    (ofString "htab_union_into") [] (ofString "dst") .one
+    [(ofString "src", .one)] _ _ (by simp; decide)
+    (by rw [hc]; exact HtabUnionInto.lookup_htab_union_into)
+    (vpre := []) (by simp) hl
+  have hdst : callee.lookup (ofString "dst") = s.locals.lookup (ofString "binner") := by
+    rw [hp]
+    exact hd.symm
+  have hn : locN (callEntryStateHOLFinite s callee) "dst" = locN s "binner" := by
+    simp only [locN, callEntryStateHOLFinite, hdst]
+  refine ⟨localsFree_worldOK s callee (s.clock - 1) hW, hbs, houter, ?_⟩
+  rw [hn]
+  exact hinner
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
