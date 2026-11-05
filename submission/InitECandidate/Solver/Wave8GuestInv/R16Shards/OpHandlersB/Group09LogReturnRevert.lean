@@ -12634,4 +12634,39 @@ theorem evmInvAt_of_log_growth_cells_g09 {F : Type}
   apply List.mem_map.2
   exact ⟨ec, hchain.symm ▸ hec, rfl⟩
 
+/-- Specialize concrete write preservation to all EVM frame and continuation
+records. The copy prefix may have changed the heap pointer and detached buffer. -/
+theorem log_growth_chain_records_preserved_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hbounds : ∀ ec ∈ evmChain s, ec.1 + 280 ≤ 2 ^ 64 ∧ ec.2 + 104 ≤ 2 ^ 64)
+    (hheader : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (l.toNat, 24) ∧ Disj (ec.2, 104) (l.toNat, 24))
+    (hbuffer : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8) ∧
+      Disj (ec.2, 104) (p.toNat, 8 * n.toNat + 8))
+    (hcopy : ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW copy (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW copy (ec.2 + k) = memW s (ec.2 + k))) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW post (ec.2 + k) = memW s (ec.2 + k)) := by
+  dsimp only
+  intro ec hec
+  constructor
+  · intro k hk hk8
+    exact (log_growth_protected_words_g09 copy l p n cap log (ec.1, 280)
+      hl hp (hbounds ec hec).1 (hheader ec hec).1 (hbuffer ec hec).1 k hk).trans
+      ((hcopy ec hec).1 k hk hk8)
+  · intro k hk hk8
+    exact (log_growth_protected_words_g09 copy l p n cap log (ec.2, 104)
+      hl hp (hbounds ec hec).2 (hheader ec hec).2 (hbuffer ec hec).2 k hk).trans
+      ((hcopy ec hec).2 k hk hk8)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
