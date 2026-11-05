@@ -12213,4 +12213,59 @@ theorem phase2_message_create_stores_hoare {ι : Type} [Nonempty ι]
   apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 15 (by decide))
   exact phase2_message_scalar_const_store buffers contents names 0 13 (by decide)
 
+/-- Evaluating a message-field address identifies its exact non-wrapping offset. -/
+theorem phase2_message_offset_eq {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (off : Nat) (hoff : off + 8 ≤ 176) {x : BitVec 64}
+    (hx : evalAt s (.op .add [.var .local (ofString "m"), .const off]) =
+      some (.val (.word x))) : x.toNat = locN s "m" + off := by
+  obtain ⟨w, hw⟩ := hp.2.2.1
+  have hl : locN s "m" = w.toNat := by simp [locN, hw]
+  have hhi := (ivl_allocated_bound hp.1.1.2 (Or.inl hp.2.2.2.1)).2
+  have he : x = w + BitVec.ofNat 64 off := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr] using hx.symm
+  have ho : off < 2 ^ 64 := by omega
+  rw [he, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ho,
+    Nat.mod_eq_of_lt (by dsimp at hhi; rw [hl] at hhi; omega), hl]
+
+/-- A scalar store records the selected field and frames every other message word. -/
+theorem phase2_message_store_fields {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (off : Nat) (hoff : off + 8 ≤ 176) {x w : BitVec 64}
+    (hx : evalAt s (.op .add [.var .local (ofString "m"), .const off]) =
+      some (.val (.word x))) {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ x [.word w] s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxMessageStoreReady buffers contents {s with memory := mem} ∧
+    memW {s with memory := mem} (locN s "m" + off) = w.toNat ∧
+    ∀ k, k < 22 → 8 * k ≠ off →
+      memW {s with memory := mem} (locN s "m" + 8 * k) =
+        memW s (locN s "m" + 8 * k) := by
+  obtain ⟨hd, hw, hm⟩ := panMemStoresHOL_word_spec hst
+  have he := phase2_message_offset_eq hp off hoff hx
+  refine ⟨phase2_message_store_ready_store buffers contents hp hd
+    (phase2_message_offset_inside hp off hoff hx) hm, ?_, ?_⟩
+  · have hx' : BitVec.ofNat 64 (locN s "m" + off) = x := by
+      rw [← he]; simp
+    simp [memW, hx', hw]
+  · intro k hk hne
+    have hslot := phase2_message_slot hp k hk
+    have hx' : BitVec.ofNat 64 (locN s "m" + 8 * k) ≠ x := by
+      intro hh
+      have he' := congrArg BitVec.toNat hh
+      rw [hslot.1, he] at he'
+      omega
+    simp only [memW]
+    rw [hm _ hx']
+
+/-- Any surviving message-store cut exposes the two required backing pointers. -/
+theorem phase2_message_backing_nonzero {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s) :
+    memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0 :=
+  ⟨hp.2.1.bo40, hp.2.1.bo72⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
