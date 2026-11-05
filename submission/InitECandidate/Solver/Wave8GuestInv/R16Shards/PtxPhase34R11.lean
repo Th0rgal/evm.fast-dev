@@ -3180,6 +3180,31 @@ def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       memW s (memW s (locN s "stable_logs") + 8 * i) =
         memW s (memW s (locN s "logs") + 8 * i)
 
+/-- The loop invariant survives clock changes and unrelated temporary locals. -/
+theorem stableCopyInv_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : ∀ name ∈ (["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap", "i"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : StableCopyInv s) : StableCopyInv {s with locals := locals, clock := k} := by
+  have he : ∀ name ∈ (["logs", "nl", "stable_logs", "stable_log_cap", "i"] : List String),
+      locN {s with locals := locals, clock := k} name = locN s name := by
+    intro name hn
+    apply locN_congr s locals k name
+    apply hl
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+    tauto
+  refine ⟨stableLengthPost_with_locals s locals k (fun name hn => hl name (by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)) hp.1, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [he "logs" (by simp)]; exact hp.2.1
+  · rw [he "stable_logs" (by simp)]; exact hp.2.2.1
+  · rw [he "stable_logs" (by simp)]; exact hp.2.2.2.1
+  · rw [he "nl" (by simp), he "stable_log_cap" (by simp)]; exact hp.2.2.2.2.1
+  · intro j hj hn
+    rw [he "i" (by simp)] at hj
+    rw [he "nl" (by simp)] at hn
+    rw [he "stable_logs" (by simp), he "logs" (by simp)]
+    exact hp.2.2.2.2.2 j hj hn
+
 theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
     (hh : WordsOK s (locN s "stable_logs", 24))
