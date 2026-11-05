@@ -3276,6 +3276,16 @@ theorem localsOnly_stableLengthPost :
   intro F s locals k hl hp
   exact stableLengthPost_with_locals s locals k hl hp
 
+/-- Initializing the stable backing operand preserves the length postcondition. -/
+theorem stableLengthPost_set_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : StableLengthPost s) :
+    StableLengthPost (setVarHOLFinite (ofString "stable_lp") v s) := by
+  apply stableLengthPost_with_locals s _ s.clock _ hp
+  intro name hn
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+  rcases hn with rfl | rfl | rfl | rfl | rfl | rfl <;>
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, ofString]
+
 /-- Reassemble the length postcondition after a copy write. The destination
 header and source header are framed, and word validity is transported by the
 guest memory-domain invariant. -/
