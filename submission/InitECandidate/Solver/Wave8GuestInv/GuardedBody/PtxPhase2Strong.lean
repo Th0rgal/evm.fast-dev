@@ -3055,4 +3055,22 @@ theorem phase2_address_beneficiary_bound (h : PtxCallees) {tail : ProgHOL 64} {b
   intro F s hc hp
   simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_beneficiary_hoare ht s hc hp
 
+/-- The address-copy loop retains scalar counters alongside its shared world. -/
+def PtxAddressCopyInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressJoint s ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word w))) ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "nkeys") = some (.val (.word w))) ∧
+    locN s "i" ≤ locN s "nal"
+
+theorem phase2_address_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  have hkeys := phase2_address_joint_set_other s hp (ofString "nkeys") (.val (.word 0)) (by decide)
+  have hi := phase2_address_joint_set_other _ hkeys (ofString "i") (.val (.word 0)) (by decide)
+  refine ⟨hi, ⟨0, ?_⟩, ⟨0, ?_⟩, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
