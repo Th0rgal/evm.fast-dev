@@ -2585,6 +2585,23 @@ theorem hoare_phase4StableCap_adjust :
   · intro F s hp hr
     cases hr
 
+/-- Capacity adjustment establishes the allocation precondition with typed operands. -/
+theorem hoare_phase4StableCap_copy_ready :
+    Hoare (fun s => Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → Phase4StableCapReady t ∧
+        (∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        locN t "logs" ≠ 0 ∧
+        ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  constructor
+  intro F s hc hp hnt hr
+  exact ⟨hoare_phase4StableCap_adjust.run s hc hp.1 hnt hr,
+    hoare_stable_capacity_frame.run s hc hp.2 hnt hr⟩
+
 theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
     TerminatingProgBoundedOn Phase4LogPointersReady
