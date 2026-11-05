@@ -4171,6 +4171,23 @@ theorem stableCopyLoopInv_counter {F : Type} (s : PanSemStateFiniteExact 64 F)
     apply stableCopyStorePre_counter s v (w + 1) hp hv hinv
     rwa [hloc] at hactive
 
+/-- Hoare composition interface for the increment with full loop-head
+preservation, including the separated contract for the next active index. -/
+theorem hoare_stableCopy_increment_loop :
+    Hoare (fun s => StableCopyStorePre s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      ∀ v, evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v →
+        StableCopyInv (setVarHOLFinite (ofString "i") v s))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    obtain ⟨n, hn⟩ := hp.2.1
+    obtain ⟨w, p, q, hw, _⟩ := hp.1.2.2.1
+    exact stableCopyLoopInv_counter s w n v hp.1 hw hn hv (hp.2.2 v hv)
+  · intro F s hp hr
+    cases hr
+
 /-- Once the store has extended the prefix, the actual counter assignment
 re-establishes the loop invariant. -/
 theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
