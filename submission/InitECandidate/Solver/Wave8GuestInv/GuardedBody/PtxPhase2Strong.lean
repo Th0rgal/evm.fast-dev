@@ -2905,4 +2905,35 @@ theorem phase2_address_store_hoare (addr src : ExpHOL 64)
     (by simpa only [flattenHOL] using hst)
   exact phase2_address_joint_store hp hdom (ha s x hp hx) hmem
 
+/-- Loop-local declarations and clock changes preserve the joint buffer world. -/
+theorem phase2_address_joint_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["al_addrs", "nal", "te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxAddressJoint s) : PtxAddressJoint { s with locals := locals, clock := clock } := by
+  have ha := locN_congr s locals clock "al_addrs" (hl "al_addrs" (by simp))
+  have hn := locN_congr s locals clock "nal" (hl "nal" (by simp))
+  have he := locN_congr s locals clock "te" (hl "te" (by simp))
+  have ht := locN_congr s locals clock "tx" (hl "tx" (by simp))
+  have hc := phase2_accessCountReady_with_locals s locals clock
+    (fun name hm => hl name (List.mem_cons_of_mem _ hm)) hp.1.1
+  obtain ⟨hp, S, Nd, hW, hT, hd, hte⟩ := hp
+  have hW' := (worldTypedWith_with_locals s locals clock S Nd).mpr hW
+  have hT' := R16Shards.PtxP1.txAccessListAt_with_locals s locals clock hT
+  refine ⟨⟨hc, ?_, ?_, ?_, ?_, ?_, ?_, ?_, S, Nd, hW', ?_, ?_⟩,
+    S, Nd, hW', ?_, ?_, ?_⟩
+  · exact (hl "al_addrs" (by simp)) ▸ hp.2.1
+  · rw [ha, hn]; exact hp.2.2.1
+  · rw [ha]; exact hp.2.2.2.1
+  · rw [ha, hn]; exact hp.2.2.2.2.1
+  · rw [he, ha, hn]; exact hp.2.2.2.2.2.1
+  · rw [ht, ha, hn]; exact hp.2.2.2.2.2.2.1
+  · rw [ht, ha, hn]; exact hp.2.2.2.2.2.2.2.1
+  · rw [ht]; exact hT'
+  · rw [ha, hn]; exact hd
+  · rw [ht]; exact hT'
+  · rw [ha, hn]; exact hd
+  · rw [he]; exact hte
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
