@@ -2888,4 +2888,21 @@ theorem phase2_address_init_hoare :
   rw [hl]
   constructor <;> dsimp <;> omega
 
+/-- Any scalar store whose destination lies in the address array retains the
+joint invariant; this is also the store rule for the access-list copy loop. -/
+theorem phase2_address_store_hoare (addr src : ExpHOL 64)
+    (hs : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxAddressJoint s → evalAt s src = some v → ∃ w : BitVec 64, v = .val (.word w))
+    (ha : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64),
+      PtxAddressJoint s → evalAt s addr = some (.val (.word x)) →
+      Inside (x.toNat, 8) (locN s "al_addrs")
+        (locN s "al_addrs" + (locN s "nal" + 1) * 8)) :
+    Hoare PtxAddressJoint (.store addr src) (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, rfl⟩ := hs s v hp hv
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact phase2_address_joint_store hp hdom (ha s x hp hx) hmem
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
