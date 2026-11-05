@@ -8562,6 +8562,41 @@ theorem finish_child_release_from_parent {F : Type}
   exact ⟨mid, heval, hi, hch.trans hchain,
     EvmEkFk.chainCellsAgree_of_memory_eq hm, hevMid.trans hev, hfmp.trans hmark, hR⟩
 
+/-- The final pc increment preserves the aligned invariant and all chain cells. -/
+theorem pc_add_body_aligned {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hi : EvmInvA s) (hc : s.code = originalRuntimeCode)
+    (e pc n : BitVec 64) (v : ValueHOL 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : s.memory e = .word pc) (hd : s.memaddrs e)
+    (hex : ∃ values, lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "pc_add") values =
+      some (sourceFnBody Guest.Software.guestFn_pc_add, s.locals, .one))
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_pc_add) =
+      (some (.returned v), post)) :
+    EvmInvA post ∧ evmChain post = evmChain s ∧
+    R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
+    EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals := by
+  obtain ⟨ps, body, rt, hl, hs⟩ := R14Shards.OpHandlersA.eps_pc_add
+  obtain ⟨rfl, rfl, rfl⟩ := funSpec_same_body lookup_pc_add hl
+  have hspec := (hs s hc hi.1 trivial hex (by rw [hr]; simp)).1 v (by rw [hr])
+  rw [hr] at hspec
+  dsimp only at hspec
+  obtain ⟨hI, hch, hR, hg⟩ := hspec
+  obtain ⟨_, hm, _, _⟩ := Ret.apply (pc_add_run s e pc n hn he hp hd) hr
+  have heAddr : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have hsafe := chain_cells_ne_head_pc s hi.1
+  rw [heAddr] at hsafe
+  have hcells : EvmEkFk.ChainCellsAgree s post := by
+    intro ec hec
+    obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
+    have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e) : memW post a = memW s a := by
+      unfold memW; rw [hm, updW_ne _ _ _ _ ha]
+    exact ⟨hkeep _ h24, hkeep _ h32, hkeep _ h40, hkeep _ h56⟩
+  have hA := headMemChainWF_of_agree hi.2 hch hcells
+    (show globN post "ev" = globN s "ev" by simp [globN, hg])
+    (show globN post "frame_mem_ptr" = globN s "frame_mem_ptr" by simp [globN, hg])
+  exact ⟨⟨hI, hA⟩, hch, hR, hcells, hg⟩
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
