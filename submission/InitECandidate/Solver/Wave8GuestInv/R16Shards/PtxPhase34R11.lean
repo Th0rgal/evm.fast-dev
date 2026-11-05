@@ -6198,6 +6198,15 @@ theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
   · change ∀ o ∈ worldOwned post S Nd, Disj _ o
     simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hdisj
 
+/-- Restoring caller locals after allocation preserves the typed source pointer. -/
+theorem stable_allocation_source_operand {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (v : ValueHOL 64) (p : BitVec 64)
+    (hp : s.locals.lookup (ofString "lp") = some (.val (.word p))) :
+    (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}).locals.lookup
+      (ofString "lp") = some (.val (.word p)) := by
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "lp" by decide] using hp
+
 /-- Allocation supplies length validity and copy separation in the same resumed state. -/
 theorem lst_new_stable_length_spatial (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
@@ -6250,6 +6259,28 @@ theorem lst_new_stable_length_joint_pre (h : PtxCallees) {F : Type}
     lst_new_stable_resumed_header_backing h s vs body callee ret v post hc hp ha hl hr,
     lst_new_stable_resumed_source_array h s vs body callee ret v post hc hp ha hl hr,
     lst_new_stable_resumed_backing_records h s vs body callee ret v post hc hp ha hl hr⟩
+
+/-- Returning from allocation retains the remaining non-spatial copy operands. -/
+theorem lst_new_stable_copy_operands (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hz : locN s "logs" ≠ 0)
+    (hptr : ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    locN t "logs" ≠ 0 ∧ WordsOK t (locN t "stable_logs", 24) ∧
+      ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p)) := by
+  refine ⟨?_, (lst_new_stable_header_resume h s vs body callee ret v post hc hp ha hl hr).1, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hz
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "lp" by decide] using hptr
 
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
