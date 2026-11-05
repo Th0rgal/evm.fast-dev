@@ -11222,4 +11222,21 @@ theorem phase2_packed_cases_initialized_live_hoare (h : PtxCallees)
     · simp only [locN, hl "nkeys" (by simp)]
   · exact fun _ _ hr => by cases hr
 
+theorem phase2_packed_live_continuation_bound (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedKeysReady s) ∧ PtxPackedLiveFrame buffer contents s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧ PtxPackedLiveFrame buffer contents s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
+    (phase2_packed_cases_initialized_live_hoare h buffer contents) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
