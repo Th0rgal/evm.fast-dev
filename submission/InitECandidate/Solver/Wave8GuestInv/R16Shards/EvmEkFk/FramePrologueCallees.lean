@@ -1953,6 +1953,24 @@ theorem frameStartSysReady_of_evmInv {F : Type}
     FrameStartSysReady s :=
   ⟨hsys, head_log_count_succ_lt_of_evmInv hInv⟩
 
+theorem ek_cc_of_readOnly {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS}
+    (hP : ∀ {F : Type} {s : PanSemStateFiniteExact 64 F}, P s → EvmInv s)
+    (hf : ReadOnlyFn fname) :
+    EvmKeeps P [] fname ∧ ChainCellsKept P fname := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := hf
+  refine ⟨⟨params, body, ret, hlook, ?_⟩, ⟨params, body, ret, hlook, ?_⟩⟩
+  · intro F s hcode hPs hex hnt hres
+    have hInv : EvmInv s := hP hPs
+    have heq := hspec s hcode hInv.1.1 hex hnt hres
+    exact (EvmFrameSpecs.evmStep_refl_locals_clock hInv heq).1
+  · intro F s hcode hPs hex hnt hres
+    have hInv : EvmInv s := hP hPs
+    have heq := hspec s hcode hInv.1.1 hex hnt hres
+    intro ec hec
+    rw [heq]
+    exact ⟨rfl, rfl, rfl, rfl⟩
+
 theorem logEntryOK_of_transfer {F : Type}
     {s : PanSemStateFiniteExact 64 F} {log topics data : Nat}
     (hwords : WordsOK s (log, 40))
