@@ -11386,4 +11386,222 @@ theorem txWorld_other_header_ne_push_writes {F : Type} {s : PanSemStateFiniteExa
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
+
+/-- A falling copy preserves a cell disjoint from its evaluated destination. -/
+theorem memcpy_fall_memory_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64)) (a : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hargs : ∀ vs,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vs →
+      ¬ CellHitsPos a.toNat
+        (valWordNat (vs[0]?.getD (.rStruct [])), valWordNat (vs[2]?.getD (.rStruct []))))
+    (hr : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy") args) =
+      (none, post)) : post.memory a = s.memory a := by
+  have hf := funByteEff_memcpy
+  obtain ⟨params, body, ret, hlook, hspec⟩ := hf
+  rw [evaluateHOLFiniteState_call] at hr
+  split at hr
+  · simp at hr
+  · split at hr
+    · simp at hr
+    · split at hr
+      · simp at hr
+      · rename_i optvs vs hv optbody body' callee ret' hl hz
+        have hb := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "memcpy")
+          params body body' ret ret' vs callee (by rw [hc]; exact hlook) hl
+        subst body'
+        have ht := lookupCodeHOLFinite_installed_return s (ofString "memcpy") params body body
+          ret ret' vs callee (by rw [hc]; exact hlook) hl
+        subst ret'
+        rcases hs : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, done⟩
+        rw [hs] at hr
+        cases r with
+        | none => simp at hr
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr
+            split at hr
+            · have hf := hspec (callEntryStateHOLFinite s callee) vs hc
+                (guestInv_callEntry s callee hG) (by simpa [hc, callEntryStateHOLFinite] using hl)
+                (by rw [hs]; simp) (by rw [hs]; exact Or.inl ⟨v, rfl⟩)
+              rw [hs] at hf
+              have hm : done.memory a = s.memory a := by
+                by_contra hn
+                obtain ⟨i, hi, hh⟩ := hf.cell_frame a hn
+                simp only [List.mem_singleton] at hi
+                subst i
+                exact hargs vs hv hh
+              cases hr
+              exact hm
+            · simp at hr
+          | _ => simp at hr
+
+/-- The concrete allocator changes no memory, including old list headers. -/
+theorem alloc_return_memory {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : post.memory = s.memory := by
+  have hb := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "alloc")
+    [(ofString "n", .one)] (sourceFnBody Guest.Software.guestFn_alloc) body .one ret vs callee
+    (by rw [hc]; exact R13Shards.lookup_alloc_r13) hl
+  subst body
+  have hp := R13Shards.alloc_body_resumes_props (callEntryStateHOLFinite s callee) hc
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA)
+    (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hp
+  obtain ⟨p, q, _, _, _, _, _, _, _, hm, _⟩ := hp
+  exact hm
+
+/-- A falling growth-store pair preserves every cell outside its two writes. -/
+theorem lst_push_growth_stores_memory_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap np a : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (h0 : a ≠ l) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+          (.var .local (ofString "np")))
+        (.store (.op .add [.var .local (ofString "l"), .const 16])
+          (.panop .mul [.var .local (ofString "cap"), .const 2]))) = (none, post)) :
+    post.memory a = s.memory a := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s
+    (.store (.op .add [.var .local (ofString "l"), .const 0])
+      (.var .local (ofString "np"))) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none =>
+    have hm : mid.memory a = s.memory a := store_word_memory_frame hc
+      (by simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp])
+      (by exact hnp) h0 hs
+    have hloc := store_fall_locals hs
+    have hcode := (evaluateHOLFiniteState_metadata s
+      (.store (.op .add [.var .local (ofString "l"), .const 0])
+        (.var .local (ofString "np")))).1
+    rw [hs] at hcode
+    have hml : mid.locals.lookup (ofString "l") = some (.val (.word l)) := by rw [hloc]; exact hl
+    have hmc : mid.locals.lookup (ofString "cap") = some (.val (.word cap)) := by rw [hloc]; exact hcap
+    exact (store_word_memory_frame (w := .word (cap * 2)) (hcode.trans hc)
+      (by simp [evalAt, evalHOLExact, evalListHOLExact, hml, valueIsWord, valueWord, wordOpHOL, wordOp])
+      (by simp [evalAt, evalHOLExact, evalListHOLExact, hmc, valueIsWord, valueWord, panOpHOL])
+      h16 hr).trans hm
+
+/-- The concrete copy and growth stores frame an unrelated header cell. -/
+theorem lst_push_copy_stores_memory_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap np a : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (h0 : a ≠ l) (h16 : a ≠ l + 16)
+    (hcopy : ∀ vs,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "np"),
+         .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+         .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]] = some vs →
+      ¬ CellHitsPos a.toNat
+        (valWordNat (vs[0]?.getD (.rStruct [])), valWordNat (vs[2]?.getD (.rStruct []))))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"),
+         .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+         .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+            (.var .local (ofString "np")))
+          (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2])))) = (none, post)) :
+    post.memory a = s.memory a := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "memcpy")
+      [.var .local (ofString "np"),
+       .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+       .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none =>
+    obtain ⟨hlocal, hcode⟩ := ignored_call_fall_locals s mid _ _ hs
+    exact (lst_push_growth_stores_memory_frame mid post l cap np a (hcode.trans hc)
+      (by rw [hlocal]; exact hl) (by rw [hlocal]; exact hcap)
+      (by rw [hlocal]; exact hnp) h0 h16 hr).trans
+      (memcpy_fall_memory_frame s mid _ a hc hG hcopy hs)
+
+/-- A fresh allocation's prefix cannot intersect any previously allocated cell. -/
+theorem fresh_copy_not_hits {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p size n : Nat} {a : BitVec 64}
+    (hA : ArenaOK s) (hAp : ArenaOK post) (hf : FreshBlock s post p size)
+    (ha : Allocated s (a.toNat, 8)) (hn : n ≤ (size + 7) / 8 * 8) :
+    ¬ CellHitsPos a.toNat (p, n) := by
+  have hd := hf.disj_allocated hA hAp ha
+  unfold Disj at hd
+  simp only [CellHitsPos, CellHits]
+  dsimp at hd
+  omega
+
+/-- The whole allocating branch frames a cell when every successful allocator
+return gives a copy destination disjoint from that cell. -/
+theorem lst_push_alloc_branch_memory_frame (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap a : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (h0 : a ≠ l) (h16 : a ≠ l + 16)
+    (hcopy : ∀ vs body callee ret (np : BitVec 64) allocated,
+      lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word np))), allocated) →
+      ∀ args,
+        evalListHOLFinite
+          (setVarHOLFinite (ofString "np") (.val (.word np)) {allocated with locals := s.locals})
+          (h := fun a => Classical.propDecidable (allocated.memaddrs a))
+          [.var .local (ofString "np"),
+           .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]] = some args →
+        ¬ CellHitsPos a.toNat
+          (valWordNat (args[0]?.getD (.rStruct [])), valWordNat (args[2]?.getD (.rStruct []))))
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul
+          [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"),
+           .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post)) :
+    post.memory a = s.memory a := by
+  obtain ⟨vs, body, callee, ret, rv, allocated, done, hlookup, hrun, hcont, hmem, _⟩ :=
+    dec_call_fall_inv hr
+  have hm := alloc_return_memory s allocated vs body callee ret rv hc hA hlookup hrun
+  obtain ⟨np, rfl, _, hpost⟩ := alloc_return_nonzero h s vs body callee ret rv allocated hc
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA) hlookup hrun
+  have hf := lst_push_copy_stores_memory_frame
+    (setVarHOLFinite (ofString "np") (.val (.word np)) {allocated with locals := s.locals})
+    done l cap np a hpost.1.code
+    (guestInv_setVar _ _ _ ((arenaReady_with_locals allocated s.locals allocated.clock).2 hpost).1)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "l" by decide] using hl)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "cap" by decide] using hcap)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    h0 h16 (hcopy vs body callee ret np allocated hlookup hrun) hcont
+  rw [hmem]
+  exact hf.trans (congrFun hm a)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
