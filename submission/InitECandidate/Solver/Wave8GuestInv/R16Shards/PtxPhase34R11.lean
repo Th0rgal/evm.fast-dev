@@ -2492,6 +2492,26 @@ theorem stable_capacity_copy_operands {F : Type} (s : PanSemStateFiniteExact 64 
     show ofString "stable_log_cap" ≠ ofString "nl" by decide,
     show ofString "stable_log_cap" ≠ ofString "lp" by decide] using And.intro hn hp
 
+/-- Initializing capacity from the length preserves the typed allocation operands. -/
+theorem hoare_stable_capacity_init_copy :
+    Hoare (fun s => Phase4LogPointersReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.assign .local (ofString "stable_log_cap") (.var .local (ofString "nl")))
+      (fun r t => r = none → Phase4StableCapInit t ∧
+        (∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        locN t "logs" ≠ 0 ∧
+        ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  apply Hoare.assign
+  · intro F s v hp he _
+    obtain ⟨hn, hl⟩ := stable_capacity_copy_operands s v hp.2.1 hp.2.2.2
+    refine ⟨phase4StableCap_init s v hp.1 he, hn, ?_, hl⟩
+    simpa [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_log_cap" ≠ ofString "logs" by decide] using hp.2.2.1
+  · intro F s hp hr
+    cases hr
+
 def Phase4StableCapReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => Phase4LogPointersReady s ∧
     locN s "stable_log_cap" = max 1 (locN s "nl")
