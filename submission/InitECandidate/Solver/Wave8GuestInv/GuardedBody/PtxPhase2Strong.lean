@@ -6304,4 +6304,45 @@ theorem phase2_packed_alloc_input_separation {F : Type}
   intro hn
   exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
 
+/-- The actual memcpy contract preserves aligned transaction header fields. -/
+theorem phase2_memcpy_header_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r →
+        ∀ S Nd tx off, ArenaOK s → WorldTypedWith s S Nd →
+          TxAccessListAt s S Nd tx → off + 8 ≤ 384 → off % 8 = 0 →
+          IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd) →
+          Disj (tx, 384) (locN s "dst", locN s "n") → 0 < locN s "n" →
+          memW post (tx + off) = memW s (tx + off))
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := h.wk_memcpy
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr S Nd tx off ha hw ht hoff ho8 hd htx hlen
+  have step := hs s hc hp he hn hr
+  obtain ⟨S', Nd', _, _, _, hf, _⟩ := step.2.2.2.2 S Nd hw hd
+  apply phase2_tx_header_world_frame s _ S Nd _ tx off ha hw ht hoff ho8 hf
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact htx
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+
+/-- A guarded copy always has a live record array, so conditional input separation applies. -/
+theorem phase2_packed_guarded_record_separation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hsep : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) :
+    Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys" + 52 * locN s "k", 20) ∧
+    Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys" + 52 * locN s "k" + 20, 32) := by
+  apply phase2_packed_guarded_input_disjoint s hp
+  apply hsep
+  have hi := hp.2.2.1
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
