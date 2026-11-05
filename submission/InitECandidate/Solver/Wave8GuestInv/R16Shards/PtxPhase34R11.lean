@@ -2225,6 +2225,32 @@ theorem hoare_logSlot_store_increment (src : ExpHOL 64)
       (fun r t => r = none → Phase4LogPointersReady t) :=
   Hoare.seq_fall (hoare_logSlot_store src hword) hoare_logPointers_increment
 
+def phase4LogCopySrc : ExpHOL 64 :=
+  .load .one (.op .add [.var .local (ofString "lp"),
+    .panop .mul [.var .local (ofString "i"), .const 8]])
+
+def phase4LogCopyBody : ProgHOL 64 :=
+  .decCall (ofString "slot") .one (ofString "lst_push")
+    [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+    (.seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+
+theorem phase4LogCopySrc_word {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (he : evalAt s phase4LogCopySrc = some v) : ∃ w : HolWordLab 64, v = .val w := by
+  unfold phase4LogCopySrc at he
+  simp only [evalAt, evalHOLExact] at he
+  split at he
+  · rename_i ha
+    split at he
+    · rename_i hw
+      simp only [memLoadHOLExact] at he
+      split at he
+      · cases he
+        exact ⟨_, rfl⟩
+      · cases he
+    · cases he
+  · cases he
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
