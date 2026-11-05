@@ -3474,4 +3474,20 @@ theorem phase2_clock_seq {p q : ProgHOL 64}
   rw [he] at ht
   cases r <;> simp_all
 
+/-- A local declaration around a clock-neutral body is clock-neutral. -/
+theorem phase2_clock_dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
+    {body : ProgHOL 64}
+    (hb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s body).2.clock = s.clock)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s (.dec name shape init body)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  split
+  · rfl
+  · split
+    · dsimp only
+      simpa [setVarHOLFinite] using hb (setVarHOLFinite name _ s)
+    · rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
