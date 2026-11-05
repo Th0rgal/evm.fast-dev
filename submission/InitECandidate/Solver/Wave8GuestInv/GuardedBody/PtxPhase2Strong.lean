@@ -13473,4 +13473,32 @@ theorem phase2_message_table_stores_suffix_bound {ι : Type} [Nonempty ι]
   simpa only [Nat.zero_add] using seq_bound_trans hb
     (phase2_message_table_stores_suffix_hoare buffers contents names aa ak ha hk) ht s hc hp
 
+/-- Scalar witnesses can be restricted before passing to a suffix continuation. -/
+theorem phase2_message_suffix_restrict_names {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageSuffixReady buffers contents names aa ak s)
+    (hn : ∀ n ∈ names', n ∈ names) :
+    PtxMessageSuffixReady buffers contents names' aa ak s :=
+  ⟨⟨hp.1.1, fun n hm => hp.1.2 n (hn n hm)⟩, hp.2⟩
+
+/-- Pointer initialization followed by the source-sized empty allocation and
+ordinary-call stores supplies the backing-aware Phase-4 continuation. -/
+theorem phase2_message_table_init_call_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak"))))
+        (.decCall (ofString "empty") .one (ofString "alloc") [.const 8]
+          (.seq phase2_message_call_stores tail))) (K.alloc + b + 1) := by
+  apply phase2_message_table_stores_suffix_bound buffers contents names aa ak ha hk
+  intro F s hc hp
+  exact phase2_message_empty8_call_suffix_bound h buffers contents aa ak ht s hc
+    (phase2_message_suffix_restrict_names hp (by simp))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
