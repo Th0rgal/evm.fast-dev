@@ -584,13 +584,17 @@ theorem evmAvoids_msg_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F
 section HeadStore
 open R10Shards.GbodyProcessMsg
 
-theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
-    (hInv : EvmInv s) {x : BitVec 64}
-    (hx_eq : x.toNat = globN s "ev" + 200)
+/-- A single word store into the head record at `ev+192` (state-gas spilled) or `ev+200`
+(auth state-gas used) keeps `EvmInv`, provided the head's `gas + spilled` does not grow. -/
+theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) {x : BitVec 64} {k : Nat} (hk : k = 192 ∨ k = 200)
+    (hx_eq : x.toNat = globN s "ev" + k)
     (hx_dom : s.memaddrs x)
     (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
       post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
-      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
     EvmInv post := by
   obtain ⟨hAs, S, hW, hch_ne, hch_len, hch_last, hFW_all, hFR_all, hRW, hFO_pw, hFO_disj, hAT, hMarks, hRoles, hGas⟩ := hInv
   obtain ⟨Nd_at, hTr_at, hAT_at⟩ := hAT
@@ -645,7 +649,7 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
   have hW_post : WorldTyped post S :=
     ⟨hWT_post.1, hWT_post.2.1, hWT_post.2.2.1, Nd_at, hWT_post.2.2.2⟩
   have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, hpost.2.2.2.2.2.1]
-  have hmemW_ne : ∀ a : Nat, a < 2 ^ 64 → a ≠ globN s "ev" + 200 → memW post a = memW s a := by
+  have hmemW_ne : ∀ a : Nat, a < 2 ^ 64 → a ≠ globN s "ev" + k → memW post a = memW s a := by
     intro a ha hne
     unfold memW
     have hbv_ne : BitVec.ofNat 64 a ≠ x := by
@@ -712,7 +716,7 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
     rcases ho with rfl | rfl | rfl | rfl | rfl | rfl <;> exact hd0 _ (by simp)
   have hrec_other_eq : ∀ ec ∈ evmChain s,
-      (∀ k, k + 8 ≤ 280 → k ≠ 200 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k', k' + 8 ≤ 280 → k' ≠ 192 → k' ≠ 200 → memW post (ec.1 + k') = memW s (ec.1 + k')) ∧
       (∀ k, k + 8 ≤ 104 → memW post (ec.2 + k) = memW s (ec.2 + k)) ∧
       (∀ k, k + 8 ≤ 24 → memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) := by
     intro ec hec
@@ -728,8 +732,8 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
       · exact hcont_disj_head _ (by simp)
       · exact hpw_head_tail.2 _ hcont_fo ec htail _ (by simp [frameObjects])
     refine ⟨?_, ?_, ?_⟩
-    · intro k hk hkne
-      apply hmemW_ne (ec.1 + k) (by omega)
+    · intro k' hk' hkne1 hkne2
+      apply hmemW_ne (ec.1 + k') (by omega)
       rw [hch_cons, List.mem_cons] at hec
       rcases hec with rfl | htail
       · dsimp only; omega
@@ -783,21 +787,21 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     intro ec hec
     obtain ⟨he_eq, _, h88_eq⟩ := hrec_other_eq ec hec
     unfold frameLogs
-    rw [he_eq 88 (by omega) (by omega),
+    rw [he_eq 88 (by omega) (by omega) (by omega),
         show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by simpa using h88_eq 0 (by omega),
         h88_eq 16 (by omega)]
   have hframeRet_eq : ∀ ec ∈ evmChain s, frameRet post ec = frameRet s ec := by
     intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     unfold frameRet
-    rw [he_eq 216 (by omega) (by omega), he_eq 144 (by omega) (by omega)]
+    rw [he_eq 216 (by omega) (by omega) (by omega), he_eq 144 (by omega) (by omega) (by omega)]
   have hframeLogObjects_eq : ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec := by
     intro ec hec
     obtain ⟨he_eq, _, h88_eq⟩ := hrec_other_eq ec hec
     have hfw := hFW_all ec hec
     unfold frameLogObjects
     dsimp only
-    rw [he_eq 88 (by omega) (by omega), h88_eq 8 (by omega),
+    rw [he_eq 88 (by omega) (by omega) (by omega), h88_eq 8 (by omega),
         show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by simpa using h88_eq 0 (by omega)]
     apply List.flatMap_congr
     intro i hi_r
@@ -842,21 +846,21 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     unfold frameObjects
-    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega),
-        he_eq 24 (by omega) (by omega), he_eq 40 (by omega) (by omega),
-        he_eq 88 (by omega) (by omega), hframeLogs_eq ec hec, hframeRet_eq ec hec, hframeLogObjects_eq ec hec]
+    rw [he_eq 8 (by omega) (by omega) (by omega), he_eq 232 (by omega) (by omega) (by omega),
+        he_eq 24 (by omega) (by omega) (by omega), he_eq 40 (by omega) (by omega) (by omega),
+        he_eq 88 (by omega) (by omega) (by omega), hframeLogs_eq ec hec, hframeRet_eq ec hec, hframeLogObjects_eq ec hec]
   have hframeScratch_eq : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
     intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     unfold frameScratch
-    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega), he_eq 88 (by omega) (by omega)]
+    rw [he_eq 8 (by omega) (by omega) (by omega), he_eq 232 (by omega) (by omega) (by omega), he_eq 88 (by omega) (by omega) (by omega)]
   have hmap_fo_eq : (evmChain s).map (frameObjects post) = (evmChain s).map (frameObjects s) :=
     List.map_congr_left hframeObjects_eq
   have hframeRoleSlots_eq : frameRoleSlots post (evmChain s) = frameRoleSlots s (evmChain s) := by
     unfold frameRoleSlots
     apply List.flatMap_congr; intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
-    rw [he_eq 136 (by omega) (by omega), he_eq 168 (by omega) (by omega), he_eq 176 (by omega) (by omega)]
+    rw [he_eq 136 (by omega) (by omega) (by omega), he_eq 168 (by omega) (by omega) (by omega), he_eq 176 (by omega) (by omega) (by omega)]
   refine ⟨hAp, S, hW_post, ?_⟩
   dsimp only
   rw [hchain_eq]
@@ -886,24 +890,24 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
       have hal_fl : Allocated s (frameLogs s ec) := c13
       exact ⟨c14.1, (ivl_allocated_bound hAs.2 hal_fl).2⟩
     have hc16_post : LogsListOK post (memW post (ec.1 + 88)) := by
-      rw [he_eq 88 (by omega) (by omega)]
+      rw [he_eq 88 (by omega) (by omega) (by omega)]
       exact logsListOK_transfer hAs.1 hAp.1 (hglob_eq "heap_ptr") (hglob_eq "scratch_ptr") hAs.2
         hpost.2.2.2.2.2.2 hm_heap (fun _ => hd_88_x) (fun _ => hd_flogs_x) (fun _ => hflogs_al) c16
     have hc17_post : MsgOwned post S (memW post (ec.1 + 112)) := by
-      rw [he_eq 112 (by omega) (by omega)]
+      rw [he_eq 112 (by omega) (by omega) (by omega)]
       exact msgOwned_transfer hAs.1 hAp.1 (hglob_eq "heap_ptr") (hglob_eq "scratch_ptr")
         (fun t ht => (htab_fp_hdr t ht).2) hfix_eq hchain_eq hframeObjects_eq htr_any_post c17
     unfold FrameWF
     dsimp only
-    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega),
-        he_eq 88 (by omega) (by omega), he_eq 24 (by omega) (by omega),
-        he_eq 40 (by omega) (by omega), he_eq 16 (by omega) (by omega),
-        he_eq 32 (by omega) (by omega),
-        he_eq 136 (by omega) (by omega), he_eq 168 (by omega) (by omega),
-        he_eq 176 (by omega) (by omega),
+    rw [he_eq 8 (by omega) (by omega) (by omega), he_eq 232 (by omega) (by omega) (by omega),
+        he_eq 88 (by omega) (by omega) (by omega), he_eq 24 (by omega) (by omega) (by omega),
+        he_eq 40 (by omega) (by omega) (by omega), he_eq 16 (by omega) (by omega) (by omega),
+        he_eq 32 (by omega) (by omega) (by omega),
+        he_eq 136 (by omega) (by omega) (by omega), he_eq 168 (by omega) (by omega) (by omega),
+        he_eq 176 (by omega) (by omega) (by omega),
         h88_eq 16 (by omega), h88_eq 8 (by omega),
         hframeLogs_eq ec hec,
-        he_eq 216 (by omega) (by omega), he_eq 144 (by omega) (by omega),
+        he_eq 216 (by omega) (by omega) (by omega), he_eq 144 (by omega) (by omega) (by omega),
         hframeRet_eq ec hec,
         hglob_eq "scratch_ptr", hglob_eq "frame_mem_ptr", hglob_eq "heap_ptr", hglob_eq "evm_empty"]
     refine ⟨?_, c2, wordsOK_transfer hAs.1 hAp.1 c3, c4, c5, c6, c7,
@@ -914,19 +918,19 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     · rcases c15 with h0 | ⟨hin, hw⟩
       · exact Or.inl h0
       · exact Or.inr ⟨hin, wordsOK_transfer hAs.1 hAp.1 hw⟩
-    · simpa [he_eq 88 (by omega) (by omega)] using hc16_post
-    · simpa [he_eq 112 (by omega) (by omega)] using hc17_post
+    · simpa [he_eq 88 (by omega) (by omega) (by omega)] using hc16_post
+    · simpa [he_eq 112 (by omega) (by omega) (by omega)] using hc17_post
   · intro ec hec
     have hec_mem : ec ∈ evmChain s := List.mem_of_mem_tail hec
     unfold FrameRoom
-    rw [(hrec_other_eq ec hec_mem).1 16 (by omega) (by omega), (hrec_other_eq ec hec_mem).1 232 (by omega) (by omega)]
+    rw [(hrec_other_eq ec hec_mem).1 16 (by omega) (by omega) (by omega), (hrec_other_eq ec hec_mem).1 232 (by omega) (by omega) (by omega)]
     exact hFR_all ec hec
   · intro i hi
     have hi0 : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
     have hi1 : (evmChain s)[i + 1] ∈ evmChain s := List.getElem_mem _
     rw [(hrec_other_eq _ hi0).2.1 80 (by omega),
         (hrec_other_eq _ hi0).2.1 72 (by omega),
-        (hrec_other_eq _ hi1).1 40 (by omega) (by omega)]
+        (hrec_other_eq _ hi1).1 40 (by omega) (by omega) (by omega)]
     exact hRW i hi
   · rw [hmap_fo_eq]; exact hFO_pw
   · intro ec hec o ho
@@ -946,19 +950,19 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
       refine and_congr Iff.rfl (forall_congr' fun j => forall_congr' fun hj =>
         forall_congr' fun k => imp_congr_right fun hk => ?_)
       have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
-      have hk_ok : k + 8 ≤ 280 ∧ k ≠ 200 := by
+      have hk_ok : k + 8 ≤ 280 ∧ k ≠ 192 ∧ k ≠ 200 := by
         simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
         rcases hk with rfl | rfl | rfl <;> omega
-      rw [(hrec_other_eq _ hj_mem).1 k hk_ok.1 hk_ok.2]
+      rw [(hrec_other_eq _ hj_mem).1 k hk_ok.1 hk_ok.2.1 hk_ok.2.2]
     intro i hi
     have hi_mem : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
     have hm_eq := (hrec_other_eq _ hi_mem).2.1 48 (by omega)
     have hmm_eq := (hrec_other_eq _ hi_mem).2.1 56 (by omega)
-    have he24_eq := (hrec_other_eq _ hi_mem).1 24 (by omega) (by omega)
+    have he24_eq := (hrec_other_eq _ hi_mem).1 24 (by omega) (by omega) (by omega)
     have htake_eq : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
         ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
       apply List.map_congr_left; intro ec hec
-      exact (hrec_other_eq ec (List.mem_of_mem_take hec)).1 136 (by omega) (by omega)
+      exact (hrec_other_eq ec (List.mem_of_mem_take hec)).1 136 (by omega) (by omega) (by omega)
     have hM := hMarks i hi
     dsimp only at hM ⊢
     rw [hm_eq, hmm_eq, he24_eq, hframeScratch_eq _ hi_mem, hfix_eq, htake_eq]
@@ -967,7 +971,7 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     · intro j hj hij
       have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
       obtain ⟨he_j, _, _⟩ := hrec_other_eq _ hj_mem
-      rw [hframeScratch_eq _ hj_mem, hframeObjects_eq _ hj_mem, hframeLogs_eq _ hj_mem, he_j 112 (by omega) (by omega)]
+      rw [hframeScratch_eq _ hj_mem, hframeObjects_eq _ hj_mem, hframeLogs_eq _ hj_mem, he_j 112 (by omega) (by omega) (by omega)]
       exact m5 j hj hij
     · intro t ht
       rw [(htab_fp_hdr t ht).2, hdelEx_iff i t]
@@ -978,12 +982,27 @@ theorem evmInv_store_ev_200 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     obtain ⟨haS, hkl⟩ := hRoles.1 a ha
     rw [(htab_fp_hdr a.1 haS).1 0 (by omega)]
     exact ⟨haS, hkl⟩
-  · have hmap_gas : ((evmChain s).map fun ec => memW post (ec.1 + 64) + memW post (ec.1 + 192)) =
-        ((evmChain s).map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)) := by
-      apply List.map_congr_left; intro ec hec
-      rw [(hrec_other_eq ec hec).1 64 (by omega) (by omega), (hrec_other_eq ec hec).1 192 (by omega) (by omega)]
-    rw [hmap_gas]
-    exact hGas
+  · have hle : ((evmChain s).map fun ec => memW post (ec.1 + 64) + memW post (ec.1 + 192)).sum ≤
+        ((evmChain s).map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)).sum := by
+      apply List.Forall₂.sum_le_sum
+      rw [List.forall₂_map_right_iff, List.forall₂_map_left_iff, List.forall₂_same]
+      intro ec hec
+      have hec' := hec
+      rw [hch_cons, List.mem_cons] at hec
+      rcases hec with rfl | htail
+      · exact hgas
+      · have hd := hpw_head_tail.2 _ hcont_fo ec htail (ec.1, 280) (by simp [frameObjects])
+        obtain ⟨hb_e, _, _⟩ := frameWF_bounds (hFW_all ec hec')
+        have htail_eq : ∀ k', k' + 8 ≤ 280 → memW post (ec.1 + k') = memW s (ec.1 + k') := by
+          intro k' hk'
+          apply hmemW_ne (ec.1 + k') (by omega)
+          rcases hd with h | h | h | h
+          · cases h
+          · cases h
+          · dsimp only at h; omega
+          · dsimp only at h; omega
+        rw [htail_eq 64 (by omega), htail_eq 192 (by omega)]
+    omega
 
 end HeadStore
 
