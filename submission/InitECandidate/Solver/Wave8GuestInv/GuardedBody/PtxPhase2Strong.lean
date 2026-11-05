@@ -7583,4 +7583,62 @@ theorem phase2_packed_copy_source_body_hoare (h : PtxCallees) (addressSrc keySrc
       (fun r t => r = none → PtxPackedSeparatedInner t) := by
   exact phase2_packed_copy_body_hoare h addressSrc keySrc
 
+/-- Counter updates preserve the world and establish word witnesses for the next guard. -/
+theorem phase2_packed_counters_iteration_state {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hw : WorldOK s)
+    (hp : PtxPackedSeparatedCopy s) (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    WorldOK post ∧ PtxPackedSeparatedInner post ∧
+      (∃ k : BitVec 64, post.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, post.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN post "heap_ptr" ≤ 2 ^ 64 := by
+  dsimp only
+  refine ⟨?_, phase2_packed_separated_counters s hp, ?_, ?_, hb⟩
+  · obtain ⟨ha, S, ht⟩ := hw
+    exact ⟨(arenaReady_with_locals s _ s.clock).mpr ha, S,
+      (worldTyped_with_locals s _ s.clock S).mpr ht⟩
+  · refine ⟨BitVec.ofNat 64 (locN s "k" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" from by decide]
+  · refine ⟨BitVec.ofNat 64 (locN s "j" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Counter updates retain world readiness and install word witnesses for both counters. -/
+theorem phase2_packed_counter_state {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedSeparatedCopy s) (ha : ArenaReady s)
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    WorldOK post ∧ PtxPackedSeparatedInner post ∧
+      (∃ k : BitVec 64, post.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, post.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN post "heap_ptr" ≤ 2 ^ 64 := by
+  dsimp only
+  have hi := phase2_packed_separated_counters s hp
+  refine ⟨phase2_packed_ready_worldOK _ ?_ hi.1.1, hi, ?_, ?_, hb⟩
+  · exact (arenaReady_with_locals s _ s.clock).mpr ha
+  · refine ⟨BitVec.ofNat 64 (locN s "k" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" from by decide]
+  · refine ⟨BitVec.ofNat 64 (locN s "j" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- The inclusive iteration state supplies the complete copy precondition under its guard. -/
+theorem phase2_packed_iteration_guard_pre {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hp : WorldOK s ∧ PtxPackedSeparatedInner s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+    (hg : locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64 := by
+  exact ⟨hp.1, phase2_packed_separated_inner_guarded hp.2.1 hg,
+    hp.2.2.1, hp.2.2.2.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
