@@ -6187,4 +6187,60 @@ theorem union_zero_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [he]
   rw [hx.1]
 
+/-- A successful union into a null destination is read-only outside locals and clock. -/
+theorem htab_union_into_zero_spec :
+    FunSpec (fun s => GuestInv s ∧ locN s "dst" = 0)
+      (OnReturn (fun s post => post = { s with locals := post.locals, clock := post.clock }))
+      (ofString "htab_union_into") := by
+  refine ⟨_, _, _, HtabUnionInto.lookup_htab_union_into, ?_⟩
+  intro F s0 hc hP _ _ v hv
+  suffices key : Wave8M19.Htab.Ret s0
+      (sourceFnBody Guest.Software.guestFn_htab_union_into)
+      (fun _ post => post = { s0 with locals := post.locals, clock := post.clock }) from key v hv
+  change Wave8M19.Htab.Ret s0
+    (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+      (extractFn Guest.Software.guestFn_htab_union_into).body) _
+  dsimp only [extractFn, Guest.Software.guestFn_htab_union_into,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply Wave8M19.Htab.Ret.dec
+  intro capv _
+  set s1 := setVarHOLFinite (ofString "cap") capv s0 with hs1
+  apply Wave8M19.Htab.Ret.dec
+  intro iv _
+  set s2 := setVarHOLFinite (ofString "i") iv s1 with hs2
+  have hG2 : GuestInv s2 := guestInv_with_locals_clock s0 s2.locals s2.clock hP.1
+  have hz2 : locN s2 "dst" = 0 := by
+    simpa [hs2, hs1, locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "i" ≠ ofString "dst" by decide,
+      show ofString "cap" ≠ ofString "dst" by decide] using hP.2
+  apply Wave8M19.Htab.Ret.seq
+  · intro w hw
+    exfalso
+    have hnr : Wave8M19.Htab.NoRet
+        (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "src"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0))
+              (.call (some (none, none)) (ofString "htab_set")
+                [.var .local (ofString "dst"), .rfield 1 (.var .local (ofString "s")),
+                 .rfield 2 (.var .local (ofString "s"))]) .skip)
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))) :=
+      Wave8M19.Htab.NoRet.decCall (Wave8M19.Htab.NoRet.seq
+        (Wave8M19.Htab.NoRet.ite Wave8M19.Htab.NoRet.call0 Wave8M19.Htab.NoRet.skip)
+        Wave8M19.Htab.NoRet.assign)
+    exact Wave8M19.Htab.while_noRet _ _ (fun st v => hnr st v) _ s2 le_rfl w hw
+  · intro u hu
+    apply Wave8M19.Htab.Ret.ret
+    intro val _
+    have he := (union_zero_loop s2 hc hG2 hz2 _ _ _ _ _ (by rw [hu])).1
+    rw [hu] at he
+    dsimp only [Prod.snd] at he
+    rw [he]
+    rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
