@@ -3213,6 +3213,112 @@ theorem frame_open_resumes_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end FrameOpenNoRaise
 
+/-! ## 3o. Arena arithmetic helpers (ported from R13 `Common` / `WkBlockTxEnc.Common`) -/
+
+theorem hb_scratch_alloc_arith (sp fp n : BitVec 64)
+    (hfp_le_sp : fp.toNat ≤ sp.toNat) (hsp_al : sp.toNat % 8 = 0)
+    (hcmp1 : ¬ ((sp - fp).toNat < n.toNat))
+    (hcmp2 : ¬ (((sp - n) &&& ((0 : BitVec 64) - 8)).toNat < fp.toNat)) :
+    let q := (sp - n) &&& ((0 : BitVec 64) - 8)
+    q.toNat % 8 = 0 ∧ fp.toNat ≤ q.toNat ∧ q.toNat ≤ sp.toNat ∧
+    q.toNat + (n.toNat + 7) / 8 * 8 = sp.toNat ∧
+    q.toNat + n.toNat ≤ sp.toNat := by
+  intro q
+  have hsp_lt := sp.isLt
+  have hfp_lt := fp.isLt
+  have hsub_pf : (sp - fp).toNat = sp.toNat - fp.toNat := by
+    rw [BitVec.toNat_sub]; omega
+  have hn_le_gap : n.toNat ≤ sp.toNat - fp.toNat := by omega
+  have hn_le_sp : n.toNat ≤ sp.toNat := by omega
+  have hsub_pn : (sp - n).toNat = sp.toNat - n.toNat := by
+    rw [BitVec.toNat_sub]; omega
+  have hq_nat : q.toNat = (sp.toNat - n.toNat) / 8 * 8 := by
+    have h := InitECandidate.Solver.GuestTrapAndLookup.and_neg8_toNat (sp - n)
+    rw [hsub_pn] at h; exact h
+  have hq_ge_fp : fp.toNat ≤ q.toNat := Nat.le_of_not_lt hcmp2
+  exact ⟨by omega, hq_ge_fp, by omega, by omega, by omega⟩
+
+theorem hb_arenaReady_update_scratch_ptr {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {q : BitVec 64}
+    (hG : GuestInv post) (hA : ArenaOK s)
+    (hg : post.globals = s.globals.update (ofString "scratch_ptr", .val (.word q)))
+    (hq_lo : globN s "frame_mem_ptr" ≤ q.toNat) (hq_hi : q.toNat ≤ scratchEnd)
+    (hq8 : q.toNat % 8 = 0) :
+    ArenaReady post := by
+  have hhp : globN post "heap_ptr" = globN s "heap_ptr" := by
+    unfold globN; rw [hg]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "scratch_ptr" ≠ ofString "heap_ptr" by decide]
+  have hfp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+    unfold globN; rw [hg]; simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "scratch_ptr" ≠ ofString "frame_mem_ptr" by decide]
+  have hsp : globN post "scratch_ptr" = q.toNat := by
+    unfold globN; rw [hg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  refine ⟨hG, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_,
+    globalsWord_update (ofString "scratch_ptr") q hg hA.2.2.2.2.2.2.2.2⟩
+  · rw [hhp]; exact hA.1
+  · rw [hhp]; exact hA.2.1
+  · rw [hfp]; exact hA.2.2.1
+  · rw [hfp, hsp]; exact hq_lo
+  · rw [hsp]; exact hq_hi
+  · rw [hhp]; exact hA.2.2.2.2.2.1
+  · rw [hfp]; exact hA.2.2.2.2.2.2.1
+  · rw [hsp]; exact hq8
+
+
+/-! ## 3p. `frame_new` leaf callees: `scratch_mark` / `frame_mem_mark` -/
+
+section FrameNewLeaves
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+attribute [local irreducible] Ret in
+/-- `scratch_mark()` is `return global scratch_ptr`: no state change besides locals. -/
+theorem scratch_mark_run {F : Type} (s : PanSemStateFiniteExact 64 F) (p : BitVec 64)
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_scratch_mark) (fun v post =>
+      v = .val (.word p) ∧ post.globals = s.globals ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_scratch_mark =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_scratch_mark).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_scratch_mark,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.ret fun val hval => ?_
+  have hv : val = .val (.word p) := by
+    simp [ev, evalHOLExact, hp] at hval; exact hval.symm
+  exact ⟨hv, rfl, rfl, rfl, rfl⟩
+
+attribute [local irreducible] Ret in
+/-- `frame_mem_mark()` is `return global frame_mem_ptr`: no state change besides locals. -/
+theorem frame_mem_mark_run {F : Type} (s : PanSemStateFiniteExact 64 F) (f : BitVec 64)
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_mem_mark) (fun v post =>
+      v = .val (.word f) ∧ post.globals = s.globals ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_mem_mark =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_mem_mark).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_mem_mark,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.ret fun val hval => ?_
+  have hv : val = .val (.word f) := by
+    simp [ev, evalHOLExact, hf] at hval; exact hval.symm
+  exact ⟨hv, rfl, rfl, rfl, rfl⟩
+
+
+end FrameNewLeaves
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
