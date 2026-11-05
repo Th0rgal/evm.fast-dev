@@ -2908,32 +2908,33 @@ to any frame-owned interval. This bridge exposes the exact unchanged footprint
 needed when transporting the head invariant through those stores. -/
 theorem frameObjects_eq_of_dispatch_slots {F : Type}
     {s post : PanSemStateFiniteExact 64 F} (ec : Ivl)
-    (hkeep : ∀ k, k ∉ ([48, 56, 80] : List Nat) →
+    (hkeep : ∀ k, k + 8 ≤ 280 → k ∉ ([48, 56, 80] : List Nat) →
       memW post (ec.1 + k) = memW s (ec.1 + k))
-    (hheader : ∀ k, memW post (memW s (ec.1 + 88) + k) =
+    (hheader : ∀ k, k + 8 ≤ 24 → memW post (memW s (ec.1 + 88) + k) =
       memW s (memW s (ec.1 + 88) + k))
     (hlogs : frameLogObjects post ec = frameLogObjects s ec) :
     frameObjects post ec = frameObjects s ec ∧
       frameScratch post ec = frameScratch s ec ∧
       frameRoleSlots post [ec] = frameRoleSlots s [ec] := by
-  have h8 := hkeep 8 (by decide)
-  have h24 := hkeep 24 (by decide)
-  have h40 := hkeep 40 (by decide)
-  have h88 := hkeep 88 (by decide)
-  have h232 := hkeep 232 (by decide)
+  have h8 := hkeep 8 (by decide) (by decide)
+  have h24 := hkeep 24 (by decide) (by decide)
+  have h40 := hkeep 40 (by decide) (by decide)
+  have h88 := hkeep 88 (by decide) (by decide)
+  have h232 := hkeep 232 (by decide) (by decide)
   have hfl : frameLogs post ec = frameLogs s ec := by
     unfold frameLogs
     rw [h88]
     rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
-      simpa only [Nat.add_zero] using hheader 0, hheader 16]
+      simpa only [Nat.add_zero] using hheader 0 (by decide), hheader 16 (by decide)]
   have hfr : frameRet post ec = frameRet s ec := by
     unfold frameRet
-    rw [hkeep 216 (by decide), hkeep 144 (by decide)]
+    rw [hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide)]
   refine ⟨?_, ?_, ?_⟩
   · simp only [frameObjects, h8, h24, h40, h88, h232, hfl, hfr, hlogs]
   · simp only [frameScratch, h8, h88, h232]
   · simp only [frameRoleSlots, List.flatMap_cons, List.flatMap_nil, List.append_nil,
-      hkeep 136 (by decide), hkeep 168 (by decide), hkeep 176 (by decide)]
+      hkeep 136 (by decide) (by decide), hkeep 168 (by decide) (by decide),
+      hkeep 176 (by decide) (by decide)]
 
 /-- Transport frame well-formedness across the three dispatch slots once the
 owned message and log predicates have been transported. -/
@@ -2941,31 +2942,33 @@ theorem frameWF_of_dispatch_slots {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
     (hfw : FrameWF s S ec) (hAs : ArenaReady s) (hAp : ArenaReady post)
     (hg : ∀ name, globN post name = globN s name)
-    (hkeep : ∀ k, k ∉ ([48, 56, 80] : List Nat) →
+    (hkeep : ∀ k, k + 8 ≤ 280 → k ∉ ([48, 56, 80] : List Nat) →
       memW post (ec.1 + k) = memW s (ec.1 + k))
-    (hheader : ∀ k, memW post (memW s (ec.1 + 88) + k) =
+    (hheader : ∀ k, k + 8 ≤ 24 → memW post (memW s (ec.1 + 88) + k) =
       memW s (memW s (ec.1 + 88) + k))
     (hlogs : LogsListOK post (memW s (ec.1 + 88)))
     (hmsg : MsgOwned post S (memW s (ec.1 + 112))) :
     FrameWF post S ec := by
   have hfl : frameLogs post ec = frameLogs s ec := by
     unfold frameLogs
-    rw [hkeep 88 (by decide)]
+    rw [hkeep 88 (by decide) (by decide)]
     rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
-      simpa only [Nat.add_zero] using hheader 0, hheader 16]
+      simpa only [Nat.add_zero] using hheader 0 (by decide), hheader 16 (by decide)]
   have hfr : frameRet post ec = frameRet s ec := by
     unfold frameRet
-    rw [hkeep 216 (by decide), hkeep 144 (by decide)]
+    rw [hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide)]
   obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
     c14, c15, _, _⟩ := hfw
   unfold FrameWF
   dsimp only
-  rw [hkeep 8 (by decide), hkeep 232 (by decide), hkeep 88 (by decide),
-    hkeep 24 (by decide), hkeep 40 (by decide), hkeep 16 (by decide),
-    hkeep 32 (by decide), hkeep 136 (by decide), hkeep 168 (by decide),
-    hkeep 176 (by decide), hheader 16, hheader 8, hfl,
-    hkeep 216 (by decide), hkeep 144 (by decide), hfr,
-    hkeep 112 (by decide), hg "scratch_ptr", hg "frame_mem_ptr",
+  rw [hkeep 8 (by decide) (by decide), hkeep 232 (by decide) (by decide),
+    hkeep 88 (by decide) (by decide), hkeep 24 (by decide) (by decide),
+    hkeep 40 (by decide) (by decide), hkeep 16 (by decide) (by decide),
+    hkeep 32 (by decide) (by decide), hkeep 136 (by decide) (by decide),
+    hkeep 168 (by decide) (by decide), hkeep 176 (by decide) (by decide),
+    hheader 16 (by decide), hheader 8 (by decide), hfl,
+    hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide), hfr,
+    hkeep 112 (by decide) (by decide), hg "scratch_ptr", hg "frame_mem_ptr",
     hg "heap_ptr", hg "evm_empty"]
   refine ⟨?_, c2, wordsOK_transfer hAs.1 hAp.1 c3, c4, c5, c6, c7,
     c8, c9, c10, c11, c12, c13, wordsOK_transfer hAs.1 hAp.1 c14, ?_, hlogs, hmsg⟩
