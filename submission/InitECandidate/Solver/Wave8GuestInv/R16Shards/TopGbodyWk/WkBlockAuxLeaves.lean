@@ -8110,4 +8110,95 @@ theorem merge_set_other_values_kept {F : Type}
     (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
       (Or.inr ((hW.1.2.1 u hu).2 i hi).1))
 
+/-- Insertion preserves nested roles of a separately owned record-rooted table. -/
+theorem merge_set_other_nestRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (g r : String) (sz : Nat) (hrec : (g, sz) ∈ typedRecords)
+    (hsz : 40 ≤ sz) (hg : ofString g ≠ ofString "heap_ptr")
+    (hroot : globN s g ≠ 0 → RootIn S (memW s (globN s g + 32)))
+    (hne : globN s g ≠ 0 → memW s (globN s g + 32) ≠ 0 →
+      memW s (globN s g + 32) ≠ t) :
+    nestRoles post g r = nestRoles s g r := by
+  have hglob : globN post g = globN s g :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString g) (by simpa using hg))
+  unfold nestRoles
+  rw [hglob]
+  by_cases hn : globN s g = 0
+  · simp [hn]
+  have hr := merge_set_recRoles_kept hA hW ht he g sz [(32, r)] hrec
+    (by omega) hg (by simp; omega)
+  simp only [recRoles, hglob, hn, ↓reduceIte, List.map_cons, List.map_nil] at hr
+  have hp : memW post (globN s g + 32) = memW s (globN s g + 32) := by
+    exact congrArg (fun l : List (Nat × String) => (l.headD (0, "")).1) hr
+  rw [hp]
+  by_cases hz : memW s (globN s g + 32) = 0
+  · simp [hz]
+  have hu : memW s (globN s g + 32) ∈ S := (hroot hn).resolve_left hz
+  rw [merge_set_other_values_kept hA hW ht hu (hne hn hz) he]
+
+/-- Insertion into a table distinct from the BAL root preserves record enumeration. -/
+theorem merge_set_balRecords_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hne : globN s "bal_accounts" ≠ t) :
+    balRecords post = balRecords s := by
+  have hg : globN post "bal_accounts" = globN s "bal_accounts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide))
+  change (if globN post "bal_accounts" = 0 then [] else
+    htabValues post (globN post "bal_accounts")) =
+    (if globN s "bal_accounts" = 0 then [] else htabValues s (globN s "bal_accounts"))
+  rw [hg]
+  by_cases hz : globN s "bal_accounts" = 0
+  · simp [hz]
+  have hu : globN s "bal_accounts" ∈ S :=
+    (hW.1.2.2.2.2.2.2.1 "bal_accounts" (by simp [globalTableRoots])).resolve_left hz
+  rw [merge_set_other_values_kept hA hW ht hu hne he]
+
+/-- The transaction's nested roles survive insertion into the block storage outer table. -/
+theorem merge_set_ts_nestRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    nestRoles post "ts" "ts.inner" = nestRoles s "ts" "ts.inner" := by
+  apply merge_set_other_nestRoles_kept hA hW ht he "ts" "ts.inner" 72
+    (by simp [typedRecords]) (by decide) (by decide)
+  · exact hW.1.2.2.2.2.2.1 32 (by simp [tsTableSlots])
+  · intro hts hu
+    have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+      rw [htbs]
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+        (by rwa [← htbs])
+      simp [recRoles, hbs]
+    have hx : (memW s (globN s "ts" + 32), "ts+32") ∈ worldRoleSlots s := by
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ts" 32 _ hts hu
+      simp [recRoles, hts]
+    exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+      hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+
+/-- Block storage insertion cannot change the enumeration of BAL accounts. -/
+theorem merge_set_bs_balRecords_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    balRecords post = balRecords s := by
+  apply merge_set_balRecords_kept hA hW ht he
+  by_cases hz : globN s "bal_accounts" = 0
+  · rw [hz]; exact Ne.symm ht0
+  have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+    rw [htbs]
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+      (by rwa [← htbs])
+    simp [recRoles, hbs]
+  have hx : (globN s "bal_accounts", "bal_accounts") ∈ worldRoleSlots s := by
+    simp [worldRoleSlots, hz]
+  exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+    hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
