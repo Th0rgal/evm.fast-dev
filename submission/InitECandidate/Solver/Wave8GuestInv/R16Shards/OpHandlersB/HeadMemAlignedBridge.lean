@@ -9351,6 +9351,93 @@ theorem finish_child_pop_other_global {F : Type} (s : PanSemStateFiniteExact 64 
       globN s name := by
   simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm he, Ne.symm hc]
 
+/-- The concrete two-global pop establishes the parent invariant and both release
+marks, with no string-name preservation hypothesis. -/
+theorem finish_child_pop_state_invariants {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt s S)
+    (hne : memW s (globN s "cur_cont" + 16) ≠ 0) :
+    let post := setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)
+    ArenaReady post ∧ ∃ S' : List Nat,
+      (∀ t ∈ S', t ∈ S) ∧
+      InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt post S' ∧
+      EvmEkFk.ReleaseReadyAt post S' (memW s (globN s "cur_cont" + 48))
+        (memW s (globN s "cur_cont" + 56)) ∧
+      evmChain post = (evmChain s).tail ∧
+      (evmChain post).length + 1 = (evmChain s).length ∧
+      R11Shards.OpDispatchSpec.evmR post +
+        (memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) =
+        R11Shards.OpDispatchSpec.evmR s := by
+  dsimp only
+  have hAp := finish_child_pop_arena hAs
+    (BitVec.ofNat 64 (memW s (globN s "cur_cont")))
+    (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))
+  have hg := finish_child_pop_other_global s
+    (BitVec.ofNat 64 (memW s (globN s "cur_cont")))
+    (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))
+  have hev : globN (setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)) "ev" =
+      memW s (globN s "cur_cont") := by
+    simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      if_neg (show ofString "cur_cont" ≠ ofString "ev" from by decide),
+      if_pos rfl, BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (memW_lt s _)
+  have hcc : globN (setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)) "cur_cont" =
+      memW s (globN s "cur_cont" + 8) := by
+    simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      if_pos rfl, BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (memW_lt s _)
+  obtain ⟨S', hsub, hcases, hIp, hch, hR⟩ :=
+    evmInvAt_of_pop_keys hAs hInv hne hAp rfl rfl rfl hev hcc hg
+  have hRel := releaseReadyAt_of_pop_keys hAs hInv hne (by rfl) hg hch hsub hcases
+  refine ⟨hAp, S', hsub, hIp, hRel, hch, ?_, hR⟩
+  rw [hch, EvmEkFk.evmChain_cons_of_cont_ne_zero hne]
+  simp
+
+/-- Parent memory alignment and links are already available immediately after
+the concrete global pop, before restoring the frame-memory pointer. -/
+theorem finish_child_pop_alignment {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : HeadMemChainWF s) (hInv : EvmInv s)
+    (hk : memW s (globN s "cur_cont" + 16) ≠ 0) :
+    let post := setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)
+    (∀ ec ∈ evmChain post,
+      memW post (ec.1 + 32) % 32 = 0 ∧ memW post (ec.1 + 40) % 8 = 0) ∧
+    ChainLinks (memW post) (evmChain post) ∧
+    memW post (globN post "ev" + 24) + memW post (globN post "ev" + 40) =
+      memW s (globN s "cur_cont" + 56) := by
+  dsimp only
+  have hev : globN (setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)) "ev" =
+      memW s (globN s "cur_cont") := by
+    simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      if_neg (show ofString "cur_cont" ≠ ofString "ev" from by decide),
+      if_pos rfl, BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (memW_lt s _)
+  have hcc : globN (setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont"))))) s)) "cur_cont" =
+      memW s (globN s "cur_cont" + 8) := by
+    simp only [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      if_pos rfl, BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (memW_lt s _)
+  have hch := EvmEkFk.evmChain_pop_eq_tail hk hInv.2.choose_spec.2.2.2.1 (by rfl) hev hcc
+  exact finish_child_parent_alignment hs hk hch (fun _ _ => ⟨rfl, rfl, rfl, rfl⟩) hev
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
