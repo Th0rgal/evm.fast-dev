@@ -7545,6 +7545,125 @@ theorem releaseReadyAt_of_pop_keys {F : Type} {s post : PanSemStateFiniteExact 6
             omega
     · exact Or.inr (Or.inr h_cm)
 
+/-! ### Exact gas accounting for error incorporation -/
+
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+def readW {F : Type} (s : PanSemStateFiniteExact 64 F) (a : BitVec 64) : BitVec 64 :=
+  match s.memory a with | .word w => w
+
+theorem ev_add_loads {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e c k : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (w : BitVec 64)
+    (h : ev s (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const k]),
+      .load .one (.op .add [.var .local (ofString "child"), .const k])]) = some (.val (.word w))) :
+    w = readW s (e + k) + readW s (c + k) := by
+  cases h1 : s.memory (e + k) with
+  | word w1 =>
+    cases h2 : s.memory (c + k) with
+    | word w2 =>
+      by_cases hd1 : s.memaddrs (e + k) <;> by_cases hd2 : s.memaddrs (c + k) <;>
+        simp [ev, evalHOLExact, evalListHOLExact, he, hc, memLoadHOLExact,
+          wordOpHOL, wordOp, valueIsWord, valueWord, h1, h2, hd1, hd2] at h
+      simpa [readW, h1, h2] using h.symm
+
+/-- Unlike the write-frame lemma, this records the actual three modular sums. -/
+theorem incorporate_child_on_error_exact {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72) :
+    Ret s (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) (fun _ post =>
+      post.globals = s.globals ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs ∧
+      post.be = s.be ∧ post.memory =
+        updW (updW (updW s.memory (e + 64)
+          (readW s (e + 64) + readW s (c + 64))) (e + 72)
+          (readW s (e + 72) + readW s (c + 72))) (e + 184)
+          (readW s (e + 184) + readW s (c + 184))) := by
+  have hb : sourceFnBody Guest.Software.guestFn_incorporate_child_on_error =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_incorporate_child_on_error).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_incorporate_child_on_error,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.seq_storeWv _ (ev_globOff s _ e 64 he) (fun v hv => ev_op_word s _ _ v hv) ?_
+  intro w1 hw1 _
+  have hw1' := ev_add_loads s e c 64 he hc w1 hw1
+  subst w1
+  refine Ret.seq_storeWv _ (ev_globOff _ _ e 72 he) (fun v hv => ev_op_word _ _ _ v hv) ?_
+  intro w2 hw2 _
+  have hw2' := ev_add_loads _ e c 72 (by exact he) (by exact hc) w2 hw2
+  simp only [readW, updW, if_neg (show e + 72 ≠ e + 64 by bv_omega),
+    if_neg hsep.1] at hw2'
+  subst w2
+  refine Ret.seq_storeWv _ (ev_globOff _ _ e 184 he) (fun v hv => ev_op_word _ _ _ v hv) ?_
+  intro w3 hw3 _
+  have hw3' := ev_add_loads _ e c 184 (by exact he) (by exact hc) w3 hw3
+  simp only [readW, updW, if_neg (show e + 184 ≠ e + 72 by bv_omega),
+    if_neg (show e + 184 ≠ e + 64 by bv_omega), if_neg hsep.2.1,
+    if_neg hsep.2.2] at hw3'
+  subst w3
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+theorem incorporate_child_on_error_head_gas {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    (readW post (e + 64)).toNat + (readW post (e + 192)).toNat ≤
+      (readW s (e + 64)).toNat + (readW s (c + 64)).toNat +
+        (readW s (e + 192)).toNat := by
+  obtain ⟨_, _, _, _, hm⟩ := Ret.apply (incorporate_child_on_error_exact s e c he hc hsep) hr
+  have h64 : readW post (e + 64) = readW s (e + 64) + readW s (c + 64) := by
+    simp [readW, hm, updW]
+  have h192 : readW post (e + 192) = readW s (e + 192) := by
+    simp [readW, hm, updW]
+  rw [h64, h192, BitVec.toNat_add]
+  exact Nat.add_le_add_right (Nat.mod_le _ _) _
+
+theorem readW_toNat {F : Type} (s : PanSemStateFiniteExact 64 F) (a : BitVec 64) :
+    (readW s a).toNat = memW s a.toNat := by
+  simp only [memW, BitVec.ofNat_toNat, readW]
+  cases s.memory a
+  rfl
+
+/-- Error incorporation consumes at most the child's regular-gas credit. -/
+theorem incorporate_child_on_error_gas {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (hcB : c.toNat + 72 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    memW post (e.toNat + 64) + memW post (e.toNat + 192) ≤
+      memW s (e.toNat + 64) + memW s (c.toNat + 64) + memW s (e.toNat + 192) := by
+  have h := incorporate_child_on_error_head_gas s post e c he hc hsep v hr
+  simp only [readW_toNat] at h
+  change memW post (e + (64 : BitVec 64)).toNat + memW post (e + (192 : BitVec 64)).toNat ≤
+    memW s (e + (64 : BitVec 64)).toNat + memW s (c + (64 : BitVec 64)).toNat +
+      memW s (e + (192 : BitVec 64)).toNat at h
+  have h64 : (64 : BitVec 64).toNat = 64 := rfl
+  have h192 : (192 : BitVec 64).toNat = 192 := rfl
+  simp only [BitVec.toNat_add, h64, h192] at h
+  rw [Nat.mod_eq_of_lt (show e.toNat + 64 < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show e.toNat + 192 < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show c.toNat + 64 < 2 ^ 64 by omega)] at h
+  exact h
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
