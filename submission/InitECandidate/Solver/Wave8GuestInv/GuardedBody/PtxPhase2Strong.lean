@@ -21,6 +21,18 @@ structure PtxPhase2LocalShapes {F : Type} (s : PanSemStateFiniteExact 64 F) : Pr
   intrinsic : ∃ a b c : BitVec 64, s.locals.lookup (ofString "intrinsic") =
     some (.rStruct [.val (.word a), .val (.word b), .val (.word c)])
 
+/-- A nonzero numeric local projection rules out the default-value cases. -/
+theorem phase1_word_of_locN_ne_zero {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {name : String} (hn : locN s name ≠ 0) :
+    ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w)) := by
+  cases hl : s.locals.lookup (ofString name) with
+  | none => simp [locN, hl] at hn
+  | some v =>
+    rcases v with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+    · exact ⟨w, rfl⟩
+    · simp [locN, hl] at hn
+    · simp [locN, hl] at hn
+
 /-- R11 entry interface for the strengthened Phase 2 proof. -/
 def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => PtxValidated s ∧ PtxPhase2LocalShapes s
