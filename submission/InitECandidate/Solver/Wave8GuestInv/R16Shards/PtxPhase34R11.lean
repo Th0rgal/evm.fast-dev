@@ -1820,6 +1820,41 @@ theorem receiptEncoded_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     change memW post (locN s "logs" + 8) < 2 ^ 28
     rw [he]; exact hn
 
+theorem logPointers_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0) {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hpres : ∀ S Nd, WorldTypedWith s S Nd →
+      WorldTypedWith {s with memory := mem'} S Nd ∧
+      worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd ∧
+      TxEnv {s with memory := mem'})
+    (hx : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ i ∈ worldOwned s S Nd, Inside (x.toNat, 8) i.1 (i.1 + i.2)) :
+    Phase4LogPointersReady {s with memory := mem'} := by
+  obtain ⟨⟨⟨ho, hl, hlen, a, b, he, hi, ha, hb, S, Nd, hWT, hown⟩, hnl⟩, hlp⟩ := h
+  let post := {s with memory := mem'}
+  have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl ho.1.1.1.1
+  obtain ⟨hWT', heq, _⟩ := hpres S Nd hWT
+  obtain ⟨i, hiw, hix⟩ := hx S Nd hWT
+  have hlogs := logsLiveOwned_single_store ho.1.1.1.2 ho.1.1.1.1 hg hl hown hm
+    ⟨i, hiw, hix⟩ heq
+  have hl' := hl.resolve_left hn
+  have hu : IvlUnhit s post (locN s "logs", 24) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hix ((hown hn).2.1 _ (by simp) _ hiw))
+  have hbnd := (ivl_allocated_bound ho.1.1.1.2 hl'.2.1).2
+  have h0 : memW post (locN s "logs") = memW s (locN s "logs") :=
+    memW_eq_of_ivlUnhit hu hl'.1.1 hbnd ⟨by omega, by omega⟩
+  have h8 : memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) :=
+    memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hbnd ⟨by omega, by omega⟩
+  refine ⟨⟨⟨txAfterCallStrong_worldStore ho hm hpres hx, hlogs.1, ?_,
+    a, b, he, hi, ha, hb, S, Nd, hWT', hlogs.2⟩, ?_⟩, ?_⟩
+  · change memW post (locN s "logs" + 8) < 2 ^ 28
+    rw [h8]; exact hlen
+  · change locN s "nl" = memW post (locN s "logs" + 8)
+    rw [h8]; exact hnl
+  · change locN s "lp" = memW post (locN s "logs")
+    rw [h0]; exact hlp
+
 theorem store_receiptSlot (off : Bool) :
     Hoare Phase4ReceiptEncoded
       (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
