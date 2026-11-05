@@ -2307,6 +2307,26 @@ theorem phase4LogPointers_cut {tail : ProgHOL 64} {b : Nat}
   exact dec_bound_trans (fun s v hp he => phase4LogCount_load s v hp he)
     (dec_bound_trans (fun s v hp he => phase4LogPointer_load s v hp he) htail)
 
+/-- Both concrete source loads establish the typed operands required by allocation. -/
+theorem phase4LogPointers_copy_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4LogPointersReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptEncoded
+      (spinePlug 2 (spineAt 126 ptxCode) tail) b := by
+  unfold ptxCode
+  refine dec_bound_trans (Q := fun s => Phase4LogCountReady s ∧
+    ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (fun s v hp he => phase4LogCount_load_typed s v hp he) ?_
+  intro F t hc ht
+  refine dec_bound_trans (P := fun s => Phase4LogCountReady s ∧
+    ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    ?_ htail t hc ht
+  intro F s v hp he
+  obtain ⟨hr, n, p, hn, hl⟩ := phase4LogPointer_load_typed s v hp.1 hp.2 he
+  exact ⟨hr, ⟨n, hn⟩, hr.1.2.2, ⟨p, hl⟩⟩
+
 theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
     TerminatingProgBoundedOn TxAfterCallStrong
