@@ -977,6 +977,50 @@ theorem txAfterCallStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
   · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
     rw [h16]; exact hlogs.2
 
+theorem eval_add_global_const {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {g : String} {k x : BitVec 64}
+    (hx : evalAt s (.op .add [.var .global (ofString g), .const k]) = some (.val (.word x))) :
+    x.toNat = (globN s g + k.toNat) % 2 ^ 64 := by
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at hx
+  rcases hg : s.globals.lookup (ofString g) with _ | vg
+  · simp [hg] at hx
+  · rcases vg with wg | _ | _
+    · cases wg with
+      | word gw =>
+        simp only [hg, valueIsWord, valueWord, wordOpHOL, wordOp, List.all, List.map,
+          Option.map, Bool.and_self, ↓reduceIte, List.foldr, Option.some.injEq,
+          ValueHOL.val.injEq, HolWordLab.word.injEq] at hx
+        have hgn : globN s g = gw.toNat := by simp [globN, hg]
+        have hx' : x = gw + (k + 0) := hx.symm
+        have hz0 : (0 : BitVec 64).toNat = 0 := by decide
+        rw [hx', BitVec.toNat_add, BitVec.toNat_add, hz0, Nat.add_zero, Nat.add_mod_mod, hgn]
+    · simp [hg, valueIsWord] at hx
+    · simp [hg, valueIsWord] at hx
+
+theorem hoare_store_bo_total (off : Nat) (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    (op : BinOp) (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallStrong
+      (.store (.op .add [.var .global (ofString "bo"), .const (BitVec.ofNat 64 off)])
+        (.op op args)) (fun r t => r = none → TxAfterCallStrong t) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' h hx hv hm
+  obtain ⟨w, rfl⟩ := PtxP1.eval_is_word_op hv
+  have hs := panMemStoresHOL_word_spec (s := s) (x := x) (w := .word w)
+    (mem' := mem') (by simpa only [flattenHOL] using hm)
+  apply txAfterCallStrong_store_bo h hoff hs.1 _ hs.2.2
+  have he := eval_add_global_const hx
+  obtain ⟨S, Nd, hWT, _⟩ := h.2.2.2.2
+  have hb := (ivl_allocated_bound h.1.1.1.2
+    (bo_words hWT.2.2.1 h.1.2.bo_nz).1).2
+  have hoff64 : off < 2 ^ 64 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> norm_num
+  have hsum : globN s "bo" + off < 2 ^ 64 := by
+    dsimp at hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hoff64, Nat.mod_eq_of_lt hsum] using he
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
