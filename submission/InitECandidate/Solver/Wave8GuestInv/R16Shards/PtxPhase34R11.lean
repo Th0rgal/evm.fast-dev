@@ -2602,6 +2602,36 @@ theorem hoare_phase4StableCap_copy_ready :
   exact ⟨hoare_phase4StableCap_adjust.run s hc hp.1 hnt hr,
     hoare_stable_capacity_frame.run s hc hp.2 hnt hr⟩
 
+/-- Capacity normalization adds no clock cost before a fully typed allocation tail. -/
+theorem stable_capacity_copy_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.seq (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip) tail) b := by
+  intro F s hc hp
+  rw [← Nat.zero_add b]
+  refine seq_bound_trans ?_ hoare_phase4StableCap_copy_ready htail s hc hp
+  intro G t hcode hpre
+  exact TerminatingProgBoundedOn.ite_on
+    (yes := .assign .local (ofString "stable_log_cap") (.const 1)) (no := .skip)
+    (a := 0) (b := 0)
+    (P := fun u => Phase4StableCapInit u ∧
+    (∃ n : BitVec 64, u.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN u "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, u.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "stable_log_cap") (.const 1)
+      exact ⟨by omega, by omega⟩)
+    (fun u _ _ _ => by
+      have hu := clock_skip u
+      exact ⟨by omega, by omega⟩) t hcode hpre
+
 theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
     TerminatingProgBoundedOn Phase4LogPointersReady
