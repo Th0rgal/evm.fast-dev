@@ -2712,6 +2712,25 @@ theorem lst_new_stable_source_cells (h : PtxCallees) {F : Type}
     show ofString "stable_logs" ≠ ofString "nl" by decide, if_false] at hlp hnl
   exact ⟨hlp.symm.trans hp.1.2, hnl.symm.trans hp.1.1.2.1⟩
 
+/-- The allocator leaves every source record pointer unchanged. -/
+theorem lst_new_stable_source_entries (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∀ i, i < memW s (locN s "logs" + 8) →
+      memW post (memW s (locN s "logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := R13Shards.worldStep_with_locals (hw (Or.inl ⟨v, rfl⟩)) s.locals s.clock
+  obtain ⟨a, b, _, _, _, _, ho⟩ := hp.1.1.1.2.2.2
+  exact logsWorldOwned_heapStep_array hs hp.1.1.1.1.1.1.1 hp.1.1.1.2.1 ho hp.1.1.2.2
+
 theorem lst_new_stable_capacity_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
@@ -4659,6 +4678,29 @@ theorem stableCopyLoopInv_of_spatial_zero {F : Type} (s : PanSemStateFiniteExact
   refine ⟨hp, ?_, ⟨0, p, q, hi, hl, hq, hd⟩, hs⟩
   simpa [locN, hi] using hpos
 
+/-- Counter initialization combines the retained spatial facts and typed
+operands into the full copy-loop invariant. -/
+theorem stableCopyLoopInv_init_spatial {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hz : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hc : locN s "nl" ≤ locN s "stable_log_cap")
+    (hs : StableCopySpatial s) (n p q : BitVec 64)
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hq : s.locals.lookup (ofString "stable_lp") = some (.val (.word q)))
+    (hd : q.toNat = memW s (locN s "stable_logs")) :
+    StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+  have hsp : StableCopySpatial (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+    apply stableCopySpatial_with_locals s _ s.clock (hp := hs) <;>
+      simp [HolFiniteMapExact.update, FUPDATE, ofString]
+  apply stableCopyLoopInv_of_spatial_zero _ (stableCopyInv_init s hp hz hh ha hc) hsp n p q
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hl
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hq
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString] using hd
+
 /-- Assigning zero to the counter establishes the full loop contract when its
 post-assignment allocation and separation obligations have been supplied. -/
 theorem hoare_stableCopy_init_loop :
@@ -5264,6 +5306,29 @@ theorem lst_new_stable_resumed_header_separation (h : PtxCallees) {F : Type}
     lst_new_stable_post_header_separation h s vs body callee ret v post hc hp ha hl hr
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "stable_logs" ≠ ofString "logs" by decide] using And.intro hh hb
+
+/-- Source-record separation remains valid after allocator memory updates. -/
+theorem lst_new_stable_post_record_separation (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ i, i < memW post (locN s "logs" + 8) →
+        Disj (memW post (memW post (locN s "logs") + 8 * i), 40) (w.toNat, 24) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells h s vs body callee ret v post hc hp hl hr
+  have he := lst_new_stable_source_entries h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  intro i hi
+  rw [hlen] at hi
+  rw [hptr, he i hi]
+  exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
