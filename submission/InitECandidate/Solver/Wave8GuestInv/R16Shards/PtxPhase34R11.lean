@@ -3150,6 +3150,12 @@ def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       ∀ i, i < memW s (locN s "logs" + 8) →
         Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
 
+/-- The allocation contract already supplies the capacity inequality for copy setup. -/
+theorem stableLengthPre_copy_capacity {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64) :
+    locN {s with memory := mem'} "nl" ≤ locN {s with memory := mem'} "stable_log_cap" := by
+  exact (phase4StableCap_bounds s hp.1.1.1).2.1
+
 /-- A memory-only length write retains the three typed setup operands. -/
 theorem stableLengthPre_memory_operands {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
@@ -4433,6 +4439,44 @@ theorem hoare_stable_length_joint :
   intro F s hc hp hnt hr
   exact ⟨hoare_stable_length_store.run s hc hp.1 hnt hr,
     hoare_stable_length_spatial.run s hc hp hnt hr⟩
+
+/-- The actual length store retains all non-spatial copy-setup operands and
+the readable stable header. -/
+theorem hoare_stable_length_setup_frame :
+    Hoare (fun s => StableLengthPre s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → locN t "logs" ≠ 0 ∧
+        WordsOK t (locN t "stable_logs", 24) ∧ Allocated t (locN t "stable_logs", 24) ∧
+        locN t "nl" ≤ locN t "stable_log_cap" ∧ WordAt t (locN t "stable_logs") ∧
+        ∃ n p w : BitVec 64,
+          t.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+          t.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+          t.locals.lookup (ofString "stable_logs") = some (.val (.word w))) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hz, hh, hc, p, hl⟩ := hp
+  have hlocal := hp.2.2.1
+  have hnl := hp.2.2.2.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    have hb := stable_length_address_bound s hp.1.1.1.1.1.1.1.1.1.1.2 hp.2.1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb.1] using hb.2
+  subst x
+  obtain ⟨hdom, he, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  obtain ⟨hh', ha', hw'⟩ := stable_length_store_header_ready s mem' _ he hm hh hp.2.1
+  exact ⟨hz, hh', ha', hc, hw', stableLengthPre_memory_operands s hp mem' p hl⟩
 
 /-- Reassemble the separated store contract from framed source cells and
 preserved ownership after a memory update. -/
