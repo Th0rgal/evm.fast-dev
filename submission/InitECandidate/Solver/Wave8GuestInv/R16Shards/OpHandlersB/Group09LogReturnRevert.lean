@@ -6544,14 +6544,21 @@ private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
     (hcell : SameTypedCells s post S Nd)
-    (hglob_eq : ∀ nm, globN post nm = globN s nm) :
+    (hglob_eq : ∀ nm ∈ coreWorldGlobals, globN post nm = globN s nm) :
     worldTableRefs post S = worldTableRefs s S := by
+  have hg : ∀ nm, nm ∈ coreWorldGlobals → globN post nm = globN s nm := hglob_eq
+  have hws := hg "ws" (by decide)
+  have hbs := hg "bs" (by decide)
+  have hts := hg "ts" (by decide)
+  have hbal := hg "bal_accounts" (by decide)
+  have hjn := hg "journal_n" (by decide)
+  have hj := hg "journal" (by decide)
   unfold worldTableRefs recordSlots
-  rw [hglob_eq "ws", hglob_eq "bs", hglob_eq "ts",
+  rw [hws, hbs, hts,
       show globalTableRoots.map (globN post) = globalTableRoots.map (globN s) by
-        simp only [globalTableRoots, List.map, hglob_eq],
-      balRecords_eq hWT.1 hcell (hglob_eq "bal_accounts"),
-      hglob_eq "journal_n", hglob_eq "journal"]
+        simp only [globalTableRoots, List.map,
+          hg "bal_accounts" (by decide), hg "bal_idx_accts" (by decide), hg "bal_idx_stor" (by decide)],
+      balRecords_eq hWT.1 hcell hbal, hjn, hj]
   have hws_sl : (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW post (globN s "ws" + k)) =
       (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW s (globN s "ws" + k)) := by
     split
@@ -6621,7 +6628,7 @@ private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
       exact memW_eq_of_cellHits hcell (by omega) (mem_worldTypedIvls_journal (S := S) (Nd := Nd) hjc_ne)
         ⟨by dsimp only; omega, by dsimp only; omega⟩
   dsimp only
-  rw [hglob_eq "bs", hglob_eq "ts", hws_sl, hbs_sl, hts_sl, hnest_bs, hnest_ts, hbal_fl, hjrn_mp]
+  rw [hbs, hts, hws_sl, hbs_sl, hts_sl, hnest_bs, hnest_ts, hbal_fl, hjrn_mp]
 
 private theorem sameTypedCells_sub_nd_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd Ndi : List Nat}
@@ -6915,7 +6922,7 @@ private theorem evmInvWith_of_bre {F : Type}
       refine ⟨Nd, hWT_post.2.2.2, fun o ho j hj => ?_⟩
       rw [hne_eq] at hj
       exact hAT o ho j hj
-    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hglob_eq
+    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell (fun g _ => hglob_eq g)
       have hdelEx_iff : ∀ i t, DelExclusive post S (evmChain s) i t ↔ DelExclusive s S (evmChain s) i t := by
         intro i t
         unfold DelExclusive
@@ -7514,7 +7521,7 @@ private theorem evmInvWith_of_head_sp_cell {F : Type}
       refine ⟨Nd, hWT_post.2.2.2, fun o ho j hj => ?_⟩
       rw [hne_eq] at hj
       exact hAT_at o ho j hj
-    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hglob_eq
+    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell (fun g _ => hglob_eq g)
       have hdelEx_iff : ∀ i t, DelExclusive post S (evmChain s) i t ↔ DelExclusive s S (evmChain s) i t := by
         intro i t
         unfold DelExclusive
@@ -12453,5 +12460,178 @@ theorem evmInvAt_of_head_log_growth_g09 {F : Type}
       rw [hfields ec hec 64 (by omega) (by omega), hfields ec hec 192 (by omega) (by omega)]
     rw [hsum]
     exact hgas
+
+/-- Typed-cell preservation supplies all world and role readback facts used in
+log-growth reconstruction, while permitting allocation to advance the heap. -/
+theorem log_growth_world_preserved_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd) :
+    WorldTyped post S ∧ TriesTypedWith post S Nd ∧
+    worldTypedIvls post S Nd = worldTypedIvls s S Nd ∧
+    fixedObjects post = fixedObjects s ∧
+    worldTableRefs post S = worldTableRefs s S ∧
+    (∀ t ∈ S, htabFootprint post t = htabFootprint s t) ∧
+    worldRoleSlots post = worldRoleSlots s ∧
+    journalRoleSlots post = journalRoleSlots s ∧
+    (∀ t ∈ S, memW post t = memW s t) := by
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" ∧
+        ofString g ≠ ofString "scratch_ptr" ∧ ofString g ≠ ofString "frame_mem_ptr" := by
+      revert g hg
+      decide
+    exact hglobals g hne.1 hne.2.1 hne.2.2
+  have hfixed : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hcore "bo" (by decide)),
+      balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell (hcore "bal_accounts" (by decide)),
+      hcore "journal" (by decide), hcore "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" ∧
+        ofString gn.1 ≠ ofString "scratch_ptr" ∧ ofString gn.1 ≠ ofString "frame_mem_ptr" := by
+      revert gn hgn
+      decide
+    rw [hglobals gn.1 hne.1 hne.2.1 hne.2.2]
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hheap hscratch hfixed
+  obtain ⟨hpost, _⟩ := worldTypedWith_congr_w1 hAs hAp hheap hscratch hcore hcell hWT
+    ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩
+  refine ⟨⟨hpost.1, hpost.2.1, hpost.2.2.1, Nd, hpost.2.2.2⟩,
+    hpost.2.2.2, worldTypedIvls_eq_of_cell_g09 hAs.2 hWT hcell hglobals, hfixed,
+    worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hcore,
+    fun t ht => htabFootprint_eq hcell ht (hWT.1.2.1 t ht).1,
+    worldRoleSlots_eq hAs.2 hWT.1 hWT.2.2.1 hcell hcore,
+    journalRoleSlots_eq hAs.2 hWT.2.1 hWT.2.2.1 hcell hcore, ?_⟩
+  intro t ht
+  have hb := ((hWT.1.2.1 t ht).1.1 (t, 88) (by simp [htabFootprint])).1
+  simpa only [hdr, Nat.mul_zero, Nat.add_zero] using htab_hdr_eq hcell ht hb 0 (by omega)
+
+/-- The concrete finishing writes leave every word of a separated object intact.
+This applies uniformly to active/suspended frame records and world objects. -/
+theorem log_growth_protected_words_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64) (o : Ivl)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (ho : o.1 + o.2 ≤ 2 ^ 64)
+    (hdheader : Disj o (l.toNat, 24))
+    (hdbuffer : Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ∀ k, k + 8 ≤ o.2 → memW post (o.1 + k) = memW copy (o.1 + k) := by
+  dsimp only
+  intro k hk
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hsepH : o.1 + o.2 ≤ l.toNat ∨ l.toNat + 24 ≤ o.1 := by
+    rcases hdheader with hz | hz | h | h
+    · omega
+    · cases hz
+    · exact Or.inl h
+    · exact Or.inr h
+  have hsepB : o.1 + o.2 ≤ p.toNat ∨ p.toNat + 8 * n.toNat + 8 ≤ o.1 := by
+    rcases hdbuffer with hz | hz | h | h
+    · omega
+    · dsimp only at hz; omega
+    · exact Or.inl h
+    · exact Or.inr h
+  have ha : (BitVec.ofNat 64 (o.1 + k)).toNat = o.1 + k := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hne : ∀ b : BitVec 64, o.1 + k ≠ b.toNat → BitVec.ofNat 64 (o.1 + k) ≠ b := by
+    intro b hb heq; exact hb (ha.symm.trans (congrArg BitVec.toNat heq))
+  have hns := hne (p + n * 8#64) (by rw [hs]; omega)
+  have hn8' := hne (l + 8#64) (by rw [hl8]; omega)
+  have hn16 := hne (l + 16#64) (by rw [hl16]; omega)
+  have hn0 := hne l (by omega)
+  simp [memW, hns, hn8', hn16, hn0]
+
+/-- A single old-world separation fact supplies both reconstructed frame/world
+separation and trie avoidance after the typed cells have been preserved. -/
+theorem log_growth_world_separation_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {objects : List Ivl}
+    (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (htries : TriesTypedWith post S Nd)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hdisj : IvlsDisj objects (worldOwned s S Nd)) :
+    (∀ o ∈ objects, (∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj o i) ∧
+      ∀ j ∈ fixedObjects post, Disj o j) ∧ AvoidsTries post S objects := by
+  have hnodes := nodeExtents_eq hWT.2.2.2.1 hcell
+  constructor
+  · intro o ho
+    constructor
+    · intro t ht i hi
+      rw [hfoot t ht] at hi
+      exact hdisj o ho i (by
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_left _
+          (List.mem_flatMap.2 ⟨t, ht, hi⟩)))
+    · intro j hj
+      rw [hfixed] at hj
+      exact hdisj o ho j (by
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_right _ hj))
+  · refine ⟨Nd, htries, ?_⟩
+    intro o ho j hj
+    rw [hnodes] at hj
+    exact hdisj o ho j (by
+      unfold worldOwned
+      exact List.mem_append_right _ hj)
+
+/-- Assemble log-growth invariant reconstruction from typed-cell preservation
+and separation against the pre-growth world. All world readbacks are derived. -/
+theorem evmInvAt_of_log_growth_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hdisj : IvlsDisj ((evmChain post).map (frameObjects post)).flatten (worldOwned s S Nd))
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) :
+    EvmInvAt post S := by
+  obtain ⟨hworld, htries, _, hfixed, hrefs, hfoot, hroles, hjroles, hkind⟩ :=
+    log_growth_world_preserved_g09 hAs hAp hWT hheap hscratch hglobals hcell
+  obtain ⟨hseparation, havoids⟩ :=
+    log_growth_world_separation_g09 hWT hcell htries hfixed hfoot hdisj
+  apply evmInvAt_of_head_log_growth_g09 hinv hworld hchain hfields hcont hframes
+    hpairwise ?_ havoids hfixed hrefs hfoot hobjects hlogs hroles hjroles hkind
+  intro ec hec o ho
+  apply hseparation o
+  apply List.mem_flatten.2
+  refine ⟨frameObjects post ec, ?_, ho⟩
+  apply List.mem_map.2
+  exact ⟨ec, hchain.symm ▸ hec, rfl⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

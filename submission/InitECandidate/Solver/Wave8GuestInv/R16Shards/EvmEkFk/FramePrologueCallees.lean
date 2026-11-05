@@ -5772,6 +5772,22 @@ theorem transfer_u256_to_be32_call_no_resumes {F : Type}
       (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])
       rfl s hcode e v hne hv
 
+theorem transfer_log_append_tail_resumes_returned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hcode : s.code = originalRuntimeCode)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0)))).1) :
+    ∃ v, (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0)))).1 =
+        some (.returned v) := by
+  rcases hr with h | ⟨e, v, he, hne⟩
+  · exact h
+  · exact False.elim (evaluate_noCatchableRaise emitLogNcrCallees emitLogNcrCallees_good
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0)))
+      rfl s hcode e v hne he)
+
 theorem transfer_log_append_return_tail {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (hstep : (evaluateHOLFiniteState s
@@ -6259,7 +6275,11 @@ theorem transfer_alloc_topics_writes_locals_prefix {F : Type}
         { (evaluateHOLFiniteState mid cont).2 with
           locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
             (ofString "topics", s.locals.lookup (ofString "topics")) } ∧
-      (∀ k, k ≠ ofString "topics" → mid.locals.lookup k = s.locals.lookup k) := by
+      (∀ k, k ≠ ofString "topics" → mid.locals.lookup k = s.locals.lookup k) ∧
+      mid.be = s.be ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) := by
   obtain ⟨allocated, ht, hhp, hw, st, er, es, hm, hb, hl⟩ :=
     transfer_decCall_alloc_exact_spec s (ofString "topics") _ p 96
       (Or.inr (Or.inl rfl)) hInv hp hr
@@ -6272,7 +6292,7 @@ theorem transfer_alloc_topics_writes_locals_prefix {F : Type}
       ((st.1.2.2.1 _ (by decide)).symm.trans htopic)
       ((hl _ (by decide)).trans hsender)
       ((hl _ (by decide)).trans hrecipient) hin (er ▸ hr)
-  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_, ?_⟩
+  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_, ?_, ef.be.trans hb, out, bytes⟩
   · simpa only [globN, ef.globals] using hhp
   · exact er.trans (congrArg Prod.fst eq)
   · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
@@ -6310,7 +6330,7 @@ theorem transfer_alloc_topics_data_prefix {F : Type}
             (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
               (ofString "data", s.locals.lookup (ofString "data")))
             (ofString "topics", s.locals.lookup (ofString "topics")) } := by
-  obtain ⟨topicsState, ht, hhp, st, resum, er, es, hlocals⟩ :=
+  obtain ⟨topicsState, ht, hhp, st, resum, er, es, hlocals, hbe, hout, hbyte⟩ :=
     transfer_alloc_topics_writes_locals_prefix s p topic sender recipient _ hInv hp htopic hsender hrecipient hr
   obtain ⟨data, hd⟩ := globalWord_of_globN_pos topicsState "heap_ptr" (by rw [hhp]; omega)
   have hdNat : data.toNat = p.toNat + 96 := by
@@ -6524,6 +6544,8 @@ theorem transfer_alloc_data_write_prefix {F : Type}
       (∀ b : Nat, b < 2 ^ 64 →
         ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
       (∀ k, k ≠ ofString "data" → mid.locals.lookup k = cur.locals.lookup k) ∧
+      mid.be = s.be ∧
+      (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat → memW mid b = memW cur b) ∧
       (evaluateHOLFiniteState cur
         (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
           (.seq (.call (some (none, none)) (ofString "u256_to_be32")
@@ -6561,12 +6583,22 @@ theorem transfer_alloc_data_write_prefix {F : Type}
       (fun a hn => (congrFun hm a).trans (hout a hn)) hbAllocated
       ((hl _ (by decide)).trans ha) hd hw.1
       ⟨by rw [← hpNat]; exact hstep.1.2.1, by rw [hheap]⟩ (er ▸ hr)
-  refine ⟨mid, loc ▸ hd, ?_, step, resum, out, bytes, ?_,
-    er.trans (congrArg Prod.fst eq), ?_⟩
+  refine ⟨mid, loc ▸ hd, ?_, step, resum, out, bytes, ?_, eff.be.trans (hb.trans hbe),
+    ?_, er.trans (congrArg Prod.fst eq), ?_⟩
   · simpa only [globN, eff.globals] using hheap
   · intro k hk
     rw [loc]
     exact hl k hk
+  · intro b hb64 hsep
+    have ha : (BitVec.ofNat 64 b).toNat = b := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+    have hm' := eff.cell_frame (BitVec.ofNat 64 b) (by
+      intro i hi
+      rcases List.mem_singleton.mp hi with rfl
+      rw [ha]
+      simp only [CellHits]
+      omega)
+    simp only [memW, hm', hm]
   · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
       { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
         (ofString "data", cur.locals.lookup (ofString "data"))) }) eq)
@@ -6720,6 +6752,358 @@ theorem transfer_record_writes_prefix {F : Type}
     exact w2
   · rw [fr4 _ (by omega) (by omega)]
     exact w3
+
+theorem transfer_record_writes_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (logw topics data : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hd : cur.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferRecordWrites cont)).1)
+    (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid → ByteRegionEffect cur mid [(logw.toNat, 40)] →
+      mid.locals = cur.locals → WordsOK mid (logw.toNat, 40) →
+      memW mid logw.toNat = memW cur logw.toNat →
+      memW mid (logw.toNat + 8) = topics.toNat →
+      memW mid (logw.toNat + 16) = 3 →
+      memW mid (logw.toNat + 24) = data.toNat →
+      memW mid (logw.toNat + 32) = 32 →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      EvmStepCC ["heap_ptr"] mid (evaluateHOLFiniteState mid cont).2) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur (transferRecordWrites cont)).2 := by
+  obtain ⟨mid, step, eff, loc, words, addr, tp, tn, dp, dn, resum, out, bytes, eq⟩ :=
+    transfer_record_writes_prefix s cur logw topics data cont hInv hstep hbe hout hbyte hl ht hd hw hin hr
+  have tail := hcont mid step eff loc words addr tp tn dp dn resum
+  rw [eq]
+  refine ⟨⟨tail.1.1, le_trans step.1.2.1 tail.1.2.1,
+    fun k hk => (step.1.2.2.1 k hk).trans (tail.1.2.2.1 k hk),
+    tail.1.2.2.2.trans step.1.2.2.2⟩, ?_⟩
+  intro ec hec
+  obtain ⟨a, b, c, d⟩ := step.2 ec hec
+  obtain ⟨a', b', c', d'⟩ := tail.2 ec (step.1.2.2.2.symm ▸ hec)
+  exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+
+theorem transfer_record_append_tail_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (evw logw topics data : BitVec 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hd : cur.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hev : cur.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hsys : Inside (globN cur "vm_system_address", 20) sourceBase (globN cur "heap_ptr"))
+    (htop : Inside (topics.toNat, 96) sourceBase (globN cur "heap_ptr"))
+    (hdata : Inside (data.toNat, 32) sourceBase (globN cur "heap_ptr"))
+    (haddr : memW cur logw.toNat = globN cur "vm_system_address")
+    (hlt : logw.toNat + 40 ≤ topics.toNat) (htd : topics.toNat + 96 ≤ data.toNat)
+    (hdisj : ∀ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid → ByteRegionEffect cur mid [(logw.toNat, 40)] →
+      ∀ x ∈ [(logw.toNat, 40), (topics.toNat, 96), (data.toNat, 32)],
+      (∀ t, ∀ S0, TablesTyped mid S0 → t ∈ S0 → ∀ i ∈ htabFootprint mid t, Disj x i) ∧
+      (∀ j ∈ fixedObjects mid, Disj x j) ∧
+      (∀ ec ∈ evmChain mid, ∀ o ∈ frameObjects mid ec, Disj x o) ∧
+      (∀ S0 Nd0, TriesTypedWith mid S0 Nd0 → ∀ j ∈ nodeExtents mid Nd0, Disj x j) ∧
+      (∀ ec ∈ evmChain mid, Disj x (memW mid (ec.1 + 112), 176)))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (transferRecordWrites (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0))))).1) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur
+      (transferRecordWrites (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0))))).2 := by
+  apply transfer_record_writes_step s cur logw topics data _ hInv hstep hbe hout hbyte hl ht hd hw hin hr
+  intro mid step eff loc words addr tp tn dp dn resum
+  have g (name : String) : globN mid name = globN cur name := by simp only [globN, eff.globals]
+  have hret : ∃ v, (evaluateHOLFiniteState mid
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0)))).1 =
+        some (.returned v) := by
+    exact transfer_log_append_tail_resumes_returned mid step.1.1.1.1.code resum
+  apply transfer_log_append_tail_step mid evw logw topics.toNat data.toNat step.1.1
+    (by simp [globN, eff.globals, hev]) words
+    ⟨le_trans hInv.1.2.1 hin.1, by simpa only [g] using hin.2⟩
+    (by simpa only [g] using hsys) (by simpa only [g] using htop)
+    (by simpa only [g] using hdata) (by rw [addr, haddr, g]) tp tn dp dn hlt htd
+    (by rw [logOwnedIvls_of_transfer (addr.trans haddr |>.trans (g _).symm) tp tn dp dn];
+        exact hdisj mid step eff)
+    (by simpa only [evalHOLExact, eff.globals] using hev)
+    (by simpa only [evalHOLExact, loc] using hl) hret
+
+def transferRecordPairWrites (off : Nat) (name : MlS) (count : BitVec 64)
+    (cont : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 off)]) (.var .local name))
+  (.seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 (off + 8))]) (.const count)) cont)
+
+theorem transfer_record_pair_writes_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (logw ptr count : BitVec 64)
+    (off : Nat) (name : MlS) (cont : ProgHOL 64)
+    (hoff : off = 8 ∨ off = 24)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hp : cur.locals.lookup name = some (.val (.word ptr)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferRecordPairWrites off name count cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(logw.toNat, 40)] ∧
+      mid.locals = cur.locals ∧ WordsOK mid (logw.toNat, 40) ∧
+      memW mid (logw.toNat + off) = ptr.toNat ∧
+      memW mid (logw.toNat + (off + 8)) = count.toNat ∧
+      (∀ b : Nat, b < 2 ^ 64 → b ≠ logw.toNat + off → b ≠ logw.toNat + (off + 8) →
+        memW mid b = memW cur b) ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur (transferRecordPairWrites off name count cont) =
+        evaluateHOLFiniteState mid cont := by
+  have ho : off = 8 ∨ off = 16 ∨ off = 24 ∨ off = 32 := by
+    rcases hoff with rfl | rfl <;> simp
+  have ho' : off + 8 = 8 ∨ off + 8 = 16 ∨ off + 8 = 24 ∨ off + 8 = 32 := by
+    rcases hoff with rfl | rfl <;> simp
+  have hbound : logw.toNat + off < 2 ^ 64 := by
+    have hlim := hstep.1.1.1.2.2.1
+    have hle := hin.2
+    have h64 : heapLimit < 2 ^ 64 := by decide
+    rcases hoff with rfl | rfl <;> omega
+  unfold transferRecordPairWrites at hr ⊢
+  obtain ⟨m1, st1, ef1, l1, w1, ws1, fr1, r1, o1, b1, eq1⟩ :=
+    transfer_log_field_store_words_prefix s cur logw ptr off _ _ hInv hstep hbe hout hbyte
+      hl (by simpa only [evalHOLExact] using hp) hw ho hin hr
+  have in1 : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN m1 "heap_ptr") := by
+    simpa only [globN, ef1.globals] using hin
+  obtain ⟨m2, st2, ef2, l2, w2, ws2, fr2, r2, o2, b2, eq2⟩ :=
+    transfer_log_field_store_words_prefix s m1 logw count (off + 8) _ cont hInv st1
+      (ef1.be.trans hbe) o1 b1 (l1 ▸ hl) rfl ws1 ho' in1 r1
+  refine ⟨m2, st2, ef1.trans ef2, l2.trans l1, ws2, ?_, w2, ?_, r2, o2, b2, eq1.trans eq2⟩
+  · rw [fr2 _ hbound (by omega)]
+    exact w1
+  · intro b hb hn hn'
+    rw [fr2 b hb hn', fr1 b hb hn]
+
+theorem transfer_alloc_data_record_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data logw : BitVec 64)
+    (av : ValueHOL 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word data)))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+        (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+          [.var .local (ofString "amount"), .var .local (ofString "data")])
+          (transferRecordPairWrites 24 (ofString "data") 32 cont)))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "data") = some (.val (.word data)) ∧
+      mid.locals.lookup (ofString "log") = some (.val (.word logw)) ∧
+      globN mid "heap_ptr" = data.toNat + 32 ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      mid.globals.lookup (ofString "ev") = cur.globals.lookup (ofString "ev") ∧
+      globN mid "vm_system_address" = globN cur "vm_system_address" ∧
+      WordsOK mid (logw.toNat, 40) ∧
+      memW mid (logw.toNat + 24) = data.toNat ∧ memW mid (logw.toNat + 32) = 32 ∧
+      (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat →
+        b ≠ logw.toNat + 24 → b ≠ logw.toNat + 32 → memW mid b = memW cur b) ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+          (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+            [.var .local (ofString "amount"), .var .local (ofString "data")])
+            (transferRecordPairWrites 24 (ofString "data") 32 cont)))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+          (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+            [.var .local (ofString "amount"), .var .local (ofString "data")])
+            (transferRecordPairWrites 24 (ofString "data") 32 cont)))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "data", cur.locals.lookup (ofString "data")) } := by
+  obtain ⟨written, hd, heap, step, resum, out, bytes, loc, wb, wframe, er, es⟩ :=
+    transfer_alloc_data_write_prefix s cur data av _ hInv hstep hbe hout hbyte ha hp hr
+  have ww : WordsOK written (logw.toNat, 40) := by
+    apply wordsOK_of_inside_heap _ step.1.1.1.1.memaddrs
+    · exact hw.1
+    · decide
+    · exact le_trans hInv.1.2.1 hin.1
+    · have hlim := hstep.1.1.1.2.2.1
+      have hle := hin.2
+      have : heapLimit ≤ heapEnd := by decide
+      omega
+  have wi : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN written "heap_ptr") :=
+    ⟨hin.1, le_trans hin.2 (by
+      have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+      rw [hpNat, heap]; omega)⟩
+  obtain ⟨mid, st', eff, lc, words, ptr, count, frame, res, out', bytes', eq⟩ :=
+    transfer_record_pair_writes_prefix s written logw data 32 24 (ofString "data") cont
+      (Or.inr rfl) hInv step wb out bytes ((loc _ (by decide)).trans hl) hd ww wi resum
+  refine ⟨mid, lc ▸ hd, lc ▸ ((loc _ (by decide)).trans hl), ?_, st', ?_, ?_, words, ptr, count,
+    ?_, res, er.trans (congrArg Prod.fst eq), ?_⟩
+  · simpa only [globN, eff.globals] using heap
+  · exact (hstep.1.2.2.1 _ (by decide)).symm.trans (st'.1.2.2.1 _ (by decide)) |>.symm
+  · unfold globN
+    rw [(st'.1.2.2.1 _ (by decide)).symm, hstep.1.2.2.1 _ (by decide)]
+  · intro b hb hsep hn hn'
+    rw [frame b hb hn hn', wframe b hb hsep]
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "data", cur.locals.lookup (ofString "data"))) }) eq)
+
+def transferAppendReturn : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "log_append")
+    [.var .global (ofString "ev"), .var .local (ofString "log")]) (.return (.const 0))
+
+def transferDataTail : ProgHOL 64 :=
+  .decCall (ofString "data") .one (ofString "alloc") [.const 32]
+    (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+      [.var .local (ofString "amount"), .var .local (ofString "data")])
+      (transferRecordPairWrites 24 (ofString "data") 32 transferAppendReturn))
+
+theorem transfer_data_tail_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data logw evw : BitVec 64) (topics : Nat)
+    (av : ValueHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hev : cur.globals.lookup (ofString "ev") = some (.val (.word evw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word data)))
+    (hsys : Inside (globN cur "vm_system_address", 20) sourceBase (globN cur "heap_ptr"))
+    (htop : Inside (topics, 96) sourceBase (globN cur "heap_ptr"))
+    (haddr : memW cur logw.toNat = globN cur "vm_system_address")
+    (htp : memW cur (logw.toNat + 8) = topics)
+    (htn : memW cur (logw.toNat + 16) = 3)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data.toNat)
+    (hdisj : ∀ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid →
+      ∀ x ∈ [(logw.toNat, 40), (topics, 96), (data.toNat, 32)],
+      (∀ t, ∀ S0, TablesTyped mid S0 → t ∈ S0 → ∀ i ∈ htabFootprint mid t, Disj x i) ∧
+      (∀ j ∈ fixedObjects mid, Disj x j) ∧
+      (∀ ec ∈ evmChain mid, ∀ o ∈ frameObjects mid ec, Disj x o) ∧
+      (∀ S0 Nd0, TriesTypedWith mid S0 Nd0 → ∀ j ∈ nodeExtents mid Nd0, Disj x j) ∧
+      (∀ ec ∈ evmChain mid, Disj x (memW mid (ec.1 + 112), 176)))
+    (hr : Resumes (evaluateHOLFiniteState cur transferDataTail).1) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur transferDataTail).2 := by
+  obtain ⟨mid, hd, hl', heap, step, ev, sys, words, dp, dn, frame, resum, er, es⟩ :=
+    transfer_alloc_data_record_prefix s cur data logw av transferAppendReturn
+      hInv hstep hbe hout hbyte ha hl hw hin hp hr
+  have hbound : logw.toNat + 40 < 2 ^ 64 := by
+    have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+    have h64 := data.isLt
+    omega
+  have addr : memW mid logw.toNat = globN mid "vm_system_address" := by
+    rw [frame _ (by omega) (by omega) (by omega) (by omega), haddr, sys]
+  have tp : memW mid (logw.toNat + 8) = topics := by
+    rw [frame _ (by omega) (by omega) (by omega) (by omega), htp]
+  have tn : memW mid (logw.toNat + 16) = 3 := by
+    rw [frame _ (by omega) (by omega) (by omega) (by omega), htn]
+  have hmono : globN cur "heap_ptr" ≤ globN mid "heap_ptr" := by
+    have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+    rw [hpNat, heap]; omega
+  have tail : EvmStepCC ["heap_ptr"] mid (evaluateHOLFiniteState mid transferAppendReturn).2 := by
+    apply transfer_log_append_tail_step mid evw logw topics data.toNat step.1.1
+      (by simp [globN, ev, hev]) words
+      ⟨le_trans hInv.1.2.1 hin.1, le_trans hin.2 hmono⟩
+      ⟨by simpa only [sys] using hsys.1, by rw [sys]; exact le_trans hsys.2 hmono⟩
+      ⟨htop.1, le_trans htop.2 hmono⟩
+      ⟨by
+          have hlo := hstep.1.1.1.2.1
+          have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+          change sourceBase ≤ data.toNat
+          omega,
+        by rw [heap]⟩ addr tp tn dp dn hlt htd
+      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step)
+      (by simpa only [evalHOLExact, ev] using hev)
+      (by simpa only [evalHOLExact] using hl')
+      (transfer_log_append_tail_resumes_returned mid step.1.1.1.1.code resum)
+  have both : EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState mid transferAppendReturn).2 := by
+    refine ⟨⟨tail.1.1, le_trans step.1.2.1 tail.1.2.1,
+      fun k hk => (step.1.2.2.1 k hk).trans (tail.1.2.2.1 k hk),
+      tail.1.2.2.2.trans step.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := step.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := tail.2 ec (step.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  change EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur
+    (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+      (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+        [.var .local (ofString "amount"), .var .local (ofString "data")])
+        (transferRecordPairWrites 24 (ofString "data") 32 transferAppendReturn)))).2
+  rw [es]
+  exact ⟨⟨localsFree_evmInv _ _ _ both.1.1, both.1.2.1, both.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans both.1.2.2.2⟩, both.2⟩
+
+theorem transfer_accumulated_alloc_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (name : MlS) (p : BitVec 64)
+    (n : Nat) (cont : ProgHOL 64) (hn : n = 40 ∨ n = 96 ∨ n = 32)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1) :
+    ∃ allocated : PanSemStateFiniteExact 64 F,
+      allocated.locals.lookup name = some (.val (.word p)) ∧
+      globN allocated "heap_ptr" = p.toNat + n ∧ WordsOK allocated (p.toNat, n) ∧
+      EvmStepCC ["heap_ptr"] s allocated ∧ allocated.memory = cur.memory ∧
+      allocated.be = s.be ∧
+      (∀ k, k ≠ name → allocated.locals.lookup k = cur.locals.lookup k) ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → allocated.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") → memB allocated b = memB s b) ∧
+      Resumes (evaluateHOLFiniteState allocated cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1 =
+        (evaluateHOLFiniteState allocated cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).2 =
+        { (evaluateHOLFiniteState allocated cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState allocated cont).2.locals
+            (name, cur.locals.lookup name) } := by
+  obtain ⟨allocated, hx, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec cur name cont p n hn hstep.1.1 hp hr
+  have both : EvmStepCC ["heap_ptr"] s allocated := by
+    refine ⟨⟨st.1.1, le_trans hstep.1.2.1 st.1.2.1,
+      fun k hk => (hstep.1.2.2.1 k hk).trans (st.1.2.2.1 k hk),
+      st.1.2.2.2.trans hstep.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := hstep.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := st.2 ec (hstep.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  refine ⟨allocated, hx, hhp, hw, both, hm, hb.trans hbe, hl, ?_, ?_, er ▸ hr, er, es⟩
+  · intro a ha
+    exact (congrFun hm a).trans (hout a ha)
+  · intro b hb64 hnot
+    rw [show memB allocated b = memB cur b by simp only [memB, hm, hb]]
+    apply hbyte b hb64
+    have hmono := st.1.2.1
+    omega
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",

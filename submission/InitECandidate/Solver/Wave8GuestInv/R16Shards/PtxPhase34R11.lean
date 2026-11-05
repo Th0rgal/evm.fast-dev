@@ -12832,4 +12832,446 @@ theorem receipt_logs_bloom_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The bloom call and its RLP serialization in the receipt body share the
+entry scratch frame; both output buffers are fresh relative to that entry. -/
+theorem receipt_bloom_encode_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (logs bloom dst old : BitVec 64)
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hb : mid.locals.lookup (ofString "bloom") = some (.val (.word bloom)))
+    (hd : mid.locals.lookup (ofString "p") = some (.val (.word dst)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hbf : globN s "heap_ptr" ≤ bloom.toNat ∧ bloom.toNat + 256 ≤ heapLimit)
+    (hdf : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + 265 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (none, none)) (ofString "logs_bloom")
+          [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+        (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+          [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])) =
+      (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] ∧
+    ∃ w : BitVec 64, w.toNat ≤ 265 ∧
+      post.locals = mid.locals.update (ofString "w", .val (.word w)) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "logs_bloom")
+        [.var .local (ofString "logs"), .var .local (ofString "bloom")]) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | some r => simp at hr
+  | none =>
+    dsimp only at hr
+    have hnext := receipt_logs_bloom_frame hpre
+      (.var .local (ofString "logs")) (.var .local (ofString "bloom")) logs bloom hl hb hbf hc
+    have hloc : next.locals = mid.locals := (ignored_call_fall_locals mid next
+      (ofString "logs_bloom") _ hc).1
+    have he := eval_call_local_rlp_encode_bytes next "w"
+      (.var .local (ofString "p")) (.var .local (ofString "bloom")) (.const 256)
+      dst bloom 256#64
+      (WkBlockTxEnc.receiptKeccakIvls s ++ [(dst.toNat, 265)]) ["heap_ptr"]
+      hnext.arena.1.code hnext.arena ⟨old, by rw [hloc]; exact hw⟩
+      (by change next.locals.lookup _ = _; rw [hloc]; exact hd)
+      (by change next.locals.lookup _ = _; rw [hloc]; exact hb) rfl
+      ⟨(dst.toNat, 265), List.mem_append_right _ (by simp), le_rfl, by
+        have hbnd := rlpHeaderLenPure_bounds 256
+        change dst.toNat + rlpHeaderLenPure 256 + 256 ≤ dst.toNat + 265
+        omega⟩ (by rw [hr]; simp)
+    rw [hr] at he
+    obtain ⟨w, hbound, _, _, hlocals, heff⟩ := he.1 rfl
+    refine ⟨heapByteEff_trans_fresh hnext heff ?_, w, ?_, ?_⟩
+    · intro i hi
+      simp only [List.mem_singleton] at hi
+      subst i
+      exact hdf
+    · have hbnd := rlpHeaderLenPure_bounds 256
+      change w.toNat ≤ rlpHeaderLenPure 256 + 256 at hbound
+      omega
+    · rw [hloc] at hlocals
+      exact hlocals
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  WkBlockTxEnc.eval_call_local_encode_logs
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Keep the encoded length and local update alongside the receipt frame, so
+the enclosing body can advance `p` and discharge the final-list bounds. -/
+theorem receipt_encode_logs_frame_result {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] ∧
+    ∃ w : BitVec 64, w.toNat ≤ bound ∧ post.globals = mid.globals ∧
+      post.locals = mid.locals.update (ofString lname, .val (.word w)) := by
+  have hframe := receipt_encode_logs_frame hA hma hpre lname dstExp logsExp dst logs bound
+    hfresh hnz hL hD hfit hold hd hl hr
+  obtain ⟨hLs, harr, _, _⟩ := receipt_snapshot_logs hA hma hpre hnz hL hD
+  obtain ⟨hsnap, hf⟩ := heapByteEff_snapshot (fresh := [(dst.toNat, bound)]) hA hpre
+  have hsum : WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+      (memW mid logs.toNat) (memW mid (logs.toNat + 8)) =
+      WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat) (memW s (logs.toNat + 8)) := by
+    have heq : ∀ n, WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+        (memW mid logs.toNat) n = WkBlockTxEnc.logsEncodedSum mid (memW mid logs.toNat) n := by
+      intro n
+      induction n with
+      | zero => rfl
+      | succ n ih => simp only [WkBlockTxEnc.logsEncodedSum, ih]; rfl
+    rw [heq, receipt_logs_sum_preserved hA hma hpre hnz hL hD]
+  have he := WkBlockTxEnc.eval_call_local_encode_logs {mid with globals := s.globals} mid
+    lname dstExp logsExp dst logs bound [(dst.toNat, bound)] ["heap_ptr"]
+    hsnap.arena.2 hsnap.arena.1.memaddrs hf hfresh.1 hfresh.2 (by decide) hnz hLs harr
+    (by change 9 + WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+          (memW mid logs.toNat) (memW mid (logs.toNat + 8)) ≤ bound
+        rw [hsum]; exact hfit)
+    ⟨(dst.toNat, bound), by simp, le_rfl, le_rfl⟩ hold hd hl (by rw [hr]; simp)
+  rw [hr] at he
+  obtain ⟨w, hw, hg, hl, _⟩ := he.1 rfl
+  refine ⟨hframe, w, ?_, hg, hl⟩
+  change w.toNat ≤ 9 + WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+    (memW mid logs.toNat) (memW mid (logs.toNat + 8)) at hw
+  rw [hsum] at hw
+  exact le_trans hw hfit
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Advance the receipt cursor by the encoded log length and finalize its RLP
+list while preserving the entry scratch frame. -/
+theorem receipt_advance_finish_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p w : BitVec 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word w)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ p.toNat + w.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+        (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+          [.var .local (ofString "start"), .var .local (ofString "p")])) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  have hn : (p + w).toNat = p.toNat + w.toNat := by
+    rw [BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt (lt_of_le_of_lt hfresh.2 (by decide))
+  have ha : evaluateHOLFiniteState mid
+      (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) =
+      (none, setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid) := by
+    rw [evaluateHOLFiniteState_assign]
+    have hev : @evalHOLExact 64 F _ mid.toExact
+        (fun a => Classical.propDecidable (mid.memaddrs a))
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]) =
+        some (.val (.word (p + w))) := by
+      simp [evalHOLExact, evalListHOLExact, hp, hw, wordOpHOL, wordOp, valueIsWord, valueWord]
+    have hv : mid.isValidValueHOLFinite .local (ofString "p") (.val (.word (p + w))) = true := by
+      simp [PanSemStateFiniteExact.isValidValueHOLFinite, lookupKvarHOLExact, hp,
+        shapeOfHOLExact, shapeEqHOL]
+    rw [hev]
+    dsimp only
+    rw [if_pos hv]
+    rfl
+  rw [evaluateHOLFiniteState_seq_line780, ha] at hr
+  dsimp only at hr
+  let next := setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid
+  have he : HeapByteEff s next (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] :=
+    hpre.locals_clock next.locals next.clock
+  apply heapByteEff_rlp_finish_list_fresh he "w"
+    (.var .local (ofString "start")) (.var .local (ofString "p")) start (p + w)
+  · exact ⟨w, by simp [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hw,
+      show ofString "p" ≠ ofString "w" by decide]⟩
+  · simpa [evalHOLExact, next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "p" ≠ ofString "start" by decide] using hs
+  · simp [evalHOLExact, next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · rw [hn]; omega
+  · exact ⟨hfresh.1, hn ▸ hfresh.2⟩
+  · exact hr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The concrete log-encoding suffix threads the entry frame through the
+returned length, cursor advance, and final RLP list write. -/
+theorem receipt_logs_finish_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs old : BitVec 64) (bound : Nat)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ p.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+          [.var .local (ofString "p"), .var .local (ofString "logs")])
+        (.seq (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+          (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+            [.var .local (ofString "start"), .var .local (ofString "p")]))) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+        [.var .local (ofString "p"), .var .local (ofString "logs")]) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | some r => simp at hr
+  | none =>
+    dsimp only at hr
+    obtain ⟨he, w, hb, _, hloc⟩ := receipt_encode_logs_frame_result hA hma hpre "w"
+      (.var .local (ofString "p")) (.var .local (ofString "logs")) p logs bound
+      ⟨by omega, hfresh.2⟩ hnz hL hD hfit ⟨old, hw⟩ hp hl hc
+    apply receipt_advance_finish_frame he start p w
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "start" by decide] using hs
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "p" by decide] using hp
+    · rw [hloc]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact hle
+    · exact ⟨hfresh.1, by omega⟩
+    · exact hr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The receipt suffix after bloom serialization advances past that encoding,
+encodes the logs, and finalizes the list within the fresh allocation. -/
+theorem receipt_advance_logs_finish_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs w : BitVec 64) (bound : Nat)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word w)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ p.toNat + w.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+        (.seq
+          (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+            [.var .local (ofString "p"), .var .local (ofString "logs")])
+          (.seq (.assign .local (ofString "p")
+            (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+            (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+              [.var .local (ofString "start"), .var .local (ofString "p")])))) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  have hn : (p + w).toNat = p.toNat + w.toNat := by
+    rw [BitVec.toNat_add]
+    apply Nat.mod_eq_of_lt
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    omega
+  have ha : evaluateHOLFiniteState mid
+      (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) =
+      (none, setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid) := by
+    rw [evaluateHOLFiniteState_assign]
+    have hev : @evalHOLExact 64 F _ mid.toExact
+        (fun a => Classical.propDecidable (mid.memaddrs a))
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]) =
+        some (.val (.word (p + w))) := by
+      simp [evalHOLExact, evalListHOLExact, hp, hw, wordOpHOL, wordOp, valueIsWord, valueWord]
+    have hv : mid.isValidValueHOLFinite .local (ofString "p") (.val (.word (p + w))) = true := by
+      simp [PanSemStateFiniteExact.isValidValueHOLFinite, lookupKvarHOLExact, hp,
+        shapeOfHOLExact, shapeEqHOL]
+    rw [hev]
+    dsimp only
+    rw [if_pos hv]
+    rfl
+  rw [evaluateHOLFiniteState_seq_line780, ha] at hr
+  dsimp only at hr
+  let next := setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid
+  have he : HeapByteEff s next (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] :=
+    hpre.locals_clock next.locals next.clock
+  apply receipt_logs_finish_frame hA hma he start (p + w) logs w bound
+  · simpa [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "p" ≠ ofString "start" by decide] using hs
+  · simp [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · simpa [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "p" ≠ ofString "logs" by decide] using hl
+  · simpa [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "p" ≠ ofString "w" by decide] using hw
+  · rw [hn]; omega
+  · exact ⟨hfresh.1, by rw [hn]; exact hfresh.2⟩
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact hr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Compose the concrete receipt body from bloom generation through final
+list encoding, using only the entry log invariants and fresh-buffer bounds. -/
+theorem receipt_bloom_logs_finish_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs bloom old : BitVec 64) (bound : Nat)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hb : mid.locals.lookup (ofString "bloom") = some (.val (.word bloom)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ p.toNat + 265 + bound ≤ heapLimit)
+    (hbf : globN s "heap_ptr" ≤ bloom.toNat ∧ bloom.toNat + 256 ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (none, none)) (ofString "logs_bloom")
+          [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+        (.seq
+          (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+            [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])
+          (.seq (.assign .local (ofString "p")
+            (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+            (.seq
+              (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+                [.var .local (ofString "p"), .var .local (ofString "logs")])
+              (.seq (.assign .local (ofString "p")
+                (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+                (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+                  [.var .local (ofString "start"), .var .local (ofString "p")])))))) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  rw [← evaluate_seq_assoc, evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (none, none)) (ofString "logs_bloom")
+          [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+        (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+          [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | some r => simp at hr
+  | none =>
+    dsimp only at hr
+    obtain ⟨he, w, hwb, hloc⟩ := receipt_bloom_encode_frame hpre logs bloom p old hl hb hp hw
+      hbf ⟨by omega, by omega⟩ hc
+    apply receipt_advance_logs_finish_frame hA hma he start p logs w bound
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "start" by decide] using hs
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "p" by decide] using hp
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "logs" by decide] using hl
+    · rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact hle
+    · exact ⟨hfresh.1, by omega⟩
+    · exact hnz
+    · exact hL
+    · exact hD
+    · exact hfit
+    · exact hr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Returning a value only clears locals, preserving the accumulated frame. -/
+theorem heapByteEff_return {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (e : ExpHOL 64) (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState mid (.return e) = (some (.returned v), post)) :
+    HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  · split at hr
+    · have hp := (Prod.mk.inj hr).2
+      subst post
+      exact he.locals_clock _ _
+    · cases hr
+
+/-- A fresh transaction-type byte followed by the receipt return preserves
+the same entry frame as the untyped receipt return. -/
+theorem heapByteEff_storeByte_return_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (addr value result : ExpHOL 64) (v : ValueHOL 64)
+    (ha : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid (.seq (.storeByte addr value) (.return result)) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid (.storeByte addr value) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | none =>
+    dsimp only at hr
+    exact heapByteEff_return (heapByteEff_storeByte_fresh he addr value hc ha) result v hr
+  | some r =>
+    have hn : ∀ v, (evaluateHOLFiniteState mid (.storeByte addr value)).1 ≠ some (.returned v) := by
+      intro v
+      rw [evaluateHOLFiniteState_storeByte]
+      split <;> try simp
+      split <;> try simp
+      split <;> simp
+    have hv := congrArg Prod.fst hr
+    exact False.elim (hn v (by simpa [hc] using hv))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

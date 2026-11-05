@@ -14222,4 +14222,398 @@ theorem phase2_htab_set_ts8_world_backing (key value : ExpHOL 64) :
   rw [← hl] at he
   exact he
 
+/-- Read-only account-table queries retain the complete backing-aware continuation guard. -/
+theorem phase2_resume_ro_world_backing {fname name : MlS}
+    (hro : ReadOnlyFn fname) (hi : name ≠ ofString "index")
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [he]; rfl
+  rw [hrestore]
+  refine ⟨?_, ?_, hp.2.2⟩
+  · obtain ⟨S, hS⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+    exact ⟨(arenaReady_with_locals s _ post.clock).mpr hp.1.1,
+      S, (worldTyped_iff_with _ S).mpr ⟨Nd,
+        (worldTypedWith_with_locals s _ post.clock S Nd).mpr hw⟩⟩
+  · apply txEnv_with_locals s _ post.clock _ hp.2.1
+    simp [HolFiniteMapExact.update, FUPDATE, hi]
+
+/-- Recording a pre-state read preserves the transaction backing headers. -/
+theorem phase2_htab_set_bs72_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hbs⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1.1 "bs" 72
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "bs" + 72) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl
+    harg (by rw [hr]; simp)
+  rw [hr] at hx
+  exact phase2_htabExit_callEntry_backing callee hp.1.1 hp.2.1 hw
+    (ht.symm ▸ hmem) hp.2.2 (hx v rfl)
+
+/-- The pre-state-read table insertion retains the complete continuation guard. -/
+theorem phase2_htab_set_bs72_world_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_htab_set_bs72_backing key value).run s hc hp hnt hr
+  have hs := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "bs" "bs+72" 72 key value (by simp) (by decide)
+    (fun s S hT hbs ht0 => R16WkAcctWs.nonValueSlot_bs72 s S hT hbs ht0)
+    s hc hp.1 hnt (Or.inl hr)
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have he := txEnv_preserved_by_worldStep hs.1 (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) (by intro k hk; simp at hk ⊢; tauto)
+    (by simp [R16WkAcctWs.bufRegions]) (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1
+    (by simp [R16WkAcctWs.bufRegions]) hp.2.1 (locals := s.locals) rfl
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value] hr
+  obtain ⟨S', Nd', _, hw', _⟩ := hs.1.2.2.2.2 S Nd hw (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  refine ⟨⟨hs.1.1, S', (worldTyped_iff_with _ S').mpr ⟨Nd', hw'⟩⟩, ?_, hb⟩
+  rw [← hl] at he
+  exact he
+
+/-- Returning from a lookup clears locals but retains its backing-aware guard. -/
+theorem phase2_return_world_backing (e : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.return e) (fun r s => Resumes r → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_return] at hr ⊢
+  split
+  · exact hp
+  · split
+    · refine ⟨?_, ?_, hp.2.2⟩
+      · obtain ⟨S, hS⟩ := hp.1.2
+        obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+        exact ⟨(arenaReady_with_locals s _ s.clock).mpr hp.1.1,
+          S, (worldTyped_iff_with _ S).mpr ⟨Nd,
+            (worldTypedWith_with_locals s _ s.clock S Nd).mpr hw⟩⟩
+      · have he := hp.2.1
+        refine ⟨he.bo_nz, he.bo24, he.bo32, he.bo40, he.bo72, ?_, he.jcap_nz⟩
+        have hi := he.idx_lt
+        change 0 < memW s (globN s "bo" + 80)
+        omega
+    · exact hp
+
+/-- A destination-free call consumes its callee's return rather than returning itself. -/
+theorem phase2_call0_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fname : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · split <;> simp_all
+        split <;> simp
+
+/-- Compose the concrete pre-state-read insertion and return with backing intact. -/
+theorem phase2_record_pre_state_read_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hp : WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) :
+    R16Shards.TxBacking post := by
+  change evaluateHOLFiniteState s (.seq
+    (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  rw [evaluateHOLFiniteState_seq] at hr
+  dsimp only at hr
+  rw [fixClockHOLFinite_evaluateState] at hr
+  generalize he : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) = out at hr
+  obtain ⟨r, t⟩ := out
+  cases r with
+  | none =>
+    have hb := (phase2_htab_set_bs72_backing (.var .local (ofString "addr")) (.const 1)).run
+      s hc hp (by rw [he]; simp) (by rw [he])
+    rw [he] at hb
+    simp only [evaluateHOLFiniteState_return] at hr
+    simp [evalHOLExact, shapeOfHOLExact] at hr
+    obtain ⟨_, rfl⟩ := hr
+    exact hb
+  | some r =>
+    have hn := phase2_call0_ne_returned s (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1] v
+    rw [he] at hn
+    exact (hn (congrArg Prod.fst hr)).elim
+
+/-- Resolve the pre-state-read call and restore its caller's transaction backing. -/
+theorem phase2_record_pre_state_read_call_backing (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "record_pre_state_read")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16WkAcctWs.lookup_record_pre_state_read] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_record_pre_state_read,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  exact phase2_record_pre_state_read_backing (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩ v post hr
+
+/-- The miss-path pre-state-read call preserves the full backing-aware guard. -/
+theorem phase2_record_pre_state_read_world_backing (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_record_pre_state_read_call_backing args).run s hc hp hnt hr
+  have hs := R16WkAcctWs.progWStep_call0 (B := []) (gw := ["heap_ptr"])
+    (fun _ h => h) (fun _ h => h) R16WkAcctWs.wkSc_record_pre_state_read
+    (args := args) s hc hp.1 hnt (Or.inl hr)
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have he := txEnv_preserved_by_worldStep hs.1 (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) (by intro k hk; simp at hk ⊢; tauto)
+    (by simp [R16WkAcctWs.bufRegions]) (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1
+    (by simp [R16WkAcctWs.bufRegions]) hp.2.1 (locals := s.locals) rfl
+  have hl := phase2_call0_locals s (ofString "record_pre_state_read") args hr
+  obtain ⟨S', Nd', _, hw', _⟩ := hs.1.2.2.2.2 S Nd hw (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  refine ⟨⟨hs.1.1, S', (worldTyped_iff_with _ S').mpr ⟨Nd', hw'⟩⟩, ?_, hb⟩
+  rw [← hl] at he
+  exact he
+
+/-- Compose returning lookup continuations without losing backing at binder restoration. -/
+theorem phase2_decCall_backing
+    {P R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {shape : ShapeHOL} {arguments : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hres : DecCallResumeOn P R name fname arguments)
+    (hcont : Hoare R cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.decCall name shape fname arguments cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  refine ⟨fun {F} s hcode hP _ hr => ?_⟩
+  obtain ⟨vout, hr⟩ := hr
+  rcases hrun : evaluateHOLFiniteState s (.decCall name shape fname arguments cont) with ⟨r, post⟩
+  rw [hrun] at hr
+  dsimp only at hr
+  subst r
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) arguments with _ | values
+  · rw [hargs] at hrun; simp at hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun; simp at hrun
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun; simp at hrun
+      · rw [if_neg hz] at hrun
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body').1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        cases bres with
+        | none => simp at hrun
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · set resumed := setVarHOLFinite name v { bpost with locals := s.locals }
+              have hresR : R resumed := hres s values body' callee ret' v bpost hcode hP hargs hl hb
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc := hcont.run resumed hresCode hresR (by rw [hc]; simp)
+              rw [hc] at hQc
+              dsimp only
+              rw [← hpost_eq]
+              exact hQc ⟨vout, rfl⟩
+            · simp at hrun
+          | _ => simp [emptyLocalsHOLFinite] at hrun
+
+theorem phase2_return_backing (e : ExpHOL 64) :
+    Hoare R16Shards.TxBacking (.return e)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  refine ⟨fun s _ hp _ _ => ?_⟩
+  rw [evaluateHOLFiniteState_return]
+  split
+  · exact hp
+  · split <;> exact hp
+
+/-- A void call can reach a returned result only through its continuation. -/
+theorem phase2_call0_seq_backing
+    {P R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hcall : Hoare P (.call (some (none, none)) fname args) (fun r t => r = none → R t))
+    (hcont : Hoare R cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.seq (.call (some (none, none)) fname args) cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply Hoare.seq
+  · refine ⟨fun s hc hp hn => ⟨hcall.run s hc hp hn, ?_⟩⟩
+    intro _ hr
+    obtain ⟨v, hv⟩ := hr
+    exact (phase2_call0_ne_returned s fname args v hv).elim
+  · exact hcont
+
+/-- The complete pre-state account miss tail preserves transaction backing. -/
+theorem phase2_pre_state_account_tail_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.seq (.call (some (none, none)) (ofString "record_pre_state_read")
+        [.var .local (ofString "addr")])
+        (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+          [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))))
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply phase2_call0_seq_backing (phase2_record_pre_state_read_world_backing _)
+  exact phase2_decCall_backing (phase2_ws_get_account_optional_resume_backing _ _)
+    (phase2_return_backing _)
+
+/-- Preserve backing across an early cache hit or a returning miss continuation. -/
+theorem phase2_lookup_hit_or_miss_backing
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (c e : ExpHOL 64) (cont : ProgHOL 64)
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → R16Shards.TxBacking s)
+    (hcont : Hoare P cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.seq (.ite c (.return e) .skip) cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply Hoare.seq
+  · apply Hoare.ite
+    · refine ⟨fun s hc hs hn => ⟨?_, ?_⟩⟩
+      · intro hr
+        exact (return_ne_none s e hr).elim
+      · intro _ hr
+        exact (phase2_return_backing e).run s hc (hp s hs.1) hn hr
+    · exact Hoare.skip (fun s hs => ⟨fun _ => hs.1, fun hn => (hn rfl).elim⟩)
+    · intro F s hs
+      refine ⟨?_, ?_⟩
+      · intro hr; cases hr
+      · intro _ hr
+        obtain ⟨v, hv⟩ := hr
+        cases hv
+  · exact hcont
+
+/-- The full pre-state account lookup preserves backing on both cache branches. -/
+theorem phase2_get_pre_state_account_optional_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_pre_state_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_call0_seq_backing (phase2_htab_set_ts8_world_backing _ _)
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_resume_ro_world_backing (name := ofString "w") EvmFrameSpecs.ro_htab_get (by decide) _)
+  exact phase2_lookup_hit_or_miss_backing _ _ _ (fun _ h => h.2.2)
+    phase2_pre_state_account_tail_backing
+
+/-- Restore backing after the concrete pre-state account lookup. -/
+theorem phase2_get_pre_state_account_optional_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "get_pre_state_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_pre_state_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_pre_state_account_optional] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_pre_state_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional) =
+      (some (.returned v), post) at hr
+  have hb := phase2_get_pre_state_account_optional_backing.run (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+    (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
+/-- The outer optional account lookup preserves backing through insertion and both cache branches. -/
+theorem phase2_get_account_optional_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account_optional)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_call0_seq_backing (phase2_htab_set_ts8_world_backing _ _)
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_resume_ro_world_backing (name := ofString "w") EvmFrameSpecs.ro_htab_get (by decide) _)
+  apply phase2_lookup_hit_or_miss_backing _ _ _ (fun _ h => h.2.2)
+  exact phase2_decCall_backing (phase2_get_pre_state_account_optional_resume_backing _ _)
+    (phase2_return_backing _)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

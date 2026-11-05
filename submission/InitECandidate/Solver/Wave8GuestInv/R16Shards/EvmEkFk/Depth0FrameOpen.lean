@@ -6,6 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Tables
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalStep
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -5893,5 +5894,228 @@ theorem hoare_prepare_dispatch_ext_delegated (gw : List String) (hp : Nat)
     obtain ⟨hD, code, code_n, daddr, hdcode, hdaddr, hnb⟩ := hP
     exact (hoare_prepare_dispatch_delegated_common gw hp G ch code code_n daddr hnb hsub).run
       s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
+
+/-! ## Concrete read-only external-code exception contract -/
+
+/-- `ws_get_code` may raise `StateErr` for a missing code hash.  Every
+catchable exception preserves the dispatch invariant, including its original
+heap/global/chain anchor. -/
+theorem ws_get_code_exception_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret
+    (hc : s.code = originalRuntimeCode) (hP : D0Pre gw hp G ch s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values =
+      some (body, callee, ret)) (e : MlS) (v : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 F) (hne : e ≠ ofString "TrapErr")
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.exception e v), post)) :
+    EvmMsgReady post ∧ StepFrom gw hp G ch post := by
+  have hG := guestInv_callEntry s callee (evmInv_guestInv s (evmInv_of_evmMsgReady s hP.1.1))
+  have heq := FunSpec.at_lookup R16WkAcctWs.ro_ws_get_code s hc values body callee ret hl hG
+    (by rw [hr]; simp)
+  rw [hr] at heq
+  have hres : Resumes (some (.exception e v)) := Or.inr ⟨e, v, rfl, hne⟩
+  have heq' := heq hres
+  dsimp only [Prod.snd, callEntryStateHOLFinite] at heq'
+  rw [heq']
+  exact ⟨localsFree_evmMsgReady s post.locals post.clock hP.1.1,
+    localsFree_stepFrom gw hp G ch s post.locals post.clock hP.1.2⟩
+
+/-- A normal return from `ws_get_code` restores the caller's message local
+and preserves the anchored dispatch precondition for any distinct binder. -/
+theorem ws_get_code_resume_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (D0Pre gw hp G ch) (D0Pre gw hp G ch)
+      name (ofString "ws_get_code") args := by
+  intro F s values body callee ret v post hc hP _ha hl hr
+  have hG := guestInv_callEntry s callee (evmInv_guestInv s (evmInv_of_evmMsgReady s hP.1.1))
+  have heq := FunSpec.at_lookup R16WkAcctWs.ro_ws_get_code s hc values body callee ret hl hG
+    (by rw [hr]; simp)
+  rw [hr] at heq
+  have heq' := heq (Or.inl ⟨v, rfl⟩)
+  dsimp only [Prod.snd, callEntryStateHOLFinite] at heq'
+  have hpost : D0Pre gw hp G ch {post with locals := s.locals} := by
+    rw [heq']
+    exact d0Pre_locals gw hp G ch s s.locals post.clock rfl hP
+  apply d0Pre_locals gw hp G ch _ _ _ ?_ hpost
+  simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
+/-- Compose a concrete `ws_get_code` invocation with a dispatch continuation;
+both ordinary return and catchable `StateErr` paths preserve its invariant. -/
+theorem hoare_ws_get_code_dispatch (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64))
+    (cont : ProgHOL 64)
+    (hcont : Hoare (D0Pre gw hp G ch) cont
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall name (.comb [.one, .one]) (ofString "ws_get_code") args cont)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.decCall_returning_exception_fall
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (ws_get_code_resume_step gw hp G ch name hne args) ?_ hcont
+  intro F s values body callee ret hc hP hl e v post hne hr
+  exact ws_get_code_exception_step gw hp G ch s values body callee ret hc hP hl e v post hne hr
+
+/-- The successful code-record return is a concrete bounded word pair, with
+no effect beyond the return epilogue's local reset. -/
+theorem dispatch_code_record_return {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {p : Nat} (hw : WordsOK s (p, 16))
+    (hin : Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr"))
+    (e0 e8 : ExpHOL 64)
+    (h0 : ev s e0 = some (.val (.word (BitVec.ofNat 64 p))))
+    (h8 : ev s e8 = some (.val (.word (BitVec.ofNat 64 (p + 8))))) :
+    Ret s (.return (.rstruct [.load .one e0, .load .one e8]))
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  obtain ⟨code, code_n, he, hb⟩ := dispatch_code_record_eval hA hw hin e0 e8 h0 h8
+  apply Ret.ret
+  intro v hv
+  rw [he] at hv
+  cases hv
+  exact ⟨code, code_n, rfl, hb, rfl⟩
+
+/-- The successful `ws_get_code` suffix forwards the concrete code words
+from `nodedb_lookup`, retaining their heap-derived bound. -/
+theorem ws_get_code_tail_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (found code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]))
+    (hn : code_n.toNat < 2 ^ 40) (hf : found ≠ 0) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))])))
+      (fun v post => v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  intro v hv
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 0)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hf
+  have hi : evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip) = (none, s) := by
+    rw [evaluateHOLFiniteState_ite]
+    change ev s _ = _ at he
+    unfold ev at he
+    rw [he]
+    simp [evaluateHOLFiniteState_skip]
+  rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
+  dsimp only at hv ⊢
+  rw [evaluateHOLFiniteState_return] at hv ⊢
+  simp [evalHOLExact, evalListHOLExact, hr, shapeOfHOLExact,
+    sizeOfShapeWithContextHOL] at hv ⊢
+  exact ⟨hv.symm, hn, rfl⟩
+
+/-- The final `ext_code_of` return forwards the actual bounded code pair. -/
+theorem ext_code_of_tail_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (code code_n : BitVec 64)
+    (hc : s.locals.lookup (ofString "c") =
+      some (.rStruct [.val (.word code), .val (.word code_n)]))
+    (hn : code_n.toNat < 2 ^ 40) :
+    Ret s (.return (.var .local (ofString "c")))
+      (fun v post => v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  apply Ret.ret
+  intro v hv
+  have he : ev s (.var .local (ofString "c")) =
+      some (.rStruct [.val (.word code), .val (.word code_n)]) := hc
+  rw [he] at hv
+  cases hv
+  exact ⟨rfl, hn, rfl⟩
+
+/-- A missing code entry takes exactly the catchable `StateErr(2)` path. -/
+theorem ws_get_code_missing_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word 0), .val (.word code), .val (.word code_n)]))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))]))) =
+      (some (.exception (ofString "StateErr") (.val (.word 2))), emptyLocalsHOLFinite s) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_raise, hshape, evalHOLExact, shapeOfHOLExact]
+
+/-- The successful `nodedb_lookup` return loads a typed code record into
+three actual words, with the length bound needed by the `ws_get_code` suffix. -/
+theorem nodedb_code_record_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hw : WordsOK s (ptr.toNat, 16))
+    (hin : Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s (.return (.rstruct [.const 1,
+      .load .one (.rfield 1 (.var .local (ofString "r"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])]))
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word 1), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
+  have hd0 := (hw.2.2 0 (by omega)).choose_spec.1
+  have hd8 := (hw.2.2 1 (by omega)).choose_spec.1
+  simp only [Nat.mul_zero, Nat.add_zero] at hd0
+  simp only [Nat.mul_one] at hd8
+  have hc' : s.memory ptr = .word code := by simpa using hc
+  have hd0' : s.memaddrs ptr := by simpa using hd0
+  have haddr : ptr + 8#64 = BitVec.ofNat 64 (ptr.toNat + 8) := by
+    rw [BitVec.ofNat_add]; simp
+  have he : ev s (.rstruct [.const 1,
+      .load .one (.rfield 1 (.var .local (ofString "r"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])]) =
+      some (.rStruct [.val (.word 1), .val (.word code), .val (.word code_n)]) := by
+    simp [ev, evalHOLExact, evalListHOLExact, hr, memLoadHOLExact,
+      isWfShapeExactHOL, wordOpHOL, wordOp, valueIsWord, valueWord,
+      haddr, hd0', hd8, hc', hn]
+  apply Ret.ret
+  intro v hv
+  rw [he] at hv
+  cases hv
+  exact ⟨code, code_n, rfl, hb, rfl⟩
+
+/-- A successful table lookup reaches the bounded code-record return through
+the concrete `nodedb_lookup` found/not-found branch. -/
+theorem nodedb_lookup_code_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hfound : found ≠ 0)
+    (hw : WordsOK s (ptr.toNat, 16))
+    (hin : Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) )
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word 1), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 0)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hfound
+  have hi : evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip) = (none, s) := by
+    rw [evaluateHOLFiniteState_ite]
+    unfold ev at he
+    rw [he]
+    simp [evaluateHOLFiniteState_skip]
+  intro v hv
+  rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
+  exact nodedb_code_record_return s hA found ptr hr hw hin v hv
 
 end HeadStore
