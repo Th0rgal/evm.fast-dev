@@ -5988,4 +5988,56 @@ theorem progWStep_call0_of_entry {B : BufList} {gw : List String}
               exact h
             exact (hs hres).from_entry
 
+/-- Argument evaluation identifies the ordinary block-table destination at entry. -/
+theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (off : BitVec 64) (hoff : off.toNat ∈ [8, 16, 24, 40, 48])
+    (hnz : memW s (globN s "bs" + off.toNat) ≠ 0)
+    (src : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bs"), .const off]), src] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_union_into") vs =
+      some (body, callee, ret)) :
+    WorldOK (callEntryStateHOLFinite s callee) ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
+      globN (callEntryStateHOLFinite s callee) "bs" ≠ 0 ∧
+      locN (callEntryStateHOLFinite s callee) "dst" =
+        memW (callEntryStateHOLFinite s callee) (globN (callEntryStateHOLFinite s callee) "bs" + k) ∧
+      locN (callEntryStateHOLFinite s callee) "dst" ≠ 0 := by
+  have ha' := ha
+  rw [evalListHOLFinite_eq_toExact] at ha'
+  rcases he1 : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const off])) with _ | v1
+  · simp [evalListHOLExact, he1] at ha'
+  · rcases he2 : evalAt s src with _ | v2
+    · simp [evalListHOLExact, he1, he2] at ha'
+    · have hv : vs = [v1, v2] := by
+        simpa only [evalListHOLExact, he1, he2, Option.some.injEq] using ha'.symm
+      subst vs
+      have hp : callee.lookup (ofString "dst") = some v1 := by
+        unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl
+        split at hl
+        · cases hl
+        · rename_i eb el er raw
+          have heq := Option.some.inj hl
+          cases heq
+          unfold lookupCodeHOLExact at raw
+          rw [hc, HtabUnionInto.lookup_htab_union_into] at raw
+          dsimp only at raw
+          split at raw
+          · have hloc' := (Prod.mk.inj (Prod.mk.inj (Option.some.inj raw)).2).1
+            subst el
+            simp [HolFiniteMapExact.lookup_update, FUPDATE,
+              show ofString "dst" ≠ ofString "src" by decide]
+          · cases raw
+      have hbound : off.toNat < sourceBase := by
+        have hk := hoff
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with h | h | h | h | h <;> rw [h] <;> decide
+      obtain ⟨w, rfl, hw, hbs⟩ := evalAt_loadG_nz s hW.1.1 "bs" off hbound v1 he1
+      have hd : locN (callEntryStateHOLFinite s callee) "dst" =
+          memW s (globN s "bs" + off.toNat) := by
+        simp [locN, callEntryStateHOLFinite, hp, hw]
+      exact ⟨localsFree_worldOK s callee (s.clock - 1) hW,
+        off.toNat, hoff, hbs, hd, by rw [hd]; exact hnz⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
