@@ -3354,6 +3354,25 @@ private theorem m23_bre_of_store_word {F : Type} {s post : PanSemStateFiniteExac
     InitECandidate.Solver.Wave8GuestInv.M11.ByteRegionEffect.of_store_word hma hrun hword hin
   exact ⟨m11_bre_to_m23 heff, hloc⟩
 
+theorem transfer_allocated_store_step {F : Type}
+    {s allocated post : PanSemStateFiniteExact 64 F}
+    {dst val : ExpHOL 64} {Rl : List Ivl}
+    (hInv : EvmInv s) (halloc : EvmStepCC ["heap_ptr"] s allocated)
+    (hmem : allocated.memory = s.memory) (hbe : allocated.be = s.be)
+    (hrun : evaluateHOLFiniteState allocated (.store dst val) = (none, post))
+    (hword : ∀ v, @evalHOLExact 64 F _ allocated.toExact
+      (fun a => Classical.propDecidable (allocated.memaddrs a)) val = some v →
+      ∃ w : BitVec 64, v = .val (.word w))
+    (hdst : ∀ addr : BitVec 64, @evalHOLExact 64 F _ allocated.toExact
+      (fun a => Classical.propDecidable (allocated.memaddrs a)) dst = some (.val (.word addr)) →
+      allocated.memaddrs addr →
+      ∃ i ∈ Rl, i.1 ≤ addr.toNat ∧ addr.toNat + 8 ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    EvmStepCC ["heap_ptr"] s post ∧
+      ByteRegionEffect allocated post Rl ∧ post.locals = allocated.locals := by
+  obtain ⟨heff, hl⟩ := m23_bre_of_store_word halloc.1.1.1.1.memaddrs hrun hword hdst
+  exact ⟨evmStepCC_of_allocated_heap_effect hInv halloc hmem hbe heff hin, heff, hl⟩
+
 private theorem word_dom_lt_heapEnd_local {s_ma : BitVec 64 → Prop} (hma : s_ma = ordinaryDomain)
     (addr : BitVec 64) (hdom : s_ma addr) :
     addr.toNat + 8 ≤ heapEnd := by
