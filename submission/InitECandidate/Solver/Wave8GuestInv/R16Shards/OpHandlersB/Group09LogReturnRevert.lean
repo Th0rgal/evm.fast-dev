@@ -12853,4 +12853,52 @@ theorem log_growth_concrete_frame_post_g09 {F : Type}
     (congrFun hglob "evm_empty") hwords hlo hq hrecords
     hfields hheaderWords hallocated hmsg hlog
 
+/-- Header allocation/domain and validity of the newly constructed record survive
+the concrete growth tail. Only separation of that record from the two write
+regions is required; its pointer fields need no post-state assumptions. -/
+theorem log_growth_header_and_new_record_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hscratch : globN copy "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (hheap_bound : globN copy "heap_ptr" ≤ 2 ^ 64)
+    (hlog : LogEntryOK copy log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, q.toNat - p.toNat)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    WordsOK post (l.toNat, 24) ∧ Allocated post (l.toNat, 24) ∧
+      LogEntryOK post log.toNat ∧ logOwnedIvls post log.toNat = logOwnedIvls copy log.toNat := by
+  dsimp only
+  have hh := hFW.1 (memW s (ec.1 + 88), 24) (by simp)
+  rw [hl] at hh
+  have hwords := (wordsOK_congr_of_dom_g09 hdom).2 hh.2
+  have hallocated : Allocated copy (l.toNat, 24) :=
+    AllocatorGrows.allocated ⟨hheap, hscratch⟩ (Or.inr hh.1)
+  have hq := q.isLt
+  have hdB : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8) := by
+    rcases hdbuffer with hz | hz | hleft | hright
+    · exact Or.inl hz
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inr (Or.inl hleft))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  have hrecord := log_growth_record_preserved_g09 copy copy l p n cap log log.toNat
+    hl_bound (by omega) (le_trans hlog.2.1.2 hheap_bound) hdheader hdB rfl
+    (le_refl _) rfl (by intros; rfl) hlog
+  refine ⟨?_, hallocated, hrecord⟩
+  exact (wordsOK_congr_of_dom_g09 (s := copy)
+    (post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}) rfl).2 hwords
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
