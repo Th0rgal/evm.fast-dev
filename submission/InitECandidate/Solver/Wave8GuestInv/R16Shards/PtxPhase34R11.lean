@@ -10014,4 +10014,94 @@ theorem phase4ThroughLogs_backing_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+
+/-- A concrete write footprint disjoint from the outer record and both nested
+headers preserves backing. This applies to fresh-allocation frame contracts. -/
+theorem txBacking_of_framed_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {keep : List Ivl} {fresh : Ivl}
+    (h : TxBacking s) (hbo : globN post "bo" = globN s "bo")
+    (hbo8 : globN s "bo" % 8 = 0) (hbob : globN s "bo" + 88 ≤ 2 ^ 64)
+    (hl8 : ∀ k ∈ ([40, 72] : List Nat), memW s (globN s "bo" + k) % 8 = 0)
+    (hlb : ∀ k ∈ ([40, 72] : List Nat), memW s (globN s "bo" + k) + 24 ≤ 2 ^ 64)
+    (hfr : FrameOutside s post keep fresh)
+    (hk_al : ∀ j ∈ keep, j.1 % 8 = 0 ∧ j.2 % 8 = 0)
+    (hf_al : fresh.1 % 8 = 0 ∧ fresh.2 % 8 = 0)
+    (hbk : ∀ j ∈ keep, Disj (globN s "bo", 88) j)
+    (hbf : Disj (globN s "bo", 88) fresh)
+    (hlk : ∀ k ∈ ([40, 72] : List Nat), ∀ j ∈ keep,
+      Disj (memW s (globN s "bo" + k), 24) j)
+    (hlf : ∀ k ∈ ([40, 72] : List Nat),
+      Disj (memW s (globN s "bo" + k), 24) fresh) : TxBacking post := by
+  apply txBacking_of_unhit_headers h hbo hbo8 hbob
+    (R16Shards.ivlUnhit_of_frameOutside_aligned hfr (by simp) hk_al hf_al hbk hbf) hl8 hlb
+  intro k hk
+  exact R16Shards.ivlUnhit_of_frameOutside_aligned hfr (by simp) hk_al hf_al (hlk k hk) (hlf k hk)
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Fresh heap writes cannot touch an already allocated heap or scratch region. -/
+theorem allocated_unhit_fresh_heap {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {i : Ivl}
+    (hA : ArenaOK s) (hAp : ArenaOK post)
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hi : Allocated s i) (hinz : i.2 ≠ 0)
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    IvlUnhit s post i := by
+  apply R16Shards.ivlUnhit_of_frameOutside_aligned hfr
+  · exact fun hz => False.elim (hinz hz)
+  · intro j hj
+    simp only [List.mem_singleton] at hj
+    subst j
+    exact ⟨hA.2.2.2.2.2.2.2.1, by simp⟩
+  · have hs := hA.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.1
+    exact ⟨hs, by dsimp; omega⟩
+  · intro j hj
+    simp only [List.mem_singleton] at hj
+    subst j
+    exact Or.inr (Or.inl rfl)
+  · have hbound : globN post "heap_ptr" ≤ globN s "scratch_ptr" := by
+      have hlim := hAp.2.1
+      have hs := hA.2.2.1
+      have hs' := hA.2.2.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      omega
+    rcases hi with hi | hi
+    · exact Or.inr (Or.inr (Or.inl hi.2))
+    · apply Or.inr ∘ Or.inr ∘ Or.inr
+      have := hi.1
+      dsimp
+      omega
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Fresh heap allocation preserves backing when the old record and headers
+are allocated and aligned. -/
+theorem txBacking_fresh_heap {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hAp : ArenaOK post) (h : TxBacking s)
+    (hbo : globN post "bo" = globN s "bo")
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hb : Allocated s (globN s "bo", 88)) (hb8 : globN s "bo" % 8 = 0)
+    (hl : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+      memW s (globN s "bo" + k) % 8 = 0)
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    TxBacking post := by
+  apply txBacking_of_unhit_headers h hbo hb8 (ivl_allocated_bound hA hb).2
+    (allocated_unhit_fresh_heap hA hAp hgrow hb (by simp) hfr)
+    (fun k hk => (hl k hk).2)
+    (fun k hk => (ivl_allocated_bound hA (hl k hk).1).2)
+  intro k hk
+  exact allocated_unhit_fresh_heap hA hAp hgrow (hl k hk).1 (by simp) hfr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
