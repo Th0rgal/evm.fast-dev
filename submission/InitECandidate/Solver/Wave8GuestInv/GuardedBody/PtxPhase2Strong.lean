@@ -11400,4 +11400,71 @@ theorem phase2_alloc_packing_live_family_bound (h : PtxCallees)
   · exact phase2_count_cases_alloc_live_family h buffers contents
   · exact phase2_packed_live_family_continuation_bound h buffers contents ht
 
+/-- The three caller-owned buffers already present when packed-key allocation starts. -/
+inductive PtxWarmBuffer where
+  | environment
+  | sender
+  | addresses
+
+def phase2_warm_buffer {F : Type} (s : PanSemStateFiniteExact 64 F) : PtxWarmBuffer → Ivl
+  | .environment => (locN s "te", 200)
+  | .sender => (locN s "sender", 24)
+  | .addresses => (locN s "al_addrs", (locN s "nal" + 1) * 8)
+
+/-- Save actual words, so the continuation can recover pointer-valued array entries. -/
+def phase2_saved_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : Nat) : BitVec 64 :=
+  match s.memory (BitVec.ofNat 64 p) with
+  | .word w => w
+
+theorem phase2_saved_word_value {F : Type} (s : PanSemStateFiniteExact 64 F) (p : Nat) :
+    (phase2_saved_word s p).toNat = memW s p := by
+  cases h : s.memory (BitVec.ofNat 64 p) with
+  | word w => rfl
+
+/-- Initializing a snapshot requires ownership, but no extra content hypothesis. -/
+theorem phase2_live_buffer_snapshot {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (buffer : Ivl)
+    (hi : Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+    (hd : IvlsDisj [buffer] (worldOwned s S Nd)) :
+    PtxLiveBufferAt s S Nd buffer (phase2_saved_word s) := by
+  refine ⟨hi, hd, ?_⟩
+  intro p _ _ _
+  exact (phase2_saved_word_value s p).symm
+
+/-- Concrete warm-state resources exported by allocation and packing. The reference
+state fixes the buffer addresses even while the loop modifies its local counters. -/
+def PtxWarmPacked {F₀ : Type} (before : PanSemStateFiniteExact 64 F₀)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (WorldOK s ∧ PtxPackedKeysReady s) ∧
+    ∀ i, PtxPackedLiveFrame (phase2_warm_buffer before i) (phase2_saved_word before) s
+
+theorem phase2_warm_packed_word {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxWarmPacked before s) (i : PtxWarmBuffer) (p : Nat)
+    (hlo : (phase2_warm_buffer before i).1 ≤ p)
+    (hhi : p + 8 ≤ (phase2_warm_buffer before i).1 + (phase2_warm_buffer before i).2)
+    (hal : p % 8 = 0) : memW s p = memW before p := by
+  obtain ⟨S, Nd, _, _, _, hb⟩ := (hp.2 i).1
+  exact (hb.2.2 p hlo hhi hal).trans (phase2_saved_word_value before p)
+
+/-- Instantiate the family continuation with the environment, sender, and address array. -/
+theorem phase2_alloc_packing_warm_bound (h : PtxCallees) {F₀ : Type}
+    (before : PanSemStateFiniteExact 64 F₀) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxWarmPacked before) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxAddressCountExit s ∧
+      ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        PtxLiveBufferAt s S Nd (phase2_warm_buffer before i) (phase2_saved_word before))
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]]
+        (.seq
+          (.dec (ofString "k") .one (.const 0)
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+                phase2_packed_source_outer_body))) tail))
+      (K.alloc + ((2 ^ 63 + 1) * ((2 ^ 63 + 1) *
+        ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) + 1) := by
+  exact phase2_alloc_packing_live_family_bound h (phase2_warm_buffer before)
+    (fun _ => phase2_saved_word before) ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
