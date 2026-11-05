@@ -1182,6 +1182,130 @@ theorem hoare_store_msg_48 :
     (ByteRegionEffect.to_evmStep_avoids (evmAvoids_msg_of_evmMsgReady s hP)
       (m11Bre_to_evmBre (fun i hi => by simp only [List.mem_singleton] at hi; subst hi; simp) heff))
 
+/-- `st ev + 200, used` (`depth0_prepare` records the authorization state gas) from
+`EvmMsgReady` with a word local `used`: `EvmMsgReady` again (`ev+200` is outside the gas sum),
+locals and globals unchanged, and the owned message pointer `ev+112` unchanged. -/
+theorem store_ev_200_used_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) {w_used : BitVec 64}
+    (hused : s.locals.lookup (ofString "used") = some (.val (.word w_used)))
+    {post : PanSemStateFiniteExact 64 F}
+    (hev : evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used"))) =
+      (none, post)) :
+    EvmMsgReady post ∧ post.locals = s.locals ∧ post.globals = s.globals ∧
+      memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112) := by
+  have hrun := evaluateHOLFiniteState_store s
+    (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used"))
+  rw [hev] at hrun
+  revert hrun
+  rcases hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .global (ofString "ev"), .const 200]) with _ | dv
+  · simp
+  · rcases dv with ⟨⟨addr⟩⟩ | _ | _
+    · have hsrc : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+          (.var .local (ofString "used")) = some (.val (.word w_used)) := by
+        simp [evalHOLExact, hused]
+      rw [hsrc]
+      dsimp only
+      split
+      · rename_i m' hst
+        unfold flattenHOL at hst
+        unfold panMemStoresHOL at hst
+        unfold panMemStoreHOL at hst
+        by_cases hdom : s.memaddrs addr
+        · simp only [hdom, ↓reduceIte, panMemStoresHOL, Option.some.injEq] at hst
+          subst hst
+          intro hrun
+          injection hrun with _ hpost
+          subst hpost
+          have hInv := evmInv_of_evmMsgReady s hP
+          have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+            unfold evmChain; exact List.mem_cons_self
+          obtain ⟨_, S, _, _, _, _, hFW_all, _⟩ := hInv
+          have hb_e := (R10Shards.GbodyProcessMsg.frameWF_bounds (hFW_all _ hhead_mem)).1
+          dsimp only at hb_e
+          have haddr_nat : addr.toNat = globN s "ev" + 200 := by
+            simp [evalHOLExact, evalListHOLExact] at hdst
+            rcases hg : s.globals.lookup (ofString "ev") with _ | gv
+            · simp [hg] at hdst
+            · rcases gv with ⟨⟨gw⟩⟩ | _ | _
+              · simp [hg, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+                subst hdst
+                have hglob : globN s "ev" = gw.toNat := by simp [globN, hg]
+                rw [hglob] at hb_e ⊢
+                have h200 : (200#64).toNat = 200 := by decide
+                rw [BitVec.toNat_add, h200, Nat.mod_eq_of_lt (by omega)]
+              · simp [hg, valueIsWord] at hdst
+              · simp [hg, valueIsWord] at hdst
+          set post : PanSemStateFiniteExact 64 F :=
+            { s with memory := fun current => if current = addr then .word w_used else s.memory current } with hpost_def
+          have hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+              post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+              ∀ a : BitVec 64, a ≠ addr → post.memory a = s.memory a :=
+            ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun a hne => by simp [post, hne]⟩
+          have hne_of : ∀ k, k < 280 → k ≠ 200 → BitVec.ofNat 64 (globN s "ev" + k) ≠ addr := by
+            intro k hk hkne heq
+            have h1 : (BitVec.ofNat 64 (globN s "ev" + k)).toNat = globN s "ev" + k :=
+              Nat.mod_eq_of_lt (by omega)
+            rw [heq, haddr_nat] at h1
+            omega
+          have hwk : ∀ k, k < 280 → k ≠ 200 → memW post (globN s "ev" + k) = memW s (globN s "ev" + k) := by
+            intro k hk hkne
+            unfold memW; simp [post, hne_of k hk hkne]
+          refine ⟨(evmMsgReady_store_ev_gas hP (Or.inr rfl) haddr_nat hdom hpost
+            (by rw [hwk 64 (by omega) (by omega), hwk 192 (by omega) (by omega)])).1, rfl, rfl,
+            hwk 112 (by omega) (by omega)⟩
+        · simp [hdom] at hst
+      · simp
+    · simp
+    · simp
+
+theorem hoare_store_ev_200_used :
+    Hoare (fun s => EvmMsgReady s ∧ ∃ w : BitVec 64,
+        s.locals.lookup (ofString "used") = some (.val (.word w)))
+      (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+      (fun r t => r = none → EvmMsgReady t) := by
+  refine ⟨fun {F} s _ ⟨hP, w_used, hused⟩ _ hr => ?_⟩
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used"))) with ⟨res, post⟩
+  rw [hev] at hr
+  dsimp only at hr ⊢
+  subst hr
+  exact (store_ev_200_used_run s hP hused hev).1
+
+/-- The three stores closing the authorization branch of `depth0_prepare`
+(`st ev+200, used; st msg+48, lds(ev+72); st ev+192, 0`), from `EvmMsgReady` with word locals
+`used` and `msg = ev+112`: `EvmMsgReady` again. -/
+theorem hoare_depth0_auth_stores :
+    Hoare (fun s => EvmMsgReady s ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w))) ∧
+        ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+          m.toNat = memW s (globN s "ev" + 112))
+      (.seq
+        (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+        (.seq
+          (.store (.op .add [.var .local (ofString "msg"), .const 48])
+            (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+          (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))
+      (fun r t => r = none → EvmMsgReady t) := by
+  refine Hoare.seq (R := fun s => EvmMsgReady s ∧
+      ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112)) ?_ ?_
+  · refine ⟨fun {F} s hcode ⟨hP, ⟨w_used, hused⟩, m, hm, hm_eq⟩ hnt => ?_⟩
+    rcases hev : evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used"))) with ⟨res, post⟩
+    dsimp only
+    refine ⟨fun hr => ?_, fun hr hr' => absurd hr' hr⟩
+    subst hr
+    obtain ⟨hP', hloc, hglob, h112⟩ := store_ev_200_used_run s hP hused hev
+    have hglobN : globN post "ev" = globN s "ev" := by simp [globN, hglob]
+    refine ⟨hP', m, by rw [hloc]; exact hm, ?_⟩
+    rw [hglobN, h112]; exact hm_eq
+  · refine Hoare.seq (R := EvmMsgReady) ?_ hoare_store_ev_192_zero
+    refine ⟨fun {F} s hcode hR hnt => ?_⟩
+    have h2 := (hoare_store_msg_48).run s hcode hR hnt
+    exact ⟨fun hr => h2 hr, fun hr hr' => absurd hr' hr⟩
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
