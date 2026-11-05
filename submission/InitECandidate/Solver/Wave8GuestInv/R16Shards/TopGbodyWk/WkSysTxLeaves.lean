@@ -452,6 +452,27 @@ theorem progPrefixStep_ite {cond : ExpHOL 64} {yes no : ProgHOL 64}
     · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
     · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
 
+theorem progPrefixStep_seq {p1 p2 : ProgHOL 64}
+    (h1 : ProgPrefixStep p1) (h2 : ProgPrefixStep p2) :
+    ProgPrefixStep (.seq p1 p2) := by
+  intro F s hc hW hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p1).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr1 : evaluateHOLFiniteState s p1 with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hfr ⊢
+  cases r1 with
+  | none =>
+    have hs1 := h1 s hc hW (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1
+    dsimp only at hs1
+    have hs2 := h2 mid (hmeta.trans hc) (worldOK_of_sysTxStep hW hs1.1) hnt hfr
+    exact ⟨worldStep_sysTx_trans_prefix hW.1 hs1 hs2.1,
+      le_trans hs1.2.1 hs2.2.1, le_trans hs2.2.2.1 hs1.2.2.1,
+      hs2.2.2.2.1.trans hs1.2.2.2.1, hs2.2.2.2.2.trans hs1.2.2.2.2⟩
+  | some _ =>
+    have hs1 := h1 s hc hW (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)
+    simpa only [hr1] using hs1
+
 theorem progSysTxStep_seq_prefix {p1 p2 : ProgHOL 64}
     (h1 : ProgPrefixStep p1) (h2 : ProgSysTxStep p2) :
     ProgSysTxStep (.seq p1 p2) := by
