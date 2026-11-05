@@ -13374,4 +13374,41 @@ theorem receipt_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- List finalization retains the `start` lookup needed to frame the receipt's
+optional type-prefix write in the following return conditional. -/
+theorem receipt_finish_preserves_start {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (start pend old : BitVec 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word pend)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ pend.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ pend.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+        [.var .local (ofString "start"), .var .local (ofString "p")]) = (none, post)) :
+    HeapByteEff s post R gw ∧
+    post.locals.lookup (ofString "start") = some (.val (.word start)) := by
+  have ht := eval_call_local_rlp_finish_list mid "w"
+    (.var .local (ofString "start")) (.var .local (ofString "p")) start pend
+    (R ++ [(start.toNat, pend.toNat - start.toNat)]) gw he.arena.1.code he.arena
+    ⟨old, hw⟩ hs hp hle (le_trans hfresh.2 (by decide))
+    ⟨(start.toNat, pend.toNat - start.toNat), List.mem_append_right _ (by simp),
+      le_rfl, by omega⟩ (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, _, _, _, hloc, heff⟩ := ht.1 rfl
+  refine ⟨heapByteEff_trans_fresh he heff ?_, ?_⟩
+  · intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨hfresh.1, by dsimp; omega⟩
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "start" by decide] using hs
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
