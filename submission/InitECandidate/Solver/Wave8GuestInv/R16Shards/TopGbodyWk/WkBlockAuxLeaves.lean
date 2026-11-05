@@ -5841,4 +5841,35 @@ theorem htab_union_into_provenance_spec :
         (ofString "cap", s0.locals.lookup (ofString "cap"))) (k2 := u.clock)] at h2
     exact h2
 
+/-- Normal union returns preserve the world when the destination is one of the
+five ordinary block tables. The source table is unrestricted. -/
+theorem htab_union_into_bs_world_spec :
+    FunSpec (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
+      globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k) ∧
+      locN s "dst" ≠ 0)
+      (fun s r post => ∀ v, r = some (.returned v) →
+        WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post)
+      (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := htab_union_into_provenance_spec
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt v hv
+  obtain ⟨hW, k, hk, hbs, hdst, hnz⟩ := hP
+  have hnon : ∀ S, TablesTyped s S → locN s "dst" ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "dst") ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "dst") ∧
+      globN s "bal_accounts" ≠ locN s "dst" ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ locN s "dst") ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "dst") := by
+    intro S hT
+    rw [hdst] at hnz ⊢
+    exact merge_bs_table_nonValue hT hk hbs hnz
+  have harg : UnionArgWF s := by
+    obtain ⟨S, hT, _⟩ := hW.2
+    have ht := (hnon S hT).1
+    exact ⟨hW.1, (hT.2.1 _ ht).1, fun i hi => ((hT.2.1 _ ht).2 i hi).1⟩
+  have he := hb s hc harg hex hnt v hv
+  have hbe := (M13.evaluateHOLFiniteState_guestInv_be s body hW.1.1).2
+  exact unionExit_worldStepSc_nonValue hW hbe hnon he.toUnionExit
+    (fun i hi => (he.2.2.2.2.2.1 i hi).2)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
