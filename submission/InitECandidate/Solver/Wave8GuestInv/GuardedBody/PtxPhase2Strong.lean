@@ -9573,4 +9573,114 @@ theorem phase2_packed_source_outer_loop_hoare (h : PtxCallees) :
       (fun r s => r = none → PtxPackedNalIteration s ∧ locN s "k" = locN s "nkeys") := by
   exact phase2_packed_nal_while (phase2_packed_source_outer_body_nal_hoare h) rfl rfl
 
+/-- Zeroed counters establish the record-boundary invariant from allocated keys. -/
+theorem phase2_packed_outer_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hi : locN s "i" = 0) (hk : locN s "k" = 0) :
+    PtxPackedOuterInv s := by
+  refine ⟨hp, hn, ?_, ?_⟩
+  · rw [hi]; exact Nat.zero_le _
+  · simp [phase2_key_prefix, hi, hk]
+
+/-- Initialization bridge from allocated, separated keys to the source loop. -/
+theorem phase2_packed_nal_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hw : WorldOK s) (hp : PtxPackedKeysReady s)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hi : locN s "i" = 0) (hk : locN s "k" = 0)
+    (ht : Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hr : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hkw : ∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hiw : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hh : globN s "heap_ptr" ≤ 2 ^ 64)
+    (hnw : ∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n)))
+    (he : locN s "nal" = memW s (locN s "tx" + 216)) :
+    PtxPackedNalIteration s :=
+  ⟨⟨hw, phase2_packed_outer_zero s hp hn hi hk, ht, hr, hkw, hiw, hh⟩, hnw, he⟩
+
+/-- Resources required before the source resets the two packing counters. -/
+def PtxPackedInitReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ PtxPackedKeysReady s ∧
+  locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+  Disj (locN s "tx", 384)
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  globN s "heap_ptr" ≤ 2 ^ 64 ∧
+  (∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+  locN s "nal" = memW s (locN s "tx" + 216)
+
+/-- The actual declaration and assignment establish the packing-loop entry. -/
+theorem phase2_packed_init_state {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedInitReady s) :
+    PtxPackedNalIteration
+      (setVarHOLFinite (ofString "i") (.val (.word 0))
+        (setVarHOLFinite (ofString "k") (.val (.word 0)) s)) := by
+  let t := setVarHOLFinite (ofString "i") (.val (.word 0))
+    (setVarHOLFinite (ofString "k") (.val (.word 0)) s)
+  have hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "nal"] : List String),
+      t.locals.lookup (ofString n) = s.locals.lookup (ofString n) := by
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl <;>
+      simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  have hn (n : String) (hm : n ∈ (["al_keys", "nkeys", "tx", "nal"] : List String)) :
+      locN t n = locN s n := by simp only [locN, hl n hm]
+  have hready : PtxPackedKeysReady t := by
+    apply phase2_packed_keys_with_locals s t.locals s.clock hp.2.1
+    intro n hm
+    apply hl n
+    simp only [List.mem_cons, List.mem_singleton] at hm ⊢
+    tauto
+  change PtxPackedNalIteration t
+  have hm : t.memory = s.memory := rfl
+  apply phase2_packed_nal_zero t
+  · exact phase2_packed_ready_worldOK t
+      ((arenaReady_with_locals s t.locals s.clock).mpr hp.1.1) hready
+  · exact hready
+  · simpa only [hn "nkeys" (by simp), hn "tx" (by simp), txAccessSlots, memW, hm] using hp.2.2.1
+  · simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  · simpa only [hn "tx" (by simp), hn "al_keys" (by simp), hn "nkeys" (by simp)]
+      using hp.2.2.2.1
+  · simpa only [hn "tx" (by simp), hn "al_keys" (by simp), hn "nkeys" (by simp), memW, hm]
+      using hp.2.2.2.2.1
+  · exact ⟨0, by simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]⟩
+  · exact ⟨0, by simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · exact hp.2.2.2.2.2.1
+  · simpa only [hl "nal" (by simp)] using hp.2.2.2.2.2.2.1
+  · simpa only [hn "nal" (by simp), hn "tx" (by simp), memW, hm] using hp.2.2.2.2.2.2.2
+
+/-- The source's counter initialization feeds the proved packing loop directly. -/
+theorem phase2_packed_initialized_loop_hoare (h : PtxCallees) :
+    Hoare PtxPackedInitReady
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before, PtxPackedInitReady before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := PtxPackedNalIteration)
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        exact fun _ => phase2_packed_init_state before hp
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      exact ((phase2_packed_source_outer_loop_hoare h).run s hc hp hnt hr).1.1.2.1.1
+  · intro F r s locals hl hp hr
+    exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
