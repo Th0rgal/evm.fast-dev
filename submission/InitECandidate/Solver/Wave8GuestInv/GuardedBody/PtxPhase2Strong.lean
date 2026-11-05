@@ -3308,4 +3308,15 @@ theorem phase2_address_copy_body_hoare :
     exact phase2_address_copy_with_locals s locals s.clock hl (hp hr)
   · exact fun _ _ hr => by cases hr
 
+/-- Allocation bounds keep both copy counters in the nonnegative signed range. -/
+theorem phase2_address_copy_signed_bounds {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) :
+    locN s "i" < 2 ^ 63 ∧ locN s "nal" < 2 ^ 63 := by
+  have hj := hp.1
+  have hA := hj.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl hj.1.2.2.1)).2
+  have hi := hp.2.2.2
+  dsimp at hb
+  constructor <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
