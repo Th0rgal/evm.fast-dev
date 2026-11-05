@@ -921,4 +921,61 @@ theorem worldStep_liveMpt_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
   obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_csr hs hstep.1 hbe hag hm hd hg hu
   exact ⟨S', Nd', hsub, hW', hm', hd', heq, hQ⟩
 
+theorem mptObjInWith_transfer_frame_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hp : ArenaReady post) (hbe : post.be = s.be)
+    (hag : AllocatorGrows s post) {S S' Nd Nd' Nm : List Nat} {m : Nat}
+    {keep : List Ivl} {fresh : Ivl}
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hg : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hfr : FrameOutside s post keep fresh)
+    (hk : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → ∀ j ∈ keep,
+      (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj o j) ∨ j.1 + j.2 + 8 ≤ o.1)
+    (hfa : fresh.1 % 8 = 0 ∧ fresh.2 % 8 = 0)
+    (hf : IvlsDisj (mptObjIvls s Nm m) [fresh]) :
+    MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m := by
+  apply mptObjInWith_transfer_csr hs hp hbe hag hm hd hg
+  intro o ho hnz
+  exact P3MptSet.ivlUnhit_of_frameOutside hfr (hk o ho hnz) hfa
+    (hf o ho fresh (by simp)) hnz
+
+theorem worldStep_liveMpt_of_separated_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    (hs : ArenaReady s) (hstep : WorldStep R gw keep Q s r post)
+    (hbe : post.be = s.be) (hag : AllocatorGrows s post)
+    {S Nd Nm : List Nat} {m : Nat}
+    (hW : WorldTypedWith s S Nd) (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hsep : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 →
+      ∀ j ∈ worldOwned s S Nd ++ R s ++ [freeGap s],
+        (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj o j) ∨ j.1 + j.2 + 8 ≤ o.1) :
+    ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+      MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m ∧ Q s r post S' Nd' := by
+  obtain ⟨S', Nd', hsub, hW', hg, hfr, hQ⟩ := hstep.2.2.2.2 S Nd hW hR
+  have hfa : (heapFree s).1 % 8 = 0 ∧ (heapFree s).2 % 8 = 0 := by
+    have hal := hs.2.2.2.2.2.2.1
+    have hlim : heapLimit % 8 = 0 := by decide
+    dsimp [heapFree]
+    exact ⟨hal, by omega⟩
+  have hf : IvlsDisj (mptObjIvls s Nm m) [heapFree s] := by
+    intro o ho j hj
+    have heq : j = heapFree s := List.mem_singleton.mp hj
+    subst j
+    by_cases hz : o.2 = 0
+    · exact Or.inl hz
+    · exact P3MptSet.disj_allocated_heapFree hs.2 (mptObjInWith_allocated_csr hm o ho hz)
+  obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hstep.1 hbe hag
+    hm hd hg hfr hsep hfa hf
+  exact ⟨S', Nd', hsub, hW', hm', hd', heq, hQ⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12

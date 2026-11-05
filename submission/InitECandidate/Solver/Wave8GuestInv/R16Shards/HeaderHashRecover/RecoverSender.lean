@@ -3142,4 +3142,560 @@ private theorem ec_mul2_tail_heapByteEff {F : Type}
     exact hp.trans (HeapByteEff.of_byteEff hp.arena
       (R13Shards.Keccak256.byteEff_return post (.const 0) Rl))
 
+private theorem ptIvls_cover {base : BitVec 64} {Rl : List Ivl}
+    (hout : ∃ j ∈ Rl, j.1 ≤ base.toNat ∧ base.toNat + 96 ≤ j.1 + j.2) :
+    ∀ i ∈ ptIvls base, ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2 := by
+  intro i hi
+  obtain ⟨j, hj, hj1, hj2⟩ := hout
+  refine ⟨j, hj, ?_, ?_⟩
+  all_goals
+    simp only [ptIvls, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl <;> dsimp only <;> omega
+
+private theorem heapByteEff_step_of_wsSafe {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {R1 Rl : List Ivl} {gw : List String}
+    {out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F}
+    (heff : HeapByteEff s0 s Rl gw) (hs : WsSafe s R1 out)
+    (hR : ∀ i ∈ R1, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hr : out.1 = none ∨ Resumes out.1) :
+    HeapByteEff s0 out.2 Rl gw := by
+  exact heff.trans ((heapByteEff_of_m23_bre (gw := gw) heff.arena
+    (hr.elim hs.1 hs.2)).mono hR (fun _ h => h))
+
+private theorem ecPtProg_full_heapByteEff {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {ptVar : MlS} {base : BitVec 64}
+    {c4vars c5vars : List MlS} {p : ProgHOL 64} {Rl : List Ivl} {gw : List String}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hi : EcPtInv s ptVar base c4vars c5vars)
+    (hbase : base.toNat + 96 ≤ heapEnd)
+    (hp : ecPtProg ecCal1Full ecCal2Full ptVar c4vars c5vars p = true)
+    (hR : ∀ i ∈ ptIvls base, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hr : (evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s p).2 Rl gw ∧
+    ((evaluateHOLFiniteState s p).1 = none →
+      EcPtInv (evaluateHOLFiniteState s p).2 ptVar base c4vars c5vars) := by
+  have hs := ecPtProg_full_wsSafe_post hi hbase hp
+  exact ⟨heapByteEff_step_of_wsSafe heff hs.1 hR hr, hs.2⟩
+
+private theorem secp256k1_decompress_r_heapByteEff {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {base : BitVec 64} {Rl : List Ivl} {gw : List String}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hout : PtFrame s (ofString "out") base) (hrv : comb4Val s (ofString "r"))
+    (hbase : base.toNat + 96 ≤ heapEnd)
+    (hR : ∀ i ∈ ptIvls base, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_secp256k1_decompress_r)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_secp256k1_decompress_r)).2 Rl gw := by
+  exact heapByteEff_step_of_wsSafe heff
+    (secp256k1_decompress_r_wsSafe_bound heff.arena.1.code heff.arena.1.memaddrs
+      hout hrv hbase) hR (Or.inr hr)
+
+private def ecMul2SumSetup : ProgHOL 64 :=
+  .seq
+    (.call (some (none, none)) (ofString "ec_set_affine")
+      [.var .local (ofString "sum"), .var .local (ofString "ax"), .var .local (ofString "ay")])
+    (.seq
+      (.call (some (none, none)) (ofString "ec_add_affine")
+        [.var .local (ofString "sum"), .var .local (ofString "bx"), .var .local (ofString "by")])
+      (.decCall (ofString "sum_inf") .one (ofString "ec_is_infinity")
+        [.var .local (ofString "sum")]
+        (.ite (.cmp .equal (.var .local (ofString "sum_inf")) (.const 0))
+          (.call (some (none, none)) (ofString "ec_to_affine") [.var .local (ofString "sum")])
+          .skip)))
+
+private theorem ecMul2SumSetup_checked :
+    ecPtProg ecCal1Full ecCal2Full (ofString "sum")
+      [ofString "ax", ofString "ay", ofString "bx", ofString "by"] [] ecMul2SumSetup = true := by
+  decide
+
+private theorem ec_mul2_sum_setup_heapByteEff {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {base : BitVec 64} {Rl : List Ivl} {gw : List String}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hi : EcPtInv s (ofString "sum") base
+      [ofString "ax", ofString "ay", ofString "bx", ofString "by"] [])
+    (hbase : base.toNat + 96 ≤ heapEnd)
+    (hfree : globN s0 "heap_ptr" ≤ base.toNat ∧ base.toNat + 96 ≤ heapLimit)
+    (hr : (evaluateHOLFiniteState s ecMul2SumSetup).1 = none ∨
+      Resumes (evaluateHOLFiniteState s ecMul2SumSetup).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s ecMul2SumSetup).2 Rl gw ∧
+    ((evaluateHOLFiniteState s ecMul2SumSetup).1 = none →
+      EcPtInv (evaluateHOLFiniteState s ecMul2SumSetup).2 (ofString "sum") base
+        [ofString "ax", ofString "ay", ofString "bx", ofString "by"] []) := by
+  have hs := ecPtProg_full_wsSafe_post hi hbase ecMul2SumSetup_checked
+  have hb : HeapByteEff s (evaluateHOLFiniteState s ecMul2SumSetup).2 (ptIvls base) gw :=
+    heapByteEff_of_m23_bre (gw := gw) heff.arena (hr.elim hs.1.1 hs.1.2)
+  have hsub : ∀ i ∈ Rl ++ ptIvls base, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s0 "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s0 "scratch_ptr") ∨
+      (globN s0 "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit) := by
+    intro i hi _
+    rcases List.mem_append.1 hi with hiR | hiP
+    · exact Or.inl ⟨i, hiR, le_rfl, le_rfl⟩
+    · right; right
+      simp only [ptIvls, List.mem_cons, List.not_mem_nil, or_false] at hiP
+      rcases hiP with rfl | rfl | rfl <;> dsimp only <;> omega
+  have heff' : HeapByteEff s0 s (Rl ++ ptIvls base) gw :=
+    heff.mono (fun i hi _ => Or.inl ⟨i, List.mem_append_left _ hi, le_rfl, le_rfl⟩) (fun _ h => h)
+  have hb' : HeapByteEff s (evaluateHOLFiniteState s ecMul2SumSetup).2 (Rl ++ ptIvls base) gw :=
+    hb.mono (fun i hi _ => Or.inl ⟨i, List.mem_append_right _ hi, le_rfl, le_rfl⟩) (fun _ h => h)
+  exact ⟨(heff'.trans hb').mono hsub (fun _ h => h), hs.2⟩
+
+private theorem heapByteEff_seq_wsSafe {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {p cont : ProgHOL 64} {P : PanSemStateFiniteExact 64 F → Prop}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hs : WsSafe s Rl (evaluateHOLFiniteState s p))
+    (hpost : (evaluateHOLFiniteState s p).1 = none →
+      P (evaluateHOLFiniteState s p).2)
+    (hcont : ∀ t, HeapByteEff s0 t Rl gw → P t →
+      (evaluateHOLFiniteState t cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState t cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState t cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.seq p cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.seq p cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.seq p cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hres ⊢
+  rcases hp : evaluateHOLFiniteState s p with ⟨r, mid⟩
+  simp only [hp] at hs hpost hnt hres ⊢
+  cases r with
+  | none =>
+    exact hcont mid (heff.trans (heapByteEff_of_m23_bre heff.arena (hs.1 rfl)))
+      (hpost rfl) hnt hres
+  | some r =>
+    exact heff.trans (heapByteEff_of_m23_bre heff.arena (hs.2 hres))
+
+private theorem heapByteEff_restoreLocal {F : Type}
+    {s0 post : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    (heff : HeapByteEff s0 post Rl gw) (nm : MlS) (old : Option (ValueHOL 64)) :
+    HeapByteEff s0 (restoreLocal nm old post) Rl gw :=
+  heff.locals_clock _ post.clock
+
+private theorem heapByteEff_return {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    (heff : HeapByteEff s0 s Rl gw) (e : ExpHOL 64) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.return e)).2 Rl gw :=
+  heff.trans (HeapByteEff.of_byteEff heff.arena
+    (R13Shards.Keccak256.byteEff_return s e Rl))
+
+private theorem return_fst_ne_none {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.return e)).1 ≠ none := by
+  rw [evaluateHOLFiniteState_return]
+  split
+  · simp
+  · split <;> simp
+
+private theorem heapByteEff_seq_wsSafe_sub {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {R1 Rl : List Ivl} {gw : List String}
+    {p cont : ProgHOL 64} {P : PanSemStateFiniteExact 64 F → Prop}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hs : WsSafe s R1 (evaluateHOLFiniteState s p))
+    (hR : ∀ i ∈ R1, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hpost : (evaluateHOLFiniteState s p).1 = none →
+      Wave8Contracts.M23.ByteRegionEffect s (evaluateHOLFiniteState s p).2 R1 →
+      P (evaluateHOLFiniteState s p).2)
+    (hcont : ∀ t, HeapByteEff s0 t Rl gw → P t →
+      (evaluateHOLFiniteState t cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState t cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState t cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.seq p cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.seq p cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.seq p cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hres ⊢
+  rcases hp : evaluateHOLFiniteState s p with ⟨r, mid⟩
+  have hstep : r = none ∨ Resumes r → HeapByteEff s0 mid Rl gw := fun hr => by
+    have hh := heapByteEff_step_of_wsSafe heff hs hR (by rw [hp]; exact hr)
+    simpa [hp] using hh
+  simp only [hp] at hs hpost hnt hres ⊢
+  cases r with
+  | none =>
+    exact hcont mid (hstep (Or.inl rfl)) (hpost rfl (hs.1 rfl)) hnt hres
+  | some r =>
+    exact hstep (Or.inr hres)
+
+private theorem heapByteEff_seq_ite_return_skip {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {cond retExp : ExpHOL 64} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hcont : (evaluateHOLFiniteState s cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState s cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState s cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.seq (.ite cond (.return retExp) .skip) cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.seq (.ite cond (.return retExp) .skip) cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.seq (.ite cond (.return retExp) .skip) cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt hres ⊢
+  rcases hcv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+  · simp only [hcv] at hnt hres ⊢; exact heff
+  · rcases cv with ⟨⟨cw⟩⟩ | _ | _
+    · simp only [hcv] at hnt hres ⊢
+      by_cases hcz : cw = 0
+      · subst hcz
+        simp only [↓reduceIte, evaluateHOLFiniteState_skip] at hnt hres ⊢
+        exact hcont hnt hres
+      · simp only [hcz, ↓reduceIte] at hnt hres ⊢
+        rcases hr : evaluateHOLFiniteState s (.return retExp) with ⟨rr, sr⟩
+        cases rr with
+        | none => exact absurd rfl (by have hn := return_fst_ne_none s retExp; rw [hr] at hn; exact hn)
+        | some _ =>
+          have hh := heapByteEff_return heff retExp
+          rw [hr] at hh
+          exact hh
+    · simp only [hcv] at hnt hres ⊢; exact heff
+    · simp only [hcv] at hnt hres ⊢; exact heff
+
+private theorem heapByteEff_release_return {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {mExp retExp : ExpHOL 64} {mw : BitVec 64}
+    (heff : HeapByteEff s0 s Rl gw) (hgw : "heap_ptr" ∈ gw)
+    (hm_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) mExp =
+      some (.val (.word mw)))
+    (hm_lo : globN s0 "heap_ptr" ≤ mw.toNat)
+    (hm_lo_sb : sourceBase ≤ mw.toNat)
+    (hm_hi : mw.toNat ≤ heapLimit)
+    (hm8 : mw.toNat % 8 = 0)
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "heap_release") [mExp]) (.return retExp))).1 ≠
+        some .timeOut) :
+    HeapByteEff s0 (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "heap_release") [mExp]) (.return retExp))).2 Rl gw ∧
+    (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "heap_release") [mExp]) (.return retExp))).1 ≠ none := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  rcases hc : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "heap_release") [mExp]) with ⟨rc, post⟩
+  have hntc : rc ≠ some .timeOut := by
+    rintro rfl; rw [hc] at hnt; exact hnt rfl
+  have hrel := eval_call_heap_release s mExp mw Rl gw heff.arena.1.code heff hgw
+    hm_ev hm_lo hm_lo_sb hm_hi hm8 (by rw [hc]; exact hntc)
+  dsimp only at hrel
+  rw [hc] at hrel
+  obtain ⟨rfl, _, _, _, hp⟩ := hrel
+  dsimp only at hp ⊢
+  exact ⟨heapByteEff_return hp retExp, return_fst_ne_none post retExp⟩
+
+private theorem heapByteEff_seq_ite_release_return_skip {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {cond mExp retExp : ExpHOL 64} {mw : BitVec 64} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw) (hgw : "heap_ptr" ∈ gw)
+    (hm_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) mExp =
+      some (.val (.word mw)))
+    (hm_lo : globN s0 "heap_ptr" ≤ mw.toNat)
+    (hm_lo_sb : sourceBase ≤ mw.toNat)
+    (hm_hi : mw.toNat ≤ heapLimit)
+    (hm8 : mw.toNat % 8 = 0)
+    (hcont : (evaluateHOLFiniteState s cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState s cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState s cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.ite cond (.seq (.call (some (none, none)) (ofString "heap_release") [mExp])
+          (.return retExp)) .skip) cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.seq (.ite cond (.seq (.call (some (none, none)) (ofString "heap_release") [mExp])
+          (.return retExp)) .skip) cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s
+      (.seq (.ite cond (.seq (.call (some (none, none)) (ofString "heap_release") [mExp])
+          (.return retExp)) .skip) cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt hres ⊢
+  rcases hcv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+  · simp only [hcv] at hnt hres ⊢; exact heff
+  · rcases cv with ⟨⟨cw⟩⟩ | _ | _
+    · simp only [hcv] at hnt hres ⊢
+      by_cases hcz : cw = 0
+      · subst hcz
+        simp only [↓reduceIte, evaluateHOLFiniteState_skip] at hnt hres ⊢
+        exact hcont hnt hres
+      · simp only [hcz, ↓reduceIte] at hnt hres ⊢
+        rcases hr : evaluateHOLFiniteState s
+          (.seq (.call (some (none, none)) (ofString "heap_release") [mExp]) (.return retExp)) with ⟨rr, sr⟩
+        simp only [hr] at hnt hres ⊢
+        have hnt_r : rr ≠ some .timeOut := by
+          rintro rfl; exact hnt rfl
+        have hh := heapByteEff_release_return heff hgw hm_ev hm_lo hm_lo_sb hm_hi hm8
+          (by rw [hr]; exact hnt_r)
+        rw [hr] at hh
+        cases rr with
+        | none => exact absurd rfl hh.2
+        | some _ => exact hh.1
+    · simp only [hcv] at hnt hres ⊢; exact heff
+    · simp only [hcv] at hnt hres ⊢; exact heff
+
+private theorem heapByteEff_seq_ite_skip {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {cond : ExpHOL 64} {yes cont : ProgHOL 64} {P : PanSemStateFiniteExact 64 F → Prop}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hskip : P s)
+    (hyes : (evaluateHOLFiniteState s yes).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState s yes).1 = none ∨ Resumes (evaluateHOLFiniteState s yes).1) →
+      HeapByteEff s0 (evaluateHOLFiniteState s yes).2 Rl gw ∧
+      ((evaluateHOLFiniteState s yes).1 = none → P (evaluateHOLFiniteState s yes).2))
+    (hcont : ∀ t, HeapByteEff s0 t Rl gw → P t →
+      (evaluateHOLFiniteState t cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState t cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState t cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.seq (.ite cond yes .skip) cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.seq (.ite cond yes .skip) cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.seq (.ite cond yes .skip) cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hnt hres ⊢
+  rcases hcv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+  · simp only [hcv] at hnt hres ⊢; exact heff
+  · rcases cv with ⟨⟨cw⟩⟩ | _ | _
+    · simp only [hcv] at hnt hres ⊢
+      by_cases hcz : cw = 0
+      · subst hcz
+        simp only [↓reduceIte, evaluateHOLFiniteState_skip] at hnt hres ⊢
+        exact hcont s heff hskip hnt hres
+      · simp only [hcz, ↓reduceIte] at hnt hres ⊢
+        rcases hy : evaluateHOLFiniteState s yes with ⟨ry, sy⟩
+        simp only [hy] at hnt hres ⊢
+        have hnty : ry ≠ some .timeOut := by
+          rintro rfl; exact hnt rfl
+        have hory : ry = none ∨ Resumes ry := by
+          cases ry with
+          | none => exact Or.inl rfl
+          | some _ => exact Or.inr hres
+        have hh := hyes (by rw [hy]; exact hnty) (by rw [hy]; exact hory)
+        simp only [hy] at hh
+        cases ry with
+        | none => exact hcont sy hh.1 (hh.2 rfl) hnt hres
+        | some _ => exact hh.1
+    · simp only [hcv] at hnt hres ⊢; exact heff
+    · simp only [hcv] at hnt hres ⊢; exact heff
+
+private theorem heapByteEff_dec {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {nm : MlS} {sh : ShapeHOL} {init : ExpHOL 64} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hcont : ∀ (v : ValueHOL 64),
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init = some v →
+      shapeEqHOL sh (shapeOfHOLExact v) = true →
+      let mid := setVarHOLFinite nm v s
+      HeapByteEff s0 mid Rl gw →
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState mid cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.dec nm sh init cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.dec nm sh init cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.dec nm sh init cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_dec_total] at hnt hres ⊢
+  dsimp only at hnt hres ⊢
+  rcases hv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init with _ | v
+  · simp only [hv] at hnt hres ⊢; exact heff
+  · simp only [hv] at hnt hres ⊢
+    by_cases hsh : shapeEqHOL sh (shapeOfHOLExact v) = true
+    · simp only [hsh, ↓reduceIte] at hnt hres ⊢
+      have heff_mid : HeapByteEff s0 (setVarHOLFinite nm v s) Rl gw :=
+        heff.locals_clock _ s.clock
+      exact heapByteEff_restoreLocal (hcont v hv hsh heff_mid hnt hres) nm (s.locals.lookup nm)
+    · simp only [hsh, ↓reduceIte]
+      exact heff
+
+private theorem heapByteEff_decCall_wsSafe {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {R1 Rl : List Ivl} {gw : List String}
+    {nm fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hcal : ∀ vals body callee rs,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vals →
+      lookupCodeHOLFinite s.code.lookup fname vals = some (body, callee, rs) →
+      s.clock ≠ 0 →
+      WsSafe (callEntryStateHOLFinite s callee) R1
+        (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body))
+    (hR : ∀ i ∈ R1, 0 < i.2 →
+      (∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2) ∨
+      (globN s "frame_mem_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ globN s "scratch_ptr") ∨
+      (globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit))
+    (hcont : ∀ (v : ValueHOL 64) (cp : PanSemStateFiniteExact 64 F),
+      let mid := setVarHOLFinite nm v { cp with locals := s.locals }
+      shapeEqHOL (shapeOfHOLExact v) sh = true →
+      mid.globals = s.globals →
+      mid.locals.lookup nm = some v →
+      (∀ x, x ≠ nm → mid.locals.lookup x = s.locals.lookup x) →
+      HeapByteEff s0 mid Rl gw →
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState mid cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).2 Rl gw := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hres ⊢
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp only [hargs] at hnt hres ⊢; exact heff
+  · simp only [hargs] at hnt hres ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨body, callee, rs⟩
+    · simp only [hl] at hnt hres ⊢; exact heff
+    · simp only [hl] at hnt hres ⊢
+      by_cases hz : s.clock = 0
+      · simp only [hz, ↓reduceIte] at hnt; simp at hnt
+      · simp only [hz, ↓reduceIte] at hnt hres ⊢
+        have hc := hcal vals body callee rs hargs hl hz
+        have he0 : Wave8Contracts.M23.ByteRegionEffect s (callEntryStateHOLFinite s callee) R1 :=
+          (Wave8Contracts.M23.ByteRegionEffect.refl s R1).with_locals_clock callee (s.clock - 1)
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨rb, cp⟩
+        simp only [hrun] at hc hnt hres ⊢
+        cases rb with
+        | none =>
+          simp at hres; exact False.elim (not_resumes_error hres)
+        | some r0 =>
+          cases r0 with
+          | returned v =>
+            dsimp only at hnt hres ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) rs) = true
+            · simp only [hsh, ↓reduceIte] at hnt hres ⊢
+              have hsh2 := (Bool.and_eq_true_iff.1 hsh).1
+              have he_cp := he0.trans (hc.2 (Or.inl ⟨v, rfl⟩))
+              have heff_cp : HeapByteEff s0 cp Rl gw :=
+                heff.trans ((heapByteEff_of_m23_bre heff.arena he_cp).mono hR (fun _ h => h))
+              set mid := setVarHOLFinite nm v { cp with locals := s.locals }
+              have heff_mid : HeapByteEff s0 mid Rl gw := heff_cp.locals_clock _ cp.clock
+              have hglob : mid.globals = s.globals := he_cp.globals
+              have hloc_nm : mid.locals.lookup nm = some v := by
+                simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+              have hloc_other : ∀ x, x ≠ nm → mid.locals.lookup x = s.locals.lookup x := by
+                intro x hne
+                simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+              exact heapByteEff_restoreLocal
+                (hcont v cp hsh2 hglob hloc_nm hloc_other heff_mid hnt hres)
+                nm (s.locals.lookup nm)
+            · simp only [hsh, ↓reduceIte] at hres; exact False.elim (not_resumes_error hres)
+          | exception eid ev =>
+            dsimp only at hres ⊢
+            rcases hres with ⟨_, h⟩ | ⟨e', v', h, hne⟩
+            · simp at h
+            · injection h with h'; injection h' with h1 h2; subst h1 h2
+              have he_cp := he0.trans (hc.2 (Or.inr ⟨eid, ev, rfl, hne⟩))
+              have heff_cp : HeapByteEff s0 cp Rl gw :=
+                heff.trans ((heapByteEff_of_m23_bre heff.arena he_cp).mono hR (fun _ h => h))
+              exact heff_cp.locals_clock _ cp.clock
+          | timeOut => simp at hnt
+          | error | «break» | «continue» =>
+            simp at hres; exact False.elim (not_resumes_error hres)
+          | finalFfi _ =>
+            rcases hres with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> simp at h
+
+private theorem heapByteEff_decCall_ro {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {nm fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hro : recRoCallees fname = true)
+    (hcont : ∀ (v : ValueHOL 64) (cp : PanSemStateFiniteExact 64 F),
+      let mid := setVarHOLFinite nm v { cp with locals := s.locals }
+      shapeEqHOL (shapeOfHOLExact v) sh = true →
+      mid.globals = s.globals →
+      mid.locals.lookup nm = some v →
+      (∀ x, x ≠ nm → mid.locals.lookup x = s.locals.lookup x) →
+      HeapByteEff s0 mid Rl gw →
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState mid cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s (.decCall nm sh fname args cont)).2 Rl gw := by
+  refine heapByteEff_decCall_wsSafe (R1 := []) heff (fun vals body callee rs _ hl _ => ?_)
+    (fun _ hi => nomatch hi) hcont hnt hres
+  have hc := heff.arena.1.code
+  rw [hc] at hl
+  exact wsSafe_of_recRo hc (recRoCallees_good fname hro vals body callee rs hl)
+
+private theorem heapByteEff_decCall_heap_mark {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {lname : String} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw)
+    (hcont : ∀ (mark : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
+      mark.toNat = globN s "heap_ptr" →
+      globN s0 "heap_ptr" ≤ mark.toNat →
+      sourceBase ≤ mark.toNat →
+      mark.toNat ≤ heapLimit →
+      mark.toNat % 8 = 0 →
+      mid.globals = s.globals →
+      mid.locals.lookup (ofString lname) = some (.val (.word mark)) →
+      (∀ x, x ≠ ofString lname → mid.locals.lookup x = s.locals.lookup x) →
+      HeapByteEff s0 mid Rl gw →
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState mid cont).2 Rl gw)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "heap_mark") [] cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "heap_mark") [] cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "heap_mark") [] cont)).2 Rl gw := by
+  obtain ⟨mark, mid, _, hmark_nat, hg_eq, _, hloc_eq, heff_s_mid, hnt_mid, heval_eq⟩ :=
+    eval_decCall_heap_mark s lname cont Rl gw heff.arena.1.code heff.arena hnt
+  rw [heval_eq] at hres ⊢
+  dsimp only at hres ⊢
+  have heff_mid : HeapByteEff s0 mid Rl gw := heff.trans heff_s_mid
+  have hlo : globN s0 "heap_ptr" ≤ mark.toNat := by rw [hmark_nat]; exact heff.hp_le
+  have hsb : sourceBase ≤ mark.toNat := by rw [hmark_nat]; exact heff.arena.2.1
+  have hhi : mark.toNat ≤ heapLimit := by rw [hmark_nat]; exact heff.arena.2.2.1
+  have hm8 : mark.toNat % 8 = 0 := by rw [hmark_nat]; exact heff.arena.2.2.2.2.2.2.1
+  have hloc_nm : mid.locals.lookup (ofString lname) = some (.val (.word mark)) := by
+    rw [hloc_eq]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hloc_other : ∀ x, x ≠ ofString lname → mid.locals.lookup x = s.locals.lookup x := by
+    intro x hne; rw [hloc_eq]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+  exact heapByteEff_restoreLocal
+    (hcont mark mid hmark_nat hlo hsb hhi hm8 hg_eq hloc_nm hloc_other heff_mid hnt_mid hres)
+    (ofString lname) (s.locals.lookup (ofString lname))
+
+private theorem heapByteEff_decCall_alloc {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {gw : List String}
+    {lname : String} {nExp : ExpHOL 64} {cont : ProgHOL 64}
+    (heff : HeapByteEff s0 s Rl gw) (hgw : "heap_ptr" ∈ gw)
+    (hcont : ∀ (hp n q : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) nExp =
+        some (.val (.word n)) →
+      hp.toNat = globN s "heap_ptr" →
+      hp.toNat % 8 = 0 →
+      hp.toNat + n.toNat ≤ q.toNat →
+      q.toNat ≤ heapLimit →
+      hp.toNat + n.toNat ≤ heapEnd →
+      mid.locals.lookup (ofString lname) = some (.val (.word hp)) →
+      (∀ x, x ≠ ofString lname → mid.locals.lookup x = s.locals.lookup x) →
+      HeapByteEff s0 mid (Rl ++ [(hp.toNat, n.toNat)]) gw →
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      HeapByteEff s0 (evaluateHOLFiniteState mid cont).2 (Rl ++ [(hp.toNat, n.toNat)]) gw)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)).1) :
+    HeapByteEff s0 (evaluateHOLFiniteState s
+      (.decCall (ofString lname) .one (ofString "alloc") [nExp] cont)).2 Rl gw := by
+  obtain ⟨hp, n, q, mid, hnev, hhp_nat, hhp8, _, hpq, hq_hi, _, _, _, _, hloc_eq,
+    heff_s_mid, hnt_mid, hres_mid, heval_eq⟩ :=
+    eval_decCall_alloc_resumes s lname nExp cont Rl gw heff.arena.1.code heff.arena hgw hnt hres
+  rw [heval_eq]
+  dsimp only
+  have hhl_he : heapLimit ≤ heapEnd := by rw [WkBlockTxEnc.heapLimit_val, WkBlockTxEnc.heapEnd_val]; decide
+  have hhe : hp.toNat + n.toNat ≤ heapEnd := by omega
+  have heff_mid0 : HeapByteEff s0 mid Rl gw := heff.trans heff_s_mid
+  have heff_mid : HeapByteEff s0 mid (Rl ++ [(hp.toNat, n.toNat)]) gw :=
+    heff_mid0.mono (fun i hi _ => Or.inl ⟨i, List.mem_append_left _ hi, le_rfl, le_rfl⟩)
+      (fun _ h => h)
+  have hloc_nm : mid.locals.lookup (ofString lname) = some (.val (.word hp)) := by
+    rw [hloc_eq]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hloc_other : ∀ x, x ≠ ofString lname → mid.locals.lookup x = s.locals.lookup x := by
+    intro x hne; rw [hloc_eq]; simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+  have hout := heapByteEff_restoreLocal
+    (hcont hp n q mid hnev hhp_nat hhp8 hpq hq_hi hhe hloc_nm hloc_other heff_mid hnt_mid hres_mid)
+    (ofString lname) (s.locals.lookup (ofString lname))
+  refine hout.mono (fun i hi _ => ?_) (fun _ h => h)
+  rcases List.mem_append.1 hi with hiR | hiA
+  · exact Or.inl ⟨i, hiR, le_rfl, le_rfl⟩
+  · simp only [List.mem_singleton] at hiA
+    subst hiA
+    have hlo : globN s0 "heap_ptr" ≤ hp.toNat := by rw [hhp_nat]; exact heff.hp_le
+    exact Or.inr (Or.inr ⟨hlo, by dsimp only; omega⟩)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover

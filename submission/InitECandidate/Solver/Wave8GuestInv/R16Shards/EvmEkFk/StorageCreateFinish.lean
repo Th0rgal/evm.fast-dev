@@ -78,4 +78,50 @@ theorem rootIn_tagged_word {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hlt := rootIn_lt_word_limit hh hr
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, Nat.add_sub_cancel] using hr
 
+theorem allocated_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {o : Ivl} {old new : List Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (ho : Allocated s o)
+    (hold : ∀ i ∈ old, Disj o i)
+    (hgrow : OwnedGrows s post old new) :
+    ∀ j ∈ new, Disj o j := by
+  intro j hj
+  rcases hgrow j hj with hz | hcontained
+  · subst j
+    exact Or.inr (Or.inl rfl)
+  · exact allocated_disj_old_or_fresh_extent hAs hAp hhp ho hold hcontained
+
+theorem allocated_regions_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {os old new : List Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hos : ∀ o ∈ os, Allocated s o)
+    (hold : IvlsDisj os old)
+    (hgrow : OwnedGrows s post old new) :
+    IvlsDisj os new := by
+  intro o ho
+  exact allocated_disj_ownedGrows hAs hAp hhp (hos o ho) (hold o ho) hgrow
+
+theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n * 1530).toNat = n.toNat * 1530 := by
+  rw [BitVec.toNat_mul]
+  change n.toNat * 1530 % 2 ^ 64 = n.toNat * 1530
+  exact Nat.mod_eq_of_lt (by omega)
+
+theorem create_finish_alloc_add_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n + 8).toNat = n.toNat + 8 := by
+  apply BitVec.toNat_add_of_lt
+  change n.toNat + 8 < 2 ^ 64
+  omega
+
+theorem create_finish_word_charge_no_wrap (w : BitVec 64)
+    (hw : w.toNat ≤ 2048) :
+    (6 * w).toNat = 6 * w.toNat := by
+  rw [BitVec.toNat_mul]
+  change 6 * w.toNat % 2 ^ 64 = 6 * w.toNat
+  exact Nat.mod_eq_of_lt (by omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
