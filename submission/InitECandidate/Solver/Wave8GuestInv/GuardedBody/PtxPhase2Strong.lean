@@ -1593,4 +1593,64 @@ theorem phase2_teStoreReady_slot_store {F : Type} {s : PanSemStateFiniteExact 64
   obtain ⟨_, hx, hin⟩ := phase2_teLive_slot hp.1 k hk
   exact phase2_teStoreReady_store hp hx hin hm
 
+/-- Program-level scalar store rule for the environment initialization. -/
+theorem phase2_teStoreReady_scalar_hoare (addr : ExpHOL 64) (name : String)
+    (hn : name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String))
+    (ha : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64),
+      PtxTeStoreReady s → evalAt s addr = some (.val (.word x)) →
+      Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200)) :
+    Hoare PtxTeStoreReady (.store addr (.var .local (ofString name)))
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.1.2.scalar name hn
+  have he : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  subst v
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact phase2_teStoreReady_store hp hdom (ha s x hp hx) hmem
+
+theorem phase2_teStoreReady_base_scalar (name : String)
+    (hn : name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String)) :
+    Hoare PtxTeStoreReady
+      (.store (.var .local (ofString "te")) (.var .local (ofString name)))
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply phase2_teStoreReady_scalar_hoare _ name hn
+  intro F s x hp hx
+  obtain ⟨w, hw⟩ := hp.1.2.1
+  have he : x = w := by simpa [evalAt, evalHOLExact, hw] using hx.symm
+  subst x
+  have hl : locN s "te" = w.toNat := by simp [locN, hw]
+  rw [hl]
+  constructor <;> dsimp <;> omega
+
+theorem phase2_te_offset_inside {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s) (off : Nat) (hoff : off + 8 ≤ 200)
+    {x : BitVec 64}
+    (hx : evalAt s (.op .add [.var .local (ofString "te"), .const off]) = some (.val (.word x))) :
+    Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200) := by
+  obtain ⟨w, hw⟩ := hp.2.1
+  have hl : locN s "te" = w.toNat := by simp [locN, hw]
+  have hhi := (ivl_allocated_bound hp.1.1.1.1.1.1.2 (Or.inl hp.2.2.1)).2
+  have he : x = w + BitVec.ofNat 64 off := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr] using hx.symm
+  have ho : off < 2 ^ 64 := by omega
+  have hn : x.toNat = w.toNat + off := by
+    rw [he, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ho,
+      Nat.mod_eq_of_lt (by dsimp at hhi; rw [hl] at hhi; omega)]
+  rw [hn, hl]
+  constructor <;> dsimp <;> omega
+
+theorem phase2_teStoreReady_offset_scalar (off : Nat) (hoff : off + 8 ≤ 200)
+    (name : String)
+    (hn : name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String)) :
+    Hoare PtxTeStoreReady
+      (.store (.op .add [.var .local (ofString "te"), .const off]) (.var .local (ofString name)))
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply phase2_teStoreReady_scalar_hoare _ name hn
+  intro F s x hp hx
+  exact phase2_te_offset_inside hp.1 off hoff hx
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
