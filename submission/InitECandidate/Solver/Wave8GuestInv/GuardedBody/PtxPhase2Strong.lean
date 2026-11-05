@@ -3319,4 +3319,25 @@ theorem phase2_address_copy_signed_bounds {F : Type} {s : PanSemStateFiniteExact
   dsimp at hb
   constructor <;> omega
 
+/-- A true signed AST comparison yields the natural copy-loop guard. -/
+theorem phase2_address_copy_guard {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (w : BitVec 64)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word w)))
+    (hnz : w ≠ 0) : locN s "i" < locN s "nal" := by
+  obtain ⟨i, hi⟩ := hp.2.1
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  obtain ⟨hib, hnb⟩ := phase2_address_copy_signed_bounds hp
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nal" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib ⊢
+  rw [hnl] at hnb ⊢
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .less i n = true := by
+    by_contra hc
+    simp [evalAt, evalHOLExact, hi, hn, hc] at he
+    exact hnz he.symm
+  norm_num at hib hnb
+  simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
+    hib, hnb] using hc
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
