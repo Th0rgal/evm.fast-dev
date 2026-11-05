@@ -3189,4 +3189,24 @@ theorem phase2_address_copy_updates_hoare :
   exact Hoare.seq_fall phase2_address_copy_nkeys_guard_hoare
     phase2_address_copy_increment_hoare
 
+/-- Declaring the current access-list record preserves the guarded copy state. -/
+theorem phase2_address_copy_set_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") (v : ValueHOL 64) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "acc") v s) ∧
+      locN (setVarHOLFinite (ofString "acc") v s) "i" <
+        locN (setVarHOLFinite (ofString "acc") v s) "nal" := by
+  have hi : locN (setVarHOLFinite (ofString "acc") v s) "i" = locN s "i" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide]
+  have hn : locN (setVarHOLFinite (ofString "acc") v s) "nal" = locN s "nal" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "nal" by decide]
+  refine ⟨⟨phase2_address_joint_set_other s hp.1.1 _ v (by decide), ?_, ?_, ?_⟩, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide] using hp.1.2.1
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "nkeys" by decide] using hp.1.2.2.1
+  · rw [hi, hn]; exact hp.1.2.2.2
+  · rw [hi, hn]; exact hp.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
