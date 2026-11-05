@@ -670,6 +670,11 @@ def TxValidEncodeAt {F : Type} (s : PanSemStateFiniteExact 64 F) (tx : Nat) : Pr
 def TxValidEncodeReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   TxValidEncodeAt s (locN s "tx")
 
+/-- `TxValidEncodeReady` implies `TxValid` (the C08 precondition). -/
+theorem txValidEncodeReady_txValid {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxValidEncodeReady s) : TxValid s :=
+  h.1
+
 /-! ## Section 4: Lookup helper for mixed-shape `tx_put_u256` -/
 
 /-- Mixed-shape lookup: dst:.one, v:.comb [.one,.one,.one,.one] -/
