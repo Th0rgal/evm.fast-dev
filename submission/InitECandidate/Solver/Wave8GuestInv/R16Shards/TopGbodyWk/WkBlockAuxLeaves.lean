@@ -5427,4 +5427,144 @@ theorem wkSc_state_fresh_tx_withdrawal :
     (by decide) (fun rec hrec k hk => ⟨rec.2, hrec, hk⟩)
     (hbody s hc hW hex hnt hres)
 
+theorem validBufList_withdrawal : ValidBufList withdrawalBufs := by
+  intro p hp
+  simp only [withdrawalBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+  rcases hp with rfl | rfl | rfl | rfl | rfl
+  · exact ⟨64, by decide, by decide, le_rfl⟩
+  · exact ⟨136, by decide, by decide, le_rfl⟩
+  · exact ⟨200, by decide, by decide, le_rfl⟩
+  · exact ⟨64, by decide, by decide, le_rfl⟩
+  · exact ⟨64, by decide, by decide, by decide⟩
+
+theorem withdrawalStep_trans {F : Type}
+    {s1 s2 s3 : PanSemStateFiniteExact 64 F}
+    {r1 r2 : Option (PanSemResultExact 64)}
+    (h12 : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s1 r1 s2)
+    (h23 : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s2 r2 s3) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s1 r2 s3 := by
+  apply worldStepSc_trans_mask validBufList_withdrawal (h12 := h12) (h23 := h23)
+  · unfold bufRegions
+    apply List.map_congr_left
+    intro p hp
+    have hnot : ofString p.1 ∉ withdrawalGlobals.map ofString := by
+      simp only [withdrawalBufs, List.mem_cons, List.not_mem_nil, or_false] at hp
+      rcases hp with rfl | rfl | rfl | rfl | rfl <;> decide
+    have hg : globN s2 p.1 = globN s1 p.1 :=
+      globN_eq_of_lookup (h12.1.2.2.1 (ofString p.1) hnot)
+    simp only [bufferRegion, hg]
+  · exact globN_eq_of_lookup (h12.1.2.2.1 (ofString "frame_mem_ptr") (by decide))
+  · intro rec hrec k hk
+    have hnot : ofString rec.1 ∉ withdrawalGlobals.map ofString := by
+      simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · decide
+      · decide
+      · cases hk
+      · decide
+    exact globN_eq_of_lookup (h12.1.2.2.1 (ofString rec.1) hnot)
+
+/-- Program effects with the withdrawal-specific global and record masks. -/
+def ProgWithdrawalStep (p : ProgHOL 64) : Prop :=
+  ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+    s.code = originalRuntimeCode → WorldOK s →
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    FlowingOrResumes (evaluateHOLFiniteState s p).1 →
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2
+
+theorem progWithdrawalStep_seq {p q : ProgHOL 64}
+    (hp : ProgWithdrawalStep p) (hq : ProgWithdrawalStep q) :
+    ProgWithdrawalStep (.seq p q) := by
+  intro F s hc hW hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, mid⟩
+  simp only [hr] at hmeta hnt hfr ⊢
+  cases r with
+  | none =>
+    have hs := hp s hc hW (by rw [hr]; simp) (by rw [hr]; exact Or.inl rfl)
+    rw [hr] at hs
+    exact withdrawalStep_trans hs
+      (hq mid (hmeta.trans hc) (hs.worldOK_bufs validBufList_withdrawal hW) hnt hfr)
+  | some r =>
+    have hs := hp s hc hW (by rw [hr]; exact hnt) (by rw [hr]; exact hfr)
+    simpa only [hr] using hs
+
+/-- Standard effects can be weakened to the withdrawal record mask. -/
+theorem progWithdrawalStep_of_progWStep {B : BufList} {gw : List String}
+    {p : ProgHOL 64} (hB : ∀ b ∈ B, b ∈ withdrawalBufs)
+    (hgw : ∀ g ∈ gw, g ∈ withdrawalGlobals) (hp : ProgWStep B gw p) :
+    ProgWithdrawalStep p := by
+  intro F s hc hW hnt hfr
+  apply worldStepSc_mono_mask hB hgw _ (hp s hc hW hnt hfr)
+  intro rec hrec k hk
+  simp only [withdrawalKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+  rcases hrec with rfl | rfl | rfl | rfl
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · exact ⟨_, by simp [stdKeep], hk⟩
+  · cases hk
+  · exact ⟨_, by simp [stdKeep], hk⟩
+
+theorem progWithdrawalStep_dec {x : MlS} {sh : ShapeHOL} {e : ExpHOL 64}
+    {body : ProgHOL 64} (hb : ProgWithdrawalStep body) :
+    ProgWithdrawalStep (.dec x sh e body) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | val
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hnt hfr ⊢
+    by_cases hok : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hok, ↓reduceIte] at hnt hfr ⊢
+      set s1 := setVarHOLFinite x val s
+      have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hW
+      have hstep := hb s1 hc hW1 hnt hfr
+      exact (WorldStepSc.of_pre_locals_clock hstep).with_locals_clock _ (evaluateHOLFiniteState s1 body).2.clock
+    · simp [hok] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progWithdrawalStep_call0 {fname : MlS} {args : List (ExpHOL 64)}
+    (hf : WorldKeepsSc WorldOK (bufRegions withdrawalBufs)
+      withdrawalGlobals withdrawalKeep NoExtra fname) :
+    ProgWithdrawalStep (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun
+        simp only [hrun] at hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              exact (hspec (Or.inl ⟨v, rfl⟩)).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            exact (hspec hres_ex).from_entry
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
