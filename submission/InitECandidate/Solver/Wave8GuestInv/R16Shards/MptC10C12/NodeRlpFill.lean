@@ -64,6 +64,38 @@ private theorem keccakBufsSafe_with_locals {F : Type} (s : PanSemStateFiniteExac
     (h : KeccakBufsSafe s Nd) :
     KeccakBufsSafe { s with locals := locals, clock := k } Nd := h
 
+private theorem keccakBufsSafe_of_grows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat}
+    (hs : KeccakBufsSafe s Nd) (hg : AllocatorGrows s post)
+    (hbuf : ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion post gs = bufferRegion s gs)
+    (hext : nodeExtents post Nd = nodeExtents s Nd) :
+    KeccakBufsSafe post Nd := by
+  intro gs hgs
+  rw [hbuf gs hgs]
+  refine ⟨(hs gs hgs).1.elim Or.inl (fun h => Or.inr (hg.allocated h)), ?_⟩
+  intro o ho
+  rw [hext] at ho
+  exact (hs gs hgs).2 o ho
+
+private theorem strong_to_nodeRlpReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : NodeRlpReadyStrong s) : NodeRlpReady s := by
+  obtain ⟨Nd, hNd, hr, _⟩ := h.1.2
+  exact ⟨h.1.1, Nd, hNd, hr⟩
+
+private theorem strong_node_member {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : NodeRlpReadyStrong s) :
+    ∃ Nd, NodeHeap s Nd ∧ locN s "node" ∈ Nd ∧ KeccakBufsSafe s Nd := by
+  obtain ⟨Nd, hNd, hr, hk⟩ := h.1.2
+  exact ⟨Nd, hNd, hr.resolve_left h.2.1, hk⟩
+
+private theorem scratch48_progress {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p : Nat} (hf : FreshScratch s post p 48)
+    (hp : globN post "scratch_ptr" = p) :
+    globN post "scratch_ptr" + 48 ≤ globN s "scratch_ptr" := by
+  rw [hp]
+  exact hf.2.2.1.2
+
 private theorem localsOnlyNonNull : LocalsOnly ["node"] NodeRlpReadyNonNull := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
