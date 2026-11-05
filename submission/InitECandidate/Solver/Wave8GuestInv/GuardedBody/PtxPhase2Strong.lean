@@ -3458,4 +3458,20 @@ theorem phase2_address_copy_body_incr :
               (.op .add [.var .local (ofString "i"), .const 1]))))) := by
   ptx_incr
 
+/-- Sequencing clock-neutral fragments remains clock-neutral. -/
+theorem phase2_clock_seq {p q : ProgHOL 64}
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s p).2.clock = s.clock)
+    (hq : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s q).2.clock = s.clock)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s (.seq p q)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_seq]
+  dsimp only
+  rw [fixClockHOLFinite_evaluateState]
+  rcases he : evaluateHOLFiniteState s p with ⟨r, t⟩
+  have ht := hp s
+  rw [he] at ht
+  cases r <;> simp_all
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
