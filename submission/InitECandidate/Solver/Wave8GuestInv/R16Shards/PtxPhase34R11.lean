@@ -4044,19 +4044,30 @@ theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact stable_copy_complete s hp hn hh ha hcap
     (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
 
+/-- The copied live prefix fits inside the allocated stable backing capacity. -/
+theorem stableCopyInv_live_allocated {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) :
+    Allocated s (memW s (locN s "stable_logs"),
+      8 * memW s (locN s "stable_logs" + 8)) := by
+  have ha := hp.1.2.2.2.2.2.2.2.1
+  have hn := hp.1.2.2.2.2.2.1
+  have hc := hp.2.2.2.2.1
+  rw [hn]
+  rcases ha with ha | ha
+  · exact Or.inl ⟨ha.1, by have := ha.2; dsimp at *; omega⟩
+  · exact Or.inr ⟨ha.1, by have := ha.2; dsimp at *; omega⟩
+
 /-- At copy completion, source record ownership transfers to the stable list
 when its header and live backing remain separated from the same world. -/
 theorem stableCopyInv_exit_owned {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i")
     {S Nd : List Nat} (hown : LogsLiveOwned s S Nd (locN s "logs"))
-    (halloc : Allocated s (memW s (locN s "stable_logs"),
-      8 * memW s (locN s "stable_logs" + 8)))
     (hsep : IvlsDisj [(locN s "stable_logs", 24),
       (memW s (locN s "stable_logs"), 8 * memW s (locN s "stable_logs" + 8))]
       (worldOwned s S Nd)) :
     LogsLiveOwned s S Nd (locN s "stable_logs") := by
   intro _
-  refine ⟨halloc, hsep, ?_⟩
+  refine ⟨stableCopyInv_live_allocated s hp, hsep, ?_⟩
   intro j hj
   have hlen := hp.1.2.2.2.2.2.1
   have hsource := hp.1.2.2.2.1
