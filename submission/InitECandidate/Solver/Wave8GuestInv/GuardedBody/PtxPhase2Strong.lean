@@ -13775,4 +13775,32 @@ theorem phase2_get_account_message_scalar_ready (h : PtxCallees)
   obtain ⟨w, hw⟩ := hp.2 n hmem
   exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hmem] using hw⟩
 
+/-- Transport nested backing through a call that frames the fixed world objects. -/
+theorem phase2_backing_of_fixed_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hu : ∀ i ∈ fixedObjects s, IvlUnhit s post i) : TxBacking post := by
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → Allocated s i ∧ WordsOK s i := by
+    intro i hi hn
+    rcases hw.2.2.1.1 i hi with hz | hh
+    · exact (hn hz).elim
+    · exact hh
+  have hbo : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  apply PtxP34.txBacking_of_unhit_headers hb hg
+  · exact (hf _ hbo (by simp)).2.1
+  · exact (ivl_allocated_bound ha.2 (hf _ hbo (by simp)).1).2
+  · exact hu _ hbo
+  · intro k hk; exact (hf _ (hl k hk) (by simp)).2.1
+  · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl k hk) (by simp)).1).2
+  · intro k hk; exact hu _ (hl k hk)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
