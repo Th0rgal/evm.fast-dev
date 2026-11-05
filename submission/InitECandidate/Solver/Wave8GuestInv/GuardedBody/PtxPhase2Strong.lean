@@ -10870,4 +10870,25 @@ theorem phase2_packed_live_resource_counters (buffer : Ivl) (contents : Nat → 
     (phase2_packed_live_resource_assign buffer contents _ _ (by decide) (by decide) (by decide))
     (phase2_packed_live_resource_assign buffer contents _ _ (by decide) (by decide) (by decide))
 
+/-- The complete source-order copy/counter body preserves the saved caller frame. -/
+theorem phase2_packed_body_live_resource_hoare (h : PtxCallees)
+    (addressSrc keySrc : ExpHOL 64) (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedLiveResource buffer contents s) := by
+  apply Hoare.seq_fall (phase2_packed_address_copy_live_hoare h addressSrc buffer contents)
+  apply Hoare.seq_fall (phase2_packed_storage_copy_live_hoare h keySrc buffer contents)
+  exact Hoare.mono (phase2_packed_live_resource_counters buffer contents)
+    (fun _ hp => hp.2.1.2)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
