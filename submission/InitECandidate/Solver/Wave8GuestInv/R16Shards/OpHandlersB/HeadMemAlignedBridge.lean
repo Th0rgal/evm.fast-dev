@@ -10618,4 +10618,80 @@ theorem icsTail_logEntryOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
     have hk' : k ≤ 32 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
     exact hkeep _ (by omega)
 
+/-- Preserve all words of an allocated interval separated from the success tail. -/
+theorem icsTail_wordsOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} {i : Ivl} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hi : Allocated s i) (hw : WordsOK s i)
+    (hib : i.1 + i.2 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat i)
+    (hT : ∀ j ∈ htabFootprint s T, Disj i j) (hwf : HtabWF s T) :
+    WordsOK post i := by
+  obtain ⟨ha, hn, hw⟩ := hw
+  refine ⟨ha, hn, fun k hk => ?_⟩
+  obtain ⟨w, hd, hm⟩ := hw k hk
+  have hak : i.1 ≤ i.1 + 8 * k ∧ i.1 + 8 * k + 8 ≤ i.1 + i.2 := by omega
+  have hab : i.1 + 8 * k < 2 ^ 64 := by omega
+  refine ⟨w, by rw [h.2.1]; exact hd, ?_⟩
+  apply Eq.trans _ hm
+  apply h.2.2.2.2.2
+  · apply Ne.symm
+    exact ne_of_not_hits hE (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hak)
+  · intro j hj
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hak
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi hak (by omega) h.2.2.2.2.1
+
+/-- Once the append loop establishes its contents, table union preserves the
+whole parent log-list invariant, including every referenced log record. -/
+theorem icsTail_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hlogs : LogsListOK s L.toNat)
+    (hL : Allocated s (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF s T)
+    (harr : Allocated s (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrW : WordsOK s (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrB : memW s L.toNat + 8 * memW s (L.toNat + 16) ≤ 2 ^ 64)
+    (harrE : ¬ CellHits (e + 96).toNat (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrT : ∀ j ∈ htabFootprint s T,
+      Disj (memW s L.toNat, 8 * memW s (L.toNat + 16)) j)
+    (hlogE : ∀ log, LogEntryOK s log → ¬ CellHits (e + 96).toNat (log, 40))
+    (hlogT : ∀ log, LogEntryOK s log → ∀ j ∈ htabFootprint s T, Disj (log, 40) j) :
+    LogsListOK post L.toNat := by
+  rcases hlogs with hz | ⟨hwords, _, hcount, hcap, hentries⟩
+  · exact Or.inl hz
+  have hdrKeep (k : Nat) (hk : k ≤ 16) :
+      memW post (L.toNat + k) = memW s (L.toNat + k) :=
+    icsTail_memW h hA hL (by dsimp only; omega) (by omega) hE hT hwf
+  have h0 := hdrKeep 0 (by omega)
+  simp only [Nat.add_zero] at h0
+  have h8 := hdrKeep 8 (by omega)
+  have h16 := hdrKeep 16 (by omega)
+  have harrWp := icsTail_wordsOK h hA harr harrW harrB harrE harrT hwf
+  have halloc : Allocated post (L.toNat, 24) := by
+    apply Wave8Contracts.M23.allocated_mono h.2.2.2.2.1 _ hL
+    unfold globN
+    rw [h.2.2.2.1 _ (by decide)]
+  refine Or.inr ⟨icsTail_wordsOK h hA hL hwords hLB hE hT hwf,
+    halloc, by rwa [h8], by rwa [h8, h16], ?_⟩
+  intro i hi
+  rw [h8] at hi
+  have hiCap : i < memW s (L.toNat + 16) := by omega
+  obtain ⟨hslot, hlog⟩ := hentries i hi
+  have hs := icsTail_memW h hA harr
+    (show memW s L.toNat ≤ memW s L.toNat + 8 * i ∧
+      memW s L.toNat + 8 * i + 8 ≤ memW s L.toNat + 8 * memW s (L.toNat + 16) by omega)
+    (by omega) harrE harrT hwf
+  rw [h0, hs]
+  refine ⟨?_, icsTail_logEntryOK h hA hlog (hlogE _ hlog) (hlogT _ hlog) hwf⟩
+  obtain ⟨_, _, hw⟩ := harrWp
+  exact hw i (by dsimp only; omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
