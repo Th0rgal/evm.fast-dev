@@ -10557,4 +10557,36 @@ private theorem evmInvWith_of_head_mem_extend_g09 {F : Type}
       rw [hsum_eq]; exact hGas
   exact ⟨⟨hApost, hInvAt_post, hWT_post.2.2.2, hAT_post⟩, hwti_eq, hchain_eq, hR_eq, hfo_post_cases⟩
 
+private theorem heap_buffer_disj_after_head_mem_extend_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {buf : Ivl}
+    (hInvW : EvmInvWith post S Nd)
+    (hbuf_hi : buf.1 + buf.2 ≤ heapLimit)
+    (hwti : worldTypedIvls post S Nd = worldTypedIvls s S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hobjects : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects post ec,
+      o ∈ frameObjects s ec ∨
+      (ec = (globN s "ev", globN s "cur_cont") ∧
+        o = (memW post (globN s "ev" + 24), memW post (globN s "ev" + 40))))
+    (hdisj : IvlsDisj [buf]
+      (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten)) :
+    IvlsDisj [buf]
+      (worldTypedIvls post S Nd ++ ((evmChain post).map (frameObjects post)).flatten) := by
+  intro b hb o ho
+  simp only [List.mem_singleton] at hb
+  subst b
+  rcases List.mem_append.1 ho with hworld | hframe
+  · apply hdisj buf (by simp) o
+    apply List.mem_append_left
+    rwa [hwti] at hworld
+  · obtain ⟨objects, hmap, ho⟩ := List.mem_flatten.1 hframe
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hmap
+    have hec_old : ec ∈ evmChain s := by rwa [hchain] at hec
+    rcases hobjects ec hec_old o ho with hold | ⟨rfl, rfl⟩
+    · exact hdisj buf (by simp) o (List.mem_append_right _
+        (List.mem_flatten.2 ⟨_, List.mem_map.2 ⟨ec, hec_old, rfl⟩, hold⟩))
+    · have hFW := hInvW.2.1.2.2.2.2.1 _ hec
+      have hlo := hFW.2.1.1
+      have hlim : heapLimit ≤ scratchStart := by decide
+      exact Or.inr (Or.inr (Or.inl (by dsimp only at hlo ⊢; omega)))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
