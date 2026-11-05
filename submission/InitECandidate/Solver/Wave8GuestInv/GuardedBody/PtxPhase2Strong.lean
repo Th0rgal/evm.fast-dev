@@ -7152,4 +7152,59 @@ theorem phase2_memcpy_eval_packed_destination (h : PtxCallees) {F : Type}
   exact phase2_memcpy_eval_separated h s post vs body callee ret r S Nd hc hl he hn hr
     hp ha hi hw ht hs hd htx hrec hlen
 
+/-- Evaluated word arguments connect either packed destination to copy preservation. -/
+theorem phase2_memcpy_packed_word_eval (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src len : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (d v n : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hv : evalAt s src = some (.val (.word v)))
+    (hnum : evalAt s len = some (.val (.word n)))
+    (hpair : (d.toNat, n.toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  obtain ⟨hdst, _, hlen⟩ := phase2_memcpy_word_arguments s dst src len vs body callee ret
+    d v n hc hargs hl hd hv hnum
+  apply phase2_memcpy_packed_eval h s post vs body callee ret r hc hl he hn hr hp ha hi
+  rw [hdst, hlen]
+  exact hpair
+
+/-- Evaluated caller arguments suffice to preserve either packed-copy destination. -/
+theorem phase2_memcpy_packed_arguments_preserve (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src len : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (d n : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hlen : evalAt s len = some (.val (.word n)))
+    (hpair : (d.toNat, n.toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  have hentry := phase2_memcpy_entry_destination s dst src len vs body callee ret d n
+    hc hargs hl hd hlen
+  apply phase2_memcpy_eval_packed_destination h s post vs body callee ret r hc hl he hn hr hp ha hi
+  change (locN { s with locals := callee, clock := s.clock - 1 } "dst",
+    locN { s with locals := callee, clock := s.clock - 1 } "n") ∈ _
+  rw [hentry.1, hentry.2]
+  exact hpair
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
