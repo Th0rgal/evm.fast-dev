@@ -3638,4 +3638,18 @@ theorem phase2_key_alloc_size_nonwrapping {F : Type} (s : PanSemStateFiniteExact
   rw [hw]
   omega
 
+/-- The shared input witness bounds the total number of storage keys. -/
+theorem phase2_address_copy_total_keys {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) : txAccessSlots s (locN s "tx") < 2 ^ 32 := by
+  obtain ⟨S, Nd, hW, hT, hd, he⟩ := hp.1.2
+  exact hT.1.2.2.2.2.2.1
+
+/-- Relating the accumulated count to the input total suffices for allocation. -/
+theorem phase2_key_alloc_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s)
+    (hk : locN s "nkeys" ≤ txAccessSlots s (locN s "tx")) :
+    locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  have ht := phase2_address_copy_total_keys hp
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
