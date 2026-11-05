@@ -4797,6 +4797,25 @@ theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [hd0]
     exact hb o ho
 
+/-- The concrete indexed store retains the coherent ownership frame. -/
+theorem hoare_stableCopy_store_ownedFrame :
+    Hoare (fun s => StableCopyStorePre s ∧ StableCopyOwnedFrame s)
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩, hf⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, _, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  exact stableCopyOwnedFrame_store s mem' hinv hf
+    ⟨S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ hi hdom hm
+
 /-- Local initialization and clock changes preserve the coherent ownership frame. -/
 theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
@@ -4812,6 +4831,19 @@ theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 
   refine ⟨S, Nd, (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hW, ?_⟩
   simp only [el, es, ec]
   exact ⟨ho, hh, hb⟩
+
+/-- Assignments to temporary locals retain the coherent ownership frame. -/
+theorem hoare_stableCopyOwnedFrame_assign (name : MlS) (e : ExpHOL 64)
+    (hl : name ≠ ofString "logs") (hs : name ≠ ofString "stable_logs")
+    (hc : name ≠ ofString "stable_log_cap") :
+    Hoare StableCopyOwnedFrame (.assign .local name e)
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    apply stableCopyOwnedFrame_with_locals s _ s.clock _ _ _ hp
+    all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE, hl, hs, hc]
+  · intro F s hp hr
+    cases hr
 
 /-- The coherent ownership frame strengthens the copy exit postcondition. -/
 theorem stableCopyOwnedFrame_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -5865,6 +5897,16 @@ theorem hoare_stableCopy_body_loop :
     hoare_stableCopy_store_length_word.run s hc hp.2 hnt hr,
     hoare_stableCopy_store_for_increment.run s hc hp.1 hnt hr⟩
 
+/-- The indexed copy followed by its counter increment preserves ownership. -/
+theorem hoare_stableCopy_body_ownedFrame :
+    Hoare (fun s => StableCopyStorePre s ∧ StableCopyOwnedFrame s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  exact Hoare.seq_fall hoare_stableCopy_store_ownedFrame
+    (hoare_stableCopyOwnedFrame_assign _ _ (by decide) (by decide) (by decide))
+
 /-- An active loop head supplies the concrete body's full precondition. -/
 theorem hoare_stableCopy_active_body :
     Hoare (fun s => StableCopyLoopInv s ∧
@@ -5878,6 +5920,20 @@ theorem hoare_stableCopy_active_body :
   obtain ⟨i, n, hi, hn⟩ := hp.1.2.1
   exact hoare_stableCopy_body_loop.run s hc
     ⟨stableCopyLoopInv_active s hp.1 hp.2, n, hn⟩ hnt hr
+
+/-- An active copy step preserves both the loop invariant and its ownership frame. -/
+theorem hoare_stableCopy_active_body_owned :
+    Hoare (fun s => (StableCopyLoopInv s ∧ StableCopyOwnedFrame s) ∧
+      LoopActive (.cmp .less (.var .local (ofString "i"))
+        (.var .local (ofString "nl"))) s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyLoopInv t ∧ StableCopyOwnedFrame t) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hoare_stableCopy_active_body.run s hc ⟨hp.1.1, hp.2⟩ hnt hr,
+    hoare_stableCopy_body_ownedFrame.run s hc
+      ⟨stableCopyLoopInv_active s hp.1.1 hp.2, hp.1.2⟩ hnt hr⟩
 
 /-- At an active loop head the concrete body restores the full loop invariant. -/
 theorem hoare_stableCopy_body_active :
