@@ -5646,4 +5646,46 @@ theorem phase2_copy_frame_interval {F : Type}
   exact phase2_copy_frame_word s post dst len (base + off) fresh hf
     (by omega) (hd off ho) (hn off ho)
 
+/-- A complete word inside a disjoint protected interval is untouched by a copy. -/
+theorem phase2_copy_protected_cell (base size p dst len : Nat)
+    (hlen : 0 < len)
+    (hp : base ≤ p ∧ p + 8 ≤ base + size)
+    (hd : Disj (base, size) (dst, len)) :
+    ¬ CellHits p (dst, len) := by
+  simp only [Disj] at hd
+  simp only [CellHits]
+  omega
+
+/-- Compose the two copy-call preservation obligations with the verified counters. -/
+theorem phase2_packed_inner_body_of_copies
+    (addressCopy keyCopy : ProgHOL 64)
+    (ha : Hoare PtxPackedCopyIndex addressCopy
+      (fun r s => r = none → PtxPackedCopyIndex s))
+    (hk : Hoare PtxPackedCopyIndex keyCopy
+      (fun r s => r = none → PtxPackedCopyIndex s)) :
+    Hoare PtxPackedCopyIndex
+      (.seq addressCopy (.seq keyCopy (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedInnerInv s) := by
+  apply Hoare.seq_fall (R := PtxPackedCopyIndex)
+  · exact ha
+  · apply Hoare.seq_fall (R := PtxPackedCopyIndex)
+    · exact hk
+    · exact phase2_packed_inner_counters_hoare
+
+/-- Disjoint intervals protect aligned complete words against a copy frame. -/
+theorem phase2_copy_frame_disjoint_word {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len p : Nat) (region fresh : Ivl)
+    (hf : FrameOutside s post [(dst, len)] fresh)
+    (hp : p < 2 ^ 64) (ha : p % 8 = 0)
+    (hin : region.1 ≤ p ∧ p + 8 ≤ region.1 + region.2)
+    (hd : Disj region (dst, len)) (hn : Disj region fresh)
+    (hz : len = 0 → dst % 8 = 0)
+    (hfresh : fresh.2 = 0 → fresh.1 % 8 = 0) :
+    memW post p = memW s p := by
+  apply phase2_copy_frame_word s post dst len p fresh hf hp
+  · exact not_cellHits_of_disj ha hz hin hd
+  · exact not_cellHits_of_disj ha hfresh hin hn
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
