@@ -1044,6 +1044,88 @@ theorem evmMsgReady_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 
   · intro g _
     rw [hpost.2.2.2.2.2.1]
 
+/-- `st ev + 192, 0` (`depth0_prepare` clears the spilled state gas) from `EvmMsgReady`:
+`EvmMsgReady` again and an `EvmStep []` from the entry state. -/
+theorem hoare_store_ev_192_zero :
+    Hoare EvmMsgReady
+      (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))
+      (fun r t => r = none → EvmMsgReady t) := by
+  refine ⟨fun {F} s _ hP _ hr => ?_⟩
+  have hrun := evaluateHOLFiniteState_store s
+    (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0)
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0)) with ⟨res, post⟩
+  rw [hev] at hr hrun
+  dsimp only at hr ⊢
+  subst hr
+  revert hrun
+  rcases hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .global (ofString "ev"), .const 192]) with _ | dv
+  · simp
+  · rcases dv with ⟨⟨addr⟩⟩ | _ | _
+    · have hsrc : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+          (.const 0) = some (.val (.word 0)) := by
+        simp [evalHOLExact]
+      rw [hsrc]
+      dsimp only
+      split
+      · rename_i m' hst
+        unfold flattenHOL at hst
+        unfold panMemStoresHOL at hst
+        unfold panMemStoreHOL at hst
+        by_cases hdom : s.memaddrs addr
+        · simp only [hdom, ↓reduceIte, panMemStoresHOL, Option.some.injEq] at hst
+          subst hst
+          intro hrun
+          injection hrun with _ hpost
+          subst hpost
+          have hInv := evmInv_of_evmMsgReady s hP
+          have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+            unfold evmChain; exact List.mem_cons_self
+          obtain ⟨_, S, _, _, _, _, hFW_all, _⟩ := hInv
+          have hb_e := (R10Shards.GbodyProcessMsg.frameWF_bounds (hFW_all _ hhead_mem)).1
+          dsimp only at hb_e
+          have haddr_nat : addr.toNat = globN s "ev" + 192 := by
+            simp [evalHOLExact, evalListHOLExact] at hdst
+            rcases hg : s.globals.lookup (ofString "ev") with _ | gv
+            · simp [hg] at hdst
+            · rcases gv with ⟨⟨gw⟩⟩ | _ | _
+              · simp [hg, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+                subst hdst
+                have hglob : globN s "ev" = gw.toNat := by simp [globN, hg]
+                rw [hglob] at hb_e ⊢
+                have h192 : (192#64).toNat = 192 := by decide
+                rw [BitVec.toNat_add, h192, Nat.mod_eq_of_lt (by omega)]
+              · simp [hg, valueIsWord] at hdst
+              · simp [hg, valueIsWord] at hdst
+          set post : PanSemStateFiniteExact 64 F :=
+            { s with memory := fun current => if current = addr then .word 0 else s.memory current } with hpost_def
+          have hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+              post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+              ∀ a : BitVec 64, a ≠ addr → post.memory a = s.memory a :=
+            ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun a hne => by simp [post, hne]⟩
+          have hne64 : BitVec.ofNat 64 (globN s "ev" + 64) ≠ addr := by
+            intro heq
+            have h1 : (BitVec.ofNat 64 (globN s "ev" + 64)).toNat = globN s "ev" + 64 :=
+              Nat.mod_eq_of_lt (by omega)
+            rw [heq, haddr_nat] at h1
+            omega
+          have hw64 : memW post (globN s "ev" + 64) = memW s (globN s "ev" + 64) := by
+            unfold memW; simp [post, hne64]
+          have hw192 : memW post (globN s "ev" + 192) = 0 := by
+            unfold memW
+            have heq : BitVec.ofNat 64 (globN s "ev" + 192) = addr := by
+              apply BitVec.eq_of_toNat_eq
+              rw [haddr_nat]
+              exact Nat.mod_eq_of_lt (by omega)
+            simp [post, heq]
+          exact (evmMsgReady_store_ev_gas hP (Or.inl rfl) haddr_nat hdom hpost
+            (by rw [hw64, hw192]; omega)).1
+        · simp [hdom] at hst
+      · simp
+    · simp
+    · simp
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
