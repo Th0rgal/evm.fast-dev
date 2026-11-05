@@ -5570,6 +5570,28 @@ theorem stableCopy_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact stableCopy_backing_init_cut (stableCopy_loop_cut htail) s hc hp
 
+/-- Package the length-write framing facts into the complete copy setup contract. -/
+theorem stable_length_copy_setup_ready {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
+    (hp : StableLengthPre s) (hz : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (hc : locN s "nl" ≤ locN s "stable_log_cap")
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hpost : StableLengthPost {s with memory := mem'})
+    (hs : StableCopySpatial {s with memory := mem'}) :
+    let t := {s with memory := mem'}
+    StableLengthPost t ∧ locN t "logs" ≠ 0 ∧
+      WordsOK t (locN t "stable_logs", 24) ∧ Allocated t (locN t "stable_logs", 24) ∧
+      locN t "nl" ≤ locN t "stable_log_cap" ∧ StableCopySpatial t ∧
+      WordAt t (locN t "stable_logs") ∧ ∃ n p w : BitVec 64,
+        t.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        t.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        t.locals.lookup (ofString "stable_logs") = some (.val (.word w)) := by
+  obtain ⟨hh', ha', hw'⟩ := stable_length_store_header_ready s mem' w he hm hh hp.2.1
+  exact ⟨hpost, hz, hh', ha', hc, hs, hw', stableLengthPre_memory_operands s hp mem' p hl⟩
+
 /-- An active separated copy state can run the entire remaining loop and
 then any receipt-ready continuation. -/
 theorem stableCopy_active_loop_cut {tail : ProgHOL 64} {b : Nat}
