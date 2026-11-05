@@ -5508,4 +5508,19 @@ theorem phase2_packed_outer_increment_hoare :
     exact fun _ => phase2_packed_outer_advance s hp.1 hp.2.1 hp.2.2
   · exact fun _ _ hr => by cases hr
 
+/-- The concrete inner counter reset prepares the next key-copy pass. -/
+theorem phase2_packed_inner_reset_hoare :
+    Hoare (fun s => PtxPackedOuterInv s ∧
+      locN s "i" < memW s (locN s "tx" + 216))
+      (.assign .local (ofString "j") (.const 0))
+      (fun r s => r = none → PtxPackedInnerInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by
+      simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    intro _
+    exact phase2_packed_inner_reset s hp.1 hp.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
