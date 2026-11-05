@@ -6818,6 +6818,62 @@ theorem transfer_record_append_tail_step {F : Type}
     (by simpa only [evalHOLExact, eff.globals] using hev)
     (by simpa only [evalHOLExact, loc] using hl) hret
 
+def transferRecordPairWrites (off : Nat) (name : MlS) (count : BitVec 64)
+    (cont : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 off)]) (.var .local name))
+  (.seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 (off + 8))]) (.const count)) cont)
+
+theorem transfer_record_pair_writes_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (logw ptr count : BitVec 64)
+    (off : Nat) (name : MlS) (cont : ProgHOL 64)
+    (hoff : off = 8 ∨ off = 24)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hp : cur.locals.lookup name = some (.val (.word ptr)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferRecordPairWrites off name count cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(logw.toNat, 40)] ∧
+      mid.locals = cur.locals ∧ WordsOK mid (logw.toNat, 40) ∧
+      memW mid (logw.toNat + off) = ptr.toNat ∧
+      memW mid (logw.toNat + (off + 8)) = count.toNat ∧
+      (∀ b : Nat, b < 2 ^ 64 → b ≠ logw.toNat + off → b ≠ logw.toNat + (off + 8) →
+        memW mid b = memW cur b) ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur (transferRecordPairWrites off name count cont) =
+        evaluateHOLFiniteState mid cont := by
+  have ho : off = 8 ∨ off = 16 ∨ off = 24 ∨ off = 32 := by
+    rcases hoff with rfl | rfl <;> simp
+  have ho' : off + 8 = 8 ∨ off + 8 = 16 ∨ off + 8 = 24 ∨ off + 8 = 32 := by
+    rcases hoff with rfl | rfl <;> simp
+  have hbound : logw.toNat + off < 2 ^ 64 := by
+    have hlim := hstep.1.1.1.2.2.1
+    have hle := hin.2
+    have h64 : heapLimit < 2 ^ 64 := by decide
+    rcases hoff with rfl | rfl <;> omega
+  unfold transferRecordPairWrites at hr ⊢
+  obtain ⟨m1, st1, ef1, l1, w1, ws1, fr1, r1, o1, b1, eq1⟩ :=
+    transfer_log_field_store_words_prefix s cur logw ptr off _ _ hInv hstep hbe hout hbyte
+      hl (by simpa only [evalHOLExact] using hp) hw ho hin hr
+  have in1 : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN m1 "heap_ptr") := by
+    simpa only [globN, ef1.globals] using hin
+  obtain ⟨m2, st2, ef2, l2, w2, ws2, fr2, r2, o2, b2, eq2⟩ :=
+    transfer_log_field_store_words_prefix s m1 logw count (off + 8) _ cont hInv st1
+      (ef1.be.trans hbe) o1 b1 (l1 ▸ hl) rfl ws1 ho' in1 r1
+  refine ⟨m2, st2, ef1.trans ef2, l2.trans l1, ws2, ?_, w2, ?_, r2, o2, b2, eq1.trans eq2⟩
+  · rw [fr2 _ hbound (by omega)]
+    exact w1
+  · intro b hb hn hn'
+    rw [fr2 b hb hn', fr1 b hb hn]
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
