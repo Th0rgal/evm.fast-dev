@@ -9823,4 +9823,21 @@ theorem phase2_packed_alloc_init_ready (h : PtxCallees) :
     · exact Nat.le_of_lt (BitVec.isLt _)
     · exact Nat.zero_le _
 
+/-- The counting-loop exit supplies both equalities required by packed allocation. -/
+theorem phase2_count_exit_alloc_pre {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s ∧ locN s "i" = locN s "nal") :
+    PtxAddressCountInv s ∧ locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+      locN s "nal" = memW s (locN s "tx" + 216) :=
+  ⟨hp.1, phase2_address_count_exit_total hp.1 hp.2, hp.1.2.1⟩
+
+/-- Packed allocation is ready for initialization directly from counting-loop exit. -/
+theorem phase2_count_exit_alloc_ready (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ locN s "i" = locN s "nal")
+      PtxPackedInitReady (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact phase2_packed_alloc_init_ready h s vs body callee ret v post hc
+    (phase2_count_exit_alloc_pre s hp) ha hl hb
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
