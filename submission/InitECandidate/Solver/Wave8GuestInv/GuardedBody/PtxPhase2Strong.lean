@@ -7457,4 +7457,316 @@ theorem phase2_packed_next_call_pre {F : Type}
   rw [phase2_copy_globals_heap_eq s _ hg]
   exact hb
 
+/-- The address copy retains the entire precondition needed by the storage-key call. -/
+theorem phase2_packed_address_copy_next_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → WorldOK t ∧ PtxPackedSeparatedCopy t ∧
+        (∃ k : BitVec 64, t.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        globN t "heap_ptr" ≤ 2 ^ 64) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1 callee
+  have hcopy := phase2_packed_address_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1 hp.2.1 hbase hk hp.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  exact phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.2.2.2
+
+/-- The two concrete packed-copy calls compose without a post-state readiness assumption. -/
+theorem phase2_packed_copy_pair_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32]))
+      (fun r t => r = none → PtxPackedSeparatedCopy t) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (phase2_packed_storage_copy_hoare h keySrc)
+
+/-- The concrete copy pair followed by both increments establishes the inclusive invariant. -/
+theorem phase2_packed_pair_counters_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32]))
+        (.seq
+          (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+          (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))
+      (fun r t => r = none → PtxPackedSeparatedInner t) := by
+  exact Hoare.seq_fall (phase2_packed_copy_pair_hoare h addressSrc keySrc)
+    phase2_packed_separated_counters_hoare
+
+/-- The storage-key copy retains the world and scalar facts needed for iteration. -/
+theorem phase2_packed_storage_copy_next_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32])
+      (fun r t => r = none → WorldOK t ∧ PtxPackedSeparatedCopy t ∧
+        (∃ k : BitVec 64, t.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        globN t "heap_ptr" ≤ 2 ^ 64) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1 callee
+  have hcopy := phase2_packed_storage_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1 hp.2.1 hbase hk hp.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  exact phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.2.2.2
+
+/-- Right-associated copy statements and increments establish the inner invariant. -/
+theorem phase2_packed_copy_body_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r t => r = none → PtxPackedSeparatedInner t) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_hoare h keySrc)
+      phase2_packed_separated_counters_hoare)
+
+/-- Right-associated source-order composition of the copy calls and counter updates. -/
+theorem phase2_packed_copy_source_body_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r t => r = none → PtxPackedSeparatedInner t) := by
+  exact phase2_packed_copy_body_hoare h addressSrc keySrc
+
+/-- Counter updates preserve the world and establish word witnesses for the next guard. -/
+theorem phase2_packed_counters_iteration_state {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hw : WorldOK s)
+    (hp : PtxPackedSeparatedCopy s) (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    WorldOK post ∧ PtxPackedSeparatedInner post ∧
+      (∃ k : BitVec 64, post.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, post.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN post "heap_ptr" ≤ 2 ^ 64 := by
+  dsimp only
+  refine ⟨?_, phase2_packed_separated_counters s hp, ?_, ?_, hb⟩
+  · obtain ⟨ha, S, ht⟩ := hw
+    exact ⟨(arenaReady_with_locals s _ s.clock).mpr ha, S,
+      (worldTyped_with_locals s _ s.clock S).mpr ht⟩
+  · refine ⟨BitVec.ofNat 64 (locN s "k" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" from by decide]
+  · refine ⟨BitVec.ofNat 64 (locN s "j" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Counter updates retain world readiness and install word witnesses for both counters. -/
+theorem phase2_packed_counter_state {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedSeparatedCopy s) (ha : ArenaReady s)
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    WorldOK post ∧ PtxPackedSeparatedInner post ∧
+      (∃ k : BitVec 64, post.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, post.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN post "heap_ptr" ≤ 2 ^ 64 := by
+  dsimp only
+  have hi := phase2_packed_separated_counters s hp
+  refine ⟨phase2_packed_ready_worldOK _ ?_ hi.1.1, hi, ?_, ?_, hb⟩
+  · exact (arenaReady_with_locals s _ s.clock).mpr ha
+  · refine ⟨BitVec.ofNat 64 (locN s "k" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" from by decide]
+  · refine ⟨BitVec.ofNat 64 (locN s "j" + 1), ?_⟩
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- The inclusive iteration state supplies the complete copy precondition under its guard. -/
+theorem phase2_packed_iteration_guard_pre {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hp : WorldOK s ∧ PtxPackedSeparatedInner s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+    (hg : locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64 := by
+  exact ⟨hp.1, phase2_packed_separated_inner_guarded hp.2.1 hg,
+    hp.2.2.1, hp.2.2.2.2⟩
+
+/-- The copy pair preserves all premises needed before the counter updates. -/
+theorem phase2_packed_copy_pair_next_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32]))
+      (fun r t => r = none → WorldOK t ∧ PtxPackedSeparatedCopy t ∧
+        (∃ k : BitVec 64, t.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        globN t "heap_ptr" ≤ 2 ^ 64) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (phase2_packed_storage_copy_next_hoare h keySrc)
+
+/-- Counter execution restores the world, word witnesses and bound needed by iteration. -/
+theorem phase2_packed_counters_full_hoare :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → WorldOK s ∧ PtxPackedSeparatedInner s ∧
+        (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+        globN s "heap_ptr" ≤ 2 ^ 64) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, WorldOK before ∧
+    PtxPackedSeparatedCopy before ∧ globN before "heap_ptr" ≤ 2 ^ 64 ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp.1, hp.2.1, hp.2.2.2, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hw, hp, hbound, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1).2
+      obtain ⟨w, rfl, hew⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hew, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => phase2_packed_counters_iteration_state before hw hp hbound
+    · exact fun _ _ hr => by cases hr
+
+/-- Counter statements preserve the complete state needed for another inner iteration. -/
+theorem phase2_packed_counters_next_hoare :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → WorldOK s ∧ PtxPackedSeparatedInner s ∧
+        (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+        globN s "heap_ptr" ≤ 2 ^ 64) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, ArenaReady before ∧
+    PtxPackedSeparatedCopy before ∧ globN before "heap_ptr" ≤ 2 ^ 64 ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp.1.1, hp.2.1, hp.2.2.2, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, ha, hp, hbound, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => phase2_packed_counter_state before hp ha hbound
+    · exact fun _ _ hr => by cases hr
+
+/-- The source-ordered copy body restores the complete inclusive iteration state. -/
+theorem phase2_packed_body_iteration_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → WorldOK s ∧ PtxPackedSeparatedInner s ∧
+        (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+        globN s "heap_ptr" ≤ 2 ^ 64) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_next_hoare h keySrc)
+      phase2_packed_counters_full_hoare)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
