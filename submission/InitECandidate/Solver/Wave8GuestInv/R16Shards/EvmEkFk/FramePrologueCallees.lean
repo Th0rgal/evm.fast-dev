@@ -7494,6 +7494,61 @@ theorem transfer_frame_disjoint_of_accumulated_frame {F : Type}
     rw [(fp ec hec).2.2]
     exact hmsg ec hec
 
+theorem transfer_worldOwned_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    worldOwned post S Nd = worldOwned s S Nd := by
+  obtain ⟨fix, tables, nodes⟩ :=
+    transfer_world_footprints_of_accumulated_frame hInv hstep hWT hbe hout hbyte
+  unfold worldOwned
+  rw [fix, nodes]
+  congr 2
+  exact List.flatMap_congr tables
+
+theorem transfer_owned_disjoint_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {x : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (hworld : ∀ o ∈ worldOwned s S Nd, Disj x o)
+    (hframe : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o)
+    (hmsg : ∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)) :
+    (∀ o ∈ worldOwned post S Nd, Disj x o) ∧
+    (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj x o) ∧
+    (∀ ec ∈ evmChain post, Disj x (memW post (ec.1 + 112), 176)) := by
+  refine ⟨?_, transfer_frame_disjoint_of_accumulated_frame
+    hInv hstep hbe hout hbyte hframe hmsg⟩
+  rw [transfer_worldOwned_of_accumulated_frame hInv hstep hWT hbe hout hbyte]
+  exact hworld
+
+theorem transfer_fresh_disjoint_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {x : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (hx : x = (0, 0) ∨ Inside x (globN s "heap_ptr") (globN post "heap_ptr")) :
+    (∀ o ∈ worldOwned post S Nd, Disj x o) ∧
+    (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj x o) ∧
+    (∀ ec ∈ evmChain post, Disj x (memW post (ec.1 + 112), 176)) := by
+  have fresh := disj_fresh_heap_of_evmInv hInv hstep.1.1.1.2.2.1 hx
+  apply transfer_owned_disjoint_of_accumulated_frame hInv hstep hWT hbe hout hbyte
+  · intro o ho
+    simp only [worldOwned, List.mem_append, List.mem_flatMap] at ho
+    rcases ho with (⟨t, ht, hi⟩ | hf) | hn
+    · exact fresh.1 t S hWT.1 ht o hi
+    · exact fresh.2.1 o hf
+    · exact fresh.2.2.2.1 S Nd hWT.2.2.2 o hn
+  · exact fresh.2.2.1
+  · exact fresh.2.2.2.2
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
