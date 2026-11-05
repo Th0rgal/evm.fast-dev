@@ -2992,6 +2992,22 @@ theorem stable_length_store_words {F : Type} (s : PanSemStateFiniteExact 64 F)
   · exact ⟨w, hd, by change mem' _ = _; rw [ha, he]⟩
   · exact ⟨v, hd, (hm _ ha).trans hv⟩
 
+/-- A word-valued length write retains the allocated, readable stable header
+needed by the subsequent backing-pointer load. -/
+theorem stable_length_store_header_ready {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24)) :
+    let t := {s with memory := mem'}
+    WordsOK t (locN t "stable_logs", 24) ∧
+      Allocated t (locN t "stable_logs", 24) ∧ WordAt t (locN t "stable_logs") := by
+  have hw := stable_length_store_words s mem' w he hm hh
+  refine ⟨hw, ha, ?_⟩
+  have h0 := hw.2.2 0 (by change 0 < 24 / 8; decide)
+  simpa only [Nat.mul_zero, Nat.add_zero, locN] using h0
+
 theorem stable_length_store_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : Phase4StableStorageReady s) (hA : ArenaOK s)
     (hh : Allocated s (locN s "stable_logs", 24))
@@ -5680,6 +5696,28 @@ theorem lst_new_stable_post_source_array (h : PtxCallees) {F : Type}
   refine ⟨w, hv, ?_⟩
   rw [hptr, hlen]
   exact (hs _ (by simp)).2.1
+
+/-- Restored source headers are disjoint from the fresh stable backing. -/
+theorem lst_new_stable_resumed_source_header (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, hs⟩ :=
+    lst_new_stable_source_separation h s vs body callee ret v post hc hp ha hl hr
+  have hd := (hs (memW post w.toNat, 8 * locN s "stable_log_cap") (by simp)).1
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using
+    R13Shards.disj_symm hd
 
 /-- The resumed source array is disjoint from the fresh stable backing. -/
 theorem lst_new_stable_resumed_source_array (h : PtxCallees) {F : Type}
