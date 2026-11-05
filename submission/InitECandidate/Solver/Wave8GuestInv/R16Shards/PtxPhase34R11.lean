@@ -1589,6 +1589,48 @@ def Phase4ReceiptEncoded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
       Inside (a.toNat, b.toNat) sourceBase (globN s "heap_ptr") ∧
       a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧ LogsWorldOwned s (locN s "logs")
 
+theorem receiptEncoded_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : Phase4ReceiptEncoded s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (memW s (globN s "bo" + 32))
+      (memW s (globN s "bo" + 32) + (16 * memW s (globN s "bo" + 80) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    Phase4ReceiptEncoded {s with memory := mem'} := by
+  obtain ⟨ho, hl, hn, a, b, hrc, hi, ha, hb, S, Nd, hWT, hown⟩ := h
+  let post := {s with memory := mem'}
+  have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl ho.1.1.1.1
+  obtain ⟨hWT', heq, _⟩ := store_bo_array_world ho.1.1.1 ho.1.2 hWT
+    (Or.inl ⟨rfl, rfl⟩) hx hin hm
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list ho.1.2 hWT.1
+  have hmemb : (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+      ∈ blockOutObjects s := by rw [hbo]; simp
+  have hmemf : (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+      ∈ fixedObjects s := List.mem_append_left _ (List.mem_append_right _ hmemb)
+  have hmemw : (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+      ∈ worldOwned s S Nd := by
+    unfold worldOwned; simp only [List.mem_append]; exact Or.inl (Or.inr hmemf)
+  have hlogs := logsLiveOwned_single_store ho.1.1.1.2 ho.1.1.1.1 hg hl hown hm
+    ⟨_, hmemw, hin⟩ heq
+  refine ⟨txAfterCallStrong_store_receipt ho hx hin hm, hlogs.1, ?_, a, b, hrc, hi, ha, hb,
+    S, Nd, hWT', hlogs.2⟩
+  by_cases hz : locN s "logs" = 0
+  · have hxlo := ((ordinaryDomain_iff x).mp (ho.1.1.1.1.memaddrs ▸ hx)).2.1
+    have hbase : 8 < sourceBase := by decide
+    have he : memW post 8 = memW s 8 := by
+      unfold memW
+      rw [show post.memory (BitVec.ofNat 64 8) = s.memory (BitVec.ofNat 64 8) from hm _ (by
+        intro he; have := congrArg BitVec.toNat he; norm_num at this; omega)]
+    change memW post (locN s "logs" + 8) < 2 ^ 28
+    simpa only [hz, Nat.zero_add, he] using hn
+  · rcases hl with he | hl
+    · exact False.elim (hz he)
+    have hu : IvlUnhit s post (locN s "logs", 24) :=
+      ivlUnhit_single hm (by simp)
+        (disj_of_inside_right hin ((hown hz).2.1 _ (by simp) _ hmemw))
+    have he := memW_eq_of_ivlUnhit (a := locN s "logs" + 8) hu (by have := hl.1.1; omega)
+      (ivl_allocated_bound ho.1.1.1.2 hl.2.1).2 ⟨by omega, by omega⟩
+    change memW post (locN s "logs" + 8) < 2 ^ 28
+    rw [he]; exact hn
+
 theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
