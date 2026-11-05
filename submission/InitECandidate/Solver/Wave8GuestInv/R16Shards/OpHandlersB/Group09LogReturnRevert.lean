@@ -11033,4 +11033,178 @@ theorem log_append_store_return_exact_g09 {F : Type}
     sizeOfShapeWithContextHOL, emptyLocalsHOLFinite]
   rfl
 
+theorem log_append_of_lst_push_execution_g09 {F : Type}
+    (s pushPost : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (slot log : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8] = some values)
+    (hlookup : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") values =
+      some (sourceFnBody Guest.Software.guestFn_lst_push, callee, .one))
+    (hclock : s.clock ≠ 0)
+    (hpush : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_lst_push) =
+      (some (.returned (.val (.word slot))), pushPost))
+    (hd : pushPost.memaddrs slot) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append) =
+      (some (.returned (.val (.word 0))),
+        {pushPost with
+          locals := HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot"))
+          memory := fun a => if a = slot then .word log else pushPost.memory a}) := by
+  have hb : sourceFnBody Guest.Software.guestFn_log_append =
+      .decCall (ofString "slot") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8]
+        (.seq (.store (.var .local (ofString "slot")) (.var .local (ofString "log")))
+          (.return (.const 0))) := rfl
+  rw [hb, evaluateHOLFiniteState_decCall_fixClockRewrite, hargs]
+  dsimp only
+  rw [hlookup]
+  simp only [hclock, ↓reduceIte, hpush, shapeOfHOLExact, shapeEqHOL, Bool.and_self]
+  have hsl : ofString "slot" ≠ ofString "log" := by decide
+  have hs : (setVarHOLFinite (ofString "slot") (.val (.word slot))
+      {pushPost with locals := s.locals}).locals.lookup (ofString "slot") = some (.val (.word slot)) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hlog : (setVarHOLFinite (ofString "slot") (.val (.word slot))
+      {pushPost with locals := s.locals}).locals.lookup (ofString "log") = some (.val (.word log)) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hsl, Ne.symm hsl, hl]
+  rw [log_append_store_return_exact_g09 _ slot log hs hlog hd]
+  rfl
+
+theorem lst_push_alloc_copy_header_exact_g09 {F : Type}
+    (s allocPost copyPost : PanSemStateFiniteExact 64 F) (l esz cap np : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hclock : s.clock ≠ 0)
+    (halloc : evaluateHOLFiniteState
+      (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (esz * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) =
+        (some (.returned (.val (.word np))), allocPost))
+    (hcopy : evaluateHOLFiniteState
+      (setVarHOLFinite (ofString "np") (.val (.word np)) {allocPost with locals := s.locals})
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) =
+        (none, copyPost))
+    (hcl : copyPost.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcp : copyPost.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hcc : copyPost.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hd0 : copyPost.memaddrs l) (hd16 : copyPost.memaddrs (l + 16#64)) :
+    evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+            .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) =
+      (none, {copyPost with
+        locals := copyPost.locals.resVarEq (ofString "np", s.locals.lookup (ofString "np"))
+        memory := fun a => if a = l + 16#64 then .word (cap * 2#64)
+          else if a = l then .word np else copyPost.memory a}) := by
+  have hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]] =
+        some [.val (.word (esz * cap * 2#64))] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, he, hc, panOpHOL,
+      valueIsWord, valueWord]
+  have hlook := pan_one_word_lookup s.code.lookup (ofString "alloc") (ofString "n")
+    (sourceFnBody Guest.Software.guestFn_alloc) (esz * cap * 2#64)
+    (by rw [hcode]; exact OpHandlers.lookup_alloc)
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite, hargs]
+  dsimp only
+  rw [hlook]
+  simp only [hclock, ↓reduceIte, halloc, shapeOfHOLExact, shapeEqHOL, Bool.and_self]
+  rw [evaluateHOLFiniteState_seq_line780, hcopy]
+  dsimp only
+  rw [lst_push_growth_header_exact_g09 copyPost l np cap hcl hcp hcc hd0 hd16]
+
+theorem lst_push_growth_of_branch_execution_g09 {F : Type}
+    (s growPost : PanSemStateFiniteExact 64 F) (l esz n cap np : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hge : cap.toNat ≤ n.toNat)
+    (hbranch : evaluateHOLFiniteState
+      (setVarHOLFinite (ofString "cap") (.val (.word cap))
+        (setVarHOLFinite (ofString "n") (.val (.word n)) s))
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+            .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, growPost))
+    (hgl : growPost.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hge' : growPost.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hgn : growPost.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hgd0 : growPost.memaddrs l) (hgd8 : growPost.memaddrs (l + 8#64))
+    (hgm0 : growPost.memory l = .word np) (hne : l ≠ l + 8#64) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_lst_push) =
+      (some (.returned (.val (.word (np + n * esz)))),
+        {growPost with
+          locals := ((HolFiniteMapExact.empty.resVarEq
+            (ofString "cap", s.locals.lookup (ofString "cap"))).resVarEq
+            (ofString "n", s.locals.lookup (ofString "n"))),
+          memory := fun a => if a = l + 8#64 then .word (n + 1#64) else growPost.memory a}) := by
+  have hcn : ofString "cap" ≠ ofString "n" := by decide
+  have hnl : ofString "n" ≠ ofString "l" := by decide
+  have hload : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "l"), .const 8])) = some (.val (.word n)) := by
+    simp [evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp,
+      memLoadHOLExact, hd8, hm8]
+  change evaluateHOLFiniteState s
+    (.dec (ofString "n") .one (.load .one (.op .add [.var .local (ofString "l"), .const 8]))
+      (.dec (ofString "cap") .one (.load .one (.op .add [.var .local (ofString "l"), .const 16]))
+        (.seq (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq (.call (some (none, none)) (ofString "memcpy")
+              [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+            (.op .add [.var .local (ofString "n"), .const 1]))
+            (.return (.op .add [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+              .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))))) = _
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  rw [hload]
+  simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte]
+  have hloadcap : @evalHOLExact 64 F _
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "l"), .const 16])) = some (.val (.word cap)) := by
+    simp [evalHOLExact, evalListHOLExact, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+      FUPDATE, hnl, Ne.symm hnl, hl, valueIsWord, valueWord, wordOpHOL, wordOp,
+      memLoadHOLExact, hd16, hm16]
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  erw [hloadcap]
+  simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte]
+  have hcmp : cap ≤ n := hge
+  have hcond : @evalHOLExact 64 F _
+      (setVarHOLFinite (ofString "cap") (.val (.word cap))
+        (setVarHOLFinite (ofString "n") (.val (.word n)) s)).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap"))) =
+        some (.val (.word 1)) := by
+    simp [evalHOLExact, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      hcn, Ne.symm hcn, valueIsWord, valueWord, Compiler.Encoders.Asm.wordCmpHOL, hcmp]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  dsimp only
+  erw [hcond]
+  simp only [valueIsWord, valueWord, ↓reduceIte]
+  rw [hbranch]
+  have hone : (1 : BitVec 64) ≠ 0 := by decide
+  simp only [hone, ↓reduceIte]
+  rw [lst_push_finish_exact_g09 growPost l esz n np hgl hge' hgn hgd0 hgd8 hgm0 hne]
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hcn, Ne.symm hcn]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

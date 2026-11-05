@@ -9111,6 +9111,24 @@ theorem resume_lst_push_typed_logSlot (h : PtxCallees)
     exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
 
+/-- Strong push backing also retains the typed source operands. -/
+theorem resume_lst_push_typed_logSlot_backing (h : PtxCallees) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨resume_lst_push_logSlot_backing h s vs body callee ret v post hc
+    ⟨hp.1.1, hp.2⟩ ha hl hr, ?_, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.1.2.1
+    exact ⟨n, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "nl" by decide] using hn⟩
+  · obtain ⟨p, hp⟩ := hp.1.2.2.2
+    exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
+
 /-- The owned copy prefix closes Phase 4 given nonzero push backing. -/
 theorem ptxPhase4_cut_strong_of_backing_nonzero (h : PtxCallees)
     (hnonzero : LstPushBackingNonzero)
@@ -9595,5 +9613,405 @@ theorem gbody_process_transaction_strong_of_h12_backing_nonzero
   apply gbody_process_transaction_strong_of_cuts h hwk h12
   intro tail b ht F s hc hp
   exact PtxP34.ptxPhase4_cut_strong_of_backing_nonzero h hnonzero ht s hc hp.1
+
+/-- Phase 3 carries both backing facts under an explicit callee preservation
+contract, together with the existing strong message result and local shapes. -/
+theorem ptxPhase3_cut_backing_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (ptxCost3 + b) := by
+  have he : CallEntryOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      MsgReady (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret hc hp ha hl
+    exact PtxP34.entry_pmc s vs body callee ret hc hp.1.1 ha hl
+  have hr : DecCallResumeOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨⟨PtxP34.resume_pmc_strong hwk s vs body callee ret v post hc hp.1.1 ha hl hb,
+      hback s vs body callee ret v post hc hp.1 ha hl hb⟩,
+      ptxPhase4LocalShapes_resume s post v hp.2⟩
+  have hb : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (K.«process_message_call» + b + 1) := by
+    unfold ptxPhase3 ptxCode
+    exact TerminatingProgBoundedOn.decCall_on h.gb_process_message_call
+      (ofString "out") .one [.var .local (ofString "m")] he hr htail
+  have heq : K.«process_message_call» + b + 1 = ptxCost3 + b := by
+    unfold ptxCost3; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+/-- Parameterized backing-aware transaction export. The prefix, message-call
+backing preservation, and Phase-4 cut remain explicit integration obligations;
+the weaker world contracts alone do not imply them. -/
+theorem gbody_process_transaction_backing_strong_of_h12
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn
+        (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyBackingStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (h4 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b)) :
+    TerminatingFunBoundedOn TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  refine ⟨_, _, _, ptx_lookup, ?_⟩
+  have hb : TerminatingProgBoundedOn TxReadyBackingStrong
+      (ptxPhase1 (ptxPhase2 (ptxPhase3 (ptxPhase4 ptxPhase5))))
+      (ptxCost1 + (ptxCost2 + (ptxCost3 + (ptxCost4 + ptxCost5)))) :=
+    h12 _ _ (ptxPhase3_cut_backing_strong_shapes h hwk hback
+      (h4 _ _ (R13Shards.ptxPhase5_cut h)))
+  rw [← ptx_phases_eq, ptx_cost_eq] at hb
+  intro F s hc hp
+  simpa only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
+    (hb (F := F) s hc hp)
+
+open PtxP34
+
+/-- Stable-copy exit guard consumed by the proved receipt push/store suffix. -/
+def Phase4StableBackingReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => (PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+    locN s "stable_logs" ≠ 0 ∧
+    ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+    TxBacking s
+
+/-- Remaining Phase-4 integration obligation: retain backing through the
+credit, log-push, allocation and stable-copy prefix. -/
+def Phase4BackingPrefix : Prop :=
+  ∀ (tail : ProgHOL 64) (b : Nat),
+    TerminatingProgBoundedOn Phase4StableBackingReady tail b →
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (spinePlug 38 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + (2 ^ 28 + 1 + b) + 1)) + 1)))
+
+/-- Close Phase 4 from its backing-aware prefix and the concrete receipt suffix. -/
+theorem ptxPhase4_cut_backing_strong (h : PtxCallees)
+    (hprefix : Phase4BackingPrefix)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ptxPhase4 tail) (ptxCost4 + b) := by
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hb := hprefix _ _ (phase4ReceiptPush_backing_cut h htail) (F := F)
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
+
+/-- The quantified Phase-4 interface expected by transaction composition. -/
+theorem h4_backing_strong (h : PtxCallees) (hprefix : Phase4BackingPrefix) :
+    ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b) := by
+  intro tail b ht F s hc hp
+  exact ptxPhase4_cut_backing_strong h hprefix ht s hc hp
+
+/-- Callee-level backing contract for the cross-shard message-call bridge. -/
+def PmcBackingStrong : Prop :=
+  FunSpec (fun s => MsgReady s ∧ TxBacking s)
+    (fun _ r post => ∀ v, r = some (.returned v) → TxBacking post)
+    (ofString "process_message_call")
+
+/-- Convert callee backing preservation to the caller resume obligation. -/
+theorem resume_pmc_backing (hkeep : PmcBackingStrong) :
+    DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hm := entry_pmc s vs body callee ret hc hp.1 ha hl
+  have hpre : MsgReady (callEntryStateHOLFinite s callee) ∧
+      TxBacking (callEntryStateHOLFinite s callee) := ⟨hm, hp.2⟩
+  have hk := PtxP1.funSpec_at_lookup hkeep s hc vs body callee ret hl hpre (by rw [hb]; simp)
+  rw [hb] at hk
+  exact hk v rfl
+
+namespace PtxP34
+
+/-- Block-total stores preserve both nested backing words: the list headers
+are disjoint from the block-output record by fixed-object separation. -/
+theorem txAfterCallBackingStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallBackingStrong s) {off : Nat} (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    {x : BitVec 64} (hx : s.memaddrs x) (hxe : x.toNat = globN s "bo" + off)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxAfterCallBackingStrong {s with memory := mem'} := by
+  refine ⟨txAfterCallStrong_store_bo h.1 hoff hx hxe hm, ?_⟩
+  obtain ⟨S, Nd, hW, _⟩ := h.1.2.2.2.2
+  have hE := h.1.1.2
+  have hA := h.1.1.1.1
+  obtain ⟨_, _, hgb_rest, _, _⟩ := fixedObjects_disj_parts hW.2.2.1
+  have hbo_hi := (ivl_allocated_bound hA.2 (bo_words hW.2.2.1 hE.bo_nz).1).2
+  have hbo_gbs : (globN s "bo", 88) ∈
+      (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) :=
+    List.mem_map.2 ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩
+  apply txBacking_store h.2 hm
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hb : globN s "bo" + k < 2 ^ 64 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      dsimp at hbo_hi
+      rcases hk with rfl | rfl <;> omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb, hxe] at ht
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk hoff
+    rcases hk with rfl | rfl <;> rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  · intro k hk heq
+    have hd : Disj (globN s "bo", 88) (memW s (globN s "bo" + k), 24) := by
+      apply hgb_rest _ hbo_gbs
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+      · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+    have ht := congrArg BitVec.toNat heq
+    have hb : memW s (globN s "bo" + k) < 2 ^ 64 := by
+      unfold memW
+      split
+      rename_i w hw
+      exact w.isLt
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb, hxe] at ht
+    unfold Disj at hd
+    dsimp at hd
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Operational store rule retaining both block-output backing pointers. -/
+theorem hoare_store_bo_total_backing (off : Nat) (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    (op : BinOp) (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallBackingStrong
+      (.store (.op .add [.var .global (ofString "bo"), .const (BitVec.ofNat 64 off)])
+        (.op op args)) (fun r t => r = none → TxAfterCallBackingStrong t) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' h hx hv hm
+  obtain ⟨w, rfl⟩ := PtxP1.eval_is_word_op hv
+  have hs := panMemStoresHOL_word_spec (s := s) (x := x) (w := .word w)
+    (mem' := mem') (by simpa only [flattenHOL] using hm)
+  apply txAfterCallBackingStrong_store_bo h hoff hs.1 _ hs.2.2
+  have he := eval_add_global_const hx
+  obtain ⟨S, Nd, hWT, _⟩ := h.1.2.2.2.2
+  have hb := (ivl_allocated_bound h.1.1.1.1.2
+    (bo_words hWT.2.2.1 h.1.1.2.bo_nz).1).2
+  have hoff64 : off < 2 ^ 64 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> norm_num
+  have hsum : globN s "bo" + off < 2 ^ 64 := by
+    dsimp at hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hoff64, Nat.mod_eq_of_lt hsum] using he
+
+/-- All four block-total writes carry backing into their continuation. -/
+theorem phase4TotalStores_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) (0 + (0 + (0 + (0 + b)))) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 0 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 8 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 48 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 16 (by simp) _ _) ?_
+    change TerminatingProgBoundedOn TxAfterCallBackingStrong (.seq .skip tail) b
+    intro F s hc hp hnt
+    simpa only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip] using
+      htail s hc hp (by simpa only [evaluateHOLFiniteState_seq_line780,
+        evaluateHOLFiniteState_skip] using hnt)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+theorem localsOnly_txAfterCallBackingStrong : LocalsOnly ["index", "out"] TxAfterCallBackingStrong := by
+  intro F s locals k hl h
+  exact ⟨txAfterCallStrong_with_locals s locals k
+    (hl "index" (by simp)) (hl "out" (by simp)) h.1, h.2⟩
+
+/-- Read-only calls retain backing as well as the strong output invariant. -/
+theorem resume_ro_txAfterCallBackingStrong {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ k ∈ (["index", "out"] : List String), ofString k ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn TxAfterCallBackingStrong TxAfterCallBackingStrong name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨resume_ro_txAfterCallStrong hro hne args s vs body callee ret v post hc hp.1 ha hl hb, ?_⟩
+  have hs := funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  change TxBacking post
+  rw [he]
+  exact hp.2
+
+/-- Gas normalization and block-total updates preserve both backing facts. -/
+theorem phase4Totals_backing_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (K.max + b + 1) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (0 + (K.max + b + 1)) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine seq_bound_trans (Q := TxAfterCallBackingStrong) ?_ ?_ ?_
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallBackingStrong) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_txAfterCallBackingStrong
+            (name := ofString "tx_state_gas_nat") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+    · refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+        (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1)
+        (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+      have hh := @phase4TotalStores_backing_cut tail b htail
+      unfold ptxCode at hh
+      intro F s hc hp
+      exact hh s hc hp
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Refund arithmetic transports backing; only the two mutating ether credits
+require a strengthened preservation contract. -/
+theorem phase4CreditPrefix_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (phase4CreditCost + b) := by
+  have he : ∀ fn args, CallEntryOn TxAfterCallBackingStrong GuestInv fn args := by
+    intro fn args F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1) := by
+    unfold phase4CreditPrefix ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_udiv_small5 _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_udiv_small5 (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_min _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_min (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_u256_sub _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_u256_sub (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine seq_bound_trans ?_ (hcredit _) ?_
+    · exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+        (fun s hp => hp.1.1.1.1.1)
+    refine seq_bound_trans ?_ (hcredit _) htail
+    exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+      (fun s hp => hp.1.1.1.1.1)
+  have heq : K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1 =
+      phase4CreditCost + b := by unfold phase4CreditCost; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Compose the backing-aware refund prefix and the proved totals segment. -/
+theorem phase4CreditTotals_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 20 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hb := @phase4CreditPrefix_backing_cut h hcredit _ _ (phase4Totals_backing_cut h htail)
+  have he : spinePlug 20 (spineAt 99 ptxCode) tail =
+      phase4CreditPrefix (spinePlug 9 (spineAt 110 ptxCode) tail) := by
+    unfold phase4CreditPrefix ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hr := hb s hc hp
+  convert hr using 1 <;> omega
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Loading the live-log pointer retains both block-output backing facts. -/
+theorem phase4ThroughLogs_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 21 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hl : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (.dec (ofString "logs") .one
+        (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) b :=
+    dec_bound_trans (fun s v hp he => ⟨phase4LogsReady_load s v hp.1 he, hp.2⟩) htail
+  have hb := @phase4CreditTotals_backing_cut h hcredit _ _ hl
+  have he : spinePlug 21 (spineAt 99 ptxCode) tail =
+      spinePlug 20 (spineAt 99 ptxCode)
+        (.dec (ofString "logs") .one
+          (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

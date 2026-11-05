@@ -1918,6 +1918,59 @@ def FrameStartSysReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr") ∧
     memW s (memW s (globN s "ev" + 88) + 8) + 1 < 2 ^ 28
 
+theorem head_log_count_succ_lt_of_evmInv {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hInv : EvmInv s) :
+    memW s (memW s (globN s "ev" + 88) + 8) + 1 < 2 ^ 28 := by
+  obtain ⟨hAs, S, hInvAt⟩ := hInv
+  have hFW := hInvAt.2.2.2.2.1 (globN s "ev", globN s "cur_cont") List.mem_cons_self
+  have hlen_le : memW s (memW s (globN s "ev" + 88) + 8) ≤
+      memW s (memW s (globN s "ev" + 88) + 16) :=
+    hFW.2.2.2.2.2.2.2.2.2.2.2.1
+  have hfl_in :
+      (Inside (frameLogs s (globN s "ev", globN s "cur_cont")) sourceBase (globN s "heap_ptr") ∨
+        Inside (frameLogs s (globN s "ev", globN s "cur_cont")) (globN s "scratch_ptr") scratchEnd) :=
+    hFW.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hcap_lt : memW s (memW s (globN s "ev" + 88) + 16) < 2 ^ 25 := by
+    rcases hfl_in with hheap | hscratch
+    · have hhl := hAs.2.2.1
+      rw [R11Shards.heapLimit_val] at hhl
+      rw [R11Shards.sourceBase_val] at hheap
+      unfold frameLogs Inside at hheap
+      dsimp only at hheap
+      omega
+    · have hlo := hAs.2.2.2.1
+      have hmid := hAs.2.2.2.2.1
+      rw [R11Shards.scratchStart_val] at hlo
+      rw [R11Shards.scratchEnd_val] at hscratch
+      unfold frameLogs Inside at hscratch
+      dsimp only at hscratch
+      omega
+  omega
+
+theorem frameStartSysReady_of_evmInv {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr")) :
+    FrameStartSysReady s :=
+  ⟨hsys, head_log_count_succ_lt_of_evmInv hInv⟩
+
+theorem ek_cc_of_readOnly {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS}
+    (hP : ∀ {F : Type} {s : PanSemStateFiniteExact 64 F}, P s → EvmInv s)
+    (hf : ReadOnlyFn fname) :
+    EvmKeeps P [] fname ∧ ChainCellsKept P fname := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := hf
+  refine ⟨⟨params, body, ret, hlook, ?_⟩, ⟨params, body, ret, hlook, ?_⟩⟩
+  · intro F s hcode hPs hex hnt hres
+    have hInv : EvmInv s := hP hPs
+    have heq := hspec s hcode hInv.1.1 hex hnt hres
+    exact (EvmFrameSpecs.evmStep_refl_locals_clock hInv heq).1
+  · intro F s hcode hPs hex hnt hres
+    have hInv : EvmInv s := hP hPs
+    have heq := hspec s hcode hInv.1.1 hex hnt hres
+    intro ec hec
+    rw [heq]
+    exact ⟨rfl, rfl, rfl, rfl⟩
+
 theorem logEntryOK_of_transfer {F : Type}
     {s : PanSemStateFiniteExact 64 F} {log topics data : Nat}
     (hwords : WordsOK s (log, 40))
