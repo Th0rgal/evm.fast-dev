@@ -10084,4 +10084,43 @@ theorem phase2_packed_zero_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
 
+/-- The source packing loop is correct for enabled and disabled access lists. -/
+theorem phase2_packed_cases_initialized_loop_hoare (h : PtxCallees) :
+    Hoare PtxPackedInitCases
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before, PtxPackedInitCases before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := fun s => PtxPackedNalIteration s ∨
+      (PtxPackedKeysReady s ∧
+        s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+        s.locals.lookup (ofString "nal") = some (.val (.word 0))))
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        rcases hp with hp | hp
+        · exact Or.inl (phase2_packed_init_state before hp)
+        · exact Or.inr (phase2_packed_zero_init before hp.1 hp.2)
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      rcases hp with hp | hp
+      · exact ((phase2_packed_source_outer_loop_hoare h).run s hc hp hnt hr).1.1.2.1.1
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hp.2.1 hp.2.2]
+        exact hp.1
+  · intro F r s locals hl hp hr
+    exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
