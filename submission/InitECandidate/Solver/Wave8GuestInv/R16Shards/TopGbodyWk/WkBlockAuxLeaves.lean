@@ -5163,4 +5163,61 @@ theorem bal_ensure_account_miss_worldStepSc {F : Type}
       have := hARp.2.2.1
       omega
 
+/-- A successful BAL enumeration returns an owned account record and a bounded key. -/
+theorem decCall_bal_account_item_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (ordExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hW : WorldOK s)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item")
+        [.var .global (ofString "bal_accounts"), ordExp] cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item")
+        [.var .global (ofString "bal_accounts"), ordExp] cont)).1) :
+    ∃ (f0 f1 f2 : BitVec 64) (ck : Nat),
+      (f0 ≠ 0 → f2.toNat ∈ balRecords s ∧
+        Inside (f1.toNat, hdr s (globN s "bal_accounts") 0)
+          (hdr s (globN s "bal_accounts") 4)
+          (hdr s (globN s "bal_accounts") 4 +
+            (hdr s (globN s "bal_accounts") 10 + 1) * hdr s (globN s "bal_accounts") 1)) ∧
+      let sc := setVarHOLFinite x (.rStruct [.val (.word f0), .val (.word f1), .val (.word f2)])
+        { s with clock := ck }
+      (evaluateHOLFiniteState sc cont).1 ≠ some .timeOut ∧
+      Resumes (evaluateHOLFiniteState sc cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .global (ofString "bal_accounts"), ordExp] cont)).1 =
+        (evaluateHOLFiniteState sc cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .global (ofString "bal_accounts"), ordExp] cont)).2 =
+        { (evaluateHOLFiniteState sc cont).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (evaluateHOLFiniteState sc cont).2.locals (x, s.locals.lookup x) } := by
+  obtain ⟨tw, ordw, f0, f1, f2, ck, ht, _, htnz, hspec, hcont⟩ :=
+    decCall_htab_item_resumes s x (.var .global (ofString "bal_accounts")) ordExp cont
+      hW.1.1 hnt hres
+  have hlookup : s.globals.lookup (ofString "bal_accounts") = some (.val (.word tw)) := ht
+  have htN : globN s "bal_accounts" = tw.toNat := by
+    simp [globN, hlookup]
+  have hnz : globN s "bal_accounts" ≠ 0 := by
+    rw [htN]
+    intro hz
+    apply htnz
+    apply BitVec.eq_of_toNat_eq
+    simpa using hz
+  obtain ⟨S, htyped⟩ := hW.2
+  obtain ⟨Nd, htyped⟩ := (worldTyped_iff_with s S).1 htyped
+  have hS := (bal_accounts_slot_distinct htyped.1 hnz).1
+  have htab : HtabWF s tw.toNat := by
+    rw [← htN]
+    exact (htyped.1.2.1 _ hS).1
+  refine ⟨f0, f1, f2, ck, ?_, hcont⟩
+  intro hf0
+  obtain ⟨_, hkey, hval⟩ := hspec htab hf0
+  refine ⟨?_, ?_⟩
+  · have htn : tw.toNat ≠ 0 := by rwa [htN] at hnz
+    simpa [balRecords, htN, htn, htabValues] using hval
+  · simpa only [htN] using hkey
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
