@@ -1598,6 +1598,127 @@ theorem hoare_store_ev_200_used_step (gw : List String) (hp : Nat)
   refine ⟨⟨hP', stepFrom_of_evmStep (fun _ h => by cases h) hS hstep⟩, m, by rw [hloc]; exact hm, ?_⟩
   rw [hglobN, h112]; exact hm_eq
 
+/-- `st msg + 48, lds 1 (ev + 72)` from `EvmMsgReady` with `msg = ev+112`: `EvmMsgReady` again and
+an `EvmStep []` (the message record is an `EvmAvoids` region). -/
+theorem store_msg_48_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) {m : BitVec 64}
+    (hm : s.locals.lookup (ofString "msg") = some (.val (.word m)))
+    (hm_eq : m.toNat = memW s (globN s "ev" + 112))
+    {post : PanSemStateFiniteExact 64 F}
+    (hev : evaluateHOLFiniteState s
+      (.store (.op .add [.var .local (ofString "msg"), .const 48])
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 72]))) = (none, post)) :
+    EvmMsgReady post ∧ EvmStep [] s post := by
+  have hAs : ArenaReady s := hP.1
+  have hm_bnd : memW s (globN s "ev" + 112) + 176 ≤ 2 ^ 64 := by
+    obtain ⟨_, S, _, hal, _⟩ := hP
+    exact allocated_le_2pow64 hAs.2 hal
+  obtain ⟨heff, _⟩ := M11.ByteRegionEffect.of_store_word
+    (Rl := [(memW s (globN s "ev" + 112), 176)]) hAs.1.memaddrs hev
+    (fun v hv => M11.eval_load_one_word s _ v hv)
+    (fun addr hdst _ => by
+      refine ⟨(memW s (globN s "ev" + 112), 176), List.mem_singleton.2 rfl, ?_⟩
+      have haddr : addr.toNat = m.toNat + 48 := by
+        simp [evalHOLExact, evalListHOLExact, hm, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+        subst hdst
+        have h48 : (48#64).toNat = 48 := by decide
+        rw [BitVec.toNat_add, h48, Nat.mod_eq_of_lt (by omega)]
+      dsimp only
+      omega)
+  have hstep : EvmStep [] s post :=
+    ByteRegionEffect.to_evmStep_avoids (evmAvoids_msg_of_evmMsgReady s hP)
+      (m11Bre_to_evmBre (fun i hi => by simp only [List.mem_singleton] at hi; subst hi; simp) heff)
+  exact ⟨evmMsgReady_of_evmStep hstep, hstep⟩
+
+/-- `st msg + 48, lds 1 (ev + 72)` between `StepFrom` states. -/
+theorem hoare_store_msg_48_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧
+        ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+          m.toNat = memW s (globN s "ev" + 112))
+      (.store (.op .add [.var .local (ofString "msg"), .const 48])
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+      (fun r t => r = none → EvmMsgReady t ∧ StepFrom gw hp G ch t) := by
+  refine ⟨fun {F} s _ ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ _ hr => ?_⟩
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .local (ofString "msg"), .const 48])
+      (.load .one (.op .add [.var .global (ofString "ev"), .const 72]))) with ⟨res, post⟩
+  rw [hev] at hr
+  dsimp only at hr ⊢
+  subst hr
+  obtain ⟨hP', hstep⟩ := store_msg_48_run s hP hm hm_eq hev
+  exact ⟨hP', stepFrom_of_evmStep (fun _ h => by cases h) hS hstep⟩
+
+/-- The three auth-branch stores of `depth0_prepare`, between `StepFrom` states. -/
+theorem hoare_depth0_auth_stores_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w))) ∧
+        ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+          m.toNat = memW s (globN s "ev" + 112))
+      (.seq
+        (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+        (.seq
+          (.store (.op .add [.var .local (ofString "msg"), .const 48])
+            (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+          (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))
+      (fun r t => r = none → EvmMsgReady t ∧ StepFrom gw hp G ch t) := by
+  refine Hoare.seq (R := fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧
+      ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112)) ?_ ?_
+  · refine ⟨fun {F} s hcode hP hnt => ?_⟩
+    have h1 := (hoare_store_ev_200_used_step gw hp G ch).run s hcode hP hnt
+    exact ⟨fun hr => h1 hr, fun hr hr' => absurd hr' hr⟩
+  · refine Hoare.seq (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) ?_
+      (hoare_store_ev_192_zero_step gw hp G ch)
+    refine ⟨fun {F} s hcode hR hnt => ?_⟩
+    have h2 := (hoare_store_msg_48_step gw hp G ch).run s hcode hR hnt
+    exact ⟨fun hr => h2 hr, fun hr hr' => absurd hr' hr⟩
+
+/-- The `depth0_prepare` auth branch after `set_delegation`, between `StepFrom` states. -/
+theorem hoare_depth0_auth_tail_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (.decCall (ofString "used") .one (ofString "frame_state_gas_used") [.var .global (ofString "ev")]
+        (.seq
+          (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+          (.seq
+            (.store (.op .add [.var .local (ofString "msg"), .const 48])
+              (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+            (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0)))))
+      (fun r t => r = none → EvmMsgReady t ∧ StepFrom gw hp G ch t) := by
+  have hLO : LocalsOnly ["msg"] (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+      s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+      m.toNat = memW s (globN s "ev" + 112)) := by
+    intro F s locals k hl ⟨⟨hP, hS⟩, m, hm, hm_eq⟩
+    exact ⟨⟨localsFree_evmMsgReady s locals k hP, localsFree_stepFrom gw hp G ch s locals k hS⟩,
+      m, by rw [hl "msg" (by simp)]; exact hm, hm_eq⟩
+  have hres : DecCallResumeOn
+      (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (ofString "used") (ofString "frame_state_gas_used") [.var .global (ofString "ev")] :=
+    ReadOnlyFn.resumeOn hLO
+      (fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1))
+      ro_frame_state_gas_used (ofString "used") (by decide) _
+  have hLF : LocalsFree (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) := by
+    intro F s locals k h
+    exact ⟨localsFree_evmMsgReady s locals k h.1, localsFree_stepFrom gw hp G ch s locals k h.2⟩
+  have hQ : LocalsOnly [] (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) :=
+    LocalsOnly.of_localsFree hLF
+  have hcont := Hoare.mono (hoare_depth0_auth_stores_step gw hp G ch)
+    (P := fun s => ((EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112)) ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w)))
+    (fun s h => ⟨h.1.1, h.2, h.1.2⟩)
+  exact Hoare.decCall_fall_word (names := []) (by simp) hQ (fun {F} => @hres F) hcont
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
