@@ -2619,4 +2619,220 @@ theorem pBounded_readOnlyLocal_csr
   pBounded_callLocal_csr hfb (callEntryOn_guestInv_csr hG fname args)
     (hro.resumeOn hP hG name hne args)
 
+theorem funSpec_resumeOn_csr
+    {P Pc R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)}
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      R (setVarHOLFinite name v { post with locals := s.locals })) :
+    DecCallResumeOn P R name fname args := by
+  intro F s values body callee ret v post hc hs ha hl hb
+  have hq := FunSpec.at_lookup hspec s hc values body callee ret hl
+    (hentry s values body callee ret hc hs ha hl) (by rw [hb]; simp)
+  rw [hb] at hq
+  exact hret s values body callee ret v post hc hs ha hl hb hq
+
+theorem pBounded_specLocal_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      P (setVarHOLFinite name v { post with locals := s.locals })) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) :=
+  pBounded_callLocal_csr hfb hentry (funSpec_resumeOn_csr hspec hentry hret)
+
+theorem pBounded_readOnlyDecCall_csr
+    {names : List String} {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B Bc : Nat}
+    {shape : ShapeHOL} {cont : ProgHOL 64}
+    (hP : LocalsOnly names P)
+    (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hfb : TerminatingFunBoundedOn GuestInv fname B)
+    (hro : ReadOnlyFn fname) (hne : ∀ n ∈ names, ofString n ≠ name)
+    (hb : PBounded P cont Bc) :
+    PBounded P (.decCall name shape fname args cont) (B + Bc + 1) :=
+  PBounded.decCallTrans hfb hP name hne shape args
+    (callEntryOn_guestInv_csr hG fname args) (hro.resumeOn hP hG name hne args)
+    hb.bounded hb.hoare
+
+theorem callee_param_five_exp_csr {F : Type} (state : PanSemStateFiniteExact 64 F)
+    (fname p1 p2 p3 p4 p5 : MlS) (s1 s2 s3 s4 s5 : ShapeHOL)
+    (body : ProgHOL 64) (ret : ShapeHOL)
+    (hl : state.code.lookup fname =
+      some ([(p1, s1), (p2, s2), (p3, s3), (p4, s4), (p5, s5)], body, ret))
+    (e1 e2 e3 e4 e5 : ExpHOL 64) (values : List (ValueHOL 64)) (body' : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL)
+    (hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [e1, e2, e3, e4, e5] = some values)
+    (hlook : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ∃ v1 v2 v3 v4 v5,
+      evalAt state e1 = some v1 ∧ evalAt state e2 = some v2 ∧
+      evalAt state e3 = some v3 ∧ evalAt state e4 = some v4 ∧
+      evalAt state e5 = some v5 ∧
+      callee.lookup p1 = some v1 ∧ callee.lookup p2 = some v2 ∧
+      callee.lookup p3 = some v3 ∧ callee.lookup p4 = some v4 ∧
+      callee.lookup p5 = some v5 := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  simp only [evalListHOLExact] at hargs
+  rcases he1 : evalAt state e1 with _ | v1 <;>
+  rcases he2 : evalAt state e2 with _ | v2 <;>
+  rcases he3 : evalAt state e3 with _ | v3 <;>
+  rcases he4 : evalAt state e4 with _ | v4 <;>
+  rcases he5 : evalAt state e5 with _ | v5 <;>
+    simp only [evalAt] at he1 he2 he3 he4 he5 <;>
+    simp only [he1, he2, he3, he4, he5, Option.some.injEq] at hargs <;>
+    cases hargs
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hlook
+  split at hlook
+  · cases hlook
+  · rename_i exactBody exactLocals exactShape raw
+    have heq := Option.some.inj hlook
+    rcases Prod.mk.inj heq with ⟨rfl, hrest⟩
+    rcases Prod.mk.inj hrest with ⟨rfl, _⟩
+    unfold lookupCodeHOLExact at raw
+    rw [hl] at raw
+    dsimp only at raw
+    split at raw
+    · rename_i hcond
+      have rawEq := Option.some.inj raw
+      rcases Prod.mk.inj rawEq with ⟨-, hrest2⟩
+      rcases Prod.mk.inj hrest2 with ⟨hloc, -⟩
+      subst hloc
+      obtain ⟨hnd, -, -⟩ := hcond
+      simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+        not_or, List.not_mem_nil, or_false] at hnd
+      refine ⟨v1, v2, v3, v4, v5, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+      · simp [List.zip, List.foldl, hnd.1.1, hnd.1.2.1, hnd.1.2.2.1, hnd.1.2.2.2]
+      · simp [List.zip, List.foldl, hnd.2.1.1, hnd.2.1.2.1, hnd.2.1.2.2]
+      · simp [List.zip, List.foldl, hnd.2.2.1.1, hnd.2.2.1.2]
+      · simp [List.zip, List.foldl, hnd.2.2.2]
+      · simp [List.zip, List.foldl]
+    · cases raw
+
+theorem csrLiveAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} (hs : CsrLiveAt s cache roots m)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, hc, hr, _⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  exact ⟨hA, (hW.1.2.1 _ htS).1, fun i hi => (hW.1.2.1 _ htS).2 i hi |>.1⟩
+
+theorem csrTablesAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (hs : CsrTablesAt s cache roots)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s := by
+  obtain ⟨hA, _, S, Nd, hW, hc, hr, _⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  exact ⟨hA, (hW.1.2.1 _ htS).1, fun i hi => (hW.1.2.1 _ htS).2 i hi |>.1⟩
+
+theorem csrLiveAt_mptSetReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (hs : CsrLiveAt s cache roots (locN s "m"))
+    (hk : locN s "klen" ≤ 32) (hv : locN s "vlen" ≤ 110) : MptSetReady s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, _, _, _, _, hm, hd⟩ := hs
+  exact mptSetReady_of_parts_csr hA hW hm hd hk hv
+
+theorem pBounded_specDecCall_csr
+    {names : List String}
+    {P Pc R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B Bc : Nat}
+    {shape : ShapeHOL} {cont : ProgHOL 64}
+    (hP : LocalsOnly names P)
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hne : ∀ n ∈ names, ofString n ≠ name)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      R (setVarHOLFinite name v { post with locals := s.locals }))
+    (hb : TerminatingProgBoundedOn R cont Bc)
+    (hh : Hoare R cont (fun r t => r = none → P t)) :
+    PBounded P (.decCall name shape fname args cont) (B + Bc + 1) :=
+  PBounded.decCallTrans hfb hP name hne shape args hentry
+    (funSpec_resumeOn_csr hspec hentry hret) hb hh
+
+ theorem callEntryOn_worldOK_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → WorldOK s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P WorldOK fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact localsFree_worldOK s _ _ (hP s hs)
+
+ theorem callEntryOn_arenaReady_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → ArenaReady s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P ArenaReady fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact localsFree_arenaReady s _ _ (hP s hs)
+
+ theorem csrMpt_worldOK (name : String) {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrMpt name s) : WorldOK s := csrTabs_worldOK (csrMpt_tabs name hs)
+
+theorem csrBuffers_disj_worldTyped_csr {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {buffers : List (String × Nat)} (hW : WorldTypedWith s S Nd)
+    (hb : ∀ b ∈ buffers, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst) :
+    IvlsDisj (buffers.map (bufferRegion s)) (worldTypedIvls s S Nd) := by
+  intro i hi j hj
+  obtain ⟨b, hmem, rfl⟩ := List.mem_map.mp hi
+  exact bufferRegion_disj hW b (hb b hmem).1 (hb b hmem).2 j hj
+
+theorem worldStep_buffers_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots : Nat}
+    {buffers : List (String × Nat)} {gw : List String}
+    {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : CsrTablesAt s cache roots)
+    (hb : ∀ b ∈ buffers, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst)
+    (hstep : WorldStep (fun t => buffers.map (bufferRegion t)) gw keep Q s r post) :
+    CsrTablesAt post cache roots := by
+  apply worldStep_csrTablesAt hs hstep
+  · intro j hj hz
+    obtain ⟨b, _, rfl⟩ := List.mem_map.mp hj
+    dsimp only [bufferRegion] at hz ⊢
+    by_cases hzero : globN s b.1 = 0
+    · simp [hzero]
+    · simp only [hzero, ↓reduceIte] at hz
+      have hbuf := (hb b (by assumption)).1
+      have hpos : b.2 ≠ 0 := by
+        revert hbuf
+        have : ∀ b ∈ globalBuffers, b.2 ≠ 0 := by decide
+        exact this b
+      exact False.elim (hpos hz)
+  · intro S Nd hW
+    exact csrBuffers_disj_worldTyped_csr hW hb
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
