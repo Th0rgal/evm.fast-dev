@@ -5798,4 +5798,15 @@ theorem phase2_packed_copy_frame_preserves {F : Type}
   · rw [ht]; exact hh.2
   · intro i hi; rw [ht, hh.1]; exact hm i hi
 
+/-- Extract an unchanged word directly from the full world-step frame. -/
+theorem phase2_world_frame_word {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (keep : List Ivl) (fresh : Ivl) (p : Nat)
+    (hf : FrameOutside s post keep fresh) (hp : p < 2 ^ 64)
+    (hk : ∀ region ∈ keep, ¬ CellHits p region)
+    (hn : ¬ CellHits p fresh) : memW post p = memW s p := by
+  have he : (BitVec.ofNat 64 p).toNat = p := Nat.mod_eq_of_lt hp
+  have hm := hf (BitVec.ofNat 64 p)
+    (by simpa only [he] using hk) (by simpa only [he] using hn)
+  simp only [memW, hm]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
