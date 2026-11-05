@@ -6142,6 +6142,46 @@ theorem transfer_topic_writes_prefix {F : Type}
   exact ⟨m5, st5, ef04.trans ef5, l5.trans l04, r5, o5, b5,
     eq1.trans (eq2.trans (eq3.trans (eq4.trans eq5)))⟩
 
+theorem transfer_alloc_topics_writes_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 96 ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨allocated, ht, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") _ p 96
+      (Or.inr (Or.inl rfl)) hInv hp hr
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 96) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨mid, st', ef, loc, resum, out, bytes, eq⟩ :=
+    transfer_topic_writes_prefix s allocated p topic sender recipient cont hInv st hb
+      (fun _ _ => congrFun hm _) (fun _ _ _ => by simp only [memB, hm, hb]) ht
+      ((st.1.2.2.1 _ (by decide)).symm.trans htopic)
+      ((hl _ (by decide)).trans hsender)
+      ((hl _ (by decide)).trans hrecipient) hin (er ▸ hr)
+  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_⟩
+  · simpa only [globN, ef.globals] using hhp
+  · exact er.trans (congrArg Prod.fst eq)
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "topics", s.locals.lookup (ofString "topics"))) }) eq)
+
 theorem transfer_topics_alloc_prefix {F : Type}
     (s : PanSemStateFiniteExact 64 F) (logp p : BitVec 64) (cont : ProgHOL 64)
     (hInv : EvmInv s)
