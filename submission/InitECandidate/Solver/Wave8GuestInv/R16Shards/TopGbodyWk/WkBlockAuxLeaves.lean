@@ -6696,4 +6696,42 @@ theorem eval_call_union_bs_inner {F : Type} (s : PanSemStateFiniteExact 64 F)
               exact h
             exact (hs hres).from_entry
 
+/-- Insertion establishes ownership of its value whether it appends a new key
+or replaces an existing key. Every resulting value is old or the inserted one. -/
+theorem merge_set_values_membership {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t value : Nat}
+    (h : WkBal.HtabSetValuesPost s post t value) :
+    value ∈ htabValues post t ∧
+      ∀ x ∈ htabValues post t, x ∈ htabValues s t ∨ x = value := by
+  rcases h with h | ⟨i, hi, h⟩
+  · rw [h]
+    constructor
+    · simp
+    · intro x hx
+      simpa using hx
+  · rw [h]
+    constructor
+    · exact List.mem_iff_getElem.2 ⟨i, by simp [hi], by simp⟩
+    · intro x hx
+      have hm := List.mem_or_eq_of_mem_set hx
+      exact hm
+
+/-- The outer insertion in the fresh-inner branch installs the new table
+as a value and introduces no unrelated values. -/
+theorem merge_outer_set_ret_values {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw iw : BitVec 64)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "value") = some (.val (.word iw)))
+    (hA : ArenaReady s) (hT : HtabWF s tw.toNat)
+    (halloc : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i)
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).1 =
+      some (.returned v)) :
+    let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).2
+    iw.toNat ∈ htabValues post tw.toNat ∧
+      ∀ x ∈ htabValues post tw.toNat, x ∈ htabValues s tw.toNat ∨ x = iw.toNat := by
+  have hv := WkBal.htab_set_body_values_exact s tw kw iw ht hk hi hA hT halloc v hret
+  exact merge_set_values_membership hv.2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
