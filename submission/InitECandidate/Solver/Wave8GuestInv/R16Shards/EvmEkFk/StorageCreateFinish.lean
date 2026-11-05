@@ -8,7 +8,40 @@ set_option maxHeartbeats 4000000
 namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
+open Flapjack.Basis.Pure.MlString
 open InitE InitECandidate.Solver.Wave8GuestInv
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+
+theorem lookup_create_finish :
+    originalRuntimeCode.lookup (ofString "create_finish") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_create_finish).2) :=
+  lookup_of_guestAst_getElem 589 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_create_finish) rfl
+
+theorem lookup_set_code :
+    originalRuntimeCode.lookup (ofString "set_code") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_set_code).2) :=
+  lookup_of_guestAst_getElem 399 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_set_code) rfl
+
+theorem lookup_get_storage_original :
+    originalRuntimeCode.lookup (ofString "get_storage_original") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_get_storage_original).2) :=
+  lookup_of_guestAst_getElem 379 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_get_storage_original) rfl
+
+theorem lookup_ws_storage_trie :
+    originalRuntimeCode.lookup (ofString "ws_storage_trie") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_ws_storage_trie).2) :=
+  lookup_of_guestAst_getElem 368 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_ws_storage_trie) rfl
+
+theorem lookup_ws_get_storage :
+    originalRuntimeCode.lookup (ofString "ws_get_storage") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_ws_get_storage).2) :=
+  lookup_of_guestAst_getElem 369 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_ws_get_storage) rfl
 
 theorem allocated_disj_fresh_extent {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {o j : Ivl}
