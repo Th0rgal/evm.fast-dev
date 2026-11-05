@@ -13318,4 +13318,59 @@ theorem phase2_message_empty_call_suffix_bound (h : PtxCallees) {ι : Type} [Non
         rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
   exact phase2_message_call_stores_suffix_bound buffers contents ["empty"] aa ak (by simp) ht
 
+/-- Empty allocation at any size feeds the ordinary-call branch stores. -/
+theorem phase2_message_alloc_empty_call_suffix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    (size : BitVec 64) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents [] aa ak)
+      (.decCall (ofString "empty") .one (ofString "alloc") [.const size]
+        (.seq phase2_message_call_stores tail)) (K.alloc + b + 1) := by
+  apply phase2_alloc_message_suffix_word_bound h buffers contents [] aa ak "empty" _
+    (by decide) (by decide) (by simp)
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  exact phase2_message_call_stores_suffix_bound buffers contents ["empty"] aa ak (by simp) ht
+
+/-- The source's eight-byte empty allocation supplies the ordinary-call store cut. -/
+theorem phase2_message_empty8_call_suffix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents [] aa ak)
+      (.decCall (ofString "empty") .one (ofString "alloc") [.const 8]
+        (.seq phase2_message_call_stores tail)) (K.alloc + b + 1) :=
+  phase2_message_alloc_empty_call_suffix_bound h buffers contents aa ak 8 ht
+
+/-- The create branch's address allocation supplies the scalar needed by its stores.
+The address-computation call is handled by its own preservation cut. -/
+theorem phase2_message_ct_alloc_suffix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (PtxMessageSuffixReady buffers contents ["ct", "empty"] aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents ["empty"] aa ak)
+      (.decCall (ofString "ct") .one (ofString "alloc") [.const 24] tail)
+      (K.alloc + b + 1) := by
+  exact phase2_alloc_message_suffix_word_bound h buffers contents ["empty"] aa ak "ct" _
+    (by decide) (by decide) (by intro n hn; simp only [List.mem_singleton] at hn; subst n; decide)
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide) ht
+
+/-- Allocating the create address and executing its stores discharges the suffix guard. -/
+theorem phase2_message_ct_alloc_create_stores_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents ["empty"] aa ak)
+      (.decCall (ofString "ct") .one (ofString "alloc") [.const 24]
+        (.seq phase2_message_create_stores tail)) (K.alloc + b + 1) := by
+  apply phase2_message_ct_alloc_suffix_bound h buffers contents aa ak
+  exact phase2_message_create_stores_suffix_bound buffers contents ["ct", "empty"] aa ak
+    (by simp) (by simp) ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
