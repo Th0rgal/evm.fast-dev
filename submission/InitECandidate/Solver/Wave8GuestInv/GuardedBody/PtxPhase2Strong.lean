@@ -14145,4 +14145,27 @@ theorem phase2_ws_get_account_optional_callEntry_backing {F : Type}
     (phase2_txEnv_callEntry_without_index s callee he hi)
     ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hb hnt hr
 
+/-- Resolve the concrete world-state callee and restore its caller with backing intact. -/
+theorem phase2_ws_get_account_optional_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "ws_get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "ws_get_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.lookup_ws_get_account_optional_top] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have hb := phase2_ws_get_account_optional_callEntry_backing s callee hc hp.1.1 hp.2.1 hw hp.2.2 hi
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
