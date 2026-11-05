@@ -12095,4 +12095,122 @@ theorem phase2_message_value_store_hoare {ι : Type} [Nonempty ι]
   exact phase2_message_expr_store_hoare buffers contents _ 7 4 (by decide)
     (fun s v _ hv => phase2_load_quad_length s _ v hv)
 
+/-- Scalar caller witnesses needed by message stores, retained with the spatial cut. -/
+def PtxMessageScalarReady {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMessageStoreReady buffers contents s ∧
+    ∀ name ∈ names, ∃ w : BitVec 64,
+      s.locals.lookup (ofString name) = some (.val (.word w))
+
+/-- A message write changes memory only, so caller scalar witnesses survive. -/
+theorem phase2_message_scalar_expr_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (src : ExpHOL 64) (k n : Nat) (hk : k + n ≤ 22)
+    (hlen : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxMessageScalarReady buffers contents names s → evalAt s src = some v →
+      (flattenHOL v).length = n) :
+    Hoare (PtxMessageScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) src)
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.2.2.1
+  have hl : locN s "m" = w.toNat := by simp [locN, hw]
+  have he : x = w + BitVec.ofNat 64 (8 * k) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr, BitVec.ofNat_mul] using hx.symm
+  have hx' : x = BitVec.ofNat 64 (locN s "m" + 8 * k) := by
+    simp [he, hl, BitVec.ofNat_add]
+  rw [hx'] at hst
+  exact ⟨phase2_message_store_ready_words buffers contents (flattenHOL v) hp.1 k
+    (by rw [hlen s v hp hv]; exact hk) hst, hp.2⟩
+
+theorem phase2_message_scalar_local_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (name : String) (hn : name ∈ names) (k : Nat) (hk : k < 22) :
+    Hoare (PtxMessageScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)])
+        (.var .local (ofString name)))
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  apply phase2_message_scalar_expr_store buffers contents names _ k 1 (by omega)
+  intro F s v hp hv
+  obtain ⟨w, hw⟩ := hp.2 name hn
+  have he : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  simp [he, flattenHOL]
+
+theorem phase2_message_scalar_load_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (addr : ExpHOL 64) (k : Nat) (hk : k < 22) :
+    Hoare (PtxMessageScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) (.load .one addr))
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  exact phase2_message_scalar_expr_store buffers contents names _ k 1 (by omega)
+    (fun s v _ hv => phase2_load_one_length s addr v hv)
+
+theorem phase2_message_scalar_const_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (names : List String)
+    (w : BitVec 64) (k : Nat) (hk : k < 22) :
+    Hoare (PtxMessageScalarReady buffers contents names)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) (.const w))
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  apply phase2_message_scalar_expr_store buffers contents names _ k 1 (by omega)
+  intro F s v _ hv
+  have he : v = .val (.word w) := by simpa [evalAt, evalHOLExact] using hv.symm
+  simp [he, flattenHOL]
+
+/-- The six ordinary-call branch stores set recipient, input and code fields. -/
+def phase2_message_call_stores : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "m"), .const 32])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 88])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 192])))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 96])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 200])))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 112])
+      (.var .local (ofString "empty")))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 120]) (.const 0))
+    (.store (.op .add [.var .local (ofString "m"), .const 104])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))))))
+
+theorem phase2_message_call_stores_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (he : "empty" ∈ names) :
+    Hoare (PtxMessageScalarReady buffers contents names) phase2_message_call_stores
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  unfold phase2_message_call_stores
+  apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 4 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 11 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 12 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_local_store buffers contents names "empty" he 14 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_const_store buffers contents names 0 15 (by decide))
+  exact phase2_message_scalar_load_store buffers contents names _ 13 (by decide)
+
+/-- The six create-branch stores following contract-address computation. -/
+def phase2_message_create_stores : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "m"), .const 32])
+      (.var .local (ofString "ct")))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 88])
+      (.var .local (ofString "empty")))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 96]) (.const 0))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 112])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 192])))
+  (.seq (.store (.op .add [.var .local (ofString "m"), .const 120])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 200])))
+    (.store (.op .add [.var .local (ofString "m"), .const 104]) (.const 0))))))
+
+theorem phase2_message_create_stores_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (hc : "ct" ∈ names) (he : "empty" ∈ names) :
+    Hoare (PtxMessageScalarReady buffers contents names) phase2_message_create_stores
+      (fun r s => r = none → PtxMessageScalarReady buffers contents names s) := by
+  unfold phase2_message_create_stores
+  apply Hoare.seq_fall (phase2_message_scalar_local_store buffers contents names "ct" hc 4 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_local_store buffers contents names "empty" he 11 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_const_store buffers contents names 0 12 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 14 (by decide))
+  apply Hoare.seq_fall (phase2_message_scalar_load_store buffers contents names _ 15 (by decide))
+  exact phase2_message_scalar_const_store buffers contents names 0 13 (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
