@@ -1756,6 +1756,17 @@ theorem phase4LogCount_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "nl" ≠ ofString "logs" from by decide] using And.intro hwe hn
 
+/-- Loading the source length retains a word-shaped operand, including zero. -/
+theorem phase4LogCount_load_typed {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : Phase4ReceiptEncoded s)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "logs"), .const 8])) = some v) :
+    let t := setVarHOLFinite (ofString "nl") v s
+    Phase4LogCountReady t ∧
+      ∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n)) := by
+  refine ⟨phase4LogCount_load s v h he, ?_⟩
+  obtain ⟨w, rfl, _⟩ := evalAt_load_local s "logs" 8 v he
+  exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+
 theorem localsOnly_phase4LogCountReady :
     LocalsOnly ["index", "out", "logs", "rc", "nl"] Phase4LogCountReady := by
   intro F s locals k hl hp
@@ -6289,6 +6300,66 @@ theorem stable_length_canonical_operand {F : Type} (s : PanSemStateFiniteExact 6
       some (.val (.word (BitVec.ofNat 64 (locN s "nl")))) := by
   obtain ⟨n, hn⟩ := hn
   simpa [locN, hn] using hn
+
+/-- The allocator's return state enters the bounded length/copy suffix and receipt tail. -/
+theorem lst_new_stable_copy_continuation (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (hz : locN s "logs" ≠ 0)
+    (hptr : ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hcode : post.code = originalRuntimeCode)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingRunBounded
+      (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals})
+      (.seq (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+        (.seq (.assign .local (ofString "stable_lp")
+          (.load .one (.var .local (ofString "stable_logs"))))
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+              (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+                .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+                (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+              tail)))) (2 ^ 28 + 1 + b) := by
+  exact stable_length_setup_loop_cut htail _ hcode
+    ⟨lst_new_stable_length_joint_pre h s vs body callee ret v post hc hp hn ha hl hr,
+      lst_new_stable_copy_operands h s vs body callee ret v post hc hp hz hptr ha hl hr⟩
+
+/-- Execute the stable length write using the allocation's joint spatial witnesses. -/
+theorem lst_new_stable_length_write (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post u : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hcode : post.code = originalRuntimeCode)
+    (he : evaluateHOLFiniteState
+      (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals})
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl"))) = (none, u)) :
+    StableLengthPost u ∧ StableCopySpatial u := by
+  have hpre := lst_new_stable_length_joint_pre h s vs body callee ret v post hc hp
+    (stable_length_canonical_operand s hn) ha hl hr
+  have hout := hoare_stable_length_joint.run
+    (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) hcode hpre
+    (by rw [he]; simp)
+  rw [he] at hout
+  exact hout rfl
 
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
