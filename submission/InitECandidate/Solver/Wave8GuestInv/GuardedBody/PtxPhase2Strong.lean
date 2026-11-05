@@ -6521,4 +6521,20 @@ theorem phase2_memcpy_restore_domain {F : Type}
   intro a ha
   exact hd a ha
 
+/-- Restoring caller locals retains the callee's global-preservation guarantee. -/
+theorem phase2_memcpy_restore_globals {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hg : GlobalsKept [] (callEntryStateHOLFinite s callee) post) :
+    GlobalsKept [] s { post with locals := s.locals } := by
+  intro k hk
+  exact hg k hk
+
+/-- Restoring caller locals leaves every caller numeric local unchanged. -/
+theorem phase2_memcpy_restore_locals {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (name : String) :
+    locN ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) name =
+      locN s name := by
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
