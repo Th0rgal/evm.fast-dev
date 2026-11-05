@@ -2987,4 +2987,15 @@ theorem phase2_address_copy_slot {F : Type} {s : PanSemStateFiniteExact 64 F}
   rw [he]
   constructor <;> dsimp <;> omega
 
+/-- A successful word store at a copy-loop slot preserves both buffer frames
+and the input access-list witness. -/
+theorem phase2_address_copy_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) (i : Nat) (hi : i < locN s "nal")
+    (w : HolWordLab 64) {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1)))
+      [w] s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxAddressJoint { s with memory := mem } := by
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  exact phase2_address_joint_store hp hdom (phase2_address_copy_slot hp i hi).2 hmem
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
