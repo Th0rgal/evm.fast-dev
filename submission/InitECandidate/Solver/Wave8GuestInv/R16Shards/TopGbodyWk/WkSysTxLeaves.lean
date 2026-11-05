@@ -2,6 +2,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkAcctWsBase
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01AllocMpt
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard06b
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -746,15 +747,15 @@ theorem sysTxPrefix_ext_code_of :
       keepSub_sysTxKeep_stdKeep hstep,
     by rw [hfmp], hsp, hbn1, hbn2⟩
 
-theorem sysTxPrefix_alloc :
-    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
-      (ofString "alloc") := by
-  obtain ⟨ps, body, ret, hl, hb⟩ := R13Shards.wk_alloc_impl
+theorem sysTxPrefix_of_heapOnly
+    {fname : MlS}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    (hf : WorldKeeps WorldOK (bufRegions []) ["heap_ptr"] stdKeep Q fname) :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post) fname := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := hf
   refine ⟨ps, body, ret, hl, fun s hc hW hex hnt hres => ?_⟩
-  have hstep : WorldStep (bufRegions []) ["heap_ptr"] stdKeep
-      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)]))
-      s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2 :=
-    hb s hc hW hex hnt hres
+  have hstep := hb s hc hW hex hnt hres
   have hG := hstep.2.2.1
   have hfmp : globN (evaluateHOLFiniteState s body).2 "frame_mem_ptr" = globN s "frame_mem_ptr" :=
     globN_eq_of_lookup (hG (ofString "frame_mem_ptr") (by decide))
@@ -768,6 +769,21 @@ theorem sysTxPrefix_alloc :
       (by intro g hg; simp at hg; subst hg; simp [sysTxGlobals])
       keepSub_sysTxKeep_stdKeep hstep,
     by rw [hfmp], by rw [hsp], hbn1, hbn2⟩
+
+theorem sysTxPrefix_alloc :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "alloc") :=
+  sysTxPrefix_of_heapOnly R13Shards.wk_alloc_impl
+
+theorem sysTxPrefix_te_new :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "te_new") :=
+  sysTxPrefix_of_heapOnly R13Wk06b.wk_te_new
+
+theorem sysTxPrefix_msg_new :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "msg_new") :=
+  sysTxPrefix_of_heapOnly R13Wk06b.wk_msg_new
 
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
