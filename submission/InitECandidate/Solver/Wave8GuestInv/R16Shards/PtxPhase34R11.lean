@@ -4044,25 +4044,56 @@ theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact stable_copy_complete s hp hn hh ha hcap
     (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
 
+/-- The copied live prefix fits inside the allocated stable backing capacity. -/
+theorem stableCopyInv_live_allocated {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) :
+    Allocated s (memW s (locN s "stable_logs"),
+      8 * memW s (locN s "stable_logs" + 8)) := by
+  have ha := hp.1.2.2.2.2.2.2.2.1
+  have hn := hp.1.2.2.2.2.2.1
+  have hc := hp.2.2.2.2.1
+  rw [hn]
+  rcases ha with ha | ha
+  · exact Or.inl ⟨ha.1, by have := ha.2; dsimp at *; omega⟩
+  · exact Or.inr ⟨ha.1, by have := ha.2; dsimp at *; omega⟩
+
 /-- At copy completion, source record ownership transfers to the stable list
 when its header and live backing remain separated from the same world. -/
 theorem stableCopyInv_exit_owned {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i")
     {S Nd : List Nat} (hown : LogsLiveOwned s S Nd (locN s "logs"))
-    (halloc : Allocated s (memW s (locN s "stable_logs"),
-      8 * memW s (locN s "stable_logs" + 8)))
     (hsep : IvlsDisj [(locN s "stable_logs", 24),
       (memW s (locN s "stable_logs"), 8 * memW s (locN s "stable_logs" + 8))]
       (worldOwned s S Nd)) :
     LogsLiveOwned s S Nd (locN s "stable_logs") := by
   intro _
-  refine ⟨halloc, hsep, ?_⟩
+  refine ⟨stableCopyInv_live_allocated s hp, hsep, ?_⟩
   intro j hj
   have hlen := hp.1.2.2.2.2.2.1
   have hsource := hp.1.2.2.2.1
   have hjn : j < locN s "nl" := by simpa only [hlen] using hj
   rw [hp.2.2.2.2.2 j (lt_of_lt_of_le hjn hexit) hjn]
   exact (hown hp.2.1).2.2 j (by simpa only [← hsource] using hjn)
+
+/-- Header separation and capacity separation suffice for live-list ownership
+at exit; all copied records inherit the source's world separation. -/
+theorem stableCopyInv_exit_owned_of_capacity {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : StableCopyInv s)
+    (hexit : locN s "nl" ≤ locN s "i") {S Nd : List Nat}
+    (hown : LogsLiveOwned s S Nd (locN s "logs"))
+    (hhead : ∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o)
+    (hback : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) :
+    LogsLiveOwned s S Nd (locN s "stable_logs") := by
+  apply stableCopyInv_exit_owned s hp hexit hown
+  intro a ha o ho
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl
+  · exact hhead o ho
+  · apply disj_of_inside_left ?_ (hback o ho)
+    have hn := hp.1.2.2.2.2.2.1
+    have hc := hp.2.2.2.2.1
+    constructor <;> dsimp <;> omega
 
 /-- Exhaustion of the natural copy rank yields the receipt postcondition. -/
 theorem stableCopyInv_rank_zero_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -4727,6 +4758,69 @@ def StableCopySpatial : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     ∀ j, j < memW s (locN s "logs" + 8) →
       Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
         (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+/-- A coherent world witness retains both header and backing separation. -/
+def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+    LogsLiveOwned s S Nd (locN s "logs") ∧
+    (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+    ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
+
+/-- A separated copy write preserves the coherent header/backing ownership frame. -/
+theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hf : StableCopyOwnedFrame s) (hsp : StableCopySpatial s)
+    (hi : locN s "i" < locN s "nl")
+    (hx : s.memaddrs (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    StableCopyOwnedFrame {s with memory := mem'} := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hf
+  obtain ⟨_, _, _, _, _, hsrc, hdst, harr, hentry⟩ := hsp
+  obtain ⟨hW', hw', _⟩ := stableCopyInv_world_preserved s mem' hp hi S Nd hW hb hx hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hp.1.1.1.1.1
+  have ho' := (stableCopyInv_logs_preserved s mem' hp hi S Nd ho hg hw'
+    hsrc harr hentry hm).2
+  have hd0 := (stableCopyInv_header_unhit s mem' hp hi _
+    hp.2.2.2.1 hp.2.2.1.1 hdst hm).1
+  refine ⟨S, Nd, hW', ho', ?_, ?_⟩
+  · intro o ho
+    rw [hw'] at ho
+    exact hh o ho
+  · intro o ho
+    rw [hw'] at ho
+    change Disj (memW {s with memory := mem'} (locN s "stable_logs"),
+      8 * locN s "stable_log_cap") o
+    rw [hd0]
+    exact hb o ho
+
+/-- Local initialization and clock changes preserve the coherent ownership frame. -/
+theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : locals.lookup (ofString "logs") = s.locals.lookup (ofString "logs"))
+    (hs : locals.lookup (ofString "stable_logs") = s.locals.lookup (ofString "stable_logs"))
+    (hc : locals.lookup (ofString "stable_log_cap") = s.locals.lookup (ofString "stable_log_cap"))
+    (hp : StableCopyOwnedFrame s) :
+    StableCopyOwnedFrame {s with locals := locals, clock := k} := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hp
+  have el := locN_congr s locals k "logs" hl
+  have es := locN_congr s locals k "stable_logs" hs
+  have ec := locN_congr s locals k "stable_log_cap" hc
+  refine ⟨S, Nd, (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hW, ?_⟩
+  simp only [el, es, ec]
+  exact ⟨ho, hh, hb⟩
+
+/-- The coherent ownership frame strengthens the copy exit postcondition. -/
+theorem stableCopyOwnedFrame_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hf : StableCopyOwnedFrame s)
+    (hexit : locN s "nl" ≤ locN s "i") :
+    PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hf
+  exact ⟨stableCopyInv_exit s hp hexit,
+    S, Nd, hW, stableCopyInv_exit_owned_of_capacity s hp hexit ho hh hb⟩
 
 /-- Counter and backing-pointer local initialization preserve spatial facts. -/
 theorem stableCopySpatial_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
