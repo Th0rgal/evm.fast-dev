@@ -1147,9 +1147,54 @@ def RunAttemptScanReady (M : Nat) : ∀ {F : Type}, PanSemStateFiniteExact 64 F 
     s.locals.lookup (ofString "ntx") = some (.val (.word wn)) ∧
     wi.toNat ≤ wn.toNat ∧ wn.toNat ≤ M
 
+theorem runAttemptScan_step
+    {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hWi : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "i") v s))
+    (M : Nat) (hM : M < 2 ^ 63) (test : ExpHOL 64) :
+    Hoare (fun s => (W s ∧ RunAttemptScanReady M s) ∧
+        CondTrue (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx"))) s)
+      (.seq (.ite test (.raise (ofString "BlockErr") (.const 4#64)) .skip)
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const 1#64])))
+      (fun r t => r = none → W t ∧ RunAttemptScanReady M t) := by
+  apply Hoare.seq_fall (Hoare.ite_raise_skip _ _ _)
+  apply Hoare.assign_fall
+  intro F s v h hev
+  obtain ⟨wi, wn, hi, hn, hle, hbound⟩ := h.1.2
+  have hact : LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx"))) s := by
+    obtain ⟨w, hw, hwne⟩ := h.2
+    exact ⟨w, by rwa [evalHOLFinite_eq_toExact], hwne⟩
+  obtain ⟨wi', wn', hi', hn', hlt⟩ := loopActive_cmp_less_locals hact
+  have heqi : wi = wi' := by simpa [hi] using hi'
+  have heqn : wn = wn' := by simpa [hn] using hn'
+  subst wi'; subst wn'
+  have hnat : wi.toNat < wn.toNat := by
+    simp only [BitVec.toInt_eq_msb_cond, BitVec.msb_eq_decide] at hlt
+    simp only [show ¬ wi.toNat ≥ 2 ^ (64 - 1) by omega,
+      show ¬ wn.toNat ≥ 2 ^ (64 - 1) by omega, decide_false,
+      Bool.false_eq_true, ↓reduceIte] at hlt
+    omega
+  have hv : v = .val (.word (wi + 1#64)) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hi, valueIsWord, valueWord,
+      wordOpHOL, wordOp, BitVec.add_zero] using hev.symm
+  subst v
+  have hnext : (wi + 1#64).toNat = wi.toNat + 1 := by
+    rw [BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt (by change wi.toNat + 1 < 2 ^ 64; omega)
+  refine ⟨hWi s (.val (.word (wi + 1#64))) h.1.1, wi + 1#64, wn, ?_, ?_, ?_, hbound⟩
+  · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "ntx" by decide] using hn
+  · rw [hnext]; omega
+
 theorem runAttemptScan_bounded
     {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
-    (hW : LocalsFree W) (M : Nat) (hM : M < 2 ^ 63) (test : ExpHOL 64) :
+    (hWdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → W (decClockHOLFinite s))
+    (hWi : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "i") v s))
+    (M : Nat) (hM : M < 2 ^ 63) (test : ExpHOL 64) :
     TerminatingProgBoundedOn (fun s => W s ∧ RunAttemptScanReady M s)
       (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx")))
         (.seq (.ite test (.raise (ofString "BlockErr") (.const 4#64)) .skip)
@@ -1160,7 +1205,7 @@ theorem runAttemptScan_bounded
       W s ∧ RunAttemptScanReady M s → W (decClockHOLFinite s) ∧
         RunAttemptScanReady M (decClockHOLFinite s) := by
     intro F s h
-    exact ⟨hW s s.locals (s.clock - 1) h.1, h.2⟩
+    exact ⟨hWdec s h.1, h.2⟩
   apply while_signed_up_bounded_on (ofString "i") (ofString "ntx") M hM hdec
   · intro F s h wi wn hi hn
     obtain ⟨wi', wn', hi', hn', hle, hbound⟩ := h.2
@@ -1170,38 +1215,171 @@ theorem runAttemptScan_bounded
     exact ⟨by omega, hbound⟩
   · intro F s hcode _
     exact TerminatingProgBounded.straight _ rfl s hcode
-  · apply Hoare.seq_fall (Hoare.ite_raise_skip _ _ _)
-    apply Hoare.assign_fall
-    intro F s v h hev
-    obtain ⟨wi, wn, hi, hn, hle, hbound⟩ := h.1.2
-    have hact : LoopActive
-        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx"))) s := by
-      obtain ⟨w, hw, hwne⟩ := h.2
-      exact ⟨w, by rwa [evalHOLFinite_eq_toExact], hwne⟩
-    obtain ⟨wi', wn', hi', hn', hlt⟩ := loopActive_cmp_less_locals hact
-    have heqi : wi = wi' := by simpa [hi] using hi'
-    have heqn : wn = wn' := by simpa [hn] using hn'
-    subst wi'; subst wn'
-    have hnat : wi.toNat < wn.toNat := by
-      simp only [BitVec.toInt_eq_msb_cond, BitVec.msb_eq_decide] at hlt
-      simp only [show ¬ wi.toNat ≥ 2 ^ (64 - 1) by omega,
-        show ¬ wn.toNat ≥ 2 ^ (64 - 1) by omega, decide_false,
-        Bool.false_eq_true, ↓reduceIte] at hlt
-      omega
-    have hv : v = .val (.word (wi + 1#64)) := by
-      simpa [evalAt, evalHOLExact, evalListHOLExact, hi, valueIsWord, valueWord,
-        wordOpHOL, wordOp, BitVec.add_zero] using hev.symm
-    subst v
-    have hnext : (wi + 1#64).toNat = wi.toNat + 1 := by
-      rw [BitVec.toNat_add]
-      exact Nat.mod_eq_of_lt (by change wi.toNat + 1 < 2 ^ 64; omega)
-    refine ⟨hW s _ s.clock h.1.1, wi + 1#64, wn, ?_, ?_, ?_, hbound⟩
-    · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
-    · simpa [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
-        show ofString "i" ≠ ofString "ntx" by decide] using hn
-    · rw [hnext]; omega
+  · exact runAttemptScan_step hWi M hM test
   · rfl
   · exact StepsCounter.seq_keep (PreservesCounter.ite_raise_skip _ _ _ _)
       (StepsCounter.assign_inc _)
+
+theorem runAttemptScan_hoare
+    {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hWdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → W (decClockHOLFinite s))
+    (hWi : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "i") v s))
+    (M : Nat) (hM : M < 2 ^ 63) (test : ExpHOL 64) :
+    Hoare (fun s => W s ∧ RunAttemptScanReady M s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx")))
+        (.seq (.ite test (.raise (ofString "BlockErr") (.const 4#64)) .skip)
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 1#64]))))
+      (fun r t => r = none → W t) := by
+  let body : ProgHOL 64 :=
+    .seq (.ite test (.raise (ofString "BlockErr") (.const 4#64)) .skip)
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1#64]))
+  have hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      W s ∧ RunAttemptScanReady M s → W (decClockHOLFinite s) ∧
+        RunAttemptScanReady M (decClockHOLFinite s) := by
+    intro F s h
+    exact ⟨hWdec s h.1, h.2⟩
+  have hstep := runAttemptScan_step hWi M hM test
+  have hbody : Hoare (fun s => (W s ∧ RunAttemptScanReady M s) ∧
+      CondTrue (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx"))) s)
+      body (fun r t => (r = none ∨ r = some .continue ∨ r = some .break) →
+        W t ∧ RunAttemptScanReady M t) :=
+    ⟨fun s hcode hP hnt hr => by
+      rcases hr with hnone | hcont | hbrk
+      · exact hstep.run s hcode hP hnt hnone
+      · exact absurd hcont (noContBreak_sound body rfl s).1
+      · exact absurd hbrk (noContBreak_sound body rfl s).2⟩
+  have hwh := Hoare.while_preserve hdec hbody
+  exact ⟨fun s hcode hP hnt hr => (hwh.run s hcode hP hnt hr).1⟩
+
+def runAttemptScanTestExp : ExpHOL 64 :=
+  .cmp .equal
+    (.load .one
+      (.op .add
+        [ .var .local (ofString "txs"),
+          .panop .mul [.var .local (ofString "i"), .const 16#64],
+          .const 8#64 ]))
+    (.const 0#64)
+
+def runAttemptScanLoopProg : ProgHOL 64 :=
+  .while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "ntx")))
+    (.seq (.ite runAttemptScanTestExp (.raise (ofString "BlockErr") (.const 4#64)) .skip)
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1#64])))
+
+private theorem evalAt_load_one_word {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hg : GuestInv s) {addr : ExpHOL 64} {v : ValueHOL 64}
+    (hev : evalAt s (.load .one addr) = some v) :
+    ∃ a w : BitVec 64, evalAt s addr = some (.val (.word a)) ∧
+      v = .val (.word w) ∧ w.toNat = memW s a.toNat ∧
+      a.toNat % 8 = 0 ∧ sourceBase ≤ a.toNat ∧ a.toNat < heapEnd := by
+  simp only [evalAt, evalHOLExact] at hev
+  rcases ha : @evalHOLExact 64 F _ s.toExact
+      (fun address => Classical.propDecidable (s.memaddrs address)) addr with _ | va
+  · rw [ha] at hev; simp at hev
+  · rw [ha] at hev
+    cases va with
+    | val wl =>
+      cases wl with
+      | word a =>
+        simp only [memLoadHOLExact] at hev
+        split_ifs at hev with _ hdom
+        simp only [Option.some.injEq] at hev
+        rw [hg.memaddrs, ordinaryDomain_iff] at hdom
+        cases hmem : s.memory a with
+        | word w =>
+          rw [hmem] at hev
+          have hmemW : memW s a.toNat = w.toNat := by
+            unfold memW; simp [BitVec.ofNat_toNat, hmem]
+          exact ⟨a, w, ha, hev.symm, hmemW.symm, hdom.1, hdom.2.1, hdom.2.2⟩
+    | rStruct _ => simp at hev
+    | nStruct _ => simp at hev
+
+private theorem evalAt_add2_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {e1 e2 : ExpHOL 64} {x : BitVec 64}
+    (hev : evalAt s (.op .add [e1, e2]) = some (.val (.word x))) :
+    ∃ w1 w2 : BitVec 64, evalAt s e1 = some (.val (.word w1)) ∧
+      evalAt s e2 = some (.val (.word w2)) ∧ x = w1 + w2 := by
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at hev
+  rcases h1 : @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) e1 with _ | v1
+  · rw [h1] at hev; simp at hev
+  · rw [h1] at hev
+    rcases h2 : @evalHOLExact 64 F _ s.toExact
+        (fun a => Classical.propDecidable (s.memaddrs a)) e2 with _ | v2
+    · rw [h2] at hev; simp at hev
+    · rw [h2] at hev; dsimp only at hev
+      rcases v1 with ⟨⟨w1⟩⟩ | _ | _ <;> try simp [valueIsWord] at hev
+      rcases v2 with ⟨⟨w2⟩⟩ | _ | _ <;> try simp at hev
+      simp only [valueWord, wordOpHOL, wordOp, List.foldr, add_zero, Option.some.injEq] at hev
+      exact ⟨w1, w2, h1, h2, hev.symm⟩
+
+theorem runAttemptScan_init_bounded
+    {W : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {rest : ProgHOL 64} {K : Nat}
+    (hWdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), W s → W (decClockHOLFinite s))
+    (hWtxs : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "txs") v s))
+    (hWntx : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "ntx") v s))
+    (hWi : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      W s → W (setVarHOLFinite (ofString "i") v s))
+    (hWpl : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      W s → GuestInv s ∧ ∃ wpl : BitVec 64,
+        s.locals.lookup (ofString "pl") = some (.val (.word wpl)) ∧
+        wpl.toNat + 40 < 2 ^ 64 ∧ memW s (wpl.toNat + 40) < 2 ^ 32)
+    (hcont : TerminatingProgBoundedOn W rest K) :
+    TerminatingProgBoundedOn W
+      (.dec (ofString "txs") .one
+        (.load .one (.op .add [.var .local (ofString "pl"), .const 32#64]))
+        (.dec (ofString "ntx") .one
+          (.load .one (.op .add [.var .local (ofString "pl"), .const 40#64]))
+          (.dec (ofString "i") .one (.const 0#64)
+            (.seq runAttemptScanLoopProg rest))))
+      ((31104957952 + 1) * (0 + 1) + K) := by
+  set W_ntx : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+    fun s => W s ∧ ∃ wn : BitVec 64,
+      s.locals.lookup (ofString "ntx") = some (.val (.word wn)) ∧ wn.toNat ≤ 31104957952
+  refine dec_eval_on (P := W) (Q := W) (ofString "txs") .one
+    (.load .one (.op .add [.var .local (ofString "pl"), .const 32#64]))
+    (fun s v hW _ => hWtxs s v hW) ?_
+  refine dec_eval_on (P := W) (Q := W_ntx) (ofString "ntx") .one
+    (.load .one (.op .add [.var .local (ofString "pl"), .const 40#64]))
+    ?_ ?_
+  · intro F s v hW hev
+    obtain ⟨hg, wpl, hlpl, hpl_lt, hntx_lt⟩ := hWpl s hW
+    obtain ⟨a, wn, ha, rfl, hwn_mem, _⟩ := evalAt_load_one_word hg hev
+    obtain ⟨w1, w2, hw1, hw2, ha_eq⟩ := evalAt_add2_words ha
+    have hw1_eq : w1 = wpl := by
+      have hl1 : s.locals.lookup (ofString "pl") = some (.val (.word w1)) := by
+        simpa [evalAt, evalHOLExact] using hw1
+      exact (by simpa [hlpl] using hl1 : wpl = w1).symm
+    have hw2_eq : w2 = 40#64 := by
+      simp only [evalAt, evalHOLExact, Option.some.injEq, ValueHOL.val.injEq,
+        HolWordLab.word.injEq] at hw2
+      exact hw2.symm
+    subst w1; subst w2
+    have ha_nat : a.toNat = wpl.toNat + 40 := by
+      rw [ha_eq, BitVec.toNat_add]
+      change (wpl.toNat + 40) % 2 ^ 64 = wpl.toNat + 40
+      exact Nat.mod_eq_of_lt hpl_lt
+    refine ⟨hWntx s (.val (.word wn)) hW, wn, ?_, ?_⟩
+    · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    · rw [hwn_mem, ha_nat]; omega
+  · refine dec_eval_on (P := W_ntx) (Q := fun s => W s ∧ RunAttemptScanReady 31104957952 s)
+      (ofString "i") .one (.const 0#64) ?_ ?_
+    · intro F s v ⟨hW, wn, hlntx, hwn_le⟩ hev
+      have hv : v = .val (.word 0#64) := by
+        simpa [evalAt, evalHOLExact] using hev.symm
+      subst hv
+      refine ⟨hWi s (.val (.word 0#64)) hW, 0#64, wn, ?_, ?_, by simp, hwn_le⟩
+      · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+      · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "i" ≠ ofString "ntx" by decide] using hlntx
+    · exact TerminatingProgBoundedOn.seq_hoare_trans
+        (runAttemptScan_bounded hWdec hWi 31104957952 (by decide) runAttemptScanTestExp)
+        (runAttemptScan_hoare hWdec hWi 31104957952 (by decide) runAttemptScanTestExp)
+        hcont
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
