@@ -2505,6 +2505,34 @@ theorem phase4StableCap_bounds {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hp.2]
   omega
 
+/-- Capacity adjustment frames the typed copy operands and nonzero source. -/
+theorem hoare_stable_capacity_frame :
+    Hoare (fun s => (∃ n : BitVec 64,
+      s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧ ∃ p : BitVec 64,
+      s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → (∃ n : BitVec 64,
+        t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        locN t "logs" ≠ 0 ∧ ∃ p : BitVec 64,
+        t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  apply Hoare.ite
+  · apply Hoare.assign
+    · intro F s v hp he _
+      obtain ⟨hn, hz, hl⟩ := hp.1
+      obtain ⟨hn', hl'⟩ := stable_capacity_copy_operands s v hn hl
+      refine ⟨hn', ?_, hl'⟩
+      simpa [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "stable_log_cap" ≠ ofString "logs" by decide] using hz
+    · intro F s hp hr
+      cases hr
+  · apply Hoare.skip
+    intro F s hp _
+    exact hp.1
+  · intro F s hp hr
+    cases hr
+
 theorem hoare_phase4StableCap_adjust :
     Hoare Phase4StableCapInit
       (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
@@ -2556,6 +2584,23 @@ theorem hoare_phase4StableCap_adjust :
     omega
   · intro F s hp hr
     cases hr
+
+/-- Capacity adjustment establishes the allocation precondition with typed operands. -/
+theorem hoare_phase4StableCap_copy_ready :
+    Hoare (fun s => Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → Phase4StableCapReady t ∧
+        (∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        locN t "logs" ≠ 0 ∧
+        ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  constructor
+  intro F s hc hp hnt hr
+  exact ⟨hoare_phase4StableCap_adjust.run s hc hp.1 hnt hr,
+    hoare_stable_capacity_frame.run s hc hp.2 hnt hr⟩
 
 theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
