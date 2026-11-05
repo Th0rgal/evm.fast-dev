@@ -5365,4 +5365,57 @@ theorem phase2_packed_inner_update_indices {F : Type} (s : PanSemStateFiniteExac
   · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       hji, hki, hjt, hkt, Nat.mod_eq_of_lt hj] using hb.1
 
+/-- Header and live-record framing also preserves the inclusive loop invariant. -/
+theorem phase2_packed_inner_live_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedInnerInv s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["nkeys", "i", "j", "k"] : List String), locN post n = locN s n)
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedInnerInv post := by
+  have hi := hl "i" (by simp)
+  have hj := hl "j" (by simp)
+  have hk := hl "k" (by simp)
+  have hn := hl "nkeys" (by simp)
+  refine ⟨hr, ?_, ?_, ?_, ?_⟩
+  · rw [hn, phase2_packed_copy_total_frame s post hc hm]; exact hp.2.1
+  · rw [hi, hc]; exact hp.2.2.1
+  · rw [hj, hi, hm _ hp.2.2.1]; exact hp.2.2.2.1
+  · rw [hk, hi, hj]
+    rw [phase2_key_prefix_congr s post (locN s "i")
+      (fun i h => hm i (Nat.lt_trans h hp.2.2.1))]
+    exact hp.2.2.2.2
+
+/-- Outer copy-loop invariant at record boundaries. -/
+def PtxPackedOuterInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedKeysReady s ∧
+  locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+  locN s "i" ≤ memW s (locN s "tx" + 216) ∧
+  locN s "k" = phase2_key_prefix s (locN s "i")
+
+/-- A fresh inner pass starts at the current outer prefix. -/
+theorem phase2_packed_outer_enter {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedOuterInv s)
+    (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (hj : locN s "j" = 0) : PtxPackedInnerInv s := by
+  refine ⟨hp.1, hp.2.1, hi, ?_, ?_⟩
+  · rw [hj]; exact Nat.zero_le _
+  · simpa [hj] using hp.2.2.2
+
+/-- The outer guard's false branch identifies the final flattened key count. -/
+theorem phase2_packed_outer_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedOuterInv s)
+    (hg : ¬ locN s "i" < memW s (locN s "tx" + 216)) :
+    locN s "i" = memW s (locN s "tx" + 216) ∧ locN s "k" = locN s "nkeys" := by
+  have hi : locN s "i" = memW s (locN s "tx" + 216) := by
+    have := hp.2.2.1
+    omega
+  refine ⟨hi, ?_⟩
+  have hk := hp.2.2.2
+  rw [hi] at hk
+  change locN s "k" = txAccessSlots s (locN s "tx") at hk
+  exact hk.trans hp.2.1.symm
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
