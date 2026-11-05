@@ -1864,6 +1864,106 @@ theorem Hoare.call_evmKeeps_fall {P' : ∀ {F : Type}, PanSemStateFiniteExact 64
             · cases hr
             · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
 
+/-- `decCall` of a read-only callee with a word result, with the `Fall` post shape: a resuming
+exception from the callee leaves the state unchanged up to locals/clock (`ReadOnlyFn`), and the
+continuation's resuming results carry `Q` through the `resVarEq` locals restore (`Q` locals-free). -/
+theorem Hoare.decCall_ro_fall {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {arguments : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hro : ReadOnlyFn fname)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hQ : LocalsFree Q)
+    (hPQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → Q s)
+    (hres : DecCallResumeOn P R name fname arguments)
+    (hcont : Hoare (fun s => R s ∧ ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
+      cont (Fall Q)) :
+    Hoare P (.decCall name .one fname arguments cont) (Fall Q) := by
+  refine ⟨fun {F} s hcode hP hnt hr => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s (.decCall name .one fname arguments cont) with ⟨r, post⟩
+  rw [hrun] at hr hnt
+  dsimp only at hr hnt ⊢
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) arguments with _ | values
+  · rw [hargs] at hrun
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+        exact absurd rfl hnt
+      · rw [if_neg hz] at hrun
+        have hmeta := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body').1
+        have hGe : GuestInv (callEntryStateHOLFinite s callee) := guestInv_callEntry s callee (hPG s hP)
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        have hro_run (hsafe : bres ≠ some .timeOut) : Resumes bres →
+            bpost = { callEntryStateHOLFinite s callee with locals := bpost.locals, clock := bpost.clock } := by
+          have := FunSpec.at_lookup hro s hcode values body' callee ret' hl hGe (by rw [hb]; exact hsafe)
+          rw [hb] at this
+          exact this
+        cases bres with
+        | none =>
+          obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+          rcases hr with hr | hr
+          · cases hr
+          · exact absurd hr not_resumes_error
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · rename_i hsh
+              obtain ⟨w, rfl⟩ := R10Shards.GbodyProcessMsg.value_shape_one_word
+                (Bool.and_eq_true_iff.1 hsh).1
+              set resumed := setVarHOLFinite name (.val (.word w)) { bpost with locals := s.locals }
+              have hresR : R resumed := hres s values body' callee ret' _ bpost hcode hP hargs hl hb
+              have hresW : resumed.locals.lookup name = some (.val (.word w)) := by
+                simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc0 := hcont.run resumed hresCode ⟨hresR, w, hresW⟩ (by rw [hc]; exact hnt)
+              rw [hc] at hQc0
+              have hQc : Q cpost := hQc0 hr
+              rw [← hpost_eq]
+              exact hQ cpost _ cpost.clock hQc
+            · obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+              rcases hr with hr | hr
+              · cases hr
+              · exact absurd hr not_resumes_error
+          | exception e v =>
+            dsimp only at hrun
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            have hres' : Resumes (some (.exception e v)) := by
+              rcases hr with hr | hr
+              · cases hr
+              · exact hr
+            have heq := hro_run (by simp) hres'
+            rw [heq]
+            simp only [emptyLocalsHOLFinite, callEntryStateHOLFinite]
+            exact hQ s _ _ (hPQ s hP)
+          | timeOut =>
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            exact absurd rfl hnt
+          | _ =>
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
