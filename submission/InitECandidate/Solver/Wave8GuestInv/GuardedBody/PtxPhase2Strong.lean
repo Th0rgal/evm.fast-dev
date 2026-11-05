@@ -1941,4 +1941,64 @@ theorem phase2_tePrefix_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   apply phase2_te_new_storeReady_bound h
   exact phase2_teStores_bound ht
 
+/-- Frame the validated state through access-list bookkeeping locals. -/
+theorem phase2_validated_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxValidatedStrong s) : PtxValidatedStrong { s with locals := locals, clock := clock } := by
+  have hs := locN_congr s locals clock "sender" (hl "sender" (by simp))
+  have hm := locN_congr s locals clock "mgas" (hl "mgas" (by simp))
+  refine ⟨⟨R16Shards.PtxP1.txReadyStrong_with_locals s locals clock
+    (hl "tx" (by simp)) (hl "index" (by simp)) hp.1.1, ?_, ?_, ?_⟩,
+    ptxPhase2LocalShapes_with_locals s locals clock hl hp.2⟩
+  · rw [hs]; exact hp.1.2.1
+  · rw [hs]; exact hp.1.2.2.1
+  · rw [hm]; exact hp.1.2.2.2
+
+theorem phase2_teStoreReady_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxTeStoreReady s) : PtxTeStoreReady { s with locals := locals, clock := clock } := by
+  have hte := locN_congr s locals clock "te" (hl "te" (by simp))
+  have htx := locN_congr s locals clock "tx" (hl "tx" (by simp))
+  have hv := phase2_validated_with_locals s locals clock
+    (fun name hn => hl name (List.mem_cons_of_mem _ hn)) hp.1.1
+  have hshape : ∃ w : BitVec 64, locals.lookup (ofString "te") = some (.val (.word w)) := by
+    rw [hl "te" (by simp)]; exact hp.1.2.1
+  obtain ⟨S, Nd, hW, hT, hd, hdt, hdr⟩ := hp.2
+  have hW' := (worldTypedWith_with_locals s locals clock S Nd).mpr hW
+  have hd' : IvlsDisj [(locN { s with locals := locals, clock := clock } "te", 200)]
+      (worldOwned { s with locals := locals, clock := clock } S Nd) := by
+    rw [hte]; exact hd
+  refine ⟨⟨hv, hshape, ?_, ?_, ?_, S, Nd, hW', hd'⟩, S, Nd, hW', ?_, hd', ?_, ?_⟩
+  · rw [hte]; exact hp.1.2.2.1
+  · rw [hte]; exact hp.1.2.2.2.1
+  · rw [hte]; exact hp.1.2.2.2.2.1
+  · rw [htx]; exact R16Shards.PtxP1.txAccessListAt_with_locals s locals clock hT
+  · rw [htx, hte]; exact hdt
+  · rw [htx, hte]; exact hdr
+
+theorem phase2_teStoreReady_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeStoreReady s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] : List String), ofString n ≠ name) :
+    PtxTeStoreReady (setVarHOLFinite name v s) := by
+  apply phase2_teStoreReady_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- Initialize the access-list count without losing the environment frame. -/
+theorem phase2_nal_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeStoreReady s) :
+    let post := setVarHOLFinite (ofString "nal") (.val (.word 0)) s
+    PtxTeStoreReady post ∧ locN post "nal" = 0 ∧
+      post.locals.lookup (ofString "nal") = some (.val (.word 0)) := by
+  refine ⟨phase2_teStoreReady_set_other s hp _ _ (by decide), ?_, ?_⟩
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
