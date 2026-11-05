@@ -3176,4 +3176,17 @@ theorem phase2_address_copy_nkeys_guard_hoare :
       show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2
   · exact fun _ _ hr => by cases hr
 
+/-- The two assignments at the end of the copy body preserve its invariant. -/
+theorem phase2_address_copy_updates_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.seq
+        (.assign .local (ofString "nkeys")
+          (.op .add [.var .local (ofString "nkeys"),
+            .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  exact Hoare.seq_fall phase2_address_copy_nkeys_guard_hoare
+    phase2_address_copy_increment_hoare
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
