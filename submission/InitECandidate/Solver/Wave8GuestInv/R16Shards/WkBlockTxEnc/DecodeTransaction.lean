@@ -10058,7 +10058,7 @@ private theorem dalOuterBody_trace_step_vvh {F : Type}
     have hinv_u9 : InnerInv u9 := ⟨hu9_keys, hu9_slots, fun nm hnm => by
       simp at hnm; subst hnm; exact ⟨0, by simp [u9, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]⟩⟩
     have hws_in : wsafe dalInnerBody_vvh = true := by decide
-    have he := worldEff_while_cond_vvh _ InnerInv (fun _ hinv => hinv)
+    have he := worldEff_while_cond_vvh (body := dalInnerBody_vvh) _ InnerInv (fun _ hinv => hinv)
       (fun z0 cw_j hcond_j hnz_j heff_z hinv_z hnt_ib hcr_ib => by
         set z := decClockHOLFinite z0
         obtain ⟨hz_keys, hz_slots, hz_wloc⟩ := hinv_z
