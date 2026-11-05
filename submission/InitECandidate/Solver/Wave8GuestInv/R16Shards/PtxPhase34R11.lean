@@ -888,6 +888,61 @@ theorem phase4CreditPrefix_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact hb s hc hp
 
+/-- A single write inside world storage cannot change an owned live log list. -/
+theorem logsLiveOwned_single_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hA : ArenaOK s) (hg : GuestInv s) (hgp : GuestInv {s with memory := mem'})
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hwrite : ∃ o ∈ worldOwned s S Nd, Inside (x.toNat, 8) o.1 (o.1 + o.2))
+    (howned : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    LogsListOK {s with memory := mem'} logs ∧
+      LogsLiveOwned {s with memory := mem'} S Nd logs := by
+  let post := {s with memory := mem'}
+  by_cases hn : logs = 0
+  · exact ⟨Or.inl hn, fun h => False.elim (h hn)⟩
+  have hl' := hl.resolve_left hn
+  obtain ⟨o, ho, hin⟩ := hwrite
+  have hdisj : ∀ b, (∀ j ∈ worldOwned s S Nd, Disj b j) → Disj b (x.toNat, 8) :=
+    fun b hb => disj_of_inside_right hin (hb o ho)
+  have hh : IvlUnhit s post (logs, 24) :=
+    ivlUnhit_single hm (by simp) (hdisj _ (fun j hj => (hd hn).2.1 _ (by simp) j hj))
+  have hb := (ivl_allocated_bound hA hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    memW_eq_of_ivlUnhit hh hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    memW_eq_of_ivlUnhit hh (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩
+  have hp : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+    intro i hi
+    have ha := logsListOK_array_aligned hg hl hn (by omega)
+    have hu : IvlUnhit s post (memW s logs, 8 * memW s (logs + 8)) :=
+      ivlUnhit_single hm (fun _ => ha)
+        (hdisj _ (fun j hj => (hd hn).2.1 _ (by simp) j hj))
+    exact memW_eq_of_ivlUnhit hu (by omega)
+      (ivl_allocated_bound hA (hd hn).1).2 ⟨by dsimp; omega, by dsimp; omega⟩
+  have he : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40) := by
+    intro i hi
+    exact ivlUnhit_single hm (by simp)
+      (hdisj _ (fun j hj => (hd hn).2.2 i hi _ (by simp [logOwnedIvls, logRecordIvls]) j hj))
+  refine ⟨logsListOK_congr_header_unhit hA hg hgp (by rfl) hl
+    (fun h => h) hh hp he, ?_⟩
+  intro _
+  change Allocated post (memW post logs, 8 * memW post (logs + 8)) ∧ _
+  rw [h0, h8]
+  refine ⟨(hd hn).1, ?_, ?_⟩
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.1
+  · intro i hi
+    rw [hp i hi]
+    rw [logOwnedIvls_eq_of_unhit hA (hl'.2.2.2.2 i hi).2 (he i hi) rfl]
+    change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.2 i hi
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
