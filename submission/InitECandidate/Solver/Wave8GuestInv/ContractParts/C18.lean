@@ -216,7 +216,7 @@ def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "bal_init") K.«bal_init») →
   (TerminatingFunBoundedOn GuestInv (ofString "build_block_access_list_rlp") K.«build_block_access_list_rlp») →
-  (TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed») →
+  (TerminatingFunBoundedOn BuildMptIndexedReady (ofString "build_mpt_indexed") K.«build_mpt_indexed») →
   (TerminatingFunBoundedOn GuestInv (ofString "compute_requests_hash") K.«compute_requests_hash») →
   (TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root») →
   (TerminatingFunBoundedOn GuestInv (ofString "decode_transaction") K.«decode_transaction») →
@@ -322,7 +322,7 @@ call site (9: `wk_alloc`, `rt_alloc`, `wk_block_rlp_length`, `wk_build_mpt_index
 def GBody.«payload_header» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "block_rlp_length") K.«block_rlp_length») →
-  (TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed») →
+  (TerminatingFunBoundedOn BuildMptIndexedReady (ofString "build_mpt_indexed") K.«build_mpt_indexed») →
   (TerminatingFunBoundedOn GuestInv (ofString "compute_requests_hash") K.«compute_requests_hash») →
   (TerminatingFunBoundedOn GuestInv (ofString "encode_execution_requests") K.«encode_execution_requests») →
   (TerminatingFunBoundedOn GuestInv (ofString "encode_withdrawal_rlp") K.«encode_withdrawal_rlp») →

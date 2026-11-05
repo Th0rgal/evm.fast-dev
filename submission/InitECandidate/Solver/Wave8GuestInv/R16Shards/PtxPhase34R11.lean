@@ -27,8 +27,7 @@ def TxAfterCallStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       IvlsDisj [(locN s "out", 96)] (worldOwned s S Nd) ∧
       LogsLiveOwned s S Nd (memW s (locN s "out" + 16))
 
-def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
+/-- `BoListArgStrong` now lives in `ContractParts/C03.lean` (wave8 cutover rehearsal). -/
 
 /-- Caller locals read by Phase 4 before they are assigned there. `out` is
 introduced by Phase 3 itself. The message-building locals `mgas`, `reservoir`

@@ -75,6 +75,23 @@ theorem «gbody_mpt_set» : GBody.«mpt_set» := by sorry
 exactly `heap_mark`, `heap_release`, `mpt_new`, `mpt_root`, `mpt_set`, `rlp_encode_word` (`«callees_build_mpt_indexed»`, checked against the AST). Hypotheses: the bound
 of each of these 6 callees, then the contract of each callee at a guard-carrying
 call site (5: `ro_heap_mark`, `wk_mpt_new`, `rt_mpt_new`, `mk_mpt_set`, `wk_rlp_encode_word`). Nothing else is assumed. -/
+/-- Strengthened `build_mpt_indexed` entry guard (wave8 cutover rehearsal; hoisted from
+`R16Shards/MptC10C12/BuildMptIndexed.lean`). -/
+def BuildMptIndexedReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧
+    (∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+    locN s "n" < 2 ^ 32 ∧
+    Inside (locN s "slice_arr", 16 * locN s "n") sourceBase (globN s "heap_ptr") ∧
+    WordsOK s (locN s "slice_arr", 16 * locN s "n") ∧
+    IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
+      ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+        ("keccak_pad", 136), ("keccak_st", 200)].map (bufferRegion s)) ∧
+    ∀ i, i < locN s "n" → memW s (locN s "slice_arr" + 16 * i + 8) < 2 ^ 40
+
+theorem buildMptIndexedReady_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : BuildMptIndexedReady s) : WorldOK s := h.1
+
 def GBody.«build_mpt_indexed» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark») →
   (TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release») →
@@ -96,7 +113,7 @@ def GBody.«build_mpt_indexed» : Prop :=
     []
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "rlp_encode_word")) →
-  TerminatingFunBoundedOn WorldOK (ofString "build_mpt_indexed") K.«build_mpt_indexed»
+  TerminatingFunBoundedOn BuildMptIndexedReady (ofString "build_mpt_indexed") K.«build_mpt_indexed»
 
 /-- The direct callees of `build_mpt_indexed`, read off its AST body (revision 6). -/
 theorem «callees_build_mpt_indexed» : sameNames (progCallees (fnBody Guest.Software.guestFn_build_mpt_indexed))

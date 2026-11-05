@@ -528,6 +528,14 @@ def BoListArg : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     (locN s "l" = memW s (globN s "bo" + 40) ∨ locN s "l" = memW s (globN s "bo" + 72)) ∧
     locN s "esz" = 8
 
+/-- `lst_push` entry with a non-null backing array (wave8 cutover rehearsal; hoisted from
+`R16Shards/PtxPhase34R11.lean`). -/
+def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
+
+theorem boListArg_of_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : BoListArgStrong s) : BoListArg s := h.2.1
+
 /-- Value contract (revision 7, `execute_block` needs `bo+64 = 0` after `memzero(bo, 88)`): a
 normal return of `memzero(dst, n)` leaves every aligned word inside `[dst, dst + n)` zero. -/
 def ZeroFills (fname : MlS) : Prop :=

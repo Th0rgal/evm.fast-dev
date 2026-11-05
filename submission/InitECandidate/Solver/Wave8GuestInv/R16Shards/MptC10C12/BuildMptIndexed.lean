@@ -2077,20 +2077,8 @@ private theorem eval_nibble_list_to_compact_returned {F : Type}
 
 end RelaxedNodeRlpStack
 
-def BuildMptIndexedReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => WorldOK s ∧
-    (∀ name ∈ (["slice_arr", "n", "out"] : List String),
-      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
-    locN s "n" < 2 ^ 32 ∧
-    Inside (locN s "slice_arr", 16 * locN s "n") sourceBase (globN s "heap_ptr") ∧
-    WordsOK s (locN s "slice_arr", 16 * locN s "n") ∧
-    IvlsDisj [(locN s "slice_arr", 16 * locN s "n")]
-      ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
-        ("keccak_pad", 136), ("keccak_st", 200)].map (bufferRegion s)) ∧
-    ∀ i, i < locN s "n" → memW s (locN s "slice_arr" + 16 * i + 8) < 2 ^ 40
-
-theorem buildMptIndexedReady_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
-    (h : BuildMptIndexedReady s) : WorldOK s := h.1
+/-- `BuildMptIndexedReady` / `buildMptIndexedReady_worldOK` now live in `ContractParts/C11.lean`
+(wave8 cutover rehearsal). -/
 
 theorem localsOnly_buildMptIndexedReady :
     LocalsOnly ["slice_arr", "n", "out"] BuildMptIndexedReady := by
