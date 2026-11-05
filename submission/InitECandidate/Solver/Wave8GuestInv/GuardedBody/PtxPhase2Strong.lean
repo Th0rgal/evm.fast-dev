@@ -2164,4 +2164,24 @@ theorem phase2_count_cond_hoare (cond e : ExpHOL 64)
   · intro F s hp hr
     simp at hr
 
+/-- The concrete transaction count load has the value used by count readiness. -/
+theorem phase2_count_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64)
+    (h : evalAt s (.load .one (.op .add [.var .local (ofString "tx"), .const 216])) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = memW s (locN s "tx" + 216) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact] at h
+  rcases hl : s.locals.lookup (ofString "tx") with _ | u
+  · simp [hl] at h
+  rcases u with ⟨x⟩ | _ | _
+  · cases x with
+    | word x =>
+      simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+      rcases hm : s.memory (x + 216#64) with ⟨y⟩
+      refine ⟨y, by rw [← h.2, hm], ?_⟩
+      have hadd : BitVec.ofNat 64 (x.toNat + 216) = x + 216#64 := by
+        simp [BitVec.ofNat_add]
+      simp only [locN, memW, hl, hadd, hm]
+  · simp [hl, valueIsWord] at h
+  · simp [hl, valueIsWord] at h
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
