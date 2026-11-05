@@ -2035,6 +2035,180 @@ theorem dec_msg_init {F : Type} (s : PanSemStateFiniteExact 64 F) (hP : EvmMsgRe
     · simp at hv
     · simp at hv
 
-end HeadStore
+/-! ## `ek_depth0_prepare` from the callee contracts -/
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+/-- The body of `depth0_prepare` (AST index 587) as a `ProgHOL`. -/
+theorem depth0_prepare_body_eq :
+    sourceFnBody Guest.Software.guestFn_depth0_prepare =
+      .seq .skip
+        (.dec (ofString "msg") .one (.load .one (.op .add [.var .global (ofString "ev"), .const 112]))
+          (.dec (ofString "te") .one (.load .one (.op .add [.var .local (ofString "msg"), .const 8]))
+            (.seq
+              (.ite (.cmp .notEqual (.load .one (.op .add [.var .local (ofString "te"), .const 152]))
+                  (.const 0))
+                (.seq (.call (some (none, none)) (ofString "set_delegation") [])
+                  (.decCall (ofString "used") .one (ofString "frame_state_gas_used")
+                    [.var .global (ofString "ev")]
+                    (.seq
+                      (.store (.op .add [.var .global (ofString "ev"), .const 200])
+                        (.var .local (ofString "used")))
+                      (.seq
+                        (.store (.op .add [.var .local (ofString "msg"), .const 48])
+                          (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+                        (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))))
+                .skip)
+              (.seq .skip
+                (.seq (.call (some (none, none)) (ofString "prepare_dispatch") [])
+                  (.seq .skip (.return (.const 0)))))))) := rfl
+
+/-- The entry/`msg`-relation invariant threaded through the `depth0_prepare` body. -/
+def D0Pre (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧ ∃ m : BitVec 64,
+    s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧ m.toNat = memW s (globN s "ev" + 112)
+
+/-- `D0Pre` does not depend on the locals other than `msg`. -/
+theorem d0Pre_locals (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (k : Nat) (hl : locals.lookup (ofString "msg") = s.locals.lookup (ofString "msg"))
+    (h : D0Pre gw hp G ch s) : D0Pre gw hp G ch { s with locals := locals, clock := k } := by
+  obtain ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ := h
+  exact ⟨⟨localsFree_evmMsgReady s locals k hP, localsFree_stepFrom gw hp G ch s locals k hS⟩,
+    m, by rw [hl]; exact hm, hm_eq⟩
+
+theorem d0Pre_of_stepFrom (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64))
+    (ch : List Ivl) {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    (hpre : D0Pre gw hp G ch s) (hS : StepFrom gw hp G ch t) (hloc : t.locals = s.locals)
+    (hG : t.globals.lookup (ofString "ev") = s.globals.lookup (ofString "ev"))
+    (hmem : memW t (globN s "ev" + 112) = memW s (globN s "ev" + 112)) :
+    D0Pre gw hp G ch t := by
+  obtain ⟨_, m, hm, hm_eq⟩ := hpre
+  refine ⟨⟨evmMsgReady_of_evmInv t hS.1, hS⟩, m, by rw [hloc]; exact hm, ?_⟩
+  have hev : globN t "ev" = globN s "ev" := by simp [globN, hG]
+  rw [hev, hmem]; exact hm_eq
+
+/-- A `store` never produces a resuming result. -/
+theorem store_result_none_or_error {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst src : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.store dst src)).1 = none ∨
+      (evaluateHOLFiniteState s (.store dst src)).1 = some .error := by
+  rw [evaluateHOLFiniteState_store]
+  split <;> (try split) <;> (try split) <;> simp
+
+theorem Hoare.store_fall_of_none {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {dst src : ExpHOL 64} (h : Hoare P (.store dst src) (fun r t => r = none → Q t)) :
+    Hoare P (.store dst src) (Fall Q) :=
+  Hoare.fall_of_none h (fun s _ r hr heq => by
+    rcases store_result_none_or_error s dst src with h0 | h0
+    · rw [h0] at heq; subst heq; rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+    · rw [h0] at heq; subst heq; exact not_resumes_error hr)
+
+/-- The three auth-branch stores of `depth0_prepare`, `Fall` form. -/
+theorem hoare_depth0_auth_stores_fall (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w)))
+      (.seq
+        (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+        (.seq
+          (.store (.op .add [.var .local (ofString "msg"), .const 48])
+            (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+          (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.seq_fall' (R := D0Pre gw hp G ch) ?_ ?_ (fun _ h => h.1)
+  · refine Hoare.store_fall_of_none (Hoare.mono (hoare_store_ev_200_used_step gw hp G ch) ?_)
+    intro F s ⟨⟨hPS, hmsg⟩, hused⟩
+    exact ⟨hPS, hused, hmsg⟩
+  · refine Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) ?_ ?_ (fun _ h => h)
+    · exact Hoare.store_fall_of_none (hoare_store_msg_48_step gw hp G ch)
+    · exact Hoare.store_fall_of_none (hoare_store_ev_192_zero_step gw hp G ch)
+
+/-- The `set_delegation` call followed by the auth tail, from a `D0Pre` state: the callee is
+given as a `Hoare` triple keeping `D0Pre` (what an `ek_set_delegation` contract that also keeps the
+`ev+112` message slot would provide). -/
+theorem hoare_depth0_auth_branch (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (hsd : Hoare (D0Pre gw hp G ch) (.call (some (none, none)) (ofString "set_delegation") [])
+      (Fall (D0Pre gw hp G ch))) :
+    Hoare (D0Pre gw hp G ch)
+      (.seq (.call (some (none, none)) (ofString "set_delegation") [])
+        (.decCall (ofString "used") .one (ofString "frame_state_gas_used")
+          [.var .global (ofString "ev")]
+          (.seq
+            (.store (.op .add [.var .global (ofString "ev"), .const 200])
+              (.var .local (ofString "used")))
+            (.seq
+              (.store (.op .add [.var .local (ofString "msg"), .const 48])
+                (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+              (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.seq_fall' (R := D0Pre gw hp G ch) hsd ?_ (fun _ h => h.1)
+  have hLO : LocalsOnly ["msg"] (D0Pre gw hp G ch) := by
+    intro F s locals k hl h
+    exact d0Pre_locals gw hp G ch s locals k (hl "msg" (by simp)) h
+  have hLF : LocalsFree (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) := by
+    intro F s locals k h
+    exact ⟨localsFree_evmMsgReady s locals k h.1, localsFree_stepFrom gw hp G ch s locals k h.2⟩
+  refine Hoare.decCall_ro_fall ro_frame_state_gas_used
+    (fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1)) hLF (fun _ h => h.1)
+    (ReadOnlyFn.resumeOn hLO (fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1))
+      ro_frame_state_gas_used (ofString "used") (by decide) _)
+    (hoare_depth0_auth_stores_fall gw hp G ch)
+
+/-- `ek_depth0_prepare` from the callee contracts: `set_delegation` as a `D0Pre`-keeping triple
+(for every `StepFrom` frame) and `prepare_dispatch` as `EvmKeeps EvmMsgReady gw_pd` with
+`gw_pd ⊆ ["heap_ptr", "journal_n", "scratch_ptr"]`. -/
+theorem ek_depth0_prepare_of_callees {gw_pd : List String}
+    (hsd : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (D0Pre ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch)
+        (.call (some (none, none)) (ofString "set_delegation") [])
+        (Fall (D0Pre ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch)))
+    (hpd : EvmKeeps EvmMsgReady gw_pd (ofString "prepare_dispatch"))
+    (hsub : ∀ g ∈ gw_pd, g ∈ ["heap_ptr", "journal_n", "scratch_ptr"]) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare") := by
+  set gw : List String := ["heap_ptr", "journal_n", "scratch_ptr"] with hgw
+  have hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+        (sourceFnBody Guest.Software.guestFn_depth0_prepare)
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+    intro hp G ch
+    have hLF : LocalsFree (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) := by
+      intro F s locals k h
+      exact ⟨localsFree_evmMsgReady s locals k h.1, localsFree_stepFrom gw hp G ch s locals k h.2⟩
+    rw [depth0_prepare_body_eq]
+    refine Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+      Hoare.skip_fall ?_ (fun _ h => h)
+    -- `dec msg`
+    refine Hoare.dec_fall (P' := D0Pre gw hp G ch) ?_ ?_ hLF
+    · intro F s v hP hv
+      obtain ⟨m, rfl, hm⟩ := dec_msg_init s hP.1 v hv
+      refine ⟨⟨localsFree_evmMsgReady s _ _ hP.1, localsFree_stepFrom gw hp G ch s _ _ hP.2⟩,
+        m, ?_, hm⟩
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    -- `dec te`
+    refine Hoare.dec_fall (P' := D0Pre gw hp G ch) ?_ ?_ hLF
+    · intro F s v hP _
+      refine d0Pre_locals gw hp G ch s _ _ ?_ hP
+      have hne : (ofString "te" == ofString "msg") = false := by decide
+      simp [HolFiniteMapExact.update, FUPDATE, hne]
+    -- `ite ...; (skip; prepare_dispatch(); skip; return 0)`
+    refine Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) ?_ ?_ (fun _ h => h)
+    · refine Hoare.ite_fall ?_ ?_
+      · exact Hoare.mono (hoare_depth0_auth_branch gw hp G ch (hsd hp G ch)) (fun _ h => h.1)
+      · exact Hoare.mono Hoare.skip_fall (fun _ h => h.1.1)
+    · refine Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+        Hoare.skip_fall ?_ (fun _ h => h)
+      refine Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) ?_ ?_ (fun _ h => h)
+      · refine Hoare.mono (Hoare.weaken
+          (Hoare.call_evmKeeps_fall (gw := gw) (hp := hp) (G := G) (ch := ch) hpd hsub
+            (fun s h => evmMsgReady_of_evmInv s h.1) []) ?_) (fun _ h => h.2)
+        intro F r t h hr
+        exact ⟨evmMsgReady_of_evmInv t (h hr).1, h hr⟩
+      · exact Hoare.seq_fall' (R := fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+          Hoare.skip_fall (Hoare.return_const_fall hLF 0) (fun _ h => h)
+  refine ek_depth0_prepare_of_body (fun {F} s hcode hP hnt hres => ?_)
+  have h := (hbody (globN s "heap_ptr") s.globals.lookup (evmChain s)).run s hcode
+    ⟨hP, stepFrom_refl gw s (evmInv_of_evmMsgReady s hP)⟩ hnt (Or.inr hres)
+  exact (evmStep_iff_stepFrom gw s _).2 h.2
+
+end HeadStore
