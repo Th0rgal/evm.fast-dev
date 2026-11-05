@@ -2830,4 +2830,19 @@ theorem phase2_address_store_ready_joint {F : Type} {s : PanSemStateFiniteExact 
     hp.2.2.2.2.2.2.1 hp.2.2.2.2.2.2.2.1 hm
   exact ⟨hr, hW', by rw [how]; exact hd, by rw [how]; exact hte⟩
 
+/-- Keep the two buffer separations attached to one world throughout Phase 2. -/
+def PtxAddressJoint {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+    TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)] (worldOwned s S Nd) ∧
+    IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+theorem phase2_address_alloc_joint (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady PtxAddressJoint
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ⟨phase2_address_alloc_ready h s vs body callee ret v post hc hp ha hl hb,
+    phase2_address_alloc_world h s vs body callee ret v post hc hp ha hl hb⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
