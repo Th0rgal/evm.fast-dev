@@ -2763,6 +2763,21 @@ theorem phase4ThroughStableSetup_cut (h : PtxCallees)
   intro F s hc hp
   exact hb s hc hp
 
+theorem stable_storage_length_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) :
+    locN s "nl" ≤ memW s (locN s "stable_logs" + 16) ∧
+      8 * locN s "nl" < 2 ^ 64 ∧
+      ∀ i : Nat, i < locN s "nl" →
+        WordAt s (memW s (locN s "stable_logs") + 8 * i) := by
+  have hb := phase4StableCap_bounds s hp.1.1
+  refine ⟨by rw [hp.2.1]; exact hb.2.1, ?_, ?_⟩
+  · exact lt_of_le_of_lt (Nat.mul_le_mul_left 8 hb.2.1) hb.2.2
+  · intro i hi
+    have hw := hp.2.2.2.2
+    apply hw.2.2 i
+    have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hb.2.1
+    simpa using hic
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
