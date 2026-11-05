@@ -9840,4 +9840,33 @@ theorem phase2_count_exit_alloc_ready (h : PtxCallees) :
   exact phase2_packed_alloc_init_ready h s vs body callee ret v post hc
     (phase2_count_exit_alloc_pre s hp) ha hl hb
 
+/-- The counted allocation exposes the full initialization predicate to its tail. -/
+theorem phase2_count_exit_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxPackedInitReady tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxAddressCountInv s ∧ locN s "i" = locN s "nal")
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxPackedInitReady) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr : PtxAccessCountReady s := hp.1.1.1.1.1
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_exit_alloc_ready h
+  · exact ht
+
+/-- A zero cached access count skips either source loop, independently of its body. -/
+theorem phase2_zero_nal_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (body : ProgHOL 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hn : s.locals.lookup (ofString "nal") = some (.val (.word 0))) :
+    evaluateHOLFiniteState s
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+      (none, s) := by
+  rw [evaluateHOLFiniteState_while_total]
+  simp [evalHOLExact, hi, hn]
+  intro h
+  have hf : Compiler.Encoders.Asm.wordCmpHOL .less (0#64) (0#64) ≠ true := by decide
+  exact False.elim (hf h)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
