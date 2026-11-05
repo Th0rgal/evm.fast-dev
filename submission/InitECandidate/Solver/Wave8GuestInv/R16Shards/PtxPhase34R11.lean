@@ -1801,6 +1801,34 @@ theorem lst_push_slot_result (h : PtxCallees) {F : Type}
   obtain ⟨_, _, _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
   exact hret v rfl
 
+theorem lst_push_bo40_slot_result (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 8) (memW post (memW post (globN post "bo" + 40)))
+        (memW post (memW post (globN post "bo" + 40)) +
+          8 * memW post (memW post (globN post "bo" + 40) + 16)) := by
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp ha hl
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1 (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  obtain ⟨w, hv, hal, hin⟩ := lst_push_slot_result h s vs body callee ret v post hc hl hr harg.1
+  refine ⟨w, hv, hal, ?_⟩
+  rw [hbo, hm]
+  simpa only [harg.2] using hin
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
