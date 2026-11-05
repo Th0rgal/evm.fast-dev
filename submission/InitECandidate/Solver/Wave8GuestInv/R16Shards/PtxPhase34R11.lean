@@ -5787,6 +5787,36 @@ theorem lst_new_stable_joint_regions (h : PtxCallees) {F : Type}
       locN (callEntryStateHOLFinite s callee) "cap") (by simp) o ho
   simpa only [hargs.1, hargs.2.1] using hb
 
+/-- Restoring caller locals retains the joint separation witnesses for both
+regions used by the stable copy. -/
+theorem lst_new_stable_resumed_joint_regions (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    ∃ S Nd, WorldTypedWith t S Nd ∧ LogsLiveOwned t S Nd (locN t "logs") ∧
+      (∀ o ∈ worldOwned t S Nd, Disj (locN t "stable_logs", 24) o) ∧
+      (∀ o ∈ worldOwned t S Nd,
+        Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o) := by
+  obtain ⟨w, rfl, S, Nd, hW, hO, hh, hb⟩ :=
+    lst_new_stable_joint_regions h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨S, Nd, ?_, ?_, ?_, ?_⟩
+  · exact (R13Shards.worldTypedWith_with_locals post _ post.clock S Nd).mpr hW
+  · change LogsLiveOwned post S Nd _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hh
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using hb
+
 /-- Allocation establishes the full precondition for the stable length write,
 given the caller's word-shaped length operand. -/
 theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
