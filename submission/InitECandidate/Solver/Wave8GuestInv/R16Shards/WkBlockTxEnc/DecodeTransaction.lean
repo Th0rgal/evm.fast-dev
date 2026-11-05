@@ -7031,6 +7031,283 @@ private theorem rlp_item_total_worldEff_agree_vvh {F : Type}
     rlp_item_total_agree_unchecked_vvh s hc p len hsubfit hp hlen v hv
   exact ⟨T, hT, hpos, hbound, hagree post heff.code hppost hbytes⟩
 
+/-! ### Section 5c: Sub-Item Payload Bounds for `rlp_item`, `rlp_decode_fully`, `tx_bytes_item`, and `tx_list_item` -/
+
+private def ItemQ_vvh (P L : BitVec 64) (v : ValueHOL 64) : Prop :=
+  ∃ kind pay plen tot : BitVec 64,
+    v = .rStruct [.val (.word kind), .val (.word pay), .val (.word plen), .val (.word tot)] ∧
+    plen.toNat ≤ L.toNat ∧
+    (0 < plen.toNat → P.toNat ≤ pay.toNat ∧ pay.toNat + plen.toNat ≤ P.toNat + L.toNat) ∧
+    1 ≤ tot.toNat ∧ tot.toNat ≤ L.toNat
+
+private theorem R_raise_guard_vvh {Q : ValueHOL 64 → Prop} {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {c : ExpHOL 64} {eid : MlS} {rexp : ExpHOL 64} {rest : ProgHOL 64}
+    (h : ∀ w : BitVec 64,
+      @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) c =
+        some (.val (.word w)) → w = 0 → RetOK_vvh Q s rest) :
+    RetOK_vvh Q s (.seq (.ite c (.raise eid rexp) .skip) rest) := by
+  have hraise_nr : ∀ u : PanSemStateFiniteExact 64 F, RetOK_vvh Q u (.raise eid rexp) := by
+    intro u v hv
+    rw [evaluateHOLFiniteState_raise] at hv
+    split at hv <;> [ (dsimp only at hv; split at hv <;> simp at hv); simp at hv ]
+  apply R_seq_vvh
+  · apply R_ite_vvh
+    intro w _
+    exact ⟨fun _ => hraise_nr s, fun _ => R_skip_vvh⟩
+  · intro mid hmid
+    rw [evaluateHOLFiniteState_ite] at hmid
+    split at hmid
+    · rename_i w hw
+      split at hmid
+      · rename_i hw0
+        rw [evaluateHOLFiniteState_skip] at hmid
+        simp only [Prod.mk.injEq] at hmid
+        obtain ⟨-, rfl⟩ := hmid
+        exact h w hw hw0
+      · exact absurd (by rw [hmid]) (abrupt_nonone_vvh (.raise eid rexp) rfl s)
+    · simp at hmid
+
+private theorem R_call0_flow_vvh {Q : ValueHOL 64 → Prop} {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {f : MlS} {args : List (ExpHOL 64)} {rest : ProgHOL 64}
+    (h : ∀ mid : PanSemStateFiniteExact 64 F,
+      mid.locals = s.locals → mid.code = s.code → RetOK_vvh Q mid rest) :
+    RetOK_vvh Q s (.seq (.call (some (none, none)) f args) rest) := by
+  apply R_seq_vvh
+  · intro v hv
+    exact absurd hv (call_noret_vvh s f args v)
+  · intro mid hmid
+    obtain ⟨hloc, hcd⟩ := call_flow_locals_vvh s f args mid hmid
+    exact h mid hloc hcd
+
+private theorem rlp_item_ret_sub_vvh {F : Type}
+    (e : PanSemStateFiniteExact 64 F) (hcode : e.code = originalRuntimeCode)
+    (P L : BitVec 64) (hfit : P.toNat + L.toNat ≤ 2 ^ 64)
+    (hp : e.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hl : e.locals.lookup (ofString "len") = some (.val (.word L))) :
+    RetOK_vvh (ItemQ_vvh P L) e (sourceFnBody Guest.Software.guestFn_rlp_item) := by
+  dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_rlp_item,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map]
+  refine R_guard_vvh hcode (fun w hw hw0 => ?_)
+  have hL : L ≠ 0 := by
+    intro h; subst h; simp [evalHOLExact, hl, Compiler.Encoders.Asm.wordCmpHOL] at hw; subst hw0
+    simp at hw
+  have hL_pos : 0 < L.toNat := by
+    by_contra hc
+    apply hL
+    apply BitVec.eq_of_toNat_eq
+    simp; omega
+  have hL1 := toNat_sub_one_vvh L hL
+  have h1 : (1#64 : BitVec 64).toNat = 1 := rfl
+  refine R_dec_vvh (fun vb hvb _ => ?_)
+  obtain ⟨P', B, ha, _, rfl⟩ := loadByte_word_dom_vvh e _ vb hvb
+  simp only [evalHOLExact, PanSemStateFiniteExact.toExact, hp, Option.some.injEq, ValueHOL.val.injEq,
+    HolWordLab.word.injEq] at ha
+  subst ha
+  set e1 := setVarHOLFinite (ofString "b") (.val (.word B)) e with he1
+  have hb1 : e1.locals.lookup (ofString "b") = some (.val (.word B)) := lk_set'_vvh _ _ _
+  have hp1 : e1.locals.lookup (ofString "p") = some (.val (.word P)) := by
+    rw [lk_set_vvh _ _ _ _ (by decide)]; exact hp
+  have hl1 : e1.locals.lookup (ofString "len") = some (.val (.word L)) := by
+    rw [lk_set_vvh _ _ _ _ (by decide)]; exact hl
+  have hc1 : e1.code = originalRuntimeCode := hcode
+  -- Branch 1: b < 128
+  refine R_branch_vvh (by rfl) (fun _ _ _ => R_ret_vvh (fun v hv => ?_)) (fun _ _ _ => ?_)
+  · simp [evalHOLExact, evalListHOLExact, hp1] at hv
+    subst hv
+    exact ⟨0#64, P, 1#64, 1#64, rfl, by rw [h1]; omega,
+      fun _ => ⟨le_rfl, by rw [h1]; omega⟩, by rw [h1], by rw [h1]; omega⟩
+  -- Branch 2: b ≤ 183 (short bytes)
+  refine R_branch_vvh (by rfl) (fun _ _ _ => R_dec_vvh (fun vn hvn _ => ?_)) (fun _ _ _ => ?_)
+  · simp [evalHOLExact, evalListHOLExact, hb1, wordOpHOL, wordOp, valueIsWord, valueWord] at hvn
+    subst hvn
+    set e2 := setVarHOLFinite (ofString "n") (.val (.word (B - 128#64))) e1 with he2
+    have hc2 : e2.code = originalRuntimeCode := hcode
+    refine R_guard_vvh hc2 (fun w hw hw0 => ?_)
+    have hN : (B - 128#64).toNat ≤ L.toNat - 1 := by
+      simp [evalHOLExact, evalListHOLExact, he2, lk_set_vvh, lk_set'_vvh,
+        show ofString "n" ≠ ofString "len" by decide, hl1, wordOpHOL, wordOp, valueIsWord,
+        valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+      subst hw0
+      by_contra hc
+      have : L - 1#64 < B - 128#64 := by rw [BitVec.lt_def, hL1]; omega
+      simp [this] at hw
+    refine R_check2_vvh hc2 (R_ret_vvh (fun v hv => ?_))
+    have hp2 : e2.locals.lookup (ofString "p") = some (.val (.word P)) := by
+      rw [lk_set_vvh _ _ _ _ (by decide)]; exact hp1
+    have hn2 : e2.locals.lookup (ofString "n") = some (.val (.word (B - 128#64))) := lk_set'_vvh _ _ _
+    simp [evalHOLExact, evalListHOLExact, hp2, hn2, wordOpHOL, wordOp, valueIsWord, valueWord] at hv
+    subst hv
+    have ht_add : (1#64 + (B - 128#64)).toNat = 1 + (B - 128#64).toNat := by
+      rw [BitVec.toNat_add_of_lt (by rw [h1]; have := L.isLt; omega), h1]
+    refine ⟨0#64, P + 1#64, B - 128#64, 1#64 + (B - 128#64), rfl, by omega,
+      fun hpos => ?_, by rw [ht_add]; omega, by rw [ht_add]; omega⟩
+    have hp_add : (P + 1#64).toNat = P.toNat + 1 := by
+      rw [BitVec.toNat_add_of_lt (by rw [h1]; omega), h1]
+    exact ⟨by rw [hp_add]; omega, by rw [hp_add]; omega⟩
+  -- Branch 3: b ≤ 191 (long bytes)
+  refine R_branch_vvh (by rfl) (fun _ _ _ => R_dec_vvh (fun vll hvll _ => ?_)) (fun _ _ _ => ?_)
+  · simp [evalHOLExact, evalListHOLExact, hb1, wordOpHOL, wordOp, valueIsWord, valueWord] at hvll
+    subst hvll
+    set e2 := setVarHOLFinite (ofString "ll") (.val (.word (B - 183#64))) e1 with he2
+    have hc2 : e2.code = originalRuntimeCode := hcode
+    refine R_guard_vvh hc2 (fun w hw hw0 => ?_)
+    have hLL : (B - 183#64).toNat ≤ L.toNat - 1 := by
+      simp [evalHOLExact, evalListHOLExact, he2, lk_set_vvh, lk_set'_vvh,
+        show ofString "ll" ≠ ofString "len" by decide, hl1, wordOpHOL, wordOp, valueIsWord,
+        valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+      subst hw0
+      by_contra hc
+      have : L - 1#64 < B - 183#64 := by rw [BitVec.lt_def, hL1]; omega
+      simp [this] at hw
+    refine R_decCall_vvh (fun u vn hsh hcu hloc hun => ?_)
+    rcases vn with ⟨⟨N⟩⟩ | _ | _ <;> simp [shapeEqHOL, shapeOfHOLExact] at hsh
+    have hul : u.locals.lookup (ofString "len") = some (.val (.word L)) := by
+      rw [hloc _ (by decide), lk_set_vvh _ _ _ _ (by decide)]; exact hl1
+    have hup : u.locals.lookup (ofString "p") = some (.val (.word P)) := by
+      rw [hloc _ (by decide), lk_set_vvh _ _ _ _ (by decide)]; exact hp1
+    have hull : u.locals.lookup (ofString "ll") = some (.val (.word (B - 183#64))) := by
+      rw [hloc _ (by decide), lk_set'_vvh]
+    have hcu' : u.code = originalRuntimeCode := hcu.trans hc2
+    refine R_guard_vvh hcu' (fun _ _ _ => ?_)
+    refine R_guard_vvh hcu' (fun w hw hw0 => R_ret_vvh (fun v hv => ?_))
+    have hsub : (L - 1#64 - (B - 183#64)).toNat = L.toNat - 1 - (B - 183#64).toNat := by
+      rw [BitVec.toNat_sub, hL1]; omega
+    have hNle : N.toNat ≤ L.toNat - 1 - (B - 183#64).toNat := by
+      simp [evalHOLExact, evalListHOLExact, hul, hull, hun, wordOpHOL, wordOp, valueIsWord,
+        valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+      subst hw0
+      by_contra hc
+      have : L - 1#64 - (B - 183#64) < N := by rw [BitVec.lt_def, hsub]; omega
+      simp [this] at hw
+    simp [evalHOLExact, evalListHOLExact, hup, hull, hun, wordOpHOL, wordOp, valueIsWord, valueWord] at hv
+    subst hv
+    have htot_add : (1#64 + ((B - 183#64) + N)).toNat = 1 + (B - 183#64).toNat + N.toNat := by
+      have hlln : ((B - 183#64) + N).toNat = (B - 183#64).toNat + N.toNat := by
+        rw [BitVec.toNat_add_of_lt (by have := L.isLt; omega)]
+      rw [BitVec.toNat_add_of_lt (by rw [h1, hlln]; have := L.isLt; omega), h1, hlln]; omega
+    refine ⟨0#64, _, N, _, rfl, by omega,
+      fun hpos => ?_, by rw [htot_add]; omega, by rw [htot_add]; omega⟩
+    have hpay_add : (P + (1#64 + (B - 183#64))).toNat = P.toNat + 1 + (B - 183#64).toNat := by
+      have h1ll : (1#64 + (B - 183#64)).toNat = 1 + (B - 183#64).toNat := by
+        rw [BitVec.toNat_add_of_lt (by rw [h1]; have := L.isLt; omega), h1]
+      rw [BitVec.toNat_add_of_lt (by rw [h1ll]; omega), h1ll]; omega
+    exact ⟨by rw [hpay_add]; omega, by rw [hpay_add]; omega⟩
+  -- Branch 4: b ≤ 247 (short list)
+  refine R_branch_vvh (by decide) (fun _ _ _ => R_dec_vvh (fun vn hvn _ => ?_)) (fun _ _ _ => ?_)
+  · simp [evalHOLExact, evalListHOLExact, hb1, wordOpHOL, wordOp, valueIsWord, valueWord] at hvn
+    subst hvn
+    set e2 := setVarHOLFinite (ofString "n") (.val (.word (B - 192#64))) e1 with he2
+    have hc2 : e2.code = originalRuntimeCode := hcode
+    refine R_guard_vvh hc2 (fun w hw hw0 => ?_)
+    have hN : (B - 192#64).toNat ≤ L.toNat - 1 := by
+      simp [evalHOLExact, evalListHOLExact, he2, lk_set_vvh, lk_set'_vvh,
+        show ofString "n" ≠ ofString "len" by decide, hl1, wordOpHOL, wordOp, valueIsWord,
+        valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+      subst hw0
+      by_contra hc
+      have : L - 1#64 < B - 192#64 := by rw [BitVec.lt_def, hL1]; omega
+      simp [this] at hw
+    refine R_call0_flow_vvh (fun mid hmid_loc _ => R_ret_vvh (fun v hv => ?_))
+    have hp_m : mid.locals.lookup (ofString "p") = some (.val (.word P)) := by
+      rw [hmid_loc, lk_set_vvh _ _ _ _ (by decide)]; exact hp1
+    have hn_m : mid.locals.lookup (ofString "n") = some (.val (.word (B - 192#64))) := by
+      rw [hmid_loc, lk_set'_vvh]
+    simp [evalHOLExact, evalListHOLExact, hp_m, hn_m, wordOpHOL, wordOp, valueIsWord, valueWord] at hv
+    subst hv
+    have ht_add : (1#64 + (B - 192#64)).toNat = 1 + (B - 192#64).toNat := by
+      rw [BitVec.toNat_add_of_lt (by rw [h1]; have := L.isLt; omega), h1]
+    refine ⟨1#64, P + 1#64, B - 192#64, 1#64 + (B - 192#64), rfl, by omega,
+      fun hpos => ?_, by rw [ht_add]; omega, by rw [ht_add]; omega⟩
+    have hp_add : (P + 1#64).toNat = P.toNat + 1 := by
+      rw [BitVec.toNat_add_of_lt (by rw [h1]; omega), h1]
+    exact ⟨by rw [hp_add]; omega, by rw [hp_add]; omega⟩
+  -- Branch 5: b > 247 (long list)
+  refine R_dec_vvh (fun vll hvll _ => ?_)
+  simp [evalHOLExact, evalListHOLExact, hb1, wordOpHOL, wordOp, valueIsWord, valueWord] at hvll
+  subst hvll
+  set e2 := setVarHOLFinite (ofString "ll") (.val (.word (B - 247#64))) e1 with he2
+  have hc2 : e2.code = originalRuntimeCode := hcode
+  refine R_guard_vvh hc2 (fun w hw hw0 => ?_)
+  have hLL : (B - 247#64).toNat ≤ L.toNat - 1 := by
+    simp [evalHOLExact, evalListHOLExact, he2, lk_set_vvh, lk_set'_vvh,
+      show ofString "ll" ≠ ofString "len" by decide, hl1, wordOpHOL, wordOp, valueIsWord,
+      valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+    subst hw0
+    by_contra hc
+    have : L - 1#64 < B - 247#64 := by rw [BitVec.lt_def, hL1]; omega
+    simp [this] at hw
+  refine R_decCall_vvh (fun u vn hsh hcu hloc hun => ?_)
+  rcases vn with ⟨⟨N⟩⟩ | _ | _ <;> simp [shapeEqHOL, shapeOfHOLExact] at hsh
+  have hul : u.locals.lookup (ofString "len") = some (.val (.word L)) := by
+    rw [hloc _ (by decide), lk_set_vvh _ _ _ _ (by decide)]; exact hl1
+  have hup : u.locals.lookup (ofString "p") = some (.val (.word P)) := by
+    rw [hloc _ (by decide), lk_set_vvh _ _ _ _ (by decide)]; exact hp1
+  have hull : u.locals.lookup (ofString "ll") = some (.val (.word (B - 247#64))) := by
+    rw [hloc _ (by decide), lk_set'_vvh]
+  have hcu' : u.code = originalRuntimeCode := hcu.trans hc2
+  refine R_guard_vvh hcu' (fun _ _ _ => ?_)
+  refine R_guard_vvh hcu' (fun w hw hw0 => ?_)
+  have hsub : (L - 1#64 - (B - 247#64)).toNat = L.toNat - 1 - (B - 247#64).toNat := by
+    rw [BitVec.toNat_sub, hL1]; omega
+  have hNle : N.toNat ≤ L.toNat - 1 - (B - 247#64).toNat := by
+    simp [evalHOLExact, evalListHOLExact, hul, hull, hun, wordOpHOL, wordOp, valueIsWord,
+      valueWord, Compiler.Encoders.Asm.wordCmpHOL] at hw
+    subst hw0
+    by_contra hc
+    have : L - 1#64 - (B - 247#64) < N := by rw [BitVec.lt_def, hsub]; omega
+    simp [this] at hw
+  refine R_call0_flow_vvh (fun mid hmid_loc _ => R_ret_vvh (fun v hv => ?_))
+  have hup_m : mid.locals.lookup (ofString "p") = some (.val (.word P)) := by
+    rw [hmid_loc]; exact hup
+  have hull_m : mid.locals.lookup (ofString "ll") = some (.val (.word (B - 247#64))) := by
+    rw [hmid_loc]; exact hull
+  have hun_m : mid.locals.lookup (ofString "n") = some (.val (.word N)) := by
+    rw [hmid_loc]; exact hun
+  simp [evalHOLExact, evalListHOLExact, hup_m, hull_m, hun_m, wordOpHOL, wordOp, valueIsWord, valueWord] at hv
+  subst hv
+  have htot_add : (1#64 + ((B - 247#64) + N)).toNat = 1 + (B - 247#64).toNat + N.toNat := by
+    have hlln : ((B - 247#64) + N).toNat = (B - 247#64).toNat + N.toNat := by
+      rw [BitVec.toNat_add_of_lt (by have := L.isLt; omega)]
+    rw [BitVec.toNat_add_of_lt (by rw [h1, hlln]; have := L.isLt; omega), h1, hlln]; omega
+  refine ⟨1#64, _, N, _, rfl, by omega,
+    fun hpos => ?_, by rw [htot_add]; omega, by rw [htot_add]; omega⟩
+  have hpay_add : (P + (1#64 + (B - 247#64))).toNat = P.toNat + 1 + (B - 247#64).toNat := by
+    have h1ll : (1#64 + (B - 247#64)).toNat = 1 + (B - 247#64).toNat := by
+      rw [BitVec.toNat_add_of_lt (by rw [h1]; have := L.isLt; omega), h1]
+    rw [BitVec.toNat_add_of_lt (by rw [h1ll]; omega), h1ll]; omega
+  exact ⟨by rw [hpay_add]; omega, by rw [hpay_add]; omega⟩
+
+private theorem rlp_decode_fully_ret_sub_vvh {F : Type}
+    (e : PanSemStateFiniteExact 64 F) (hcode : e.code = originalRuntimeCode)
+    (P L : BitVec 64) (hfit : P.toNat + L.toNat ≤ 2 ^ 64)
+    (hp : e.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hl : e.locals.lookup (ofString "len") = some (.val (.word L))) :
+    RetOK_vvh (ItemQ_vvh P L) e (sourceFnBody Guest.Software.guestFn_rlp_decode_fully) := by
+  dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_rlp_decode_fully,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map]
+  refine R_decCall'_vvh (fun cvals cbody callee crs vit hargs hlk hret _ u hcu _ huit => ?_)
+  simp only [evalListHOLFinite_eq_toExact, evalListHOLExact, evalHOLExact, hp, hl, Option.some.injEq] at hargs
+  subst hargs
+  rw [hcode] at hlk
+  obtain ⟨rfl, hcp, hcl⟩ := callee_p_len_vvh lookup_rlp_item_vvh _ _ cbody callee crs hlk
+  have hit := rlp_item_ret_sub_vvh (callEntryStateHOLFinite e callee) hcode P L hfit hcp hcl vit hret
+  refine R_guard_vvh (hcu.trans hcode) (fun _ _ _ => R_ret_vvh (fun v hv => ?_))
+  simp [evalHOLExact, huit] at hv
+  subst hv
+  exact hit
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
