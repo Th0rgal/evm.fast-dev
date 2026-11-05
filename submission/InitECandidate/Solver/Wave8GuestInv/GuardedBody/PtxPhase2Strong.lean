@@ -11544,4 +11544,80 @@ theorem phase2_alloc_packing_warm_cut (h : PtxCallees)
   exact phase2_alloc_packing_warm_bound h s (ht s hp.1) s hc
     ⟨hp.1, phase2_count_exit_warm_snapshots s hp.1 hp.2⟩
 
+/-- All three saved buffers have typed cells at the count exit. -/
+theorem phase2_count_exit_warm_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s) (i : PtxWarmBuffer) :
+    WordsOK s (phase2_warm_buffer s i) := by
+  have hj := phase2_count_exit_joint hp
+  have hr := phase2_count_exit_access_ready hp
+  cases i with
+  | environment => exact hr.1.1.2.2.2.2.1
+  | sender => exact hr.1.1.1.1.2.2.1
+  | addresses => exact hj.1.2.2.2.2.1
+
+/-- Packing retains the typed cells of a snapshot, even across state type parameters. -/
+theorem phase2_warm_packed_words {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) : WordsOK s (phase2_warm_buffer before i) := by
+  have hw := phase2_count_exit_warm_words before hb i
+  have hg : GuestInv before :=
+    (phase2_count_exit_access_ready hb).1.1.1.1.1.1.1.1.1
+  refine ⟨hw.1, hw.2.1, fun k hk => ?_⟩
+  obtain ⟨_, hd, _⟩ := hw.2.2 k hk
+  cases hm : s.memory (BitVec.ofNat 64 ((phase2_warm_buffer before i).1 + 8 * k)) with
+  | word w =>
+    refine ⟨w, ?_, hm⟩
+    rw [hp.1.1.1.1.memaddrs, ← hg.memaddrs]
+    exact hd
+
+/-- Recover placement, cell typing, and world separation together for a warm buffer.
+The ownership witness also contains the transaction and packed-key allocation. -/
+theorem phase2_warm_packed_buffer_ready {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) :
+    Inside (phase2_warm_buffer before i) InitE.sourceBase (globN s "heap_ptr") ∧
+    WordsOK s (phase2_warm_buffer before i) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8),
+        phase2_warm_buffer before i] (worldOwned s S Nd) := by
+  obtain ⟨S, Nd, hw, ht, hk, hi, hd, _⟩ := (hp.2 i).1
+  refine ⟨hi, phase2_warm_packed_words before s hb hp i, S, Nd, hw, ht, ?_⟩
+  intro j hj o ho
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+  rcases hj with rfl | rfl
+  · exact hk _ (by simp) o ho
+  · exact hd _ (by simp) o ho
+
+/-- Saved numeric words determine the actual memory cells on an aligned buffer.
+This converts the snapshot interface to the frame interface used by later calls. -/
+theorem phase2_warm_packed_unhit {F : Type}
+    (before s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) : IvlUnhit before s (phase2_warm_buffer before i) := by
+  have hw := phase2_count_exit_warm_words before hb i
+  intro a ha hh
+  have hlo : (phase2_warm_buffer before i).1 ≤ a.toNat := by
+    have := hw.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hhi : a.toNat + 8 ≤
+      (phase2_warm_buffer before i).1 + (phase2_warm_buffer before i).2 := by
+    have := hw.1
+    have := hw.2.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hm := phase2_warm_packed_word before s hp i a.toNat hlo hhi ha
+  simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] at hm
+  cases hs : s.memory a with
+  | word ws =>
+    cases hb' : before.memory a with
+    | word wb =>
+      have hsN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hs
+      have hbN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hb'
+      exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq (hsN.symm.trans (hm.trans hbN)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
