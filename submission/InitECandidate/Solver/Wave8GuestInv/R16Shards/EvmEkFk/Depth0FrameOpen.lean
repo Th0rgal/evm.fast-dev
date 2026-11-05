@@ -585,9 +585,10 @@ section HeadStore
 open R10Shards.GbodyProcessMsg
 
 /-- A single word store into the head record at `ev+192` (state-gas spilled) or `ev+200`
-(auth state-gas used) keeps `EvmInv`, provided the head's `gas + spilled` does not grow. -/
-theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
-    (hInv : EvmInv s) {x : BitVec 64} {k : Nat} (hk : k = 192 ∨ k = 200)
+(auth state-gas used) keeps `EvmInvAt` for the same table set, the chain, and every owned
+message, provided the head's `gas + spilled` does not grow. -/
+theorem evmInvAt_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hInvAt : EvmInvAt s S) {x : BitVec 64} {k : Nat} (hk : k = 192 ∨ k = 200)
     (hx_eq : x.toNat = globN s "ev" + k)
     (hx_dom : s.memaddrs x)
     (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
@@ -595,8 +596,11 @@ theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
       ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a)
     (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
       memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
-    EvmInv post := by
-  obtain ⟨hAs, S, hW, hch_ne, hch_len, hch_last, hFW_all, hFR_all, hRW, hFO_pw, hFO_disj, hAT, hMarks, hRoles, hGas⟩ := hInv
+    ArenaReady post ∧ EvmInvAt post S ∧ evmChain post = evmChain s ∧
+      (∀ m, MsgOwned s S m → MsgOwned post S m) ∧
+      (∀ k', k' + 8 ≤ 280 → k' ≠ 192 → k' ≠ 200 →
+        memW post (globN s "ev" + k') = memW s (globN s "ev" + k')) := by
+  obtain ⟨hW, hch_ne, hch_len, hch_last, hFW_all, hFR_all, hRW, hFO_pw, hFO_disj, hAT, hMarks, hRoles, hGas⟩ := hInvAt
   obtain ⟨Nd_at, hTr_at, hAT_at⟩ := hAT
   have hWT : WorldTypedWith s S Nd_at := ⟨hW.1, hW.2.1, hW.2.2.1, hTr_at⟩
   have hch_cons_ex : ∃ tail, evmChain s = (globN s "ev", globN s "cur_cont") :: tail := by
@@ -861,7 +865,9 @@ theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
     apply List.flatMap_congr; intro ec hec
     obtain ⟨he_eq, _, _⟩ := hrec_other_eq ec hec
     rw [he_eq 136 (by omega) (by omega) (by omega), he_eq 168 (by omega) (by omega) (by omega), he_eq 176 (by omega) (by omega) (by omega)]
-  refine ⟨hAp, S, hW_post, ?_⟩
+  refine ⟨hAp, ⟨hW_post, ?_⟩, hchain_eq, fun m hm => msgOwned_transfer hAs.1 hAp.1
+    (hglob_eq "heap_ptr") (hglob_eq "scratch_ptr") (fun t ht => (htab_fp_hdr t ht).2) hfix_eq
+    hchain_eq hframeObjects_eq htr_any_post hm, (hrec_other_eq _ hhead_mem).1⟩
   dsimp only
   rw [hchain_eq]
   refine ⟨hch_ne, hch_len, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
@@ -1003,6 +1009,40 @@ theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
           · dsimp only at h; omega
         rw [htail_eq 64 (by omega), htail_eq 192 (by omega)]
     omega
+
+theorem evmInv_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) {x : BitVec 64} {k : Nat} (hk : k = 192 ∨ k = 200)
+    (hx_eq : x.toNat = globN s "ev" + k)
+    (hx_dom : s.memaddrs x)
+    (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
+    EvmInv post := by
+  obtain ⟨hAs, S, hInvAt⟩ := hInv
+  obtain ⟨hAp, hInvAt', _⟩ := evmInvAt_store_ev_gas hAs hInvAt hk hx_eq hx_dom hpost hgas
+  exact ⟨hAp, S, hInvAt'⟩
+
+/-- The same store from an `EvmMsgReady` state: `EvmMsgReady` again and an `EvmStep []`. -/
+theorem evmMsgReady_store_ev_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hP : EvmMsgReady s) {x : BitVec 64} {k : Nat} (hk : k = 192 ∨ k = 200)
+    (hx_eq : x.toNat = globN s "ev" + k)
+    (hx_dom : s.memaddrs x)
+    (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
+    EvmMsgReady post ∧ EvmStep [] s post := by
+  obtain ⟨hAs, S, hInvAt, hMO⟩ := hP
+  obtain ⟨hAp, hInvAt', hch, hmo, hhead⟩ := evmInvAt_store_ev_gas hAs hInvAt hk hx_eq hx_dom hpost hgas
+  have hglob_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, hpost.2.2.2.2.2.1]
+  refine ⟨⟨hAp, S, hInvAt', ?_⟩, ⟨hAp, S, hInvAt'⟩, by rw [hglob_eq], ?_, hch⟩
+  · rw [hglob_eq, hhead 112 (by omega) (by omega) (by omega)]
+    exact hmo _ hMO
+  · intro g _
+    rw [hpost.2.2.2.2.2.1]
 
 end HeadStore
 
