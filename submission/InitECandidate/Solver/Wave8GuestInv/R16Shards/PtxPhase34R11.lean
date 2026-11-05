@@ -2584,6 +2584,26 @@ theorem lst_new_stable_capacity (h : PtxCallees) {F : Type}
   obtain ⟨_, _, _, _, hcap⟩ := hf hargs.2.2.2 hargs.2.2.1
   exact ⟨w, hv, hcap.trans hargs.2.1⟩
 
+theorem fresh_empty_stable_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs cap : Nat} (hA : ArenaOK s)
+    (hh : FreshBlock s post logs 24)
+    (hb : FreshBlock s post (memW post logs) (8 * cap))
+    (hd : IvlsDisj [(logs, 24), (memW post logs, 8 * cap)] (worldOwned post S Nd))
+    (hn : memW post (logs + 8) = 0) :
+    LogsListOK post logs ∧ LogsLiveOwned post S Nd logs ∧ LogsDisjFixed post logs := by
+  have hhi : Inside (logs, 24) sourceBase (globN post "heap_ptr") := by
+    have hi := hh.2.1
+    change Inside (logs, 24) (globN s "heap_ptr") (globN post "heap_ptr") at hi
+    exact ⟨hA.1.trans hi.1, hi.2⟩
+  have hbi : Inside (memW post logs, 0) sourceBase (globN post "heap_ptr") := by
+    have hi := hb.2.1
+    constructor
+    · exact hA.1.trans hi.1
+    · have := hi.2; dsimp [Inside] at this ⊢; omega
+  have ho := logsLiveOwned_empty (S := S) (Nd := Nd) (Or.inl hbi)
+    (fun j hj => hd _ (by simp) j hj) hn
+  exact ⟨logsListOK_empty hh.2.2 (Or.inl hhi) hn, ho, logsLiveOwned_disjFixed ho⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
