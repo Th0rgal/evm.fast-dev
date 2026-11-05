@@ -6111,6 +6111,27 @@ theorem lst_new_stable_resumed_joint_regions (h : PtxCallees) {F : Type}
     simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using hb
 
+/-- Assemble all copy spatial facts directly from the allocation return. -/
+theorem lst_new_stable_resumed_spatial (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    StableCopySpatial
+      (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) := by
+  obtain ⟨S, Nd, hW, hO, _, hb⟩ :=
+    lst_new_stable_resumed_joint_regions h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨S, Nd, hW, hO, hb,
+    lst_new_stable_resumed_source_header h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_header_backing h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_array h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_backing_records h s vs body callee ret v post hc hp ha hl hr⟩
+
 /-- Allocation establishes the full precondition for the stable length write,
 given the caller's word-shaped length operand. -/
 theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
