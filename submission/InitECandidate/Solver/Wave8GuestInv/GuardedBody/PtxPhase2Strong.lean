@@ -11022,4 +11022,68 @@ theorem phase2_packed_source_inner_tail_live_hoare (h : PtxCallees)
     (phase2_packed_live_frame_assign buffer contents (ofString "i") _
       (by decide) (by decide) (by decide)).run s hc hp.2 hnt hr⟩
 
+theorem phase2_packed_live_frame_localsOnly (buffer : Ivl) (contents : Nat → BitVec 64) :
+    LocalsOnly ["al_keys", "nkeys", "tx", "i", "k", "nal"] (PtxPackedLiveFrame buffer contents) := by
+  intro F s locals clock hl hp
+  apply phase2_packed_live_frame_locals s locals clock buffer contents hp
+  · simp only [locN, hl "tx" (by simp)]
+  · simp only [locN, hl "al_keys" (by simp)]
+  · simp only [locN, hl "nkeys" (by simp)]
+
+theorem phase2_packed_source_outer_body_live_hoare (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (fun s => (PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) ∧ PtxPackedLiveFrame buffer contents s)
+      phase2_packed_source_outer_body
+      (fun r s => r = none → PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s) := by
+  have hf : LocalsOnly ["al_keys", "nkeys", "tx", "i", "k", "nal"]
+      (PtxPackedLiveFrame buffer contents) := phase2_packed_live_frame_localsOnly buffer contents
+  have hrestore : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) locals,
+      (∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k", "nal"] : List String),
+        locals.lookup (ofString n) = s.locals.lookup (ofString n)) →
+      (PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s) →
+      PtxPackedNalIteration {s with locals := locals} ∧
+        PtxPackedLiveFrame buffer contents {s with locals := locals} := by
+    intro F s locals hl hp
+    exact ⟨phase2_packed_nal_iteration_with_locals s locals s.clock hp.1 hl,
+      hf s locals s.clock hl hp.2⟩
+  unfold phase2_packed_source_outer_body
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+    (P' := fun s => (PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i") ∧
+      PtxPackedLiveFrame buffer contents s) (by decide)
+  · intro F s v hp he
+    have hd := phase2_packed_outer_declare_acc2 s hp.1.1.1 hp.1.2 v he
+    exact ⟨⟨phase2_packed_nal_set_other s hp.1.1 _ _ (by decide), hd.2⟩,
+      LocalsOnly.setVar hf (by decide) v s hp.2⟩
+  · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+      (P' := fun s => (PtxPackedNalIteration s ∧
+        locN s "i" < memW s (locN s "tx" + 216) ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+        locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) ∧
+        PtxPackedLiveFrame buffer contents s) (by decide)
+    · intro F s v hp he
+      have hd := phase2_packed_outer_declare_ns s hp.1.1.1 hp.1.2.1 hp.1.2.2 v he
+      exact ⟨⟨phase2_packed_nal_set_other s hp.1.1 _ _ (by decide), hd.2⟩,
+        LocalsOnly.setVar hf (by decide) v s hp.2⟩
+    · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+        (P' := fun s => PtxPackedNsNalIteration s ∧ PtxPackedLiveFrame buffer contents s) (by decide)
+      · intro F s v hp he
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        exact ⟨⟨phase2_packed_ns_reset s hp.1.1.1 hp.1.2.1 hp.1.2.2.1 hp.1.2.2.2,
+          (phase2_packed_nal_set_other s hp.1.1 (ofString "j") (.val (.word 0)) (by decide)).2⟩,
+          LocalsOnly.setVar hf (by decide) _ s hp.2⟩
+      · exact phase2_packed_source_inner_tail_live_hoare h buffer contents
+      · intro F r s locals hl hp hr
+        exact hrestore s locals hl (hp hr)
+      · exact fun _ _ hr => by cases hr
+    · intro F r s locals hl hp hr
+      exact hrestore s locals hl (hp hr)
+    · exact fun _ _ hr => by cases hr
+  · intro F r s locals hl hp hr
+    exact hrestore s locals hl (hp hr)
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
