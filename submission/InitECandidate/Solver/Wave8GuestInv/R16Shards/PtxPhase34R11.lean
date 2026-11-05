@@ -3205,6 +3205,11 @@ theorem stableCopyInv_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [he "stable_logs" (by simp), he "logs" (by simp)]
     exact hp.2.2.2.2.2 j hj hn
 
+/-- Clock consumption at a while boundary preserves the copy invariant. -/
+theorem stableCopyInv_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) : StableCopyInv (decClockHOLFinite s) := by
+  exact stableCopyInv_with_locals s s.locals (s.clock - 1) (fun _ _ => rfl) hp
+
 theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
     (hh : WordsOK s (locN s "stable_logs", 24))
@@ -3896,6 +3901,23 @@ theorem stable_copy_increment_word {F : Type} (s : PanSemStateFiniteExact 64 F)
   subst v
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Incrementing the counter preserves the typed source, destination, and
+length operands needed by the next loop iteration. -/
+theorem stable_copy_increment_operands {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w p q n : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hp : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hq : s.locals.lookup (ofString "stable_lp") = some (.val (.word q)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    let t := setVarHOLFinite (ofString "i") v s
+    t.locals.lookup (ofString "i") = some (.val (.word (w + 1))) ∧
+    t.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+    t.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+    t.locals.lookup (ofString "nl") = some (.val (.word n)) := by
+  refine ⟨stable_copy_increment_word s w v hw he, ?_⟩
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using ⟨hp, hq, hn⟩
+
 /-- Once the store has extended the prefix, the actual counter assignment
 re-establishes the loop invariant. -/
 theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -4055,6 +4077,35 @@ theorem hoare_stableCopy_body :
     exact hp v hv
   · intro F s hp hr
     cases hr
+
+/-- The store/increment body consumes no clock; only the enclosing loop
+iteration contributes to its bounded execution cost. -/
+theorem stableCopy_body_bound :
+    TerminatingProgBoundedOn StableCopyStorePre
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))) 0 := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+    hoare_stableCopy_store_for_increment
+    (by
+      intro F t hc ht
+      exact (TerminatingProgBoundedOn.of_clock
+        (P := fun _ => True)
+        (fun u => clock_assign u .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const 1]))) t hc trivial) s hc hp
+
+/-- Continue from the actual copy body without adding to the tail budget. -/
+theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableCopyInv tail b) :
+    TerminatingProgBoundedOn StableCopyStorePre
+      (.seq (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])) ) tail) b := by
+  intro F s hc hp
+  simpa only [Nat.zero_add] using
+    (seq_bound_trans stableCopy_body_bound hoare_stableCopy_body htail s hc hp)
 
 /-- The termination measure decreases across both the memory write and the
 counter assignment; the write cannot alter either counter local. -/
