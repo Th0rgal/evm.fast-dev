@@ -6634,7 +6634,8 @@ def LogAppendPost2 {F : Type} (s : PanSemStateFiniteExact 64 F) (L arr0 n cap : 
     post.memory L = .word arr' ∧ post.memory (L + 8) = .word (n + 1) ∧
     post.memory (L + 16) = .word cap' ∧ n.toNat < cap'.toNat ∧ cap'.toNat < 2 ^ 60 ∧
     ((arr' = arr0 ∧ cap' = cap) ∨
-      (globN s "heap_ptr" ≤ arr'.toNat ∧ arr'.toNat + 8 * cap'.toNat ≤ globN post "heap_ptr")) ∧
+      (globN s "heap_ptr" ≤ arr'.toNat ∧ arr'.toNat + 8 * cap'.toNat ≤ globN post "heap_ptr" ∧
+        cap'.toNat = 2 * n.toNat)) ∧
     arr'.toNat + 8 * cap'.toNat ≤ 2 ^ 64 ∧
     ∀ a : BitVec 64, ¬ CellHits a.toNat (arr'.toNat, 8 * cap'.toNat) → a ≠ L → a ≠ L + 8 →
       a ≠ L + 16 → post.memory a = s.memory a
@@ -6773,7 +6774,7 @@ theorem log_append_run2 {F : Type} (s : PanSemStateFiniteExact 64 F) (e L lg arr
     obtain ⟨s0, s8, s16⟩ := hslot arr (n * 2) hlt2 hw2 hd'
     refine ⟨hXc.trans pc, hXd.trans pd, arenaReady_locals _ _ (arenaReady_mem X _ hXA),
       fun k hk => ?_, by rw [hgN]; exact phm, arr, n * 2, ?_, ?_, ?_, hlt2, by rw [hc2]; omega,
-      Or.inr ⟨h1, by rw [hgN, hc2]; omega⟩, hw2, ?_⟩
+      Or.inr ⟨h1, by rw [hgN, hc2]; omega, hc2⟩, hw2, ?_⟩
     · show X.globals.lookup k = _; rw [hXg]; exact pg k hk
     · show updW X.memory _ w L = _; rw [updW_ne _ _ _ _ (Ne.symm s0), hXm]; exact pmL
     · show updW X.memory _ w (L + 8) = _; rw [updW_ne _ _ _ _ (Ne.symm s8), hXm]; exact pm8
