@@ -14,6 +14,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M11.RlpMemcpyLemmas
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_is_zero
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01AllocMpt
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.EvmFrameSpecs
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01HtabCopy
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -3032,6 +3033,67 @@ theorem transfer_alloc_body_spec {F : Type} (s : PanSemStateFiniteExact 64 F) (n
   · exact hlo
   · have : heapLimit ≤ heapEnd := by decide
     omega
+
+theorem transfer_decCall_alloc_spec {F : Type} (s : PanSemStateFiniteExact 64 F) (x : MlS)
+    (cont : ProgHOL 64) (p : BitVec 64) (n : Nat)
+    (hn : n = 40 ∨ n = 96 ∨ n = 32) (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1) :
+    ∃ next : PanSemStateFiniteExact 64 F,
+      next.locals.lookup x = some (.val (.word p)) ∧
+      globN next "heap_ptr" = p.toNat + n ∧
+      WordsOK next (p.toNat, n) ∧
+      EvmStepCC ["heap_ptr"] s next ∧
+      (evaluateHOLFiniteState s
+        (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1 =
+        (evaluateHOLFiniteState next cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).2 =
+        { (evaluateHOLFiniteState next cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState next cont).2.locals
+            (x, s.locals.lookup x) } := by
+  have hA : ArenaReady s := hInv.1
+  obtain ⟨clk, hq, hlim, h8, hpq, hAp, hr, hs⟩ :=
+    R13Shards.step_decCall_alloc_resumes s x (.const (BitVec.ofNat 64 n)) cont
+      (BitVec.ofNat 64 n) p hA.1.code hA hp rfl hres
+  let q := (p + (BitVec.ofNat 64 n + 7)) &&& ((0 : BitVec 64) - 8)
+  let next : PanSemStateFiniteExact 64 F := {s with
+    locals := s.locals.update (x, .val (.word p))
+    globals := s.globals.update (ofString "heap_ptr", .val (.word q))
+    clock := clk}
+  change ArenaReady next at hAp
+  have hnorm : ((BitVec.ofNat 64 n).toNat + 7) / 8 * 8 = n := by
+    rcases hn with rfl | rfl | rfl <;> decide
+  rw [hnorm] at hq
+  have hhp : globN next "heap_ptr" = p.toNat + n := by
+    change q.toNat = _
+    exact hq
+  have hpglob : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hstep : EvmStepCC ["heap_ptr"] s next := by
+    obtain ⟨_, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+    apply evmStepCC_of_fresh_heap_step hA hAt hAp rfl
+    · rw [hhp, hpglob]; omega
+    · intro k hk
+      change s.globals.lookup k = (s.globals.update _).lookup k
+      rw [HolFiniteMapExact.lookup_update]
+      have hne : ofString "heap_ptr" ≠ k := by
+        intro heq
+        apply hk
+        simp [← heq]
+      simp [FUPDATE, hne]
+    · intro a ha; rfl
+    · intro b hb hnot; rfl
+  refine ⟨next, ?_, hhp, ?_, hstep, hr, hs⟩
+  · simp [next, HolFiniteMapExact.lookup_update, FUPDATE]
+  · apply wordsOK_of_inside_heap _ hAp.1.memaddrs
+    · rw [← hpglob]; exact hA.2.2.2.2.2.2.1
+    · rcases hn with rfl | rfl | rfl <;> decide
+    · rw [← hpglob]; exact hA.2.1
+    · have : heapLimit ≤ heapEnd := by decide
+      change q.toNat ≤ heapLimit at hlim
+      change q.toNat = p.toNat + n at hq
+      omega
 
 theorem ek_cc_alloc :
     EvmKeeps EvmInv ["heap_ptr"] (ofString "alloc") ∧

@@ -9404,6 +9404,21 @@ theorem fcBranches_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
     | exact fun t u => EvmEkFk.call0_ne_returned_fc t _ _ u
     | exact fun t u => EvmEkFk.skip_ne_returned_fc t u
 
+/-- Both saved release marks survive every normal branch fallthrough. -/
+theorem finish_child_branches_marks {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hr : evaluateHOLFiniteState s EvmEkFk.fcBranches = (none, post)) :
+    post.locals.lookup (ofString "child_mark") = s.locals.lookup (ofString "child_mark") ∧
+    post.locals.lookup (ofString "child_mem_mark") = s.locals.lookup (ofString "child_mem_mark") := by
+  have hkeep (n : String)
+      (hn : InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.notAssignedLocal
+        (ofString n) EvmEkFk.fcBranches = true) :
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n) := by
+    have h := InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.evaluate_notAssignedLocal
+      EvmEkFk.fcBranches hn s (by rw [hr]; rfl)
+    simpa only [hr] using h
+  exact ⟨hkeep "child_mark" (by kernel_rfl), hkeep "child_mem_mark" (by kernel_rfl)⟩
+
 /-- Every returning branch-and-cleanup run has a fallthrough branch state. -/
 theorem fcBranches_cleanup_returned {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}

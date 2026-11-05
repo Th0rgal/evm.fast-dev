@@ -7519,4 +7519,47 @@ theorem merge_new_call_binding {F : Type}
       | exception e v => simp at hn
       | error | «break» | «continue» | timeOut | finalFfi _ => simp at hn
 
+/-- Adjoin precisely the table bound to the destination local to ownership. -/
+theorem merge_new_call_bound_owned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (S Nd : List Nat) (hAR : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hkl : kw.toNat ∈ htabKeyLens) (hcl : capw.toNat ≤ htabCapMax)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).2
+    ∃ tw : BitVec 64,
+      post.locals.lookup x = some (.val (.word tw)) ∧
+      (∀ y, y ≠ x → post.locals.lookup y = s.locals.lookup y) ∧
+      tw.toNat ∉ S ∧ tw.toNat ≠ 0 ∧
+      hdr post tw.toNat 0 = kw.toNat ∧ hdr post tw.toNat 3 = 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ tw.toNat) ∧
+      WorldTypedWith post (S ++ [tw.toNat]) Nd ∧
+      OwnedGrows s post (worldOwned s S Nd) (worldOwned post (S ++ [tw.toNat]) Nd) ∧
+      worldRoleSlots post = worldRoleSlots s ∧
+      journalRoleSlots post = journalRoleSlots s ∧
+      fixedObjects post = fixedObjects s ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      (∀ u ∈ S, hdr post u 0 = hdr s u 0) ∧
+      (∀ u ∈ S, htabFootprint post u = htabFootprint s u) := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (some (.local, x), none)) (ofString "htab_new")
+    [.const kw, .const capw]
+  let post := (evaluateHOLFiniteState s p).2
+  obtain ⟨tw, hbind, hlocals, hlo, hhi, hwf, hcnt, hkey, hfp⟩ :=
+    merge_new_call_binding s x kw capw hAR hkl hcl hfr
+  obtain ⟨_, _, _, hA, hbe, hsp, _, _, _, _, _, hframe, hgl⟩ :=
+    merge_new_call_flow_props s x kw capw hAR hkl hcl hfr
+  change tw.toNat + 88 ≤ globN post "heap_ptr" at hhi
+  have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by omega
+  have hd : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a := by
+    intro a ha
+    apply evaluateHOLFiniteState_mem_out_dom s p
+    rwa [hAR.1.memaddrs]
+  obtain ⟨hnS, hn0, hroles, hWT', hrest⟩ :=
+    worldTypedWith_htab_new_sysTx hAR hA hbe hh hsp hwf hkey hfp hd hframe hgl hWT
+  exact ⟨tw, hbind, hlocals, hnS, hn0, hkey, hcnt, hroles, hWT', hrest⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

@@ -13373,4 +13373,84 @@ theorem phase2_message_ct_alloc_create_stores_suffix_bound (h : PtxCallees)
   exact phase2_message_create_stores_suffix_bound buffers contents ["ct", "empty"] aa ak
     (by simp) (by simp) ht
 
+/-- Readiness before the final two access-table pointer stores. -/
+def PtxMessageTableStoreReady {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (aa ak : Nat) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMessageScalarReady buffers contents names s ∧ PtxMessageTables s aa ak ∧
+    TxBacking s ∧ PtxPhase4LocalShapes s ∧
+    memW s (locN s "m" + 40) < 2 ^ 63 ∧ locN s "aa" = aa ∧ locN s "ak" = ak
+
+/-- A final table-pointer store preserves the pre-initialization cut and records its value. -/
+theorem phase2_message_table_pointer_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (hg : off ≠ 40) (name : String) (hn : name ∈ names) :
+    Hoare (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) (.var .local (ofString name)))
+      (fun r s => r = none → PtxMessageTableStoreReady buffers contents names aa ak s ∧
+        memW s (locN s "m" + off) = locN s name) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, hw⟩ := hp.1.2 name hn
+  have hv : v = .val (.word w) := by simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  have hst' : @panMemStoresHOL 64 _ x [.word w] s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem := by
+    simpa only [flattenHOL] using hst
+  obtain ⟨hd, _, hm⟩ := panMemStoresHOL_word_spec hst'
+  have ht := phase2_message_tables_backing_store buffers contents hp.1.1 hp.2.1 hp.2.2.1 hd
+    (phase2_message_offset_inside hp.1.1 off hoff hx) hm
+  have hf := phase2_message_store_fields buffers contents hp.1.1 off hoff hx hst'
+  refine ⟨⟨⟨ht.1, hp.1.2⟩, ht.2.1, ht.2.2, hp.2.2.2.1, ?_, hp.2.2.2.2.2⟩, ?_⟩
+  · change memW {s with memory := mem} (locN s "m" + 40) < 2 ^ 63
+    rw [hf.2.2 5 (by decide) (by omega)]
+    exact hp.2.2.2.2.1
+  · simpa [locN, hw] using hf.2.1
+
+/-- Writing the second table pointer completes the suffix invariant. -/
+theorem phase2_message_ak_store_suffix {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (hn : "ak" ∈ names) :
+    Hoare (fun s => PtxMessageTableStoreReady buffers contents names aa ak s ∧
+        memW s (locN s "m" + 152) = aa)
+      (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak")))
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, hw⟩ := hp.1.1.2 "ak" hn
+  have hv : v = .val (.word w) := by simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  have hst' : @panMemStoresHOL 64 _ x [.word w] s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem := by
+    simpa only [flattenHOL] using hst
+  obtain ⟨hd, _, hm⟩ := panMemStoresHOL_word_spec hst'
+  have ht := phase2_message_tables_backing_store buffers contents hp.1.1.1 hp.1.2.1 hp.1.2.2.1 hd
+    (phase2_message_offset_inside hp.1.1.1 160 (by decide) hx) hm
+  have hf := phase2_message_store_fields buffers contents hp.1.1.1 160 (by decide) hx hst'
+  refine ⟨⟨ht.1, hp.1.1.2⟩, ht.2.1, ht.2.2, hp.1.2.2.2.1, ?_, ?_, ?_⟩
+  · exact (hf.2.2 19 (by decide) (by decide)).trans hp.2
+  · have hw' : w.toNat = ak := by simpa [locN, hw] using hp.1.2.2.2.2.2.2
+    exact hf.2.1.trans hw'
+  · change memW {s with memory := mem} (locN s "m" + 40) < 2 ^ 63
+    rw [hf.2.2 5 (by decide) (by decide)]
+    exact hp.1.2.2.2.2.1
+
+/-- The concrete final pointer stores establish readiness from uninitialized fields. -/
+theorem phase2_message_table_stores_suffix_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names) :
+    Hoare (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak"))))
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply Hoare.seq_fall (R := fun s => PtxMessageTableStoreReady buffers contents names aa ak s ∧
+    memW s (locN s "m" + 152) = aa)
+  · refine ⟨fun s hc hp ht hr => ?_⟩
+    have hf := (phase2_message_table_pointer_store buffers contents names aa ak 152
+      (by decide) (by decide) "aa" ha).run s hc hp ht hr
+    exact ⟨hf.1, hf.2.trans hf.1.2.2.2.2.2.1⟩
+  · exact phase2_message_ak_store_suffix buffers contents names aa ak hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
