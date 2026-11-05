@@ -6396,7 +6396,7 @@ theorem hoare_lst_new_stable_copy (h : PtxCallees) :
       (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
       locN s "logs" ≠ 0 ∧
       ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
-      (.call (some (VarKind.local, ofString "stable_logs")) (ofString "lst_new")
+      (.call (some (some (VarKind.local, ofString "stable_logs"), none)) (ofString "lst_new")
         [.const 8, .var .local (ofString "stable_log_cap")])
       (fun r t => r = none → StableLengthPre t ∧ StableCopySpatial t ∧
         locN t "logs" ≠ 0 ∧ WordsOK t (locN t "stable_logs", 24) ∧
