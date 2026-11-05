@@ -5670,6 +5670,30 @@ theorem hoare_stableCopy_backing_init :
     · intro F s hp hr
       cases hr
 
+/-- Backing-pointer and counter setup jointly preserve coherent ownership. -/
+theorem hoare_stableCopy_backing_init_owned :
+    Hoare (fun s => (StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      StableCopyOwnedFrame s)
+      (.seq (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+        (.assign .local (ofString "i") (.const 0)))
+      (fun r t => r = none → StableCopyLoopInv t ∧ StableCopyOwnedFrame t) := by
+  have hf := Hoare.seq_fall
+    (hoare_stableCopyOwnedFrame_assign (ofString "stable_lp")
+      (.load .one (.var .local (ofString "stable_logs")))
+      (by decide) (by decide) (by decide))
+    (hoare_stableCopyOwnedFrame_assign (ofString "i") (.const 0)
+      (by decide) (by decide) (by decide))
+  exact ⟨fun s hc hp hnt hr =>
+    ⟨hoare_stableCopy_backing_init.run s hc hp.1 hnt hr,
+      hf.run s hc hp.2 hnt hr⟩⟩
+
 /-- Zeroing the counter realizes the loop-entry weakest precondition. -/
 theorem hoare_stableCopy_zero_entry :
     Hoare (fun s => StableCopyLoopInv
