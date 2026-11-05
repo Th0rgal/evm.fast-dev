@@ -10464,4 +10464,123 @@ theorem phase2_packed_world_continuation_bound (h : PtxCallees)
     (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.2)
     (phase2_packed_cases_initialized_world_hoare h) ht s hc hp
 
+/-- A live caller buffer separated from world ownership and the copy destination
+retains every aligned word through the supplied memcpy contract. -/
+theorem phase2_memcpy_eval_live_buffer (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat) (buffer : Ivl)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hin : Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+    (hsep : ∀ region ∈ worldOwned (callEntryStateHOLFinite s callee) S Nd,
+      Disj buffer region)
+    (hcopy : Disj buffer (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    ∀ p, buffer.1 ≤ p → p + 8 ≤ buffer.1 + buffer.2 → p % 8 = 0 →
+      memW post p = memW s p := by
+  obtain ⟨S', Nd', hw', hg, hf⟩ :=
+    phase2_memcpy_eval_world_frame h s post vs body callee ret r S Nd hc hl he hn hr hp hw hd
+  intro p hlo hhi hal
+  apply phase2_world_frame_heap_disjoint s {post with locals := s.locals}
+    (worldOwned (callEntryStateHOLFinite s callee) S Nd)
+    [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")] buffer p
+    hp.1.2 hin ⟨hlo, hhi⟩ hal hf hsep
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hcopy
+  · exact worldOwned_zero_aligned hw
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+
+/-- Caller-owned word contents carried alongside a world witness. -/
+def PtxLiveBufferAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (buffer : Ivl) (contents : Nat → BitVec 64) : Prop :=
+  Inside buffer InitE.sourceBase (globN s "heap_ptr") ∧
+  IvlsDisj [buffer] (worldOwned s S Nd) ∧
+  ∀ p, buffer.1 ≤ p → p + 8 ≤ buffer.1 + buffer.2 → p % 8 = 0 →
+    memW s p = (contents p).toNat
+
+/-- A world step with separated writes preserves a caller buffer's contents
+and ownership, allowing the same frame to be reused by the next call. -/
+theorem phase2_live_buffer_step {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64) (writes : List Ivl)
+    (hp : PtxLiveBufferAt s S Nd buffer contents)
+    (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ writes ++ [freeGap s]) (heapFree s))
+    (hd : ∀ region ∈ writes, Disj buffer region)
+    (hz : ∀ region ∈ writes, region.2 = 0 → region.1 % 8 = 0) :
+    PtxLiveBufferAt post S' Nd' buffer contents := by
+  refine ⟨⟨hp.1.1, hp.1.2.trans hh⟩,
+    phase2_packed_owned_growth s post _ _ buffer hp.1 hg hp.2.1, ?_⟩
+  intro p hlo hhi hal
+  rw [phase2_world_frame_heap_disjoint s post _ writes buffer p ha hp.1
+    ⟨hlo, hhi⟩ hal hf (hp.2.1 buffer (by simp)) hd (worldOwned_zero_aligned hw) hz]
+  exact hp.2.2 p hlo hhi hal
+
+/-- The live-buffer predicate is independent of caller-local scope and clock. -/
+theorem phase2_live_buffer_with_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (S Nd : List Nat) (buffer : Ivl) (contents : Nat → BitVec 64) :
+    PtxLiveBufferAt {s with locals := locals, clock := clock} S Nd buffer contents ↔
+      PtxLiveBufferAt s S Nd buffer contents := by
+  rfl
+
+/-- A concrete copy returns a joint world/live-buffer witness suitable for
+the next iteration, rather than only pointwise memory equalities. -/
+theorem phase2_memcpy_eval_live_buffer_next (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hcopy : Disj buffer (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    ∃ S' Nd', WorldTypedWith {post with locals := s.locals} S' Nd' ∧
+      PtxLiveBufferAt {post with locals := s.locals} S' Nd' buffer contents := by
+  obtain ⟨S', Nd', hw', hg, hf⟩ :=
+    phase2_memcpy_eval_world_frame h s post vs body callee ret r S Nd hc hl he hn hr hp hw hd
+  have hglobals := phase2_memcpy_eval_globals h s post vs body callee ret r hc hl he hn hr hp
+  have hh := (phase2_copy_globals_heap_eq s {post with locals := s.locals} hglobals).symm.le
+  refine ⟨S', Nd', (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', ?_⟩
+  apply phase2_live_buffer_step s {post with locals := s.locals} S Nd S' Nd'
+    buffer contents [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")] hb hp.1.2
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mp hw) hh hg hf
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hcopy
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
