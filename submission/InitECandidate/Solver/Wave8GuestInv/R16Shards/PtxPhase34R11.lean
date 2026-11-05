@@ -3084,6 +3084,32 @@ theorem stableLengthPost_length_bound {F : Type} (s : PanSemStateFiniteExact 64 
     exact hl.2.2.1
   exact ⟨hb, hp.2.2.2.2.2.1.symm ▸ hb⟩
 
+/-- At loop exit, equality of the live pointer cells transfers log-entry
+validity from the source list to the stable list. -/
+theorem stable_copy_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hcopy : ∀ i, i < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i)) :
+    PtxReceiptsDone s := by
+  have hl := hp.2.1.resolve_left hn
+  have hb := stableLengthPost_length_bound s hp hn
+  have hlen := hp.2.2.2.2.2.1
+  have hfits := hp.2.2.2.2.2.2.1
+  have hwords := hp.2.2.2.2.2.2.2.2
+  refine ⟨hp.1, Or.inr ⟨hh, ha, hb.2, hfits, ?_⟩, hb.2⟩
+  intro i hi
+  rw [hlen] at hi
+  refine ⟨?_, ?_⟩
+  · apply hwords.2.2 i
+    have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hcap
+    simpa using hic
+  · rw [hcopy i hi]
+    exact (hl.2.2.2.2 i (by rw [← hp.2.2.2.1]; exact hi)).2
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
