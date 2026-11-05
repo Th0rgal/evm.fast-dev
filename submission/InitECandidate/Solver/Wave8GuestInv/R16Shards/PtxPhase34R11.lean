@@ -9631,4 +9631,70 @@ theorem gbody_process_transaction_strong_of_h12_backing_nonzero
   intro tail b ht F s hc hp
   exact PtxP34.ptxPhase4_cut_strong_of_backing_nonzero h hnonzero ht s hc hp.1
 
+/-- Phase 3 carries both backing facts under an explicit callee preservation
+contract, together with the existing strong message result and local shapes. -/
+theorem ptxPhase3_cut_backing_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (ptxCost3 + b) := by
+  have he : CallEntryOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      MsgReady (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret hc hp ha hl
+    exact PtxP34.entry_pmc s vs body callee ret hc hp.1.1 ha hl
+  have hr : DecCallResumeOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨⟨PtxP34.resume_pmc_strong hwk s vs body callee ret v post hc hp.1.1 ha hl hb,
+      hback s vs body callee ret v post hc hp.1 ha hl hb⟩,
+      ptxPhase4LocalShapes_resume s post v hp.2⟩
+  have hb : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (K.«process_message_call» + b + 1) := by
+    unfold ptxPhase3 ptxCode
+    exact TerminatingProgBoundedOn.decCall_on h.gb_process_message_call
+      (ofString "out") .one [.var .local (ofString "m")] he hr htail
+  have heq : K.«process_message_call» + b + 1 = ptxCost3 + b := by
+    unfold ptxCost3; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+/-- Parameterized backing-aware transaction export. The prefix, message-call
+backing preservation, and Phase-4 cut remain explicit integration obligations;
+the weaker world contracts alone do not imply them. -/
+theorem gbody_process_transaction_backing_strong_of_h12
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (hback : DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")])
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn
+        (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyBackingStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (h4 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b)) :
+    TerminatingFunBoundedOn TxReadyBackingStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  refine ⟨_, _, _, ptx_lookup, ?_⟩
+  have hb : TerminatingProgBoundedOn TxReadyBackingStrong
+      (ptxPhase1 (ptxPhase2 (ptxPhase3 (ptxPhase4 ptxPhase5))))
+      (ptxCost1 + (ptxCost2 + (ptxCost3 + (ptxCost4 + ptxCost5)))) :=
+    h12 _ _ (ptxPhase3_cut_backing_strong_shapes h hwk hback
+      (h4 _ _ (R13Shards.ptxPhase5_cut h)))
+  rw [← ptx_phases_eq, ptx_cost_eq] at hb
+  intro F s hc hp
+  simpa only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
+    (hb (F := F) s hc hp)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
