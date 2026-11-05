@@ -6221,6 +6221,22 @@ theorem stableCopy_loop_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact seq_bound_trans stableCopy_loop_budget hoare_stableCopy_loop_done htail s hc hp
 
+/-- The ownership-preserving loop composes with a stronger receipt continuation
+at the same concrete loop budget. -/
+theorem stableCopy_loop_owned_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+    TerminatingProgBoundedOn (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s)
+      (.seq
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+          (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+            .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+            (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+        tail) (2 ^ 28 + 1 + b) := by
+  intro F s hc hp
+  exact seq_bound_trans (fun t ht h => stableCopy_loop_budget t ht h.1)
+    hoare_stableCopy_loop_owned htail s hc hp
+
 /-- Counter initialization composes with any bounded full-loop continuation. -/
 theorem stableCopy_init_spatial_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn StableCopyLoopInv tail b) :
