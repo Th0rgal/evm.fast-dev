@@ -6003,4 +6003,37 @@ theorem phase2_packed_ready_globals_kept {F : Type}
   apply phase2_packed_ready_after_copy s post hp hl _ hd hw
   rw [phase2_copy_globals_heap_eq s post hg]
 
+/-- The supplied memcpy contract guarantees an unchanged heap pointer on resumption. -/
+theorem phase2_memcpy_heap_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r → globN post "heap_ptr" = globN s "heap_ptr")
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := h.wk_memcpy
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr
+  have step := hs s hc hp he hn hr
+  exact phase2_copy_globals_heap_eq s _ step.2.2.1
+
+/-- The joint transaction witness protects each live access-list count word. -/
+theorem phase2_tx_count_world_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (R : List Ivl)
+    (tx i : Nat) (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (ht : TxAccessListAt s S Nd tx) (hi : i < memW s (tx + 216))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hr : ∀ region ∈ R,
+      Disj (memW s (tx + 208), 24 * memW s (tx + 216)) region)
+    (hz : ∀ region ∈ R, region.2 = 0 → region.1 % 8 = 0) :
+    memW post (memW s (tx + 208) + 24 * i + 16) =
+      memW s (memW s (tx + 208) + 24 * i + 16) := by
+  have hpos : 0 < memW s (tx + 216) := by omega
+  have hin := (ht.2.2 hpos).1
+  have hsep := (ht.2.2 hpos).2
+  have hal : memW s (tx + 208) % 8 = 0 :=
+    (ht.1.2.2.2.2.2.2.2.2.1 hpos).1
+  exact phase2_world_frame_heap_disjoint s post (worldOwned s S Nd) R
+    (memW s (tx + 208), 24 * memW s (tx + 216))
+    (memW s (tx + 208) + 24 * i + 16) ha hin
+    (by constructor <;> dsimp <;> omega) (by omega) hf
+    (hsep _ (by simp)) hr (worldOwned_zero_aligned hw) hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
