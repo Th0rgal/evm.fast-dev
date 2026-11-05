@@ -2729,6 +2729,20 @@ theorem phase4StableAllocation_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat
   · intro F s vs body callee ret v post hc hp ha hl hr
     exact lst_new_stable_storage_resume h s vs body callee ret v post hc hp ha hl hr
 
+theorem phase4StableSetup_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 3 (spineAt 130 ptxCode) tail) (K.lst_new + b + 1) := by
+  have hb := @phase4StableCap_cut _ _ (phase4StableAllocation_cut h htail)
+  have he : spinePlug 3 (spineAt 130 ptxCode) tail =
+      spinePlug 2 (spineAt 130 ptxCode)
+        (spinePlug 1 (spineAt 132 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
