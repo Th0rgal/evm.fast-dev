@@ -6651,4 +6651,51 @@ theorem phase2_memcpy_eval_state (h : PtxCallees) {F : Type}
   exact ⟨step.1.1, phase2_memcpy_restore_globals s post callee step.2.2.1,
     phase2_memcpy_domain_of_guestInv s post hi step.1.1⟩
 
+/-- Concrete memcpy evaluation preserves every live count in the caller's record array. -/
+theorem phase2_memcpy_eval_counts (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat) (tx : Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (ht : TxAccessListAt (callEntryStateHOLFinite s callee) S Nd tx)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hsep : Disj (memW s (tx + 208), 24 * memW s (tx + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    ∀ i, i < memW s (tx + 216) →
+      memW post (memW s (tx + 208) + 24 * i + 16) =
+        memW s (memW s (tx + 208) + 24 * i + 16) := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup (phase2_memcpy_count_contract h)
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  intro i hi
+  exact hs hr S Nd tx i ha hw ht hi hd hsep hlen
+
+/-- Header and live-count preservation restore guarded indices in the caller state. -/
+theorem phase2_packed_copy_restore_indices {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hr : PtxPackedKeysReady { post with locals := s.locals })
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex { post with locals := s.locals } := by
+  apply phase2_packed_copy_live_frame s _ hp hr
+  · intro n hn
+    rfl
+  · exact hh.2
+  · intro i hi
+    change memW post (memW post (locN s "tx" + 208) + 24 * i + 16) = _
+    rw [hh.1]
+    exact hm i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
