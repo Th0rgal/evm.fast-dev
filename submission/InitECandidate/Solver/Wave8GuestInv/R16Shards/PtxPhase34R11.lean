@@ -6630,6 +6630,46 @@ theorem stable_length_decl_loop_cut {tail : ProgHOL 64} {b : Nat}
     (.var .local (ofString "nl"))
   exact ⟨by omega, by omega⟩
 
+/-- Length storage and scoped copying retain ownership for the receipt tail. -/
+theorem stable_length_decl_loop_owned_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+    TerminatingProgBoundedOn (fun s => (StableLengthPre s ∧ StableCopyOwnedFrame s ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+      locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (spinePlug 4 (spineAt 133 ptxCode) tail) (2 ^ 28 + 1 + b) := by
+  have he : spinePlug 4 (spineAt 133 ptxCode) tail =
+    (.seq (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+      (.var .local (ofString "nl")))
+      (.dec (ofString "stable_lp") .one
+        (.load .one (.op .add [.var .local (ofString "stable_logs"), .const 0]))
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+            (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+              .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+              (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+            tail)))) := by
+    unfold ptxCode phase4LogCopySrc
+    rfl
+  rw [he]
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans (a := 0)
+    (fun t _ _ _ => by
+      have ht := clock_store t (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl"))
+      exact ⟨by omega, by omega⟩)
+    hoare_stable_length_owned_copy_ready
+    (stableCopy_backing_decl_owned_cut (stableCopy_loop_owned_cut htail)) s hc hp
+
 /-- Package the length-write framing facts into the complete copy setup contract. -/
 theorem stable_length_copy_setup_ready {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
