@@ -6012,4 +6012,41 @@ theorem ws_get_code_tail_return {F : Type} (s : PanSemStateFiniteExact 64 F)
     sizeOfShapeWithContextHOL] at hv ⊢
   exact ⟨hv.symm, hn, rfl⟩
 
+/-- The final `ext_code_of` return forwards the actual bounded code pair. -/
+theorem ext_code_of_tail_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (code code_n : BitVec 64)
+    (hc : s.locals.lookup (ofString "c") =
+      some (.rStruct [.val (.word code), .val (.word code_n)]))
+    (hn : code_n.toNat < 2 ^ 40) :
+    Ret s (.return (.var .local (ofString "c")))
+      (fun v post => v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  apply Ret.ret
+  intro v hv
+  have he : ev s (.var .local (ofString "c")) =
+      some (.rStruct [.val (.word code), .val (.word code_n)]) := hc
+  rw [he] at hv
+  cases hv
+  exact ⟨rfl, hn, rfl⟩
+
+/-- A missing code entry takes exactly the catchable `StateErr(2)` path. -/
+theorem ws_get_code_missing_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word 0), .val (.word code), .val (.word code_n)]))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))]))) =
+      (some (.exception (ofString "StateErr") (.val (.word 2))), emptyLocalsHOLFinite s) := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_raise, hshape, evalHOLExact, shapeOfHOLExact]
+
 end HeadStore
