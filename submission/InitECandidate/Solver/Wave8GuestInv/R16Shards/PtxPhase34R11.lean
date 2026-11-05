@@ -6408,6 +6408,62 @@ theorem hoare_lst_new_stable_copy (h : PtxCallees) :
   exact ⟨hpre, hs,
     lst_new_stable_copy_operands h s vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
+/-- Retain the coherent header/world witness needed by the subsequent length store. -/
+theorem hoare_lst_new_stable_joint (h : PtxCallees) :
+    Hoare (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.call (some (some (.local, ofString "stable_logs"), none)) (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")])
+      (fun r s => r = none → (StableLengthPre s ∧
+        (∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+          (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+          (∀ o ∈ worldOwned s S Nd,
+            Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o)) ∧
+        Disj (locN s "logs", 24)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+        Disj (locN s "stable_logs", 24)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+        Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+        ∀ j, j < memW s (locN s "logs" + 8) →
+          Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+            (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+        locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  apply Hoare.callLocal_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact ⟨lst_new_stable_length_joint_pre h s vs body callee ret v post hc hp.1
+      (stable_length_canonical_operand s hp.2.1) ha hl hr,
+    lst_new_stable_copy_operands h s vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
+
+/-- The concrete allocator call adds its callee budget before a copy-ready tail. -/
+theorem stable_allocation_copy_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun t => StableLengthPre t ∧ StableCopySpatial t ∧
+      locN t "logs" ≠ 0 ∧ WordsOK t (locN t "stable_logs", 24) ∧
+      ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.seq (.call (some (some (.local, ofString "stable_logs"), none)) (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")]) tail)
+      ((K.lst_new + 1) + b) := by
+  refine seq_bound_trans (P := fun s => Phase4StableCapReady s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN s "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    ?_ (hoare_lst_new_stable_copy h) htail
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.call_on (P := fun t => Phase4StableCapReady t ∧
+    (∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN t "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p)))
+    h.fb_lst_new _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1.1.1.1.1)
+    s hc hp
+
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
