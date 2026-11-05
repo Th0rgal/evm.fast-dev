@@ -5254,4 +5254,17 @@ theorem phase2_packed_storage_destination_toNat {F : Type} (s : PanSemStateFinit
     (base + k * 52 + 20).toNat = locN s "al_keys" + 52 * locN s "k" + 20 := by
   exact phase2_packed_key_destination_toNat s hp base k ha hk hb
 
+/-- Framing the access-list header and record counts preserves the total key count. -/
+theorem phase2_packed_copy_total_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    txAccessSlots post (locN post "tx") = txAccessSlots s (locN s "tx") := by
+  change phase2_key_prefix post (memW post (locN post "tx" + 216)) =
+    phase2_key_prefix s (memW s (locN s "tx" + 216))
+  rw [hc]
+  exact phase2_key_prefix_congr s post _ hm
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
