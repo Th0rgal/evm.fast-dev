@@ -2791,4 +2791,28 @@ theorem phase2_address_store_teReady_joint {F : Type} {s : PanSemStateFiniteExac
   simpa only [phase2_address_store_header hp hin hm 216 (by decide) (by decide),
     phase2_address_store_header hp hin hm 208 (by decide) (by decide)] using hrr
 
+/-- The address invariant is stable under a store when both scratch buffers
+are disjoint from the same transaction world. -/
+theorem phase2_address_store_ready_joint {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    (hd : IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)] (worldOwned s S Nd))
+    (hte : IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxAddressReady { s with memory := mem } ∧
+    WorldTypedWith { s with memory := mem } S Nd ∧
+    IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)]
+      (worldOwned { s with memory := mem } S Nd) ∧
+    IvlsDisj [(locN s "te", 200)] (worldOwned { s with memory := mem } S Nd) := by
+  have hte' := phase2_address_store_teReady_joint hp hW hT hd hte hx hin hm
+  have hr := phase2_address_store_ready_of_teReady hp hx hin hm hte'
+  obtain ⟨_, hW', how⟩ := phase2_store_validated_outside hp.1.1.1.1 hW hT
+    (blk := (locN s "al_addrs", (locN s "nal" + 1) * 8))
+    (fun o ho => hd _ (by simp) o ho) hx hin
+    hp.2.2.2.2.2.2.1 hp.2.2.2.2.2.2.2.1 hm
+  exact ⟨hr, hW', by rw [how]; exact hd, by rw [how]; exact hte⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
