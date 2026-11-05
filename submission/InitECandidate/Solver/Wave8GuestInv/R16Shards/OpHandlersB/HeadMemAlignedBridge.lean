@@ -8355,6 +8355,38 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
 
 end IcsRun
 
+/-- The concrete cleanup restores the saved frame-memory mark and preserves
+every chain alignment cell.  The only memory write is the parent's pc. -/
+theorem finish_child_cleanup_cells {F : Type} (t post : PanSemStateFiniteExact 64 F)
+    (hcode : t.code = originalRuntimeCode)
+    (cm cmm e pc : BitVec 64) (v : ValueHOL 64)
+    (hcm : t.locals.lookup (ofString "child_mark") = some (.val (.word cm)))
+    (hcmm : t.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmm)))
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hpc : t.memory e = .word pc) (hdom : t.memaddrs e)
+    (hsafe : ∀ ec ∈ evmChain t,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ e ∧ BitVec.ofNat 64 (ec.1 + 32) ≠ e ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ e ∧ BitVec.ofNat 64 (ec.2 + 56) ≠ e)
+    (hr : evaluateHOLFiniteState t EvmEkFk.fcCleanup = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree t post ∧
+    globN post "ev" = globN t "ev" ∧
+    globN post "frame_mem_ptr" = cmm.toNat ∧
+    globN post "scratch_ptr" = cm.toNat := by
+  have htail := Ret.apply (finish_child_tail t hcode cm cmm e pc hcm hcmm he hpc hdom) hr
+  obtain ⟨hg, hm, _, _⟩ := htail
+  have hcells : EvmEkFk.ChainCellsAgree t post := by
+    intro ec hec
+    obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
+    have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e) : memW post a = memW t a := by
+      unfold memW
+      rw [hm, updW_ne _ _ _ _ ha]
+    exact ⟨hkeep _ h24, hkeep _ h32, hkeep _ h40, hkeep _ h56⟩
+  have hn1 : ofString "frame_mem_ptr" ≠ ofString "ev" := by decide
+  have hn2 : ofString "scratch_ptr" ≠ ofString "ev" := by decide
+  have hn3 : ofString "frame_mem_ptr" ≠ ofString "scratch_ptr" := by decide
+  refine ⟨hcells, ?_, ?_, ?_⟩ <;>
+    simp [globN, hg, HolFiniteMapExact.lookup_update, FUPDATE, hn1, hn2, hn3]
+
 /-! ## Create-finish prelude interface
 
 The frame-start/finish-child leaf is independent of this bridge.  Transport its
