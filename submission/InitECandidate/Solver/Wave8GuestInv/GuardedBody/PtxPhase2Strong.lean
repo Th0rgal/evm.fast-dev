@@ -409,6 +409,27 @@ theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64
   · simpa only [hk "enc" (by simp)] using hp.2.2.1
   · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
 
+theorem phase1_resume_frame_prefix
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fn : MlS} {args : List (ExpHOL 64)}
+    (hr : DecCallResumeOn P Q name fn args)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    DecCallResumeOn (fun s => P s ∧ PtxPhase1ShapePrefix s)
+      (fun s => Q s ∧ PtxPhase1ShapePrefix s) name fn args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ⟨hr s vs body callee ret v post hc hp.1 ha hl hb,
+    phase1_shapePrefix_resume s post hp.2 name v hne⟩
+
+theorem phase1_resume_blob_gas_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "tx_blob_gas_used") (ofString "calculate_total_blob_gas")
+      [.var .local (ofString "tx")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_ro_stage h.ro_calculate_total_blob_gas (by decide) _
+  · decide
+
 /-- The validation stage already retains the complete intrinsic triple. -/
 theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hstage : R16Shards.PtxP1.StageP 2 s)
