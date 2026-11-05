@@ -4026,4 +4026,16 @@ theorem phase2_address_count_updates_hoare :
   exact Hoare.seq_fall phase2_address_count_nkeys_hoare
     phase2_address_count_increment_hoare
 
+/-- The current record pointer is a nonwrapping natural address. -/
+theorem phase2_address_count_record_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    memW s (locN s "tx" + 208) + 24 * locN s "i" + 24 ≤ 2 ^ 64 := by
+  have hn : 0 < memW s (locN s "tx" + 216) := by rw [← hp.2.1]; omega
+  obtain ⟨S, Nd, hW, hT, hd, hte⟩ := hp.1.1.2
+  have hA := hp.1.1.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl (hT.2.2 hn).1)).2
+  rw [hp.2.1] at hi
+  dsimp at hb
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
