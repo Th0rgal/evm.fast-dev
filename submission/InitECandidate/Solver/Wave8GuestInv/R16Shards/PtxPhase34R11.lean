@@ -2601,6 +2601,30 @@ theorem lst_new_stable_fresh (h : PtxCallees) {F : Type}
   · simpa only [hargs.1, hargs.2.1] using hb
   · simpa only [hargs.1, hargs.2.1] using hd
 
+/-- The allocator separates its returned header from its backing region. -/
+theorem lst_new_stable_resumed_header_backing (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "stable_logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, rfl, _, _, hf⟩ := ht v rfl
+  have hd := (hf hargs.2.2.2 hargs.2.2.1).2.2.1
+  rw [hargs.1, hargs.2.1] at hd
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using hd
+
 /-- Fresh header allocation establishes the allocation premise of the length store. -/
 theorem lst_new_stable_header_allocated (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
