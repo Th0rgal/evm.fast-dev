@@ -2260,6 +2260,33 @@ theorem hoare_phase4LogCopyBody
   exact Hoare.decCall_fall (by decide) localsOnly_phase4LogPointersReady hresume
     (hoare_logSlot_store_increment phase4LogCopySrc phase4LogCopySrc_word)
 
+theorem phase4LogCopyLoop_bound (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4LogPointersReady
+  · unfold phase4LogCopyBody
+    have hb : TerminatingProgBoundedOn Phase4LogPointersReady phase4LogCopyBody
+        (K.lst_push + (0 + 0) + 1) := TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+      (ofString "slot") ShapeHOL.one
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+      (P := Phase4LogPointersReady) (Q := Phase4LogSlotReady)
+      (by intro F s vs body callee ret hc hp ha hl
+          exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1)
+      hresume
+      (seq_bound_trans
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+        (hoare_logSlot_store phase4LogCopySrc phase4LogCopySrc_word)
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _)))
+    intro F s hc hp
+    simpa only [phase4LogCopyBody, Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
