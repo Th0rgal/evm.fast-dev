@@ -2999,6 +2999,46 @@ theorem alloc_body_evmStepCC {F : Type} (s : PanSemStateFiniteExact 64 F)
     unfold memB
     rw [hm, hb]
 
+theorem transfer_alloc_body_spec {F : Type} (s : PanSemStateFiniteExact 64 F) (n : Nat)
+    (hn : n = 40 ∨ n = 96 ∨ n = 32)
+    (hInv : EvmInv s) (hsize : locN s "n" = n)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)
+    ∃ p : BitVec 64, out.1 = some (.returned (.val (.word p))) ∧
+      p.toNat = globN s "heap_ptr" ∧
+      globN out.2 "heap_ptr" = p.toNat + n ∧
+      WordsOK out.2 (p.toNat, n) ∧
+      Inside (p.toNat, n) sourceBase (globN out.2 "heap_ptr") ∧
+      EvmStepCC ["heap_ptr"] s out.2 := by
+  dsimp only
+  have hA : ArenaReady s := hInv.1
+  obtain ⟨p, q, hr, hp, hq, hlim, h8, hpq, hg, hm, hb, hma, hAp, hhp, hsp⟩ :=
+    R13Shards.alloc_body_resumes_props s hA.1.code hA hres
+  have halign : (n + 7) / 8 * 8 = n := by rcases hn with rfl | rfl | rfl <;> decide
+  rw [hsize, halign] at hq
+  have hlo : sourceBase ≤ p.toNat := by rw [hp]; exact hA.2.1
+  have hin : Inside (p.toNat, n) sourceBase (globN
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2 "heap_ptr") := by
+    exact ⟨hlo, by rw [hhp, hq]⟩
+  refine ⟨p, hr, hp, hhp.trans hq, ?_, hin, alloc_body_evmStepCC s hInv hres⟩
+  apply wordsOK_of_inside_heap _ hAp.1.memaddrs
+  · rw [hp]; exact hA.2.2.2.2.2.2.1
+  · rcases hn with rfl | rfl | rfl <;> decide
+  · exact hlo
+  · have : heapLimit ≤ heapEnd := by decide
+    omega
+
+theorem ek_cc_alloc :
+    EvmKeeps EvmInv ["heap_ptr"] (ofString "alloc") ∧
+      ChainCellsKept EvmInv (ofString "alloc") := by
+  constructor
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).1
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).2
+
 private theorem lookup_lst_push_local :
     originalRuntimeCode.lookup (ofString "lst_push") =
       some ([(ofString "l", .one), (ofString "esz", .one)],

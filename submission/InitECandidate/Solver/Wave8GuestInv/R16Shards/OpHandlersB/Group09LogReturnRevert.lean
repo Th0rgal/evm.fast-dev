@@ -11662,4 +11662,90 @@ theorem log_growth_final_cells_g09 {F : Type}
     obtain ⟨hs, h8, h16, h0⟩ := hold i hi
     simp [memW, hs, h8, h16, h0]
 
+/-- Interval separation of the fresh buffer and list header discharges every
+word-address inequality needed for final growth readback. -/
+theorem log_growth_write_disjoint_g09 {l p n : BitVec 64}
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hd : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24)) :
+    l ≠ l + 8#64 ∧ l ≠ l + 16#64 ∧ l + 8#64 ≠ l + 16#64 ∧
+    p + n * 8#64 ≠ l ∧ p + n * 8#64 ≠ l + 8#64 ∧
+    p + n * 8#64 ≠ l + 16#64 ∧
+    (∀ i : Nat, i < n.toNat →
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ p + n * 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 16#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l) := by
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8]
+    rw [Nat.mod_eq_of_lt (by omega)]
+    omega
+  have hsep : p.toNat + 8 * n.toNat + 8 ≤ l.toNat ∨
+      l.toNat + 24 ≤ p.toNat := by
+    rcases hd with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · dsimp only at hz; omega
+    · exact Or.inl hleft
+    · exact Or.inr hright
+  have hne : ∀ (a b : BitVec 64), a.toNat ≠ b.toNat → a ≠ b := by
+    intro a b hab heq; exact hab (congrArg BitVec.toNat heq)
+  refine ⟨hne _ _ (by rw [hl8]; omega), hne _ _ (by rw [hl16]; omega),
+    hne _ _ (by rw [hl8, hl16]; omega), hne _ _ (by rw [hs]; omega),
+    hne _ _ (by rw [hs, hl8]; omega), hne _ _ (by rw [hs, hl16]; omega), ?_⟩
+  intro i hi
+  have hiNat : (BitVec.ofNat 64 (p.toNat + 8 * i)).toNat = p.toNat + 8 * i := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  exact ⟨hne _ _ (by rw [hiNat, hs]; omega),
+    hne _ _ (by rw [hiNat, hl8]; omega),
+    hne _ _ (by rw [hiNat, hl16]; omega), hne _ _ (by rw [hiNat]; omega)⟩
+
+/-- Fresh-allocation separation supplies final growth readback directly,
+including natural-number length/capacity values and preservation of the copy. -/
+theorem log_growth_readback_of_fresh_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap q log : BitVec 64)
+    (objects : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l + 8#64).toNat = n.toNat + 1 ∧
+    memW post (l + 16#64).toNat = cap.toNat * 2 ∧
+    n.toNat + 1 ≤ cap.toNat * 2 ∧
+    memW post (p + n * 8#64).toNat = log.toNat ∧
+    (∀ i : Nat, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i)) := by
+  obtain ⟨hnc, hcap2, hsz, hn8, hn1, hcapacity, _, _, hslot, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  have hslot' : p.toNat + 8 * n.toNat + 8 ≤ q.toNat := by
+    rwa [hn8] at hslot
+  have hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24) := by
+    have hd := hfresh (p.toNat, q.toNat - p.toNat) (by simp) _ hheader
+    rcases hd with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr hright))
+  have hq := q.isLt
+  obtain ⟨h08, h016, h816, hs0, hs8, hs16, hold⟩ :=
+    log_growth_write_disjoint_g09 hl (by omega) hdisj
+  obtain ⟨h0, h8, h16, hstore, hprefix⟩ :=
+    log_growth_final_cells_g09 s l p n cap log h08 h016 h816 hs0 hs8 hs16 hold
+  exact ⟨h0, h8.trans hn1, h16.trans hcap2, hcap2 ▸ hcapacity, hstore, hprefix⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
