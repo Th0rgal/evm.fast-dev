@@ -10823,4 +10823,72 @@ theorem phase2_packed_copies_live_hoare (h : PtxCallees)
   exact Hoare.seq_fall (phase2_packed_address_copy_live_hoare h addressSrc buffer contents)
     (phase2_packed_storage_copy_live_hoare h keySrc buffer contents)
 
+/-- Saved caller resources at loop boundaries, independent of the loop indices. -/
+def PtxPackedLiveResource {F : Type} (buffer : Ivl) (contents : Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd) ∧ PtxLiveBufferAt s S Nd buffer contents
+
+/-- Local counter changes retain the shared ownership witness and saved contents. -/
+theorem phase2_packed_live_resource_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hp : PtxPackedLiveResource buffer contents s)
+    (ht : locN {s with locals := locals, clock := clock} "tx" = locN s "tx")
+    (ha : locN {s with locals := locals, clock := clock} "al_keys" = locN s "al_keys")
+    (hn : locN {s with locals := locals, clock := clock} "nkeys" = locN s "nkeys") :
+    PtxPackedLiveResource buffer contents {s with locals := locals, clock := clock} := by
+  obtain ⟨S, Nd, hw, htx, hs, hb⟩ := hp
+  refine ⟨S, Nd, (worldTypedWith_with_locals s locals clock S Nd).mpr hw, ?_, ?_, hb⟩
+  · rw [ht]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals s locals clock htx
+  · rw [ha, hn]
+    exact hs
+
+/-- Any assignment away from the resource pointers preserves the caller frame. -/
+theorem phase2_packed_live_resource_assign (buffer : Ivl) (contents : Nat → BitVec 64)
+    (name : MlS) (e : ExpHOL 64)
+    (ht : name ≠ ofString "tx") (ha : name ≠ ofString "al_keys")
+    (hn : name ≠ ofString "nkeys") :
+    Hoare (PtxPackedLiveResource buffer contents) (.assign .local name e)
+      (fun r s => r = none → PtxPackedLiveResource buffer contents s) := by
+  apply Hoare.assign
+  · intro F s v hp he hr
+    apply phase2_packed_live_resource_locals s _ s.clock buffer contents hp
+    all_goals simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ht, ha, hn]
+  · exact fun _ _ hr => by cases hr
+
+/-- Both loop-counter assignments preserve the saved caller frame. -/
+theorem phase2_packed_live_resource_counters (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveResource buffer contents)
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedLiveResource buffer contents s) := by
+  exact Hoare.seq_fall
+    (phase2_packed_live_resource_assign buffer contents _ _ (by decide) (by decide) (by decide))
+    (phase2_packed_live_resource_assign buffer contents _ _ (by decide) (by decide) (by decide))
+
+/-- The complete source-order copy/counter body preserves the saved caller frame. -/
+theorem phase2_packed_body_live_resource_hoare (h : PtxCallees)
+    (addressSrc keySrc : ExpHOL 64) (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedLiveResource buffer contents s) := by
+  apply Hoare.seq_fall (phase2_packed_address_copy_live_hoare h addressSrc buffer contents)
+  apply Hoare.seq_fall (phase2_packed_storage_copy_live_hoare h keySrc buffer contents)
+  exact Hoare.mono (phase2_packed_live_resource_counters buffer contents)
+    (fun _ hp => hp.2.1.2)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
