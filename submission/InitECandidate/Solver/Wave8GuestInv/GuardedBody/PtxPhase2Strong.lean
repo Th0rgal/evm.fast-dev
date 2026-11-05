@@ -5843,4 +5843,35 @@ theorem phase2_world_frame_record_counts {F : Type}
     exact not_cellHits_of_disj hal (hz region hr) hin (hk region hr)
   · exact not_cellHits_of_disj hal hzero hin hn
 
+/-- Allocated input words are outside both arena regions in a world-step frame. -/
+theorem phase2_world_frame_heap_word {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (old R : List Ivl) (p : Nat)
+    (ha : ArenaOK s)
+    (hin : Inside (p, 8) InitE.sourceBase (globN s "heap_ptr"))
+    (hf : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (ho : ∀ region ∈ old, ¬ CellHits p region)
+    (hr : ∀ region ∈ R, ¬ CellHits p region) :
+    memW post p = memW s p := by
+  have hsep : heapLimit ≤ InitE.scratchStart := by decide
+  obtain ⟨_, hhp, hfm, hsc, _⟩ := ha
+  have hp : p < 2 ^ 64 := by
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    unfold Inside at hin
+    dsimp at hin
+    omega
+  apply phase2_world_frame_word s post _ _ p hf hp
+  · intro region hm
+    rcases List.mem_append.1 hm with hm | hm
+    · rcases List.mem_append.1 hm with hm | hm
+      · exact ho region hm
+      · exact hr region hm
+    · simp only [List.mem_singleton] at hm
+      subst region
+      unfold CellHits freeGap Inside at *
+      dsimp at *
+      omega
+  · unfold CellHits heapFree Inside at *
+    dsimp at *
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
