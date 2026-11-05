@@ -3190,6 +3190,29 @@ theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro i hi _
   omega
 
+/-- The actual zero counter initialization establishes the copy invariant. -/
+theorem stableCopyInv_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap") :
+    StableCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+  have hpost : StableLengthPost (setVarHOLFinite (ofString "i") (.val (.word 0)) s) :=
+    LocalsOnly.setVar localsOnly_stableLengthPost (by decide) _ s hp
+  apply stableCopyInv_zero _ hpost
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "logs" from by decide] using hn
+  · change WordsOK s _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "stable_logs" from by decide] using hh
+  · change Allocated s _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "stable_logs" from by decide] using ha
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nl" from by decide,
+      show ofString "i" ≠ ofString "stable_log_cap" from by decide] using hcap
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hj : locN s "i" < locN s "nl") :
     WordAt s (locN s "lp" + 8 * locN s "i") ∧
