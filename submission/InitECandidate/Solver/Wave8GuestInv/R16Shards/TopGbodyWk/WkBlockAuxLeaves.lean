@@ -7829,4 +7829,44 @@ theorem merge_fresh_inner_ne_outer {F : Type} {s : PanSemStateFiniteExact 64 F}
     simp [recRoles, hbs]
   exact (hfresh _ (List.mem_append_left _ hm)).symm
 
+/-- Outer insertion leaves every nonempty fixed world object untouched. -/
+theorem merge_set_fixed_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ fixedObjects s, i.2 ≠ 0 → IvlUnhit s post i := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  intro i hi hpos
+  have hal : Allocated s i := by
+    rcases hW.2.2.1.1 i hi with hz | ⟨hal, _⟩
+    · exact False.elim (hpos hz)
+    · exact hal
+  exact ivlUnhit_of_frameOutside_aligned hpos hfr ht_al hf_al
+    (fun j hj => (((hW.1.2.1 t ht).2 j hj).2 i hi).flip)
+    (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp (Or.inr hal))
+
+/-- Outer insertion preserves the block record's pointer to that outer table. -/
+theorem merge_set_bs_outer_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbs : globN s "bs" ≠ 0) :
+    globN post "bs" = globN s "bs" ∧
+    memW post (globN post "bs" + 32) = memW s (globN s "bs" + 32) := by
+  have hg : globN post "bs" = globN s "bs" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bs") (by decide))
+  have hm := typedRecord_mem_fixedObjects s (r := ("bs", 80)) (by simp [typedRecords])
+  simp only [hbs, ↓reduceIte] at hm
+  have hu := merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  exact ⟨hg, rec_word_eq_of_unhit hA.2 hW.2.2.1 "bs" 80
+    (by simp [typedRecords]) hg hbs hu (by decide) (by decide)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
