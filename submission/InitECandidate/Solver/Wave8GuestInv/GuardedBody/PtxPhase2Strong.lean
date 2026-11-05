@@ -3663,4 +3663,17 @@ theorem phase2_key_prefix_succ {F : Type} (s : PanSemStateFiniteExact 64 F) (i :
       memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
   simp [phase2_key_prefix, List.range_succ, List.map_append, List.sum_append]
 
+/-- Every processed prefix is bounded by the transaction's total key count. -/
+theorem phase2_key_prefix_le_total {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {i : Nat} (hi : i ≤ memW s (locN s "tx" + 216)) :
+    phase2_key_prefix s i ≤ txAccessSlots s (locN s "tx") := by
+  have hm : ∀ j k, j ≤ k → phase2_key_prefix s j ≤ phase2_key_prefix s k := by
+    intro j k hjk
+    induction hjk with
+    | refl => exact Nat.le_refl _
+    | @step k hk ih =>
+      rw [phase2_key_prefix_succ]
+      exact Nat.le_trans ih (Nat.le_add_right _ _)
+  exact hm i _ hi
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
