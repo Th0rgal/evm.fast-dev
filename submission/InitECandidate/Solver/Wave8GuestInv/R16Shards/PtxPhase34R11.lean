@@ -1787,6 +1787,34 @@ theorem phase4ThroughReceipt_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact hb s hc hp
 
+theorem phase4ReceiptStores_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptEncoded tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptEncoded
+      (spinePlug 2 (spineAt 124 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4ReceiptEncoded
+      (spinePlug 2 (spineAt 124 ptxCode) tail) (0 + (0 + b)) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (store_receiptSlot false) ?_
+    exact seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (store_receiptSlot true) htail
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+theorem phase4ThroughReceiptStores_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptEncoded tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 27 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + (K.encode_receipt + b + 1))) := by
+  have hb := @phase4ThroughReceipt_cut h _ _ (phase4ReceiptStores_cut htail)
+  have he : spinePlug 27 (spineAt 99 ptxCode) tail =
+      spinePlug 25 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 124 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
