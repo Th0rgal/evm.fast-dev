@@ -6847,4 +6847,218 @@ theorem merge_outer_item_continuation {F : Type}
   rw [hr, hp]
   exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
 
+/-- A read-only call carries a return-value fact into a continuation that may
+fall through, break, continue, or resume. Catchable callee exceptions retain
+the same world frame without running the continuation. -/
+theorem eval_decCall_readOnly_with_return {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x fname : MlS)
+    (sh : ShapeHOL) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (Q : ValueHOL 64 → Prop)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hf : ReadOnlyFn fname)
+    (hq : ∀ vs body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vs →
+      lookupCodeHOLFinite s.code.lookup fname vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) → Q v)
+    (hcont : ∀ v ck, Q v →
+      let next := setVarHOLFinite x v { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState next cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        next (evaluateHOLFiniteState next cont).1 (evaluateHOLFiniteState next cont).2)
+    (hnt : (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1
+        (evaluateHOLFiniteState s (.decCall x sh fname args cont)).2 := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp only [ha] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp only [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        simp only [hr] at hnt hfr ⊢
+        have hnc : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠ some .timeOut := by
+          rw [hr]; rintro rfl; exact hnt rfl
+        have hframe := FunSpec.at_lookup hf s hc vs body callee ret hl
+          (guestInv_callEntry s callee hW.1.1) hnc
+        rw [hr] at hframe
+        cases r with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some r =>
+          cases r with
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | timeOut => exact absurd rfl hnt
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            split at hnt
+            · rename_i hshape
+              rw [if_pos hshape] at hfr ⊢
+              have hp := hframe (Or.inl ⟨v, rfl⟩)
+              dsimp only at hp
+              have hp' : { post with locals := s.locals } = { s with clock := post.clock } := by
+                rw [hp]; rfl
+              rw [hp'] at hnt hfr ⊢
+              have hs := hcont v post.clock (hq vs body callee ret v post ha hl hr) hnt hfr
+              exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
+            · rename_i hshape
+              rw [if_neg hshape] at hfr
+              exact absurd hfr not_flowingOrResumes_error
+          | exception e v =>
+            dsimp only at hfr ⊢
+            have hres : Resumes (some (.exception e v)) := by
+              rcases hfr with h | h | h | h <;> try simp at h
+              exact h
+            have hp := hframe hres
+            dsimp only at hp
+            rw [hp]
+            exact (WorldStepSc.refl s none hW.1).with_locals_clock _ _
+
+/-- Two word parameters are recovered independently of the return shape. -/
+theorem lookup_two_word_result {fname p1 p2 : MlS} {body found : ProgHOL 64}
+    {rs ret : ShapeHOL} {vals : List (ValueHOL 64)}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)} (hne : p1 ≠ p2)
+    (hlook : originalRuntimeCode.lookup fname = some ([(p1, .one), (p2, .one)], body, rs))
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup fname vals = some (found, L, ret)) :
+    found = body ∧ ret = rs ∧ ∃ w1 w2 : BitVec 64,
+      vals = [.val (.word w1), .val (.word w2)] ∧
+      L.lookup p1 = some (.val (.word w1)) ∧ L.lookup p2 = some (.val (.word w2)) := by
+  have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup fname vals found L ret hl
+  simp only [lookupCodeHOLExact, hlook] at hx
+  rcases vals with _ | ⟨v1, _ | ⟨v2, _ | _⟩⟩
+  · simp at hx
+  · simp at hx
+  · rcases v1 with ⟨⟨w1⟩⟩ | _ | _ <;> rcases v2 with ⟨⟨w2⟩⟩ | _ | _ <;>
+      simp [shapeOfHOLExact, shapeEqHOL] at hx
+    obtain ⟨_, rfl, hL, rfl⟩ := hx
+    refine ⟨rfl, rfl, w1, w2, rfl, ?_, ?_⟩
+    · rw [← hL]; simp [hne]
+    · rw [← hL]; simp
+  · simp at hx
+
+/-- Block outer lookup ownership is available on normal loop fall-through as
+well as resumable exits. -/
+theorem merge_outer_get_flow_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS)
+    (tExp keyExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0)
+    (ht : ∀ tw : BitVec 64, evalAt s tExp = some (.val (.word tw)) →
+      tw.toNat = memW s (globN s "bs" + 32))
+    (hcont : ∀ (f0 f1 : BitVec 64) (ck : Nat),
+      (f0 ≠ 0 → f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32))) →
+      let next := setVarHOLFinite x (.rStruct [.val (.word f0), .val (.word f1)])
+        { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState next cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        next (evaluateHOLFiniteState next cont).1 (evaluateHOLFiniteState next cont).2)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1
+        (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).2 := by
+  apply eval_decCall_readOnly_with_return s x _ _ _ cont
+    (fun v => ∃ f0 f1 : BitVec 64, v = .rStruct [.val (.word f0), .val (.word f1)] ∧
+      (f0 ≠ 0 → f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32))))
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_get ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, tw, kw, rfl, htw, hkw⟩ :=
+      lookup_two_word_result (by decide) WkBal.lookup_htab_get hl
+    have he : evalAt s tExp = some (.val (.word tw)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    have heq := ht tw he
+    have hent := guestInv_callEntry s callee hW.1.1
+    have hret := congrArg Prod.fst hr
+    have hnz := WkBal.htab_get_t_nonzero (callEntryStateHOLFinite s callee) tw kw hent htw hkw v hret
+    have hWc : WorldOK (callEntryStateHOLFinite s callee) :=
+      localsFree_worldOK s callee (s.clock - 1) hW
+    exact merge_outer_get_ret_in_values (callEntryStateHOLFinite s callee) tw kw hc hWc hbs
+      (by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz) heq htw hkw v hret
+  · intro v ck hv
+    obtain ⟨f0, f1, rfl, hm⟩ := hv
+    exact hcont f0 f1 ck hm
+
+/-- Transaction outer enumeration supplies key bounds and inner ownership on
+every flowing or resumable continuation outcome. -/
+theorem merge_outer_item_flow_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS)
+    (tExp ordExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hts : globN s "ts" ≠ 0)
+    (ht : ∀ tw : BitVec 64, evalAt s tExp = some (.val (.word tw)) →
+      tw.toNat = memW s (globN s "ts" + 32))
+    (hcont : ∀ (tw f0 f1 f2 : BitVec 64) (ck : Nat),
+      tw.toNat = memW s (globN s "ts" + 32) →
+      (f0 ≠ 0 →
+        Inside (f1.toNat, hdr s tw.toNat 1) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        Inside (f1.toNat, hdr s tw.toNat 0) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        f2.toNat ∈ htabValues s tw.toNat) →
+      let next := setVarHOLFinite x (.rStruct [.val (.word f0), .val (.word f1), .val (.word f2)])
+        { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState next cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        next (evaluateHOLFiniteState next cont).1 (evaluateHOLFiniteState next cont).2)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1
+        (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).2 := by
+  apply eval_decCall_readOnly_with_return s x _ _ _ cont
+    (fun v => ∃ tw f0 f1 f2 : BitVec 64,
+      tw.toNat = memW s (globN s "ts" + 32) ∧
+      v = .rStruct [.val (.word f0), .val (.word f1), .val (.word f2)] ∧
+      (f0 ≠ 0 →
+        Inside (f1.toNat, hdr s tw.toNat 1) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        Inside (f1.toNat, hdr s tw.toNat 0) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        f2.toNat ∈ htabValues s tw.toNat))
+    hc hW InitECandidate.Solver.Wave8Contracts.M15.ro_htab_item ?_ ?_ hnt hfr
+  · intro vs body callee ret v post ha hl hr
+    rw [hc] at hl
+    obtain ⟨rfl, rfl, tw, ow, rfl, htw, how⟩ :=
+      lookup_two_word_result (by decide) lookup_htab_item_bal hl
+    have he : evalAt s tExp = some (.val (.word tw)) := by
+      obtain ⟨v1, rest, hh, hv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+      cases hh
+      exact hv
+    have heq := ht tw he
+    have hret := congrArg Prod.fst hr
+    have hnz := htab_item_t_nonzero (callEntryStateHOLFinite s callee) tw ow
+      (guestInv_callEntry s callee hW.1.1) htw how v hret
+    obtain ⟨S, hT, _⟩ := hW.2
+    have hmem : tw.toNat ∈ S := by
+      have hm := hT.2.2.2.2.2.1 32 (by simp [tsTableSlots]) hts
+      rw [← heq] at hm
+      exact hm.resolve_left (by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz)
+    have hWF : HtabWF (callEntryStateHOLFinite s callee) tw.toNat :=
+      (WkBal.htabWF_with_locals s callee (s.clock - 1) tw.toNat).2 (hT.2.1 _ hmem).1
+    obtain ⟨f0, f1, f2, hv, hm⟩ :=
+      htab_item_ret_spec (callEntryStateHOLFinite s callee) tw ow htw how hWF v hret
+    exact ⟨tw, f0, f1, f2, heq, hv, hm⟩
+  · intro v ck hv
+    obtain ⟨tw, f0, f1, f2, heq, rfl, hm⟩ := hv
+    exact hcont tw f0 f1 f2 ck heq hm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
