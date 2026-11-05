@@ -5938,6 +5938,33 @@ theorem address_to_u256_run {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end ReadOnlyRun
 
+section StateRestoreRun
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+/-- `state_restore(snap)` from an `EvmInv` entry: on return `EvmInv` holds, the chain is kept,
+and no frame record `(e, 280)` or continuation record `(c, 104)` of the chain is written. -/
+theorem state_restore_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (hInv : EvmInv s) :
+    Ret s (sourceFnBody Guest.Software.guestFn_state_restore) (fun _ post =>
+      EvmInv post ∧ globN s "heap_ptr" ≤ globN post "heap_ptr" ∧
+      Wave8Contracts.M23.GlobalsKept ["heap_ptr", "journal_n"] s post ∧
+      evmChain post = evmChain s ∧
+      (∀ ec ∈ evmChain s, ∀ a : BitVec 64, a.toNat % 8 = 0 →
+        (CellHits a.toNat (ec.1, 280) ∨ CellHits a.toNat (ec.2, 104)) →
+        post.memory a = s.memory a)) := by
+  intro v hv
+  obtain ⟨h1, h2, h3, h4, _, h6⟩ :=
+    R16Shards.StateRestoreEpilogue.state_restore_body_spec s hcode hInv v hv
+  refine ⟨h1, h2, h3, h4, fun ec hec a ha8 hin => ?_⟩
+  obtain ⟨hu1, hu2⟩ := h6 ec hec
+  rcases hin with h | h
+  · exact hu1 a ha8 h
+  · exact hu2 a ha8 h
+
+end StateRestoreRun
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
