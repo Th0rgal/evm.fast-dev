@@ -5992,7 +5992,6 @@ theorem progWStep_call0_of_entry {B : BufList} {gw : List String}
 theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
     (off : BitVec 64) (hoff : off.toNat ∈ [8, 16, 24, 40, 48])
-    (hnz : memW s (globN s "bs" + off.toNat) ≠ 0)
     (src : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
     (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
@@ -6002,8 +6001,7 @@ theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
     WorldOK (callEntryStateHOLFinite s callee) ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
       globN (callEntryStateHOLFinite s callee) "bs" ≠ 0 ∧
       locN (callEntryStateHOLFinite s callee) "dst" =
-        memW (callEntryStateHOLFinite s callee) (globN (callEntryStateHOLFinite s callee) "bs" + k) ∧
-      locN (callEntryStateHOLFinite s callee) "dst" ≠ 0 := by
+        memW (callEntryStateHOLFinite s callee) (globN (callEntryStateHOLFinite s callee) "bs" + k) := by
   have ha' := ha
   rw [evalListHOLFinite_eq_toExact] at ha'
   rcases he1 : evalAt s (.load .one (.op .add [.var .global (ofString "bs"), .const off])) with _ | v1
@@ -6038,7 +6036,7 @@ theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
           memW s (globN s "bs" + off.toNat) := by
         simp [locN, callEntryStateHOLFinite, hp, hw]
       exact ⟨localsFree_worldOK s callee (s.clock - 1) hW,
-        off.toNat, hoff, hbs, hd, by rw [hd]; exact hnz⟩
+        off.toNat, hoff, hbs, hd⟩
 
 /-- A union iteration cannot finish its insertion when the destination is null. -/
 theorem union_zero_set_no_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -6259,5 +6257,42 @@ theorem wkSc_htab_union_into_zero :
     exact (WorldStepSc.refl s (some (.returned v)) hP.1.1).with_locals_clock _ _
   · exfalso
     exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
+
+/-- Both null and allocated ordinary block tables admit the same union frame. -/
+theorem wkSc_htab_union_into_bs_all :
+    WorldKeepsSc (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
+      globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k))
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := wkSc_htab_union_into_bs
+  obtain ⟨params0, body0, ret0, hl0, hb0⟩ := wkSc_htab_union_into_zero
+  have heq := Option.some.inj (hl.symm.trans hl0)
+  cases heq
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  by_cases hz : locN s "dst" = 0
+  · exact hb0 s hc ⟨hP.1, hz⟩ hex hnt hres
+  · obtain ⟨hW, k, hk, hbs, hd⟩ := hP
+    exact hb s hc ⟨hW, k, hk, hbs, hd, hz⟩ hex hnt hres
+
+/-- Every ordinary block-table union call has its required entry frame. -/
+theorem progWStep_union_bs (off : BitVec 64)
+    (hoff : off.toNat ∈ [8, 16, 24, 40, 48]) (src : ExpHOL 64) :
+    ProgWStep [] ["heap_ptr"]
+      (.call (some (none, none)) (ofString "htab_union_into")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const off]), src]) := by
+  apply progWStep_call0_of_entry wkSc_htab_union_into_bs_all
+  intro F s hc hW vs body callee ret ha hl
+  exact union_bs_call_entry s hc hW off hoff src vs body callee ret ha hl
+
+/-- Ordinary table merging composes with any withdrawal-framed storage suffix. -/
+theorem progWithdrawalStep_union_bs_then (off : BitVec 64)
+    (hoff : off.toNat ∈ [8, 16, 24, 40, 48]) (src : ExpHOL 64)
+    {p : ProgHOL 64} (hp : ProgWithdrawalStep p) :
+    ProgWithdrawalStep
+      (.seq (.call (some (none, none)) (ofString "htab_union_into")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const off]), src]) p) := by
+  refine progWithdrawalStep_seq ?_ hp
+  exact progWithdrawalStep_of_progWStep (by simp)
+    (by simp [withdrawalGlobals]) (progWStep_union_bs off hoff src)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
