@@ -5976,4 +5976,18 @@ theorem phase2_copy_globals_heap_eq {F : Type}
   have he := hg (ofString "heap_ptr") (by simp)
   simp only [globN, he]
 
+/-- The joint transaction witness supplies the world exclusions for header words. -/
+theorem phase2_tx_header_world_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (R : List Ivl)
+    (tx off : Nat) (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (ht : TxAccessListAt s S Nd tx) (hoff : off + 8 ≤ 384) (ho8 : off % 8 = 0)
+    (hf : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hr : ∀ region ∈ R, Disj (tx, 384) region)
+    (hz : ∀ region ∈ R, region.2 = 0 → region.1 % 8 = 0) :
+    memW post (tx + off) = memW s (tx + off) := by
+  have htx8 : tx % 8 = 0 := ht.1.1.1
+  exact phase2_world_frame_heap_disjoint s post (worldOwned s S Nd) R (tx, 384)
+    (tx + off) ha ht.1.2.1 (by constructor <;> dsimp <;> omega)
+    (by omega) hf (ht.2.1 _ (by simp)) hr (worldOwned_zero_aligned hw) hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
