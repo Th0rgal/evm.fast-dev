@@ -4887,6 +4887,17 @@ theorem frameOpenMemSpecB : FrameOpenMemSpecB := by
   have := frame_open_run s hcode hAR0 m k hm hk (by rw [← hlk]; exact hkind) hmlo hnb v hv
   exact this
 
+/-- `frame_open_aligned_B` with the bounded frame-memory effect discharged (`frameOpenMemSpecB`):
+only the unaligned `fk_frame_open` contract remains. -/
+theorem frame_open_aligned_B' (hk : KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open")) :
+    KeepsOn FrameOpenReadyB (fun s => EvmMsgReady s ∧ HeadMemChainWF s) (ofString "frame_open") :=
+  frame_open_aligned_B hk frameOpenMemSpecB
+
+/-- Entry establishment at `frame_open`, unconditional. -/
+theorem frame_open_headMemChainWF_B' :
+    KeepsOn FrameOpenReadyB HeadMemChainWF (ofString "frame_open") :=
+  frame_open_headMemChainWF_B frameOpenMemSpecB
+
 end FrameOpenRun
 
 /-! ## 4. The required statement -/
