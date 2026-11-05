@@ -9869,4 +9869,45 @@ theorem phase2_zero_nal_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
   have hf : Compiler.Encoders.Asm.wordCmpHOL .less (0#64) (0#64) ≠ true := by decide
   exact False.elim (hf h)
 
+/-- Scalar shape plus a zero numeric projection identifies the actual zero word. -/
+theorem phase2_local_zero_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String)
+    (hw : ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w)))
+    (hz : locN s name = 0) :
+    s.locals.lookup (ofString name) = some (.val (.word 0)) := by
+  obtain ⟨w, hw⟩ := hw
+  have hn : w.toNat = 0 := by simpa [locN, hw] using hz
+  have he : w = 0 := BitVec.eq_of_toNat_eq hn
+  simpa [he] using hw
+
+/-- The address-copy invariant alone suffices to skip a zero-count loop. -/
+theorem phase2_address_zero_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (body : ProgHOL 64) (hp : PtxAddressCopyInv s) (hn : locN s "nal" = 0) :
+    evaluateHOLFiniteState s
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+      (none, s) := by
+  apply phase2_zero_nal_loop
+  · apply phase2_local_zero_word s "i" hp.2.1
+    have hi := hp.2.2.2
+    omega
+  · exact phase2_local_zero_word s "nal" hp.1.1.1.2.1 hn
+
+/-- Counting entry includes the no-access-list case without equating a disabled
+cached count with the transaction's unused header field. -/
+def PtxAddressCountCases {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressCountInv s ∨
+    (PtxAddressCopyInv s ∧ locN s "nal" = 0 ∧ locN s "nkeys" = 0)
+
+theorem phase2_address_count_cases_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) :
+    PtxAddressCountCases (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  by_cases hn : locN s "nal" = 0
+  · refine Or.inr ⟨phase2_address_copy_init s hp, ?_, ?_⟩
+    · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "i" ≠ ofString "nal" by decide,
+        show ofString "nkeys" ≠ ofString "nal" by decide] using hn
+    · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · exact Or.inl (phase2_address_count_init s hp hn)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
