@@ -3901,7 +3901,7 @@ private theorem u256_to_be32_aligned_body_bre {F : Type}
         (eval_add_local_const_eq mid3 "out" out 24 ho3)
         (eval_var_local_eq mid3 "w" wv3 hw_m3) fun s4 _ _ _ _ => return_eff_local s4 _ _
 
-private theorem eval_call_u256_to_be32_aligned_bre {F : Type}
+theorem eval_call_u256_to_be32_aligned_bre {F : Type}
     (s : PanSemStateFiniteExact 64 F) (aExp outExp : ExpHOL 64)
     (av : ValueHOL 64) (out0 : BitVec 64) (Rl : List Ivl)
     (hcode : s.code = originalRuntimeCode)
@@ -5755,6 +5755,18 @@ private theorem transfer_call0_no_return {F : Type} (s : PanSemStateFiniteExact 
           | returned _ => dsimp only; split <;> simp
           | _ => simp
 
+theorem transfer_u256_to_be32_call_no_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (amount dst : ExpHOL 64)
+    (hcode : s.code = originalRuntimeCode) :
+    ¬ Resumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])).1 := by
+  intro hr
+  rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, hne⟩
+  · exact transfer_call0_no_return s _ _ v hv
+  · exact evaluate_noCatchableRaise emitLogNcrCallees emitLogNcrCallees_good
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])
+      rfl s hcode e v hne hv
+
 theorem transfer_log_append_return_tail {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (hstep : (evaluateHOLFiniteState s
@@ -6323,6 +6335,81 @@ theorem transfer_alloc_topics_data_prefix {F : Type}
     { out with locals := (HolFiniteMapExact.resVarEq out.locals
       (ofString "topics", s.locals.lookup (ofString "topics"))) }) he).trans (by
         rw [hlocals _ (by decide)]))
+
+theorem transfer_accumulated_u256_to_be32_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (amount dst : ExpHOL 64)
+    (av : ValueHOL 64) (dw : BitVec 64) (Rl : List Ivl)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) amount = some av)
+    (hd : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word dw)))
+    (halign : dw.toNat % 8 = 0)
+    (hsub : ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + 32 ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hz : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])).1 = none) :
+    let out := evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])
+    EvmStepCC ["heap_ptr"] s out.2 ∧ ByteRegionEffect cur out.2 Rl ∧
+      out.2.locals = cur.locals ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → out.2.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN out.2 "heap_ptr") → memB out.2 b = memB s b) := by
+  dsimp only
+  obtain ⟨eff, hl⟩ := eval_call_u256_to_be32_aligned_bre cur amount dst av dw Rl
+    hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs ha hd halign hsub hz
+  obtain ⟨step, out, bytes⟩ :=
+    evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte eff hin
+  exact ⟨step, eff, hl, out, bytes⟩
+
+theorem transfer_data_write_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data : BitVec 64)
+    (av : ValueHOL 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hd : cur.locals.lookup (ofString "data") = some (.val (.word data)))
+    (halign : data.toNat % 8 = 0)
+    (hin : Inside (data.toNat, 32) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+        [.var .local (ofString "amount"), .var .local (ofString "data")]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(data.toNat, 32)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+          [.var .local (ofString "amount"), .var .local (ofString "data")]) cont) =
+        evaluateHOLFiniteState mid cont := by
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "u256_to_be32")
+    [.var .local (ofString "amount"), .var .local (ofString "data")]
+  have hz : (evaluateHOLFiniteState cur call).1 = none := by
+    rcases transfer_seq_resumes_left cur call cont hr with hz | resum
+    · exact hz
+    · exact False.elim (transfer_u256_to_be32_call_no_resumes cur _ _ hstep.1.1.1.1.code resum)
+  obtain ⟨step, eff, hl, out, bytes⟩ := transfer_accumulated_u256_to_be32_step
+    s cur (.var .local (ofString "amount")) (.var .local (ofString "data")) av data
+    [(data.toNat, 32)] hInv hstep hbe hout hbyte
+    (by simpa only [evalHOLExact] using ha) (by simpa only [evalHOLExact] using hd)
+    halign ⟨(data.toNat, 32), by simp, le_refl _, le_refl _⟩
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hz
+  let mid := (evaluateHOLFiniteState cur call).2
+  have eq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    simp only [hz]
+    rfl
+  exact ⟨mid, step, eff, hl, eq ▸ hr, out, bytes, eq⟩
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
