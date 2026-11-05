@@ -3960,6 +3960,25 @@ theorem stable_backing_load_local {F : Type} (s : PanSemStateFiniteExact 64 F)
   refine ⟨q, ?_, hn.symm⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn]
 
+/-- Backing initialization retains both source operands required by the loop. -/
+theorem stable_backing_load_operands {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w n p : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hp : WordAt s (locN s "stable_logs"))
+    (he : evalAt s (.load .one (.var .local (ofString "stable_logs"))) = some v) :
+    let t := setVarHOLFinite (ofString "stable_lp") v s
+    t.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+    t.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+    ∃ q : BitVec 64, t.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+      q.toNat = memW t (locN t "stable_logs") := by
+  obtain ⟨q, hq, hd⟩ := stable_backing_load_local s w v hw hp he
+  refine ⟨?_, ?_, q, hq, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hl
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString, memW, locN] using hd
+
 /-- A successful semantic copy store writes the indexed source value. -/
 theorem stable_copy_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
