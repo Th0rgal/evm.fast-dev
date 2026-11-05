@@ -7898,4 +7898,29 @@ theorem merge_roles_append_fresh {F : Type} {s : PanSemStateFiniteExact 64 F}
         exact False.elim (hf a (List.mem_append_right _ ha) heq)
     · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
 
+/-- Outer insertion introduces only the installed block-inner role. -/
+theorem merge_set_nestRoles_provenance {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t inner : Nat}
+    (hbs : globN s "bs" ≠ 0) (ht : t = memW s (globN s "bs" + 32))
+    (ht0 : t ≠ 0) (hg : globN post "bs" = globN s "bs")
+    (hp : memW post (globN post "bs" + 32) = t)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    (inner, "bs.inner") ∈ nestRoles post "bs" "bs.inner" ∧
+    ∀ a ∈ nestRoles post "bs" "bs.inner",
+      a ∈ nestRoles s "bs" "bs.inner" ∨ a = (inner, "bs.inner") := by
+  have hpost : nestRoles post "bs" "bs.inner" =
+      (htabValues post t).map (fun v => (v, "bs.inner")) := by
+    have hbpost : globN post "bs" ≠ 0 := by rwa [hg]
+    simp [nestRoles, hbpost, hp, ht0]
+  have hpre : nestRoles s "bs" "bs.inner" =
+      (htabValues s t).map (fun v => (v, "bs.inner")) := by
+    simp [nestRoles, hbs, ← ht, ht0]
+  rw [hpost, hpre]
+  refine ⟨List.mem_map.2 ⟨inner, (merge_set_values_membership hv).1, rfl⟩, ?_⟩
+  intro a ha
+  obtain ⟨v, hv', rfl⟩ := List.mem_map.1 ha
+  rcases (merge_set_values_membership hv).2 v hv' with hold | heq
+  · exact Or.inl (List.mem_map.2 ⟨v, hold, rfl⟩)
+  · exact Or.inr (by rw [heq])
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
