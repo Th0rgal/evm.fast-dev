@@ -6962,6 +6962,36 @@ theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
   intro F s hc hp
   exact hb s hc hp
 
+/-- Full Phase-4 composition with the two push preservation obligations explicit. -/
+theorem ptxPhase4_cut_strong_of_slots (h : PtxCallees)
+    (hlogs : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hreceipt : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (ptxPhase4 tail) (ptxCost4 + b) := by
+  have hb := @phase4ThroughStableCopy_typed_cut h hlogs _ _
+    (phase4ReceiptPush_cut h R hreceipt hstore htail)
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
+
 /-- The concrete allocator call adds its callee budget before a copy-ready tail. -/
 theorem stable_allocation_copy_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn (fun t => StableLengthPre t ∧ StableCopySpatial t ∧
