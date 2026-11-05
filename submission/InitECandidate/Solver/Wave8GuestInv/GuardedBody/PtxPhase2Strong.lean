@@ -1704,4 +1704,74 @@ theorem phase2_teStoreReady_price_hoare (addr : ExpHOL 64) (k : Nat)
   exact phase2_teStoreReady_words [.word a, .word b, .word c, .word d] hp k
     (by simpa using hk) (by simpa [flattenHOL] using hst)
 
+theorem phase2_teStoreReady_offset_price (k : Nat) (hk : k + 4 ≤ 25) :
+    Hoare PtxTeStoreReady
+      (.store (.op .add [.var .local (ofString "te"), .const (8 * k)])
+        (.var .local (ofString "price")))
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply phase2_teStoreReady_price_hoare _ k hk
+  intro F s x hp hx
+  obtain ⟨w, hw⟩ := hp.1.2.1
+  have hl : locN s "te" = w.toNat := by simp [locN, hw]
+  have he : x = w + BitVec.ofNat 64 (8 * k) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr, BitVec.ofNat_mul] using hx.symm
+  simp [he, hl, BitVec.ofNat_add]
+
+/-- The constructor's fresh-block separation and surviving access list share
+one world witness, obtained from a single application of its world contract. -/
+theorem phase2_te_new_joint_world (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn PtxValidatedStrong
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd))
+      (ofString "te") .one (ofString "te_new") [] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  obtain ⟨w, rfl⟩ := R16Shards.PtxP1.shape_one_word
+    (by simpa only [shapeEqHOL_eq_true] using hsh)
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_te_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨_, rfl⟩)
+  obtain ⟨S, Nd, hW, hT⟩ := hp.1.1.2.2.2.2
+  have hWe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hex⟩ := step.2.2.2.2 S Nd hWe (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hp.1.1.1.1.1
+    step.1.1 step.2.1 hW (R := []) (by simp) hgrow hframe hT (by simp) (by simp)
+    (locals := s.locals) (by rfl)
+  obtain ⟨w', heq, hav⟩ := hex _ rfl
+  have heq' : w = w' := by simpa using heq
+  subst w'
+  let out := setVarHOLFinite (ofString "te") (.val (.word w)) { post with locals := s.locals }
+  have htx : locN out "tx" = locN s "tx" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "te" ≠ ofString "tx" from by decide]
+  have hte : locN out "te" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · change TxAccessListAt out S' Nd' (locN out "tx")
+    rw [htx]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals _ _ _ hTp
+  · change IvlsDisj [(locN out "te", 200)] (worldOwned post S' Nd')
+    rw [hte]
+    exact hav
+
+/-- The transaction header is an existing heap buffer, hence is disjoint from
+the fresh environment returned by the constructor. -/
+theorem phase2_te_new_tx_separation (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn PtxValidatedStrong
+      (fun s => Disj (locN s "tx", 384) (locN s "te", 200))
+      (ofString "te") .one (ofString "te_new") [] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have ht := R16Shards.PtxP1.txReadyStrong_txValid hp.1.1
+  have hs := phase2_te_new_separates h (locN s "tx") 384
+    s vs body callee ret v post hc ⟨hp, ht.2.1⟩ ha hl hb hsh
+  have htx : locN (setVarHOLFinite (ofString "te") v { post with locals := s.locals }) "tx" =
+      locN s "tx" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "te" ≠ ofString "tx" from by decide]
+  rw [htx]
+  exact hs.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
