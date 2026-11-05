@@ -191,6 +191,35 @@ theorem logsOwnedDisj_array_survives {F : Type}
   · exact (R13Shards.ivl_allocated_bound hAs (Or.inl hin)).2
   · constructor <;> dsimp <;> omega
 
+/-- A framed world step preserves the entire log list when its live array is
+heap-resident and all live log storage avoids the explicit write footprint. -/
+theorem logsListOK_of_framed_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs)
+    (harray : logs ≠ 0 → memW s logs % 8 = 0 ∧
+      Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsListOK post logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  have hh := logsOwnedDisj_header_survives hAs hhp hlogs hd hn hold0 hR0 hog hfr hRh
+  have ha := logsOwnedDisj_array_survives hAs hhp hd hn
+    (harray hn).1 (harray hn).2 hold0 hR0 hog hfr hRa
+  apply logsListOK_congr_header_unhit hAs hgS hgP hhp hlogs
+    (fun _ => Or.inl hh.1) hh.2.2 ha.1
+  intro i hi
+  exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
+    hold0 hR0 hog hfr (hRe i hi)).2.2
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
