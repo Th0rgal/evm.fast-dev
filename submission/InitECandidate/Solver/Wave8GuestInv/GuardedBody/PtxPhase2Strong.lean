@@ -12647,4 +12647,36 @@ theorem phase2_alloc_message_tables (h : PtxCallees) {ι : Type}
       ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
     exact ⟨S', Nd', hsub, (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw', hg⟩
 
+/-- Allocation preserves both the saved-buffer cut and the joint table witness. -/
+theorem phase2_alloc_message_tables_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  exact ⟨phase2_alloc_message_store_ready h buffers contents name args hm hi
+    s vs body callee ret v post hc hp.1 he hl hb,
+    phase2_alloc_message_tables h buffers contents aa ak name args hm
+      s vs body callee ret v post hc hp he hl hb⟩
+
+/-- The suffix allocation can be composed with a table-aware continuation. -/
+theorem phase2_alloc_message_tables_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1
+  · exact phase2_alloc_message_tables_ready h buffers contents aa ak name args hm hi
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
