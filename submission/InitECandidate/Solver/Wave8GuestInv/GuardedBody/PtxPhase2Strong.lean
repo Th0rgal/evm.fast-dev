@@ -1,0 +1,265 @@
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
+
+set_option autoImplicit false
+set_option maxRecDepth 100000
+set_option maxHeartbeats 4000000
+
+namespace InitECandidate.Solver.Wave8GuestInv.R13Shards
+open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
+open Flapjack.Basis.Pure.MlString
+
+/-- Shape information needed by the untyped stores of Phase 2. `price` is
+the four-word fee value, whereas `mgas` and `reservoir` are scalar words. -/
+structure PtxPhase2LocalShapes {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop where
+  scalar : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir"] : List String),
+    ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))
+  price : ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)])
+  enc : ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+    some (.rStruct [.val (.word a), .val (.word b)])
+  intrinsic : ∃ a b c : BitVec 64, s.locals.lookup (ofString "intrinsic") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c)])
+
+/-- R11 entry interface for the strengthened Phase 2 proof. -/
+def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxValidated s ∧ PtxPhase2LocalShapes s
+
+theorem ptxValidatedStrong_mgas {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : PtxValidatedStrong s) :
+    ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)) ∧
+      w.toNat ≤ 16777216 := by
+  obtain ⟨w, hw⟩ := h.2.scalar "mgas" (by simp)
+  refine ⟨w, hw, ?_⟩
+  have hb := h.1.2.2.2
+  simpa [locN, hw] using hb
+
+theorem ptxValidatedStrong_price_length {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : PtxValidatedStrong s) {v : ValueHOL 64}
+    (hv : s.locals.lookup (ofString "price") = some v) :
+    (flattenHOL v).length = 4 := by
+  obtain ⟨a, b, c, d, hp⟩ := h.2.price
+  rw [hp] at hv
+  cases hv
+  simp [flattenHOL]
+
+theorem ptxPhase2LocalShapes_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (h : PtxPhase2LocalShapes s) :
+    PtxPhase2LocalShapes { s with locals := locals, clock := clock } := by
+  constructor
+  · intro name hn
+    obtain ⟨w, hw⟩ := h.scalar name hn
+    refine ⟨w, ?_⟩
+    change locals.lookup (ofString name) = _
+    rw [hl name (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)]
+    exact hw
+  · simpa only [hl "price" (by simp)] using h.price
+  · simpa only [hl "enc" (by simp)] using h.enc
+  · simpa only [hl "intrinsic" (by simp)] using h.intrinsic
+
+/-- Preserve the scalar witness produced by `min`, which the original
+Phase 1 stage predicate retained only through its numeric projection. -/
+theorem phase1_resume_min_word (h : PtxCallees) :
+    DecCallResumeOn (R16Shards.PtxP1.StageP 3)
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+      (ofString "mgas") (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")] := by
+  intro F s vs body callee ret v post hc hP ha hl hb
+  have hstage := R16Shards.PtxP1.resume_min h s vs body callee ret v post hc hP ha hl hb
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.rv_min s hc vs body callee ret hl
+    (guestInv_callEntry s callee hP.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  obtain ⟨w, hv, _⟩ := hs v rfl
+  subst v
+  refine ⟨hstage, w, ?_⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Shape facts concern only caller locals and therefore survive calls whose
+memory/world postconditions are proved separately. -/
+theorem ptxPhase2LocalShapes_restore {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (h : PtxPhase2LocalShapes s) :
+    PtxPhase2LocalShapes { post with locals := s.locals } := by
+  exact ⟨h.scalar, h.price, h.enc, h.intrinsic⟩
+
+theorem ptxPhase2LocalShapes_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : PtxPhase2LocalShapes s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "mgas", "reservoir", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxPhase2LocalShapes (setVarHOLFinite name v s) := by
+  apply ptxPhase2LocalShapes_with_locals s _ s.clock _ h
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- The scalar gas witness survives the caller-local restoration at every
+subsequent call, including the balance-return assignment. -/
+theorem phase1_mgas_word_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (h : ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+    (name : MlS) (v : ValueHOL 64) (hne : name ≠ ofString "mgas") :
+    ∃ w : BitVec 64,
+      (setVarHOLFinite name v { post with locals := s.locals }).locals.lookup (ofString "mgas") =
+        some (.val (.word w)) := by
+  obtain ⟨w, hw⟩ := h
+  exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hw⟩
+
+/-- Retain the scalar pointer returned by sender allocation instead of keeping
+only its numeric projection in the allocated-buffer predicate. -/
+theorem phase1_resume_alloc_sender_word (h : PtxCallees) :
+    DecCallResumeOn (R16Shards.PtxP1.StageP 0)
+      (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w)))
+      (ofString "sender") (ofString "alloc") [.const 24] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hallocated := R16Shards.PtxP1.resume_alloc_sender h s vs body callee ret v post
+    hc hp ha hl hb
+  have hrt := R16Shards.PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hrt
+  obtain ⟨w, hv, _⟩ := hrt v rfl
+  subst v
+  refine ⟨hallocated, w, ?_⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Calls with discarded return values restore every caller-local witness. -/
+theorem phase1_call0_word (name fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare (fun s => ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
+      (.call (some (none, none)) fn args)
+      (fun r s => r = none → ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w))) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact hp
+
+theorem phase1_recover_sender_word (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w)))
+      (.call (some (none, none)) (ofString "recover_sender_with_chain_id") R16Shards.PtxP1.recoverArgs)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 1 s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w))) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.hoare_recover_sender h).run s hc hp.1 hnt hr,
+    (phase1_call0_word (ofString "sender") _ _).run s hc hp.2 hnt hr⟩
+
+/-- Local information accumulated before `mgas` and `reservoir` are declared. -/
+def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (∀ name ∈ (["tx", "index", "sender"] : List String),
+    ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+  (∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)])) ∧
+  (∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+    some (.rStruct [.val (.word a), .val (.word b)])) ∧
+  (∃ a b c : BitVec 64, s.locals.lookup (ofString "intrinsic") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c)]))
+
+theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hp : PtxPhase1ShapePrefix s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxPhase1ShapePrefix (setVarHOLFinite name v { post with locals := s.locals }) := by
+  have hk : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      (setVarHOLFinite name v { post with locals := s.locals }).locals.lookup (ofString n) =
+        s.locals.lookup (ofString n) := by
+    intro n hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro n hn
+    rw [hk n (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)]
+    exact hp.1 n hn
+  · simpa only [hk "price" (by simp)] using hp.2.1
+  · simpa only [hk "enc" (by simp)] using hp.2.2.1
+  · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
+
+/-- The validation stage already retains the complete intrinsic triple. -/
+theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hstage : R16Shards.PtxP1.StageP 2 s)
+    (hscalar : ∀ n ∈ (["tx", "index", "sender"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+    (hprice : ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+      some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]))
+    (henc : ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+      some (.rStruct [.val (.word a), .val (.word b)])) :
+    PtxPhase1ShapePrefix s := by
+  obtain ⟨a, b, c, hi, _⟩ := hstage.2.2.1 (by omega)
+  exact ⟨hscalar, hprice, henc, a, b, c, hi⟩
+
+theorem phase1_declare_regular_budget_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+    (he : evalAt s R16Shards.PtxP1.regularBudgetExp = some v) :
+    R16Shards.PtxP1.StageP 3 (setVarHOLFinite (ofString "regular_budget") v s) ∧
+      PtxPhase1ShapePrefix (setVarHOLFinite (ofString "regular_budget") v s) := by
+  exact ⟨R16Shards.PtxP1.declare_regular_budget s v hp.1 he,
+    phase1_shapePrefix_resume s s hp.2 (ofString "regular_budget") v (by decide)⟩
+
+theorem phase1_resume_min_shapes (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+      (ofString "mgas") (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hm := phase1_resume_min_word h s vs body callee ret v post hc hp.1 ha hl hb
+  exact ⟨hm.1, phase1_shapePrefix_resume s post hp.2 (ofString "mgas") v (by decide), hm.2⟩
+
+/-- Assemble all Phase 2 shapes when the arithmetic reservoir declaration
+succeeds. This step uses expression semantics, not the default-zero `locN`. -/
+theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hprefix : PtxPhase1ShapePrefix s)
+    (hgas : ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .sub [.var .local (ofString "execution_gas"),
+      .var .local (ofString "mgas")]) = some v) :
+    PtxPhase2LocalShapes (setVarHOLFinite (ofString "reservoir") v s) := by
+  obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+  have hkeep : ∀ name : String, ofString name ≠ ofString "reservoir" →
+      (setVarHOLFinite (ofString "reservoir") (.val (.word w)) s).locals.lookup (ofString name) =
+        s.locals.lookup (ofString name) := by
+    intro name hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  constructor
+  · intro name hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl | rfl
+    · simpa only [hkeep "tx" (by decide)] using hprefix.1 "tx" (by simp)
+    · simpa only [hkeep "index" (by decide)] using hprefix.1 "index" (by simp)
+    · simpa only [hkeep "sender" (by decide)] using hprefix.1 "sender" (by simp)
+    · simpa only [hkeep "mgas" (by decide)] using hgas
+    · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · simpa only [hkeep "price" (by decide)] using hprefix.2.1
+  · simpa only [hkeep "enc" (by decide)] using hprefix.2.2.1
+  · simpa only [hkeep "intrinsic" (by decide)] using hprefix.2.2.2
+
+/-- Combine independent world and local-shape postconditions for a statement. -/
+theorem phase1_hoare_frame_shapes
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {p : ProgHOL 64}
+    (hw : Hoare P p (fun r s => r = none → Q s))
+    (hs : Hoare PtxPhase2LocalShapes p (fun r s => r = none → PtxPhase2LocalShapes s)) :
+    Hoare (fun s => P s ∧ PtxPhase2LocalShapes s) p
+      (fun r s => r = none → Q s ∧ PtxPhase2LocalShapes s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hw.run s hc hp.1 hnt hr, hs.run s hc hp.2 hnt hr⟩
+
+theorem phase1_call0_shapes (fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare PtxPhase2LocalShapes (.call (some (none, none)) fn args)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ptxPhase2LocalShapes_restore s post hp
+
+theorem phase1_call_balance_shapes (fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare PtxPhase2LocalShapes (.call (some (some (.local, ofString "bal"), none)) fn args)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.callLocal_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ptxPhase2LocalShapes_set_other _ (ptxPhase2LocalShapes_restore s post hp)
+    (ofString "bal") v (by decide)
+
+/-- The final Phase 1 stage plus retained shapes is exactly the strengthened
+entry needed at the Phase 2 boundary. -/
+theorem phase1_stage4_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hw : R16Shards.PtxP1.StageP 4 s) (hs : PtxPhase2LocalShapes s) :
+    PtxValidatedStrong s :=
+  ⟨R16Shards.PtxP1.stage4_validated hw, hs⟩
+
+end InitECandidate.Solver.Wave8GuestInv.R13Shards
