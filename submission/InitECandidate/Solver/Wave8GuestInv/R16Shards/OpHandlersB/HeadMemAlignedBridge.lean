@@ -8785,6 +8785,18 @@ theorem finish_child_prelude_cont_load {F : Type} {s0 s : PanSemStateFiniteExact
   simp only [hd, ↓reduceIte, hm, hmem, BitVec.ofNat_toNat]
   rfl
 
+/-- Execute both post-prelude pop assignments with no evaluation premises. -/
+theorem finish_child_pop_step {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    (hpre : EvmEkFk.PreludeRel s0 s) :
+    evaluateHOLFiniteState s EvmEkFk.fcAfterPrelude =
+      evaluateHOLFiniteState
+        (setGlobalHOLFinite (ofString "cur_cont")
+          (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+          (setGlobalHOLFinite (ofString "ev")
+            (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s))
+        (.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) := by
+  exact finish_child_pop_of_prelude hpre _ (finish_child_prelude_cont_load hpre _)
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
