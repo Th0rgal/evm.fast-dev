@@ -2967,4 +2967,24 @@ theorem phase2_address_initialized_bound (h : PtxCallees) {tail : ProgHOL 64} {b
   intro F s hc hp
   simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_init_hoare ht s hc hp
 
+/-- Each copy-loop destination, including the final access-list entry, is a
+nonwrapping word slot within the allocated address array. -/
+theorem phase2_address_copy_slot {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) (i : Nat) (hi : i < locN s "nal") :
+    let x := BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1))
+    x.toNat = locN s "al_addrs" + 8 * (i + 1) ∧
+      Inside (x.toNat, 8) (locN s "al_addrs")
+        (locN s "al_addrs" + (locN s "nal" + 1) * 8) := by
+  have hA := hp.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl hp.1.2.2.1)).2
+  have hlt : locN s "al_addrs" + 8 * (i + 1) < 2 ^ 64 := by
+    dsimp at hb
+    omega
+  have he : (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1))).toNat =
+      locN s "al_addrs" + 8 * (i + 1) := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  refine ⟨he, ?_⟩
+  rw [he]
+  constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
