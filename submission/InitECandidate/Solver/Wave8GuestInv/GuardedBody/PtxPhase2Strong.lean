@@ -766,4 +766,21 @@ theorem phase1_balance_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : N
   apply phase1_sub_balance_tail_strong h
   exact phase1_set_balance_tail_strong h _ htail
 
+def phase1GasSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
+  .dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
+    (.decCall (ofString "mgas") .one (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")]
+      (.dec (ofString "reservoir") .one
+        (.op .sub [.var .local (ofString "execution_gas"), .var .local (ofString "mgas")])
+        (phase1BalanceSuffix tail)))
+
+theorem phase1_gas_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (phase1GasSuffix tail)
+      (K.min + ((K.increment_nonce + 1) + ((K.u256_sub + 1) + ((K.u256_sub + 1) +
+        ((K.set_account_balance + 1) + (0 + b))))) + 1) := by
+  exact phase1_gas_segment_strong h (phase1_balance_suffix_strong h htail)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
