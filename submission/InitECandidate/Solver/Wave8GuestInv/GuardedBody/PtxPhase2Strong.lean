@@ -10583,4 +10583,49 @@ theorem phase2_memcpy_eval_live_buffer_next (h : PtxCallees) {F : Type}
     dsimp at hz
     omega
 
+/-- Packing and a saved caller buffer share the same ownership witness. -/
+def PtxPackedLiveCopy {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (buffer : Ivl) (contents : Nat → BitVec 64) : Prop :=
+  PtxPackedSeparatedCopy s ∧
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd) ∧ PtxLiveBufferAt s S Nd buffer contents
+
+/-- Restore packing and caller contents from one copy frame, keeping their
+world witnesses synchronized for the following copy. -/
+theorem phase2_packed_live_copy_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat) (dst len : Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hi : PtxPackedSeparatedCopy s) (ha : ArenaReady s) (hpost : GuestInv post)
+    (hg : GlobalsKept [] s post)
+    (hw : WorldTypedWith s S Nd) (hw' : WorldTypedWith post S' Nd')
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hs : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ [(dst, len)] ++ [freeGap s]) (heapFree s))
+    (htx : Disj (locN s "tx", 384) (dst, len))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (dst, len))
+    (hbuf : Disj buffer (dst, len)) (hlen : 0 < len) :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents := by
+  have hh := (phase2_copy_globals_heap_eq s post hg).symm.le
+  have hz : ∀ region ∈ ([(dst, len)] : List Ivl), region.2 = 0 → region.1 % 8 = 0 := by
+    intro region hm he
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at he
+    omega
+  have ht' := R16Shards.PtxP1.txAccessListOK_survives_step ha hpost hh hw hz ho hf ht
+    (by simpa only [List.mem_singleton, forall_eq] using htx)
+    (by simpa only [List.mem_singleton, forall_eq] using (fun _ => hrec :
+      0 < memW s (locN s "tx" + 216) → _)) (locals := s.locals) rfl
+  refine ⟨phase2_packed_separated_of_copy_frame s post S Nd S' Nd' dst len
+    hi ha hpost hg hw hw' ht hs ho hf htx hrec hlen,
+    S', Nd', (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', ht', ?_, ?_⟩
+  · exact phase2_packed_owned_growth s post _ _ _ hi.1.1.2.1 ho hs
+  · exact phase2_live_buffer_step s {post with locals := s.locals} S Nd S' Nd'
+      buffer contents [(dst, len)] hb ha.2 hw hh ho hf
+      (by simpa only [List.mem_singleton, forall_eq] using hbuf) hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
