@@ -2474,6 +2474,34 @@ theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   simpa only [Nat.zero_add] using hb s hc hp
 
+theorem lst_new_stable_args {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret)) :
+    let ent := callEntryStateHOLFinite s callee
+    locN ent "esz" = 8 ∧ locN ent "cap" = locN s "stable_log_cap" ∧
+      1 ≤ locN ent "cap" ∧ locN ent "esz" * locN ent "cap" < 2 ^ 64 := by
+  have ha' := ha
+  rw [evalListHOLFinite_eq_toExact] at ha'
+  cases hv : s.locals.lookup (ofString "stable_log_cap") with
+  | none => simp [evalListHOLExact, evalHOLExact, hv] at ha'
+  | some v =>
+    have hlc := R13Shards.lookup_lst_new
+    rw [← hc] at hlc
+    obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+      (ofString "esz") (ofString "cap") .one .one _ _ hlc
+      (.const 8) (.var .local (ofString "stable_log_cap")) (.val (.word 8)) v
+      vs body callee ret rfl hv ha hl
+    have he8 : locN (callEntryStateHOLFinite s callee) "esz" = 8 := by
+      simp [locN, callEntryStateHOLFinite, he]
+    have hce : locN (callEntryStateHOLFinite s callee) "cap" = locN s "stable_log_cap" := by
+      simp [locN, callEntryStateHOLFinite, hcap, hv]
+    have hb := phase4StableCap_bounds s hp
+    exact ⟨he8, hce, hce.symm ▸ hb.1, by rw [he8, hce]; exact hb.2.2⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
