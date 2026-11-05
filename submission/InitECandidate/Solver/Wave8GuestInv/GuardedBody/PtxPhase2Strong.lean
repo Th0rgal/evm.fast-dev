@@ -4609,4 +4609,18 @@ theorem phase2_storage_keys_alloc_ready (h : PtxCallees) :
   have hworld := phase2_storage_keys_alloc_world h s vs body callee ret v post hc hp ha hl hb
   exact ⟨hlive.2.2.2, hlive.2.1, hworld⟩
 
+/-- A completed record's inner pass advances the flattened index to the next prefix. -/
+theorem phase2_key_copy_record_done {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (i j k : Nat)
+    (hk : k = phase2_key_prefix s i + j)
+    (hj : j = memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    k = phase2_key_prefix s (i + 1) := by
+  rw [phase2_key_prefix_succ, hk, hj]
+
+/-- Incrementing both copy indices retains their prefix relation. -/
+theorem phase2_key_copy_index_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (i j k : Nat) (hk : k = phase2_key_prefix s i + j) :
+    k + 1 = phase2_key_prefix s i + (j + 1) := by
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
