@@ -4128,4 +4128,36 @@ theorem phase2_address_count_loop_bound :
   intro F s hc hp
   exact phase2_address_copy_loop_bound s hc hp.1
 
+/-- The concrete copy store also retains the current-record relation. -/
+theorem phase2_address_count_store_record_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.store (.op .add [.var .local (ofString "al_addrs"),
+        .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+        (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+        locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨a, ha⟩ := hp.1.1.1.1.2.1
+  obtain ⟨i, hi⟩ := hp.1.1.2.1
+  have he : x = a + (i + 1) * 8 := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, ha, hi,
+      valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using hx.symm
+  have hslot := (phase2_address_copy_slot hp.1.1.1 (locN s "i") hp.2.1).2
+  rw [← phase2_address_copy_word_addr hp.1.1 a i ha hi, ← he] at hslot
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  exact ⟨phase2_address_count_store hp.1 hdom hslot hmem, hp.2.1,
+    phase2_address_count_store_acc hp.1 hslot hmem hp.2.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
