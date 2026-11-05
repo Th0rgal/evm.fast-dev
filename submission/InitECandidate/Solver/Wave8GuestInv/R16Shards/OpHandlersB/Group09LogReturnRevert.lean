@@ -13004,4 +13004,38 @@ theorem msgOwned_of_log_growth_cells_g09 {F : Type}
     rw [hnodes] at hj
     exact hdj_m o ho j (hsub_int j hj).2
 
+/-- Protected frame-record readback supplies the finite field list required by
+the concrete growth-frame contract. -/
+theorem log_growth_frame_fields_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (hec : ec.1 + 280 ≤ 2 ^ 64)
+    (hdheader : Disj (ec.1, 280) (l.toNat, 24))
+    (hdbuffer : Disj (ec.1, 280) (p.toNat, q.toNat - p.toNat))
+    (hcopy : ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW copy (ec.1 + k) = memW s (ec.1 + k)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k) := by
+  dsimp only
+  intro k hk
+  have hkbound : k + 8 ≤ 280 ∧ k % 8 = 0 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+  have hq := q.isLt
+  have hdB : Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8) := by
+    rcases hdbuffer with hz | hz | hleft | hright
+    · exact Or.inl hz
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inr (Or.inl hleft))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  exact (log_growth_protected_words_g09 copy l p n cap log (ec.1, 280)
+    hl (by omega) hec hdheader hdB k hkbound.1).trans (hcopy k hkbound.1 hkbound.2)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
