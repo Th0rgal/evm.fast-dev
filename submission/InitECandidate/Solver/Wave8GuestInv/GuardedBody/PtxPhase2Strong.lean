@@ -11521,4 +11521,27 @@ theorem phase2_warm_packed_address {F₀ F : Type}
     omega
   · simp [Nat.add_mod, Nat.mul_mod, hal]
 
+/-- Select the snapshot at the actual count-exit state. Thus callers supply only
+the sender ownership frame, rather than three independent content invariants. -/
+theorem phase2_alloc_packing_warm_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : ∀ {F : Type} (before : PanSemStateFiniteExact 64 F),
+      PtxAddressCountExit before →
+      TerminatingProgBoundedOn (PtxWarmPacked before) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxAddressCountExit s ∧
+      ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "sender", 24)] (worldOwned s S Nd))
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]]
+        (.seq
+          (.dec (ofString "k") .one (.const 0)
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+                phase2_packed_source_outer_body))) tail))
+      (K.alloc + ((2 ^ 63 + 1) * ((2 ^ 63 + 1) *
+        ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) + 1) := by
+  intro F s hc hp
+  exact phase2_alloc_packing_warm_bound h s (ht s hp.1) s hc
+    ⟨hp.1, phase2_count_exit_warm_snapshots s hp.1 hp.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
