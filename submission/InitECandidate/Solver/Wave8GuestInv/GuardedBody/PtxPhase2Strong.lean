@@ -3676,4 +3676,19 @@ theorem phase2_key_prefix_le_total {F : Type} (s : PanSemStateFiniteExact 64 F)
       exact Nat.le_trans ih (Nat.le_add_right _ _)
   exact hm i _ hi
 
+/-- Counting-pass invariant connecting the machine accumulator to a natural prefix. -/
+def PtxAddressCountInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressCopyInv s ∧
+  locN s "nal" = memW s (locN s "tx" + 216) ∧
+  locN s "nkeys" = phase2_key_prefix s (locN s "i")
+
+/-- The counting invariant supplies the previously conditional allocation bound. -/
+theorem phase2_address_count_alloc_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) : locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  apply phase2_key_alloc_count_bound hp.1
+  rw [hp.2.2]
+  apply phase2_key_prefix_le_total
+  rw [← hp.2.1]
+  exact hp.1.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
