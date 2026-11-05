@@ -2222,4 +2222,19 @@ theorem phase2_countPrefix_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     intro F s hc hp
     simpa only [Nat.zero_add] using seq_bound_trans hb0 hi ht s hc hp
 
+/-- Constructor, initialization stores, and count setup compose at the first
+access-list allocation, retaining the strong Phase 1 locals throughout. -/
+theorem phase2_allocationEntry_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAccessCountReady tail b) :
+    TerminatingProgBoundedOn PtxValidatedStrong
+      (spinePlug 10 (spineAt 34 ptxCode) tail)
+      (K.te_new + (K.tx_has_access_list + b + 1) + 1) := by
+  have he : spinePlug 10 (spineAt 34 ptxCode) tail =
+      spinePlug 7 (spineAt 34 ptxCode) (spinePlug 3 (spineAt 41 ptxCode) tail) := by
+    simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+    rfl
+  rw [he]
+  apply phase2_tePrefix_bound h
+  exact phase2_countPrefix_bound h ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
