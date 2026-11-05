@@ -11356,4 +11356,20 @@ theorem phase2_alloc_packing_live_bound (h : PtxCallees)
   · exact phase2_count_cases_alloc_live h buffer contents
   · exact phase2_packed_live_continuation_bound h buffer contents ht
 
+/-- Allocation preserves a whole family of caller buffers, including an empty family. -/
+theorem phase2_count_cases_alloc_live_family (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn (fun s => PtxAddressCountExit s ∧
+      ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨phase2_count_cases_alloc_world_init h s vs body callee ret v post hc hp.1 ha hl hb, ?_⟩
+  intro i
+  exact (phase2_count_cases_alloc_live h (buffers i) (contents i)
+    s vs body callee ret v post hc ⟨hp.1, hp.2 i⟩ ha hl hb).2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
