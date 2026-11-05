@@ -5224,6 +5224,7 @@ theorem decCall_bal_account_item_resumes {F : Type}
 
 /-! ## Withdrawal iteration: multiplication, credit, and journal reset. -/
 
+/-- Pure arithmetic can be composed with the withdrawal world effect. -/
 theorem wkSc_u256_mul :
     WorldKeepsSc WorldOK (bufRegions []) [] stdKeep NoExtra (ofString "u256_mul") :=
   worldKeepsSc_of_readOnly InitECandidate.Solver.Wave8Contracts.M18.ro_u256_mul
@@ -5252,5 +5253,27 @@ theorem progWStep_withdrawal_iteration
   · exact progWStep_seq hB hgw
       (progWStep_assign_journal_n_zero B gw (hglobals _ (by simp)))
       (progWStep_assign_local B gw _ _)
+
+/-- The complete credit loop preserves the world, including every finite number
+of iterations and each resumable exceptional exit. -/
+theorem progWStep_withdrawal_loop
+    (B : BufList) (gw : List String)
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hbuf : ∀ p ∈ [("keccak_pad", 136), ("keccak_st", 200),
+      ("mpt_nib_scratch", 64), ("sk_buf", 52)], p ∈ B)
+    (hglobals : ∀ g ∈ ["heap_ptr", "journal_n", "scratch_ptr"], g ∈ gw)
+    (cond e_w e_amt : ExpHOL 64) (args_mul args_ce : List (ExpHOL 64)) :
+    ProgWStep B gw
+      (.while cond
+        (.dec (ofString "w") .one e_w
+          (.dec (ofString "amt") (.comb [.one, .one, .one, .one]) e_amt
+            (.decCall (ofString "wei") (.comb [.one, .one, .one, .one])
+              (ofString "u256_mul") args_mul
+              (.seq (.call (some (none, none)) (ofString "create_ether") args_ce)
+                (.seq (.assign .global (ofString "journal_n") (.const 0#64))
+                  (.assign .local (ofString "i")
+                    (.op .add [.var .local (ofString "i"), .const 1#64])))))))) :=
+  progWStep_while hB hgw
+    (progWStep_withdrawal_iteration B gw hB hgw hbuf hglobals e_w e_amt args_mul args_ce)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
