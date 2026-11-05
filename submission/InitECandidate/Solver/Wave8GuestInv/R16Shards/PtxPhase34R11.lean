@@ -826,6 +826,25 @@ theorem create_ether_txAfterCallStrong_resume {F : Type}
     (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
         rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
 
+theorem lst_new_txAfterCallStrong_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs =
+      some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : TxAfterCallStrong s) :
+    TxAfterCallStrong (setVarHOLFinite (ofString "logs") v
+      { post with locals := s.locals }) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _
+    (txAfterCallStrong_heapStep hs' hp)
+
 theorem hoare_create_ether_txAfterCallStrong (args : List (ExpHOL 64)) :
     Hoare TxAfterCallStrong (.call (some (none, none)) (ofString "create_ether") args)
       (fun r t => r = none → TxAfterCallStrong t) := by
