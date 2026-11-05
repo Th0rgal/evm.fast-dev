@@ -7869,4 +7869,33 @@ theorem merge_set_bs_outer_kept {F : Type}
   exact ⟨hg, rec_word_eq_of_unhit hA.2 hW.2.2.1 "bs" 80
     (by simp [typedRecords]) hg hbs hu (by decide) (by decide)⟩
 
+/-- Installing a fresh block inner-table role preserves role compatibility. -/
+theorem merge_roles_append_fresh {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {sl jr : List (Nat × String)} {inner : Nat}
+    (h : RolesOK s S sl jr) (hi : inner ∈ S)
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ sl ++ jr, a.1 ≠ inner) :
+    RolesOK s S (sl ++ [(inner, "bs.inner")]) jr := by
+  refine ⟨?_, List.pairwise_append.2 ⟨h.2.1, by simp, ?_⟩, ?_⟩
+  · intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases List.mem_append.1 ha with ha | ha
+      · exact h.1 a (List.mem_append_left _ ha)
+      · have he := List.mem_singleton.1 ha
+        subst a
+        exact ⟨hi, hk⟩
+    · exact h.1 a (List.mem_append_right _ ha)
+  · intro a ha b hb heq
+    have hb := List.mem_singleton.1 hb
+    subst b
+    exact False.elim (hf a (List.mem_append_left _ ha) heq)
+  · intro a ha b hb heq
+    rcases List.mem_append.1 hb with hb | hb
+    · rcases List.mem_append.1 hb with hb | hb
+      · exact h.2.2 a ha b (List.mem_append_left _ hb) heq
+      · have hb := List.mem_singleton.1 hb
+        subst b
+        exact False.elim (hf a (List.mem_append_right _ ha) heq)
+    · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
