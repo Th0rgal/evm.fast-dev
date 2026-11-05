@@ -3,6 +3,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg
 import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.NewScratchSpec
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Tables
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -552,5 +553,29 @@ theorem ek_depth0_prepare_of_body
         (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_depth0_prepare)).2) :
     EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare") :=
   ⟨_, _, _, lookup_depth0_prepare, fun s hcode hP _hex hnt hr => hrun s hcode hP hnt hr⟩
+
+/-- The owned message record of `EvmMsgReady` is an `EvmAvoids` region: writes through it
+(`msg+48` in `depth0_prepare`, `msg+112`/`msg+120` in `prepare_dispatch`) are byte-region effects
+that `ByteRegionEffect.to_evmStep_avoids` turns into an `EvmStep`. -/
+theorem evmAvoids_msg_of_evmMsgReady {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : EvmMsgReady s) :
+    EvmAvoids (fun s => [(memW s (globN s "ev" + 112), 176)]) s := by
+  obtain ⟨hAR, S, hInv, hAl, hW, hT, hFx, hFr, Nd, hTr, hNd⟩ := h
+  refine ⟨hAR, S, hInv, Nd, hTr, ?_⟩
+  intro o ho j hj
+  simp only [List.mem_singleton] at ho
+  subst ho
+  rcases List.mem_append.1 hj with hjw | hjf
+  · have hjo := R13Shards.worldTypedIvls_sub_worldOwned hjw
+    unfold worldOwned at hjo
+    rcases List.mem_append.1 hjo with hjo | hjn
+    · rcases List.mem_append.1 hjo with hjt | hjx
+      · obtain ⟨t, ht, hi⟩ := List.mem_flatMap.1 hjt
+        exact hT t ht j hi
+      · exact hFx j hjx
+    · exact hNd _ (List.mem_singleton.2 rfl) j hjn
+  · obtain ⟨os, hos, hjo⟩ := List.mem_flatten.1 hjf
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hos
+    exact hFr ec hec j hjo
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
