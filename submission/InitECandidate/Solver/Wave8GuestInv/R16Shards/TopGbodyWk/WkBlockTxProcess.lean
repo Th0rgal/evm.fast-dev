@@ -722,4 +722,50 @@ theorem pmcLogsLiveOwned_congr_live {F : Type}
       (hentry i hi) hsys, hworld]
     exact he i hi
 
+def ptxRegions {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)]
+
+def ptxGlobals : List String :=
+  ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+
+def ptxKeep : List (String × List Nat) :=
+  [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]),
+   ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+
+def PtxRelRun {F : Type} (entry : PanSemStateFiniteExact 64 F)
+    (p : ProgHOL 64) (s : PanSemStateFiniteExact 64 F) : Prop :=
+  Resumes (evaluateHOLFiniteState s p).1 →
+    WorldStep ptxRegions ptxGlobals ptxKeep RetTransactionLogs entry
+      (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2
+
+def PtxRelCut (phase : ProgHOL 64 → ProgHOL 64)
+    (A B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) : Prop :=
+  ∀ {F : Type} (entry : PanSemStateFiniteExact 64 F) (tail : ProgHOL 64),
+    (∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      B entry s → PtxRelRun entry tail s) →
+    ∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      A entry s → PtxRelRun entry (phase tail) s
+
+theorem wk_process_transaction_of
+    (A0 A1 A2 A3 A4 : ∀ {F : Type},
+      PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), TxReadyStrong s → A0 s s)
+    (h1 : PtxRelCut R13Shards.ptxPhase1 A0 A1)
+    (h2 : PtxRelCut R13Shards.ptxPhase2 A1 A2)
+    (h3 : PtxRelCut R13Shards.ptxPhase3 A2 A3)
+    (h4 : PtxRelCut R13Shards.ptxPhase4 A3 A4)
+    (h5 : ∀ {F : Type} (entry s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → A4 entry s → PtxRelRun entry R13Shards.ptxPhase5 s) :
+    WorldKeeps TxReadyStrong
+      (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+      RetTransactionLogs (ofString "process_transaction") := by
+  refine ⟨_, _, _, R13Shards.ptx_lookup, ?_⟩
+  intro F s hcode hready _hparams _hnt
+  have hb := h1 s _ (h2 s _ (h3 s _ (h4 s _ (h5 s)))) s hcode (hinit s hready)
+  rw [← R13Shards.ptx_phases_eq] at hb
+  unfold PtxRelRun R13Shards.ptxCode ptxRegions ptxGlobals ptxKeep at hb
+  exact hb
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
