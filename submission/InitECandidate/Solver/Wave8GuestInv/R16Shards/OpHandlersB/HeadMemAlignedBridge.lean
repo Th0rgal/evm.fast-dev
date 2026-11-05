@@ -11340,4 +11340,26 @@ theorem log_append_run_contents_step {F : Type} (s u : PanSemStateFiniteExact 64
   intro v hr
   exact ⟨hframe v hr, laContents_step hcontents hma hn hlgChild (hcontent v hr)⟩
 
+/-- At normal exit the strengthened invariant contains the complete child
+suffix, including when the last iteration reallocated the parent array. -/
+theorem laInvContents_exit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat → Nat}
+    (h : LAInvContents s L arr cap n nc child post)
+    (hnc : nc.toNat < 2 ^ 63)
+    (hexit : evalAt post (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    LAContents s L arr n child nc.toNat post := by
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _⟩ := h.1
+  have hc := h.2 i hi
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  rwa [hieq] at hc
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
