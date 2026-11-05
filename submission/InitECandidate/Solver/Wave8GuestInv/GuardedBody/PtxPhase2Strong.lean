@@ -409,6 +409,34 @@ theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64
   · simpa only [hk "enc" (by simp)] using hp.2.2.1
   · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
 
+theorem phase1_prefix_localsOnly :
+    LocalsOnly ["tx", "index", "sender", "price", "enc", "intrinsic"] PtxPhase1ShapePrefix := by
+  intro F s locals k hl hp
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro n hn
+    change ∃ w : BitVec 64, locals.lookup (ofString n) = some (.val (.word w))
+    rw [hl n (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)]
+    exact hp.1 n hn
+  · simpa only [hl "price" (by simp)] using hp.2.1
+  · simpa only [hl "enc" (by simp)] using hp.2.2.1
+  · simpa only [hl "intrinsic" (by simp)] using hp.2.2.2
+
+theorem phase1_blobBranch_prefix :
+    Hoare PtxPhase1ShapePrefix R16Shards.PtxP1.blobBranch
+      (fun r s => r = none → PtxPhase1ShapePrefix s) := by
+  apply Hoare.decCall_fall (names := ["tx", "index", "sender", "price", "enc", "intrinsic"])
+    (by decide) phase1_prefix_localsOnly
+  · intro F s vs body callee ret v post hc hp ha hl hb
+    exact phase1_shapePrefix_resume s post hp _ v (by decide)
+  · apply Hoare.decCall_fall (names := ["tx", "index", "sender", "price", "enc", "intrinsic"])
+      (by decide) phase1_prefix_localsOnly
+    · intro F s vs body callee ret v post hc hp ha hl hb
+      exact phase1_shapePrefix_resume s post hp _ v (by decide)
+    · apply Hoare.assign
+      · intro F s v hp _
+        exact fun _ => LocalsOnly.setVar phase1_prefix_localsOnly (by decide) v s hp
+      · exact fun _ _ hr => by cases hr
+
 theorem phase1_resume_frame_prefix
     {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
     {name fn : MlS} {args : List (ExpHOL 64)}
