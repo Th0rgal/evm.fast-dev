@@ -9867,4 +9867,63 @@ theorem phase4TotalStores_backing_cut {tail : ProgHOL 64} {b : Nat}
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+theorem localsOnly_txAfterCallBackingStrong : LocalsOnly ["index", "out"] TxAfterCallBackingStrong := by
+  intro F s locals k hl h
+  exact ⟨txAfterCallStrong_with_locals s locals k
+    (hl "index" (by simp)) (hl "out" (by simp)) h.1, h.2⟩
+
+/-- Read-only calls retain backing as well as the strong output invariant. -/
+theorem resume_ro_txAfterCallBackingStrong {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ k ∈ (["index", "out"] : List String), ofString k ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn TxAfterCallBackingStrong TxAfterCallBackingStrong name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨resume_ro_txAfterCallStrong hro hne args s vs body callee ret v post hc hp.1 ha hl hb, ?_⟩
+  have hs := funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  change TxBacking post
+  rw [he]
+  exact hp.2
+
+/-- Gas normalization and block-total updates preserve both backing facts. -/
+theorem phase4Totals_backing_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (K.max + b + 1) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (0 + (K.max + b + 1)) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine seq_bound_trans (Q := TxAfterCallBackingStrong) ?_ ?_ ?_
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallBackingStrong) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_txAfterCallBackingStrong
+            (name := ofString "tx_state_gas_nat") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+    · refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+        (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1)
+        (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+      have hh := @phase4TotalStores_backing_cut tail b htail
+      unfold ptxCode at hh
+      intro F s hc hp
+      exact hh s hc hp
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
