@@ -978,4 +978,48 @@ theorem worldStep_liveMpt_of_separated_csr {F : Type}
     hm hd hg hfr hsep hfa hf
   exact ⟨S', Nd', hsub, hW', hm', hd', heq, hQ⟩
 
+theorem htab_frame_liveMpt_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S S' Nd Nd' Nm : List Nat} {t m : Nat}
+    (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (hp : ArenaReady post) (hW' : WorldTypedWith post S' Nd')
+    (hog : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hbe : post.be = s.be)
+    (hg : ∀ name : MlS, name ∉ (["heap_ptr"] : List String).map ofString →
+      s.globals.lookup name = post.globals.lookup name)
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd)) :
+    WorldTypedWith post S' Nd' ∧
+      MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m := by
+  have hag : AllocatorGrows s post := by
+    refine ⟨hhp, ?_⟩
+    rw [R10Shards.P26_P28.globN_eq_of_lookup (hg (ofString "scratch_ptr") (by decide))]
+  have hfa : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have hs8 := hs.2.2.2.2.2.2.1
+    have hp8 := hp.2.2.2.2.2.2.1
+    exact ⟨hs8, by omega⟩
+  have hdis : IvlsDisj (mptObjIvls s Nm m)
+      [(globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")] := by
+    intro o ho j hj
+    obtain rfl := List.mem_singleton.mp hj
+    by_cases hz : o.2 = 0
+    · exact Or.inl hz
+    · exact disj_symm (disj_allocated_fresh_heap hs.2 hp.2
+        (mptObjInWith_allocated_csr hm o ho hz) ⟨le_rfl, by dsimp; omega⟩)
+  obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hp hbe hag hm hd hog hfr
+    (fun o ho hnz j hj => Or.inl
+      ⟨((hW.1.2.1 t ht).1.1 j hj).2.1,
+       ((hW.1.2.1 t ht).1.1 j hj).2.2.1,
+       mptObjInWith_disj_world_csr hm hd o ho j
+         (List.mem_append.mpr (Or.inl (List.mem_append.mpr
+           (Or.inl (List.mem_flatMap.mpr ⟨t, ht, hj⟩)))))⟩)
+    hfa hdis
+  exact ⟨hW', hm', hd', heq⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
