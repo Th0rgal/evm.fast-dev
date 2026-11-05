@@ -7285,4 +7285,29 @@ theorem phase2_packed_storage_copy_eval (h : PtxCallees) {F : Type}
   rw [phase2_packed_key_destination_toNat s hi.1 base k hbase hk hb]
   simp
 
+/-- The inclusive inner-loop invariant retains separation for the next guarded iteration. -/
+def PtxPackedSeparatedInner {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedInnerInv s ∧
+  Disj (locN s "tx", 384)
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+
+/-- Advancing both copy counters preserves input separation and the inclusive loop invariant. -/
+theorem phase2_packed_separated_counters {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedSeparatedCopy s) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    PtxPackedSeparatedInner post := by
+  dsimp only
+  refine ⟨phase2_packed_inner_update_indices s hp.1, ?_⟩
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "j" ≠ ofString "tx" from by decide,
+    show ofString "k" ≠ ofString "tx" from by decide,
+    show ofString "j" ≠ ofString "al_keys" from by decide,
+    show ofString "k" ≠ ofString "al_keys" from by decide,
+    show ofString "j" ≠ ofString "nkeys" from by decide,
+    show ofString "k" ≠ ofString "nkeys" from by decide] using hp.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
