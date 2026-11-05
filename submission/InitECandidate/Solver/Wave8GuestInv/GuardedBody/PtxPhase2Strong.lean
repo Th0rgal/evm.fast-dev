@@ -4564,7 +4564,7 @@ theorem phase2_storage_keys_words_frame {F : Type}
   cases hm : post.memory (BitVec.ofNat 64 (base + 8 * k)) with
   | word v => exact ⟨v, hd _ ha, hm⟩
 
-/-- The concrete packed-record allocation returns the entire requested buffer. -/
+/-- The concrete 52-byte packed-record allocation returns the entire requested buffer. -/
 theorem phase2_packed_keys_alloc_fresh (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
     (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
