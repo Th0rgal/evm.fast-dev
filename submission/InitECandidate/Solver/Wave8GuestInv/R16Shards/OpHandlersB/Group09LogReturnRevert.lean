@@ -10676,4 +10676,31 @@ theorem logOwnedIvls_disj_of_record_fields_g09 {F : Type}
   · exact htopics
   · exact hdata
 
+theorem frameObjects_of_log_append_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat}
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hret : frameRet post ec = frameRet s ec)
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log) :
+    frameObjects post ec =
+      [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
+       (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24),
+       frameLogs post ec, frameRet s ec] ++
+      frameLogObjects s ec ++ logOwnedIvls post log := by
+  unfold frameObjects
+  rw [hfields 8 (by simp), hfields 232 (by simp), hfields 24 (by simp),
+    hfields 40 (by simp), hfields 88 (by simp), hret, hlogs, List.append_assoc]
+
+theorem log_append_owned_disj_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat} {other : Ivl}
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log)
+    (hold : ∀ i ∈ frameLogObjects s ec, Disj i other)
+    (hnew : ∀ i ∈ logOwnedIvls post log, Disj i other) :
+    ∀ i ∈ frameLogObjects post ec, Disj i other := by
+  intro i hi
+  rw [hlogs] at hi
+  rcases List.mem_append.1 hi with hi | hi
+  · exact hold i hi
+  · exact hnew i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
