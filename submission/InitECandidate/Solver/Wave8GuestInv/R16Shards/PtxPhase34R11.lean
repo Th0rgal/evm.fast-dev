@@ -7821,6 +7821,26 @@ theorem resume_lst_push_typed_logSlot (h : PtxCallees)
     exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
 
+/-- The owned copy prefix closes Phase 4 given nonzero push backing. -/
+theorem ptxPhase4_cut_strong_of_backing_nonzero (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (ptxPhase4 tail) (ptxCost4 + b) := by
+  have hb := @phase4ThroughStableCopy_owned_cut h
+    (resume_lst_push_typed_logSlot h hnonzero) _ _
+    (phase4ReceiptPush_owned_cut h hnonzero htail)
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
+
 /-- Full Phase-4 composition with the two push preservation obligations explicit. -/
 theorem ptxPhase4_cut_strong_of_slots (h : PtxCallees)
     (hlogs : DecCallResumeOn Phase4TypedLogPointers
