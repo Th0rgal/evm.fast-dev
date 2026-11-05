@@ -12680,4 +12680,38 @@ theorem heapByteEff_encode_logs_snapshot {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsListOK_preserved
+  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_snapshot_logs {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (hnz : logs ≠ 0) (hL : LogsListOK s logs) (hD : LogsDisjFixed s logs) :
+    LogsListOK {mid with globals := s.globals} logs ∧
+    Allocated {mid with globals := s.globals} (memW mid logs, 8 * memW mid (logs + 8)) ∧
+    memW mid logs = memW s logs ∧ memW mid (logs + 8) = memW s (logs + 8) := by
+  have hs := (heapByteEff_snapshot (fresh := []) hA he).1
+  have hLs := WkBlockTxEnc.logsListOK_preserved hA hma hs hnz hL hD
+  rcases hL with hz | ⟨hw, ha, _⟩
+  · exact False.elim (hnz hz)
+  rcases hD with hz | ⟨harr, hdisj⟩
+  · exact False.elim (hnz hz)
+  have hd : ∀ f ∈ fixedObjects s, Disj (logs, 24) f :=
+    fun f hf => hdisj _ (List.mem_append_left _ List.mem_cons_self) f hf
+  have hm0 : memW mid logs = memW s logs :=
+    WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma ha hd hw.1
+      (by simp) (by simp)
+  have hm8 : memW mid (logs + 8) = memW s (logs + 8) :=
+    WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma ha hd
+      (by have := hw.1; omega) (by simp) (by simp)
+  refine ⟨hLs.2, ?_, hm0, hm8⟩
+  rw [hm0, hm8]
+  exact harr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
