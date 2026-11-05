@@ -10057,4 +10057,43 @@ theorem txBacking_of_framed_headers {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Fresh heap writes cannot touch an already allocated heap or scratch region. -/
+theorem allocated_unhit_fresh_heap {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {i : Ivl}
+    (hA : ArenaOK s) (hAp : ArenaOK post)
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hi : Allocated s i) (hinz : i.2 ≠ 0)
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    IvlUnhit s post i := by
+  apply R16Shards.ivlUnhit_of_frameOutside_aligned hfr
+  · exact fun hz => False.elim (hinz hz)
+  · intro j hj
+    simp only [List.mem_singleton] at hj
+    subst j
+    exact ⟨hA.2.2.2.2.2.2.2.1, by simp⟩
+  · have hs := hA.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.1
+    exact ⟨hs, by dsimp; omega⟩
+  · intro j hj
+    simp only [List.mem_singleton] at hj
+    subst j
+    exact Or.inr (Or.inl rfl)
+  · have hbound : globN post "heap_ptr" ≤ globN s "scratch_ptr" := by
+      have hlim := hAp.2.1
+      have hs := hA.2.2.1
+      have hs' := hA.2.2.2.1
+      have hsep : heapLimit ≤ scratchStart := by decide
+      omega
+    rcases hi with hi | hi
+    · exact Or.inr (Or.inr (Or.inl hi.2))
+    · apply Or.inr ∘ Or.inr ∘ Or.inr
+      have := hi.1
+      dsimp
+      omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
