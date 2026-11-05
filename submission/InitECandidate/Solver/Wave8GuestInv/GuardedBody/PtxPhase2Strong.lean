@@ -8485,4 +8485,405 @@ theorem phase2_packed_outer_acc_eval {F : Type} (s : PanSemStateFiniteExact 64 F
     rw [Nat.add_mod_mod, han, ← hin, Nat.mul_comm (locN s "i") 24]
     exact Nat.mod_eq_of_lt hlt
 
+/-- Declaring the current record preserves all live outer-loop resources. -/
+theorem phase2_packed_outer_set_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (v : ValueHOL 64) :
+    PtxPackedOuterIteration (setVarHOLFinite (ofString "acc") v s) := by
+  have hr := phase2_packed_keys_set_other s hp.2.1.1 (ofString "acc") v (by decide)
+  have hout : PtxPackedOuterInv (setVarHOLFinite (ofString "acc") v s) := by
+    refine ⟨hr, ?_⟩
+    simpa [locN, memW, txAccessSlots, phase2_key_prefix, setVarHOLFinite,
+      HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "tx" by decide,
+      show ofString "acc" ≠ ofString "nkeys" by decide,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "k" by decide] using hp.2.1.2
+  refine ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s _ s.clock).mpr hp.1.1) hr, hout, ?_⟩
+  simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "acc" ≠ ofString "tx" by decide,
+    show ofString "acc" ≠ ofString "al_keys" by decide,
+    show ofString "acc" ≠ ofString "nkeys" by decide,
+    show ofString "acc" ≠ ofString "i" by decide,
+    show ofString "acc" ≠ ofString "k" by decide] using hp.2.2
+
+/-- Record declaration establishes exactly the precondition of the inner reset. -/
+theorem phase2_packed_outer_declare_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    let post := setVarHOLFinite (ofString "acc") v s
+    PtxPackedOuterIteration post ∧
+      locN post "i" < memW post (locN post "tx" + 216) ∧
+      locN post "acc" = memW post (locN post "tx" + 208) + 24 * locN post "i" := by
+  obtain ⟨w, rfl, hw⟩ := phase2_packed_outer_acc_eval s hp hi v he
+  refine ⟨phase2_packed_outer_set_acc s hp _, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hw
+
+/-- Restoring a declaration scope preserves the complete outer packing state. -/
+theorem phase2_packed_outer_iteration_with_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (hp : PtxPackedOuterIteration s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedOuterIteration {s with locals := locals, clock := clock} := by
+  have hr := phase2_packed_keys_with_locals s locals clock hp.2.1.1
+    (fun n hn => hl n (by simp only [List.mem_cons, List.mem_singleton] at hn ⊢; tauto))
+  have he : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k"] : List String),
+      locN {s with locals := locals, clock := clock} n = locN s n := by
+    intro n hn
+    simp [locN, hl n hn]
+  have hout : PtxPackedOuterInv {s with locals := locals, clock := clock} := by
+    refine ⟨hr, ?_⟩
+    simpa only [he "nkeys" (by simp), he "i" (by simp), he "k" (by simp),
+      txAccessSlots, phase2_key_prefix, he "tx" (by simp), memW] using hp.2.1.2
+  refine ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s locals clock).mpr hp.1.1) hr, hout, ?_, ?_, ?_, ?_, hp.2.2.2.2.2.2⟩
+  · simpa only [he "tx" (by simp), he "al_keys" (by simp), he "nkeys" (by simp)] using hp.2.2.1
+  · simpa only [he "tx" (by simp), he "al_keys" (by simp), he "nkeys" (by simp), memW] using hp.2.2.2.1
+  · simpa only [hl "k" (by simp)] using hp.2.2.2.2.1
+  · simpa only [hl "i" (by simp)] using hp.2.2.2.2.2.1
+
+/-- A record pass composes the reset, strengthened inner loop, and outer increment. -/
+theorem phase2_packed_record_pass_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.seq (.assign .local (ofString "j") (.const 0))
+        (.seq
+          (.while (.cmp .less (.var .local (ofString "j"))
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 16])))
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.op .add [.var .local (ofString "al_keys"),
+                  .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+              (.seq
+                (.call (some (none, none)) (ofString "memcpy")
+                  [.op .add [.var .local (ofString "al_keys"),
+                    .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+                (.seq
+                  (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+                  (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxPackedOuterIteration s) := by
+  exact Hoare.seq_fall phase2_packed_outer_iteration_reset_hoare
+    (Hoare.seq_fall (phase2_packed_inner_acc_hoare h addressSrc keySrc)
+      phase2_packed_outer_iteration_increment_hoare)
+
+/-- The source loop caches the current record count in `ns`. -/
+def PtxPackedNsIteration {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedIteration s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+    locN s "ns" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)
+
+/-- Interpret the actual source guard, which compares against the cached `ns` word. -/
+theorem phase2_packed_ns_guard_eval {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (w : BitVec 64)
+    (hp : PtxPackedNsIteration s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "j"))
+      (.var .local (ofString "ns"))) = some (.val (.word w))) :
+    w ≠ 0 ↔ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  obtain ⟨j, hj⟩ := hp.1.2.2.2.1
+  obtain ⟨n, hn⟩ := hp.2.1
+  have hb := phase2_packed_inner_signed_bounds hp.1.2.1.1
+  have hnat : n.toNat = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+    simpa [locN, hn] using hp.2.2
+  have hjb : j.toNat < 2 ^ 63 := by simpa [locN, hj] using hb.1
+  have hnb : n.toNat < 2 ^ 63 := by rw [hnat]; exact hb.2
+  simpa only [hnat] using phase2_packed_guard_word_compare s _ j n w hj
+    (by simp [evalAt, evalHOLExact, hn]) hjb hnb he
+
+/-- The cached source guard is unchanged by the loop clock decrement. -/
+theorem phase2_packed_ns_iteration_decClock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedNsIteration s) :
+    PtxPackedNsIteration (decClockHOLFinite s) :=
+  ⟨phase2_packed_iteration_decClock s hp.1, hp.2⟩
+
+/-- Packed memcpy preserves the cached count used by the actual source guard. -/
+theorem phase2_memcpy_packed_ns (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hdest : (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n") ∈
+        [(locN s "al_keys" + 52 * locN s "k", 20),
+         (locN s "al_keys" + 52 * locN s "k" + 20, 32)])
+    (hns : locN s "ns" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN {post with locals := s.locals} "ns" =
+      memW {post with locals := s.locals}
+        (memW {post with locals := s.locals} (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  obtain ⟨S, Nd, hw, ht, _, hd, htx, hrec, hlen⟩ :=
+    phase2_packed_copy_spatial_premises s hi _ hdest
+  have hae := ((arenaReady_with_locals s callee (s.clock - 1)).mpr ha).2
+  have hwe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw
+  have hte := R16Shards.PtxP1.txAccessListAt_with_locals s callee (s.clock - 1) ht
+  have hh := phase2_memcpy_eval_headers h s post vs body callee ret r S Nd (locN s "tx")
+    hc hl he hn hr hp hae hwe hte hd htx hlen
+  have hm := phase2_memcpy_eval_counts h s post vs body callee ret r S Nd (locN s "tx")
+    hc hl he hn hr hp hae hwe hte hd hrec hlen
+  change locN s "ns" = memW post (memW post (locN s "tx" + 208) + 24 * locN s "i" + 16)
+  rw [hh.1, hm (locN s "i") hi.1.2.2.1]
+  exact hns
+
+/-- Evaluated destination arguments suffice to retain the cached source-loop count. -/
+theorem phase2_memcpy_packed_arguments_ns (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src len : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (d n : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hlen : evalAt s len = some (.val (.word n)))
+    (hpair : (d.toNat, n.toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)])
+    (hns : locN s "ns" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN {post with locals := s.locals} "ns" =
+      memW {post with locals := s.locals}
+        (memW {post with locals := s.locals} (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  have hentry := phase2_memcpy_entry_destination s dst src len vs body callee ret d n
+    hc hargs hl hd hlen
+  apply phase2_memcpy_packed_ns h s post vs body callee ret r hc hl he hn hr hp ha hi _ hns
+  change (locN {s with locals := callee, clock := s.clock - 1} "dst",
+    locN {s with locals := callee, clock := s.clock - 1} "n") ∈ _
+  rw [hentry.1, hentry.2]
+  exact hpair
+
+/-- Copy state carrying the cached source count and its word witness. -/
+def PtxPackedNsCopy {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+    (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+    globN s "heap_ptr" ≤ 2 ^ 64) ∧
+  (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+  locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)
+
+/-- The address copy preserves the source loop's cached count. -/
+theorem phase2_packed_address_copy_ns_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedNsCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.1.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.1.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1.1 callee
+  have hcopy := phase2_packed_address_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1.1 hp.1.2.1 hbase hk hp.1.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.1.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  refine ⟨phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.1.2.2.2, hp.2.1, ?_⟩
+  apply phase2_memcpy_packed_arguments_ns h s post _ src (.const 20) vs body callee ret
+    (some (.returned v)) (base + k * 52) 20 hc hargs hl he (by simp)
+    (by simp [Resumes]) hentry hp.1.1.1 hp.1.2.1
+    (phase2_packed_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) _ hp.2.2
+  rw [phase2_packed_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
+  simp
+
+/-- The storage-key copy preserves the source loop's cached count. -/
+theorem phase2_packed_storage_copy_ns_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32])
+      (fun r t => r = none → PtxPackedNsCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.1.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.1.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1.1 callee
+  have hcopy := phase2_packed_storage_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1.1 hp.1.2.1 hbase hk hp.1.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.1.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  refine ⟨phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.1.2.2.2, hp.2.1, ?_⟩
+  apply phase2_memcpy_packed_arguments_ns h s post _ src (.const 32) vs body callee ret
+    (some (.returned v)) (base + k * 52 + 20) 32 hc hargs hl he (by simp)
+    (by simp [Resumes]) hentry hp.1.1.1 hp.1.2.1
+    (phase2_packed_key_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) _ hp.2.2
+  rw [phase2_packed_key_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
+  simp
+
+/-- Counter updates preserve the cached `ns` word and its record-count equation. -/
+theorem phase2_packed_ns_counters {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedNsCopy s) (k j : ValueHOL 64) :
+    let post := setVarHOLFinite (ofString "j") j (setVarHOLFinite (ofString "k") k s)
+    (∃ n : BitVec 64, post.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+    locN post "ns" = memW post (memW post (locN post "tx" + 208) + 24 * locN post "i" + 16) := by
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "j" ≠ ofString "ns" by decide,
+    show ofString "k" ≠ ofString "ns" by decide,
+    show ofString "j" ≠ ofString "tx" by decide,
+    show ofString "k" ≠ ofString "tx" by decide,
+    show ofString "j" ≠ ofString "i" by decide,
+    show ofString "k" ≠ ofString "i" by decide] using hp.2
+
+/-- The source counter pair restores the cached-count iteration invariant. -/
+theorem phase2_packed_counters_ns_hoare :
+    Hoare PtxPackedNsCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedNsIteration s) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, PtxPackedNsCopy before ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hp, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨phase2_packed_counters_iteration_state before hp.1.1 hp.1.2.1
+        hp.1.2.2.2, phase2_packed_ns_counters before hp _ _⟩
+    · exact fun _ _ hr => by cases hr
+
+/-- Both copies and both counters preserve the actual source-loop invariant. -/
+theorem phase2_packed_body_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedNsIteration s) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_ns_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_ns_hoare h keySrc)
+      phase2_packed_counters_ns_hoare)
+
+/-- Clock induction for the actual source guard `j < ns`. -/
+theorem phase2_packed_ns_while {body : ProgHOL 64}
+    (hb : Hoare PtxPackedNsCopy body (fun r s => r = none → PtxPackedNsIteration s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxPackedNsIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))) body)
+      (fun r s => r = none → PtxPackedNsIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
+  let guard : ExpHOL 64 := .cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s (.while guard body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxPackedNsIteration st →
+      evaluateHOLFiniteState st (.while guard body) = (none, post) →
+      PtxPackedNsIteration post ∧ locN post "k" = phase2_key_prefix post (locN post "i" + 1) from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      have hguard := phase2_packed_ns_guard_eval st w hp (by simpa [evalAt, guard] using hw)
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd := phase2_packed_ns_iteration_decClock st hp
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc
+              ⟨phase2_packed_iteration_guard_pre _ hd.1 (hguard.mp hnz), hd.2⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, (phase2_packed_separated_inner_exit hp.1.2.1
+          (fun hlt => hz (hguard.mpr hlt))).1⟩
+    · simp at he
+
+/-- The source inner packing loop preserves the cached count and completes the record prefix. -/
+theorem phase2_packed_inner_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedNsIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns")))
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+          (.seq
+            (.call (some (none, none)) (ofString "memcpy")
+              [.op .add [.var .local (ofString "al_keys"),
+                .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+            (.seq
+              (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+              (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+      (fun r s => r = none → PtxPackedNsIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
+  exact phase2_packed_ns_while (phase2_packed_body_ns_hoare h addressSrc keySrc) rfl rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
