@@ -3642,6 +3642,30 @@ theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [hloc "stable_logs" (by simp), hloc "logs" (by simp)]
     exact hprefix j hj hjn
 
+/-- Hoare rule for the actual increment once the copy store has extended
+the prefix through the current index. -/
+theorem hoare_stableCopy_increment :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧
+      (∃ w : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word w))) ∧
+      locN s "i" < locN s "nl" ∧
+      ∀ j, j < locN s "i" + 1 → j < locN s "nl" →
+        memW s (memW s (locN s "stable_logs") + 8 * j) =
+          memW s (memW s (locN s "logs") + 8 * j))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r t => r = none → StableCopyInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    obtain ⟨hpost, hn, hh, ha, hc, ⟨w, hw⟩, hi, hprefix⟩ := hp
+    have hwi : locN s "i" = w.toNat := by simp [locN, hw]
+    apply stableCopyInv_increment s w v hpost hn hh ha hc hw
+      (by rw [← hwi]; exact hi) ?_ hv
+    intro j hj hjn
+    exact hprefix j (by rw [hwi]; exact hj) hjn
+  · intro F s hp hr
+    exact absurd hr (by simp)
+
 /-- Compose the semantic copy write with the actual counter assignment. -/
 theorem stableCopyInv_store_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64) (v : ValueHOL 64)
