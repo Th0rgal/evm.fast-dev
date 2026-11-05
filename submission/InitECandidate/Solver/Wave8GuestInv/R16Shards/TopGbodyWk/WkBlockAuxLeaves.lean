@@ -5276,4 +5276,22 @@ theorem progWStep_withdrawal_loop
   progWStep_while hB hgw
     (progWStep_withdrawal_iteration B gw hB hgw hbuf hglobals e_w e_amt args_mul args_ce)
 
+/-- Transaction initialization leaves scratch unchanged, so its world contract
+also supplies the monotonicity needed by sequential framing. -/
+theorem wkSc_state_fresh_tx :
+    WorldKeepsSc WorldOK (fun _ => [])
+      ["heap_ptr", "journal_n", "ts"]
+      [("ws", [0, 8, 16, 24, 32]),
+       ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "state_fresh_tx") := by
+  obtain ⟨params, body, ret, hlookup, hbody⟩ := WkBal.wk_state_fresh_tx
+  refine ⟨params, body, ret, hlookup, ?_⟩
+  intro F s hc hW hex hnt hres
+  have hs := hbody s hc hW hex hnt hres
+  refine ⟨hs, ?_⟩
+  have heq := hs.2.2.1 (ofString "scratch_ptr") (by decide)
+  have hn := globN_eq_of_lookup heq
+  exact Nat.le_of_eq hn
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
