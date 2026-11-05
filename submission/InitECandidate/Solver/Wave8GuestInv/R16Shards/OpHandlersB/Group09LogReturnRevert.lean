@@ -13038,4 +13038,60 @@ theorem log_growth_frame_fields_g09 {F : Type}
   exact (log_growth_protected_words_g09 copy l p n cap log (ec.1, 280)
     hl (by omega) hec hdheader hdB k hkbound.1).trans (hcopy k hkbound.1 hkbound.2)
 
+/-- A growing frame introduces precisely its replacement backing array and the
+new log-owned regions; every other object was already owned by that frame. -/
+theorem log_growth_frame_object_cases_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat}
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hret : frameRet post ec = frameRet s ec)
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log) :
+    ∀ o ∈ frameObjects post ec,
+      o ∈ frameObjects s ec ∨ o = frameLogs post ec ∨ o ∈ logOwnedIvls post log := by
+  intro o ho
+  rw [frameObjects_of_log_append_g09 hfields hret hlogs] at ho
+  rcases List.mem_append.1 ho with ho | ho
+  · rcases List.mem_append.1 ho with ho | hold
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+      rcases ho with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+      · exact Or.inl (by simp [frameObjects])
+      · exact Or.inl (by simp [frameObjects])
+      · exact Or.inl (by simp [frameObjects])
+      · exact Or.inl (by simp [frameObjects])
+      · exact Or.inl (by simp [frameObjects])
+      · exact Or.inr (Or.inl rfl)
+      · exact Or.inl (by simp [frameObjects])
+    · exact Or.inl (by simp only [frameObjects]; exact List.mem_append_right _ hold)
+  · exact Or.inr (Or.inr ho)
+
+/-- Head-frame object cases and unchanged suspended frames reduce message
+preservation to separation from the replacement array and appended log regions. -/
+theorem msgOwned_of_head_log_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {m log : Nat} {head : Ivl}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd) (hcell : SameTypedCells s post S Nd)
+    (hglobals : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hdom : post.memaddrs = s.memaddrs) (hgrows : AllocatorGrows s post)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hhead : ∀ ec ∈ evmChain s, ec = head ∨ ec ∈ (evmChain s).tail)
+    (htail : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k))
+    (hret : frameRet post head = frameRet s head)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (hbuffer : Disj (m, 176) (frameLogs post head))
+    (hnew : ∀ o ∈ logOwnedIvls post log, Disj (m, 176) o)
+    (hmsg : MsgOwned s S m) : MsgOwned post S m := by
+  apply msgOwned_of_log_growth_cells_g09 hAs hAp hWT hcell hglobals hdom hgrows
+    hfixed hfoot hchain ?_ hmsg
+  intro ec hec o ho
+  rcases hhead ec hec with rfl | htail_mem
+  · rcases log_growth_frame_object_cases_g09 hfields hret hlogs o ho with hold | rfl | hnew_mem
+    · exact Or.inl hold
+    · exact Or.inr hbuffer
+    · exact Or.inr (hnew o hnew_mem)
+  · exact Or.inl (htail ec htail_mem ▸ ho)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
