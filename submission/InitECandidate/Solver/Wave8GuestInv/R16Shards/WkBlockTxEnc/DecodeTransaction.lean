@@ -10998,6 +10998,522 @@ private theorem txAccessListAt_of_fresh_vvh {F : Type}
     refine ⟨?_, ivlsDisj_fresh_heap_worldOwned hAs hWT heff hnode hhtab hin⟩
     exact ⟨le_trans hAs.2.1 hin.1, hin.2⟩
 
+private def TxTrack_vvh {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (ptx wt warr wcnt : BitVec 64)
+    (v0 v200 v208 v216 v264 v272 v280 : Nat)
+    (P0 L0 : Nat) : Prop :=
+  WorldEff s u [] [] wsGw ∧
+  ptx.toNat + 400 ≤ globN u "heap_ptr" ∧
+  warr.toNat + 16 * wcnt.toNat ≤ globN u "heap_ptr" ∧
+  u.locals.lookup (ofString "tx") = some (.val (.word ptx)) ∧
+  u.locals.lookup (ofString "t") = some (.val (.word wt)) ∧
+  u.locals.lookup (ofString "arr") = some (.val (.word warr)) ∧
+  (∃ ww, u.locals.lookup (ofString "w") = some (.val (.word ww))) ∧
+  (∃ rvv, u.locals.lookup (ofString "v") = some rvv ∧
+    shapeEqHOL (shapeOfHOLExact rvv) (.comb [.one, .one, .one, .one]) = true) ∧
+  memW u (ptx.toNat + 0) = v0 ∧
+  memW u (ptx.toNat + 200) = v200 ∧
+  memW u (ptx.toNat + 208) = v208 ∧
+  memW u (ptx.toNat + 216) = v216 ∧
+  memW u (ptx.toNat + 264) = v264 ∧
+  memW u (ptx.toNat + 272) = v272 ∧
+  memW u (ptx.toNat + 280) = v280 ∧
+  (0 < v216 →
+    globN s "heap_ptr" ≤ v208 ∧
+    v208 + 24 * v216 ≤ globN u "heap_ptr" ∧
+    WordsOK u (v208, 24 * v216) ∧
+    ((List.range v216).map (fun i => memW u (v208 + 24 * i + 16))).sum < 2 ^ 32) ∧
+  (0 < v280 → WordsOK u (v272, 120 * v280)) ∧
+  (∀ i < wcnt.toNat,
+    memW u (warr.toNat + 16 * i + 8) < 2 ^ 32 ∧
+    P0 ≤ memW u (warr.toNat + 16 * i) ∧
+    memW u (warr.toNat + 16 * i) + memW u (warr.toNat + 16 * i + 8) ≤ P0 + L0)
+
+private theorem txTrack_dtxInv2_vvh {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt wk : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hk : u.locals.lookup (ofString "k") = some (.val (.word wk))) :
+    dtxInv2_vvh ptx u :=
+  ⟨htr.2.2.2.1, ⟨wk, hk⟩, htr.2.2.2.2.2.2.1, htr.2.2.2.2.2.2.2.1⟩
+
+private theorem txTrack_worldEff_mem_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (heff_um : WorldEff u m [] [] wsGw)
+    (htx : m.locals.lookup (ofString "tx") = some (.val (.word ptx)))
+    (ht : m.locals.lookup (ofString "t") = some (.val (.word wt)))
+    (harr : m.locals.lookup (ofString "arr") = some (.val (.word warr)))
+    (hw : ∃ ww, m.locals.lookup (ofString "w") = some (.val (.word ww)))
+    (hv : ∃ rvv, m.locals.lookup (ofString "v") = some rvv ∧
+      shapeEqHOL (shapeOfHOLExact rvv) (.comb [.one, .one, .one, .one]) = true) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 := by
+  obtain ⟨heff_su, hptx_hp, harr_hp, _, _, _, _, _,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280, hal, hau, hsl⟩ := htr
+  have hAu := heff_su.arena
+  have heff_sm : WorldEff s m [] [] wsGw :=
+    heff_su.trans_noBuf heff_um ws_nil_sub_vvh ws_no_gb_vvh
+  have hhp_le := heff_um.hp_lo
+  refine ⟨heff_sm, le_trans hptx_hp hhp_le, le_trans harr_hp hhp_le,
+    htx, ht, harr, hw, hv,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm0,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm200,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm208,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm216,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm264,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm272,
+    (memW_kept_of_worldEff_lt_hp hAu heff_um (by omega)).trans hm280,
+    fun hpos => ?_, fun hpos => wordsOK_transfer hAu.1 heff_sm.arena.1 (hau hpos),
+    fun i hi => ?_⟩
+  · obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+    refine ⟨hlo, le_trans hhi hhp_le, wordsOK_transfer hAu.1 heff_sm.arena.1 hwok, ?_⟩
+    rwa [memW_stride_sum_kept_of_worldEff_vvh hAu heff_um v208 24 v216 16 (by decide) hhi]
+  · obtain ⟨hlen_i, hlo_i, hhi_i⟩ := hsl i hi
+    have hi_mul := Nat.mul_le_mul_left 16 (Nat.succ_le_of_lt hi)
+    rw [Nat.mul_succ] at hi_mul
+    have hk0 := memW_kept_of_worldEff_lt_hp hAu heff_um (a := warr.toNat + 16 * i) (by omega)
+    have hk8 := memW_kept_of_worldEff_lt_hp hAu heff_um (a := warr.toNat + 16 * i + 8) (by omega)
+    rw [hk0, hk8]
+    exact ⟨hlen_i, hlo_i, hhi_i⟩
+
+private theorem txTrack_assign_other_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {nm : MlS} {e : ExpHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (h1 : nm ≠ ofString "tx") (h2 : nm ≠ ofString "t") (h3 : nm ≠ ofString "arr")
+    (h4 : nm ≠ ofString "w") (h5 : nm ≠ ofString "v")
+    (hrun : evaluateHOLFiniteState u (.assign .local nm e) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧
+    ∃ rv, @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) e = some rv ∧
+      m.locals.lookup nm = some rv := by
+  obtain ⟨rv, hev, hmem, hglob, hother, hnm_m⟩ := assign_local_none_inv_vvh hrun
+  have heff_m : WorldEff s m [] [] wsGw := by
+    have h1' := worldEff_assign_local htr.1 nm e
+    rwa [hrun] at h1'
+  have hmemW : ∀ a, memW m a = memW u a := fun a => by unfold memW; rw [hmem]
+  have hglobN : ∀ g, globN m g = globN u g := fun g => by unfold globN; rw [hglob]
+  obtain ⟨heff_u, hptx_hp, harr_hp, htx, ht, harr, ⟨ww, hw⟩, ⟨rvv, hv, hvsh⟩,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280, hal, hau, hsl⟩ := htr
+  refine ⟨⟨heff_m, by rw [hglobN]; exact hptx_hp, by rw [hglobN]; exact harr_hp,
+    (hother _ (Ne.symm h1)).trans htx, (hother _ (Ne.symm h2)).trans ht, (hother _ (Ne.symm h3)).trans harr,
+    ⟨ww, (hother _ (Ne.symm h4)).trans hw⟩, ⟨rvv, (hother _ (Ne.symm h5)).trans hv, hvsh⟩,
+    by rw [hmemW]; exact hm0, by rw [hmemW]; exact hm200, by rw [hmemW]; exact hm208,
+    by rw [hmemW]; exact hm216, by rw [hmemW]; exact hm264, by rw [hmemW]; exact hm272,
+    by rw [hmemW]; exact hm280,
+    fun hpos => by
+      obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+      refine ⟨hlo, by rw [hglobN]; exact hhi, wordsOK_transfer heff_u.arena.1 heff_m.arena.1 hwok, ?_⟩
+      have hmap : (List.range v216).map (fun i => memW m (v208 + 24 * i + 16)) =
+          (List.range v216).map (fun i => memW u (v208 + 24 * i + 16)) :=
+        List.map_congr_left (fun i _ => hmemW _)
+      rwa [hmap],
+    fun hpos => wordsOK_transfer heff_u.arena.1 heff_m.arena.1 (hau hpos),
+    fun i hi => by simp only [hmemW]; exact hsl i hi⟩, rv, hev, hnm_m⟩
+
+private theorem txTrack_assign_v_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {e : ExpHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hrun : evaluateHOLFiniteState u (.assign .local (ofString "v") e) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧
+    (∀ key, key ≠ ofString "v" → m.locals.lookup key = u.locals.lookup key) := by
+  obtain ⟨rv, _, hmem, hglob, hother, hnm_m⟩ := assign_local_none_inv_vvh hrun
+  obtain ⟨_, rv', hnm', hsh⟩ := assign_local_none_keeps u m (ofString "v") e hrun
+  have hrv : rv' = rv := by rw [hnm_m] at hnm'; exact Option.some.inj hnm'.symm
+  subst rv'
+  have heff_m : WorldEff s m [] [] wsGw := by
+    have h1' := worldEff_assign_local htr.1 (ofString "v") e
+    rwa [hrun] at h1'
+  have hmemW : ∀ a, memW m a = memW u a := fun a => by unfold memW; rw [hmem]
+  have hglobN : ∀ g, globN m g = globN u g := fun g => by unfold globN; rw [hglob]
+  obtain ⟨heff_u, hptx_hp, harr_hp, htx, ht, harr, ⟨ww, hw⟩, ⟨rvv, hv, hvsh⟩,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280, hal, hau, hsl⟩ := htr
+  refine ⟨⟨heff_m, by rw [hglobN]; exact hptx_hp, by rw [hglobN]; exact harr_hp,
+    (hother _ (by decide)).trans htx, (hother _ (by decide)).trans ht, (hother _ (by decide)).trans harr,
+    ⟨ww, (hother _ (by decide)).trans hw⟩,
+    ⟨rv, hnm_m, shapeEq_quad_trans_vvh rv rvv (hsh rvv hv) hvsh⟩,
+    by rw [hmemW]; exact hm0, by rw [hmemW]; exact hm200, by rw [hmemW]; exact hm208,
+    by rw [hmemW]; exact hm216, by rw [hmemW]; exact hm264, by rw [hmemW]; exact hm272,
+    by rw [hmemW]; exact hm280,
+    fun hpos => by
+      obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+      refine ⟨hlo, by rw [hglobN]; exact hhi, wordsOK_transfer heff_u.arena.1 heff_m.arena.1 hwok, ?_⟩
+      have hmap : (List.range v216).map (fun i => memW m (v208 + 24 * i + 16)) =
+          (List.range v216).map (fun i => memW u (v208 + 24 * i + 16)) :=
+        List.map_congr_left (fun i _ => hmemW _)
+      rwa [hmap],
+    fun hpos => wordsOK_transfer heff_u.arena.1 heff_m.arena.1 (hau hpos),
+    fun i hi => by simp only [hmemW]; exact hsl i hi⟩, hother⟩
+
+private theorem txTrack_store_disj_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {off sz : Nat} {valExp : ExpHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hptx_lo : globN s "heap_ptr" ≤ ptx.toNat)
+    (hoff : off + sz ≤ 400)
+    (hd0 : 8 ≤ off)
+    (hd200 : 208 ≤ off ∨ off + sz ≤ 200)
+    (hd208 : 224 ≤ off ∨ off + sz ≤ 208)
+    (hd264 : 272 ≤ off ∨ off + sz ≤ 264)
+    (hd272 : 288 ≤ off ∨ off + sz ≤ 272)
+    (hal_disj : 0 < v216 → ptx.toNat + 400 ≤ v208)
+    (harr_disj : ptx.toNat + 400 ≤ warr.toNat)
+    (hsz : ∀ v, @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) valExp =
+      some v → 8 * (flattenHOL v).length ≤ sz)
+    (hflow : evaluateHOLFiniteState u
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧ m.locals = u.locals := by
+  obtain ⟨heff_u, hptx_hp, harr_hp, htx, ht, harr, hw, hv,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280, hal, hau, hsl⟩ := htr
+  have hptx_hi : ptx.toNat + 400 ≤ heapLimit := le_trans hptx_hp heff_u.arena.2.2.1
+  have hhl : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hoff_bv : (BitVec.ofNat 64 off).toNat = off := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hadd : (ptx + BitVec.ofNat 64 off).toNat = ptx.toNat + off := by
+    rw [BitVec.toNat_add_of_lt (by rw [hoff_bv]; omega), hoff_bv]
+  have hdst : @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a))
+      (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (ptx + BitVec.ofNat 64 off))) := by
+    simp [evalHOLExact, evalListHOLExact, htx, wordOpHOL, wordOp, valueIsWord, valueWord]
+  have hbnd := dtx_off_in_heap_vvh ptx off sz hoff hptx_lo hptx_hi
+  have heff_m : WorldEff s m [] [] wsGw := by
+    have h1 := worldEff_store_heap_bounded heff_u _ _ sz hsz
+      (fun x hx => by rw [hdst] at hx; injection hx with hx'; injection hx' with hx''; injection hx'' with hx3; subst hx3; exact hbnd)
+    rwa [hflow] at h1
+  have hcf := (evaluate_store_control_frame u
+    (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp)
+  rw [hflow] at hcf
+  have hloc : m.locals = u.locals := hcf.2.1
+  have hglob : m.globals = u.globals := by
+    rw [evaluateHOLFiniteState_store, hdst] at hflow
+    split at hflow <;> simp_all
+    split at hflow <;> simp_all
+    split at hflow <;> simp_all
+    subst hflow
+    rfl
+  have hglobN : globN m "heap_ptr" = globN u "heap_ptr" := by unfold globN; rw [hglob]
+  have hGu := heff_u.arena.1
+  refine ⟨⟨heff_m, by rw [hglobN]; exact hptx_hp, by rw [hglobN]; exact harr_hp,
+    by rw [hloc]; exact htx, by rw [hloc]; exact ht, by rw [hloc]; exact harr,
+    by rw [hloc]; exact hw, by rw [hloc]; exact hv,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) (Or.inl hd0) hsz hflow).trans hm0,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) hd200 hsz hflow).trans hm200,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) (hd208.imp (fun h => by omega) id) hsz hflow).trans hm208,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) (hd208.imp id (fun h => by omega)) hsz hflow).trans hm216,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) hd264 hsz hflow).trans hm264,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) (hd272.imp (fun h => by omega) id) hsz hflow).trans hm272,
+    (memW_tx_off_store_disj_vvh hGu htx hptx_hi hoff (by decide) (hd272.imp id (fun h => by omega)) hsz hflow).trans hm280,
+    fun hpos => ?_, fun hpos => wordsOK_transfer hGu heff_m.arena.1 (hau hpos),
+    fun i hi => ?_⟩, hloc⟩
+  · obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+    have had := hal_disj hpos
+    have hhi_hl : v208 + 24 * v216 ≤ heapLimit := le_trans hhi heff_u.arena.2.2.1
+    refine ⟨hlo, by rw [hglobN]; exact hhi, wordsOK_transfer hGu heff_m.arena.1 hwok, ?_⟩
+    have hmap : (List.range v216).map (fun i => memW m (v208 + 24 * i + 16)) =
+        (List.range v216).map (fun i => memW u (v208 + 24 * i + 16)) := by
+      apply List.map_congr_left
+      intro i hi_mem
+      have hi_lt : i < v216 := List.mem_range.mp hi_mem
+      have hmul := Nat.mul_le_mul_left 24 (Nat.succ_le_of_lt hi_lt)
+      rw [Nat.mul_succ] at hmul
+      exact memW_store_disj hGu hdst hsz (by rw [hadd]; omega) hflow (by omega)
+        (Or.inr (by rw [hadd]; omega))
+    rwa [hmap]
+  · obtain ⟨hlen_i, hlo_i, hhi_i⟩ := hsl i hi
+    have harr_hl : warr.toNat + 16 * wcnt.toNat ≤ heapLimit := le_trans harr_hp heff_u.arena.2.2.1
+    have hmul := Nat.mul_le_mul_left 16 (Nat.succ_le_of_lt hi)
+    rw [Nat.mul_succ] at hmul
+    have hk0 := memW_store_disj hGu hdst hsz (by rw [hadd]; omega) hflow
+      (a := warr.toNat + 16 * i) (by omega) (Or.inr (by rw [hadd]; omega))
+    have hk8 := memW_store_disj hGu hdst hsz (by rw [hadd]; omega) hflow
+      (a := warr.toNat + 16 * i + 8) (by omega) (Or.inr (by rw [hadd]; omega))
+    rw [hk0, hk8]
+    exact ⟨hlen_i, hlo_i, hhi_i⟩
+
+private theorem txTrack_call_w_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {fname : MlS} {args : List (ExpHOL 64)}
+    {params : List (MlS × ShapeHOL)} {fbody : ProgHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hlook : originalRuntimeCode.lookup fname = some (params, fbody, .one))
+    (hcallee_eff : ∀ callee cvals,
+      lookupCodeHOLFinite originalRuntimeCode.lookup fname cvals = some (fbody, callee, .one) →
+      let entry := callEntryStateHOLFinite u callee
+      (evaluateHOLFiniteState entry fbody).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState entry fbody).1 →
+      WorldEff entry (evaluateHOLFiniteState entry fbody).2 [] [] wsGw)
+    (hrun : evaluateHOLFiniteState u (.call (some (some (.local, ofString "w"), none)) fname args) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧
+    (∀ key, key ≠ ofString "w" → m.locals.lookup key = u.locals.lookup key) := by
+  obtain ⟨vs, b', c', r', rv, pb, _, hlk, hb, hsh, hmem, hglob, hother, hnm_m⟩ :=
+    call_local_none_inv_vvh hrun
+  have hsame := lookupCodeHOLFinite_installed_body u.code.lookup fname params fbody b' .one r' vs c'
+    (by rw [htr.1.code]; exact hlook) hlk
+  cases hsame
+  have hret_eq := lookupCodeHOLFinite_installed_return u fname params fbody fbody .one r' vs c'
+    (by rw [htr.1.code]; exact hlook) hlk
+  subst hret_eq
+  rcases rv with ⟨⟨ww'⟩⟩ | _ | _ <;> simp [shapeOfHOLExact, shapeEqHOL] at hsh
+  have heff_cb := hcallee_eff c' vs (by simpa [htr.1.code] using hlk)
+    (by rw [hb]; simp) (by rw [hb]; exact Or.inl ⟨.val (.word ww'), rfl⟩)
+  rw [hb] at heff_cb
+  have heff_um : WorldEff u m [] [] wsGw := by
+    have h1 := worldEff_call_local_eff
+      (WorldEff.refl u [] [] wsGw htr.1.arena htr.1.code)
+      (ofString "w") fname args _ _ _ hlook
+      (fun callee cvals _ hl hnt hres =>
+        WorldEff.from_locals_clock (hcallee_eff callee cvals
+          (by simpa [htr.1.code] using hl) hnt hres))
+      (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl rfl)
+    rwa [hrun] at h1
+  obtain ⟨rvv, hv, hvsh⟩ := htr.2.2.2.2.2.2.2.1
+  refine ⟨txTrack_worldEff_mem_vvh htr heff_um
+    ((hother _ (by decide)).trans htr.2.2.2.1)
+    ((hother _ (by decide)).trans htr.2.2.2.2.1)
+    ((hother _ (by decide)).trans htr.2.2.2.2.2.1)
+    ⟨ww', hnm_m⟩
+    ⟨rvv, (hother _ (by decide)).trans hv, hvsh⟩, hother⟩
+
+private theorem txTrack_call_v_u256_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {args : List (ExpHOL 64)}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hrun : evaluateHOLFiniteState u (.call (some (some (.local, ofString "v"), none))
+      (ofString "tx_scalar_u256") args) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧
+    (∀ key, key ≠ ofString "v" → m.locals.lookup key = u.locals.lookup key) := by
+  obtain ⟨vs, b', c', r', rv, pb, _, hlk, hb, hsh, hmem, hglob, hother, hnm_m⟩ :=
+    call_local_none_inv_vvh hrun
+  have hsame := lookupCodeHOLFinite_installed_body u.code.lookup (ofString "tx_scalar_u256") _ _ b'
+    (.comb [.one, .one, .one, .one]) r' vs c' (by rw [htr.1.code]; exact lookup_tx_scalar_u256_vvh) hlk
+  subst hsame
+  have hret_eq := lookupCodeHOLFinite_installed_return u (ofString "tx_scalar_u256") _ _ _
+    (.comb [.one, .one, .one, .one]) r' vs c' (by rw [htr.1.code]; exact lookup_tx_scalar_u256_vvh) hlk
+  subst hret_eq
+  have heff_um : WorldEff u m [] [] wsGw := by
+    have h1 := worldEff_call_u256_v_vvh
+      (WorldEff.refl u [] [] wsGw htr.1.arena htr.1.code) args
+      (by rw [hrun]; simp) (by rw [hrun]; exact Or.inl rfl)
+    rwa [hrun] at h1
+  obtain ⟨ww, hw⟩ := htr.2.2.2.2.2.2.1
+  refine ⟨txTrack_worldEff_mem_vvh htr heff_um
+    ((hother _ (by decide)).trans htr.2.2.2.1)
+    ((hother _ (by decide)).trans htr.2.2.2.2.1)
+    ((hother _ (by decide)).trans htr.2.2.2.2.2.1)
+    ⟨ww, (hother _ (by decide)).trans hw⟩
+    ⟨rv, hnm_m, hsh⟩, hother⟩
+
+private theorem txTrack_store_v_disj_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 off : Nat}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hptx_lo : globN s "heap_ptr" ≤ ptx.toNat)
+    (hoff : off + 32 ≤ 400)
+    (hd0 : 8 ≤ off)
+    (hd200 : 208 ≤ off ∨ off + 32 ≤ 200)
+    (hd208 : 224 ≤ off ∨ off + 32 ≤ 208)
+    (hd264 : 272 ≤ off ∨ off + 32 ≤ 264)
+    (hd272 : 288 ≤ off ∨ off + 32 ≤ 272)
+    (hal_disj : 0 < v216 → ptx.toNat + 400 ≤ v208)
+    (harr_disj : ptx.toNat + 400 ≤ warr.toNat)
+    (hflow : evaluateHOLFiniteState u
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)])
+              (.var .local (ofString "v"))) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧ m.locals = u.locals := by
+  obtain ⟨rvv, hv, hvsh⟩ := htr.2.2.2.2.2.2.2.1
+  exact txTrack_store_disj_vvh htr hptx_lo hoff hd0 hd200 hd208 hd264 hd272 hal_disj harr_disj
+    (fun v hv' => by simp [evalHOLExact, hv] at hv'; subst hv'; exact flattenHOL_len_four rvv hvsh)
+    hflow
+
+private theorem txTrack_store_w_disj_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 off : Nat}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hptx_lo : globN s "heap_ptr" ≤ ptx.toNat)
+    (hoff : off + 8 ≤ 400)
+    (hd0 : 8 ≤ off)
+    (hd200 : 208 ≤ off ∨ off + 8 ≤ 200)
+    (hd208 : 224 ≤ off ∨ off + 8 ≤ 208)
+    (hd264 : 272 ≤ off ∨ off + 8 ≤ 264)
+    (hd272 : 288 ≤ off ∨ off + 8 ≤ 272)
+    (hal_disj : 0 < v216 → ptx.toNat + 400 ≤ v208)
+    (harr_disj : ptx.toNat + 400 ≤ warr.toNat)
+    (hflow : evaluateHOLFiniteState u
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)])
+              (.var .local (ofString "w"))) = (none, m)) :
+    TxTrack_vvh s m ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 ∧ m.locals = u.locals := by
+  obtain ⟨ww, hw⟩ := htr.2.2.2.2.2.2.1
+  exact txTrack_store_disj_vvh htr hptx_lo hoff hd0 hd200 hd208 hd264 hd272 hal_disj harr_disj
+    (fun v hv' => by simp [evalHOLExact, hw] at hv'; subst hv'; simp [flattenHOL])
+    hflow
+
+private theorem txTrack_store_word_at_vvh {F : Type} {s u m : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt wval : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 off : Nat} {valExp : ExpHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (hptx_lo : globN s "heap_ptr" ≤ ptx.toNat)
+    (hoff : off + 8 ≤ 400)
+    (hal_disj : 0 < v216 → ptx.toNat + 400 ≤ v208)
+    (harr_disj : ptx.toNat + 400 ≤ warr.toNat)
+    (hval : @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) valExp =
+      some (.val (.word wval)))
+    (hflow : evaluateHOLFiniteState u
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp) = (none, m)) :
+    WorldEff s m [] [] wsGw ∧
+    m.locals = u.locals ∧
+    globN m "heap_ptr" = globN u "heap_ptr" ∧
+    memW m (ptx.toNat + off) = wval.toNat ∧
+    (∀ a : Nat, a < 2 ^ 64 → a ≠ ptx.toNat + off → memW m a = memW u a) ∧
+    (0 < v216 →
+      globN s "heap_ptr" ≤ v208 ∧
+      v208 + 24 * v216 ≤ globN m "heap_ptr" ∧
+      WordsOK m (v208, 24 * v216) ∧
+      ((List.range v216).map (fun i => memW m (v208 + 24 * i + 16))).sum < 2 ^ 32) ∧
+    (0 < v280 → WordsOK m (v272, 120 * v280)) ∧
+    (∀ i < wcnt.toNat,
+      memW m (warr.toNat + 16 * i + 8) < 2 ^ 32 ∧
+      P0 ≤ memW m (warr.toNat + 16 * i) ∧
+      memW m (warr.toNat + 16 * i) + memW m (warr.toNat + 16 * i + 8) ≤ P0 + L0) := by
+  obtain ⟨heff_u, hptx_hp, harr_hp, htx, _, _, _, _,
+    _, _, _, _, _, _, _, hal, hau, hsl⟩ := htr
+  have hptx_hi : ptx.toNat + 400 ≤ heapLimit := le_trans hptx_hp heff_u.arena.2.2.1
+  have hhl : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hdst : @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a))
+      (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (ptx + BitVec.ofNat 64 off))) := by
+    simp [evalHOLExact, evalListHOLExact, htx, wordOpHOL, wordOp, valueIsWord, valueWord]
+  have hbnd := dtx_off_in_heap_vvh ptx off 8 hoff hptx_lo hptx_hi
+  have hsz : ∀ v, @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) valExp =
+      some v → 8 * (flattenHOL v).length ≤ 8 := by
+    intro v hv'; rw [hval] at hv'; injection hv' with hv''; subst hv''; simp [flattenHOL]
+  have heff_m : WorldEff s m [] [] wsGw := by
+    have h1 := worldEff_store_heap_bounded heff_u _ _ 8 hsz
+      (fun x hx => by rw [hdst] at hx; injection hx with hx'; injection hx' with hx''; injection hx'' with hx3; subst hx3; exact hbnd)
+    rwa [hflow] at h1
+  have hcf := (evaluate_store_control_frame u
+    (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp)
+  rw [hflow] at hcf
+  have hloc : m.locals = u.locals := hcf.2.1
+  have hglob : m.globals = u.globals := by
+    have hfl := hflow
+    rw [evaluateHOLFiniteState_store, hdst, hval] at hfl
+    dsimp only at hfl
+    split at hfl <;> simp_all
+    subst hfl
+    rfl
+  have hglobN : globN m "heap_ptr" = globN u "heap_ptr" := by unfold globN; rw [hglob]
+  have hGu := heff_u.arena.1
+  obtain ⟨hm_at, hm_other⟩ := memW_tx_off_store_word_vvh hGu htx hptx_hi hoff hval hflow
+  refine ⟨heff_m, hloc, hglobN, hm_at, hm_other,
+    fun hpos => ?_, fun hpos => wordsOK_transfer hGu heff_m.arena.1 (hau hpos),
+    fun i hi => ?_⟩
+  · obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+    have had := hal_disj hpos
+    have hhi_hl : v208 + 24 * v216 ≤ heapLimit := le_trans hhi heff_u.arena.2.2.1
+    refine ⟨hlo, by rw [hglobN]; exact hhi, wordsOK_transfer hGu heff_m.arena.1 hwok, ?_⟩
+    have hmap : (List.range v216).map (fun i => memW m (v208 + 24 * i + 16)) =
+        (List.range v216).map (fun i => memW u (v208 + 24 * i + 16)) := by
+      apply List.map_congr_left
+      intro i hi_mem
+      have hi_lt : i < v216 := List.mem_range.mp hi_mem
+      have hmul := Nat.mul_le_mul_left 24 (Nat.succ_le_of_lt hi_lt)
+      rw [Nat.mul_succ] at hmul
+      exact hm_other _ (by omega) (by omega)
+    rwa [hmap]
+  · obtain ⟨hlen_i, hlo_i, hhi_i⟩ := hsl i hi
+    have harr_hl : warr.toNat + 16 * wcnt.toNat ≤ heapLimit := le_trans harr_hp heff_u.arena.2.2.1
+    have hmul := Nat.mul_le_mul_left 16 (Nat.succ_le_of_lt hi)
+    rw [Nat.mul_succ] at hmul
+    rw [hm_other (warr.toNat + 16 * i) (by omega) (by omega),
+        hm_other (warr.toNat + 16 * i + 8) (by omega) (by omega)]
+    exact ⟨hlen_i, hlo_i, hhi_i⟩
+
+private theorem txTrack_setVar_other_vvh {F : Type} {s u cpost : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {nm : MlS} {rv : ValueHOL 64}
+    (htr : TxTrack_vvh s u ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (heff_uc : WorldEff u cpost [] [] wsGw)
+    (h1 : nm ≠ ofString "tx") (h2 : nm ≠ ofString "t") (h3 : nm ≠ ofString "arr")
+    (h4 : nm ≠ ofString "w") (h5 : nm ≠ ofString "v") :
+    TxTrack_vvh s (setVarHOLFinite nm rv { cpost with locals := u.locals })
+      ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 := by
+  let a := setVarHOLFinite nm rv { cpost with locals := u.locals }
+  have heff_ua : WorldEff u a [] [] wsGw := heff_uc.locals_clock a.locals a.clock
+  obtain ⟨ww, hw⟩ := htr.2.2.2.2.2.2.1
+  obtain ⟨rvv, hv, hvsh⟩ := htr.2.2.2.2.2.2.2.1
+  exact txTrack_worldEff_mem_vvh htr heff_ua
+    (by simp [a, setVarHOLFinite, htr.2.2.2.1, HolFiniteMapExact.lookup_update, FUPDATE, h1])
+    (by simp [a, setVarHOLFinite, htr.2.2.2.2.1, HolFiniteMapExact.lookup_update, FUPDATE, h2])
+    (by simp [a, setVarHOLFinite, htr.2.2.2.2.2.1, HolFiniteMapExact.lookup_update, FUPDATE, h3])
+    ⟨ww, by simp [a, setVarHOLFinite, hw, HolFiniteMapExact.lookup_update, FUPDATE, h4]⟩
+    ⟨rvv, by simp [a, setVarHOLFinite, hv, HolFiniteMapExact.lookup_update, FUPDATE, h5], hvsh⟩
+
+private theorem txTrack_resVar_other_vvh {F : Type} {s z : PanSemStateFiniteExact 64 F}
+    {ptx wt warr wcnt : BitVec 64}
+    {v0 v200 v208 v216 v264 v272 v280 P0 L0 : Nat}
+    {nm : MlS} {old : Option (ValueHOL 64)}
+    (htr : TxTrack_vvh s z ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0)
+    (h1 : nm ≠ ofString "tx") (h2 : nm ≠ ofString "t") (h3 : nm ≠ ofString "arr")
+    (h4 : nm ≠ ofString "w") (h5 : nm ≠ ofString "v") :
+    TxTrack_vvh s { z with locals := HolFiniteMapExact.resVarEq z.locals (nm, old) }
+      ptx wt warr wcnt v0 v200 v208 v216 v264 v272 v280 P0 L0 := by
+  obtain ⟨heff_z, hptx_hp, harr_hp, htx, ht, harr, ⟨ww, hw⟩, ⟨rvv, hv, hvsh⟩,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280, hal, hau, hsl⟩ := htr
+  let z' : PanSemStateFiniteExact 64 F := { z with locals := HolFiniteMapExact.resVarEq z.locals (nm, old) }
+  have heff_z' : WorldEff s z' [] [] wsGw := heff_z.locals_clock z'.locals z.clock
+  refine ⟨heff_z', hptx_hp, harr_hp,
+    by dsimp [z']; rw [resVarEq_lookup_local, if_neg (Ne.symm h1)]; exact htx,
+    by dsimp [z']; rw [resVarEq_lookup_local, if_neg (Ne.symm h2)]; exact ht,
+    by dsimp [z']; rw [resVarEq_lookup_local, if_neg (Ne.symm h3)]; exact harr,
+    ⟨ww, by dsimp [z']; rw [resVarEq_lookup_local, if_neg (Ne.symm h4)]; exact hw⟩,
+    ⟨rvv, by dsimp [z']; rw [resVarEq_lookup_local, if_neg (Ne.symm h5)]; exact hv, hvsh⟩,
+    hm0, hm200, hm208, hm216, hm264, hm272, hm280,
+    fun hpos => by
+      obtain ⟨hlo, hhi, hwok, hsum⟩ := hal hpos
+      exact ⟨hlo, hhi, wordsOK_transfer heff_z.arena.1 heff_z'.arena.1 hwok, hsum⟩,
+    fun hpos => wordsOK_transfer heff_z.arena.1 heff_z'.arena.1 (hau hpos),
+    hsl⟩
+
+private theorem decCall_none_full_inv_vvh {F : Type}
+    {u m : PanSemStateFiniteExact 64 F}
+    {nm : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hrun : evaluateHOLFiniteState u (.decCall nm sh fname args cont) = (none, m)) :
+    ∃ (vs : List (ValueHOL 64)) (b' : ProgHOL 64) (c' : HolFiniteMapExact MlS (ValueHOL 64))
+      (r' : ShapeHOL) (rv : ValueHOL 64) (st z : PanSemStateFiniteExact 64 F),
+      evalListHOLFinite u (h := fun a => Classical.propDecidable (u.memaddrs a)) args = some vs ∧
+      lookupCodeHOLFinite u.code.lookup fname vs = some (b', c', r') ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite u c') b' = (some (.returned rv), st) ∧
+      shapeEqHOL (shapeOfHOLExact rv) sh = true ∧
+      evaluateHOLFiniteState (setVarHOLFinite nm rv { st with locals := u.locals }) cont = (none, z) ∧
+      m = { z with locals := HolFiniteMapExact.resVarEq z.locals (nm, u.locals.lookup nm) } := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite u (h := fun a => Classical.propDecidable (u.memaddrs a)) args with _ | vs
+  · rw [hargs] at hrun; cases hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hlk : lookupCodeHOLFinite u.code.lookup fname vs with _ | ⟨b', c', r'⟩
+    · rw [hlk] at hrun; cases hrun
+    · rw [hlk] at hrun; dsimp only at hrun
+      by_cases hz : u.clock = 0
+      · rw [if_pos hz] at hrun; cases hrun
+      · rw [if_neg hz] at hrun
+        rcases hcal : evaluateHOLFiniteState (callEntryStateHOLFinite u c') b' with ⟨rc, st⟩
+        rw [hcal] at hrun
+        rcases rc with _ | (_ | _ | _ | _ | rv | _ | _) <;> dsimp only at hrun <;> try cases hrun
+        by_cases hsh : shapeEqHOL (shapeOfHOLExact rv) sh && shapeEqHOL (shapeOfHOLExact rv) r'
+        · rw [if_pos hsh] at hrun
+          rcases hc : evaluateHOLFiniteState (setVarHOLFinite nm rv { st with locals := u.locals }) cont with ⟨rc2, z⟩
+          rw [hc] at hrun; dsimp only at hrun
+          injection hrun with hr hm; subst hr
+          exact ⟨vs, b', c', r', rv, st, z, rfl, hlk, hcal, (Bool.and_eq_true _ _).mp hsh |>.1, hc, hm.symm⟩
+        · rw [if_neg hsh] at hrun; cases hrun
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
