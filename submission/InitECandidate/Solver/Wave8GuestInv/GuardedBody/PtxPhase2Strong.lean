@@ -11949,4 +11949,64 @@ theorem phase2_message_offset_store_hoare {ι : Type} [Nonempty ι]
   exact phase2_message_store_ready_store buffers contents hp hdom
     (phase2_message_offset_inside hp off hoff hx) hmem
 
+/-- Message allocation retains the transaction environment after restoring the
+caller locals, including both nonzero block-output backing pointers. -/
+theorem phase2_msg_new_txEnv (h : PtxCallees) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s) TxEnv
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_msg_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" := by
+    have hg := hs.2.2.1 (ofString "bo") (by decide)
+    change s.globals.lookup (ofString "bo") = post.globals.lookup (ofString "bo") at hg
+    simp only [globN, hg]
+  have hj : globN post "journal_cap" = globN s "journal_cap" := by
+    have hg := hs.2.2.1 (ofString "journal_cap") (by decide)
+    change s.globals.lookup (ofString "journal_cap") = post.globals.lookup (ofString "journal_cap") at hg
+    simp only [globN, hg]
+  have hk : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hk
+    apply hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz k
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+    · simp
+  have hi : locN (setVarHOLFinite (ofString "m") v {post with locals := s.locals}) "index" =
+      locN s "index" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "m" ≠ ofString "index" by decide]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "bo" ≠ 0; rw [hbo]; exact hp.2.bo_nz
+  · change memW post (globN post "bo" + 24) ≠ 0; rw [hbo, hk 24 (by simp)]; exact hp.2.bo24
+  · change memW post (globN post "bo" + 32) ≠ 0; rw [hbo, hk 32 (by simp)]; exact hp.2.bo32
+  · change memW post (globN post "bo" + 40) ≠ 0; rw [hbo, hk 40 (by simp)]; exact hp.2.bo40
+  · change memW post (globN post "bo" + 72) ≠ 0; rw [hbo, hk 72 (by simp)]; exact hp.2.bo72
+  · change locN (setVarHOLFinite (ofString "m") v {post with locals := s.locals}) "index" <
+      memW post (globN post "bo" + 80)
+    rw [hi, hbo, hk 80 (by simp)]; exact hp.2.idx_lt
+  · change globN post "journal_cap" ≠ 0; rw [hj]; exact hp.2.jcap_nz
+
+/-- Allocation establishes the reusable message-store invariant for all saved
+warm buffers while preserving the block-output backing pointers. -/
+theorem phase2_msg_new_store_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ TxEnv s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (PtxMessageStoreReady buffers contents)
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hg := phase2_msg_new_geometry h s vs body callee ret v post hc hp.1 he hl hb
+  have henv := phase2_msg_new_txEnv h s vs body callee ret v post hc
+    ⟨hp.1, hp.2.1⟩ he hl hb
+  have hf := fun i => phase2_msg_new_live_ready h (buffers i) (contents i)
+    s vs body callee ret v post hc ⟨hp.1, hp.2.2 i⟩ he hl hb
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  exact ⟨(hf i).1, henv, hg.1, hg.2.1, hg.2.2.1,
+    fun j => ⟨(hf j).2.2.2.2.2.1, (hf j).2.2.2.2.2.2⟩⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
