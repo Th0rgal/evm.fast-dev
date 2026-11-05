@@ -13453,4 +13453,111 @@ theorem phase2_message_table_stores_suffix_hoare {ι : Type} [Nonempty ι]
     exact ⟨hf.1, hf.2.trans hf.1.2.2.2.2.2.1⟩
   · exact phase2_message_ak_store_suffix buffers contents names aa ak hk
 
+/-- The two final table-pointer stores initialize the suffix without consuming clock. -/
+theorem phase2_message_table_stores_suffix_bound {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak")))) tail) b := by
+  have hb : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak")))) 0 :=
+    PtxP1.bound_of_clock (P := PtxMessageTableStoreReady buffers contents names aa ak)
+      (fun s => phase2_clock_seq (fun t => clock_store t _ _) (fun t => clock_store t _ _) s)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hb
+    (phase2_message_table_stores_suffix_hoare buffers contents names aa ak ha hk) ht s hc hp
+
+/-- Scalar witnesses can be restricted before passing to a suffix continuation. -/
+theorem phase2_message_suffix_restrict_names {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageSuffixReady buffers contents names aa ak s)
+    (hn : ∀ n ∈ names', n ∈ names) :
+    PtxMessageSuffixReady buffers contents names' aa ak s :=
+  ⟨⟨hp.1.1, fun n hm => hp.1.2 n (hn n hm)⟩, hp.2⟩
+
+/-- Pointer initialization followed by the source-sized empty allocation and
+ordinary-call stores supplies the backing-aware Phase-4 continuation. -/
+theorem phase2_message_table_init_call_suffix_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.seq
+        (.store (.op .add [.var .local (ofString "m"), .const 152]) (.var .local (ofString "aa")))
+        (.store (.op .add [.var .local (ofString "m"), .const 160]) (.var .local (ofString "ak"))))
+        (.decCall (ofString "empty") .one (ofString "alloc") [.const 8]
+          (.seq phase2_message_call_stores tail))) (K.alloc + b + 1) := by
+  apply phase2_message_table_stores_suffix_bound buffers contents names aa ak ha hk
+  intro F s hc hp
+  exact phase2_message_empty8_call_suffix_bound h buffers contents aa ak ht s hc
+    (phase2_message_suffix_restrict_names hp (by simp))
+
+/-- A framed message interval retains every initialized field across a call. -/
+theorem phase2_message_unhit_fields {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hu : IvlUnhit s post (locN s "m", 176)) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  intro k hk
+  apply R16Shards.memW_eq_of_ivlUnhit hu
+  · have hm := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hm]
+  · have hi := hp.2.2.2.1.2
+    have hh := hp.1.1.2.2.1
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    dsimp at hi ⊢
+    omega
+  · constructor <;> dsimp <;> omega
+
+/-- Reassemble the complete suffix after a call that frames the message interval.
+The structural, backing, and caller-local obligations are kept separate from
+the three initialized message-field obligations. -/
+theorem phase2_message_suffix_of_unhit {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageSuffixReady buffers contents names aa ak s)
+    (hm : locN post "m" = locN s "m")
+    (hu : R13Shards.IvlUnhit s post (locN s "m", 176))
+    (hs : PtxMessageScalarReady buffers contents names' post)
+    (ht : PtxMessageTables post aa ak)
+    (hb : TxBacking post) (hl : PtxPhase4LocalShapes post) :
+    PtxMessageSuffixReady buffers contents names' aa ak post := by
+  have hf := phase2_message_unhit_fields hp.1.1 hu
+  refine ⟨hs, ht, hb, hl, ?_, ?_, ?_⟩
+  · rw [hm, show 152 = 8 * 19 from rfl, hf 19 (by decide)]
+    exact hp.2.2.2.2.1
+  · rw [hm, show 160 = 8 * 20 from rfl, hf 20 (by decide)]
+    exact hp.2.2.2.2.2.1
+  · rw [hm, show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2.2.2
+
+/-- Before pointer initialization, only the gas field needs memory transport;
+the access-table pointers are retained as caller-local equalities. -/
+theorem phase2_message_table_store_ready_of_unhit {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageTableStoreReady buffers contents names aa ak s)
+    (hm : locN post "m" = locN s "m")
+    (ha : locN post "aa" = locN s "aa") (hk : locN post "ak" = locN s "ak")
+    (hu : R13Shards.IvlUnhit s post (locN s "m", 176))
+    (hs : PtxMessageScalarReady buffers contents names' post)
+    (ht : PtxMessageTables post aa ak)
+    (hb : TxBacking post) (hl : PtxPhase4LocalShapes post) :
+    PtxMessageTableStoreReady buffers contents names' aa ak post := by
+  refine ⟨hs, ht, hb, hl, ?_, ha.trans hp.2.2.2.2.2.1, hk.trans hp.2.2.2.2.2.2⟩
+  rw [hm, show 40 = 8 * 5 from rfl, phase2_message_unhit_fields hp.1.1 hu 5 (by decide)]
+  exact hp.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

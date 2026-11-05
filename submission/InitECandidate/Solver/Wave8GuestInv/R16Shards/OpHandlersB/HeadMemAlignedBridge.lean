@@ -7545,6 +7545,125 @@ theorem releaseReadyAt_of_pop_keys {F : Type} {s post : PanSemStateFiniteExact 6
             omega
     · exact Or.inr (Or.inr h_cm)
 
+/-! ### Exact gas accounting for error incorporation -/
+
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+def readW {F : Type} (s : PanSemStateFiniteExact 64 F) (a : BitVec 64) : BitVec 64 :=
+  match s.memory a with | .word w => w
+
+theorem ev_add_loads {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e c k : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (w : BitVec 64)
+    (h : ev s (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const k]),
+      .load .one (.op .add [.var .local (ofString "child"), .const k])]) = some (.val (.word w))) :
+    w = readW s (e + k) + readW s (c + k) := by
+  cases h1 : s.memory (e + k) with
+  | word w1 =>
+    cases h2 : s.memory (c + k) with
+    | word w2 =>
+      by_cases hd1 : s.memaddrs (e + k) <;> by_cases hd2 : s.memaddrs (c + k) <;>
+        simp [ev, evalHOLExact, evalListHOLExact, he, hc, memLoadHOLExact,
+          wordOpHOL, wordOp, valueIsWord, valueWord, h1, h2, hd1, hd2] at h
+      simpa [readW, h1, h2] using h.symm
+
+/-- Unlike the write-frame lemma, this records the actual three modular sums. -/
+theorem incorporate_child_on_error_exact {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72) :
+    Ret s (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) (fun _ post =>
+      post.globals = s.globals ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs ∧
+      post.be = s.be ∧ post.memory =
+        updW (updW (updW s.memory (e + 64)
+          (readW s (e + 64) + readW s (c + 64))) (e + 72)
+          (readW s (e + 72) + readW s (c + 72))) (e + 184)
+          (readW s (e + 184) + readW s (c + 184))) := by
+  have hb : sourceFnBody Guest.Software.guestFn_incorporate_child_on_error =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_incorporate_child_on_error).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_incorporate_child_on_error,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.seq_storeWv _ (ev_globOff s _ e 64 he) (fun v hv => ev_op_word s _ _ v hv) ?_
+  intro w1 hw1 _
+  have hw1' := ev_add_loads s e c 64 he hc w1 hw1
+  subst w1
+  refine Ret.seq_storeWv _ (ev_globOff _ _ e 72 he) (fun v hv => ev_op_word _ _ _ v hv) ?_
+  intro w2 hw2 _
+  have hw2' := ev_add_loads _ e c 72 (by exact he) (by exact hc) w2 hw2
+  simp only [readW, updW, if_neg (show e + 72 ≠ e + 64 by bv_omega),
+    if_neg hsep.1] at hw2'
+  subst w2
+  refine Ret.seq_storeWv _ (ev_globOff _ _ e 184 he) (fun v hv => ev_op_word _ _ _ v hv) ?_
+  intro w3 hw3 _
+  have hw3' := ev_add_loads _ e c 184 (by exact he) (by exact hc) w3 hw3
+  simp only [readW, updW, if_neg (show e + 184 ≠ e + 72 by bv_omega),
+    if_neg (show e + 184 ≠ e + 64 by bv_omega), if_neg hsep.2.1,
+    if_neg hsep.2.2] at hw3'
+  subst w3
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, rfl, rfl, rfl, rfl⟩
+
+theorem incorporate_child_on_error_head_gas {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    (readW post (e + 64)).toNat + (readW post (e + 192)).toNat ≤
+      (readW s (e + 64)).toNat + (readW s (c + 64)).toNat +
+        (readW s (e + 192)).toNat := by
+  obtain ⟨_, _, _, _, hm⟩ := Ret.apply (incorporate_child_on_error_exact s e c he hc hsep) hr
+  have h64 : readW post (e + 64) = readW s (e + 64) + readW s (c + 64) := by
+    simp [readW, hm, updW]
+  have h192 : readW post (e + 192) = readW s (e + 192) := by
+    simp [readW, hm, updW]
+  rw [h64, h192, BitVec.toNat_add]
+  exact Nat.add_le_add_right (Nat.mod_le _ _) _
+
+theorem readW_toNat {F : Type} (s : PanSemStateFiniteExact 64 F) (a : BitVec 64) :
+    (readW s a).toNat = memW s a.toNat := by
+  simp only [memW, BitVec.ofNat_toNat, readW]
+  cases s.memory a
+  rfl
+
+/-- Error incorporation consumes at most the child's regular-gas credit. -/
+theorem incorporate_child_on_error_gas {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (hcB : c.toNat + 72 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    memW post (e.toNat + 64) + memW post (e.toNat + 192) ≤
+      memW s (e.toNat + 64) + memW s (c.toNat + 64) + memW s (e.toNat + 192) := by
+  have h := incorporate_child_on_error_head_gas s post e c he hc hsep v hr
+  simp only [readW_toNat] at h
+  change memW post (e + (64 : BitVec 64)).toNat + memW post (e + (192 : BitVec 64)).toNat ≤
+    memW s (e + (64 : BitVec 64)).toNat + memW s (c + (64 : BitVec 64)).toNat +
+      memW s (e + (192 : BitVec 64)).toNat at h
+  have h64 : (64 : BitVec 64).toNat = 64 := rfl
+  have h192 : (192 : BitVec 64).toNat = 192 := rfl
+  simp only [BitVec.toNat_add, h64, h192] at h
+  rw [Nat.mod_eq_of_lt (show e.toNat + 64 < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show e.toNat + 192 < 2 ^ 64 by omega),
+    Nat.mod_eq_of_lt (show c.toNat + 64 < 2 ^ 64 by omega)] at h
+  exact h
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
@@ -8924,6 +9043,91 @@ theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
     unfold Disj at hd1 hd2; dsimp only at hd1 hd2
     exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+
+/-- Error incorporation's three head writes avoid every chain alignment cell. -/
+theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
+  have hkbound : k < 280 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+  have hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+  obtain ⟨_, S, _, hrest⟩ := hi
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
+  let e := globN s "ev"
+  let c := globN s "cur_cont"
+  have hhead := hFW _ (head_mem_evmChain s)
+  have heB := (hhead.1 (e, 280) (by simp [e])).1.2
+  have hcB := (hhead.1 (c, 104) (by simp [c])).1.2
+  dsimp only at heB hcB
+  have hbound : scratchEnd < 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+  have hneq (a : Nat) (ha : a < 2 ^ 64) (hne : a ≠ e + k) :
+      BitVec.ofNat 64 a ≠ BitVec.ofNat 64 (e + k) := by
+    intro hx
+    have hh := congrArg BitVec.toNat hx
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha,
+      Nat.mod_eq_of_lt (show e + k < 2 ^ 64 by omega)] at hh
+    exact hne hh
+  have hcs : evmChain s = (e, c) :: (evmChain s).tail := evmChain_cons s
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdc : Disj (e, 280) (c, 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | ht
+  · unfold Disj at hdc; dsimp only at hdc
+    refine ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+  · have hF := hFW ec (by rw [hcs]; exact List.mem_cons_of_mem _ ht)
+    have hrB := (hF.1 (ec.1, 280) (by simp)).1.2
+    have hkB := (hF.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hrB hkB
+    have hmem (i : Ivl) (hm : i ∈ frameObjects s ec) :
+        i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+      List.mem_flatten.mpr ⟨frameObjects s ec, List.mem_map_of_mem ht, hm⟩
+    have hd1 := hcross (e, 280) (by simp [frameObjects])
+      (ec.1, 280) (hmem _ (by simp [frameObjects]))
+    have hd2 := hcross (e, 280) (by simp [frameObjects])
+      (ec.2, 104) (hmem _ (by simp [frameObjects]))
+    unfold Disj at hd1 hd2; dsimp only at hd1 hd2
+    exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+
+/-- The error incorporation callee preserves the chain's memory contract. -/
+theorem incorporate_child_on_error_cells {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (hi : EvmInv s)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, ⟨w1, w2, w3, hm⟩, _, _⟩ :=
+    Ret.apply (incorporate_child_on_error_run s e he) hr
+  have heq : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have h64 := chain_cells_ne_head_error s hi 64 (by simp)
+  have h72 := chain_cells_ne_head_error s hi 72 (by simp)
+  have h184 := chain_cells_ne_head_error s hi 184 (by simp)
+  rw [BitVec.ofNat_add (globN s "ev") 64, heq] at h64
+  rw [BitVec.ofNat_add (globN s "ev") 72, heq] at h72
+  rw [BitVec.ofNat_add (globN s "ev") 184, heq] at h184
+  intro ec hec
+  obtain ⟨h1, h2, h3, h4⟩ := h64 ec hec
+  obtain ⟨h5, h6, h7, h8⟩ := h72 ec hec
+  obtain ⟨h9, h10, h11, h12⟩ := h184 ec hec
+  have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e + 64)
+      (hb : BitVec.ofNat 64 a ≠ e + 72) (hc : BitVec.ofNat 64 a ≠ e + 184) :
+      memW post a = memW s a := by
+    unfold memW
+    rw [hm, updW_ne _ _ _ _ hc, updW_ne _ _ _ _ hb, updW_ne _ _ _ _ ha]
+  exact ⟨hkeep _ h1 h5 h9, hkeep _ h2 h6 h10,
+    hkeep _ h3 h7 h11, hkeep _ h4 h8 h12⟩
 
 /-- The concrete cleanup restores the saved frame-memory mark and preserves
 every chain alignment cell.  The only memory write is the parent's pc. -/
