@@ -7712,4 +7712,31 @@ theorem merge_set_call_flow_locals {F : Type}
       | exception e v => simp at hn
       | error | «break» | «continue» | timeOut | finalFfi _ => simp at hn
 
+/-- Outer insertion carries the bound inner table into its resulting value list. -/
+theorem merge_set_call_bound_member {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hAR : ArenaReady s) (hwf : HtabWF s tw.toNat)
+    (hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    post.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+      locN post "binner" ∈ htabValues post tw.toNat := by
+  have hv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hv hAR hwf hal hfr
+  have hl := merge_set_call_flow_locals s et ek _ tw kw iw ht hk hv hAR.1.code hfr
+  dsimp only
+  constructor
+  · rw [hl]; exact hi
+  · have hm := (merge_set_values_membership hp.2.1).1
+    simpa [locN, hl, hi] using hm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
