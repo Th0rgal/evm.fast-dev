@@ -2012,6 +2012,28 @@ theorem logPointers_store_bo40 {F : Type} {s : PanSemStateFiniteExact 64 F}
     refine ⟨arr, ?_, hin⟩
     unfold worldOwned; simp only [List.mem_append]; exact Or.inl (Or.inr hmemf)
 
+def Phase4LogSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    memW s (memW s (globN s "bo" + 40)) ≠ 0 ∧
+    Inside (locN s "slot", 8) (memW s (memW s (globN s "bo" + 40)))
+      (memW s (memW s (globN s "bo" + 40)) +
+        8 * memW s (memW s (globN s "bo" + 40) + 16))
+
+theorem hoare_logSlot_store (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare Phase4LogSlotReady (.store (.var .local (ofString "slot")) src)
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨w, rfl⟩ := hword s v hv
+  obtain ⟨hdom, _, hmem⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hslot : locN s "slot" = x.toNat := by
+    have hlu : s.locals.lookup (ofString "slot") = some (.val (.word x)) := hx
+    simp only [locN, hlu]
+  apply logPointers_store_bo40 hp.1 hp.1.1.2.2 hp.2.1 hdom _ hmem
+  simpa only [hslot] using hp.2.2
+
 theorem store_receiptSlot (off : Bool) :
     Hoare Phase4ReceiptEncoded
       (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
@@ -2162,6 +2184,37 @@ theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : N
   rw [he]
   intro F s hc hp
   exact hb s hc hp
+
+theorem hoare_logPointers_increment :
+    Hoare Phase4LogPointersReady
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  apply Hoare.assign
+  · intro F s v hp _ _
+    exact LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v s hp
+  · intro F s _ hr
+    cases hr
+
+theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 128 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 128 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+      (Hoare.assign ?_ (fun _ _ hr => absurd hr (by simp))) htail
+    intro F s v hp he _
+    have hv : v = .val (.word (0 : BitVec 64)) := by
+      change some (.val (.word (0 : BitVec 64))) = some v at he
+      exact (Option.some.inj he).symm
+    subst v
+    refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) _ s hp, ?_⟩
+    change locN (setVarHOLFinite (ofString "i") (.val (.word (0 : BitVec 64))) s) "i" = 0
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
