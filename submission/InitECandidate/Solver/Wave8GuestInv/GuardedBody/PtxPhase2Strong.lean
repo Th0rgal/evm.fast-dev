@@ -4320,4 +4320,43 @@ theorem phase2_key_alloc_exit_size {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hw]
   exact phase2_key_record_inside base _ k hk
 
+/-- The storage-key byte allocation evaluates without machine-word wraparound. -/
+theorem phase2_storage_keys_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) :
+    ∃ w : BitVec 64,
+      evalAt s (.panop .mul [.var .local (ofString "nkeys"), .const 32]) =
+        some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 32 ∧
+      (w.toNat + 7) / 8 * 8 = locN s "nkeys" * 32 := by
+  obtain ⟨n, hn⟩ := hp.1.2.2.1
+  have hb := phase2_address_count_alloc_bound hp
+  have hnN : locN s "nkeys" = n.toNat := by simp [locN, hn]
+  have hlt : n.toNat * 32 < 2 ^ 64 := by rw [hnN] at hb; omega
+  refine ⟨n * 32, ?_, ?_, ?_⟩
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      panOpHOL]
+  · change n.toNat * 32 % 2 ^ 64 = locN s "nkeys" * 32
+    rw [Nat.mod_eq_of_lt hlt, hnN]
+  · simp only [BitVec.toNat_mul]
+    change (n.toNat * 32 % 2 ^ 64 + 7) / 8 * 8 = locN s "nkeys" * 32
+    rw [Nat.mod_eq_of_lt hlt, hnN]
+    omega
+
+/-- The storage-key allocation covers each complete 32-byte copy at loop exit. -/
+theorem phase2_storage_keys_exit_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    ∃ w : BitVec 64,
+      evalAt s (.panop .mul [.var .local (ofString "nkeys"), .const 32]) =
+        some (.val (.word w)) ∧
+      w.toNat = txAccessSlots s (locN s "tx") * 32 ∧
+      ∀ base k, k < txAccessSlots s (locN s "tx") →
+        Inside (base + 32 * k, 32) base (base + (w.toNat + 7) / 8 * 8) := by
+  obtain ⟨w, he, hw, hr⟩ := phase2_storage_keys_alloc_size s hp
+  have ht := phase2_address_count_exit_total hp hi
+  rw [ht] at hw hr
+  refine ⟨w, he, hw, ?_⟩
+  intro base k hk
+  rw [hr]
+  constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
