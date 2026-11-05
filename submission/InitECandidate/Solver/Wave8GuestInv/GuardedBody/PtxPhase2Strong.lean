@@ -14901,4 +14901,19 @@ theorem phase2_get_account_resume_backing (name : MlS) (args : List (ExpHOL 64))
   rw [hr] at hb
   exact hb
 
+/-- Account lookup jointly preserves message buffers, scalar locals and transaction backing. -/
+theorem phase2_get_account_message_scalar_backing (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      (fun s => PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s)
+      name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact ⟨phase2_get_account_message_scalar_ready h buffers contents names name args hm hi hn
+    s vs body callee ret v post hc hp.1 ha hl hr,
+    phase2_get_account_resume_backing name args s vs body callee ret v post hc
+      ⟨hp.1.1.1, hp.1.1.2.1, hp.2⟩ ha hl hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
