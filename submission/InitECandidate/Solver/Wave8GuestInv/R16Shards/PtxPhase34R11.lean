@@ -1275,6 +1275,30 @@ theorem logsWorldOwned_scratchStep {F : Type}
     hWT hgrow hl hd (R16Shards.globN_eq_of_lookup (hs.2.2.1 _ hsys)) hog hfr'
   exact ⟨hp.1, S', Nd', hWT', hp.2⟩
 
+theorem logsWorldOwned_heapStep_header {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {keep : List (String × List Nat)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"] keep Q s r post)
+    (hA : ArenaReady s) (hl : LogsListOK s logs) (ho : LogsWorldOwned s logs)
+    (hn : logs ≠ 0) :
+    memW post logs = memW s logs ∧ memW post (logs + 8) = memW s (logs + 8) := by
+  obtain ⟨S, Nd, hWT, hd⟩ := ho
+  have hgrow : AllocatorGrows s post := ⟨hs.2.1, by
+    have he : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+      R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+    omega⟩
+  obtain ⟨S', Nd', _, _, hog, hfr, _⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  have hl' := hl.resolve_left hn
+  have hh := allocated_ivl_survives_step hA.2 hs.1.2 hgrow
+    (worldOwned_zero_aligned hWT) (by intro j hj; cases hj) hog hfr
+    hl'.1.1 (by norm_num : 24 % 8 = 0) hl'.2.1
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj) (by intro j hj; cases hj)
+  have hb := (ivl_allocated_bound hA.2 hl'.2.1).2
+  exact ⟨memW_eq_of_ivlUnhit hh.2.2 hl'.1.1 hb ⟨by omega, by omega⟩,
+    memW_eq_of_ivlUnhit hh.2.2 (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩⟩
+
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     LogsDisjFixed s (locN s "logs") ∧ LogsWorldOwned s (locN s "logs")
