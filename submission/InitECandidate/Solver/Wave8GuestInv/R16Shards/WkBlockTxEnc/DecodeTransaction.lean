@@ -7459,6 +7459,373 @@ private theorem tx_list_item_ret_sub_vvh {F : Type}
     · simp at hrest
   · simp at hargs
 
+private theorem memW_stride_sum_kept_of_worldEff_vvh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hAs : ArenaReady s) (heff : WorldEff s post [] [] wsGw)
+    (base stride count offset : Nat)
+    (hoff : offset + 8 ≤ stride)
+    (hheap : base + stride * count ≤ globN s "heap_ptr") :
+    ((List.range count).map (fun i => memW post (base + stride * i + offset))).sum =
+      ((List.range count).map (fun i => memW s (base + stride * i + offset))).sum := by
+  have hmaps : (List.range count).map (fun i => memW post (base + stride * i + offset)) =
+      (List.range count).map (fun i => memW s (base + stride * i + offset)) := by
+    apply List.map_congr_left
+    intro i hi
+    have hi_lt : i < count := List.mem_range.mp hi
+    have hmul := Nat.mul_le_mul_left stride (Nat.succ_le_of_lt hi_lt)
+    rw [Nat.mul_succ] at hmul
+    exact memW_kept_of_worldEff_lt_hp hAs heff (by omega)
+  rw [hmaps]
+
+/-! ### Section 5d: Trace Agreement for `rlp_list_count` and Slice Specification for `rlp_list_to_slices` -/
+
+private def sliceOff_vvh (ts : List (BitVec 64)) (j : Nat) : Nat :=
+  ((List.range j).map (fun r => (ts.getD r 0#64).toNat)).sum
+
+private def CountTraceAt_vvh {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P m : BitVec 64)
+    (ts : List (BitVec 64)) (idx : Nat) (off : BitVec 64) : Prop :=
+  off.toNat = sliceOff_vvh ts idx ∧
+  off.toNat ≤ m.toNat ∧
+  ∀ j < idx,
+    1 ≤ (ts.getD j 0#64).toNat ∧
+    sliceOff_vvh ts j + (ts.getD j 0#64).toNat ≤ m.toNat ∧
+    ∀ (e2 : PanSemStateFiniteExact 64 F),
+      e2.code = originalRuntimeCode →
+      e2.locals.lookup (ofString "p") =
+        some (.val (.word (P + BitVec.ofNat 64 (sliceOff_vvh ts j)))) →
+      (∀ k < m.toNat - sliceOff_vvh ts j,
+        memB e2 ((P + BitVec.ofNat 64 (sliceOff_vvh ts j)).toNat + k) =
+          memB s0 ((P + BitVec.ofNat 64 (sliceOff_vvh ts j)).toNat + k)) →
+      ∀ rv2 : ValueHOL 64,
+        (evaluateHOLFiniteState e2 (sourceFnBody Guest.Software.guestFn_rlp_item_total_unchecked)).1 =
+          some (.returned rv2) →
+        rv2 = .val (.word (ts.getD j 0#64))
+
+private def CountTraceInv_vvh {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P m : BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldEff s0 s [] [] wsGw ∧
+  ∃ (vis : Finset (Fin domainBytes)) (ts : List (BitVec 64)) (y c : BitVec 64),
+    s.locals.lookup (ofString "p") = some (.val (.word P)) ∧
+    s.locals.lookup (ofString "off") = some (.val (.word y)) ∧
+    s.locals.lookup (ofString "len") = some (.val (.word m)) ∧
+    s.locals.lookup (ofString "count") = some (.val (.word c)) ∧
+    ts.length = c.toNat ∧
+    c.toNat = vis.card ∧
+    c.toNat ≤ y.toNat ∧
+    CountTraceAt_vvh s0 P m ts c.toNat y ∧
+    ∀ k ∈ vis, ∃ d : BitVec 64, d.toNat < y.toNat ∧
+      sourceBase ≤ (P + d).toNat ∧ (P + d).toNat < heapEnd ∧
+      k.val = (P + d).toNat - sourceBase
+
+private theorem sliceOff_succ_vvh (ts : List (BitVec 64)) (j : Nat) :
+    sliceOff_vvh ts (j + 1) = sliceOff_vvh ts j + (ts.getD j 0#64).toNat := by
+  simp [sliceOff_vvh, List.range_succ, List.sum_append]
+
+private theorem sliceOff_append_singleton_lt_vvh (ts : List (BitVec 64)) (T : BitVec 64)
+    {j : Nat} (hj : j ≤ ts.length) :
+    sliceOff_vvh (ts ++ [T]) j = sliceOff_vvh ts j := by
+  unfold sliceOff_vvh
+  congr 1
+  apply List.map_congr_left
+  intro r hr
+  have hr_lt : r < ts.length := Nat.lt_of_lt_of_le (List.mem_range.mp hr) hj
+  rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD, List.getElem?_append_left hr_lt]
+
+private theorem countBody_trace_step_vvh {F : Type}
+    (s0 s : PanSemStateFiniteExact 64 F) (P y m c : BitVec 64)
+    (hAs0 : ArenaReady s0)
+    (heff : WorldEff s0 s [] [] wsGw)
+    (hfit : P.toNat + m.toNat ≤ 2 ^ 64)
+    (hdj : IvlsDisj [(P.toNat, m.toNat)] [(globN s0 "heap_ptr", scratchEnd - globN s0 "heap_ptr")])
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hy : s.locals.lookup (ofString "off") = some (.val (.word y)))
+    (hm : s.locals.lookup (ofString "len") = some (.val (.word m)))
+    (hc : s.locals.lookup (ofString "count") = some (.val (.word c)))
+    (hlt : y.toNat < m.toNat)
+    (hflow : (evaluateHOLFiniteState s countBody_vvh).1 = none) :
+    let post := (evaluateHOLFiniteState s countBody_vvh).2
+    WorldEff s0 post [] [] wsGw ∧
+    ∃ T : BitVec 64,
+      1 ≤ T.toNat ∧ y.toNat + T.toNat ≤ m.toNat ∧
+      sourceBase ≤ (P + y).toNat ∧ (P + y).toNat < heapEnd ∧
+      (∀ (e2 : PanSemStateFiniteExact 64 F),
+        e2.code = originalRuntimeCode →
+        e2.locals.lookup (ofString "p") = some (.val (.word (P + y))) →
+        (∀ k < m.toNat - y.toNat, memB e2 ((P + y).toNat + k) = memB s0 ((P + y).toNat + k)) →
+        ∀ rv2 : ValueHOL 64,
+          (evaluateHOLFiniteState e2 (sourceFnBody Guest.Software.guestFn_rlp_item_total_unchecked)).1 =
+            some (.returned rv2) →
+          rv2 = .val (.word T)) ∧
+      post.locals.lookup (ofString "off") = some (.val (.word (y + T))) ∧
+      post.locals.lookup (ofString "count") = some (.val (.word (c + 1#64))) ∧
+      post.locals.lookup (ofString "p") = some (.val (.word P)) ∧
+      post.locals.lookup (ofString "len") = some (.val (.word m)) := by
+  unfold countBody_vvh at hflow ⊢
+  have heff_post : WorldEff s0 (evaluateHOLFiniteState s
+      (.decCall (ofString "total") .one (ofString "rlp_item_total")
+        [.op .add [.var .local (ofString "p"), .var .local (ofString "off")],
+          .op .sub [.var .local (ofString "len"), .var .local (ofString "off")]]
+        (.seq (.assign .local (ofString "off") (.op .add [.var .local (ofString "off"), .var .local (ofString "total")]))
+          (.assign .local (ofString "count") (.op .add [.var .local (ofString "count"), .const 1]))))).2 [] [] wsGw :=
+    worldEff_decCall_eff heff (ofString "total") .one (ofString "rlp_item_total") _ _ _ _ lookup_rlp_item_total_vvh
+      (fun callee cvals _ hlc hnt_cb hres_cb =>
+        heff.trans_noBuf
+          (WorldEff.from_locals_clock
+            (worldEff_rlp_item_total_vvh (callEntryStateHOLFinite s callee) cvals
+              heff.code (localsFree_arenaReady s callee _ heff.arena)
+              (by simpa [heff.code, callEntryStateHOLFinite] using hlc) hnt_cb hres_cb))
+          ws_nil_sub_vvh ws_no_gb_vvh)
+      (fun _ _ _ cpost _ _ _ _ heff_cp hnt_k hcr_k =>
+        worldEff_seq hnt_k hcr_k
+          (fun _ _ => worldEff_assign_local (heff_cp.locals_clock _ _) _ _)
+          (fun _ _ heff_m2 _ _ => worldEff_assign_local heff_m2 _ _))
+      (by rw [hflow]; simp) (by rw [hflow]; exact Or.inl rfl)
+  obtain ⟨values, body, callee, rs, v, hargs, hl, hret, u, hcu, hloc, hu, hcont, hfin⟩ := decCall_flow_vvh hflow
+  simp only [evalListHOLFinite_eq_toExact, evalListHOLExact, evalHOLExact, hp, hy, hm,
+    wordOpHOL, wordOp, valueIsWord, valueWord, List.all, List.map, Option.map, Bool.and_self,
+    ↓reduceIte, List.foldr, add_zero, Option.some.injEq] at hargs
+  subst hargs
+  have hcode : s.code = originalRuntimeCode := heff.code
+  have hG : GuestInv s := heff.arena.1
+  rw [hcode] at hl
+  obtain ⟨rfl, hcp, hcl⟩ := callee_p_len_vvh lookup_rlp_item_total_vvh _ _ body callee rs hl
+  have hsub : (m - y).toNat = m.toNat - y.toNat := by rw [BitVec.toNat_sub]; omega
+  have hpy_nat : (P + y).toNat = P.toNat + y.toNat :=
+    BitVec.toNat_add_of_lt (by omega)
+  have hsub_fit : (P + y).toNat + (m - y).toNat ≤ 2 ^ 64 := by omega
+  obtain ⟨T_dom, rfl, hT1, hT2, hpy_lo, hpy_hi⟩ :=
+    total_post_dom_vvh (callEntryStateHOLFinite s callee) hcode (guestInv_callEntry s callee hG)
+      (P + y) (m - y) hcp hcl v hret
+  obtain ⟨T', hv_eq, _, _, hagree_s⟩ :=
+    rlp_item_total_agree_unchecked_vvh (callEntryStateHOLFinite s callee) hcode (P + y) (m - y)
+      hsub_fit hcp hcl (.val (.word T_dom)) hret
+  injection hv_eq with hv_eq'; injection hv_eq' with hT_eq; subst hT_eq
+  rw [hsub] at hT2 hagree_s
+  have hbytes_s_s0 : ∀ k < m.toNat - y.toNat, memB s ((P + y).toNat + k) = memB s0 ((P + y).toNat + k) := by
+    intro k hk
+    exact memB_kept_of_worldEff_disj hAs0 heff hfit hdj (by omega) (by omega)
+  have huoff : u.locals.lookup (ofString "off") = some (.val (.word y)) := by
+    rw [hloc _ (by decide)]; exact hy
+  have hucnt : u.locals.lookup (ofString "count") = some (.val (.word c)) := by
+    rw [hloc _ (by decide)]; exact hc
+  have hup : u.locals.lookup (ofString "p") = some (.val (.word P)) := by
+    rw [hloc _ (by decide)]; exact hp
+  have hulen : u.locals.lookup (ofString "len") = some (.val (.word m)) := by
+    rw [hloc _ (by decide)]; exact hm
+  have hfirst : evaluateHOLFiniteState u
+      (.assign .local (ofString "off") (.op .add [.var .local (ofString "off"), .var .local (ofString "total")])) =
+      (none, setKvarHOLFinite .local (ofString "off") (.val (.word (y + T_dom))) u) := by
+    rw [evaluateHOLFiniteState_assign]
+    simp [evalHOLExact, evalListHOLExact, huoff, hu, wordOpHOL, wordOp, valueIsWord, valueWord,
+      isValidValueHOLFinite, lookupKvarHOLExact, shapeOfHOLExact, shapeEqHOL]
+  let u1 := setKvarHOLFinite .local (ofString "off") (.val (.word (y + T_dom))) u
+  have hu1_cnt : u1.locals.lookup (ofString "count") = some (.val (.word c)) := by
+    simp [u1, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hucnt,
+      show ofString "off" ≠ ofString "count" by decide]
+  have hsecond : evaluateHOLFiniteState u1
+      (.assign .local (ofString "count") (.op .add [.var .local (ofString "count"), .const 1])) =
+      (none, setKvarHOLFinite .local (ofString "count") (.val (.word (c + 1#64))) u1) := by
+    rw [evaluateHOLFiniteState_assign]
+    simp [evalHOLExact, evalListHOLExact, hu1_cnt, wordOpHOL, wordOp, valueIsWord, valueWord,
+      isValidValueHOLFinite, lookupKvarHOLExact, shapeOfHOLExact, shapeEqHOL]
+  refine ⟨heff_post, T_dom, hT1, by omega, hpy_lo, hpy_hi, ?_, ?_, ?_, ?_, ?_⟩
+  · intro e2 hc2 hp2 hbytes2 rv2 hret2
+    exact hagree_s e2 hc2 hp2 (fun k hk => (hbytes2 k hk).trans (hbytes_s_s0 k hk).symm) rv2 hret2
+  · rw [hfin (ofString "off") (by decide), evaluateHOLFiniteState_seq_line780, hfirst]; dsimp only
+    rw [hsecond]; dsimp only
+    simp [u1, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "count" ≠ ofString "off" by decide]
+  · rw [hfin (ofString "count") (by decide), evaluateHOLFiniteState_seq_line780, hfirst]; dsimp only
+    rw [hsecond]; dsimp only
+    simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · rw [hfin (ofString "p") (by decide), evaluateHOLFiniteState_seq_line780, hfirst]; dsimp only
+    rw [hsecond]; dsimp only
+    simp [u1, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hup,
+      show ofString "count" ≠ ofString "p" by decide, show ofString "off" ≠ ofString "p" by decide]
+  · rw [hfin (ofString "len") (by decide), evaluateHOLFiniteState_seq_line780, hfirst]; dsimp only
+    rw [hsecond]; dsimp only
+    simp [u1, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hulen,
+      show ofString "count" ≠ ofString "len" by decide, show ofString "off" ≠ ofString "len" by decide]
+
+private theorem while_countTraceInv_vvh {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (P m : BitVec 64)
+    (hAs0 : ArenaReady s0)
+    (hfit : P.toNat + m.toNat ≤ 2 ^ 64)
+    (hdj : IvlsDisj [(P.toNat, m.toNat)] [(globN s0 "heap_ptr", scratchEnd - globN s0 "heap_ptr")])
+    (k : Nat) (s post : PanSemStateFiniteExact 64 F)
+    (hclk : s.clock ≤ k) (hinv : CountTraceInv_vvh s0 P m s)
+    (hrun : evaluateHOLFiniteState s (.while countCond_vvh countBody_vvh) = (none, post)) :
+    CountTraceInv_vvh s0 P m post ∧
+    @evalHOLExact 64 F _ post.toExact (fun a => Classical.propDecidable (post.memaddrs a)) countCond_vvh =
+      some (.val (.word 0)) := by
+  induction k generalizing s with
+  | zero =>
+    rw [evaluateHOLFiniteState_while_total] at hrun
+    split at hrun
+    · rename_i cw hcond
+      split at hrun
+      · split at hrun <;> [simp at hrun; omega]
+      · rename_i hnotnz
+        have hcw0 : cw = 0 := Classical.not_not.1 hnotnz
+        subst hcw0; simp at hrun; subst hrun; exact ⟨hinv, hcond⟩
+    · simp at hrun
+  | succ k ih =>
+    rw [evaluateHOLFiniteState_while_total] at hrun
+    split at hrun
+    · rename_i cw hcond
+      split at hrun
+      · rename_i hnz
+        split at hrun
+        · simp at hrun
+        · dsimp only at hrun
+          rw [fixClockHOLFinite_evaluateState] at hrun
+          have rem := evaluateHOLFiniteState_clock_le (decClockHOLFinite s) countBody_vvh
+          have hbc := countBody_no_bc_vvh (decClockHOLFinite s)
+          rcases hbr : evaluateHOLFiniteState (decClockHOLFinite s) countBody_vvh with ⟨r1, mid⟩
+          rw [hbr] at hrun rem hbc
+          cases r1 with
+          | none =>
+            obtain ⟨heff_s, vis, ts, y, c, hp, hy, hm, hc_cnt, hts_len, hcard, hcy, htr, hvis⟩ := hinv
+            obtain ⟨hy_off, hym, htr_j⟩ := htr
+            have hlt : y.toNat < m.toNat := by
+              simp [countCond_vvh, evalHOLExact, hy, hm, Compiler.Encoders.Asm.wordCmpHOL] at hcond
+              by_contra hge
+              have hge' : ¬ (y < m) := by rw [BitVec.lt_def]; omega
+              simp [hge'] at hcond
+              exact hnz hcond.symm
+            let sd := decClockHOLFinite s
+            have heff_sd : WorldEff s0 sd [] [] wsGw := heff_s.locals_clock s.locals (s.clock - 1)
+            obtain ⟨heff_mid, T, hT1, hyT_le, hpy_lo, hpy_hi, hagree_T, hm_off, hm_cnt, hm_p, hm_len⟩ :=
+              countBody_trace_step_vvh s0 sd P y m c hAs0 heff_sd hfit hdj hp hy hm hc_cnt hlt (by rw [hbr])
+            rw [hbr] at heff_mid hm_off hm_cnt hm_p hm_len
+            dsimp only at heff_mid hm_off hm_cnt hm_p hm_len
+            have hk_lt : (P + y).toNat - sourceBase < domainBytes := by
+              have eD : domainBytes = heapEnd - sourceBase := rfl; omega
+            let k_now : Fin domainBytes := ⟨(P + y).toNat - sourceBase, hk_lt⟩
+            have hfresh : k_now ∉ vis := by
+              intro hmem
+              obtain ⟨d, hd_lt, _, _, hk_eq⟩ := hvis k_now hmem
+              have hbv : P + d = P + y := BitVec.eq_of_toNat_eq (by change (P + y).toNat - sourceBase = _ at hk_eq; omega)
+              have hdy : d = y := by
+                have hsub := congrArg (fun x => -P + x) hbv
+                simpa [← BitVec.add_assoc] using hsub
+              subst hdy; omega
+            have hle_ins : (insert k_now vis).card ≤ domainBytes := by
+              simpa using Finset.card_le_univ (insert k_now vis)
+            have hcard_ins := Finset.card_insert_of_notMem hfresh
+            have hdb_lt : domainBytes < 2 ^ 64 := by decide
+            have hc1_nat : (c + 1#64).toNat = c.toNat + 1 :=
+              BitVec.toNat_add_of_lt (by change c.toNat + 1 < 2 ^ 64; omega)
+            have hyT_nat : (y + T).toNat = y.toNat + T.toNat :=
+              BitVec.toNat_add_of_lt (by have := m.isLt; omega)
+            have hgetD_last : (ts ++ [T]).getD c.toNat 0#64 = T := by
+              rw [List.getD_eq_getElem?_getD, ← hts_len, List.getElem?_append_right le_rfl,
+                Nat.sub_self, List.getElem?_cons_zero, Option.getD_some]
+            have hinv_mid : CountTraceInv_vvh s0 P m mid := by
+              refine ⟨heff_mid, insert k_now vis, ts ++ [T], y + T, c + 1#64,
+                hm_p, hm_off, hm_len, hm_cnt, by simp [hts_len, hc1_nat], by omega, by omega, ?_, ?_⟩
+              · refine ⟨?_, by omega, ?_⟩
+                · rw [hyT_nat, hc1_nat, sliceOff_succ_vvh, sliceOff_append_singleton_lt_vvh ts T (by omega),
+                    hgetD_last, hy_off]
+                · intro j hj
+                  rw [hc1_nat] at hj
+                  rcases Nat.lt_succ_iff_lt_or_eq.mp hj with hj_lt | rfl
+                  · have hgetD_j : (ts ++ [T]).getD j 0#64 = ts.getD j 0#64 := by
+                      rw [List.getD_eq_getElem?_getD, List.getD_eq_getElem?_getD,
+                        List.getElem?_append_left (by omega)]
+                    have hoff_j : sliceOff_vvh (ts ++ [T]) j = sliceOff_vvh ts j :=
+                      sliceOff_append_singleton_lt_vvh ts T (by omega)
+                    rw [hgetD_j, hoff_j]
+                    exact htr_j j hj_lt
+                  · have hoff_c : sliceOff_vvh (ts ++ [T]) c.toNat = y.toNat := by
+                      rw [sliceOff_append_singleton_lt_vvh ts T (by omega), ← hy_off]
+                    have hy_bv : BitVec.ofNat 64 y.toNat = y := by simp
+                    rw [hgetD_last, hoff_c, hy_bv]
+                    exact ⟨hT1, hyT_le, hagree_T⟩
+              · intro k' hk'
+                rcases Finset.mem_insert.mp hk' with rfl | hk'
+                · exact ⟨y, by omega, hpy_lo, hpy_hi, rfl⟩
+                · obtain ⟨d, hd, h1, h2, h3⟩ := hvis k' hk'
+                  exact ⟨d, by omega, h1, h2, h3⟩
+            exact ih mid (by change mid.clock ≤ s.clock - 1 at rem; omega) hinv_mid hrun
+          | some r1 =>
+            cases r1 with
+            | «continue» => exact absurd rfl hbc.2
+            | «break» => exact absurd rfl hbc.1
+            | _ => simp at hrun
+      · rename_i hnotnz
+        have hcw0 : cw = 0 := Classical.not_not.1 hnotnz
+        subst hcw0; simp at hrun; subst hrun; exact ⟨hinv, hcond⟩
+    · simp at hrun
+
+private theorem rlp_list_count_trace_vvh {F : Type}
+    (s cpost : PanSemStateFiniteExact 64 F) (vals : List (ValueHOL 64)) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hAs : ArenaReady s)
+    (P m : BitVec 64)
+    (hvals : vals = [.val (.word P), .val (.word m)])
+    (hfit : P.toNat + m.toNat ≤ 2 ^ 64)
+    (hdj : IvlsDisj [(P.toNat, m.toNat)] [(globN s "heap_ptr", scratchEnd - globN s "heap_ptr")])
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_count") vals =
+      some (sourceFnBody Guest.Software.guestFn_rlp_list_count, s.locals, .one))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_count) =
+      (some (.returned rv), cpost)) :
+    ∃ (wcnt : BitVec 64) (ts : List (BitVec 64)),
+      rv = .val (.word wcnt) ∧
+      wcnt.toNat ≤ domainBytes ∧
+      wcnt.toNat ≤ m.toNat ∧
+      ts.length = wcnt.toNat ∧
+      CountTraceAt_vvh s P m ts wcnt.toNat m := by
+  subst hvals
+  obtain ⟨-, hp, hm⟩ := callee_p_len_vvh lookup_rlp_list_count_vvh (.val (.word P)) (.val (.word m)) _ s.locals _ hl
+  have hbody : sourceFnBody Guest.Software.guestFn_rlp_list_count =
+      .dec (ofString "count") .one (.const 0)
+        (.dec (ofString "off") .one (.const 0)
+          (.seq (.while countCond_vvh countBody_vvh)
+            (.return (.var .local (ofString "count"))))) := rfl
+  have hret1 : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_count)).1 =
+      some (.returned rv) := by rw [hret]
+  clear hret
+  rw [hbody] at hret1
+  revert rv hret1
+  change RetOK_vvh (fun rv => ∃ (wcnt : BitVec 64) (ts : List (BitVec 64)),
+    rv = .val (.word wcnt) ∧ wcnt.toNat ≤ domainBytes ∧ wcnt.toNat ≤ m.toNat ∧
+    ts.length = wcnt.toNat ∧ CountTraceAt_vvh s P m ts wcnt.toNat m) s _
+  refine R_dec_vvh (fun vcnt hvcnt _ => ?_)
+  have hvcnt_eq : vcnt = .val (.word 0) := by simp [evalHOLExact] at hvcnt; exact hvcnt.symm
+  subst hvcnt_eq
+  refine R_dec_vvh (fun voff hvoff _ => ?_)
+  have hvoff_eq : voff = .val (.word 0) := by simp [evalHOLExact] at hvoff; exact hvoff.symm
+  subst hvoff_eq
+  let s2 := setVarHOLFinite (ofString "off") (.val (.word 0))
+    (setVarHOLFinite (ofString "count") (.val (.word 0)) s)
+  have heff2 : WorldEff s s2 [] [] wsGw :=
+    ((WorldEff.refl s [] [] wsGw hAs hc).locals_clock _ _).locals_clock _ _
+  have hinv2 : CountTraceInv_vvh s P m s2 := by
+    refine ⟨heff2, ∅, [], 0, 0, ?_, ?_, ?_, ?_, rfl, by simp, by simp, ?_, by simp⟩
+    · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hp,
+        show ofString "off" ≠ ofString "p" by decide, show ofString "count" ≠ ofString "p" by decide]
+    · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hm,
+        show ofString "off" ≠ ofString "len" by decide, show ofString "count" ≠ ofString "len" by decide]
+    · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "off" ≠ ofString "count" by decide]
+    · refine ⟨by simp [sliceOff_vvh], by simp, fun j hj => by simp at hj⟩
+  refine R_seq_vvh (fun rv hw => absurd hw (while_count_no_return_vvh rv s2.clock s2 le_rfl))
+    (fun mid hmid => ?_)
+  obtain ⟨⟨_, vis, ts, y, c, _, hm_off, hm_len, hm_cnt, hts_len, hcard, hcy, htr, _⟩, hcond0⟩ :=
+    while_countTraceInv_vvh s P m hAs hfit hdj s2.clock s2 mid le_rfl hinv2 hmid
+  have hy_ge_m : m.toNat ≤ y.toNat := by
+    simp [countCond_vvh, evalHOLExact, hm_off, hm_len, Compiler.Encoders.Asm.wordCmpHOL] at hcond0
+    exact BitVec.le_def.mp hcond0
+  have hy_eq_m : y = m := BitVec.eq_of_toNat_eq (by have := htr.2.1; omega)
+  subst hy_eq_m
+  refine R_ret_vvh (fun v hv => ?_)
+  simp [evalHOLExact, hm_cnt] at hv; subst hv
+  have hle : vis.card ≤ domainBytes := by simpa using Finset.card_le_univ vis
+  exact ⟨c, ts, rfl, by omega, by omega, hts_len, htr⟩
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
