@@ -2830,4 +2830,79 @@ theorem phase2_address_store_ready_joint {F : Type} {s : PanSemStateFiniteExact 
     hp.2.2.2.2.2.2.1 hp.2.2.2.2.2.2.2.1 hm
   exact ⟨hr, hW', by rw [how]; exact hd, by rw [how]; exact hte⟩
 
+/-- Keep the two buffer separations attached to one world throughout Phase 2. -/
+def PtxAddressJoint {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressReady s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+    TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)] (worldOwned s S Nd) ∧
+    IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+theorem phase2_address_alloc_joint (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady PtxAddressJoint
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ⟨phase2_address_alloc_ready h s vs body callee ret v post hc hp ha hl hb,
+    phase2_address_alloc_world h s vs body callee ret v post hc hp ha hl hb⟩
+
+/-- Address stores preserve the shared witness, including access-list ownership. -/
+theorem phase2_address_joint_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxAddressJoint { s with memory := mem } := by
+  obtain ⟨hp, S, Nd, hW, hT, hd, hte⟩ := hp
+  obtain ⟨hr, hW', hd', hte'⟩ :=
+    phase2_address_store_ready_joint hp hW hT hd hte hx hin hm
+  obtain ⟨hv, _, how⟩ := phase2_store_validated_outside hp.1.1.1.1 hW hT
+    (blk := (locN s "al_addrs", (locN s "nal" + 1) * 8))
+    (fun o ho => hd _ (by simp) o ho) hx hin
+    hp.2.2.2.2.2.2.1 hp.2.2.2.2.2.2.2.1 hm
+  refine ⟨hr, S, Nd, hW', ?_, hd', hte'⟩
+  exact R16Shards.PtxP1.txAccessListAt_congr_unhit
+    hp.1.1.1.1.1.1.1.1.1.2 hp.1.1.1.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 le_rfl hT
+    (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2)
+    (ivlUnhit_single hm (by simp) (disj_of_inside_right hin hp.2.2.2.2.2.2.1))
+    (fun hn => ivlUnhit_single hm (by dsimp; omega)
+      (disj_of_inside_right hin (hp.2.2.2.2.2.2.2.1 hn)))
+
+/-- Initialization of the address array with the sender preserves its world. -/
+theorem phase2_address_init_hoare :
+    Hoare PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender")))
+      (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.1.1.1.1.2.scalar "sender" (by simp)
+  have he : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  subst v
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  apply phase2_address_joint_store hp hdom _ hmem
+  obtain ⟨a, ha⟩ := hp.1.2.1
+  have he : x = a := by simpa [evalAt, evalHOLExact, ha] using hx.symm
+  subst x
+  have hl : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  rw [hl]
+  constructor <;> dsimp <;> omega
+
+/-- Any scalar store whose destination lies in the address array retains the
+joint invariant; this is also the store rule for the access-list copy loop. -/
+theorem phase2_address_store_hoare (addr src : ExpHOL 64)
+    (hs : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxAddressJoint s → evalAt s src = some v → ∃ w : BitVec 64, v = .val (.word w))
+    (ha : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64),
+      PtxAddressJoint s → evalAt s addr = some (.val (.word x)) →
+      Inside (x.toNat, 8) (locN s "al_addrs")
+        (locN s "al_addrs" + (locN s "nal" + 1) * 8)) :
+    Hoare PtxAddressJoint (.store addr src) (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, rfl⟩ := hs s v hp hv
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact phase2_address_joint_store hp hdom (ha s x hp hx) hmem
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
