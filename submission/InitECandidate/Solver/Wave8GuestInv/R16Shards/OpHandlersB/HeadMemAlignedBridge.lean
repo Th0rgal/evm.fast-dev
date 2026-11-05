@@ -8376,21 +8376,73 @@ theorem headMemChainWF_iff_finishChild {F : Type} (s : PanSemStateFiniteExact 64
     HeadMemChainWF s ↔ EvmEkFk.HeadMemChainWF s := by
   exact and_congr Iff.rfl (and_congr Iff.rfl (chainLinks_iff_finishChild _ _))
 
+theorem finishReadyA_iff_finishChild {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    FinishReadyA s ↔ EvmEkFk.FinishReadyA s := by
+  exact and_congr (and_congr Iff.rfl (headMemChainWF_iff_finishChild s)) Iff.rfl
+
+/-- Transport the independent finish-child leaf's memory contract into this bridge. -/
+theorem finishChildMemSpec_of_leaf (h : EvmEkFk.FinishChildMemSpec) :
+    FinishChildMemSpec := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt => ?_⟩
+  exact hr s hc ((finishReadyA_iff_finishChild s).mp hs) hex hnt
+
+/-- `FinishPost` is the single joint postcondition used by the finish-child
+body proof. Project its memory footprint without an aligned output assumption. -/
+theorem finishChildMemSpec_of_finishPost
+    (h : FunSpec FinishReadyA EvmEkFk.FinishPost (ofString "finish_child")) :
+    FinishChildMemSpec := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt hres => ?_⟩
+  obtain ⟨_, _, _, hchain, hcells, hev, hfmp⟩ := hr s hc hs hex hnt hres
+  exact ⟨hchain, hcells, hev, hfmp⟩
+
+/-- Project the unaligned contract from the same joint body postcondition. -/
+theorem finishChildSpecU_of_finishPost
+    (h : FunSpec FinishReady EvmEkFk.FinishPost (ofString "finish_child")) :
+    FinishChildSpecU := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt hres => ?_⟩
+  obtain ⟨hi, hlen, hgas, _⟩ := hr s hc hs hex hnt hres
+  exact ⟨hi, hlen, hgas⟩
+
+/-- One unaligned joint finish-child proof discharges both finish-child
+contracts required by the aligned `run_frames` bound. -/
+theorem gbody_run_frames_aligned_of_finishPost
+    (bf : TerminatingFunBoundedOn FinishReadyA (ofString "finish_child") K.«finish_child»)
+    (be : TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue»)
+    (bx : TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception»)
+    (bd : TerminatingFunBoundedOn EvmRunA (ofString "op_dispatch") K.«op_dispatch»)
+    (hf : FunSpec FinishReady EvmEkFk.FinishPost (ofString "finish_child"))
+    (hd : OpDispatchSpecA) :
+    TerminatingFunBoundedOn (fun s => EvmInv s ∧ HeadMemChainWF s)
+      (ofString "run_frames") K.«run_frames» := by
+  apply gbody_run_frames_aligned_fc bf be bx bd (finishChildSpecU_of_finishPost hf) _ hd
+  apply finishChildMemSpec_of_finishPost
+  obtain ⟨ps, body, rt, hl, hr⟩ := hf
+  exact ⟨ps, body, rt, hl, fun s hc hs hex hnt =>
+    hr s hc ⟨hs.1.1, hs.2.1, hs.2.2⟩ hex hnt⟩
+
 /-- The create-finish prelude preserves the aligned chain invariant whenever it
 falls through.  Its callee requirements are exactly `CreateFinishSpecs`. -/
 theorem fcPrelude_headMemChainWF (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
     {s0 s1 : PanSemStateFiniteExact 64 F}
     (hRel : EvmEkFk.PreludeRel s0 s1) (hAligned : HeadMemChainWF s0)
+    (hcode : s1.code = originalRuntimeCode)
+    (hfmp : globN s1 "frame_mem_ptr" = globN s0 "frame_mem_ptr")
     (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 ≠ some .timeOut)
-    (hflow : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 = none)
-    (hfmp : globN (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).2 "frame_mem_ptr" =
-      globN s0 "frame_mem_ptr") :
+    (hflow : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 = none) :
     HeadMemChainWF (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).2 := by
   have hpost := (EvmEkFk.fcPrelude_step hCF hRel hnt).1 hflow
   apply headMemChainWF_of_agree hAligned hpost.chain_eq hpost.cells
   · have hh := congrArg List.head? hpost.chain_eq
     rw [evmChain_cons, evmChain_cons] at hh
     exact (Prod.mk.inj (Option.some.inj hh)).1
-  · exact hfmp
+  · have hg := InitECandidate.Solver.GuestGlobalKeep.evaluate_keepsG
+      (ofString "frame_mem_ptr") InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem
+      good_fmp_hgood EvmEkFk.fcPrelude (by kernel_rfl) s1 hcode
+    unfold globN
+    rw [hg]
+    exact hfmp
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
