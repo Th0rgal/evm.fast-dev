@@ -6823,4 +6823,36 @@ theorem phase2_packed_guarded_restored_frame {F : Type}
     hp.1 ha hpost hg hw hw' ht hs ho hf htx (fun _ => hrec) hlen
   exact phase2_packed_copy_restore_indices s post hp hready hh hm
 
+/-- Concrete copy evaluation restores caller readiness without a post-state witness premise. -/
+theorem phase2_memcpy_eval_ready (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hready : PtxPackedKeysReady s)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hsep : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (htx : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    PtxPackedKeysReady { post with locals := s.locals } := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  have step := hs hr
+  have hwe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw
+  obtain ⟨S', Nd', _, hw', ho, hf, _⟩ := step.2.2.2.2 S Nd hwe hd
+  exact phase2_packed_ready_restored_frame s post S Nd S' Nd' _ _ hready ha
+    step.1.1 step.2.2.1 hw hw' ht hsep ho hf htx (fun _ => hrec) hlen
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
