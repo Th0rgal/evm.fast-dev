@@ -5925,4 +5925,24 @@ theorem phase2_world_frame_heap_header {F : Type}
   dsimp at hin ⊢
   constructor <;> omega
 
+/-- Spatial separation discharges the remaining exclusions in the full world frame. -/
+theorem phase2_world_frame_heap_disjoint {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (old R : List Ivl) (b : Ivl) (p : Nat)
+    (ha : ArenaOK s) (hin : Inside b InitE.sourceBase (globN s "heap_ptr"))
+    (hp : b.1 ≤ p ∧ p + 8 ≤ b.1 + b.2) (hal : p % 8 = 0)
+    (hf : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (ho : ∀ region ∈ old, Disj b region)
+    (hr : ∀ region ∈ R, Disj b region)
+    (hozero : ∀ region ∈ old, region.2 = 0 → region.1 % 8 = 0)
+    (hrzero : ∀ region ∈ R, region.2 = 0 → region.1 % 8 = 0) :
+    memW post p = memW s p := by
+  refine phase2_world_frame_heap_word s post old R p ha ?_ hf ?_ ?_
+  · unfold Inside at hin ⊢
+    dsimp
+    constructor <;> omega
+  · intro region hm
+    exact not_cellHits_of_disj hal (hozero region hm) hp (ho region hm)
+  · intro region hm
+    exact not_cellHits_of_disj hal (hrzero region hm) hp (hr region hm)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
