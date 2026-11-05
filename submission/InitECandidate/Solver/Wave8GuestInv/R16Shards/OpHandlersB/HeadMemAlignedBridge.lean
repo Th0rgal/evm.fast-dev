@@ -11288,4 +11288,78 @@ theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
     exact hkeep k (by omega)
   · simpa only [hn, hlg] using hnew
 
+/-- Strengthened loop invariant: retain the allocation/frame invariant and the
+exact parent prefix and appended child suffix at the local loop index. -/
+def LAInvContents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat)
+    (u : PanSemStateFiniteExact 64 F) : Prop :=
+  LAInv s L arr0 cap0 n0 nc u ∧
+    ∀ i : BitVec 64, u.locals.lookup (ofString "i") = some (.val (.word i)) →
+      LAContents s L arr0 n0 child i.toNat u
+
+theorem laInvContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat)
+    (h : LAInv s L arr0 cap0 n0 nc s)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hm : s.memory L = .word arr0) : LAInvContents s L arr0 cap0 n0 nc child s := by
+  refine ⟨h, fun i hli => ?_⟩
+  have heq : i = 0 := by have he := hli.symm.trans hi; cases he; rfl
+  subst i
+  exact laContents_init s L arr0 n0 child hm
+
+attribute [local irreducible] Ret in
+/-- The contents and footprint results describe the same deterministic append
+run, so the loop can consume them jointly without losing either component. -/
+theorem log_append_run_contents_step {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (e L lg arr0 arr n0 n cap : BitVec 64) (child : Nat → Nat) (i : Nat)
+    (hcontents : LAContents s L arr0 n0 child i u)
+    (hn : n.toNat = n0.toNat + i) (hlgChild : lg.toNat = child i)
+    (hA : ArenaReady u)
+    (he : u.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : u.locals.lookup (ofString "log") = some (.val (.word lg)))
+    (hd88 : u.memaddrs (e + 88)) (hmL : u.memory (e + 88) = .word L)
+    (hma : u.memory L = .word arr)
+    (hmn : u.memory (L + 8) = .word n) (hmc : u.memory (L + 16) = .word cap)
+    (hd0 : u.memaddrs L) (hd8 : u.memaddrs (L + 8)) (hd16 : u.memaddrs (L + 16))
+    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59)
+    (ha8 : arr.toNat % 8 = 0)
+    (hw : arr.toNat + 8 * cap.toNat ≤ 2 ^ 64)
+    (hold : arr.toNat + 8 * n.toNat ≤ globN u "heap_ptr")
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hsep : L.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN u "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hc1 : 1 ≤ cap.toNat) :
+    Ret u (sourceFnBody Guest.Software.guestFn_log_append)
+      (fun _ post => LogAppendPost2 u L arr n cap post ∧
+        LAContents s L arr0 n0 child (i + 1) post) := by
+  have hframe := log_append_run2 u e L lg arr n cap hA he hlg hd88 hmL
+    hma hmn hmc hd0 hd8 hd16 hle hcap hw hLw hsep hLh hc1
+  have hcontent := log_append_run_contents u e L lg arr n cap hA he hlg hd88 hmL
+    hma hmn hmc hd0 hd8 hd16 hle hcap ha8 hw hold hLw hsep hLh hc1
+  unfold Ret at hframe hcontent ⊢
+  intro v hr
+  exact ⟨hframe v hr, laContents_step hcontents hma hn hlgChild (hcontent v hr)⟩
+
+/-- At normal exit the strengthened invariant contains the complete child
+suffix, including when the last iteration reallocated the parent array. -/
+theorem laInvContents_exit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat → Nat}
+    (h : LAInvContents s L arr cap n nc child post)
+    (hnc : nc.toNat < 2 ^ 63)
+    (hexit : evalAt post (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    LAContents s L arr n child nc.toNat post := by
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _⟩ := h.1
+  have hc := h.2 i hi
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  rwa [hieq] at hc
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
