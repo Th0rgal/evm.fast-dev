@@ -2696,6 +2696,28 @@ theorem lst_new_stable_backing_resume (h : PtxCallees) {F : Type}
     Allocated, WordsOK, WordAt, globN,
     show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hb'
 
+def Phase4StableStorageReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableAllocated s ∧
+    memW s (locN s "stable_logs" + 16) = locN s "stable_log_cap" ∧
+    let p := memW s (locN s "stable_logs")
+    p % 8 = 0 ∧ Allocated s (p, 8 * locN s "stable_log_cap") ∧
+      WordsOK s (p, 8 * locN s "stable_log_cap")
+
+theorem lst_new_stable_storage_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableStorageReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  obtain ⟨hp', hcap⟩ := lst_new_stable_capacity_resume h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨hp', hcap, lst_new_stable_backing_resume h s vs body callee ret v post hc hp ha hl hr⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
