@@ -5583,4 +5583,18 @@ theorem phase2_packed_copy_intervals_frame {F : Type}
   · rw [ht]; exact hh 216 (by omega)
   · exact phase2_packed_record_counts_frame s post ht hh hm
 
+/-- A copy frame preserves a complete word disjoint from both its write and fresh regions. -/
+theorem phase2_copy_frame_word {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len p : Nat) (fresh : Ivl)
+    (hf : FrameOutside s post [(dst, len)] fresh)
+    (hp : p < 2 ^ 64)
+    (hd : ¬ CellHits p (dst, len)) (hn : ¬ CellHits p fresh) :
+    memW post p = memW s p := by
+  have he : (BitVec.ofNat 64 p).toNat = p := by
+    exact Nat.mod_eq_of_lt hp
+  have hm := hf (BitVec.ofNat 64 p)
+    (by intro i hi; simp only [List.mem_singleton] at hi; subst i; simpa only [he] using hd)
+    (by simpa only [he] using hn)
+  simp only [memW, hm]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
