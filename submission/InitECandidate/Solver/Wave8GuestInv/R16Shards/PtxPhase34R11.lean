@@ -2382,6 +2382,18 @@ theorem phase4ThroughLogCopy_cut (h : PtxCallees)
   intro F s hc hp
   exact hb s hc hp
 
+def Phase4StableCapInit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧ locN s "stable_log_cap" = locN s "nl"
+
+theorem phase4StableCap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : Phase4LogPointersReady s)
+    (he : evalAt s (.var .local (ofString "nl")) = some v) :
+    Phase4StableCapInit (setVarHOLFinite (ofString "stable_log_cap") v s) := by
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v s hp, ?_⟩
+  have hlu : s.locals.lookup (ofString "nl") = some v := he
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hlu,
+    show ofString "stable_log_cap" ≠ ofString "nl" from by decide]
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
