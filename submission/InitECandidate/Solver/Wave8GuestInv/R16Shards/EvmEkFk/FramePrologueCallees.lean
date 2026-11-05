@@ -7277,6 +7277,25 @@ theorem transfer_accumulated_topics_record_step {F : Type}
   exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
     (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
 
+theorem transfer_memW_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (a : Nat) (ha : a + 8 ≤ 2 ^ 64)
+    (hsep : a + 8 ≤ globN s "heap_ptr" ∨ globN post "heap_ptr" ≤ a) :
+    memW post a = memW s a := by
+  have hnat : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt (by omega)
+  unfold memW
+  by_cases hd : ordinaryDomain (BitVec.ofNat 64 a)
+  · rw [R13Shards.mem_eq_of_bytes_eq_ord hbe _ hd (by
+      intro k hk
+      rw [hnat]
+      apply hbyte _ (by omega)
+      rcases hsep with hl | hh <;> omega)]
+  · rw [hout _ (by rwa [hInv.1.1.memaddrs])]
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
