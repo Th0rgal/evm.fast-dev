@@ -6643,6 +6643,79 @@ theorem transfer_log_field_store_words_prefix {F : Type}
     have : heapLimit ≤ heapEnd := by decide
     omega
 
+def transferRecordWrites (cont : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "log"), .const 8]) (.var .local (ofString "topics")))
+  (.seq (.store (.op .add [.var .local (ofString "log"), .const 16]) (.const 3))
+  (.seq (.store (.op .add [.var .local (ofString "log"), .const 24]) (.var .local (ofString "data")))
+  (.seq (.store (.op .add [.var .local (ofString "log"), .const 32]) (.const 32)) cont)))
+
+theorem transfer_record_writes_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (logw topics data : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hd : cur.locals.lookup (ofString "data") = some (.val (.word data)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferRecordWrites cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(logw.toNat, 40)] ∧
+      mid.locals = cur.locals ∧ WordsOK mid (logw.toNat, 40) ∧
+      memW mid logw.toNat = memW cur logw.toNat ∧
+      memW mid (logw.toNat + 8) = topics.toNat ∧
+      memW mid (logw.toNat + 16) = 3 ∧
+      memW mid (logw.toNat + 24) = data.toNat ∧
+      memW mid (logw.toNat + 32) = 32 ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur (transferRecordWrites cont) = evaluateHOLFiniteState mid cont := by
+  have hbound : logw.toNat + 40 < 2 ^ 64 := by
+    have hlim := hstep.1.1.1.2.2.1
+    have hle := hin.2
+    have h64 : heapLimit < 2 ^ 64 := by decide
+    omega
+  unfold transferRecordWrites at hr ⊢
+  obtain ⟨m1, st1, ef1, l1, w1, ws1, fr1, r1, o1, b1, eq1⟩ :=
+    transfer_log_field_store_words_prefix s cur logw topics 8 _ _ hInv hstep hbe hout hbyte
+      hl (by simpa only [evalHOLExact] using ht) hw (Or.inl rfl) hin hr
+  have in1 : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN m1 "heap_ptr") := by
+    simpa only [globN, ef1.globals] using hin
+  obtain ⟨m2, st2, ef2, l2, w2, ws2, fr2, r2, o2, b2, eq2⟩ :=
+    transfer_log_field_store_words_prefix s m1 logw 3 16 _ _ hInv st1 (ef1.be.trans hbe) o1 b1
+      (l1 ▸ hl) rfl ws1 (Or.inr (Or.inl rfl)) in1 r1
+  have ef02 := ef1.trans ef2
+  have l02 := l2.trans l1
+  have in2 : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN m2 "heap_ptr") := by
+    simpa only [globN, ef02.globals] using hin
+  obtain ⟨m3, st3, ef3, l3, w3, ws3, fr3, r3, o3, b3, eq3⟩ :=
+    transfer_log_field_store_words_prefix s m2 logw data 24 _ _ hInv st2 (ef02.be.trans hbe) o2 b2
+      (l02 ▸ hl) (by simpa only [evalHOLExact, l02] using hd) ws2
+      (Or.inr (Or.inr (Or.inl rfl))) in2 r2
+  have ef03 := ef02.trans ef3
+  have l03 := l3.trans l02
+  have in3 : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN m3 "heap_ptr") := by
+    simpa only [globN, ef03.globals] using hin
+  obtain ⟨m4, st4, ef4, l4, w4, ws4, fr4, r4, o4, b4, eq4⟩ :=
+    transfer_log_field_store_words_prefix s m3 logw 32 32 _ cont hInv st3 (ef03.be.trans hbe) o3 b3
+      (l03 ▸ hl) rfl ws3 (Or.inr (Or.inr (Or.inr rfl))) in3 r3
+  refine ⟨m4, st4, ef03.trans ef4, l4.trans l03, ws4, ?_, ?_, ?_, ?_, w4,
+    r4, o4, b4, eq1.trans (eq2.trans (eq3.trans eq4))⟩
+  · rw [fr4 _ (by omega) (by omega), fr3 _ (by omega) (by omega),
+      fr2 _ (by omega) (by omega), fr1 _ (by omega) (by omega)]
+  · rw [fr4 _ (by omega) (by omega), fr3 _ (by omega) (by omega),
+      fr2 _ (by omega) (by omega)]
+    exact w1
+  · rw [fr4 _ (by omega) (by omega), fr3 _ (by omega) (by omega)]
+    exact w2
+  · rw [fr4 _ (by omega) (by omega)]
+    exact w3
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
