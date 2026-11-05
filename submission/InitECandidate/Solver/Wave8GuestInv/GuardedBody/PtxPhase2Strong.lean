@@ -9910,4 +9910,33 @@ theorem phase2_address_count_cases_init {F : Type} (s : PanSemStateFiniteExact 6
     · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · exact Or.inl (phase2_address_count_init s hp hn)
 
+/-- Both counting cases exit with a complete allocation size: the active case
+has the full key sum, and the disabled case retains its initialized zero. -/
+def PtxAddressCountExit {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (PtxAddressCountInv s ∧ locN s "i" = locN s "nal") ∨
+    (PtxAddressCopyInv s ∧ locN s "nal" = 0 ∧ locN s "nkeys" = 0)
+
+theorem phase2_count_cases_while_hoare {body : ProgHOL 64}
+    (hb : Hoare PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" = locN s "nal")) :
+    Hoare PtxAddressCountCases
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountExit s) := by
+  refine ⟨?_⟩
+  intro F s hc hp hnt hr
+  rcases hp with hp | hp
+  · exact Or.inl (hb.run s hc hp hnt hr)
+  · rw [phase2_address_zero_loop s body hp.1 hp.2.1]
+    exact Or.inr hp
+
+/-- The disabled count has the same allocation bound without using any header
+count equality. -/
+theorem phase2_count_cases_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s) : locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  rcases hp with hp | hp
+  · exact phase2_address_count_alloc_bound hp.1
+  · rw [hp.2.2]
+    decide
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
