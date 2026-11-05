@@ -3337,7 +3337,7 @@ private theorem m11_bre_to_m23 {F : Type} {s post : PanSemStateFiniteExact 64 F}
     ByteRegionEffect s post Rl :=
   ⟨h.code, h.memaddrs, h.shMemaddrs, h.baseAddr, h.be, h.globals, h.out_dom, h.cell_frame, h.byte_frame⟩
 
-private theorem m23_bre_of_store_word {F : Type} {s post : PanSemStateFiniteExact 64 F}
+theorem m23_bre_of_store_word {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {dstExp valExp : ExpHOL 64} {Rl : List Ivl}
     (hma : s.memaddrs = ordinaryDomain)
     (hrun : evaluateHOLFiniteState s (.store dstExp valExp) = (none, post))
@@ -6410,6 +6410,84 @@ theorem transfer_data_write_prefix {F : Type}
     simp only [hz]
     rfl
   exact ⟨mid, step, eff, hl, eq ▸ hr, out, bytes, eq⟩
+
+theorem transfer_accumulated_store_step {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F}
+    {dst val : ExpHOL 64} {Rl : List Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hrun : evaluateHOLFiniteState cur (.store dst val) = (none, post))
+    (hword : ∀ v, @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) val = some v →
+      ∃ w : BitVec 64, v = .val (.word w))
+    (hdst : ∀ addr : BitVec 64, @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word addr)) →
+      cur.memaddrs addr → ∃ i ∈ Rl, i.1 ≤ addr.toNat ∧ addr.toNat + 8 ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr")) :
+    EvmStepCC ["heap_ptr"] s post ∧ ByteRegionEffect cur post Rl ∧ post.locals = cur.locals ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) := by
+  obtain ⟨eff, hl⟩ := m23_bre_of_store_word hstep.1.1.1.1.memaddrs hrun hword hdst
+  obtain ⟨step, out, bytes⟩ :=
+    evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte eff hin
+  exact ⟨step, eff, hl, out, bytes⟩
+
+theorem transfer_log_field_store_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (logw value addr : BitVec 64)
+    (off : Nat) (valueExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hlog : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hv : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) valueExp = some (.val (.word value)))
+    (haddr : addr = logw + BitVec.ofNat 64 off)
+    (hnat : addr.toNat = logw.toNat + off) (hoff : off + 8 ≤ 40)
+    (hdom : cur.memaddrs addr)
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 off)]) valueExp) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(logw.toNat, 40)] ∧
+      mid.locals = cur.locals ∧ memW mid (logw.toNat + off) = value.toNat ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 off)]) valueExp) cont) =
+        evaluateHOLFiniteState mid cont := by
+  let dst : ExpHOL 64 := .op .add [.var .local (ofString "log"), .const (BitVec.ofNat 64 off)]
+  have hd : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word addr)) := by
+    simp [dst, evalHOLExact, evalListHOLExact, hlog, wordOpHOL, wordOp,
+      valueIsWord, valueWord, haddr]
+  let mid : PanSemStateFiniteExact 64 F :=
+    {cur with memory := fun a => if a = addr then .word value else cur.memory a}
+  have run : evaluateHOLFiniteState cur (.store dst valueExp) = (none, mid) := by
+    simp [evaluateHOLFiniteState_store, hd, hv, flattenHOL, panMemStoresHOL,
+      panMemStoreHOL, hdom, mid]
+  obtain ⟨step, eff, hl, out, bytes⟩ := transfer_accumulated_store_step hInv hstep hbe hout hbyte
+    (Rl := [(logw.toNat, 40)]) run
+    (fun v he => ⟨value, Option.some.inj (he.symm.trans hv)⟩)
+    (fun a he _ => by
+      have heq : a = addr := by simpa only [hd, Option.some.injEq, ValueHOL.val.injEq,
+        HolWordLab.word.injEq] using he.symm
+      subst a
+      exact ⟨(logw.toNat, 40), by simp, by rw [hnat]; omega, by rw [hnat]; omega⟩)
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin)
+  have eq : evaluateHOLFiniteState cur (.seq (.store dst valueExp) cont) =
+      evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780, run]
+  refine ⟨mid, step, eff, hl, ?_, eq ▸ hr, out, bytes, eq⟩
+  have hword : BitVec.ofNat 64 (logw.toNat + off) = addr := by rw [← hnat]; simp
+  simp [memW, mid, hword]
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
