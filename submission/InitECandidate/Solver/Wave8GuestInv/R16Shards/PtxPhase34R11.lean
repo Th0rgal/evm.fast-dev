@@ -1016,6 +1016,39 @@ theorem txAfterCallStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
   · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
     rw [h16]; exact hlogs.2
 
+/-- An owned-world write that preserves world typing also preserves the output. -/
+theorem txAfterCallStrong_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallStrong s) {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hpres : ∀ S Nd, WorldTypedWith s S Nd →
+      WorldTypedWith {s with memory := mem'} S Nd ∧
+      worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd ∧
+      TxEnv {s with memory := mem'})
+    (hx : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ i ∈ worldOwned s S Nd, Inside (x.toNat, 8) i.1 (i.1 + i.2)) :
+    TxAfterCallStrong {s with memory := mem'} := by
+  obtain ⟨hW, hw, hin, hl, S, Nd, hWT, hd, hown⟩ := h
+  let post := {s with memory := mem'}
+  have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl hW.1.1.1
+  obtain ⟨hWT', howned, hE⟩ := hpres S Nd hWT
+  obtain ⟨i, hi, hix⟩ := hx S Nd hWT
+  have hu : IvlUnhit s post (locN s "out", 96) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hix (hd _ (by simp) _ hi))
+  have h16 : memW post (locN s "out" + 16) = memW s (locN s "out" + 16) :=
+    memW_eq_of_ivlUnhit hu (by have := hw.1; omega)
+      (ivl_allocated_bound hW.1.1.2 (Or.inl hin)).2 ⟨by omega, by omega⟩
+  have hlogs := logsLiveOwned_single_store hW.1.1.2 hW.1.1.1 hg hl hown hm
+    ⟨i, hi, hix⟩ howned
+  refine ⟨⟨worldOK_of_parts ⟨hg, hW.1.1.2⟩ hWT', hE⟩,
+    wordsOK_transfer hW.1.1.1 hg hw, hin, ?_, S, Nd, hWT', ?_, ?_⟩
+  · change LogsListOK post (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.1
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]; exact hd
+  · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.2
+
 theorem eval_add_global_const {F : Type} {s : PanSemStateFiniteExact 64 F}
     {g : String} {k x : BitVec 64}
     (hx : evalAt s (.op .add [.var .global (ofString g), .const k]) = some (.val (.word x))) :
