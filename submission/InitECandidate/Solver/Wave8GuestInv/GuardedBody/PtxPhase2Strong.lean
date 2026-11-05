@@ -6223,22 +6223,29 @@ theorem phase2_packed_owned_growth {F : Type}
       exact hin.2.trans hfresh.1
     exact Or.inr (Or.inr (Or.inl hbefore))
 
-/-- Packed-buffer ownership supplies the typing separation required by memcpy. -/
-theorem phase2_packed_memcpy_typing_separation {F : Type}
+/-- Both copy destinations retain the same world and transaction ownership witness. -/
+theorem phase2_packed_memcpy_owned_separation {F : Type}
     (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s) :
     ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
       IvlsDisj [(locN s "al_keys" + 52 * locN s "k", 20),
-        (locN s "al_keys" + 52 * locN s "k" + 20, 32)] (worldTypedIvls s S Nd) := by
+        (locN s "al_keys" + 52 * locN s "k" + 20, 32)] (worldOwned s S Nd) := by
   obtain ⟨S, Nd, hw, ht, hd⟩ := hp.1.2.2.2.2
   refine ⟨S, Nd, hw, ht, ?_⟩
   intro dest hdest region hregion
-  rcases worldTypedIvls_mem hregion with rfl | howned
-  · exact disj_zero_right dest
-  · have hb := hd _ (by simp) region howned
-    have hs := phase2_packed_guarded_input_disjoint s hp region (disj_symm hb)
-    simp only [List.mem_cons, List.mem_singleton] at hdest
-    rcases hdest with rfl | rfl
-    · exact disj_symm hs.1
-    · exact disj_symm hs.2
+  have hb := hd (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+    (by simp) region hregion
+  have hs := phase2_packed_guarded_input_disjoint s hp region (disj_symm hb)
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hdest
+  rcases hdest with rfl | rfl
+  · exact disj_symm hs.1
+  · exact disj_symm hs.2
+
+/-- Owned-region separation also excludes every typed world interval. -/
+theorem phase2_packed_typed_of_owned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (writes : List Ivl)
+    (hd : IvlsDisj writes (worldOwned s S Nd)) :
+    IvlsDisj writes (worldTypedIvls s S Nd) := by
+  intro dest hdest region hregion
+  exact hd dest hdest region (worldTypedIvls_sub_worldOwned hregion)
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
