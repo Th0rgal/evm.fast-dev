@@ -25,6 +25,37 @@ def RetMessageOutputStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
 def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
 
+/-- Caller locals read by Phase 4 before they are assigned there. `out` is
+introduced by Phase 3 itself. The message-building locals `mgas`, `reservoir`
+and `m` are not read by Phase 4. -/
+def PtxPhase4LocalShapes : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s =>
+    (∀ name ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+    (∃ v, s.locals.lookup (ofString "price") = some v ∧
+      shapeOfHOLExact v = .comb [.one, .one, .one, .one]) ∧
+    (∃ v, s.locals.lookup (ofString "intrinsic") = some v ∧
+      shapeOfHOLExact v = .comb [.one, .one, .one])
+
+theorem ptxPhase4LocalShapes_resume {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (h : PtxPhase4LocalShapes s) :
+    PtxPhase4LocalShapes (setVarHOLFinite (ofString "out") v { post with locals := s.locals }) := by
+  have hlu : ∀ name : String, ofString name ≠ ofString "out" →
+      (setVarHOLFinite (ofString "out") v { post with locals := s.locals }).locals.lookup
+        (ofString name) = s.locals.lookup (ofString name) := by
+    intro name hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  refine ⟨?_, ?_, ?_⟩
+  · intro name hn
+    have hne : ofString name ≠ ofString "out" := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl | rfl | rfl <;> decide
+    rw [hlu name hne]
+    exact h.1 name hn
+  · rw [hlu "price" (by decide)]; exact h.2.1
+  · rw [hlu "intrinsic" (by decide)]; exact h.2.2
+
 namespace PtxP34
 open PtxP1
 
@@ -276,6 +307,35 @@ theorem ptxPhase3_cut_strong (h : PtxCallees) (hwk : PtxP34.PmcStrong)
   have he : K.«process_message_call» + b + 1 = ptxCost3 + b := by
     unfold ptxCost3; omega
   rw [he] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+/-- The Phase-3 cut also transports the caller-local shapes required downstream. -/
+theorem ptxPhase3_cut_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
+      (ptxPhase3 tail) (ptxCost3 + b) := by
+  have he : CallEntryOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
+      MsgReady (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret hc hp ha hl
+    exact PtxP34.entry_pmc s vs body callee ret hc hp.1 ha hl
+  have hr : DecCallResumeOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
+      (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s) (ofString "out")
+      (ofString "process_message_call") [.var .local (ofString "m")] := by
+    intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨PtxP34.resume_pmc_strong hwk s vs body callee ret v post hc hp.1 ha hl hb,
+      ptxPhase4LocalShapes_resume s post v hp.2⟩
+  have hb : TerminatingProgBoundedOn
+      (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s) (ptxPhase3 tail)
+      (K.«process_message_call» + b + 1) := by
+    unfold ptxPhase3 ptxCode
+    exact TerminatingProgBoundedOn.decCall_on h.gb_process_message_call
+      (ofString "out") .one [.var .local (ofString "m")] he hr htail
+  have heq : K.«process_message_call» + b + 1 = ptxCost3 + b := by
+    unfold ptxCost3; omega
+  rw [heq] at hb
   intro F s hc hp
   exact hb s hc hp
 
