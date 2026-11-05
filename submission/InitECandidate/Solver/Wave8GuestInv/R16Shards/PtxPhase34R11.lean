@@ -5878,6 +5878,27 @@ theorem lst_new_stable_post_backing_records (h : PtxCallees) {F : Type}
   rw [hptr, he i hi]
   exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
 
+/-- Restore the source-record/backing separation needed by copy setup. -/
+theorem lst_new_stable_resumed_backing_records (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    ∀ i, i < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * i), 40)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, he⟩ :=
+    lst_new_stable_post_backing_records h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using he
+
 /-- Restore caller locals in the source-record separation conclusion. -/
 theorem lst_new_stable_resumed_record_separation (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
