@@ -2386,4 +2386,72 @@ theorem worldEff_liveMpt_csr {F : Type}
   intro a ha
   rwa [hwrs_eq, hjrs_eq] at ha
 
+def CsrLiveAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cache roots m : Nat) : Prop :=
+  ArenaReady s ∧ cache ≠ roots ∧ ∃ S Nd Nm,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧ roots ∈ S ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots) ∧
+    MptObjInWith s S Nm m ∧
+    IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd)
+
+theorem localsFree_csrLiveAt (cache roots m : Nat) :
+    LocalsFree (fun s => CsrLiveAt s cache roots m) := by
+  intro F s locals k h
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := h
+  exact ⟨localsFree_arenaReady s locals k hA, hne, S, Nd, Nm,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
+    hc, hr, hcl, hrl, (mptObjInWith_with_locals_csr s locals k S Nm m).2 hm, hd⟩
+
+theorem csrLiveAt_tables {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} (h : CsrLiveAt s cache roots m) :
+    CsrTablesAt s cache roots := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := h
+  exact ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩
+
+theorem worldEff_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (hB_ok : ∀ gs ∈ B, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst)
+    (hcore_out : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (heff : R16Shards.WorldEff s post Rl B gw)
+    (hR : ∀ S Nd Nm, WorldTypedWith s S Nd →
+      MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      IvlsDisj Rl (worldTypedIvls s S Nd ++ mptObjIvls s Nm m)) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  obtain ⟨hWp, hmp, hdp, _, _, _, _, hroles, _⟩ :=
+    worldEff_liveMpt_csr hA hB_ok hcore_out heff hW hm hd (hR S Nd Nm hW hm hd)
+  exact ⟨heff.arena, hne, S, Nd, Nm, hWp, hc, hr,
+    fun a ha => hcl a (hroles a ha), fun a ha => hrl a (hroles a ha), hmp, hdp⟩
+
+theorem mptObjStep_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {cache roots : Nat}
+    (hs : CsrLiveAt s cache roots (locN s "m"))
+    (hstep : MptObjStep R gw keep s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR_ti : ∀ S Nd Nm, WorldTypedWith s S Nd →
+      MptObjInWith s S Nm (locN s "m") →
+      IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd) →
+      IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m"))) :
+    CsrLiveAt post cache roots (locN s "m") := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have hR := hR_ti S Nd Nm hW hm hd
+  have hRN : IvlsDisj (R s) (nodeExtents s Nd) := by
+    intro r hr i hi
+    exact hR r hr i (List.mem_append_left _ (by
+      unfold worldTypedIvls
+      exact List.mem_append_right _ hi))
+  obtain ⟨S', Nd', Nm', hWp, hc', hr', hcl', hrl', _, _, _, _, hmp, hdp, _, _⟩ :=
+    mptObjStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl hm hd
+      hstep hR_z hR hRN
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm', hWp,
+    hc', hr', hcl', hrl', hmp, hdp⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
