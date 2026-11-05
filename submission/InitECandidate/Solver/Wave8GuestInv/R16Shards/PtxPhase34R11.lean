@@ -1778,6 +1778,29 @@ theorem lst_push_bo40_arg {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp only [locN, callEntryStateHOLFinite, hparams.2.2]
   rfl
 
+theorem lst_push_slot_result (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (harg : BoListArg (callEntryStateHOLFinite s callee)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat % 8 = 0 ∧
+      Inside (w.toNat, 8) (memW post (locN (callEntryStateHOLFinite s callee) "l"))
+        (memW post (locN (callEntryStateHOLFinite s callee) "l") +
+          8 * memW post (locN (callEntryStateHOLFinite s callee) "l" + 16)) := by
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, hW⟩ := harg.1.2
+  obtain ⟨Nd, hTr⟩ := hW.2.2.2
+  have hWT : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd :=
+    ⟨hW.1, hW.2.1, hW.2.2.1, hTr⟩
+  obtain ⟨_, _, _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  exact hret v rfl
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
