@@ -11124,4 +11124,52 @@ theorem store_receiptSlot_backing (off : Bool) :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Both encoded-receipt stores compose without losing transaction backing. -/
+theorem phase4ReceiptStores_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 124 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 124 ptxCode) tail) (0 + (0 + b)) := by
+    unfold ptxCode
+    refine seq_bound_trans (P := fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (by intro F s _ _ _; have hc := clock_store s (receiptDst false)
+            (.rfield (if false then 1 else 0) (.var .local (ofString "rc"))); exact ⟨by omega, by omega⟩)
+      (store_receiptSlot_backing false) ?_
+    exact seq_bound_trans (P := fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (by intro F s _ _ _; have hc := clock_store s (receiptDst true)
+            (.rfield (if true then 1 else 0) (.var .local (ofString "rc"))); exact ⟨by omega, by omega⟩)
+      (store_receiptSlot_backing true) htail
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+/-- The encoded-receipt suffix reaches stable-copy exit with backing retained. -/
+theorem phase4Encoded_stable_backing_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 13 (spineAt 124 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  have hb := @phase4ReceiptStores_backing_cut _ _ (phase4LogPointers_backing_cut
+    (phase4LogLoop_stable_backing_cut h hresume htail))
+  have he : spinePlug 13 (spineAt 124 ptxCode) tail =
+      spinePlug 2 (spineAt 124 ptxCode)
+        (spinePlug 2 (spineAt 126 ptxCode) (spinePlug 9 (spineAt 128 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

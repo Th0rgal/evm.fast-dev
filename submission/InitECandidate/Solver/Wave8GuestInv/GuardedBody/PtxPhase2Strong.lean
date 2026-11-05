@@ -12992,4 +12992,131 @@ theorem phase2_alloc_message_tables_backing_shapes_bound (h : PtxCallees) {ι : 
     simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hmem]
   · exact ht
 
+/-- The branch-store cut retains the initialized gas and access-table fields,
+as well as caller scalars, backing, and Phase-4 shapes. -/
+def PtxMessageSuffixReady {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) (names : List String) (aa ak : Nat) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  PtxMessageScalarReady buffers contents names s ∧ PtxMessageTables s aa ak ∧
+    TxBacking s ∧ PtxPhase4LocalShapes s ∧
+    memW s (locN s "m" + 152) = aa ∧ memW s (locN s "m" + 160) = ak ∧
+    memW s (locN s "m" + 40) < 2 ^ 63
+
+/-- Stores to branch-specific fields frame all three readiness fields. -/
+theorem phase2_message_suffix_store_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (ha : off ≠ 152) (hk : off ≠ 160) (hg : off ≠ 40) (value : ExpHOL 64)
+    (hv : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxMessageScalarReady buffers contents names s → evalAt s value = some v →
+      ∃ w, v = .val (.word w)) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) value)
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, rfl⟩ := hv s v hp.1 he
+  have hst' : @panMemStoresHOL 64 _ x [.word w] s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem := by
+    simpa only [flattenHOL] using hst
+  obtain ⟨hd, _, hm⟩ := panMemStoresHOL_word_spec hst'
+  have ht := phase2_message_tables_backing_store buffers contents hp.1.1 hp.2.1 hp.2.2.1 hd
+    (phase2_message_offset_inside hp.1.1 off hoff hx) hm
+  have hf := (phase2_message_store_fields buffers contents hp.1.1 off hoff hx hst').2.2
+  refine ⟨⟨ht.1, hp.1.2⟩, ht.2.1, ht.2.2, hp.2.2.2.1, ?_, ?_, ?_⟩
+  · exact (hf 19 (by decide) (by omega)).trans hp.2.2.2.2.1
+  · exact (hf 20 (by decide) (by omega)).trans hp.2.2.2.2.2.1
+  · change memW {s with memory := mem} (locN s "m" + 40) < 2 ^ 63
+    rw [hf 5 (by decide) (by omega)]; exact hp.2.2.2.2.2.2
+
+theorem phase2_message_suffix_load_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (ha : off ≠ 152) (hk : off ≠ 160) (hg : off ≠ 40) (addr : ExpHOL 64) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) (.load .one addr))
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply phase2_message_suffix_store_hoare buffers contents names aa ak off hoff ha hk hg
+  intro F s v hp hv
+  simp [evalAt, evalHOLExact] at hv
+  split at hv
+  · simp [memLoadHOLExact] at hv
+    rcases hv with ⟨_, rfl⟩
+    cases s.memory _ with
+    | word w => exact ⟨w, rfl⟩
+  · cases hv
+
+theorem phase2_message_suffix_local_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (ha : off ≠ 152) (hk : off ≠ 160) (hg : off ≠ 40)
+    (name : String) (hn : name ∈ names) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) (.var .local (ofString name)))
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply phase2_message_suffix_store_hoare buffers contents names aa ak off hoff ha hk hg
+  intro F s v hp hv
+  obtain ⟨w, hw⟩ := hp.2 name hn
+  exact ⟨w, by simpa [evalAt, evalHOLExact, hw] using hv.symm⟩
+
+theorem phase2_message_suffix_const_store {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak off : Nat) (hoff : off + 8 ≤ 176)
+    (ha : off ≠ 152) (hk : off ≠ 160) (hg : off ≠ 40) (w : BitVec 64) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) (.const w))
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  apply phase2_message_suffix_store_hoare buffers contents names aa ak off hoff ha hk hg
+  intro F s v hp hv
+  exact ⟨w, by simpa [evalAt, evalHOLExact] using hv.symm⟩
+
+/-- The concrete ordinary-call stores retain the complete readiness cut. -/
+theorem phase2_message_call_stores_suffix_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (he : "empty" ∈ names) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak) phase2_message_call_stores
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  unfold phase2_message_call_stores
+  apply Hoare.seq_fall (phase2_message_suffix_load_store buffers contents names aa ak 32
+    (by decide) (by decide) (by decide) (by decide) _)
+  apply Hoare.seq_fall (phase2_message_suffix_load_store buffers contents names aa ak 88
+    (by decide) (by decide) (by decide) (by decide) _)
+  apply Hoare.seq_fall (phase2_message_suffix_load_store buffers contents names aa ak 96
+    (by decide) (by decide) (by decide) (by decide) _)
+  apply Hoare.seq_fall (phase2_message_suffix_local_store buffers contents names aa ak 112
+    (by decide) (by decide) (by decide) (by decide) "empty" he)
+  apply Hoare.seq_fall (phase2_message_suffix_const_store buffers contents names aa ak 120
+    (by decide) (by decide) (by decide) (by decide) 0)
+  exact phase2_message_suffix_load_store buffers contents names aa ak 104
+    (by decide) (by decide) (by decide) (by decide) _
+
+/-- The concrete create stores retain the complete readiness cut. -/
+theorem phase2_message_create_stores_suffix_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (hc : "ct" ∈ names) (he : "empty" ∈ names) :
+    Hoare (PtxMessageSuffixReady buffers contents names aa ak) phase2_message_create_stores
+      (fun r s => r = none → PtxMessageSuffixReady buffers contents names aa ak s) := by
+  unfold phase2_message_create_stores
+  apply Hoare.seq_fall (phase2_message_suffix_local_store buffers contents names aa ak 32
+    (by decide) (by decide) (by decide) (by decide) "ct" hc)
+  apply Hoare.seq_fall (phase2_message_suffix_local_store buffers contents names aa ak 88
+    (by decide) (by decide) (by decide) (by decide) "empty" he)
+  apply Hoare.seq_fall (phase2_message_suffix_const_store buffers contents names aa ak 96
+    (by decide) (by decide) (by decide) (by decide) 0)
+  apply Hoare.seq_fall (phase2_message_suffix_load_store buffers contents names aa ak 112
+    (by decide) (by decide) (by decide) (by decide) _)
+  apply Hoare.seq_fall (phase2_message_suffix_load_store buffers contents names aa ak 120
+    (by decide) (by decide) (by decide) (by decide) _)
+  exact phase2_message_suffix_const_store buffers contents names aa ak 104
+    (by decide) (by decide) (by decide) (by decide) 0
+
+/-- The branch-store cut supplies the exact backing-aware continuation guard. -/
+theorem phase2_message_suffix_ready {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names : List String} {aa ak : Nat} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageSuffixReady buffers contents names aa ak s) :
+    (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s :=
+  phase2_message_ready_backing_shapes hp.1.1 hp.2.1 hp.2.2.1 hp.2.2.2.1
+    hp.2.2.2.2.1 hp.2.2.2.2.2.1 hp.2.2.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
