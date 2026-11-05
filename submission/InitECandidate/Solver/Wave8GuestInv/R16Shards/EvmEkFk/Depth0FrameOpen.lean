@@ -5094,4 +5094,62 @@ theorem hoare_prepare_dispatch_value_zero (gw : List String) (hp : Nat)
     (ReadOnlyFn.resumeOn hLO hG EvmFrameSpecs.ro_u256_is_zero (ofString "vz") (by decide) _)
     htail
 
+/-- The read-only value test also retains the recipient local used by the
+account-aliveness test and subsequent code lookup. -/
+theorem hoare_prepare_dispatch_value_zero_recipient (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (recipient : ValueHOL 64)
+    (tail : ProgHOL 64)
+    (htail : Hoare (fun s => (D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "recipient") = some recipient) ∧ ∃ w : BitVec 64,
+      s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ s.locals.lookup (ofString "recipient") = some recipient)
+      (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+        [.load (.comb [.one, .one, .one, .one])
+          (.op .add [.var .local (ofString "msg"), .const 56])] tail)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLO : LocalsOnly ["msg", "recipient"] (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "recipient") = some recipient) := by
+    intro F s l k hl h
+    exact ⟨d0Pre_locals gw hp G ch s l k (hl "msg" (by simp)) h.1,
+      (hl "recipient" (by simp)).trans h.2⟩
+  have hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      D0Pre gw hp G ch s ∧ s.locals.lookup (ofString "recipient") = some recipient → GuestInv s :=
+    fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1.1)
+  exact Hoare.decCall_ro_fall EvmFrameSpecs.ro_u256_is_zero hG
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (fun _ h => h.1.1)
+    (ReadOnlyFn.resumeOn hLO hG EvmFrameSpecs.ro_u256_is_zero (ofString "vz") (by decide) _)
+    htail
+
+/-- Compose the source recipient binder with the value-zero call while
+retaining the recipient for the remaining dispatch prelude. -/
+theorem hoare_prepare_dispatch_recipient (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (tail : ProgHOL 64)
+    (htail : ∀ recipient : ValueHOL 64,
+      Hoare (fun s => (D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "recipient") = some recipient) ∧ ∃ w : BitVec 64,
+        s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.dec (ofString "recipient") .one
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 32]))
+        (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+          [.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "msg"), .const 56])] tail))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.dec_fall (P' := fun s => D0Pre gw hp G ch s ∧
+    ∃ recipient, s.locals.lookup (ofString "recipient") = some recipient) ?_ ?_ ?_
+  · intro F s v hP _
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP, v, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+    obtain ⟨hD, recipient, hrecipient⟩ := hP
+    exact (hoare_prepare_dispatch_value_zero_recipient gw hp G ch recipient tail
+      (htail recipient)).run s hc ⟨hD, hrecipient⟩ hnt hr
+  · exact fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩
+
 end HeadStore
