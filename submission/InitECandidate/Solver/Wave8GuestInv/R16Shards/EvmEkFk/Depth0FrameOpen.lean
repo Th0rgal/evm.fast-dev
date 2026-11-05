@@ -2717,6 +2717,101 @@ theorem ek_prepare_dispatch_of_body
     EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "prepare_dispatch") :=
   evmKeeps_of_stepFrom_body _ lookup_prepare_dispatch hbody
 
+/-- Local assignments in dispatch retain the owned message and step origin. -/
+theorem hoare_assign_d0_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (name : MlS)
+    (hne : name ≠ ofString "msg") (source : ExpHOL 64)
+    (L L' : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hlocal : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      L s.locals → ev s source = some v → L' (setVarHOLFinite name v s).locals) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.assign .local name source) (Fall (fun s => D0Pre gw hp G ch s ∧ L' s.locals)) := by
+  apply Hoare.assign
+  · intro F s v hP hv _
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, hlocal s v hP.2 hv⟩
+    simp only [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update]
+    simp [FUPDATE, hne]
+  · intro F s _ hr
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+
+/-- The delegated-code branch's final four instructions: unpack the returned
+code pair, mark delegation and record the copied address. Both code words are
+retained for the subsequent common dispatch tail. -/
+theorem hoare_prepare_dispatch_delegated_finish (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)) ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))) := by
+  let L0 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr))
+  let L1 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr)) ∧
+    l.lookup (ofString "code") = some (.val (.word code))
+  let L2 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "code") = some (.val (.word code)) ∧
+    l.lookup (ofString "code_n") = some (.val (.word code_n)) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr))
+  have hcd : ofString "code" ≠ ofString "dcode" := by decide
+  have hca : ofString "code" ≠ ofString "daddr" := by decide
+  have hnc : ofString "code_n" ≠ ofString "code" := by decide
+  have hna : ofString "code_n" ≠ ofString "daddr" := by decide
+  have seq_assign {P R Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+      {name : MlS} {source : ExpHOL 64} {tail : ProgHOL 64}
+      (ha : Hoare P (.assign .local name source) (Fall R))
+      (ht : Hoare R tail (Fall Q)) :
+      Hoare P (.seq (.assign .local name source) tail) (Fall Q) := by
+    refine Hoare.seq (R := R) ?_ ht
+    refine ⟨fun {F} s hc hP hnt => ?_⟩
+    have h := ha.run s hc hP hnt
+    refine ⟨fun hn => h (Or.inl hn), fun hn hr => ?_⟩
+    have hnr : ¬ Resumes (evaluateHOLFiniteState s (.assign .local name source)).1 := by
+      rw [evaluateHOLFiniteState_assign]
+      repeat' split
+      all_goals first | exact not_resumes_error | rintro (⟨_, h⟩ | ⟨_, _, h, _⟩) <;> cases h
+    rcases hr with hr | hr
+    · exact (hn hr).elim
+    · exact (hnr hr).elim
+  refine seq_assign
+    (hoare_assign_d0_step gw hp G ch (ofString "code") (by decide) _ L0 L1 ?_) ?_
+  · intro F s v hL hv
+    have hv' : v = .val (.word code) := by
+      simpa [ev, evalHOLExact, hL.1] using hv.symm
+    subst v
+    dsimp [L1]
+    simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hcd, hca, L0] using
+      (show L0 s.locals ∧ True from ⟨hL, trivial⟩)
+  · refine seq_assign
+      (hoare_assign_d0_step gw hp G ch (ofString "code_n") (by decide) _ L1 L2 ?_)
+      ?_
+    · intro F s v hL hv
+      have hv' : v = .val (.word code_n) := by
+        simpa [ev, evalHOLExact, hL.1] using hv.symm
+      subst v
+      dsimp [L2]
+      simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hnc, hna] using
+        (show s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+          s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) from ⟨hL.2.2, hL.2.1⟩)
+    · exact Hoare.seq_fall'
+        (hoare_store_msg_word_step_with gw hp G ch 168 (by decide) (.const 1) L2
+          (fun _ v _ _ hv => ⟨1, (Option.some.inj hv).symm⟩))
+        (hoare_store_msg_local_step gw hp G ch 104 (by decide) (ofString "daddr") daddr L2
+          (fun _ h => h.2.2)) (fun _ h => h)
+
+#print axioms hoare_prepare_dispatch_delegated_finish
 #print axioms Hoare.while_fall_checked
 #print axioms ek_set_delegation_of_body
 #print axioms ek_prepare_dispatch_of_body
