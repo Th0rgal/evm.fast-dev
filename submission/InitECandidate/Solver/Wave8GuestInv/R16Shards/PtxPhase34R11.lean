@@ -2564,6 +2564,26 @@ theorem lst_new_stable_source_resume (h : PtxCallees) {F : Type}
     show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide,
     show ofString "stable_logs" ≠ ofString "nl" from by decide] using hp.2
 
+theorem lst_new_stable_capacity (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      memW post (w.toNat + 16) = locN s "stable_log_cap" := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hv, _, _, hf⟩ := ht v rfl
+  obtain ⟨_, _, _, _, hcap⟩ := hf hargs.2.2.2 hargs.2.2.1
+  exact ⟨w, hv, hcap.trans hargs.2.1⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
