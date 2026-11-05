@@ -1453,6 +1453,40 @@ theorem encode_receipt_result (h : PtxCallees) {F : Type}
   obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc hR
   simpa only [hg] using hret v rfl
 
+def Phase4ReceiptEncoded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
+    memW s (locN s "logs" + 8) < 2 ^ 28 ∧
+    ∃ a b : BitVec 64,
+      s.locals.lookup (ofString "rc") = some (.rStruct [.val (.word a), .val (.word b)]) ∧
+      Inside (a.toNat, b.toNat) sourceBase (globN s "heap_ptr") ∧
+      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61
+
+theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    Phase4ReceiptEncoded (setVarHOLFinite (ofString "rc") v { post with locals := s.locals }) := by
+  have ho := encode_receipt_output_resume h s vs body callee ret v post hc hl hr hp hg
+  obtain ⟨a, b, hv, hi, ha, hb, hn, hL⟩ :=
+    encode_receipt_result h s vs body callee ret v post hc hl hr hp hg
+  let t := setVarHOLFinite (ofString "rc") v { post with locals := s.locals }
+  have hlogs : locN t "logs" = locN s "logs" := by
+    simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rc" ≠ ofString "logs" from by decide]
+  refine ⟨LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _ ho, ?_, ?_, a, b, ?_, hi, ha, hb⟩
+  · change LogsListOK t (locN t "logs")
+    rw [hlogs]
+    exact (R13Shards.logsListOK_with_locals post t.locals post.clock _).mpr hL
+  · change memW post (locN t "logs" + 8) < 2 ^ 28
+    rw [hlogs]; exact hn
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
