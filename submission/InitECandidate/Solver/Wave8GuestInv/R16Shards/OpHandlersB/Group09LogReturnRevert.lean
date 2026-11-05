@@ -10640,4 +10640,40 @@ theorem logsListOK_append_g09 {F : Type}
     subst i
     exact ⟨hslot, by rw [hstore]; exact hlog⟩
 
+theorem frameLogObjects_append_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat}
+    (hheader : memW post (ec.1 + 88) = memW s (ec.1 + 88))
+    (hlen : memW post (memW s (ec.1 + 88) + 8) =
+      memW s (memW s (ec.1 + 88) + 8) + 1)
+    (hold : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      logOwnedIvls post (memW post (memW post (memW s (ec.1 + 88)) + 8 * i)) =
+      logOwnedIvls s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i)))
+    (hnew : memW post
+      (memW post (memW s (ec.1 + 88)) + 8 * memW s (memW s (ec.1 + 88) + 8)) = log) :
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log := by
+  unfold frameLogObjects
+  dsimp only
+  rw [hheader, hlen, List.range_succ, List.flatMap_append]
+  simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil, hnew]
+  congr 1
+  apply List.flatMap_congr
+  intro i hi
+  exact hold i (List.mem_range.1 hi)
+
+theorem logOwnedIvls_disj_of_record_fields_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log : Nat} {other : Ivl}
+    (hrecord : Disj (log, 40) other)
+    (haddress : Disj (memW s log, 20) other)
+    (htopics : Disj (memW s (log + 8), 32 * memW s (log + 16)) other)
+    (hdata : Disj (memW s (log + 24), memW s (log + 32)) other) :
+    ∀ i ∈ logOwnedIvls s log, Disj i other := by
+  intro i hi
+  have hi' := (List.mem_filter.1 hi).1
+  simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at hi'
+  rcases hi' with rfl | rfl | rfl | rfl
+  · exact hrecord
+  · exact haddress
+  · exact htopics
+  · exact hdata
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
