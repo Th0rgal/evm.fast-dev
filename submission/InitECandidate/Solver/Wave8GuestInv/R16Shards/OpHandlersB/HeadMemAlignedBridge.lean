@@ -8355,18 +8355,66 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
 
 end IcsRun
 
+theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev") := by
+  obtain ⟨_, S, _, hrest⟩ := hi
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
+  let e := globN s "ev"
+  let c := globN s "cur_cont"
+  have hhead := hFW _ (head_mem_evmChain s)
+  have heB := (hhead.1 (e, 280) (by simp [e])).1.2
+  have hcB := (hhead.1 (c, 104) (by simp [c])).1.2
+  dsimp only at heB hcB
+  have hbound : scratchEnd < 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+  have hneq (a : Nat) (ha : a < 2 ^ 64) (hne : a ≠ e) :
+      BitVec.ofNat 64 a ≠ BitVec.ofNat 64 e := by
+    intro hx
+    have hh := congrArg BitVec.toNat hx
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha,
+      Nat.mod_eq_of_lt (show e < 2 ^ 64 by omega)] at hh
+    exact hne hh
+  have hcs : evmChain s = (e, c) :: (evmChain s).tail := evmChain_cons s
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdc : Disj (e, 280) (c, 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | ht
+  · unfold Disj at hdc; dsimp only at hdc ⊢
+    refine ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+  · have hF := hFW ec (by rw [hcs]; exact List.mem_cons_of_mem _ ht)
+    have hrB := (hF.1 (ec.1, 280) (by simp)).1.2
+    have hkB := (hF.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hrB hkB
+    have hmem (i : Ivl) (hm : i ∈ frameObjects s ec) :
+        i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+      List.mem_flatten.mpr ⟨frameObjects s ec, List.mem_map_of_mem ht, hm⟩
+    have hd1 := hcross (e, 280) (by simp [frameObjects])
+      (ec.1, 280) (hmem _ (by simp [frameObjects]))
+    have hd2 := hcross (e, 280) (by simp [frameObjects])
+      (ec.2, 104) (hmem _ (by simp [frameObjects]))
+    unfold Disj at hd1 hd2; dsimp only at hd1 hd2
+    exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+
 /-- The concrete cleanup restores the saved frame-memory mark and preserves
 every chain alignment cell.  The only memory write is the parent's pc. -/
 theorem finish_child_cleanup_cells {F : Type} (t post : PanSemStateFiniteExact 64 F)
-    (hcode : t.code = originalRuntimeCode)
+    (hcode : t.code = originalRuntimeCode) (hi : EvmInv t)
     (cm cmm e pc : BitVec 64) (v : ValueHOL 64)
     (hcm : t.locals.lookup (ofString "child_mark") = some (.val (.word cm)))
     (hcmm : t.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmm)))
     (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
     (hpc : t.memory e = .word pc) (hdom : t.memaddrs e)
-    (hsafe : ∀ ec ∈ evmChain t,
-      BitVec.ofNat 64 (ec.1 + 24) ≠ e ∧ BitVec.ofNat 64 (ec.1 + 32) ≠ e ∧
-      BitVec.ofNat 64 (ec.1 + 40) ≠ e ∧ BitVec.ofNat 64 (ec.2 + 56) ≠ e)
     (hr : evaluateHOLFiniteState t EvmEkFk.fcCleanup = (some (.returned v), post)) :
     EvmEkFk.ChainCellsAgree t post ∧
     globN post "ev" = globN t "ev" ∧
@@ -8374,6 +8422,9 @@ theorem finish_child_cleanup_cells {F : Type} (t post : PanSemStateFiniteExact 6
     globN post "scratch_ptr" = cm.toNat := by
   have htail := Ret.apply (finish_child_tail t hcode cm cmm e pc hcm hcmm he hpc hdom) hr
   obtain ⟨hg, hm, _, _⟩ := htail
+  have heAddr : BitVec.ofNat 64 (globN t "ev") = e := by simp [globN, he]
+  have hsafe := chain_cells_ne_head_pc t hi
+  rw [heAddr] at hsafe
   have hcells : EvmEkFk.ChainCellsAgree t post := by
     intro ec hec
     obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
