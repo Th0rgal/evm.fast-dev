@@ -11660,4 +11660,33 @@ theorem phase2_warm_packed_readonly_resume {F₀ : Type}
   rcases hmem with rfl | rfl | rfl <;>
     simp [HolFiniteMapExact.update, FUPDATE, ha, hn, ht]
 
+/-- Allocation in the suffix preserves a saved caller buffer and its ownership witness. -/
+theorem phase2_alloc_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  refine ⟨?_, S', Nd', ?_, hbuf'⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
