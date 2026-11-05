@@ -11014,4 +11014,23 @@ theorem lst_push_after_copy_exact_g09 {F : Type}
   exact lst_push_finish_exact_g09 _ l esz n np hl he hn hd0 hd8
     (by simp [hne16]) hne8
 
+/-- Concrete final store and return in `log_append`. -/
+theorem log_append_store_return_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (slot log : BitVec 64)
+    (hs : s.locals.lookup (ofString "slot") = some (.val (.word slot)))
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hd : s.memaddrs slot) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.var .local (ofString "slot")) (.var .local (ofString "log")))
+        (.return (.const 0))) =
+      (some (.returned (.val (.word 0))),
+        {s with
+          locals := HolFiniteMapExact.empty
+          memory := fun a => if a = slot then .word log else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evaluateHOLFiniteState_return, evalHOLExact, hs, hl, flattenHOL,
+    panMemStoresHOL, panMemStoreHOL, hd, FUPDATE, shapeOfHOLExact,
+    sizeOfShapeWithContextHOL, emptyLocalsHOLFinite]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
