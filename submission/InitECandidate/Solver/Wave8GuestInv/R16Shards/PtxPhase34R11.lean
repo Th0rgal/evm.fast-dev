@@ -4767,6 +4767,24 @@ def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
     ∀ o ∈ worldOwned s S Nd,
       Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
 
+/-- Updating the stable length retains the coherent ownership witness. -/
+theorem stableCopyOwnedFrame_length_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hframe : StableCopyOwnedFrame s) :
+    StableCopyOwnedFrame {s with memory := mem'} := by
+  obtain ⟨S, Nd, hW, ho, hs, hb⟩ := hframe
+  obtain ⟨_, _, _, _, _, hh, ha, hr⟩ := hp.2.2.2.2
+  have hf := stable_length_store_source s hp.1 hp.2.1 S Nd hW ho hs hh ha hr hx mem' hm
+  have hd := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  refine ⟨S, Nd, hf.1, hf.2.2.2.2.1, ?_,
+    stable_copy_world_separation s mem' S Nd hd hf.2.1 hb⟩
+  intro o hmem
+  rw [hf.2.1] at hmem
+  exact hs o hmem
+
 /-- A separated copy write preserves the coherent header/backing ownership frame. -/
 theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
