@@ -2657,6 +2657,941 @@ theorem stable_backing_allocated {F : Type} {s post : PanSemStateFiniteExact 64 
   rw [hround] at hi hw
   exact ⟨halign, Or.inl ⟨hA.1.trans hi.1, hi.2⟩, hw⟩
 
+theorem lst_new_stable_backing_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    let p := memW resumed (locN resumed "stable_logs")
+    p % 8 = 0 ∧ Allocated resumed (p, 8 * locN resumed "stable_log_cap") ∧
+      WordsOK resumed (p, 8 * locN resumed "stable_log_cap") := by
+  obtain ⟨w, rfl, _, hb, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hb' := stable_backing_allocated
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hb
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hb'
+
+def Phase4StableStorageReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableAllocated s ∧
+    memW s (locN s "stable_logs" + 16) = locN s "stable_log_cap" ∧
+    let p := memW s (locN s "stable_logs")
+    p % 8 = 0 ∧ Allocated s (p, 8 * locN s "stable_log_cap") ∧
+      WordsOK s (p, 8 * locN s "stable_log_cap")
+
+theorem lst_new_stable_storage_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableStorageReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  obtain ⟨hp', hcap⟩ := lst_new_stable_capacity_resume h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨hp', hcap, lst_new_stable_backing_resume h s vs body callee ret v post hc hp ha hl hr⟩
+
+theorem phase4StableAllocation_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4StableCapReady
+      (spinePlug 1 (spineAt 132 ptxCode) tail) (K.lst_new + b + 1) := by
+  unfold ptxCode
+  refine TerminatingProgBoundedOn.decCall_on h.fb_lst_new _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    exact lst_new_stable_storage_resume h s vs body callee ret v post hc hp ha hl hr
+
+theorem phase4StableSetup_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 3 (spineAt 130 ptxCode) tail) (K.lst_new + b + 1) := by
+  have hb := @phase4StableCap_cut _ _ (phase4StableAllocation_cut h htail)
+  have he : spinePlug 3 (spineAt 130 ptxCode) tail =
+      spinePlug 2 (spineAt 130 ptxCode)
+        (spinePlug 1 (spineAt 132 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4ThroughStableSetup_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 34 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + b + 1)) + 1))) := by
+  have hb := @phase4ThroughLogCopy_cut h hresume _ _ (phase4StableSetup_cut h htail)
+  have he : spinePlug 34 (spineAt 99 ptxCode) tail =
+      spinePlug 31 (spineAt 99 ptxCode) (spinePlug 3 (spineAt 130 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem stable_storage_length_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) :
+    locN s "nl" ≤ memW s (locN s "stable_logs" + 16) ∧
+      8 * locN s "nl" < 2 ^ 64 ∧
+      ∀ i : Nat, i < locN s "nl" →
+        WordAt s (memW s (locN s "stable_logs") + 8 * i) := by
+  have hb := phase4StableCap_bounds s hp.1.1
+  refine ⟨by rw [hp.2.1]; exact hb.2.1, ?_, ?_⟩
+  · exact lt_of_le_of_lt (Nat.mul_le_mul_left 8 hb.2.1) hb.2.2
+  · intro i hi
+    have hw := hp.2.2.2.2
+    apply hw.2.2 i
+    have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hb.2.1
+    simpa using hic
+
+theorem lst_new_stable_header_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    WordsOK resumed (locN resumed "stable_logs", 24) ∧
+      Allocated resumed (locN resumed "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hi : Inside (w.toNat, 24) sourceBase (globN post "heap_ptr") :=
+    ⟨(worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2.1.trans hh.2.1.1, hh.2.1.2⟩
+  have hw : WordsOK post (w.toNat, 24) := hh.2.2
+  have ho : Allocated post (w.toNat, 24) := Or.inl hi
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN] using And.intro hw ho
+
+theorem stable_length_field_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hh : WordsOK s (locN s "stable_logs", 24)) :
+    WordAt s (locN s "stable_logs" + 8) := by
+  have hw := hh.2.2 1 (by norm_num)
+  simpa using hw
+
+theorem stable_length_address_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24)) :
+    locN s "stable_logs" + 8 < 2 ^ 64 ∧
+      (BitVec.ofNat 64 (locN s "stable_logs") + (8 : BitVec 64)).toNat =
+        locN s "stable_logs" + 8 := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have hlt : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  refine ⟨hlt, ?_⟩
+  have hl : locN s "stable_logs" < 2 ^ 64 := by omega
+  simp only [BitVec.toNat_add, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hl, show (8 : BitVec 64).toNat = 8 from rfl,
+    Nat.mod_eq_of_lt hlt]
+
+theorem stable_length_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s)
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) =
+      .word (BitVec.ofNat 64 (locN s "nl"))) :
+    memW {s with memory := mem'} (locN s "stable_logs" + 8) = locN s "nl" := by
+  have hb := (stable_storage_length_fits s hp).2.1
+  have hn : locN s "nl" < 2 ^ 64 := by omega
+  change (valueWord (.val (mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8))))).toNat = _
+  rw [hm]
+  exact Nat.mod_eq_of_lt hn
+
+theorem stable_length_store_header_unchanged {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    memW {s with memory := mem'} (locN s "stable_logs") = memW s (locN s "stable_logs") ∧
+    memW {s with memory := mem'} (locN s "stable_logs" + 16) =
+      memW s (locN s "stable_logs" + 16) := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have h0 : locN s "stable_logs" < 2 ^ 64 := by dsimp at hb; omega
+  have h8 : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  have h16 : locN s "stable_logs" + 16 < 2 ^ 64 := by dsimp at hb; omega
+  have hn0 : BitVec.ofNat 64 (locN s "stable_logs") ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h0, Nat.mod_eq_of_lt h8] at he'
+    omega
+  have hn16 : BitVec.ofNat 64 (locN s "stable_logs" + 16) ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h16, Nat.mod_eq_of_lt h8] at he'
+    omega
+  constructor <;> simp only [memW]
+  · rw [hm _ hn0]
+  · rw [hm _ hn16]
+
+theorem stable_length_store_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    {i : Ivl} (hi : WordsOK s i) : WordsOK {s with memory := mem'} i := by
+  refine ⟨hi.1, hi.2.1, ?_⟩
+  intro k hk
+  obtain ⟨v, hd, hv⟩ := hi.2.2 k hk
+  by_cases ha : BitVec.ofNat 64 (i.1 + 8 * k) =
+      BitVec.ofNat 64 (locN s "stable_logs" + 8)
+  · exact ⟨w, hd, by change mem' _ = _; rw [ha, he]⟩
+  · exact ⟨v, hd, (hm _ ha).trans hv⟩
+
+theorem stable_length_store_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    let post := {s with memory := mem'}
+    Allocated post (memW post (locN post "stable_logs"), 8 * locN post "stable_log_cap") ∧
+      WordsOK post (memW post (locN post "stable_logs"), 8 * locN post "stable_log_cap") := by
+  have hptr := (stable_length_store_header_unchanged s hA hh mem' hm).1
+  change Allocated {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    WordsOK {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+  rw [hptr]
+  exact ⟨hp.2.2.2.1, stable_length_store_words s mem' w he hm hp.2.2.2.2⟩
+
+theorem stable_length_store_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) =
+      .word (BitVec.ofNat 64 (locN s "nl")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    memW {s with memory := mem'} (locN s "stable_logs" + 8) ≤
+      memW {s with memory := mem'} (locN s "stable_logs" + 16) := by
+  rw [stable_length_store_value s hp mem' he,
+    (stable_length_store_header_unchanged s hA hh mem' hm).2]
+  exact (stable_storage_length_fits s hp).1
+
+/-- A store separated from the source header, live array and records retains
+both source-log validity and ownership under an unchanged world footprint. -/
+theorem logsLiveOwned_disjoint_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hA : ArenaOK s) (hg : GuestInv s) (hgp : GuestInv {s with memory := mem'})
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hh : Disj (logs, 24) (x.toNat, 8))
+    (ha : Disj (memW s logs, 8 * memW s (logs + 8)) (x.toNat, 8))
+    (he : ∀ i, i < memW s (logs + 8) →
+      Disj (memW s (memW s logs + 8 * i), 40) (x.toNat, 8))
+    (howned : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    LogsListOK {s with memory := mem'} logs ∧
+      LogsLiveOwned {s with memory := mem'} S Nd logs := by
+  let post := {s with memory := mem'}
+  by_cases hn : logs = 0
+  · exact ⟨Or.inl hn, fun h => False.elim (h hn)⟩
+  have hl' := hl.resolve_left hn
+  have hu : IvlUnhit s post (logs, 24) := ivlUnhit_single hm (by simp) hh
+  have hb := (ivl_allocated_bound hA hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    memW_eq_of_ivlUnhit hu hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩
+  have hp : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+    intro i hi
+    have hal := logsListOK_array_aligned hg hl hn (by omega)
+    have hua : IvlUnhit s post (memW s logs, 8 * memW s (logs + 8)) :=
+      ivlUnhit_single hm (fun _ => hal) ha
+    exact memW_eq_of_ivlUnhit hua (by omega)
+      (ivl_allocated_bound hA (hd hn).1).2 ⟨by dsimp; omega, by dsimp; omega⟩
+  have hue : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40) :=
+    fun i hi => ivlUnhit_single hm (by simp) (he i hi)
+  refine ⟨logsListOK_congr_header_unhit hA hg hgp (by rfl) hl
+    (fun h => h) hu hp hue, ?_⟩
+  intro _
+  change Allocated post (memW post logs, 8 * memW post (logs + 8)) ∧ _
+  rw [h0, h8]
+  refine ⟨(hd hn).1, ?_, ?_⟩
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.1
+  · intro i hi
+    rw [hp i hi, logOwnedIvls_eq_of_unhit hA (hl'.2.2.2.2 i hi).2 (hue i hi) rfl]
+    change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.2 i hi
+
+/-- The stable length update preserves the source logs and their ownership.
+The separation premises are the freshness facts to retain from `lst_new`. -/
+theorem stable_length_store_source {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (S Nd : List Nat) (hW : WorldTypedWith s S Nd)
+    (ho : LogsLiveOwned s S Nd (locN s "logs"))
+    (hs : ∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o)
+    (hhead : Disj (locN s "logs", 24) (locN s "stable_logs", 24))
+    (harray : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (locN s "stable_logs", 24))
+    (hentry : ∀ i, i < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24))
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    let post := {s with memory := mem'}
+    WorldTypedWith post S Nd ∧ worldOwned post S Nd = worldOwned s S Nd ∧
+      TxEnv post ∧ LogsListOK post (locN s "logs") ∧
+      LogsLiveOwned post S Nd (locN s "logs") ∧
+      memW post (locN s "logs") = memW s (locN s "logs") ∧
+      memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) := by
+  have hptr := hp.1.1.1
+  have htw := hptr.1.1.1.1
+  have hA := htw.1.1
+  have hbound := (stable_length_address_bound s hA.2 hh).1
+  have hxin : Inside ((BitVec.ofNat 64 (locN s "stable_logs" + 8)).toNat, 8)
+      (locN s "stable_logs") (locN s "stable_logs" + 24) := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound]
+    constructor <;> dsimp <;> omega
+  obtain ⟨hW', heq, hE'⟩ := store_outside_worldOwned hA htw.2 hW hs hx hxin hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hA.1
+  have hl := hptr.1.1.2.1
+  have hr := logsLiveOwned_disjoint_store hA.2 hA.1 hg hl ho hm
+    (disj_of_inside_right hxin hhead) (disj_of_inside_right hxin harray)
+    (fun i hi => disj_of_inside_right hxin (hentry i hi)) heq
+  have hl' := hl.resolve_left hptr.1.2.2
+  have hu : IvlUnhit s {s with memory := mem'} (locN s "logs", 24) :=
+    ivlUnhit_single hm (by simp) (disj_of_inside_right hxin hhead)
+  have hb := (ivl_allocated_bound hA.2 hl'.2.1).2
+  exact ⟨hW', heq, hE', hr.1, hr.2,
+    memW_eq_of_ivlUnhit hu hl'.1.1 hb ⟨by omega, by omega⟩,
+    memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩⟩
+
+/-- The length store needs the separation facts supplied by fresh allocation,
+as well as the word shapes of its two local operands. -/
+def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableStorageReady s ∧
+    Allocated s (locN s "stable_logs", 24) ∧
+    s.locals.lookup (ofString "stable_logs") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "stable_logs")))) ∧
+    s.locals.lookup (ofString "nl") = some (.val (.word (BitVec.ofNat 64 (locN s "nl")))) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+      (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+      Disj (locN s "logs", 24) (locN s "stable_logs", 24) ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (locN s "stable_logs", 24) ∧
+      ∀ i, i < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
+
+def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
+    LogsWorldOwned s (locN s "logs") ∧
+    locN s "nl" = memW s (locN s "logs" + 8) ∧
+    locN s "lp" = memW s (locN s "logs") ∧
+    memW s (locN s "stable_logs" + 8) = locN s "nl" ∧
+    memW s (locN s "stable_logs" + 8) ≤ memW s (locN s "stable_logs" + 16) ∧
+    Allocated s (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    WordsOK s (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+theorem hoare_stable_length_store :
+    Hoare StableLengthPre
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → StableLengthPost t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hh, hlocal, hnl, S, Nd, hW, ho, hs, hhead, harray, hentry⟩ := hp
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt
+      (stable_length_address_bound s hA.2 hh).1] using
+      (stable_length_address_bound s hA.2 hh).2
+  subst x
+  obtain ⟨hdom, he, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  obtain ⟨hW', _, hE', hl', ho', h0, h8⟩ :=
+    stable_length_store_source s hp hh S Nd hW ho hs hhead harray hentry hdom mem' hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hA.1
+  have hAp : ArenaReady {s with memory := mem'} := ⟨hg, hA.2⟩
+  refine ⟨⟨worldOK_of_parts hAp hW', hE'⟩, hl', ⟨S, Nd, hW', ho'⟩,
+    ?_, ?_, stable_length_store_value s hp mem' he,
+    stable_length_store_fits s hp hA.2 hh mem' he hm,
+    stable_length_store_backing s hp hA.2 hh mem' _ he hm⟩
+  · exact hp.1.1.1.1.2.1.trans h8.symm
+  · exact hp.1.1.1.2.trans h0.symm
+
+theorem stableLengthPost_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : ∀ name ∈ (["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : StableLengthPost s) : StableLengthPost {s with locals := locals, clock := k} := by
+  have he : ∀ name ∈ (["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] : List String),
+      locN {s with locals := locals, clock := k} name = locN s name :=
+    fun name hn => locN_congr s locals k name (hl name hn)
+  obtain ⟨hW, hlogs, hown, hnl, hlp, hlen, hcap, ha, hw⟩ := hp
+  refine ⟨⟨localsFree_worldOK s locals k hW.1,
+    txEnv_with_locals s locals k (hl "index" (by simp)) hW.2⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [he "logs" (by simp)]
+    exact (R13Shards.logsListOK_with_locals s locals k _).mpr hlogs
+  · rw [he "logs" (by simp)]
+    exact logsWorldOwned_with_locals locals k hown
+  · rw [he "nl" (by simp), he "logs" (by simp)]; exact hnl
+  · rw [he "lp" (by simp), he "logs" (by simp)]; exact hlp
+  · rw [he "stable_logs" (by simp), he "nl" (by simp)]; exact hlen
+  · rw [he "stable_logs" (by simp)]; exact hcap
+  · rw [he "stable_logs" (by simp), he "stable_log_cap" (by simp)]; exact ha
+  · rw [he "stable_logs" (by simp), he "stable_log_cap" (by simp)]; exact hw
+
+theorem localsOnly_stableLengthPost :
+    LocalsOnly ["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] StableLengthPost := by
+  intro F s locals k hl hp
+  exact stableLengthPost_with_locals s locals k hl hp
+
+/-- Reassemble the length postcondition after a copy write. The destination
+header and source header are framed, and word validity is transported by the
+guest memory-domain invariant. -/
+theorem stableLengthPost_copy_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableLengthPost s)
+    (hworld : TxWorld {s with memory := mem'})
+    (hlogs : LogsListOK {s with memory := mem'} (locN s "logs"))
+    (hown : LogsWorldOwned {s with memory := mem'} (locN s "logs"))
+    (hsrc0 : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hsrc8 : memW {s with memory := mem'} (locN s "logs" + 8) = memW s (locN s "logs" + 8))
+    (hdst0 : memW {s with memory := mem'} (locN s "stable_logs") = memW s (locN s "stable_logs"))
+    (hdst8 : memW {s with memory := mem'} (locN s "stable_logs" + 8) =
+      memW s (locN s "stable_logs" + 8))
+    (hdst16 : memW {s with memory := mem'} (locN s "stable_logs" + 16) =
+      memW s (locN s "stable_logs" + 16)) :
+    StableLengthPost {s with memory := mem'} := by
+  obtain ⟨hW, _, _, hnl, hlp, hlen, hcap, ha, hw⟩ := hp
+  refine ⟨hworld, hlogs, hown, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · exact hnl.trans hsrc8.symm
+  · exact hlp.trans hsrc0.symm
+  · change memW {s with memory := mem'} (locN s "stable_logs" + 8) = locN s "nl"
+    rw [hdst8]; exact hlen
+  · change memW {s with memory := mem'} (locN s "stable_logs" + 8) ≤
+      memW {s with memory := mem'} (locN s "stable_logs" + 16)
+    rw [hdst8, hdst16]; exact hcap
+  · change Allocated {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hdst0]; exact ha
+  · change WordsOK {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hdst0]
+    exact wordsOK_transfer hW.1.1.1 hworld.1.1.1 hw
+
+/-- Connect the actual length write at spine position 133 to its continuation. -/
+theorem phase4StableLength_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableLengthPost tail b) :
+    TerminatingProgBoundedOn StableLengthPre
+      (spinePlug 1 (spineAt 133 ptxCode) tail) b := by
+  have hb := @seq_bound_trans _ _ _ _ _ _
+    (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+    hoare_stable_length_store htail
+  unfold ptxCode
+  intro F s hc hp
+  have hr := hb s hc hp
+  simp only [Nat.zero_add] at hr
+  exact hr
+
+/-- The copied length inherits the source list's receipt-size bound. -/
+theorem stableLengthPost_length_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0) :
+    locN s "nl" < 2 ^ 28 ∧ memW s (locN s "stable_logs" + 8) < 2 ^ 28 := by
+  have hl := hp.2.1.resolve_left hn
+  have hb : locN s "nl" < 2 ^ 28 := by
+    rw [hp.2.2.2.1]
+    exact hl.2.2.1
+  exact ⟨hb, hp.2.2.2.2.2.1.symm ▸ hb⟩
+
+/-- At loop exit, equality of the live pointer cells transfers log-entry
+validity from the source list to the stable list. -/
+theorem stable_copy_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hcopy : ∀ i, i < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i)) :
+    PtxReceiptsDone s := by
+  have hl := hp.2.1.resolve_left hn
+  have hb := stableLengthPost_length_bound s hp hn
+  have hlen := hp.2.2.2.2.2.1
+  have hfits := hp.2.2.2.2.2.2.1
+  have hwords := hp.2.2.2.2.2.2.2.2
+  refine ⟨hp.1, Or.inr ⟨hh, ha, hb.2, hfits, ?_⟩, hb.2⟩
+  intro i hi
+  rw [hlen] at hi
+  refine ⟨?_, ?_⟩
+  · apply hwords.2.2 i
+    have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hcap
+    simpa using hic
+  · rw [hcopy i hi]
+    exact (hl.2.2.2.2 i (by rw [← hp.2.2.2.1]; exact hi)).2
+
+/-- The stable-copy loop records equality only for the already copied prefix. -/
+def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+    WordsOK s (locN s "stable_logs", 24) ∧
+    Allocated s (locN s "stable_logs", 24) ∧
+    locN s "nl" ≤ locN s "stable_log_cap" ∧
+    ∀ i, i < locN s "i" → i < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i)
+
+theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hj : locN s "i" = 0) : StableCopyInv s := by
+  refine ⟨hp, hn, hh, ha, hcap, ?_⟩
+  intro i hi _
+  omega
+
+theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hj : locN s "i" < locN s "nl") :
+    WordAt s (locN s "lp" + 8 * locN s "i") ∧
+      LogEntryOK s (memW s (locN s "lp" + 8 * locN s "i")) := by
+  have hl := hp.1.2.1.resolve_left hp.2.1
+  rw [hp.1.2.2.2.2.1]
+  exact hl.2.2.2.2 (locN s "i") (by rw [← hp.1.2.2.2.1]; exact hj)
+
+theorem stableCopyInv_destination_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    WordAt s (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+  have hw := hp.1.2.2.2.2.2.2.2.2
+  have hcap := hp.2.2.2.2.1
+  apply hw.2.2 (locN s "i")
+  have hic : locN s "i" < locN s "stable_log_cap" := lt_of_lt_of_le hi hcap
+  simpa using hic
+
+theorem stableCopyInv_destination_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    memW s (locN s "stable_logs") + 8 * locN s "nl" ≤ 2 ^ 64 ∧
+      memW s (locN s "stable_logs") + 8 * locN s "i" < 2 ^ 64 := by
+  have ha := hp.1.2.2.2.2.2.2.2.1
+  have hA := hp.1.1.1.1.2
+  have hb := (ivl_allocated_bound hA ha).2
+  have hc := hp.2.2.2.2.1
+  dsimp at hb
+  constructor <;> omega
+
+theorem stableCopyInv_source_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    locN s "lp" + 8 * locN s "nl" ≤ 2 ^ 64 ∧
+      locN s "lp" + 8 * locN s "i" < 2 ^ 64 := by
+  obtain ⟨S, Nd, _, ho⟩ := hp.1.2.2.1
+  have hb := (ivl_allocated_bound hp.1.1.1.1.2 (ho hp.2.1).1).2
+  rw [hp.1.2.2.2.2.1, hp.1.2.2.2.1] at *
+  dsimp at hb
+  constructor <;> omega
+
+theorem stableCopyInv_source_aligned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    locN s "lp" % 8 = 0 := by
+  rw [hp.1.2.2.2.2.1]
+  apply logsListOK_array_aligned hp.1.1.1.1.1 hp.1.2.1 hp.2.1
+  rw [← hp.1.2.2.2.1]
+  omega
+
+theorem stableCopyInv_offset_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    (BitVec.ofNat 64 (locN s "i") * (8 : BitVec 64)).toNat = 8 * locN s "i" := by
+  have hb := (stableCopyInv_source_bound s hp hi).2
+  have hi' : locN s "i" < 2 ^ 64 := by omega
+  have hm : locN s "i" * 8 < 2 ^ 64 := by omega
+  simp only [BitVec.toNat_mul, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hi']
+  change locN s "i" * 8 % 2 ^ 64 = 8 * locN s "i"
+  rw [Nat.mod_eq_of_lt hm, Nat.mul_comm]
+
+theorem stableCopyInv_address_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    (BitVec.ofNat 64 (locN s "lp") +
+      BitVec.ofNat 64 (8 * locN s "i")).toNat = locN s "lp" + 8 * locN s "i" ∧
+    (BitVec.ofNat 64 (memW s (locN s "stable_logs")) +
+      BitVec.ofNat 64 (8 * locN s "i")).toNat =
+        memW s (locN s "stable_logs") + 8 * locN s "i" := by
+  have hs := (stableCopyInv_source_bound s hp hi).2
+  have hd := (stableCopyInv_destination_bound s hp hi).2
+  have hi' : 8 * locN s "i" < 2 ^ 64 := by omega
+  have hs' : locN s "lp" < 2 ^ 64 := by omega
+  have hd' : memW s (locN s "stable_logs") < 2 ^ 64 := by omega
+  constructor <;> simp only [BitVec.toNat_add, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hi', Nat.mod_eq_of_lt hs', Nat.mod_eq_of_lt hd',
+    Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt hd]
+
+theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
+    PtxReceiptsDone s := by
+  obtain ⟨hp, hn, hh, ha, hcap, hcopy⟩ := hp
+  exact stable_copy_complete s hp hn hh ha hcap
+    (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
+
+/-- Separation from the whole backing allocation implies separation from
+the current copy destination, including its machine-address conversion. -/
+theorem stableCopyInv_destination_disj {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl")
+    {region : Ivl}
+    (hd : Disj region (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    Disj region
+      ((BitVec.ofNat 64 (memW s (locN s "stable_logs") + 8 * locN s "i")).toNat, 8) := by
+  apply disj_of_inside_right ?_ hd
+  rw [BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt (stableCopyInv_destination_bound s hp hi).2]
+  have hc := hp.2.2.2.2.1
+  constructor <;> dsimp <;> omega
+
+/-- A copy write preserves any allocated header separated from the backing
+array. This supplies the source and destination header frame obligations. -/
+theorem stableCopyInv_header_unhit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl") (p : Nat)
+    (ha : Allocated s (p, 24)) (hal : p % 8 = 0)
+    (hd : Disj (p, 24) (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    memW {s with memory := mem'} p = memW s p ∧
+      memW {s with memory := mem'} (p + 8) = memW s (p + 8) ∧
+      memW {s with memory := mem'} (p + 16) = memW s (p + 16) := by
+  have hu : IvlUnhit s {s with memory := mem'} (p, 24) :=
+    ivlUnhit_single hm (by simp) (stableCopyInv_destination_disj s hp hi hd)
+  have hb := (ivl_allocated_bound hp.1.1.1.1.2 ha).2
+  refine ⟨memW_eq_of_ivlUnhit hu hal hb ⟨by omega, by omega⟩, ?_, ?_⟩
+  · exact memW_eq_of_ivlUnhit hu (by omega) hb ⟨by omega, by omega⟩
+  · exact memW_eq_of_ivlUnhit hu (by omega) hb ⟨by omega, by omega⟩
+
+/-- The semantic memory step of the stable-copy loop extends the copied
+prefix by one cell. The source is framed, and destination addresses do not wrap. -/
+theorem stable_copy_prefix_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (dst src i n : Nat)
+    (hi : i < n) (hbound : dst + 8 * n ≤ 2 ^ 64)
+    (hprefix : ∀ j, j < i → memW s (dst + 8 * j) = memW s (src + 8 * j))
+    (hwrite : memW {s with memory := mem'} (dst + 8 * i) = memW s (src + 8 * i))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (dst + 8 * i) → mem' a = s.memory a)
+    (hsource : ∀ j, j < n →
+      memW {s with memory := mem'} (src + 8 * j) = memW s (src + 8 * j)) :
+    ∀ j, j < i + 1 →
+      memW {s with memory := mem'} (dst + 8 * j) =
+        memW {s with memory := mem'} (src + 8 * j) := by
+  intro j hj
+  rw [hsource j (by omega)]
+  by_cases he : j = i
+  · subst j; exact hwrite
+  have hji : j < i := by omega
+  have hdi : dst + 8 * i < 2 ^ 64 := by omega
+  have hdj : dst + 8 * j < 2 ^ 64 := by omega
+  have hne : BitVec.ofNat 64 (dst + 8 * j) ≠ BitVec.ofNat 64 (dst + 8 * i) := by
+    intro heq
+    have heq' := congrArg BitVec.toNat heq
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hdi, Nat.mod_eq_of_lt hdj] at heq'
+    omega
+  calc
+    memW {s with memory := mem'} (dst + 8 * j) = memW s (dst + 8 * j) := by
+      simp only [memW]
+      rw [hm _ hne]
+    _ = memW s (src + 8 * j) := hprefix j hji
+
+/-- Instantiate prefix extension with the addresses and bound carried by
+the stable-copy invariant. -/
+theorem stableCopyInv_store_prefix {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl")
+    (hwrite : memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a)
+    (hsource : ∀ j, j < locN s "nl" →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (hsrc : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hdst : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs")) :
+    ∀ j, j < locN s "i" + 1 →
+      memW {s with memory := mem'}
+          (memW {s with memory := mem'} (locN s "stable_logs") + 8 * j) =
+        memW {s with memory := mem'}
+          (memW {s with memory := mem'} (locN s "logs") + 8 * j) := by
+  intro j hj
+  rw [hsrc, hdst]
+  exact stable_copy_prefix_step s mem' _ _ _ _ hi
+    (stableCopyInv_destination_bound s hp hi).1
+    (fun k hk => hp.2.2.2.2.2 k hk (lt_trans hk hi)) hwrite hm hsource j hj
+
+/-- A destination write outside the source array preserves every source
+pointer cell, providing the frame premise of `stable_copy_prefix_step`. -/
+theorem stable_copy_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (src n : Nat) (x : BitVec 64)
+    (hA : ArenaOK s) (ha : Allocated s (src, 8 * n)) (hal : src % 8 = 0)
+    (hd : Disj (src, 8 * n) (x.toNat, 8))
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    ∀ j, j < n → memW {s with memory := mem'} (src + 8 * j) = memW s (src + 8 * j) := by
+  have hu : IvlUnhit s {s with memory := mem'} (src, 8 * n) :=
+    ivlUnhit_single hm (fun _ => hal) hd
+  intro j hj
+  exact memW_eq_of_ivlUnhit hu (by omega) (ivl_allocated_bound hA ha).2
+    ⟨by dsimp; omega, by dsimp; omega⟩
+
+/-- Specialize source-array framing to the current stable-copy write. -/
+theorem stableCopyInv_source_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl")
+    (hd : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    ∀ j, j < locN s "nl" →
+      memW {s with memory := mem'} (locN s "lp" + 8 * j) =
+        memW s (locN s "lp" + 8 * j) := by
+  obtain ⟨S, Nd, _, ho⟩ := hp.1.2.2.1
+  have ha : Allocated s (locN s "lp", 8 * locN s "nl") := by
+    rw [hp.1.2.2.2.2.1, hp.1.2.2.2.1]
+    exact (ho hp.2.1).1
+  exact stable_copy_source_cells s mem' _ _ _ hp.1.1.1.1.2 ha
+    (stableCopyInv_source_aligned s hp hi)
+    (stableCopyInv_destination_disj s hp hi hd) hm
+
+/-- A copy destination outside the world footprint preserves world typing,
+the footprint itself, and the transaction environment. -/
+theorem stableCopyInv_world_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl") (S Nd : List Nat)
+    (hW : WorldTypedWith s S Nd)
+    (hd : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o)
+    (hx : s.memaddrs (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    WorldTypedWith {s with memory := mem'} S Nd ∧
+      worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd ∧
+      TxEnv {s with memory := mem'} := by
+  apply store_outside_worldOwned hp.1.1.1.1 hp.1.1.2 hW hd hx ?_ hm
+  rw [BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt (stableCopyInv_destination_bound s hp hi).2]
+  have hc := hp.2.2.2.2.1
+  constructor <;> dsimp <;> omega
+
+/-- Preserve source validity and live ownership across the current copy
+write using separation from the complete stable backing allocation. -/
+theorem stableCopyInv_logs_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl") (S Nd : List Nat)
+    (ho : LogsLiveOwned s S Nd (locN s "logs"))
+    (hg : GuestInv {s with memory := mem'})
+    (hworld : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd)
+    (hh : Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (ha : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    LogsListOK {s with memory := mem'} (locN s "logs") ∧
+      LogsLiveOwned {s with memory := mem'} S Nd (locN s "logs") := by
+  exact logsLiveOwned_disjoint_store hp.1.1.1.1.2 hp.1.1.1.1.1 hg hp.1.2.1 ho hm
+    (stableCopyInv_destination_disj s hp hi hh)
+    (stableCopyInv_destination_disj s hp hi ha)
+    (fun j hj => stableCopyInv_destination_disj s hp hi (he j hj)) hworld
+
+/-- Assemble world, source ownership, and header fields of the length
+postcondition after a separated copy write. -/
+theorem stableCopyInv_store_post {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl") (S Nd : List Nat)
+    (hW : WorldTypedWith s S Nd) (ho : LogsLiveOwned s S Nd (locN s "logs"))
+    (hworld : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o)
+    (hh : Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hd : Disj (locN s "stable_logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (ha : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hx : s.memaddrs (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    StableLengthPost {s with memory := mem'} := by
+  obtain ⟨hW', hw', hE'⟩ := stableCopyInv_world_preserved s mem' hp hi S Nd hW hworld hx hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hp.1.1.1.1.1
+  obtain ⟨hl', ho'⟩ := stableCopyInv_logs_preserved s mem' hp hi S Nd ho hg hw' hh ha he hm
+  have hl := hp.1.2.1.resolve_left hp.2.1
+  obtain ⟨hs0, hs8, _⟩ := stableCopyInv_header_unhit s mem' hp hi _ hl.2.1 hl.1.1 hh hm
+  obtain ⟨hd0, hd8, hd16⟩ := stableCopyInv_header_unhit s mem' hp hi _
+    hp.2.2.2.1 hp.2.2.1.1 hd hm
+  exact stableLengthPost_copy_store s mem' hp.1
+    ⟨worldOK_of_parts ⟨hg, hp.1.1.1.1.2⟩ hW', hE'⟩ hl' ⟨S, Nd, hW', ho'⟩
+    hs0 hs8 hd0 hd8 hd16
+
+/-- The actual copy-loop counter increment agrees with natural-number
+successor throughout the bounded source list. -/
+theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : w.toNat < locN s "nl") (hn : locN s "nl" < 2 ^ 28)
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    locN (setVarHOLFinite (ofString "i") v s) "i" = w.toNat + 1 := by
+  have hv : v = .val (.word (w + 1)) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+      valueWord, wordOpHOL, wordOp] using he.symm
+  subst v
+  have hb : w.toNat + 1 < 2 ^ 64 := by omega
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    BitVec.toNat_add]
+  exact hb
+
+/-- The remaining-copy count strictly decreases under the actual increment,
+providing a natural-number termination measure for the copy loop. -/
+theorem stableCopyInv_increment_decreases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : locN s "i" < locN s "nl")
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    locN (setVarHOLFinite (ofString "i") v s) "nl" -
+        locN (setVarHOLFinite (ofString "i") v s) "i" <
+      locN s "nl" - locN s "i" := by
+  have hwi : locN s "i" = w.toNat := by simp [locN, hw]
+  have hinc := stable_copy_increment_nat s w v hw (by rw [← hwi]; exact hi)
+    (stableLengthPost_length_bound s hp.1 hp.2.1).1 he
+  have hnl : locN (setVarHOLFinite (ofString "i") v s) "nl" = locN s "nl" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nl" from by decide]
+  rw [hnl, hinc]
+  omega
+
+/-- Once the store has extended the prefix, the actual counter assignment
+re-establishes the loop invariant. -/
+theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : w.toNat < locN s "nl")
+    (hprefix : ∀ j, j < w.toNat + 1 → j < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    StableCopyInv (setVarHOLFinite (ofString "i") v s) := by
+  have hpost : StableLengthPost (setVarHOLFinite (ofString "i") v s) :=
+    LocalsOnly.setVar localsOnly_stableLengthPost (by decide) v s hp
+  have hinc := stable_copy_increment_nat s w v hw hi
+    (stableLengthPost_length_bound s hp hn).1 he
+  have hloc : ∀ name ∈ (["logs", "stable_logs", "nl", "stable_log_cap"] : List String),
+      locN (setVarHOLFinite (ofString "i") v s) name = locN s name := by
+    intro name hname
+    have hne : ofString "i" ≠ ofString name := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+      rcases hname with rfl | rfl | rfl | rfl <;> decide
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  refine ⟨hpost, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hloc "logs" (by simp)]; exact hn
+  · rw [hloc "stable_logs" (by simp)]; exact hh
+  · rw [hloc "stable_logs" (by simp)]; exact ha
+  · rw [hloc "nl" (by simp), hloc "stable_log_cap" (by simp)]; exact hcap
+  · intro j hj hjn
+    rw [hinc] at hj
+    rw [hloc "nl" (by simp)] at hjn
+    rw [hloc "stable_logs" (by simp), hloc "logs" (by simp)]
+    exact hprefix j hj hjn
+
+/-- Compose the semantic copy write with the actual counter assignment. -/
+theorem stableCopyInv_store_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64) (v : ValueHOL 64)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl")
+    (hpost : StableLengthPost {s with memory := mem'})
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hwrite : memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a)
+    (hsource : ∀ j, j < locN s "nl" →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (hsrc : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hdst : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs"))
+    (he : evalAt {s with memory := mem'}
+      (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    StableCopyInv (setVarHOLFinite (ofString "i") v {s with memory := mem'}) := by
+  have hiw : locN s "i" = w.toNat := by simp [locN, hw]
+  apply stableCopyInv_increment {s with memory := mem'} w v hpost hp.2.1
+    (wordsOK_transfer hp.1.1.1.1.1 hpost.1.1.1.1 hp.2.2.1)
+    hp.2.2.2.1 hp.2.2.2.2.1 hw (by change w.toNat < locN s "nl"; rw [← hiw]; exact hi) ?_ he
+  intro j hj _
+  exact stableCopyInv_store_prefix s mem' hp hi hwrite hm hsource hsrc hdst j
+    (by simpa only [hiw] using hj)
+
+theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
+    (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
+    Disj (p, 24) (locN s "logs", 24) := by
+  have hl := hp.1.1.2.1
+  rcases hl with hz | hl
+  · exact False.elim (hp.1.2.2 hz)
+  · exact hh.disj_allocated hA hPost hl.2.1
+
+/-- Fresh stable storage avoids every source cell that the stable-copy loop
+will read, including a scratch-resident source array. -/
+theorem fresh_stable_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
+    (hf : FreshBlock s post p n) (hn : n % 8 = 0) (hp : Phase4LogPointersReady s) :
+    Disj (p, n) (locN s "logs", 24) ∧
+      Disj (p, n) (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8)) ∧
+      ∀ i, i < memW s (locN s "logs" + 8) →
+        Disj (p, n) (memW s (memW s (locN s "logs") + 8 * i), 40) := by
+  have hl := hp.1.1.2.1.resolve_left hp.1.2.2
+  obtain ⟨a, b, _, _, _, _, S, Nd, _, ho⟩ := hp.1.1.2.2.2
+  have hround : (n + 7) / 8 * 8 = n := by omega
+  have hd : ∀ i, Allocated s i → Disj (p, n) i := by
+    intro i hi
+    simpa only [hround] using hf.disj_allocated hA hPost hi
+  refine ⟨hd _ hl.2.1, hd _ (ho hp.1.2.2).1, ?_⟩
+  intro i hi
+  exact hd _ (Or.inl (hl.2.2.2.2 i hi).2.2.1)
+
+theorem stable_length_cell_disj {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24))
+    {i : Ivl} (hd : Disj i (locN s "stable_logs", 24)) :
+    Disj i ((BitVec.ofNat 64 (locN s "stable_logs" + 8)).toNat, 8) := by
+  apply disj_of_inside_right ?_ hd
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (stable_length_address_bound s hA hh).1]
+  constructor <;> dsimp <;> omega
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=

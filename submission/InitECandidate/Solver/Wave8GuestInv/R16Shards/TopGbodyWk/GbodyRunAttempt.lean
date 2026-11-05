@@ -1455,7 +1455,6 @@ def RunAttemptPreBe {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
     InputAtStrongWith s S Nd w_si.toNat ∧
     AllBlocksGood s S Nd [(w_hdr.toNat, 248)] ∧
     HeaderAt s w_hdr.toNat ∧
-    IvlsDisj (runAttemptCells s w_si.toNat) [(w_hdr.toNat, 248)] ∧
     globN s "journal_cap" ≠ 0 ∧
     s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
     s.locals.lookup (ofString "hdr") = some (.val (.word w_hdr))
@@ -1465,16 +1464,53 @@ def RunAttemptHasBe {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
     InputAtStrongWith s S Nd w_si.toNat ∧
     AllBlocksGood s S Nd [(w_hdr.toNat, 248)] ∧
     HeaderAt s w_hdr.toNat ∧
-    IvlsDisj (runAttemptCells s w_si.toNat) [(w_hdr.toNat, 248)] ∧
     globN s "journal_cap" ≠ 0 ∧
     globN s "be" ≠ 0 ∧
     s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
     s.locals.lookup (ofString "hdr") = some (.val (.word w_hdr))
 
+theorem localsOnly_runAttemptPreBe : LocalsOnly ["si", "hdr"] RunAttemptPreBe := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hsi, hhdr⟩ := hP
+  exact ⟨w_si, w_hdr, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_hdr.toNat, 248)]).2 hBs,
+    hHdr, hjc,
+    (hl "si" (by simp)).trans hsi,
+    (hl "hdr" (by simp)).trans hhdr⟩
+
+theorem localsOnly_runAttemptHasBe : LocalsOnly ["si", "hdr"] RunAttemptHasBe := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hbe, hsi, hhdr⟩ := hP
+  exact ⟨w_si, w_hdr, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_hdr.toNat, 248)]).2 hBs,
+    hHdr, hjc, hbe,
+    (hl "si" (by simp)).trans hsi,
+    (hl "hdr" (by simp)).trans hhdr⟩
+
 theorem runAttemptPreBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : RunAttemptPreBe s) : GuestInv s := by
   obtain ⟨_, _, _, _, hIA, _⟩ := h
   exact hIA.1.1.1
+
+theorem runAttemptPreBe_inputReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : InputReadyStrong s := by
+  obtain ⟨w_si, _, S, Nd, hIA, _, _, _, hsi, _⟩ := h
+  have heq : locN s "si" = w_si.toNat := by simp [locN, hsi]
+  unfold InputReadyStrong
+  rw [heq]
+  exact inputAtStrongWith_strong hIA
+
+theorem runAttemptPreBe_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : WorldOK s :=
+  inputReadyStrong_worldOK s (runAttemptPreBe_inputReadyStrong h)
+
+theorem runAttemptPreBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : BlockReadyExecStrong s := by
+  have hIR := runAttemptPreBe_inputReadyStrong h
+  obtain ⟨_, w_hdr, _, _, _, _, hHdr, hjc, _, hhdr⟩ := h
+  exact blockReadyExecStrong_of s hIR (by simpa [locN, hhdr] using hHdr) hjc
 
 theorem runAttemptHasBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : RunAttemptHasBe s) : GuestInv s := by
@@ -1483,7 +1519,7 @@ theorem runAttemptHasBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
 
 theorem runAttemptHasBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : RunAttemptHasBe s) : BlockReadyExecStrong s := by
-  obtain ⟨w_si, w_hdr, S, Nd, hIA, _, hHdr, _, hjc, _, hlsi, hlhdr⟩ := h
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, _, hHdr, hjc, _, hlsi, hlhdr⟩ := h
   have hsi_eq : locN s "si" = w_si.toNat := by simp [locN, hlsi]
   have hhdr_eq : locN s "hdr" = w_hdr.toNat := by simp [locN, hlhdr]
   have hIRS : InputReadyStrong s := by
@@ -1491,6 +1527,42 @@ theorem runAttemptHasBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteEx
     rw [hsi_eq]
     exact inputAtStrongWith_strong hIA
   exact blockReadyExecStrong_of s hIRS (by rwa [hhdr_eq]) hjc
+
+theorem runAttemptPreBe_worldStep
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hP : RunAttemptPreBe s) (hw : WorldStep R gw keep Q s r post)
+    (hz : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (ht : ∀ S Nd si, InputAtStrongWith s S Nd si →
+      IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hc : ∀ si, InputAtStrong s si → IvlsDisj (runAttemptCells s si) (R s))
+    (hb : ∀ h, HeaderAt s h →
+      Inside (h, 248) sourceBase (globN s "heap_ptr") →
+      IvlsDisj [(h, 248)] (R s))
+    (hj : ofString "journal_cap" ∉ gw.map ofString) :
+    RunAttemptPreBe { post with locals := s.locals } := by
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hsi, hhdr⟩ := hP
+  have hgood := hBs (w_hdr.toNat, 248) (by simp)
+  obtain ⟨S', Nd', hIA', hBs', _, _, hub, _⟩ :=
+    worldStep_preserves_strongAndBlocks hIA hBs hw hz (ht S Nd w_si.toNat hIA)
+      (hc w_si.toNat (inputAtStrongWith_strong hIA)) (hb w_hdr.toNat hHdr hgood.2.2.1)
+  have hlim : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
+  have hHdr' : HeaderAt post w_hdr.toNat :=
+    headerAt_of_unhit hIA.1.1.1 hIA'.1.1.1
+      (by have hi := hgood.2.2.1; unfold Inside at hi; omega)
+      (hub (w_hdr.toNat, 248) (by simp)) hHdr
+  have hjc' : globN post "journal_cap" = globN s "journal_cap" :=
+    globN_eq_of_lookup (hw.2.2.1 (ofString "journal_cap") hj)
+  refine ⟨w_si, w_hdr, S', Nd',
+    (inputAtStrongWith_with_locals post s.locals post.clock S' Nd' w_si.toNat).2 hIA',
+    (allBlocksGood_with_locals post s.locals post.clock S' Nd' [(w_hdr.toNat, 248)]).2 hBs',
+    hHdr', ?_, hsi, hhdr⟩
+  change globN post "journal_cap" ≠ 0
+  rwa [hjc']
 
 theorem hoare_alloc_be_120
     (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
@@ -1507,7 +1579,7 @@ theorem hoare_alloc_be_120
     ⟨cres, cpost⟩
   have hr' : cres = none := by rw [hcall] at hr; exact hr
   subst hr'
-  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd_rc_hdr, hjc, hlsi, hlhdr⟩ := hPre
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hlsi, hlhdr⟩ := hPre
   have hAs : ArenaReady state := hIA.1.1
   have hW_state : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
   rw [evaluateHOLFiniteState_call] at hcall
@@ -1591,9 +1663,7 @@ theorem hoare_alloc_be_120
               ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩ hav hw_rc hw_bs
             set resumed := setGlobalHOLFinite (ofString "be") (.val (.word w_be)) resumed0
             have hRes : RunAttemptHasBe resumed := by
-              refine ⟨w_si, w_hdr, S', Nd', hbe_step.1, hbe_step.2.1, hHdr_post, ?_, ?_, ?_, hlsi, hlhdr⟩
-              · change IvlsDisj (runAttemptCells post w_si.toNat) [(w_hdr.toNat, 248)]
-                rw [hrc_eq]; exact hd_rc_hdr
+              refine ⟨w_si, w_hdr, S', Nd', hbe_step.1, hbe_step.2.1, hHdr_post, ?_, ?_, hlsi, hlhdr⟩
               · rw [hbe_step.2.2.1]; change globN post "journal_cap" ≠ 0; rwa [hjc_post]
               · rw [hbe_step.2.2.2.1]; exact hbe_step.2.2.2.2
             simpa [resumed, resumed0, setKvarHOLFinite] using hpost_eq ▸ hRes
@@ -1615,7 +1685,7 @@ theorem hoare_memzero_be_120
     ⟨cres, cpost⟩
   have hr' : cres = none := by rw [hcall] at hr; exact hr
   subst hr'
-  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd_rc_hdr, hjc, hbe_nz, hlsi, hlhdr⟩ := hHas
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hbe_nz, hlsi, hlhdr⟩ := hHas
   have hAs : ArenaReady state := hIA.1.1
   have hW_state : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
   obtain ⟨w_be, hbe_g⟩ := hAs.2.2.2.2.2.2.2.2.2 "be" (by decide)
@@ -1690,9 +1760,7 @@ theorem hoare_memzero_be_120
               refine ⟨w_si, w_hdr, S', Nd',
                 (inputAtStrongWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
                 (allBlocksGood_with_locals post state.locals post.clock S' Nd' [(w_hdr.toNat, 248)]).2 hBs_post,
-                hHdr_post, ?_, ?_, ?_, hlsi, hlhdr⟩
-              · change IvlsDisj (runAttemptCells post w_si.toNat) [(w_hdr.toNat, 248)]
-                rw [hrc_eq]; exact hd_rc_hdr
+                hHdr_post, ?_, ?_, hlsi, hlhdr⟩
               · change globN post "journal_cap" ≠ 0; rwa [hjc_post]
               · change globN post "be" ≠ 0; rwa [hbe_post]
             rwa [hpost_eq] at hRes
@@ -1708,26 +1776,20 @@ theorem hoare_store_be_preserve {off : Nat} {src : ExpHOL 64}
       (fun r t => r = none → RunAttemptHasBe t) := by
   refine Hoare_store_fall (fun s x v mem' hHas hx hv hst => ?_)
   have hf := hfit s v hHas hv
-  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd_rc_hdr, hjc, hbe_nz, hlsi, hlhdr⟩ := hHas
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hjc, hbe_nz, hlsi, hlhdr⟩ := hHas
   have htr := store_in_be_preserves_strongAndBlocks (off := off) hIA hBs hbe_nz hoff8 hf hx hst
   have hcond := strongAndBlocks_bufferRegion_conditions hIA hBs ("be", 120) (by decide) (by decide) (by decide)
   have hbuf_eq : bufferRegion s ("be", 120) = (globN s "be", 120) := by simp [bufferRegion, hbe_nz]
   rw [hbuf_eq] at hcond
-  have hu_rc : ∀ c ∈ runAttemptCells s w_si.toNat,
-      IvlUnhit s { s with memory := mem' } c :=
-    fun c hc => htr.2.2.2.2 c (fun _ => (hIA.2.1 c hc).1)
-      (hcond.2.2.1 c hc (globN s "be", 120) (by simp))
   have hu_hdr : IvlUnhit s { s with memory := mem' } (w_hdr.toNat, 248) :=
     htr.2.2.2.2 (w_hdr.toNat, 248) (by simp)
       (hcond.2.2.2 (w_hdr.toNat, 248) (by simp) (globN s "be", 120) (by simp))
-  have hrc_eq := runAttemptCells_eq_of_unhit (inputAtStrongWith_strong hIA) hu_rc
   have h264 : heapLimit ≤ 2 ^ 64 := by decide
   have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
   have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
   have hHdr' : HeaderAt { s with memory := mem' } w_hdr.toNat :=
     headerAt_of_unhit hIA.1.1.1 htr.1.1.1.1 (by unfold Inside at hhdr_in; omega) hu_hdr hHdr
   exact ⟨w_si, w_hdr, S, Nd, htr.1, htr.2.1, hHdr',
-    by rw [hrc_eq]; exact hd_rc_hdr,
     by rw [htr.2.2.1]; exact hjc,
     by rw [htr.2.2.2.1]; exact hbe_nz,
     hlsi, hlhdr⟩
@@ -1881,5 +1943,871 @@ theorem runAttemptPhaseC2_bounded
         (0 + (0 + (0 + (0 + (0 + (0 + (0 + (0 + (0 + (0 + (0 + (0 + (K.«execute_block» + 1)))))))))))))))
     (b := (K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1))
     hall (by omega) s hc hp
+
+theorem lookup_header_hash_fn :
+    originalRuntimeCode.lookup (ofString "header_hash") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_header_hash).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 230 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_header_hash) rfl
+
+theorem lookup_validate_headers_fn :
+    originalRuntimeCode.lookup (ofString "validate_headers") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_validate_headers).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 231 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_validate_headers) rfl
+
+theorem lookup_validate_header_fn :
+    originalRuntimeCode.lookup (ofString "validate_header") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_validate_header).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 239 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_validate_header) rfl
+
+theorem lookup_nodedb_build_fn :
+    originalRuntimeCode.lookup (ofString "nodedb_build") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_nodedb_build).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 253 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_nodedb_build) rfl
+
+theorem lookup_state_init_fn :
+    originalRuntimeCode.lookup (ofString "state_init") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_state_init).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 354 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_state_init) rfl
+
+theorem lookup_payload_header_fn :
+    originalRuntimeCode.lookup (ofString "payload_header") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_payload_header).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 864 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_payload_header) rfl
+
+def HeaderAtStrongLocal {F : Type} (s : PanSemStateFiniteExact 64 F) (h : Nat) : Prop :=
+  HeaderAt s h ∧ Inside (h, 248) sourceBase (globN s "heap_ptr")
+
+def HeaderOKStrongLocal : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => HeaderAtStrongLocal s (locN s "h")
+
+def RunAttemptPostScan {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    globN s "journal_cap" ≠ 0 ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent))
+
+def RunAttemptPostHdr {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent w_hdr : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    HeaderAt s w_hdr.toNat ∧
+    globN s "journal_cap" ≠ 0 ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent)) ∧
+    s.locals.lookup (ofString "hdr") = some (.val (.word w_hdr))
+
+def RunAttemptPostBh {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent w_hdr w_bh : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248), (w_bh.toNat, 32)] ∧
+    HeaderAt s w_parent.toNat ∧
+    HeaderAt s w_hdr.toNat ∧
+    IvlsDisj (runAttemptCells s w_si.toNat) [(w_bh.toNat, 32)] ∧
+    Disj (w_parent.toNat, 248) (w_bh.toNat, 32) ∧
+    Disj (w_hdr.toNat, 248) (w_bh.toNat, 32) ∧
+    globN s "journal_cap" ≠ 0 ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent)) ∧
+    s.locals.lookup (ofString "hdr") = some (.val (.word w_hdr)) ∧
+    s.locals.lookup (ofString "bh") = some (.val (.word w_bh))
+
+theorem localsOnly_runAttemptPostScan : LocalsOnly ["si", "pl", "parent"] RunAttemptPostScan := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hjc, hsi, hpl, hpar⟩ := hP
+  exact ⟨w_si, w_pl, w_parent, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_parent.toNat, 248)]).2 hBs,
+    hPar, hjc,
+    (hl "si" (by simp)).trans hsi,
+    (hl "pl" (by simp)).trans hpl,
+    (hl "parent" (by simp)).trans hpar⟩
+
+theorem localsOnly_runAttemptPostHdr : LocalsOnly ["si", "pl", "parent", "hdr"] RunAttemptPostHdr := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_pl, w_parent, w_hdr, S, Nd, hIA, hBs, hPar, hHdr, hjc, hsi, hpl, hpar, hhdr⟩ := hP
+  exact ⟨w_si, w_pl, w_parent, w_hdr, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)]).2 hBs,
+    hPar, hHdr, hjc,
+    (hl "si" (by simp)).trans hsi,
+    (hl "pl" (by simp)).trans hpl,
+    (hl "parent" (by simp)).trans hpar,
+    (hl "hdr" (by simp)).trans hhdr⟩
+
+theorem runAttemptPostScan_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPostScan s) : GuestInv s := by
+  obtain ⟨_, _, _, _, _, hIA, _⟩ := h
+  exact hIA.1.1.1
+
+theorem runAttemptPostScan_inputReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPostScan s) : InputReadyStrong s := by
+  obtain ⟨w_si, _, _, S, Nd, hIA, _, _, _, hsi, _, _⟩ := h
+  have heq : locN s "si" = w_si.toNat := by simp [locN, hsi]
+  unfold InputReadyStrong
+  rw [heq]
+  exact inputAtStrongWith_strong hIA
+
+theorem runAttemptPostHdr_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPostHdr s) : GuestInv s := by
+  obtain ⟨_, _, _, _, _, _, hIA, _⟩ := h
+  exact hIA.1.1.1
+
+theorem runAttemptPostHdr_preBe {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPostHdr s) : RunAttemptPreBe s := by
+  obtain ⟨w_si, _, _, w_hdr, S, Nd, hIA, hBs, _, hHdr, hjc, hsi, _, _, hhdr⟩ := h
+  refine ⟨w_si, w_hdr, S, Nd, hIA, ?_, hHdr, hjc, hsi, hhdr⟩
+  intro b hb
+  simp only [List.mem_singleton] at hb; subst hb
+  exact hBs (w_hdr.toNat, 248) (by simp)
+
+theorem runAttemptPostBh_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPostBh s) : GuestInv s := by
+  obtain ⟨_, _, _, _, _, _, _, hIA, _⟩ := h
+  exact hIA.1.1.1
+
+theorem decCallResumeOn_memeq_runAttemptPreBe
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn RunAttemptPreBe RunAttemptPreBe
+      (ofString "eq") (ofString "memeq") arguments :=
+  ReadOnlyFn.resumeOn localsOnly_runAttemptPreBe (fun _ h => runAttemptPreBe_guestInv h)
+    romeq (ofString "eq") (by intro n hn; simp at hn; rcases hn with rfl | rfl <;> decide) arguments
+
+theorem decCallResumeOn_memeq_runAttemptPostHdr
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn RunAttemptPostHdr RunAttemptPostHdr
+      (ofString "eq") (ofString "memeq") arguments :=
+  ReadOnlyFn.resumeOn localsOnly_runAttemptPostHdr (fun _ h => runAttemptPostHdr_guestInv h)
+    romeq (ofString "eq")
+    (by intro n hn; simp at hn; rcases hn with rfl | rfl | rfl | rfl <;> decide) arguments
+
+theorem decCallResumeOn_payload_header
+    (wph : WorldKeeps InputReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+        (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeader (ofString "payload_header")) :
+    DecCallResumeOn RunAttemptPostScan RunAttemptPostHdr
+      (ofString "hdr") (ofString "payload_header") [.var .local (ofString "si")] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hjc, hlsi, hlpl, hlpar⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hpc := callee_param_one state (ofString "payload_header") (ofString "si") .one _ _
+    (by rw [hcode]; exact lookup_payload_header_fn) values body callee ret hargs hl
+  set entry := callEntryStateHOLFinite state callee
+  have hsi_loc : locN entry "si" = w_si.toNat := by
+    have hev : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+        [.var .local (ofString "si")] = some [.val (.word w_si)] := by
+      rw [evalListHOLFinite_eq_toExact]; simp [evalListHOLExact, evalHOLExact, hlsi]
+    rw [hev] at hargs
+    have hv := Option.some.inj hargs; subst hv
+    simp [entry, locN, callEntryStateHOLFinite, hpc, hlsi]
+  have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+    (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+  have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248)] :=
+    (allBlocksGood_with_locals state callee (state.clock - 1) S Nd [(w_parent.toNat, 248)]).2 hBs
+  have hIR_entry : InputReady entry := by
+    unfold InputReady
+    rw [hsi_loc]
+    exact (inputAtStrongWith_strong hIA_entry).1
+  have hstep := FunSpec.at_lookup wph state hcode values body callee ret hl hIR_entry
+    (by rw [hrun]; simp)
+  rw [hrun] at hstep; dsimp only at hstep
+  have hws := hstep (Or.inl ⟨value, rfl⟩)
+  have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_pad", 136) (by decide) (by decide) (by decide)
+  have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_st", 200) (by decide) (by decide) (by decide)
+  have hc3 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("mpt_hash_scratch", 40) (by decide) (by decide) (by decide)
+  have hc4 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("mpt_key_scratch", 16) (by decide) (by decide) (by decide)
+  have hc5 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("sha_pad", 128) (by decide) (by decide) (by decide)
+  have hc6 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("sha_st", 64) (by decide) (by decide) (by decide)
+  obtain ⟨S', Nd', hIA_post, hBs_post, _, _, hu_bs, _, _, hQ⟩ :=
+    worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+      (fun j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl | rfl | rfl | rfl
+        · exact hc1.1
+        · exact hc2.1
+        · exact hc3.1
+        · exact hc4.1
+        · exact hc5.1
+        · exact hc6.1)
+      (fun j hj k hk => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl | rfl | rfl | rfl
+        · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc2.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc3.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc4.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc5.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc6.2.1 _ (by simp [bufferRegion]) k hk)
+      (fun c hc j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl | rfl | rfl | rfl
+        · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc2.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc3.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc4.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc5.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc6.2.2.1 c hc _ (by simp [bufferRegion]))
+      (fun b hb j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl | rfl | rfl | rfl
+        · exact hc1.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc2.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc3.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc4.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc5.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc6.2.2.2 b hb _ (by simp [bufferRegion]))
+  obtain ⟨w_hdr, rfl, hHdr_post, hhdr_in, hhdr_ow⟩ := hQ value rfl
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  have hPar_post : HeaderAt post w_parent.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+      (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+  have hjc_post : globN post "journal_cap" = globN state "journal_cap" :=
+    globN_eq_of_lookup (s := state) (post := post)
+      (hws.2.2.1 (ofString "journal_cap") (by decide))
+  have hBs_both : AllBlocksGood post S' Nd' [(w_parent.toNat, 248), (w_hdr.toNat, 248)] := by
+    intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl
+    · exact hBs_post (w_parent.toNat, 248) (by simp)
+    · exact ⟨hHdr_post.1.1, show (248 : Nat) % 8 = 0 by decide, hhdr_in, hHdr_post.1, hhdr_ow⟩
+  set resumed := setVarHOLFinite (ofString "hdr") (.val (.word w_hdr)) { post with locals := state.locals }
+  refine ⟨w_si, w_pl, w_parent, w_hdr, S', Nd',
+    (inputAtStrongWith_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post,
+    (allBlocksGood_with_locals post _ post.clock S' Nd' [(w_parent.toNat, 248), (w_hdr.toNat, 248)]).2 hBs_both,
+    hPar_post, hHdr_post, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "journal_cap" ≠ 0; rwa [hjc_post]
+  · simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "hdr" ≠ ofString "si" by decide, hlsi]
+  · simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "hdr" ≠ ofString "pl" by decide, hlpl]
+  · simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "hdr" ≠ ofString "parent" by decide, hlpar]
+  · simp [resumed, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem decCallResumeOn_alloc_bh_32
+    (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc"))
+    (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc")) :
+    DecCallResumeOn RunAttemptPostHdr RunAttemptPostBh
+      (ofString "bh") (ofString "alloc") [.const 32#64] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨w_si, w_pl, w_parent, w_hdr, S, Nd, hIA, hBs, hPar, hHdr, hjc, hlsi, hlpl, hlpar, hlhdr⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  have hpc := callee_param_one_exp state (ofString "alloc") (ofString "n") .one _ _
+    (by rw [hcode]; exact lookup_alloc_fn) (.const 32#64) (.val (.word 32#64))
+    values body callee ret rfl hargs hl
+  set entry := callEntryStateHOLFinite state callee
+  have hn : locN entry "n" = 32 := by
+    simp [entry, locN, callEntryStateHOLFinite, hpc.2]
+  have hstep := FunSpec.at_lookup wal state hcode values body callee ret hl
+    (localsFree_worldOK state callee (state.clock - 1) hW) (by rw [hrun]; simp)
+  rw [hrun] at hstep; dsimp only at hstep
+  have hws := hstep (Or.inl ⟨value, rfl⟩)
+  have hrt := FunSpec.at_lookup rtal state hcode values body callee ret hl
+    (localsFree_arenaReady state callee (state.clock - 1) hAs) (by rw [hrun]; simp)
+  rw [hrun] at hrt; dsimp only at hrt
+  obtain ⟨w_bh, rfl, _, _, hfb⟩ := hrt value rfl
+  rw [hn] at hfb
+  have hfb_in : Inside (w_bh.toNat, 32) (globN state "heap_ptr") (globN post "heap_ptr") := hfb.2.1
+  have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+    (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+  have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] :=
+    (allBlocksGood_with_locals state callee (state.clock - 1) S Nd _).2 hBs
+  obtain ⟨S', Nd', hIA_post, hBs_post, _, hu_rc, hu_bs, _, _, hQ⟩ :=
+    worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+      (fun _ hj => by simp at hj) (fun _ hj => by simp at hj)
+      (fun _ _ _ hj => by simp at hj) (fun _ _ _ hj => by simp at hj)
+  obtain ⟨w_bh', hw_eq, hav⟩ := hQ (.val (.word w_bh)) rfl
+  injection hw_eq with hw_eq'; injection hw_eq' with hw_eq''; subst hw_eq''
+  dsimp only at hav; rw [hn] at hav
+  have hrc_eq : runAttemptCells post w_si.toNat = runAttemptCells state w_si.toNat :=
+    runAttemptCells_eq_of_unhit (inputAtStrongWith_strong hIA) hu_rc
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
+  have hPar_post : HeaderAt post w_parent.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+      (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+  have hHdr_post : HeaderAt post w_hdr.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hhdr_in; omega)
+      (hu_bs (w_hdr.toNat, 248) (by simp)) hHdr
+  have hBs_all : AllBlocksGood post S' Nd'
+      [(w_parent.toNat, 248), (w_hdr.toNat, 248), (w_bh.toNat, 32)] := by
+    intro b hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl
+    · exact hBs_post _ (by simp)
+    · exact hBs_post _ (by simp)
+    · exact ⟨hfb.1, show (32 : Nat) % 8 = 0 by decide,
+        ⟨Nat.le_trans hAs.2.1 hfb_in.1, hfb_in.2⟩, hfb.2.2,
+        fun i hi o ho => by rw [List.mem_singleton.1 hi]; exact hav (w_bh.toNat, 32) (by simp) o ho⟩
+  have hd_rc : IvlsDisj (runAttemptCells post w_si.toNat) [(w_bh.toNat, 32)] := by
+    rw [hrc_eq]
+    intro c hc b hb
+    rw [List.mem_singleton.1 hb]
+    have hi := (hIA.2.1 c hc).2.1
+    unfold Inside at hi hfb_in
+    unfold Disj; dsimp only at hi hfb_in ⊢; omega
+  have hd_bs : ∀ b ∈ [(w_parent.toNat, 248), (w_hdr.toNat, 248)], Disj b (w_bh.toNat, 32) := by
+    intro b hb
+    have hi := (hBs b hb).2.2.1
+    unfold Inside at hi hfb_in
+    unfold Disj; dsimp only at hi hfb_in ⊢; omega
+  have hjc_post : globN post "journal_cap" = globN state "journal_cap" :=
+    globN_eq_of_lookup (s := state) (post := post)
+      (hws.2.2.1 (ofString "journal_cap") (by decide))
+  refine ⟨w_si, w_pl, w_parent, w_hdr, w_bh, S', Nd',
+    (inputAtStrongWith_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post,
+    (allBlocksGood_with_locals post _ post.clock S' Nd' _).2 hBs_all,
+    hPar_post, hHdr_post, hd_rc, hd_bs _ (by simp), hd_bs _ (by simp), ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "journal_cap" ≠ 0; rwa [hjc_post]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlsi,
+      show ofString "bh" ≠ ofString "si" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpl,
+      show ofString "bh" ≠ ofString "pl" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpar,
+      show ofString "bh" ≠ ofString "parent" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlhdr,
+      show ofString "bh" ≠ ofString "hdr" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem lookup_is_valid_versioned_hashes_fn :
+    originalRuntimeCode.lookup (ofString "is_valid_versioned_hashes") =
+      some ((sourceFunctionEntry Guest.Software.guestFn_is_valid_versioned_hashes).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 868 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_is_valid_versioned_hashes) rfl
+
+theorem hoare_header_hash_bh
+    (whh : WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+      (fun s => [(locN s "out", 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "header_hash")) :
+    Hoare RunAttemptPostBh
+      (.call (some (none, none)) (ofString "header_hash")
+        [.var .local (ofString "hdr"), .var .local (ofString "bh")])
+      (fun r t => r = none → RunAttemptPostHdr t) := by
+  refine ⟨fun {F} state hcode hP _ hr => ?_⟩
+  rcases hcall : evaluateHOLFiniteState state
+      (.call (some (none, none)) (ofString "header_hash")
+        [.var .local (ofString "hdr"), .var .local (ofString "bh")]) with ⟨cres, cpost⟩
+  have hr' : cres = none := by rw [hcall] at hr; exact hr
+  subst hr'
+  obtain ⟨w_si, w_pl, w_parent, w_hdr, w_bh, S, Nd,
+    hIA, hBs, hPar, hHdr, hd_rc_bh, hd_par_bh, hd_hdr_bh,
+    hjc, hlsi, hlpl, hlpar, hlhdr, hlbh⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  rw [evaluateHOLFiniteState_call] at hcall
+  have hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [.var .local (ofString "hdr"), .var .local (ofString "bh")] =
+      some [.val (.word w_hdr), .val (.word w_bh)] := by
+    rw [evalListHOLFinite_eq_toExact]
+    simp [evalListHOLExact, evalHOLExact, hlhdr, hlbh]
+  rw [hargs] at hcall; dsimp only at hcall
+  rcases hl : lookupCodeHOLFinite state.code.lookup (ofString "header_hash")
+      [.val (.word w_hdr), .val (.word w_bh)] with _ | ⟨body, callee, ret⟩
+  · rw [hl] at hcall; simp at hcall
+  · rw [hl] at hcall; dsimp only at hcall
+    split_ifs at hcall with hz
+    · simp at hcall
+    · rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body with ⟨bres, post⟩
+      rw [hrun] at hcall
+      cases bres with
+      | none => simp at hcall
+      | some br =>
+        cases br with
+        | returned v =>
+          dsimp only at hcall
+          split_ifs at hcall with hsh
+          · obtain ⟨_, hpost_eq⟩ := Prod.mk.inj hcall
+            have hpc := callee_param_two state (ofString "header_hash") (ofString "h") (ofString "out")
+              .one .one _ _ (by rw [hcode]; exact lookup_header_hash_fn)
+              (.var .local (ofString "hdr")) (.var .local (ofString "bh"))
+              (.val (.word w_hdr)) (.val (.word w_bh))
+              [.val (.word w_hdr), .val (.word w_bh)] body callee ret
+              (by simpa [evalAt, evalHOLExact] using hlhdr)
+              (by simpa [evalAt, evalHOLExact] using hlbh) hargs hl
+            set entry := callEntryStateHOLFinite state callee
+            have hh_loc : locN entry "h" = w_hdr.toNat := by
+              simp [entry, locN, callEntryStateHOLFinite, hpc.2.1]
+            have hout_loc : locN entry "out" = w_bh.toNat := by
+              simp [entry, locN, callEntryStateHOLFinite, hpc.2.2]
+            have hhdr_good := hBs (w_hdr.toNat, 248) (by simp)
+            have hbh_good := hBs (w_bh.toNat, 32) (by simp)
+            have hHOK : HeaderOKStrongLocal entry := by
+              unfold HeaderOKStrongLocal HeaderAtStrongLocal
+              rw [hh_loc]
+              exact ⟨hHdr, hhdr_good.2.2.1⟩
+            have hstep := FunSpec.at_lookup whh state hcode _ body callee ret hl
+              ⟨localsFree_worldOK state callee (state.clock - 1) hW, hHOK⟩ (by rw [hrun]; simp)
+            rw [hrun] at hstep; dsimp only at hstep
+            have hws := hstep (Or.inl ⟨v, rfl⟩)
+            have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+              (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+            have hBs_two : AllBlocksGood state S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] := by
+              intro b hb
+              simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+              rcases hb with rfl | rfl
+              · exact hBs _ (by simp)
+              · exact hBs _ (by simp)
+            have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] :=
+              (allBlocksGood_with_locals state callee (state.clock - 1) S Nd _).2 hBs_two
+            have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
+              ("keccak_pad", 136) (by decide) (by decide) (by decide)
+            have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
+              ("keccak_st", 200) (by decide) (by decide) (by decide)
+            obtain ⟨S', Nd', hIA_post, hBs_post, _, _, hu_bs, _, _, _⟩ :=
+              worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+                (fun j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · rw [hout_loc]; exact fun _ => hbh_good.1
+                  · exact hc1.1
+                  · exact hc2.1)
+                (fun j hj k hk => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · rw [hout_loc]
+                    exact hbh_good.2.2.2.2 (w_bh.toNat, 32) (by simp) k
+                      (R10Shards.Fast_GbodyC17ToC21.worldTypedIvls_sub_worldOwned _ _ _ k hk)
+                  · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+                  · exact hc2.2.1 _ (by simp [bufferRegion]) k hk)
+                (fun c hc j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · rw [hout_loc]; exact hd_rc_bh c hc _ (by simp)
+                  · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+                  · exact hc2.2.2.1 c hc _ (by simp [bufferRegion]))
+                (fun b hb j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · rw [hout_loc]
+                    simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+                    rcases hb with rfl | rfl
+                    · exact hd_par_bh
+                    · exact hd_hdr_bh
+                  · exact hc1.2.2.2 b hb _ (by simp [bufferRegion])
+                  · exact hc2.2.2.2 b hb _ (by simp [bufferRegion]))
+            have h264 : heapLimit ≤ 2 ^ 64 := by decide
+            have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+            have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+            have hhdr_in := hhdr_good.2.2.1
+            have hPar_post : HeaderAt post w_parent.toNat :=
+              headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+                (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+            have hHdr_post : HeaderAt post w_hdr.toNat :=
+              headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hhdr_in; omega)
+                (hu_bs (w_hdr.toNat, 248) (by simp)) hHdr
+            have hjc_post : globN post "journal_cap" = globN state "journal_cap" :=
+              globN_eq_of_lookup (s := state) (post := post)
+                (hws.2.2.1 (ofString "journal_cap") (by decide))
+            have hRes : RunAttemptPostHdr { post with locals := state.locals } := by
+              refine ⟨w_si, w_pl, w_parent, w_hdr, S', Nd',
+                (inputAtStrongWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+                (allBlocksGood_with_locals post state.locals post.clock S' Nd' _).2 hBs_post,
+                hPar_post, hHdr_post, ?_, hlsi, hlpl, hlpar, hlhdr⟩
+              change globN post "journal_cap" ≠ 0; rwa [hjc_post]
+            exact hpost_eq ▸ hRes
+          · simp at hcall
+        | _ => simp [emptyLocalsHOLFinite] at hcall
+
+theorem decCallResumeOn_is_valid_versioned_hashes
+    (wvvh : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "is_valid_versioned_hashes")) :
+    DecCallResumeOn RunAttemptPostHdr RunAttemptPostHdr
+      (ofString "vvh") (ofString "is_valid_versioned_hashes") [.var .local (ofString "si")] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨w_si, w_pl, w_parent, w_hdr, S, Nd, hIA, hBs, hPar, hHdr, hjc, hlsi, hlpl, hlpar, hlhdr⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  set entry := callEntryStateHOLFinite state callee
+  have hstep := FunSpec.at_lookup wvvh state hcode values body callee ret hl
+    (localsFree_worldOK state callee (state.clock - 1) hW) (by rw [hrun]; simp)
+  rw [hrun] at hstep; dsimp only at hstep
+  have hws := hstep (Or.inl ⟨value, rfl⟩)
+  have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+    (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+  have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] :=
+    (allBlocksGood_with_locals state callee (state.clock - 1) S Nd _).2 hBs
+  obtain ⟨S', Nd', hIA_post, hBs_post, _, _, hu_bs, _, _, _⟩ :=
+    worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+      (fun _ hj => by simp at hj) (fun _ hj => by simp at hj)
+      (fun _ _ _ hj => by simp at hj) (fun _ _ _ hj => by simp at hj)
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
+  have hPar_post : HeaderAt post w_parent.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+      (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+  have hHdr_post : HeaderAt post w_hdr.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hhdr_in; omega)
+      (hu_bs (w_hdr.toNat, 248) (by simp)) hHdr
+  have hjc_post : globN post "journal_cap" = globN state "journal_cap" :=
+    globN_eq_of_lookup (s := state) (post := post)
+      (hws.2.2.1 (ofString "journal_cap") (by decide))
+  refine ⟨w_si, w_pl, w_parent, w_hdr, S', Nd',
+    (inputAtStrongWith_with_locals post _ post.clock S' Nd' w_si.toNat).2 hIA_post,
+    (allBlocksGood_with_locals post _ post.clock S' Nd' _).2 hBs_post,
+    hPar_post, hHdr_post, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "journal_cap" ≠ 0; rwa [hjc_post]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlsi,
+      show ofString "vvh" ≠ ofString "si" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpl,
+      show ofString "vvh" ≠ ofString "pl" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpar,
+      show ofString "vvh" ≠ ofString "parent" by decide]
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlhdr,
+      show ofString "vvh" ≠ ofString "hdr" by decide]
+
+theorem hoare_validate_header
+    (wvh : WorldKeeps
+      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header")) :
+    Hoare RunAttemptPostHdr
+      (.call (some (none, none)) (ofString "validate_header")
+        [.var .local (ofString "parent"), .var .local (ofString "hdr")])
+      (fun r t => r = none → RunAttemptPreBe t) := by
+  refine ⟨fun {F} state hcode hP _ hr => ?_⟩
+  rcases hcall : evaluateHOLFiniteState state
+      (.call (some (none, none)) (ofString "validate_header")
+        [.var .local (ofString "parent"), .var .local (ofString "hdr")]) with ⟨cres, cpost⟩
+  have hr' : cres = none := by rw [hcall] at hr; exact hr
+  subst hr'
+  obtain ⟨w_si, w_pl, w_parent, w_hdr, S, Nd, hIA, hBs, hPar, hHdr, hjc, hlsi, hlpl, hlpar, hlhdr⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  rw [evaluateHOLFiniteState_call] at hcall
+  have hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [.var .local (ofString "parent"), .var .local (ofString "hdr")] =
+      some [.val (.word w_parent), .val (.word w_hdr)] := by
+    rw [evalListHOLFinite_eq_toExact]
+    simp [evalListHOLExact, evalHOLExact, hlpar, hlhdr]
+  rw [hargs] at hcall; dsimp only at hcall
+  rcases hl : lookupCodeHOLFinite state.code.lookup (ofString "validate_header")
+      [.val (.word w_parent), .val (.word w_hdr)] with _ | ⟨body, callee, ret⟩
+  · rw [hl] at hcall; simp at hcall
+  · rw [hl] at hcall; dsimp only at hcall
+    split_ifs at hcall with hz
+    · simp at hcall
+    · rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body with ⟨bres, post⟩
+      rw [hrun] at hcall
+      cases bres with
+      | none => simp at hcall
+      | some br =>
+        cases br with
+        | returned v =>
+          dsimp only at hcall
+          split_ifs at hcall with hsh
+          · obtain ⟨_, hpost_eq⟩ := Prod.mk.inj hcall
+            have hpc := callee_param_two state (ofString "validate_header") (ofString "parent") (ofString "h")
+              .one .one _ _ (by rw [hcode]; exact lookup_validate_header_fn)
+              (.var .local (ofString "parent")) (.var .local (ofString "hdr"))
+              (.val (.word w_parent)) (.val (.word w_hdr))
+              [.val (.word w_parent), .val (.word w_hdr)] body callee ret
+              (by simpa [evalAt, evalHOLExact] using hlpar)
+              (by simpa [evalAt, evalHOLExact] using hlhdr) hargs hl
+            set entry := callEntryStateHOLFinite state callee
+            have hpar_loc : locN entry "parent" = w_parent.toNat := by
+              simp [entry, locN, callEntryStateHOLFinite, hpc.2.1]
+            have hh_loc : locN entry "h" = w_hdr.toNat := by
+              simp [entry, locN, callEntryStateHOLFinite, hpc.2.2]
+            have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+            have hhdr_in := (hBs (w_hdr.toNat, 248) (by simp)).2.2.1
+            have hHOK : HeaderOKStrongLocal entry := by
+              unfold HeaderOKStrongLocal HeaderAtStrongLocal; rw [hh_loc]; exact ⟨hHdr, hhdr_in⟩
+            have hPar_entry : HeaderAtStrongLocal entry (locN entry "parent") := by
+              unfold HeaderAtStrongLocal; rw [hpar_loc]; exact ⟨hPar, hpar_in⟩
+            have hstep := FunSpec.at_lookup wvh state hcode _ body callee ret hl
+              ⟨localsFree_worldOK state callee (state.clock - 1) hW, hHOK, hPar_entry⟩
+              (by rw [hrun]; simp)
+            rw [hrun] at hstep; dsimp only at hstep
+            have hws := hstep (Or.inl ⟨v, rfl⟩)
+            have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+              (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+            have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248), (w_hdr.toNat, 248)] :=
+              (allBlocksGood_with_locals state callee (state.clock - 1) S Nd _).2 hBs
+            have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
+              ("keccak_pad", 136) (by decide) (by decide) (by decide)
+            have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
+              ("keccak_st", 200) (by decide) (by decide) (by decide)
+            have hc3 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry
+              ("u256_ws", 640) (by decide) (by decide) (by decide)
+            obtain ⟨S', Nd', hIA_post, hBs_post, _, _, hu_bs, _, _, _⟩ :=
+              worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+                (fun j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · exact hc1.1
+                  · exact hc2.1
+                  · exact hc3.1)
+                (fun j hj k hk => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+                  · exact hc2.2.1 _ (by simp [bufferRegion]) k hk
+                  · exact hc3.2.1 _ (by simp [bufferRegion]) k hk)
+                (fun c hc j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+                  · exact hc2.2.2.1 c hc _ (by simp [bufferRegion])
+                  · exact hc3.2.2.1 c hc _ (by simp [bufferRegion]))
+                (fun b hb j hj => by
+                  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+                  rcases hj with rfl | rfl | rfl
+                  · exact hc1.2.2.2 b hb _ (by simp [bufferRegion])
+                  · exact hc2.2.2.2 b hb _ (by simp [bufferRegion])
+                  · exact hc3.2.2.2 b hb _ (by simp [bufferRegion]))
+            have h264 : heapLimit ≤ 2 ^ 64 := by decide
+            have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+            have hHdr_post : HeaderAt post w_hdr.toNat :=
+              headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hhdr_in; omega)
+                (hu_bs (w_hdr.toNat, 248) (by simp)) hHdr
+            have hjc_post : globN post "journal_cap" = globN state "journal_cap" :=
+              globN_eq_of_lookup (s := state) (post := post)
+                (hws.2.2.1 (ofString "journal_cap") (by decide))
+            have hBs_one : AllBlocksGood post S' Nd' [(w_hdr.toNat, 248)] := by
+              intro b hb
+              rw [List.mem_singleton.1 hb]
+              exact hBs_post (w_hdr.toNat, 248) (by simp)
+            have hRes : RunAttemptPreBe { post with locals := state.locals } := by
+              refine ⟨w_si, w_hdr, S', Nd',
+                (inputAtStrongWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+                (allBlocksGood_with_locals post state.locals post.clock S' Nd' [(w_hdr.toNat, 248)]).2 hBs_one,
+                hHdr_post, ?_, hlsi, hlhdr⟩
+              change globN post "journal_cap" ≠ 0; rwa [hjc_post]
+            exact hpost_eq ▸ hRes
+          · simp at hcall
+        | _ => simp [emptyLocalsHOLFinite] at hcall
+
+def runAttemptPhaseC1Prog : ProgHOL 64 :=
+  .seq .skip
+    (.decCall (ofString "hdr") .one (ofString "payload_header") [.var .local (ofString "si")]
+      (.seq .skip
+        (.decCall (ofString "bh") .one (ofString "alloc") [.const 32#64]
+          (.seq (.call (some (none, none)) (ofString "header_hash")
+              [.var .local (ofString "hdr"), .var .local (ofString "bh")])
+            (.decCall (ofString "eq") .one (ofString "memeq")
+              [.var .local (ofString "bh"),
+               .op .add [.load .one (.op .add [.var .local (ofString "pl"), .const 0#64]), .const 472#64],
+               .const 32#64]
+              (.seq
+                (.ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+                  (.raise (ofString "BlockErr") (.const 5#64))
+                  .skip)
+                (.seq .skip
+                  (.decCall (ofString "vvh") .one (ofString "is_valid_versioned_hashes")
+                    [.var .local (ofString "si")]
+                    (.seq .skip
+                      (.seq
+                        (.ite (.cmp .equal (.var .local (ofString "vvh")) (.const 0#64))
+                          (.raise (ofString "BlockErr") (.const 6#64))
+                          .skip)
+                        (.seq .skip
+                          (.seq
+                            (.call (some (none, none)) (ofString "validate_header")
+                              [.var .local (ofString "parent"), .var .local (ofString "hdr")])
+                            (.seq .skip runAttemptPhaseC2Prog)))))))))))))
+
+theorem runAttemptPhaseC1_bounded
+    (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+      (ofString "execute_block") K.«execute_block»)
+    (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
+    (hvvh : TerminatingFunBoundedOn GuestInv
+      (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
+    (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
+    (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
+    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
+    (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc"))
+    (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc"))
+    (whh : WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+      (fun s => [(locN s "out", 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "header_hash"))
+    (wvvh : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "is_valid_versioned_hashes"))
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (wmz : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")]) []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "memzero"))
+    (wph : WorldKeeps InputReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+        (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeader (ofString "payload_header"))
+    (wvh : WorldKeeps
+      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header")) :
+    TerminatingProgBoundedOn RunAttemptPostScan runAttemptPhaseC1Prog
+      ((K.«payload_header» + 1) + (K.«alloc» + 1) + (K.«header_hash» + 1) +
+        (K.«memeq» + 1) + (K.«is_valid_versioned_hashes» + 1) + (K.«validate_header» + 1) +
+        (K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1)) := by
+  have hentry_ph : CallEntryOn RunAttemptPostScan InputReady
+      (ofString "payload_header") [.var .local (ofString "si")] := by
+    have hentry_strong : CallEntryOn InputReadyStrong InputReadyStrong
+        (ofString "payload_header") [.var .local (ofString "si")] :=
+      callEntryOn_inputReadyStrong lookup_payload_header_fn rfl
+    intro F state values body' callee ret' hcode hP hargs hl
+    exact inputReadyStrong_inputReady _
+      (hentry_strong state values body' callee ret' hcode
+        (runAttemptPostScan_inputReadyStrong hP) hargs hl)
+  have hc2 : TerminatingProgBoundedOn RunAttemptPreBe runAttemptPhaseC2Prog
+      ((K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1)) :=
+    runAttemptPhaseC2_bounded hal hmz hexec wal rtal wmz
+  have hskip_c2 : TerminatingProgBoundedOn RunAttemptPreBe
+      (.seq .skip runAttemptPhaseC2Prog)
+      (0 + ((K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1))) :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPreBe)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPreBe) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hc2
+  have hvld : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare_trans (P := RunAttemptPostHdr) (Q := RunAttemptPreBe)
+      (TerminatingProgBoundedOn.call_on hvh none _
+        (callEntryOn_of_imp localsFree_guestInv (fun _ h => runAttemptPostHdr_guestInv h) _ _))
+      (hoare_validate_header wvh)
+      hskip_c2
+  have hskip_vld : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hvld
+  have hite_vvh : TerminatingProgBoundedOn RunAttemptPostHdr
+      (.ite (.cmp .equal (.var .local (ofString "vvh")) (.const 0#64))
+        (.raise (ofString "BlockErr") (.const 6#64))
+        .skip)
+      (max 0 0) :=
+    TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_raise s _ _))
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+  have hafter_vvh : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      (TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+        hite_vvh (Hoare.ite_raise_skip _ _ _) hskip_vld)
+  have hvvh_call : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.decCall_on hvvh (ofString "vvh") .one _
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => runAttemptPostHdr_guestInv h) _ _)
+      (decCallResumeOn_is_valid_versioned_hashes wvvh)
+      hafter_vvh
+  have hskip_vvh : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hvvh_call
+  have hite_eq : TerminatingProgBoundedOn RunAttemptPostHdr
+      (.ite (.cmp .equal (.var .local (ofString "eq")) (.const 0#64))
+        (.raise (ofString "BlockErr") (.const 5#64))
+        .skip)
+      (max 0 0) :=
+    TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_raise s _ _))
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+  have hafter_eq : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+      hite_eq (Hoare.ite_raise_skip _ _ _) hskip_vvh
+  set meqArgs : List (ExpHOL 64) :=
+    [.var .local (ofString "bh"),
+     .op .add [.load .one (.op .add [.var .local (ofString "pl"), .const 0#64]), .const 472#64],
+     .const 32#64]
+  have hmeq_call : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.decCall_on hmeq (ofString "eq") .one meqArgs
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => runAttemptPostHdr_guestInv h) _ meqArgs)
+      (decCallResumeOn_memeq_runAttemptPostHdr romeq meqArgs)
+      hafter_eq
+  have hhh_seq : TerminatingProgBoundedOn RunAttemptPostBh _ _ :=
+    TerminatingProgBoundedOn.seq_hoare_trans (P := RunAttemptPostBh) (Q := RunAttemptPostHdr)
+      (TerminatingProgBoundedOn.call_on hhh none _
+        (callEntryOn_of_imp localsFree_guestInv (fun _ h => runAttemptPostBh_guestInv h) _ _))
+      (hoare_header_hash_bh whh)
+      hmeq_call
+  have hbh_call : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.decCall_on hal (ofString "bh") .one _
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => runAttemptPostHdr_guestInv h) _ _)
+      (decCallResumeOn_alloc_bh_32 wal rtal)
+      hhh_seq
+  have hskip_bh : TerminatingProgBoundedOn RunAttemptPostHdr _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostHdr)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostHdr) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hbh_call
+  have hph_call : TerminatingProgBoundedOn RunAttemptPostScan _ _ :=
+    TerminatingProgBoundedOn.decCall_on hph (ofString "hdr") .one _
+      hentry_ph
+      (decCallResumeOn_payload_header wph)
+      hskip_bh
+  have hall : TerminatingProgBoundedOn RunAttemptPostScan runAttemptPhaseC1Prog _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPostScan)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPostScan) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hph_call
+  intro F s hc hp
+  exact TerminatingRunBounded.weaken (hall s hc hp) (by omega)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
