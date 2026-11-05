@@ -13176,4 +13176,146 @@ theorem phase2_message_create_stores_suffix_bound {ι : Type} [Nonempty ι]
   simpa only [Nat.zero_add] using seq_bound_trans hb
     (phase2_message_create_stores_suffix_hoare buffers contents names aa ak hc he) ht' s hcode hp
 
+/-- Successful allocation changes the heap frontier but leaves caller memory intact. -/
+theorem phase2_alloc_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL) (v : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hp : WorldOK s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    post.memory = s.memory := by
+  have hl' := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "alloc")
+    vs body callee ret hl
+  unfold lookupCodeHOLExact at hl'
+  rw [hc, InitECandidate.Solver.Wave8Contracts.M27.lookup_alloc_te] at hl'
+  dsimp only at hl'
+  split at hl'
+  · rename_i hcond
+    obtain ⟨rfl, hrest⟩ := Prod.mk.inj (Option.some.inj hl')
+    obtain ⟨hlocal, _⟩ := Prod.mk.inj hrest
+    rcases vs with _ | ⟨nv, _ | _⟩
+    · simp at hcond
+    · rcases nv with ⟨⟨n⟩⟩ | _ | _
+      · have hn : (callEntryStateHOLFinite s callee).locals.lookup (ofString "n") =
+            some (.val (.word n)) := by
+          change callee.lookup (ofString "n") = _
+          rw [← hlocal]; simp [List.zip, List.foldl]
+        obtain ⟨p, hpl⟩ := hp.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+        have hr := InitECandidate.Solver.Wave8Contracts.M27.alloc_body_run
+          (callEntryStateHOLFinite s callee) p n hc hpl hn v
+        rw [hb] at hr
+        exact congrArg (fun t => t.memory) (hr rfl).2.2.2
+      · simp [List.zip, shapeOfHOLExact, shapeEqHOL] at hcond
+      · simp [List.zip, shapeOfHOLExact, shapeEqHOL] at hcond
+    · simp at hcond
+  · cases hl'
+
+/-- Allocation frames the full suffix invariant, including initialized message fields. -/
+theorem phase2_alloc_message_suffix_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hs : ∀ n ∈ names, name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (PtxMessageSuffixReady buffers contents names aa ak) name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have ht := phase2_alloc_message_tables_backing_ready h buffers contents aa ak name args hm hi
+    s vs body callee ret v post hc ⟨⟨hp.1.1, hp.2.1⟩, hp.2.2.1⟩ he hl hb
+  have hmem := phase2_alloc_memory s vs body callee ret v post hc hp.1.1.1 hl hb
+  have hloc : locN (setVarHOLFinite name v {post with locals := s.locals}) "m" = locN s "m" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  refine ⟨⟨ht.1.1, ?_⟩, ht.1.2, ht.2, ?_, ?_, ?_, ?_⟩
+  · intro n hns
+    obtain ⟨w, hw⟩ := hp.1.2 n hns
+    exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hs n hns] using hw⟩
+  · apply phase2_phase4_shapes_localsOnly s _ post.clock (fun n hns => ?_) hp.2.2.2.1
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hns]
+  · rw [hloc]
+    simpa only [memW, setVarHOLFinite, hmem] using hp.2.2.2.2.1
+  · rw [hloc]
+    simpa only [memW, setVarHOLFinite, hmem] using hp.2.2.2.2.2.1
+  · rw [hloc]
+    simpa only [memW, setVarHOLFinite, hmem] using hp.2.2.2.2.2.2
+
+/-- The full suffix invariant composes through allocation at the exact callee cost. -/
+theorem phase2_alloc_message_suffix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hs : ∀ n ∈ names, name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageSuffixReady buffers contents names aa ak) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_alloc_message_suffix_ready h buffers contents names aa ak name args hm hi hs hn
+  · exact ht
+
+/-- Allocation extends the suffix scalar witnesses with its returned word. -/
+theorem phase2_alloc_message_suffix_word_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : String) (args : List (ExpHOL 64))
+    (hm : ofString name ≠ ofString "m") (hi : ofString name ≠ ofString "index")
+    (hs : ∀ n ∈ names, ofString name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      ofString name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (PtxMessageSuffixReady buffers contents (name :: names) aa ak)
+      (ofString name) (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have ht := phase2_alloc_message_suffix_ready h buffers contents names aa ak
+    (ofString name) args hm hi hs hn s vs body callee ret v post hc hp he hl hb
+  have hrt := PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hrt
+  obtain ⟨w, hv, _⟩ := hrt v rfl
+  refine ⟨⟨ht.1.1, ?_⟩, ht.2⟩
+  intro n hns
+  rcases List.mem_cons.mp hns with rfl | hns
+  · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]⟩
+  · exact ht.1.2 n hns
+
+/-- The word-producing allocation feeds a continuation using the extended locals. -/
+theorem phase2_alloc_message_suffix_word_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (name : String) (args : List (ExpHOL 64))
+    (hm : ofString name ≠ ofString "m") (hi : ofString name ≠ ofString "index")
+    (hs : ∀ n ∈ names, ofString name ≠ ofString n)
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      ofString name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents (name :: names) aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.decCall (ofString name) .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := PtxMessageSuffixReady buffers contents (name :: names) aa ak) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · exact phase2_alloc_message_suffix_word_ready h buffers contents names aa ak name args hm hi hs hn
+  · exact ht
+
+/-- Empty-buffer allocation followed by the ordinary-call stores supplies the tail guard. -/
+theorem phase2_message_empty_call_suffix_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents [] aa ak)
+      (.decCall (ofString "empty") .one (ofString "alloc") [.const 0]
+        (.seq phase2_message_call_stores tail)) (K.alloc + b + 1) := by
+  apply phase2_alloc_message_suffix_word_bound h buffers contents [] aa ak "empty" _
+    (by decide) (by decide) (by simp)
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  exact phase2_message_call_stores_suffix_bound buffers contents ["empty"] aa ak (by simp) ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

@@ -9351,6 +9351,92 @@ theorem finish_child_pop_other_global {F : Type} (s : PanSemStateFiniteExact 64 
       globN s name := by
   simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm he, Ne.symm hc]
 
+/-- The finish-child branches fall through or raise; they cannot bypass cleanup
+by returning directly. -/
+theorem fcBranches_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s EvmEkFk.fcBranches).1 ≠ some (.returned v) := by
+  unfold EvmEkFk.fcBranches EvmEkFk.fcAfterPrelude EvmEkFk.fcCore
+    EvmEkFk.fcBody EvmEkFk.fcDropDecls EvmEkFk.fcLeftSeq EvmEkFk.fcRightSeq
+    sourceFnBody sourceFunctionEntry Guest.Software.guestFn_finish_child
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural
+  repeat' first
+    | apply EvmEkFk.ite_ne_returned_fc
+    | apply EvmEkFk.dec_ne_returned_fc
+    | apply EvmEkFk.seq_ne_returned_fc
+    | apply EvmEkFk.decCall_ne_returned_fc
+    | exact fun t u => EvmEkFk.call0_ne_returned_fc t _ _ u
+    | exact fun t u => EvmEkFk.skip_ne_returned_fc t u
+
+/-- Every returning branch-and-cleanup run has a fallthrough branch state. -/
+theorem fcBranches_cleanup_returned {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s EvmEkFk.fcBranches = (none, mid) ∧
+      evaluateHOLFiniteState mid EvmEkFk.fcCleanup = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hb : evaluateHOLFiniteState s EvmEkFk.fcBranches with ⟨r, mid⟩
+  rw [hb] at hr
+  cases r with
+  | none => exact ⟨mid, rfl, hr⟩
+  | some r =>
+    have hh := congrArg Prod.fst hr
+    dsimp only at hh
+    have he : r = .returned v := Option.some.inj hh
+    subst r
+    exact False.elim (fcBranches_ne_returned s v (by rw [hb]))
+
+/-- A returning post-prelude run factors through the concrete pop, the branch
+fallthrough state, and the cleanup return. -/
+theorem finish_child_afterPrelude_returned {F : Type}
+    {s0 s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    (hpre : EvmEkFk.PreludeRel s0 s)
+    (hr : evaluateHOLFiniteState s EvmEkFk.fcAfterPrelude = (some (.returned v), post)) :
+    ∃ mid,
+      evaluateHOLFiniteState
+        (setGlobalHOLFinite (ofString "cur_cont")
+          (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+          (setGlobalHOLFinite (ofString "ev")
+            (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s))
+        EvmEkFk.fcBranches = (none, mid) ∧
+      evaluateHOLFiniteState mid EvmEkFk.fcCleanup = (some (.returned v), post) := by
+  rw [finish_child_pop_step hpre] at hr
+  exact fcBranches_cleanup_returned hr
+
+/-- The prelude preserves the parent pointers encoded by its nonempty chain tail. -/
+theorem finish_child_prelude_parent {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} (hpre : EvmEkFk.PreludeRel s0 s)
+    (hk0 : memW s0 (globN s0 "cur_cont" + 16) ≠ 0) :
+    memW s (globN s "cur_cont" + 16) ≠ 0 ∧
+    memW s (globN s "cur_cont") = memW s0 (globN s0 "cur_cont") ∧
+    memW s (globN s "cur_cont" + 8) = memW s0 (globN s0 "cur_cont" + 8) := by
+  have ht0 : (evmChain s0).tail ≠ [] := by
+    rw [EvmEkFk.evmChain_cons_of_cont_ne_zero hk0]
+    dsimp only [List.tail]
+    have hm : maxChain = (maxChain - 1) + 1 := by decide
+    rw [hm]
+    simp [evmChainFrom]
+  have hk : memW s (globN s "cur_cont" + 16) ≠ 0 := by
+    intro hz
+    apply ht0
+    rw [← hpre.chain_eq, evmChain_cons, if_pos hz]
+    rfl
+  have ht := congrArg (fun l : List Ivl => l.tail.head?) hpre.chain_eq
+  rw [EvmEkFk.evmChain_cons_of_cont_ne_zero hk,
+    EvmEkFk.evmChain_cons_of_cont_ne_zero hk0] at ht
+  have hm : maxChain = (maxChain - 1) + 1 := by decide
+  simp only [List.tail_cons] at ht
+  rw [hm] at ht
+  simp only [evmChainFrom, List.head?_cons] at ht
+  exact ⟨hk, (Prod.mk.inj (Option.some.inj ht)).1,
+    (Prod.mk.inj (Option.some.inj ht)).2⟩
+
 /-- The concrete two-global pop establishes the parent invariant and both release
 marks, with no string-name preservation hypothesis. -/
 theorem finish_child_pop_state_invariants {F : Type}

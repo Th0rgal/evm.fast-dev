@@ -7406,4 +7406,33 @@ theorem merge_new_call_owned {F : Type}
     worldTypedWith_htab_new_sysTx hAR hA hbe hh hsp hwf hkey hfp hd hframe hgl hWT
   exact ⟨tw.toNat, hnS, hn0, hkey, hcnt, hroles, hWT', hrest⟩
 
+/-- A fresh inner allocation composes with a withdrawal-framed continuation
+on all flowing and resumable outcomes. -/
+theorem progWithdrawalStep_new_then (x : MlS) (kw capw : BitVec 64)
+    (hkl : kw.toNat ∈ htabKeyLens) (hcl : capw.toNat ≤ htabCapMax)
+    {cont : ProgHOL 64} (hcont : ProgWithdrawalStep cont) :
+    ProgWithdrawalStep (.seq
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw]) cont) := by
+  have hnew : ProgWithdrawalStep
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw]) := by
+    apply progWithdrawalStep_of_progWStep (B := []) (gw := ["heap_ptr"])
+      (by simp) (by simp [withdrawalGlobals])
+    intro F s hc hW hnt hfr
+    exact merge_new_call_worldStep s x kw capw hW hkl hcl hfr
+  intro F s hc hW hnt hfr
+  exact progWithdrawalStep_seq hnew hcont s hc hW hnt hfr
+
+/-- The concrete allocation at the start of the storage merge miss branch
+fits the withdrawal mask. -/
+theorem progWithdrawalStep_merge_new :
+    ProgWithdrawalStep
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) := by
+  apply progWithdrawalStep_of_progWStep (B := []) (gw := ["heap_ptr"])
+    (by simp) (by simp [withdrawalGlobals])
+  intro F s hc hW hnt hfr
+  exact merge_new_call_worldStep s _ _ _ hW (by decide) (by decide) hfr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
