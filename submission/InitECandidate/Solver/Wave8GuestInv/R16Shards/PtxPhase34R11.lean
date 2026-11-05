@@ -1305,6 +1305,26 @@ theorem phase4ThroughLogs_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact hb s hc hp
 
+theorem phase4NullLogs_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptReady tail b) :
+    TerminatingProgBoundedOn Phase4LogsReady
+      (spinePlug 1 (spineAt 120 ptxCode) tail) ((K.lst_new + 1) + b) := by
+  have hb : TerminatingProgBoundedOn Phase4LogsReady
+      (spinePlug 1 (spineAt 120 ptxCode) tail) (max (K.lst_new + 1) 0 + b) := by
+    unfold ptxCode
+    refine seq_bound_trans (Q := Phase4ReceiptReady) ?_ ?_ htail
+    · apply TerminatingProgBoundedOn.ite_on
+      · exact TerminatingProgBoundedOn.call_on h.fb_lst_new _ _
+          (fun s vs body callee ret hc hp ha hl => guestInv_callEntry s callee hp.1.1.1.1.1)
+      · exact TerminatingProgBoundedOn.of_clock clock_skip
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallStrong) _ (fun _ hp => hp.1.1)
+        exact Hoare.callLocal_resume (lst_new_receiptReady_resume h)
+      · exact Hoare.skip (fun _ hp _ => ⟨hp.1.1, hp.1.2.2⟩)
+      · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  simpa only [Nat.max_zero] using hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
