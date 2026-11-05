@@ -3729,4 +3729,21 @@ theorem phase2_address_count_alloc_size {F : Type} (s : PanSemStateFiniteExact 6
       locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
   exact phase2_key_alloc_size_nonwrapping s hp.1 (phase2_address_count_alloc_bound hp)
 
+/-- Transfer the strengthened invariant across a step preserving count fields. -/
+theorem phase2_address_count_frame {F : Type} (s t : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (ht : PtxAddressCopyInv t)
+    (hi : locN t "i" = locN s "i")
+    (hn : locN t "nkeys" = locN s "nkeys")
+    (ha : locN t "nal" = locN s "nal")
+    (hc : memW t (locN t "tx" + 216) = memW s (locN s "tx" + 216))
+    (hf : ∀ j, j < locN s "i" →
+      memW t (memW t (locN t "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16)) :
+    PtxAddressCountInv t := by
+  refine ⟨ht, ?_, ?_⟩
+  · rw [ha, hc]
+    exact hp.2.1
+  · rw [hn, hi, phase2_key_prefix_congr s t _ hf]
+    exact hp.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
