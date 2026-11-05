@@ -3060,6 +3060,33 @@ theorem hoare_stable_length_store :
   · exact hp.1.1.1.1.2.1.trans h8.symm
   · exact hp.1.1.1.2.trans h0.symm
 
+theorem stableLengthPost_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : ∀ name ∈ (["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : StableLengthPost s) : StableLengthPost {s with locals := locals, clock := k} := by
+  have he : ∀ name ∈ (["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] : List String),
+      locN {s with locals := locals, clock := k} name = locN s name :=
+    fun name hn => locN_congr s locals k name (hl name hn)
+  obtain ⟨hW, hlogs, hown, hnl, hlp, hlen, hcap, ha, hw⟩ := hp
+  refine ⟨⟨localsFree_worldOK s locals k hW.1,
+    txEnv_with_locals s locals k (hl "index" (by simp)) hW.2⟩, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [he "logs" (by simp)]
+    exact (R13Shards.logsListOK_with_locals s locals k _).mpr hlogs
+  · rw [he "logs" (by simp)]
+    exact logsWorldOwned_with_locals locals k hown
+  · rw [he "nl" (by simp), he "logs" (by simp)]; exact hnl
+  · rw [he "lp" (by simp), he "logs" (by simp)]; exact hlp
+  · rw [he "stable_logs" (by simp), he "nl" (by simp)]; exact hlen
+  · rw [he "stable_logs" (by simp)]; exact hcap
+  · rw [he "stable_logs" (by simp), he "stable_log_cap" (by simp)]; exact ha
+  · rw [he "stable_logs" (by simp), he "stable_log_cap" (by simp)]; exact hw
+
+theorem localsOnly_stableLengthPost :
+    LocalsOnly ["index", "logs", "nl", "lp", "stable_logs", "stable_log_cap"] StableLengthPost := by
+  intro F s locals k hl hp
+  exact stableLengthPost_with_locals s locals k hl hp
+
 /-- Connect the actual length write at spine position 133 to its continuation. -/
 theorem phase4StableLength_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn StableLengthPost tail b) :
