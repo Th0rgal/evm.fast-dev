@@ -9814,4 +9814,57 @@ theorem txAfterCallBackingStrong_store_bo {F : Type} {s : PanSemStateFiniteExact
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Operational store rule retaining both block-output backing pointers. -/
+theorem hoare_store_bo_total_backing (off : Nat) (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    (op : BinOp) (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallBackingStrong
+      (.store (.op .add [.var .global (ofString "bo"), .const (BitVec.ofNat 64 off)])
+        (.op op args)) (fun r t => r = none → TxAfterCallBackingStrong t) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' h hx hv hm
+  obtain ⟨w, rfl⟩ := PtxP1.eval_is_word_op hv
+  have hs := panMemStoresHOL_word_spec (s := s) (x := x) (w := .word w)
+    (mem' := mem') (by simpa only [flattenHOL] using hm)
+  apply txAfterCallBackingStrong_store_bo h hoff hs.1 _ hs.2.2
+  have he := eval_add_global_const hx
+  obtain ⟨S, Nd, hWT, _⟩ := h.1.2.2.2.2
+  have hb := (ivl_allocated_bound h.1.1.1.1.2
+    (bo_words hWT.2.2.1 h.1.1.2.bo_nz).1).2
+  have hoff64 : off < 2 ^ 64 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> norm_num
+  have hsum : globN s "bo" + off < 2 ^ 64 := by
+    dsimp at hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hoff64, Nat.mod_eq_of_lt hsum] using he
+
+/-- All four block-total writes carry backing into their continuation. -/
+theorem phase4TotalStores_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) (0 + (0 + (0 + (0 + b)))) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 0 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 8 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 48 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total_backing 16 (by simp) _ _) ?_
+    change TerminatingProgBoundedOn TxAfterCallBackingStrong (.seq .skip tail) b
+    intro F s hc hp hnt
+    simpa only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip] using
+      htail s hc hp (by simpa only [evaluateHOLFiniteState_seq_line780,
+        evaluateHOLFiniteState_skip] using hnt)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
