@@ -2409,4 +2409,157 @@ theorem ek_depth0_prepare_of_ek {gw_sd gw_pd : List String}
     (fun hp G ch => hoare_call_d0CallPost_of_evmKeeps hsd hslot hsub_sd (by decide) hp G ch)
     hpd hsub_pd
 
+/-! ## Word writes in the owned message record
+
+The stores at offsets `104`, `112`, `120`, and `168` in `prepare_dispatch` all use
+this rule.  The frame's message-pointer slot is preserved separately from the
+message payload: subsequent calls can therefore retain the caller's `msg` local.
+-/
+
+theorem hoare_store_msg_word_step_with (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      D0Pre gw hp G ch s → L s.locals → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  apply Hoare.store_fall_of_none
+  refine ⟨fun {F} s _ ⟨hD, hL⟩ _ hnone => ?_⟩
+  obtain ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ := hD
+  have hD : D0Pre gw hp G ch s := ⟨⟨hP, hS⟩, m, hm, hm_eq⟩
+  rcases hrun : evaluateHOLFiniteState s
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      with ⟨res, post⟩
+  rw [hrun] at hnone
+  dsimp only at hnone ⊢
+  subst res
+  have hm_bnd : m.toNat + 176 ≤ 2 ^ 64 := by
+    rw [hm_eq]
+    exact allocated_le_2pow64 hP.1.2 hP.2.choose_spec.2.1
+  obtain ⟨heff, hloc⟩ := M11.ByteRegionEffect.of_store_word
+    (Rl := [(m.toNat, 176)]) hP.1.1.memaddrs hrun
+    (fun v hv => hword s v hD hL (by simpa only [ev] using hv))
+    (fun addr hdst _ => by
+      refine ⟨(m.toNat, 176), List.mem_singleton.2 rfl, ?_⟩
+      have haddr : addr.toNat = m.toNat + off := by
+        simp [evalHOLExact, evalListHOLExact, hm, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+        subst hdst
+        simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
+        rw [Nat.mod_eq_of_lt (show off < 2 ^ 64 by omega), Nat.mod_eq_of_lt (by omega)]
+      dsimp only
+      omega)
+  have heff' : EvmStepLemmas.ByteRegionEffect s post
+      [(memW s (globN s "ev" + 112), 176)] := by
+    rw [← hm_eq]
+    exact m11Bre_to_evmBre (fun i hi => by
+      simp only [List.mem_singleton] at hi; subst hi; simp) heff
+  have hstep : EvmStep [] s post :=
+    ByteRegionEffect.to_evmStep_avoids (evmAvoids_msg_of_evmMsgReady s hP) heff'
+  have hslot : memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112) := by
+    have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+      unfold evmChain; exact List.mem_cons_self
+    have hd := hP.2.choose_spec.2.2.2.2.2.1 _ hhead (globN s "ev", 280)
+      (by simp [frameObjects])
+    have hb := frameWF_bounds (hP.2.choose_spec.1.2.2.2.2.1 _ hhead)
+    unfold memW
+    rw [heff'.cell_frame _ ?_]
+    intro i hi _ hhit
+    simp only [List.mem_singleton] at hi
+    subst i
+    unfold CellHits at hhit
+    have haddr : (BitVec.ofNat 64 (globN s "ev" + 112)).toNat = globN s "ev" + 112 :=
+      Nat.mod_eq_of_lt (by omega)
+    rw [haddr] at hhit
+    rcases hd with hd | hd | hd | hd <;> dsimp only at hd <;> omega
+  refine ⟨d0Pre_of_stepFrom gw hp G ch hD
+    (stepFrom_of_evmStep (fun g hg => by simp at hg) hS hstep) hloc
+    (congrArg (fun gs => gs.lookup (ofString "ev")) heff'.globals) hslot, ?_⟩
+  rw [hloc]
+  exact hL
+
+theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      D0Pre gw hp G ch s → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (D0Pre gw hp G ch)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      (Fall (D0Pre gw hp G ch)) := by
+  have h := hoare_store_msg_word_step_with gw hp G ch off hoff value (fun _ => True)
+    (fun s v hD _ hv => hword s v hD hv)
+  exact Hoare.mono (Hoare.weaken h (fun _ _ h hr => (h hr).1)) (fun _ hD => ⟨hD, trivial⟩)
+
+/-- A message store preserves all caller-local facts, including the code words needed
+by the subsequent dispatch stores. -/
+theorem hoare_store_msg_local_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (name : MlS) (w : BitVec 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hL : ∀ locals, L locals → locals.lookup name = some (.val (.word w))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) (.var .local name))
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  apply hoare_store_msg_word_step_with gw hp G ch off hoff (.var .local name) L
+  intro F s v _ hlocals hv
+  simp only [ev, evalHOLExact, hL _ hlocals] at hv
+  exact ⟨w, (Option.some.inj hv).symm⟩
+
+theorem hoare_store_msg_const_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (w : BitVec 64) :
+    Hoare (D0Pre gw hp G ch)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) (.const w))
+      (Fall (D0Pre gw hp G ch)) := by
+  apply hoare_store_msg_word_step gw hp G ch off hoff
+  intro F s v _ hv
+  exact ⟨w, (Option.some.inj hv).symm⟩
+
+/-- The final two message stores of `prepare_dispatch`, preserving the code locals
+for the subsequent head-frame stores and jump-destination computation. -/
+theorem hoare_prepare_dispatch_msg_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.seq
+        (.store (.op .add [.var .local (ofString "msg"), .const 112])
+          (.var .local (ofString "code")))
+        (.store (.op .add [.var .local (ofString "msg"), .const 120])
+          (.var .local (ofString "code_n"))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "code") = some (.val (.word code)) ∧
+    locals.lookup (ofString "code_n") = some (.val (.word code_n))
+  exact Hoare.seq_fall'
+    (hoare_store_msg_local_step gw hp G ch 112 (by decide) (ofString "code") code L
+      (fun _ h => h.1))
+    (hoare_store_msg_local_step gw hp G ch 120 (by decide) (ofString "code_n") code_n L
+      (fun _ h => h.2))
+    (fun _ h => h)
+
+/-- The delegated-code branch marks the message and records the freshly copied
+address without invalidating its owned-record invariant or caller locals. -/
+theorem hoare_prepare_dispatch_delegated_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq
+        (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+        (.store (.op .add [.var .local (ofString "msg"), .const 104])
+          (.var .local (ofString "daddr"))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "daddr") = some (.val (.word daddr))
+  refine Hoare.seq_fall'
+    (hoare_store_msg_word_step_with gw hp G ch 168 (by decide) (.const 1) L ?_)
+    (hoare_store_msg_local_step gw hp G ch 104 (by decide) (ofString "daddr") daddr L
+      (fun _ h => h)) (fun _ h => h)
+  intro F s v _ _ hv
+  exact ⟨1, (Option.some.inj hv).symm⟩
+
 end HeadStore

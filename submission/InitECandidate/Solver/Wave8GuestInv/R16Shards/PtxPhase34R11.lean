@@ -422,6 +422,354 @@ theorem lst_push_tail_backing_nonzero {F : Type}
       · cases hs'
     · cases hs'
 
+/-- A returned store sequence exposes a falling store with unchanged locals
+and code, followed by a returned continuation. -/
+theorem store_seq_returned {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {dst src : ExpHOL 64} {tail : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.store dst src) tail) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.store dst src) = (none, mid) ∧
+      mid.locals = s.locals ∧ mid.code = s.code ∧
+      evaluateHOLFiniteState mid tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s (.store dst src) with ⟨r, mid⟩
+  rw [hs] at hr
+  have hs' := hs
+  rw [evaluateHOLFiniteState_store] at hs'
+  cases r with
+  | none =>
+    refine ⟨mid, rfl, ?_, ?_, hr⟩
+    · split at hs'
+      · split at hs'
+        · split at hs'
+          · cases hs'; rfl
+          · cases hs'
+        · cases hs'
+      · cases hs'
+    · have he := (evaluateHOLFiniteState_metadata s (.store dst src)).1
+      simpa only [hs] using he
+  | some r =>
+    dsimp only at hr
+    have he := (Prod.mk.inj hr).1
+    cases he
+    split at hs'
+    · split at hs'
+      · split at hs' <;> cases hs'
+      · cases hs'
+    · cases hs'
+
+/-- A word store cannot return from its enclosing function. -/
+theorem store_not_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst src : ExpHOL 64) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.store dst src)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_store]
+  split
+  · split
+    · split <;> simp
+    · simp
+  · simp
+
+/-- A returned sequence must reach its tail when the prefix cannot return. -/
+theorem seq_returned_of_not_returned {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {pre tail : ProgHOL 64} {v : ValueHOL 64}
+    (hp : (evaluateHOLFiniteState s pre).1 ≠ some (.returned v))
+    (hr : evaluateHOLFiniteState s (.seq pre tail) = (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s pre = (none, mid) ∧
+      evaluateHOLFiniteState mid tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases he : evaluateHOLFiniteState s pre with ⟨r, mid⟩
+  rw [he] at hr hp
+  cases r with
+  | none => exact ⟨mid, rfl, hr⟩
+  | some r => exact (hp (congrArg Prod.fst hr)).elim
+
+/-- Non-returning prefixes compose without inspecting successful fall-through. -/
+theorem seq_not_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b : ProgHOL 64) (v : ValueHOL 64)
+    (ha : (evaluateHOLFiniteState s a).1 ≠ some (.returned v))
+    (hb : ∀ mid : PanSemStateFiniteExact 64 F,
+      (evaluateHOLFiniteState mid b).1 ≠ some (.returned v)) :
+    (evaluateHOLFiniteState s (.seq a b)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases he : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  cases r with
+  | none => exact hb mid
+  | some r => simpa only [he] using ha
+
+/-- A falling word store leaves the local environment unchanged. -/
+theorem store_fall_locals {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {dst src : ExpHOL 64}
+    (h : evaluateHOLFiniteState s (.store dst src) = (none, post)) :
+    post.locals = s.locals := by
+  rw [evaluateHOLFiniteState_store] at h
+  split at h
+  · split at h
+    · split at h
+      · cases h; rfl
+      · cases h
+    · cases h
+  · cases h
+
+/-- Local preservation composes across falling sequences. -/
+theorem seq_fall_locals {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {a b : ProgHOL 64}
+    (ha : ∀ mid, evaluateHOLFiniteState s a = (none, mid) → mid.locals = s.locals)
+    (hb : ∀ mid, evaluateHOLFiniteState mid b = (none, post) → post.locals = mid.locals)
+    (hr : evaluateHOLFiniteState s (.seq a b) = (none, post)) :
+    post.locals = s.locals := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none => exact (hb mid hr).trans (ha mid hs)
+
+/-- A successful ignored-result call restores caller locals. In particular,
+the copy preceding growth stores preserves `np`, `l`, `cap`, and `n`. -/
+theorem ignored_call_fall_locals {F : Type} (s mid : PanSemStateFiniteExact 64 F)
+    (f : MlS) (args : List (ExpHOL 64))
+    (h : evaluateHOLFiniteState s (.call (some (none, none)) f args) = (none, mid)) :
+    mid.locals = s.locals ∧ mid.code = s.code := by
+  have hmeta := (evaluateHOLFiniteState_metadata s (.call (some (none, none)) f args)).1
+  rw [h] at hmeta
+  refine ⟨?_, hmeta⟩
+  revert h
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · rcases evaluateHOLFiniteState (callEntryStateHOLFinite s _) _ with ⟨r, st⟩
+        rcases r with _ | (_ | _ | _ | _ | w | _ | _) <;> dsimp only <;>
+          (repeat' split) <;> simp
+        intro h; rw [← h]
+
+/-- Ignoring a call result cannot directly return from the caller. -/
+theorem ignored_call_not_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (f : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) f args)).1 ≠
+      some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · rcases evaluateHOLFiniteState (callEntryStateHOLFinite s _) _ with ⟨r, st⟩
+        rcases r with _ | (_ | _ | _ | _ | w | _ | _) <;> dsimp only <;>
+          (repeat' split) <;> simp
+
+/-- Returning after an ignored-result call requires that call to fall through;
+its continuation starts with the original caller locals and code. -/
+theorem ignored_call_seq_returned {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {f : MlS} {args : List (ExpHOL 64)} {tail : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.call (some (none, none)) f args) tail) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (none, none)) f args) = (none, mid) ∧
+      mid.locals = s.locals ∧ mid.code = s.code ∧
+      evaluateHOLFiniteState mid tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s (.call (some (none, none)) f args) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | none =>
+    obtain ⟨hl, hc⟩ := ignored_call_fall_locals s mid f args hs
+    exact ⟨mid, rfl, hl, hc, hr⟩
+  | some r =>
+    have hn := ignored_call_not_returned s f args v
+    rw [hs] at hn
+    exact (hn (congrArg Prod.fst hr)).elim
+
+/-- The growth branch's data, capacity, and length writes compose with return
+to establish nonzero backing from the allocator result. -/
+theorem lst_push_growth_writes_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+          (.var .local (ofString "np")))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2]))
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+              (.op .add [.var .local (ofString "n"), .const 1]))
+            (.return (.op .add
+              [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+               .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  obtain ⟨mid, hs, hloc, hcode, ht⟩ := store_seq_returned hr
+  have hm := (hoare_lst_push_data_write l).run s hc ⟨hl, np, hnp, hnz⟩
+    (by rw [hs]; simp)
+  rw [hs] at hm
+  have hml : mid.locals.lookup (ofString "l") = some (.val (.word l)) := by
+    rw [hloc]; exact hl
+  have hmc : mid.locals.lookup (ofString "cap") = some (.val (.word cap)) := by
+    rw [hloc]; exact hcap
+  obtain ⟨last, hs2, hloc2, hcode2, ht2⟩ := store_seq_returned ht
+  have hm2 := (hoare_lst_push_capacity_write l cap).run mid (hcode.trans hc)
+    ⟨hml, hmc, hm rfl⟩ (by rw [hs2]; simp)
+  rw [hs2] at hm2
+  exact lst_push_tail_backing_nonzero last post l n v (hcode2.trans (hcode.trans hc))
+    (by rw [hloc2, hloc]; exact hl) (by rw [hloc2, hloc]; exact hn) (hm2 rfl) ht2
+
+/-- Reassociate the growth branch's two stores with the common tail without
+changing execution, including any non-falling result. -/
+theorem evaluate_seq_assoc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq (.seq a b) c) =
+      evaluateHOLFiniteState s (.seq a (.seq b c)) := by
+  simp only [evaluateHOLFiniteState_seq_line780]
+  rcases ha : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  cases r <;> simp only
+
+/-- The exact grouped growth-store suffix of `lst_push` retains the new
+nonzero backing through the shared length update and return. -/
+theorem lst_push_grouped_growth_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.seq
+          (.store (.op .add [.var .local (ofString "l"), .const 0])
+            (.var .local (ofString "np")))
+          (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2])))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+            (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  rw [evaluate_seq_assoc] at hr
+  exact lst_push_growth_writes_backing_nonzero s post l n cap np v
+    hc hl hn hcap hnp hnz hr
+
+/-- On fall-through, the growth stores have installed nonzero backing before
+the allocation declaration restores its local scope. -/
+theorem lst_push_growth_stores_fall {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap np : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+          (.var .local (ofString "np")))
+        (.store (.op .add [.var .local (ofString "l"), .const 16])
+          (.panop .mul [.var .local (ofString "cap"), .const 2]))) = (none, post)) :
+    memW post l.toNat ≠ 0 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s
+    (.store (.op .add [.var .local (ofString "l"), .const 0])
+      (.var .local (ofString "np"))) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none =>
+    dsimp only at hr
+    have hm := (hoare_lst_push_data_write l).run s hc ⟨hl, np, hnp, hnz⟩
+      (by rw [hs]; simp)
+    rw [hs] at hm
+    have hloc : mid.locals = s.locals := by
+      rw [evaluateHOLFiniteState_store] at hs
+      split at hs
+      · split at hs
+        · split at hs
+          · cases hs; rfl
+          · cases hs
+        · cases hs
+      · cases hs
+    have hcode := (evaluateHOLFiniteState_metadata s
+      (.store (.op .add [.var .local (ofString "l"), .const 0])
+        (.var .local (ofString "np")))).1
+    rw [hs] at hcode
+    have hm2 := (hoare_lst_push_capacity_write l cap).run mid (hcode.trans hc)
+      ⟨by rw [hloc]; exact hl, by rw [hloc]; exact hcap, hm rfl⟩
+      (by rw [hr]; simp)
+    rw [hr] at hm2
+    exact hm2 rfl
+
+/-- The allocation declaration's concrete copy-and-store body establishes
+nonzero backing whenever it falls through. -/
+theorem lst_push_copy_stores_fall {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap np : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"),
+           .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "l"), .const 0])
+            (.var .local (ofString "np")))
+          (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2])))) = (none, post)) :
+    memW post l.toNat ≠ 0 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s
+    (.call (some (none, none)) (ofString "memcpy")
+      [.var .local (ofString "np"),
+       .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+       .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none =>
+    obtain ⟨hlocal, hcode⟩ := ignored_call_fall_locals s mid _ _ hs
+    exact lst_push_growth_stores_fall mid post l cap np (hcode.trans hc)
+      (by rw [hlocal]; exact hl) (by rw [hlocal]; exact hcap)
+      (by rw [hlocal]; exact hnp) hnz hr
+
+/-- The concrete copy followed by growth stores and the common return tail
+establishes nonzero backing from the allocator result in `np`. -/
+theorem lst_push_copy_growth_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "np"),
+           .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "l"), .const 0])
+            (.var .local (ofString "np")))
+          (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2]))))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+            (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  rw [evaluate_seq_assoc] at hr
+  obtain ⟨mid, _, hloc, hcode, ht⟩ := ignored_call_seq_returned hr
+  exact lst_push_grouped_growth_backing_nonzero mid post l n cap np v
+    (hcode.trans hc) (by rw [hloc]; exact hl) (by rw [hloc]; exact hn)
+    (by rw [hloc]; exact hcap) (by rw [hloc]; exact hnp) hnz ht
+
 /-- A fresh backing block starts above the positive source base. -/
 theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p n : Nat} (hA : ArenaOK s) (hf : FreshBlock s post p n) : p ≠ 0 := by
@@ -439,6 +787,362 @@ theorem backing_nonzero_of_grow {F : Type}
   have hlo := hA.1
   rw [hdata, hnp]
   omega
+
+/-- Expose a falling declaration call and its scope-restored continuation.
+The memory is unchanged by restoration of the declared local. -/
+theorem dec_call_fall_inv {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {x fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (none, t)) :
+    ∃ values body callee retShape rv post u,
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      evaluateHOLFiniteState (setVarHOLFinite x rv { post with locals := s.locals }) cont = (none, u) ∧
+      t.memory = u.memory ∧
+      (∀ k, k ≠ x → t.locals.lookup k = u.locals.lookup k) := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h
+  split at h
+  · simp at h
+  · split at h
+    · simp at h
+    · rename_i values hargs body callee retShape hl
+      split at h
+      · simp at h
+      · dsimp only at h
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r with
+          | returned rv =>
+            dsimp only at h
+            split at h
+            · rcases ht : evaluateHOLFiniteState
+                (setVarHOLFinite x rv { post with locals := s.locals }) cont with ⟨rc, u⟩
+              rw [ht] at h
+              cases rc with
+              | none =>
+                have he := (Prod.mk.inj h).2
+                exact ⟨_, body, callee, retShape, rv, post, u, hl, hr, ht,
+                  congrArg (fun st => st.memory) he.symm, by
+                    intro k hk
+                    rw [← he]
+                    cases s.locals.lookup x <;>
+                      simp [HolFiniteMapExact.resVarEq, HolFiniteMapExact.lookup_eraseEq,
+                        HolFiniteMapExact.lookup_updateEq, FDOMSUB_HOL, FUPDATE_HOL,
+                        hk, Ne.symm hk]⟩
+              | some r => simp at h
+            · simp at h
+          | _ => simp at h
+
+/-- A scoped call can return only through its continuation. -/
+theorem dec_call_not_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x fname : MlS) (sh : ShapeHOL) (args : List (ExpHOL 64)) (cont : ProgHOL 64)
+    (v : ValueHOL 64)
+    (hc : ∀ a : PanSemStateFiniteExact 64 F,
+      (evaluateHOLFiniteState a cont).1 ≠ some (.returned v)) :
+    (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 ≠
+      some (.returned v) := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · dsimp only
+        rcases evaluateHOLFiniteState (callEntryStateHOLFinite s _) _ with ⟨r, post⟩
+        cases r with
+        | none => simp
+        | some r =>
+          cases r with
+          | returned rv =>
+            dsimp only
+            split
+            · simpa only using hc (setVarHOLFinite x rv {post with locals := s.locals})
+            · simp
+          | _ => simp
+
+/-- The existing allocator return contract supplies the nonzero word needed
+by the concrete growth stores, including for a zero-sized request. -/
+theorem alloc_return_nonzero (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hA : ArenaReady (callEntryStateHOLFinite s callee))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ np : BitVec 64, v = .val (.word np) ∧ np.toNat ≠ 0 ∧ ArenaReady post := by
+  have ha := funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl hA
+    (by rw [hr]; simp)
+  rw [hr] at ha
+  obtain ⟨np, hv, hpost, _, hf⟩ := ha v rfl
+  exact ⟨np, hv, fresh_backing_nonzero hA.2 hf, hpost⟩
+
+/-- A declaration whose continuation preserves locals preserves every local
+other than its temporary binding across the whole call. -/
+theorem dec_call_fall_lookup {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {x fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hcont : ∀ (a b : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState a cont = (none, b) → b.locals = a.locals)
+    (hr : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (none, post))
+    (k : MlS) (hk : k ≠ x) : post.locals.lookup k = s.locals.lookup k := by
+  obtain ⟨_, _, _, _, rv, allocated, done, _, _, hrun, _, hlocal⟩ := dec_call_fall_inv hr
+  rw [hlocal k hk, hcont _ _ hrun]
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk, Ne.symm hk]
+
+/-- The complete allocating branch establishes nonzero backing, including
+copying and restoration of the temporary `np` local. -/
+theorem lst_push_alloc_branch_fall (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc")
+        [.panop .mul [.panop .mul
+          [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.var .local (ofString "np"),
+             .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post)) :
+    memW post l.toNat ≠ 0 := by
+  obtain ⟨vs, body, callee, ret, rv, allocated, done, hlookup, hrun, hcont, hmem, _⟩ :=
+    dec_call_fall_inv hr
+  have hentry : ArenaReady (callEntryStateHOLFinite s callee) :=
+    (arenaReady_with_locals s callee (s.clock - 1)).2 hA
+  obtain ⟨np, rfl, hnz, hpost⟩ :=
+    alloc_return_nonzero h s vs body callee ret rv allocated hc hentry hlookup hrun
+  have hb := lst_push_copy_stores_fall
+    (setVarHOLFinite (ofString "np") (.val (.word np)) { allocated with locals := s.locals })
+    done l cap np hpost.1.code
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "l" by decide] using hl)
+    (by simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "np" ≠ ofString "cap" by decide] using hcap)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hnz hcont
+  simpa only [memW, hmem] using hb
+
+/-- The allocating branch preserves all caller lookups except its temporary
+`np` binding; in particular it preserves the list address and old length. -/
+theorem lst_push_alloc_branch_lookup {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64))
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc") args
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.var .local (ofString "np"),
+             .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post))
+    (k : MlS) (hk : k ≠ ofString "np") : post.locals.lookup k = s.locals.lookup k := by
+  apply dec_call_fall_lookup ?_ hr k hk
+  intro a b hab
+  apply seq_fall_locals ?_ ?_ hab
+  · intro mid hm
+    exact (ignored_call_fall_locals a mid _ _ hm).1
+  · intro mid hm
+    exact seq_fall_locals (fun _ hs => store_fall_locals hs)
+      (fun _ hs => store_fall_locals hs) hm
+
+/-- A falling conditional either executes its growth branch or skips it.
+This exposes the branch result without imposing a condition-evaluation premise. -/
+theorem ite_skip_fall_inv {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {cond : ExpHOL 64} {grow : ProgHOL 64}
+    (hr : evaluateHOLFiniteState s (.ite cond grow .skip) = (none, post)) :
+    evaluateHOLFiniteState s grow = (none, post) ∨ post = s := by
+  rw [evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · rw [evaluateHOLFiniteState_skip] at hr
+      exact Or.inr (Prod.mk.inj hr).2.symm
+    · exact Or.inl hr
+  · cases hr
+
+/-- Both outcomes of the capacity check preserve nonzero backing. The growth
+case obtains it from allocation; the skip case retains the entry fact. -/
+theorem lst_push_capacity_branch_fall (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l cap : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hb : memW s l.toNat ≠ 0)
+    (cond : ExpHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (.ite cond
+        (.decCall (ofString "np") .one (ofString "alloc")
+          [.panop .mul [.panop .mul
+            [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+          (.seq
+            (.call (some (none, none)) (ofString "memcpy")
+              [.var .local (ofString "np"),
+               .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+               .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+            (.seq
+              (.store (.op .add [.var .local (ofString "l"), .const 0])
+                (.var .local (ofString "np")))
+              (.store (.op .add [.var .local (ofString "l"), .const 16])
+                (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip) =
+      (none, post)) : memW post l.toNat ≠ 0 ∧
+        (∀ k, k ≠ ofString "np" → post.locals.lookup k = s.locals.lookup k) := by
+  rcases ite_skip_fall_inv hr with hg | rfl
+  · exact ⟨lst_push_alloc_branch_fall h s post l cap hc hA hl hcap hg,
+      fun k hk => lst_push_alloc_branch_lookup s post _ hg k hk⟩
+  · exact ⟨hb, fun _ _ => rfl⟩
+
+/-- A falling capacity branch supplies precisely the backing and local facts
+needed by the common tail. -/
+theorem lst_push_branch_to_tail {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (l n : BitVec 64) (v : ValueHOL 64)
+    (branch : ProgHOL 64) (hc : s.code = originalRuntimeCode)
+    (hbranch : evaluateHOLFiniteState s branch = (none, mid))
+    (hb : memW mid l.toNat ≠ 0)
+    (hl : mid.locals.lookup (ofString "l") = s.locals.lookup (ofString "l"))
+    (hn : mid.locals.lookup (ofString "n") = s.locals.lookup (ofString "n"))
+    (hsl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hsn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState s
+      (.seq branch
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  have hm := (evaluateHOLFiniteState_metadata s branch).1
+  rw [hbranch] at hm
+  rw [evaluateHOLFiniteState_seq_line780, hbranch] at hr
+  exact lst_push_tail_backing_nonzero mid post l n v (hm.trans hc)
+    (hl.trans hsl) (hn.trans hsn) hb hr
+
+/-- A conditional cannot return if neither arm can return. -/
+theorem ite_not_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cond : ExpHOL 64) (a b : ProgHOL 64) (v : ValueHOL 64)
+    (ha : (evaluateHOLFiniteState s a).1 ≠ some (.returned v))
+    (hb : (evaluateHOLFiniteState s b).1 ≠ some (.returned v)) :
+    (evaluateHOLFiniteState s (.ite cond a b)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_ite]
+  split
+  · split
+    · exact hb
+    · exact ha
+  · simp
+
+/-- The complete returned push suffix forces the capacity branch to fall
+through, then preserves its nonzero data word through the common tail. -/
+theorem lst_push_capacity_tail_returned (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq
+        (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul
+              [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.var .local (ofString "np"),
+                 .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                 .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq
+                (.store (.op .add [.var .local (ofString "l"), .const 0])
+                  (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  obtain ⟨mid, hm, _⟩ := seq_returned_of_not_returned (by
+    apply ite_not_returned
+    · apply dec_call_not_returned
+      intro a
+      apply seq_not_returned
+      · exact ignored_call_not_returned _ _ _ _
+      · intro b
+        apply seq_not_returned
+        · exact store_not_returned _ _ _ _
+        · intro c; exact store_not_returned _ _ _ _
+    · simp [evaluateHOLFiniteState_skip]) hr
+  obtain ⟨hbmid, hlocals⟩ := lst_push_capacity_branch_fall h s mid l cap hc hA hl hcap hb _ hm
+  exact lst_push_branch_to_tail s mid post l n v _ hc hm hbmid
+    (hlocals _ (by decide)) (hlocals _ (by decide)) hl hn hr
+
+/-- A returning word declaration exposes a word-valued initializer and the
+returned continuation; scope restoration does not change memory. -/
+theorem dec_word_returned_inv {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {x : MlS} {e : ExpHOL 64} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.dec x .one e cont) = (some (.returned v), post)) :
+    ∃ w : BitVec 64, ∃ mid,
+      evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont =
+        (some (.returned v), mid) ∧ post.memory = mid.memory := by
+  rw [evaluateHOLFiniteState_dec_total] at hr
+  dsimp only at hr
+  split at hr
+  · cases hr
+  · rename_i value he
+    split at hr
+    · rename_i hshape
+      have hw : ∃ w : BitVec 64, value = .val (.word w) := by
+        cases value with
+        | val z => cases z with
+          | word w => exact ⟨w, rfl⟩
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hshape
+      obtain ⟨w, rfl⟩ := hw
+      rcases he : evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont with ⟨r, mid⟩
+      rw [he] at hr
+      exact ⟨w, mid, by rw [← (Prod.mk.inj hr).1]; exact he,
+        congrArg (fun t => t.memory) (Prod.mk.inj hr).2.symm⟩
+    · cases hr
+
+/-- The entire concrete push body preserves a nonzero backing word. The two
+header reads are exposed from the returned execution, without extra evaluation
+or branch-selection premises. -/
+theorem lst_push_body_backing_nonzero (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_lst_push,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hr
+  obtain ⟨n, mid, hr, hm⟩ := dec_word_returned_inv hr
+  obtain ⟨cap, last, hr, hm'⟩ := dec_word_returned_inv hr
+  have hs := lst_push_capacity_tail_returned h
+    (setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s)) last l n cap v hc
+    ((arenaReady_with_locals s _ s.clock).mpr hA) (by
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hl,
+        show ofString "cap" ≠ ofString "l" by decide,
+        show ofString "n" ≠ ofString "l" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "cap" ≠ ofString "n" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hb hr
+  simpa only [memW, hm, hm'] using hs
 
 /-- A push may relocate either backing array. Preserve the outer header
 pointers, and allow each data word either to stay fixed or to become a fresh

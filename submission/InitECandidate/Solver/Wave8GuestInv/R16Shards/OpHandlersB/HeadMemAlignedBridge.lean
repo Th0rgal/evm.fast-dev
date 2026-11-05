@@ -6,6 +6,7 @@ import InitECandidate.Solver.GuestFrameMemKeep
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M28.ww_memzero
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M29.zv_memzero
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.U256WsSpecs
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChild
 
 /-! # `HeadMemAligned` as a frame-chain invariant through `run_frames`
 
@@ -8353,4 +8354,178 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
   exact hTs a hE hL hAr hF1
 
 end IcsRun
+
+theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev") ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev") := by
+  obtain ⟨_, S, _, hrest⟩ := hi
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
+  let e := globN s "ev"
+  let c := globN s "cur_cont"
+  have hhead := hFW _ (head_mem_evmChain s)
+  have heB := (hhead.1 (e, 280) (by simp [e])).1.2
+  have hcB := (hhead.1 (c, 104) (by simp [c])).1.2
+  dsimp only at heB hcB
+  have hbound : scratchEnd < 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+  have hneq (a : Nat) (ha : a < 2 ^ 64) (hne : a ≠ e) :
+      BitVec.ofNat 64 a ≠ BitVec.ofNat 64 e := by
+    intro hx
+    have hh := congrArg BitVec.toNat hx
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha,
+      Nat.mod_eq_of_lt (show e < 2 ^ 64 by omega)] at hh
+    exact hne hh
+  have hcs : evmChain s = (e, c) :: (evmChain s).tail := evmChain_cons s
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdc : Disj (e, 280) (c, 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | ht
+  · unfold Disj at hdc; dsimp only at hdc ⊢
+    refine ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+  · have hF := hFW ec (by rw [hcs]; exact List.mem_cons_of_mem _ ht)
+    have hrB := (hF.1 (ec.1, 280) (by simp)).1.2
+    have hkB := (hF.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hrB hkB
+    have hmem (i : Ivl) (hm : i ∈ frameObjects s ec) :
+        i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+      List.mem_flatten.mpr ⟨frameObjects s ec, List.mem_map_of_mem ht, hm⟩
+    have hd1 := hcross (e, 280) (by simp [frameObjects])
+      (ec.1, 280) (hmem _ (by simp [frameObjects]))
+    have hd2 := hcross (e, 280) (by simp [frameObjects])
+      (ec.2, 104) (hmem _ (by simp [frameObjects]))
+    unfold Disj at hd1 hd2; dsimp only at hd1 hd2
+    exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+
+/-- The concrete cleanup restores the saved frame-memory mark and preserves
+every chain alignment cell.  The only memory write is the parent's pc. -/
+theorem finish_child_cleanup_cells {F : Type} (t post : PanSemStateFiniteExact 64 F)
+    (hcode : t.code = originalRuntimeCode) (hi : EvmInv t)
+    (cm cmm e pc : BitVec 64) (v : ValueHOL 64)
+    (hcm : t.locals.lookup (ofString "child_mark") = some (.val (.word cm)))
+    (hcmm : t.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmm)))
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hpc : t.memory e = .word pc) (hdom : t.memaddrs e)
+    (hr : evaluateHOLFiniteState t EvmEkFk.fcCleanup = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree t post ∧
+    globN post "ev" = globN t "ev" ∧
+    globN post "frame_mem_ptr" = cmm.toNat ∧
+    globN post "scratch_ptr" = cm.toNat := by
+  have htail := Ret.apply (finish_child_tail t hcode cm cmm e pc hcm hcmm he hpc hdom) hr
+  obtain ⟨hg, hm, _, _⟩ := htail
+  have heAddr : BitVec.ofNat 64 (globN t "ev") = e := by simp [globN, he]
+  have hsafe := chain_cells_ne_head_pc t hi
+  rw [heAddr] at hsafe
+  have hcells : EvmEkFk.ChainCellsAgree t post := by
+    intro ec hec
+    obtain ⟨h24, h32, h40, h56⟩ := hsafe ec hec
+    have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e) : memW post a = memW t a := by
+      unfold memW
+      rw [hm, updW_ne _ _ _ _ ha]
+    exact ⟨hkeep _ h24, hkeep _ h32, hkeep _ h40, hkeep _ h56⟩
+  have hn1 : ofString "frame_mem_ptr" ≠ ofString "ev" := by decide
+  have hn2 : ofString "scratch_ptr" ≠ ofString "ev" := by decide
+  have hn3 : ofString "frame_mem_ptr" ≠ ofString "scratch_ptr" := by decide
+  refine ⟨hcells, ?_, ?_, ?_⟩ <;>
+    simp [globN, hg, HolFiniteMapExact.lookup_update, FUPDATE, hn1, hn2, hn3]
+
+/-! ## Create-finish prelude interface
+
+The frame-start/finish-child leaf is independent of this bridge.  Transport its
+chain invariant explicitly, so callers can use `CreateFinishSpecs` without
+identifying two separately recursive definitions by reduction.
+-/
+
+theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
+    ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    cases rest with
+    | nil => rfl
+    | cons b tail =>
+      exact and_congr Iff.rfl ih
+
+theorem headMemChainWF_iff_finishChild {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    HeadMemChainWF s ↔ EvmEkFk.HeadMemChainWF s := by
+  exact and_congr Iff.rfl (and_congr Iff.rfl (chainLinks_iff_finishChild _ _))
+
+theorem finishReadyA_iff_finishChild {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    FinishReadyA s ↔ EvmEkFk.FinishReadyA s := by
+  exact and_congr (and_congr Iff.rfl (headMemChainWF_iff_finishChild s)) Iff.rfl
+
+/-- Transport the independent finish-child leaf's memory contract into this bridge. -/
+theorem finishChildMemSpec_of_leaf (h : EvmEkFk.FinishChildMemSpec) :
+    FinishChildMemSpec := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt => ?_⟩
+  exact hr s hc ((finishReadyA_iff_finishChild s).mp hs) hex hnt
+
+/-- `FinishPost` is the single joint postcondition used by the finish-child
+body proof. Project its memory footprint without an aligned output assumption. -/
+theorem finishChildMemSpec_of_finishPost
+    (h : FunSpec FinishReadyA EvmEkFk.FinishPost (ofString "finish_child")) :
+    FinishChildMemSpec := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt hres => ?_⟩
+  obtain ⟨_, _, _, hchain, hcells, hev, hfmp⟩ := hr s hc hs hex hnt hres
+  exact ⟨hchain, hcells, hev, hfmp⟩
+
+/-- Project the unaligned contract from the same joint body postcondition. -/
+theorem finishChildSpecU_of_finishPost
+    (h : FunSpec FinishReady EvmEkFk.FinishPost (ofString "finish_child")) :
+    FinishChildSpecU := by
+  obtain ⟨ps, body, rt, hl, hr⟩ := h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt hres => ?_⟩
+  obtain ⟨hi, hlen, hgas, _⟩ := hr s hc hs hex hnt hres
+  exact ⟨hi, hlen, hgas⟩
+
+/-- One unaligned joint finish-child proof discharges both finish-child
+contracts required by the aligned `run_frames` bound. -/
+theorem gbody_run_frames_aligned_of_finishPost
+    (bf : TerminatingFunBoundedOn FinishReadyA (ofString "finish_child") K.«finish_child»)
+    (be : TerminatingFunBoundedOn GuestInv (ofString "frame_epilogue") K.«frame_epilogue»)
+    (bx : TerminatingFunBoundedOn GuestInv (ofString "frame_exception") K.«frame_exception»)
+    (bd : TerminatingFunBoundedOn EvmRunA (ofString "op_dispatch") K.«op_dispatch»)
+    (hf : FunSpec FinishReady EvmEkFk.FinishPost (ofString "finish_child"))
+    (hd : OpDispatchSpecA) :
+    TerminatingFunBoundedOn (fun s => EvmInv s ∧ HeadMemChainWF s)
+      (ofString "run_frames") K.«run_frames» := by
+  apply gbody_run_frames_aligned_fc bf be bx bd (finishChildSpecU_of_finishPost hf) _ hd
+  apply finishChildMemSpec_of_finishPost
+  obtain ⟨ps, body, rt, hl, hr⟩ := hf
+  exact ⟨ps, body, rt, hl, fun s hc hs hex hnt =>
+    hr s hc ⟨hs.1.1, hs.2.1, hs.2.2⟩ hex hnt⟩
+
+/-- The create-finish prelude preserves the aligned chain invariant whenever it
+falls through.  Its callee requirements are exactly `CreateFinishSpecs`. -/
+theorem fcPrelude_headMemChainWF (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel : EvmEkFk.PreludeRel s0 s1) (hAligned : HeadMemChainWF s0)
+    (hcode : s1.code = originalRuntimeCode)
+    (hfmp : globN s1 "frame_mem_ptr" = globN s0 "frame_mem_ptr")
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 ≠ some .timeOut)
+    (hflow : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 = none) :
+    HeadMemChainWF (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).2 := by
+  have hpost := (EvmEkFk.fcPrelude_step hCF hRel hnt).1 hflow
+  apply headMemChainWF_of_agree hAligned hpost.chain_eq hpost.cells
+  · have hh := congrArg List.head? hpost.chain_eq
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).1
+  · have hg := InitECandidate.Solver.GuestGlobalKeep.evaluate_keepsG
+      (ofString "frame_mem_ptr") InitECandidate.Solver.GuestFrameMemKeep.goodFrameMem
+      good_fmp_hgood EvmEkFk.fcPrelude (by kernel_rfl) s1 hcode
+    unfold globN
+    rw [hg]
+    exact hfmp
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge

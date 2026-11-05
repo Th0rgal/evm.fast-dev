@@ -11400,4 +11400,469 @@ theorem phase2_alloc_packing_live_family_bound (h : PtxCallees)
   · exact phase2_count_cases_alloc_live_family h buffers contents
   · exact phase2_packed_live_family_continuation_bound h buffers contents ht
 
+/-- The three caller-owned buffers already present when packed-key allocation starts. -/
+inductive PtxWarmBuffer where
+  | environment
+  | sender
+  | addresses
+
+def phase2_warm_buffer {F : Type} (s : PanSemStateFiniteExact 64 F) : PtxWarmBuffer → Ivl
+  | .environment => (locN s "te", 200)
+  | .sender => (locN s "sender", 24)
+  | .addresses => (locN s "al_addrs", (locN s "nal" + 1) * 8)
+
+/-- Save actual words, so the continuation can recover pointer-valued array entries. -/
+def phase2_saved_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : Nat) : BitVec 64 :=
+  match s.memory (BitVec.ofNat 64 p) with
+  | .word w => w
+
+theorem phase2_saved_word_value {F : Type} (s : PanSemStateFiniteExact 64 F) (p : Nat) :
+    (phase2_saved_word s p).toNat = memW s p := by
+  cases h : s.memory (BitVec.ofNat 64 p) with
+  | word w => rfl
+
+/-- Initializing a snapshot requires ownership, but no extra content hypothesis. -/
+theorem phase2_live_buffer_snapshot {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (buffer : Ivl)
+    (hi : Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+    (hd : IvlsDisj [buffer] (worldOwned s S Nd)) :
+    PtxLiveBufferAt s S Nd buffer (phase2_saved_word s) := by
+  refine ⟨hi, hd, ?_⟩
+  intro p _ _ _
+  exact (phase2_saved_word_value s p).symm
+
+/-- Concrete warm-state resources exported by allocation and packing. The reference
+state fixes the buffer addresses even while the loop modifies its local counters. -/
+def PtxWarmPacked {F₀ : Type} (before : PanSemStateFiniteExact 64 F₀)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (WorldOK s ∧ PtxPackedKeysReady s) ∧
+    ∀ i, PtxPackedLiveFrame (phase2_warm_buffer before i) (phase2_saved_word before) s
+
+theorem phase2_warm_packed_word {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxWarmPacked before s) (i : PtxWarmBuffer) (p : Nat)
+    (hlo : (phase2_warm_buffer before i).1 ≤ p)
+    (hhi : p + 8 ≤ (phase2_warm_buffer before i).1 + (phase2_warm_buffer before i).2)
+    (hal : p % 8 = 0) : memW s p = memW before p := by
+  obtain ⟨S, Nd, _, _, _, hb⟩ := (hp.2 i).1
+  exact (hb.2.2 p hlo hhi hal).trans (phase2_saved_word_value before p)
+
+/-- Instantiate the family continuation with the environment, sender, and address array. -/
+theorem phase2_alloc_packing_warm_bound (h : PtxCallees) {F₀ : Type}
+    (before : PanSemStateFiniteExact 64 F₀) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxWarmPacked before) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxAddressCountExit s ∧
+      ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        PtxLiveBufferAt s S Nd (phase2_warm_buffer before i) (phase2_saved_word before))
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]]
+        (.seq
+          (.dec (ofString "k") .one (.const 0)
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+                phase2_packed_source_outer_body))) tail))
+      (K.alloc + ((2 ^ 63 + 1) * ((2 ^ 63 + 1) *
+        ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) + 1) := by
+  exact phase2_alloc_packing_live_family_bound h (phase2_warm_buffer before)
+    (fun _ => phase2_saved_word before) ht
+
+/-- Counting retains the joint environment/address ownership witness in both cases. -/
+theorem phase2_count_exit_joint {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountExit s) : PtxAddressJoint s := by
+  rcases hp with hp | hp
+  · exact hp.1.1.1
+  · exact hp.1.1
+
+/-- The two buffers allocated in Phase 2 can be snapshotted directly at the cut.
+Sender ownership is supplied by the Phase 1 caller frame. -/
+theorem phase2_count_exit_warm_snapshots {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s)
+    (hs : ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "sender", 24)] (worldOwned s S Nd)) :
+    ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      PtxLiveBufferAt s S Nd (phase2_warm_buffer s i) (phase2_saved_word s) := by
+  have hj := phase2_count_exit_joint hp
+  have hr := phase2_count_exit_access_ready hp
+  intro i
+  cases i with
+  | environment =>
+    obtain ⟨S, Nd, hw, ht, _, hd⟩ := hj.2
+    exact ⟨S, Nd, hw, ht, phase2_live_buffer_snapshot s S Nd _ hr.1.1.2.2.1 hd⟩
+  | sender =>
+    obtain ⟨S, Nd, hw, ht, hd⟩ := hs
+    exact ⟨S, Nd, hw, ht, phase2_live_buffer_snapshot s S Nd _ hr.1.1.1.1.2.1 hd⟩
+  | addresses =>
+    obtain ⟨S, Nd, hw, ht, hd, _⟩ := hj.2
+    exact ⟨S, Nd, hw, ht, phase2_live_buffer_snapshot s S Nd _ hj.1.2.2.1 hd⟩
+
+/-- Recover any environment slot after packing from the concrete snapshot. -/
+theorem phase2_warm_packed_environment {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxWarmPacked before s) (hal : locN before "te" % 8 = 0)
+    (k : Nat) (hk : k < 25) :
+    memW s (locN before "te" + 8 * k) = memW before (locN before "te" + 8 * k) := by
+  apply phase2_warm_packed_word before s hp .environment
+  · simp [phase2_warm_buffer]
+  · simp only [phase2_warm_buffer]
+    omega
+  · simp [Nat.add_mod, Nat.mul_mod, hal]
+
+/-- Address entries, including the beneficiary at zero, survive packing verbatim. -/
+theorem phase2_warm_packed_address {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxWarmPacked before s) (hal : locN before "al_addrs" % 8 = 0)
+    (k : Nat) (hk : k ≤ locN before "nal") :
+    memW s (locN before "al_addrs" + 8 * k) =
+      memW before (locN before "al_addrs" + 8 * k) := by
+  apply phase2_warm_packed_word before s hp .addresses
+  · simp [phase2_warm_buffer]
+  · simp only [phase2_warm_buffer]
+    omega
+  · simp [Nat.add_mod, Nat.mul_mod, hal]
+
+/-- Select the snapshot at the actual count-exit state. Thus callers supply only
+the sender ownership frame, rather than three independent content invariants. -/
+theorem phase2_alloc_packing_warm_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : ∀ {F : Type} (before : PanSemStateFiniteExact 64 F),
+      PtxAddressCountExit before →
+      TerminatingProgBoundedOn (PtxWarmPacked before) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxAddressCountExit s ∧
+      ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "sender", 24)] (worldOwned s S Nd))
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]]
+        (.seq
+          (.dec (ofString "k") .one (.const 0)
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+                phase2_packed_source_outer_body))) tail))
+      (K.alloc + ((2 ^ 63 + 1) * ((2 ^ 63 + 1) *
+        ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) + 1) := by
+  intro F s hc hp
+  exact phase2_alloc_packing_warm_bound h s (ht s hp.1) s hc
+    ⟨hp.1, phase2_count_exit_warm_snapshots s hp.1 hp.2⟩
+
+/-- All three saved buffers have typed cells at the count exit. -/
+theorem phase2_count_exit_warm_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s) (i : PtxWarmBuffer) :
+    WordsOK s (phase2_warm_buffer s i) := by
+  have hj := phase2_count_exit_joint hp
+  have hr := phase2_count_exit_access_ready hp
+  cases i with
+  | environment => exact hr.1.1.2.2.2.2.1
+  | sender => exact hr.1.1.1.1.2.2.1
+  | addresses => exact hj.1.2.2.2.2.1
+
+/-- Packing retains the typed cells of a snapshot, even across state type parameters. -/
+theorem phase2_warm_packed_words {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) : WordsOK s (phase2_warm_buffer before i) := by
+  have hw := phase2_count_exit_warm_words before hb i
+  have hg : GuestInv before :=
+    (phase2_count_exit_access_ready hb).1.1.1.1.1.1.1.1.1
+  refine ⟨hw.1, hw.2.1, fun k hk => ?_⟩
+  obtain ⟨_, hd, _⟩ := hw.2.2 k hk
+  cases hm : s.memory (BitVec.ofNat 64 ((phase2_warm_buffer before i).1 + 8 * k)) with
+  | word w =>
+    refine ⟨w, ?_, hm⟩
+    rw [hp.1.1.1.1.memaddrs, ← hg.memaddrs]
+    exact hd
+
+/-- Recover placement, cell typing, and world separation together for a warm buffer.
+The ownership witness also contains the transaction and packed-key allocation. -/
+theorem phase2_warm_packed_buffer_ready {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) :
+    Inside (phase2_warm_buffer before i) InitE.sourceBase (globN s "heap_ptr") ∧
+    WordsOK s (phase2_warm_buffer before i) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8),
+        phase2_warm_buffer before i] (worldOwned s S Nd) := by
+  obtain ⟨S, Nd, hw, ht, hk, hi, hd, _⟩ := (hp.2 i).1
+  refine ⟨hi, phase2_warm_packed_words before s hb hp i, S, Nd, hw, ht, ?_⟩
+  intro j hj o ho
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+  rcases hj with rfl | rfl
+  · exact hk _ (by simp) o ho
+  · exact hd _ (by simp) o ho
+
+/-- Saved numeric words determine the actual memory cells on an aligned buffer.
+This converts the snapshot interface to the frame interface used by later calls. -/
+theorem phase2_warm_packed_unhit {F : Type}
+    (before s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) : IvlUnhit before s (phase2_warm_buffer before i) := by
+  have hw := phase2_count_exit_warm_words before hb i
+  intro a ha hh
+  have hlo : (phase2_warm_buffer before i).1 ≤ a.toNat := by
+    have := hw.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hhi : a.toNat + 8 ≤
+      (phase2_warm_buffer before i).1 + (phase2_warm_buffer before i).2 := by
+    have := hw.1
+    have := hw.2.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hm := phase2_warm_packed_word before s hp i a.toNat hlo hhi ha
+  simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] at hm
+  cases hs : s.memory a with
+  | word ws =>
+    cases hb' : before.memory a with
+    | word wb =>
+      have hsN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hs
+      have hbN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hb'
+      exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq (hsN.symm.trans (hm.trans hbN)))
+
+/-- Warm snapshots are independent of bookkeeping locals and the execution clock. -/
+theorem phase2_warm_packed_with_locals {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxWarmPacked before s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxWarmPacked before {s with locals := locals, clock := clock} := by
+  refine ⟨⟨localsFree_worldOK s locals clock hp.1.1,
+    phase2_packed_keys_with_locals s locals clock hp.1.2 hl⟩, ?_⟩
+  intro i
+  apply phase2_packed_live_frame_locals s locals clock _ _ (hp.2 i)
+  · exact locN_congr s locals clock "tx" (hl "tx" (by simp))
+  · exact locN_congr s locals clock "al_keys" (hl "al_keys" (by simp))
+  · exact locN_congr s locals clock "nkeys" (hl "nkeys" (by simp))
+
+/-- Read-only classification calls in the suffix retain all three warm snapshots. -/
+theorem phase2_warm_packed_readonly_resume {F₀ : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (name fn : MlS) (args : List (ExpHOL 64))
+    (hr : ReadOnlyFn fn)
+    (ha : name ≠ ofString "al_keys") (hn : name ≠ ofString "nkeys")
+    (ht : name ≠ ofString "tx") :
+    DecCallResumeOn (PtxWarmPacked before) (PtxWarmPacked before) name fn args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup hr s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hstate := hh (Or.inl ⟨v, rfl⟩)
+  dsimp only at hstate
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [hstate]; rfl
+  have hp' : PtxWarmPacked before {post with locals := s.locals} := by
+    rw [hrestore]
+    exact phase2_warm_packed_with_locals before s s.locals post.clock hp (fun _ _ => rfl)
+  apply phase2_warm_packed_with_locals before _ _ _ hp'
+  intro n hmem
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hmem
+  rcases hmem with rfl | rfl | rfl <;>
+    simp [HolFiniteMapExact.update, FUPDATE, ha, hn, ht]
+
+/-- Allocation in the suffix preserves a saved caller buffer and its ownership witness. -/
+theorem phase2_alloc_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  refine ⟨?_, S', Nd', ?_, hbuf'⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+
+/-- A suffix allocation preserves an arbitrary family of saved buffers. -/
+theorem phase2_alloc_live_family_resume (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  constructor
+  · have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+      (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+    rw [hb] at hh
+    have step := hh (Or.inl ⟨v, rfl⟩)
+    obtain ⟨S, hw⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hw
+    obtain ⟨S', Nd', _, hw', _⟩ := step.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+    exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · intro i
+    exact (phase2_alloc_live_buffer_resume h (buffers i) (contents i) name args
+      s vs body callee ret v post hc ⟨hp.1, hp.2 i⟩ he hl hb).2
+
+/-- Compose a suffix allocation with a continuation that consumes all saved buffers. -/
+theorem phase2_alloc_live_family_bound (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64)) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i)) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+      PtxLiveBufferAt s S Nd (buffers i) (contents i)) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1
+  · exact phase2_alloc_live_family_resume h buffers contents name args
+  · exact ht
+
+/-- Stores to a separate caller allocation preserve a saved buffer's contents.
+The same world witness is retained, allowing subsequent stores to reuse it. -/
+theorem phase2_live_buffer_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (hE : TxEnv s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd) {buffer blk : Ivl} {contents : Nat → BitVec 64}
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    (hsep : Disj buffer blk) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    WorldTypedWith {s with memory := mem} S Nd ∧ TxEnv {s with memory := mem} ∧
+      PtxLiveBufferAt {s with memory := mem} S Nd buffer contents := by
+  obtain ⟨hw, how, he⟩ := store_outside_worldOwned hA hE hW hd hx hin hm
+  refine ⟨hw, he, hb.1, ?_, ?_⟩
+  · rw [how]; exact hb.2.1
+  · intro p hlo hhi hal
+    have hbound := (ivl_allocated_bound hA.2 (Or.inl hb.1)).2
+    have hp : p < 2 ^ 64 := by omega
+    have hne : BitVec.ofNat 64 p ≠ x := by
+      intro heq
+      have hp' : p = x.toNat := by
+        have hh := congrArg BitVec.toNat heq
+        simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp] using hh
+      have hs := disj_of_inside_right hin hsep
+      rcases hs with hs | hs | hs | hs <;> omega
+    change memW {s with memory := mem} p = (contents p).toNat
+    change (match mem (BitVec.ofNat 64 p) with | .word w => w.toNat) = (contents p).toNat
+    rw [hm _ hne]
+    exact hb.2.2 p hlo hhi hal
+
+/-- Message allocation retains a saved buffer and separates the new message from
+the same world witness. This is the ownership cut for the message-field stores. -/
+theorem phase2_msg_new_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents ∧
+        IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_msg_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, hr⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  obtain ⟨w, rfl, hd⟩ := hr v rfl
+  refine ⟨?_, S', Nd', ?_, hbuf', ?_⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+  · change IvlsDisj [(locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m", 176)] (worldOwned post S' Nd')
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hd
+
+/-- The message allocator supplies its full initialized heap extent. -/
+theorem phase2_msg_new_geometry (h : PtxCallees) :
+    DecCallResumeOn WorldOK
+      (fun s =>
+        (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+        WordsOK s (locN s "m", 176) ∧
+        ∀ k, k < 22 → memW s (locN s "m" + 8 * k) = 0)
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_msg_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, hz⟩ := hr v rfl
+  have hm : locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  refine ⟨⟨w, ?_⟩, ?_, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · rw [hm]
+    exact ⟨hp.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · rw [hm]; exact hf.2.2
+  · rw [hm]; exact hz
+
+/-- Fresh message storage is disjoint from every previously allocated caller buffer. -/
+theorem phase2_msg_new_buffer_separation (h : PtxCallees) (buffer : Ivl) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => Disj buffer (locN s "m", 176))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_msg_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, _⟩ := hr v rfl
+  have hm : locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  rw [hm]
+  exact Or.inr (Or.inr (Or.inl (hp.2.2.trans hf.2.1.1)))
+
+/-- Joint cut after message allocation: the message is initialized and owned,
+and its stores cannot hit the saved caller buffer. -/
+theorem phase2_msg_new_live_ready (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+        WordsOK s (locN s "m", 176) ∧
+        (∀ k, k < 22 → memW s (locN s "m" + 8 * k) = 0) ∧
+        Disj buffer (locN s "m", 176) ∧
+        ∃ S Nd, WorldTypedWith s S Nd ∧ PtxLiveBufferAt s S Nd buffer contents ∧
+          IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hg := phase2_msg_new_geometry h s vs body callee ret v post hc hp.1 he hl hb
+  have hw := phase2_msg_new_live_buffer_resume h buffer contents
+    s vs body callee ret v post hc hp he hl hb
+  obtain ⟨S, Nd, _, hbuf⟩ := hp.2
+  have hd := phase2_msg_new_buffer_separation h buffer
+    s vs body callee ret v post hc ⟨hp.1, hbuf.1⟩ he hl hb
+  exact ⟨hw.1, hg.1, hg.2.1, hg.2.2.1, hg.2.2.2, hd, hw.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
