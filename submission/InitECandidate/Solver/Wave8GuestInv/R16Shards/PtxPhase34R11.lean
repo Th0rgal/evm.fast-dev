@@ -4636,6 +4636,20 @@ theorem stableCopyLoopInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rw [hz]; exact Nat.zero_le _
   · simpa only [hz] using hstore
 
+/-- Combine initialized operands with the spatial and prefix contracts to
+obtain the full loop head, including the empty-source case. -/
+theorem stableCopyLoopInv_of_spatial_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hs : StableCopySpatial s) (n p q : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hq : s.locals.lookup (ofString "stable_lp") = some (.val (.word q)))
+    (hd : q.toNat = memW s (locN s "stable_logs")) : StableCopyLoopInv s := by
+  apply stableCopyLoopInv_zero s hp n hi hn
+  intro hpos
+  refine ⟨hp, ?_, ⟨0, p, q, hi, hl, hq, hd⟩, hs⟩
+  simpa [locN, hi] using hpos
+
 /-- Assigning zero to the counter establishes the full loop contract when its
 post-assignment allocation and separation obligations have been supplied. -/
 theorem hoare_stableCopy_init_loop :
