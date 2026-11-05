@@ -12959,4 +12959,49 @@ theorem log_growth_frame_post_from_new_record_g09 {F : Type}
       hfields hheaderWords hallocated hmsg hlogPost
   exact ⟨htyped, hframe, hlist, by rw [hlogs, howned]⟩
 
+/-- Message ownership is stable under log growth: typed world cells retain all
+world exclusions, and only newly introduced frame objects need fresh separation. -/
+theorem msgOwned_of_log_growth_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {m : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (hglobals : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hobjects : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects post ec,
+      o ∈ frameObjects s ec ∨ Disj (m, 176) o)
+    (hmsg : MsgOwned s S m) : MsgOwned post S m := by
+  obtain ⟨hal, hw, hdt, hdf, hdfo, Nd_m, hTr_m, hdj_m⟩ := hmsg
+  obtain ⟨hTr_int, hsub_int⟩ := Wave8Contracts.M23.triesTypedWith_inter hWT.2.2.2 hTr_m
+  let Ndi := Nd.filter (fun n => decide (n ∈ Nd_m))
+  have hsub : ∀ n ∈ Ndi, n ∈ Nd := fun n hn => (List.mem_filter.1 hn).1
+  have hcell_i : SameTypedCells s post S Ndi := sameTypedCells_sub_nd_g09 hsub hcell
+  have hnodes := nodeExtents_eq hTr_int.1 hcell_i
+  have hWT_i : WorldTypedWith s S Ndi := ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr_int⟩
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hgrows.1 hgrows.2 hfixed
+  have htries_i : TriesTypedWith post S Ndi := by
+    obtain ⟨hpost, _⟩ := worldTypedWith_congr_w1 hAs hAp hgrows.1 hgrows.2
+      hglobals hcell_i hWT_i ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩
+    exact hpost.2.2.2
+  refine ⟨hgrows.allocated hal, (wordsOK_congr_of_dom_g09 hdom).2 hw,
+    ?_, ?_, ?_, Ndi, htries_i, ?_⟩
+  · intro t ht i hi
+    rw [hfoot t ht] at hi
+    exact hdt t ht i hi
+  · intro j hj
+    rw [hfixed] at hj
+    exact hdf j hj
+  · rw [hchain]
+    intro ec hec o ho
+    rcases hobjects ec hec o ho with hold | hnew
+    · exact hdfo ec hec o hold
+    · exact hnew
+  · intro o ho j hj
+    rw [hnodes] at hj
+    exact hdj_m o ho j (hsub_int j hj).2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
