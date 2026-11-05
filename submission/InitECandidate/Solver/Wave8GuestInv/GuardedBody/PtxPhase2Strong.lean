@@ -4940,4 +4940,54 @@ theorem phase2_packed_keys_input_separation {F : Type}
   · intro hn
     exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
 
+/-- Both inner counters can be incremented without wrapping a machine word. -/
+theorem phase2_packed_copy_counter_bounds {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    locN s "k" + 1 < 2 ^ 64 ∧ locN s "j" + 1 < 2 ^ 64 := by
+  obtain ⟨S, Nd, _, hT, _⟩ := hp.1.2.2.2.2
+  have ht : txAccessSlots s (locN s "tx") < 2 ^ 32 := hT.1.2.2.2.2.2.1
+  have hk := phase2_packed_copy_index_bound hp
+  have hn := hp.2.1
+  have hj := hp.2.2.2.2
+  constructor <;> omega
+
+/-- The concrete counter words agree with the natural successor indices. -/
+theorem phase2_packed_copy_counter_successors {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    (BitVec.ofNat 64 (locN s "k") + 1).toNat = locN s "k" + 1 ∧
+    (BitVec.ofNat 64 (locN s "j") + 1).toNat = locN s "j" + 1 := by
+  obtain ⟨hk, hj⟩ := phase2_packed_copy_counter_bounds hp
+  constructor
+  · rw [BitVec.toNat_add, BitVec.toNat_ofNat]
+    change (locN s "k" % 2 ^ 64 + 1) % 2 ^ 64 = locN s "k" + 1
+    rw [Nat.mod_eq_of_lt (show locN s "k" < 2 ^ 64 by omega), Nat.mod_eq_of_lt hk]
+  · rw [BitVec.toNat_add, BitVec.toNat_ofNat]
+    change (locN s "j" % 2 ^ 64 + 1) % 2 ^ 64 = locN s "j" + 1
+    rw [Nat.mod_eq_of_lt (show locN s "j" < 2 ^ 64 by omega), Nat.mod_eq_of_lt hj]
+
+/-- The flattened copy counter remains below the signed-comparison boundary. -/
+theorem phase2_packed_copy_counter_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) : locN s "k" + 1 < 2 ^ 63 := by
+  have hk := phase2_packed_copy_index_bound hp
+  obtain ⟨S, Nd, _, ht, _⟩ := hp.1.2.2.2.2
+  have hn : txAccessSlots s (locN s "tx") < 2 ^ 32 := ht.1.2.2.2.2.2.1
+  rw [hp.2.1] at hk
+  omega
+
+/-- World-owned objects are separate from both writes of a guarded packed copy. -/
+theorem phase2_packed_copy_world_destinations {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      ∀ input ∈ worldOwned s S Nd,
+        Disj input (locN s "al_keys" + 52 * locN s "k", 20) ∧
+        Disj input (locN s "al_keys" + 52 * locN s "k" + 20, 32) := by
+  obtain ⟨S, Nd, hW, hT, hd⟩ := hp.1.2.2.2.2
+  refine ⟨S, Nd, hW, hT, ?_⟩
+  intro input hin
+  have hsep := hd (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+    (by simp) input hin
+  have hr := phase2_packed_copy_index_destinations hp
+  exact ⟨disj_of_inside_right hr.1 (disj_symm hsep),
+    disj_of_inside_right hr.2 (disj_symm hsep)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
