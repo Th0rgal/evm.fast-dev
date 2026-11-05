@@ -1240,6 +1240,12 @@ theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
 def LogsWorldOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
   ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd logs
 
+theorem logsWorldOwned_with_locals {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) {logs : Nat}
+    (h : LogsWorldOwned s logs) : LogsWorldOwned {s with locals := locals, clock := k} logs := by
+  obtain ⟨S, Nd, hw, ho⟩ := h
+  exact ⟨S, Nd, (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hw, ho⟩
+
 theorem logsWorldOwned_scratchStep {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
     {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
@@ -1271,7 +1277,7 @@ theorem logsWorldOwned_scratchStep {F : Type}
 
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
-    LogsDisjFixed s (locN s "logs")
+    LogsDisjFixed s (locN s "logs") ∧ LogsWorldOwned s (locN s "logs")
 
 theorem lst_new_receiptReady_resume (h : PtxCallees) :
     DecCallResumeOn TxAfterCallStrong Phase4ReceiptReady (ofString "logs")
@@ -1294,7 +1300,7 @@ theorem lst_new_receiptReady_resume (h : PtxCallees) :
   have hs := hw (Or.inl ⟨v, rfl⟩)
   obtain ⟨S, Nd, hWT, _, _⟩ := hp.2.2.2.2
   have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
-  obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+  obtain ⟨S', Nd', _, hWT', _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
     (by intro i hi; cases hi)
   obtain ⟨w, hv, hd⟩ := hret hmul v rfl
   have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
@@ -1312,12 +1318,13 @@ theorem lst_new_receiptReady_resume (h : PtxCallees) :
     change IvlsDisj [(w.toNat, 24), (memW post w.toNat, locN ent "esz" * locN ent "cap")]
       (worldOwned post S' Nd') at hd
     simpa only [he8, hc4] using hd
-  obtain ⟨hL, _, hD⟩ := fresh_empty_logs (s := ent) hp.1.1.1.2 hh hb32 hd32 hn
+  obtain ⟨hL, hO, hD⟩ := fresh_empty_logs (s := ent) hp.1.1.1.2 hh hb32 hd32 hn
   have hout := lst_new_txAfterCallStrong_resume h s vs body callee ret v post hc hl hr hp
-  refine ⟨hout, ?_, ?_⟩
+  refine ⟨hout, ?_, ?_, ?_⟩
   all_goals rw [hv]; simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, if_pos rfl]
   · exact (R13Shards.logsListOK_with_locals post _ post.clock w.toNat).mpr hL
   · exact hD
+  · exact logsWorldOwned_with_locals _ _ ⟨S', Nd', hWT', hO⟩
 
 def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧
@@ -1406,7 +1413,12 @@ theorem phase4NullLogs_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     · apply Hoare.ite
       · apply Hoare.mono (P' := TxAfterCallStrong) _ (fun _ hp => hp.1.1)
         exact Hoare.callLocal_resume (lst_new_receiptReady_resume h)
-      · exact Hoare.skip (fun _ hp _ => ⟨hp.1.1, hp.1.2.2⟩)
+      · apply Hoare.skip
+        intro F s hp _
+        refine ⟨hp.1.1, hp.1.2.2.1, hp.1.2.2.2, ?_⟩
+        rw [hp.1.2.1]
+        obtain ⟨S, Nd, hw, _, ho⟩ := hp.1.1.2.2.2.2
+        exact ⟨S, Nd, hw, ho⟩
       · exact fun _ _ hr => absurd hr (by simp)
   intro F s hc hp
   simpa only [Nat.max_zero] using hb s hc hp
@@ -1415,10 +1427,11 @@ theorem localsOnly_phase4ReceiptReady : LocalsOnly ["index", "out", "logs"] Phas
   intro F s locals k hl hp
   have hg := locN_congr s locals k "logs" (hl "logs" (by simp))
   refine ⟨txAfterCallStrong_with_locals s locals k
-    (hl "index" (by simp)) (hl "out" (by simp)) hp.1, ?_, ?_⟩
+    (hl "index" (by simp)) (hl "out" (by simp)) hp.1, ?_, ?_, ?_⟩
   · rw [hg]
     exact (R13Shards.logsListOK_with_locals s locals k _).mpr hp.2.1
-  · rw [hg]; exact hp.2.2
+  · rw [hg]; exact hp.2.2.1
+  · rw [hg]; exact logsWorldOwned_with_locals locals k hp.2.2.2
 
 theorem phase4Succeeded_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4ReceiptReady tail b) :
@@ -1486,7 +1499,7 @@ theorem encode_receipt_output_resume (h : PtxCallees) {F : Type}
     exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
   have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
       (locN (callEntryStateHOLFinite s callee) "logs") := by
-    rw [hg]; exact hp.2.2
+    rw [hg]; exact hp.2.2.1
   have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
     ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
   rw [hr] at hw
@@ -1522,7 +1535,7 @@ theorem encode_receipt_result (h : PtxCallees) {F : Type}
     exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
   have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
       (locN (callEntryStateHOLFinite s callee) "logs") := by
-    rw [hg]; exact hp.2.2
+    rw [hg]; exact hp.2.2.1
   have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
     ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
   rw [hr] at hw
