@@ -159,6 +159,49 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 namespace PtxP34
 open PtxP1
 
+/-- Spatial form of backing transport: preserving the block-output record and
+the two list headers preserves both levels of pointer lookup. -/
+theorem txBacking_of_unhit_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (h : TxBacking s) (hbo : globN post "bo" = globN s "bo")
+    (hbo8 : globN s "bo" % 8 = 0)
+    (hbob : globN s "bo" + 88 ≤ 2 ^ 64)
+    (hbu : IvlUnhit s post (globN s "bo", 88))
+    (hl8 : ∀ k ∈ ([40, 72] : List Nat), memW s (globN s "bo" + k) % 8 = 0)
+    (hlb : ∀ k ∈ ([40, 72] : List Nat), memW s (globN s "bo" + k) + 24 ≤ 2 ^ 64)
+    (hlu : ∀ k ∈ ([40, 72] : List Nat),
+      IvlUnhit s post (memW s (globN s "bo" + k), 24)) :
+    TxBacking post := by
+  apply txBacking_of_header_words h hbo
+  · intro k hk
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    apply memW_eq_of_ivlUnhit hbu
+    · rcases hk' with rfl | rfl <;> omega
+    · exact hbob
+    · rcases hk' with rfl | rfl <;> dsimp only <;> omega
+  · intro k hk
+    exact memW_eq_of_ivlUnhit (hlu k hk) (hl8 k hk) (hlb k hk)
+      ⟨le_rfl, by omega⟩
+
+/-- The no-growth push writes only the length word at `l+8`. Its data word at
+`l` is unchanged, with no assumption about the returned slot. -/
+theorem backing_nonzero_of_length_store {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {l : Nat}
+    (hn : memW s l ≠ 0) (hb : l + 24 ≤ 2 ^ 64)
+    (hm : ∀ a : BitVec 64, ¬ CellHits a.toNat (l + 8, 8) →
+      post.memory a = s.memory a) :
+    memW post l ≠ 0 := by
+  have he : memW post l = memW s l := by
+    have hl : l < 2 ^ 64 := by omega
+    have he := hm (BitVec.ofNat 64 l) (by
+      unfold CellHits
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hl]
+      dsimp only
+      omega)
+    unfold memW
+    rw [he]
+  rwa [he]
+
 /-- `lst_new(8,16)` supplies a nonzero data pointer because its backing block
 starts at or above the positive heap frontier. -/
 theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
@@ -166,6 +209,48 @@ theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
   have hlo := hA.1.trans hf.2.1.1
   have hbase : 0 < sourceBase := by decide
   omega
+
+/-- The growth branch stores the old heap frontier in the list's data word.
+This is the `hnp_eq`/`hl0_post` pair established by the concrete push proof. -/
+theorem backing_nonzero_of_grow {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {l np : Nat}
+    (hA : ArenaOK s) (hnp : np = globN s "heap_ptr")
+    (hdata : memW post l = np) : memW post l ≠ 0 := by
+  have hbase : 0 < sourceBase := by decide
+  have hlo := hA.1
+  rw [hdata, hnp]
+  omega
+
+/-- A push may relocate either backing array. Preserve the outer header
+pointers, and allow each data word either to stay fixed or to become a fresh
+heap pointer. This also records preservation of the list not being pushed. -/
+theorem txBacking_of_kept_or_grown_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (h : TxBacking s)
+    (hbo : globN post "bo" = globN s "bo")
+    (hslots : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k))
+    (hdata : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) ∨
+      globN s "heap_ptr" ≤ memW post (memW s (globN s "bo" + k))) :
+    TxBacking post := by
+  have hn : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) ≠ 0 := by
+    intro k hk
+    rcases hdata k hk with he | hg
+    · rw [he]
+      have hk' : k = 40 ∨ k = 72 := by simpa using hk
+      rcases hk' with rfl | rfl
+      · exact h.1
+      · exact h.2
+    · have hlo := hA.1.trans hg
+      have hbase : 0 < sourceBase := by decide
+      omega
+  constructor
+  · rw [hbo, hslots 40 (by simp)]
+    exact hn 40 (by simp)
+  · rw [hbo, hslots 72 (by simp)]
+    exact hn 72 (by simp)
 
 /-- Initialization bridge for the two `execute_block` list allocations. The
 freshness witnesses may have different allocation-entry states. -/
