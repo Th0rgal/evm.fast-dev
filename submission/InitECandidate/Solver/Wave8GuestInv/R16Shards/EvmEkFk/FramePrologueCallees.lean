@@ -5575,6 +5575,59 @@ theorem transfer_log_append_returned_step {F : Type}
     hdisj (transfer_logOwnedIvls_pairwise haddr htp htn hdp hdn hlt htd)
     hdisj_header hdisj_array hcall heval_ev heval_log
 
+private theorem transfer_call0_no_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64)) (u : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).1 ≠ some (.returned u) := by
+  rw [evaluateHOLFiniteState_call]
+  rcases evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | _
+  · simp
+  · dsimp only
+    rcases lookupCodeHOLFinite s.code.lookup fn _ with _ | ⟨_, _, _⟩
+    · simp
+    · dsimp only; split
+      · simp
+      · rcases evaluateHOLFiniteState _ _ with ⟨res, _⟩
+        rcases res with _ | r
+        · simp
+        · cases r with
+          | returned _ => dsimp only; split <;> simp
+          | _ => simp
+
+theorem transfer_log_append_return_tail {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hstep : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none →
+      EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s
+        (.call (some (none, none)) (ofString "log_append")
+          [.var .global (ofString "ev"), .var .local (ofString "log")])).2)
+    (hres : ∃ v, (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+        (.return (.const 0)))).1 = some (.returned v)) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+        (.return (.const 0)))).2 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hres ⊢
+  rcases hc : evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")]) with ⟨r, mid⟩
+  simp only [hc] at hres ⊢
+  cases r with
+  | none =>
+    have hs := hstep (by rw [hc])
+    rw [hc] at hs
+    simp only [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact,
+      sizeOfShapeWithContextHOL] at hres ⊢
+    exact ⟨⟨localsFree_evmInv _ _ _ hs.1.1, hs.1.2.1, hs.1.2.2.1,
+      (evmChain_with_locals _ _ _).trans hs.1.2.2.2⟩, hs.2⟩
+  | some r =>
+    obtain ⟨v, hv⟩ := hres
+    simp only at hv
+    have hret : r = .returned v := Option.some.inj hv
+    exact False.elim (transfer_call0_no_return s _ _ v (by rw [hc, hret]))
+
 end EmitTransferLogStep
 
 /-! ## Precompile dispatch composition -/
