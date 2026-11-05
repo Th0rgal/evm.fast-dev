@@ -144,4 +144,36 @@ theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simpa only [hkeep "enc" (by decide)] using hprefix.2.2.1
   · simpa only [hkeep "intrinsic" (by decide)] using hprefix.2.2.2
 
+/-- Combine independent world and local-shape postconditions for a statement. -/
+theorem phase1_hoare_frame_shapes
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {p : ProgHOL 64}
+    (hw : Hoare P p (fun r s => r = none → Q s))
+    (hs : Hoare PtxPhase2LocalShapes p (fun r s => r = none → PtxPhase2LocalShapes s)) :
+    Hoare (fun s => P s ∧ PtxPhase2LocalShapes s) p
+      (fun r s => r = none → Q s ∧ PtxPhase2LocalShapes s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hw.run s hc hp.1 hnt hr, hs.run s hc hp.2 hnt hr⟩
+
+theorem phase1_call0_shapes (fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare PtxPhase2LocalShapes (.call (some (none, none)) fn args)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ptxPhase2LocalShapes_restore s post hp
+
+theorem phase1_call_balance_shapes (fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare PtxPhase2LocalShapes (.call (some (some (.local, ofString "bal"), none)) fn args)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.callLocal_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ptxPhase2LocalShapes_set_other _ (ptxPhase2LocalShapes_restore s post hp)
+    (ofString "bal") v (by decide)
+
+/-- The final Phase 1 stage plus retained shapes is exactly the strengthened
+entry needed at the Phase 2 boundary. -/
+theorem phase1_stage4_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hw : R16Shards.PtxP1.StageP 4 s) (hs : PtxPhase2LocalShapes s) :
+    PtxValidatedStrong s :=
+  ⟨R16Shards.PtxP1.stage4_validated hw, hs⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
