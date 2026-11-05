@@ -7919,4 +7919,31 @@ theorem phase2_packed_inner_signed_bounds {F : Type}
   have hj := hp.2.2.2.1
   constructor <;> omega
 
+/-- Interpret the concrete record-count comparison using the current record pointer. -/
+theorem phase2_packed_inner_guard_eval {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (w : BitVec 64)
+    (hp : PtxPackedIteration s)
+    (ha : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+    (he : evalAt s (.cmp .less (.var .local (ofString "j"))
+      (.load .one (.op .add [.var .local (ofString "acc"), .const 16]))) =
+      some (.val (.word w))) :
+    w ≠ 0 ↔ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  obtain ⟨j, hj⟩ := hp.2.2.2.1
+  have hb := phase2_packed_inner_signed_bounds hp.2.1.1
+  cases hl : evalAt s (.load .one (.op .add [.var .local (ofString "acc"), .const 16])) with
+  | none =>
+    unfold evalAt at hl
+    simp only [evalHOLExact] at hl
+    simp only [evalAt, evalHOLExact, hj, hl] at he
+    simp at he
+  | some v =>
+    obtain ⟨n, rfl, hn⟩ := phase2_count_load_local s "acc" 16 v hl
+    have hn' : n.toNat = memW s
+        (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+      simpa only [ha, show (16 : BitVec 64).toNat = 16 by decide] using hn
+    have hjb : j.toNat < 2 ^ 63 := by simpa [locN, hj] using hb.1
+    have hnb : n.toNat < 2 ^ 63 := by rw [hn']; exact hb.2
+    simpa only [hn'] using phase2_packed_guard_word_compare s _ j n w hj hl hjb hnb he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
