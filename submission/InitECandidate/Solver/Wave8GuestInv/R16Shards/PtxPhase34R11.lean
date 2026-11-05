@@ -3263,6 +3263,50 @@ def LstPushBackingNonzero : Prop :=
   FunSpec BoListArg (fun s r post => ∀ v, r = some (.returned v) →
     memW post (locN s "l") ≠ 0) (ofString "lst_push")
 
+/-- The concrete push discharges the backing contract under the authorized
+nonzero-entry guard. -/
+theorem lst_push_backing_nonzero_strong (h : PtxCallees) :
+    FunSpec BoListArgStrong (fun s r post => ∀ v, r = some (.returned v) →
+      memW post (locN s "l") ≠ 0) (ofString "lst_push") := by
+  have hlookup : originalRuntimeCode.lookup (ofString "lst_push") =
+      some ([(ofString "l", .one), (ofString "esz", .one)],
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1, .one) := by
+    exact lookup_lst_push
+  refine ⟨_, _, _, hlookup, ?_⟩
+  intro F s hc hp hvalid hnt v hv
+  obtain ⟨values, hvalid⟩ := hvalid
+  have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup (ofString "lst_push")
+    values _ s.locals _ hvalid
+  simp only [lookupCodeHOLExact, hlookup] at hx
+  rcases values with _ | ⟨vl, _ | ⟨ve, _ | ⟨_, _⟩⟩⟩
+  · simp at hx
+  · simp at hx
+  swap
+  · simp at hx
+  · rcases vl with ⟨⟨lw⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    rcases ve with ⟨⟨ew⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+    obtain ⟨_, hlocals⟩ := hx
+    have hl : s.locals.lookup (ofString "l") = some (.val (.word lw)) := by
+      have he := congrFun hlocals (ofString "l")
+      simpa [FUPDATE, show ofString "esz" ≠ ofString "l" by decide,
+        show ofString "l" ≠ ofString "esz" by decide] using he.symm
+    have hrun : evaluateHOLFiniteState s
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+        (some (.returned v), (evaluateHOLFiniteState s
+          (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1).2) :=
+      Prod.ext hv rfl
+    simpa only [locN, hl] using lst_push_body_backing_nonzero h s _ lw v hc hp.1.1 hl
+      (by simpa only [locN, hl] using hp.2.2) hrun
+
 theorem resume_lst_push_logSlot (h : PtxCallees) (hnonzero : LstPushBackingNonzero) :
     DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
@@ -3285,6 +3329,34 @@ theorem resume_lst_push_logSlot (h : PtxCallees) (hnonzero : LstPushBackingNonze
   apply lst_push_logSlot_resume h s vs body callee ret v post hc hp ha hl hr
   rw [hbo, hm]
   simpa only [harg.2] using hn'
+
+/-- At a backing-aware log cut the concrete push supplies its own nonzero
+result, rather than requiring the unguarded backing contract. -/
+theorem resume_lst_push_logSlot_backing (h : PtxCallees) :
+    DecCallResumeOn (fun s => Phase4LogPointersReady s ∧ TxBacking s) Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp.1.1.1.1.1 ha hl
+  have hstrong : BoListArgStrong (callEntryStateHOLFinite s callee) := by
+    refine ⟨harg.1.1, harg.1, ?_⟩
+    rw [harg.2]
+    exact hp.2.1
+  have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong h) s hc vs body callee ret hl
+    hstrong (by rw [hr]; simp)
+  rw [hr] at hn
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.1.1.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  apply lst_push_logSlot_resume h s vs body callee ret v post hc hp.1 ha hl hr
+  rw [hbo, hm]
+  simpa only [harg.2] using hn v rfl
 
 theorem hoare_logSlot_store (src : ExpHOL 64)
     (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
@@ -8832,6 +8904,48 @@ theorem resume_lst_push_owned_receiptSlot (h : PtxCallees)
     exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "rl" ≠ ofString "stable_logs" by decide] using hw⟩
 
+/-- The final receipt push obtains nonzero backing from the concrete strong
+push theorem at a backing-aware cut. -/
+theorem resume_lst_push_owned_receiptSlot_backing (h : PtxCallees) :
+    DecCallResumeOn (fun s => (PtxReceiptsDone s ∧
+      LogsWorldOwned s (locN s "stable_logs") ∧ locN s "stable_logs" ≠ 0 ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      TxBacking s) Phase4ReceiptSlotReady (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo72_arg s vs body callee ret hc hp.1.1.1 ha hl
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  obtain ⟨hdone, hown⟩ := ptxReceiptsDone_heapStep hs' hp.1.1 hp.1.2.1 hp.1.2.2.1
+  have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong h) s hc vs body callee ret hl
+    (lst_push_bo72_arg_backing s vs body callee ret hc hp.1.1.1 hp.2 ha hl)
+    (by rw [hr]; simp)
+  rw [hr] at hn
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  have hback : memW post (memW post (globN post "bo" + 72)) ≠ 0 := by
+    rw [hbo, hm]
+    simpa only [harg.2] using hn v rfl
+  obtain ⟨q, rfl, _, hin⟩ := lst_push_bo72_slot_result h s vs body callee ret v post hc hp.1.1.1 ha hl hr
+  have he : locN (setVarHOLFinite (ofString "rl") (.val (.word q))
+      {post with locals := s.locals}) "stable_logs" = locN s "stable_logs" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide]
+  refine ⟨ptxReceiptsDone_set_rl _ _ hdone, ?_, ?_, hback, ?_, ?_⟩
+  · rw [he]; exact hp.1.2.2.1
+  · rw [he]
+    exact logsWorldOwned_with_locals _ post.clock hown
+  · simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+  · obtain ⟨w, hw⟩ := hp.1.2.2.2
+    exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide] using hw⟩
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
@@ -8893,6 +9007,37 @@ theorem phase4ReceiptPush_owned_cut (h : PtxCallees)
     h.fb_lst_push _ _ _
     (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1)
     (resume_lst_push_owned_receiptSlot h hnonzero) hs s hc hp
+
+/-- Backing-aware receipts close the final push/store suffix without an
+unguarded push-backing hypothesis. -/
+theorem phase4ReceiptPush_backing_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+        TxBacking s)
+      (spinePlug 2 (spineAt 137 ptxCode) tail) (K.lst_push + b + 1) := by
+  have hs : TerminatingProgBoundedOn Phase4ReceiptSlotReady
+      (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_store u (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))
+      exact ⟨by omega, by omega⟩) hoare_receiptSlot_store htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  have he : spinePlug 2 (spineAt 137 ptxCode) tail =
+      .decCall (ofString "rl") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8]
+        (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.decCall_on
+    h.fb_lst_push _ _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1.1)
+    (resume_lst_push_owned_receiptSlot_backing h) hs s hc hp
 
 /-- The receipt prefix, log pushing, allocation, and stable copying compose. -/
 theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)

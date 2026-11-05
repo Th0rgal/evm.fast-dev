@@ -10849,4 +10849,188 @@ theorem log_append_slot_store_exact_g09 {F : Type}
     · intro a ha; simp [memW, hmem, ha]
   · simp [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom] at hraw
 
+/-- Exact no-growth execution: only the length cell is changed and the old
+length determines the returned slot. Return clears locals before the enclosing
+declarations restore their saved bindings. -/
+theorem lst_push_no_growth_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l esz n cap p : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm0 : s.memory l = .word p) (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hlt : n.toNat < cap.toNat) (hne : l ≠ l + 8#64) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_lst_push) =
+      (some (.returned (.val (.word (p + n * esz)))),
+        {s with
+          locals := ((HolFiniteMapExact.empty.resVarEq
+            (ofString "cap", s.locals.lookup (ofString "cap"))).resVarEq
+            (ofString "n", s.locals.lookup (ofString "n"))),
+          memory := fun a => if a = l + 8#64 then .word (n + 1#64) else s.memory a}) := by
+  have hb : sourceFnBody Guest.Software.guestFn_lst_push =
+    .dec (ofString "n") .one (.load .one (.op .add [.var .local (ofString "l"), .const 8]))
+      (.dec (ofString "cap") .one (.load .one (.op .add [.var .local (ofString "l"), .const 16]))
+        (.seq (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq (.call (some (none, none)) (ofString "memcpy")
+              [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+            (.op .add [.var .local (ofString "n"), .const 1]))
+            (.return (.op .add [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+              .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))))) := rfl
+  rw [hb]
+  have hcn : ofString "cap" ≠ ofString "n" := by decide
+  have hnl : ofString "n" ≠ ofString "l" := by decide
+  have hcl : ofString "cap" ≠ ofString "l" := by decide
+  have hne' : ofString "n" ≠ ofString "esz" := by decide
+  have hce : ofString "cap" ≠ ofString "esz" := by decide
+  have hcmp : ¬ cap ≤ n := by exact Nat.not_le_of_lt hlt
+  have hlt' : n < cap := hlt
+  have hload : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "l"), .const 8])) = some (.val (.word n)) := by
+    simp [evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp,
+      memLoadHOLExact, hd8, hm8]
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  rw [hload]
+  simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte]
+  have hloadcap : @evalHOLExact 64 F _
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s).toExact
+      (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "l"), .const 16])) = some (.val (.word cap)) := by
+    simp [evalHOLExact, evalListHOLExact, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+      FUPDATE, hnl, Ne.symm hnl, hl, valueIsWord, valueWord, wordOpHOL, wordOp,
+      memLoadHOLExact, hd16, hm16]
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  erw [hloadcap]
+  simp only [shapeOfHOLExact, shapeEqHOL, ↓reduceIte]
+  simp only [
+    evaluateHOLFiniteState_dec_total, evaluateHOLFiniteState_seq_line780,
+    evaluateHOLFiniteState_ite, evaluateHOLFiniteState_skip,
+    evaluateHOLFiniteState_store, evaluateHOLFiniteState_return,
+    evalHOLExact, evalListHOLExact, hl, he, hd0, hd8, hd16, hm0, hm8, hm16,
+    setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact,
+    hlt, hne, hcn, hnl, hcl, hne', hce,
+    Ne.symm hcn, Ne.symm hnl, Ne.symm hcl, Ne.symm hne', Ne.symm hce,
+    shapeOfHOLExact, shapeEqHOL, hcmp, flattenHOL, panMemStoresHOL, panMemStoreHOL,
+    List.all, List.map, Option.map, List.foldr, Bool.and_self, BitVec.add_zero,
+    ↓reduceIte]
+  simp [hd8, hm8, hd16, hm16, hd0, hm0, shapeOfHOLExact, shapeEqHOL,
+    Compiler.Encoders.Asm.wordCmpHOL, hcmp, hlt', hcn, Ne.symm hcn]
+  simp [evalHOLExact, evalListHOLExact, hl, he, hd0, hd8, hm0, hm8,
+    setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact,
+    hcn, hnl, hcl, hne', hce, Ne.symm hcn, Ne.symm hnl, Ne.symm hcl,
+    Ne.symm hne', Ne.symm hce, flattenHOL, panMemStoresHOL, panMemStoreHOL,
+    evaluateHOLFiniteState_return, hne, hlt', panOpHOL,
+    shapeOfHOLExact, sizeOfShapeWithContextHOL, emptyLocalsHOLFinite]
+  rfl
+
+/-- The common length increment and slot-return tail, valid after either branch. -/
+theorem lst_push_finish_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l esz n p : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64))
+    (hm0 : s.memory l = .word p) (hne : l ≠ l + 8#64) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+        (.return (.op .add [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))) =
+      (some (.returned (.val (.word (p + n * esz)))),
+        {s with
+          locals := HolFiniteMapExact.empty
+          memory := fun a => if a = l + 8#64 then .word (n + 1#64) else s.memory a}) := by
+  simp only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, he, hn, valueIsWord, valueWord, wordOpHOL, wordOp,
+    List.all, List.map, List.foldr, Option.map, BitVec.add_zero, Bool.and_self, ↓reduceIte]
+  simp [flattenHOL, panMemStoresHOL, panMemStoreHOL, hd8, evaluateHOLFiniteState_return,
+    evalHOLExact, evalListHOLExact, hl, he, hn, valueIsWord, valueWord, wordOpHOL, wordOp,
+    memLoadHOLExact, hd0, hm0, hne, panOpHOL, shapeOfHOLExact,
+    sizeOfShapeWithContextHOL, emptyLocalsHOLFinite, FUPDATE]
+  rfl
+
+/-- Exact header installation after allocation and copying in the growth branch. -/
+theorem lst_push_growth_header_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l np cap : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hd0 : s.memaddrs l) (hd16 : s.memaddrs (l + 16#64)) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+        (.store (.op .add [.var .local (ofString "l"), .const 16])
+          (.panop .mul [.var .local (ofString "cap"), .const 2]))) =
+      (none, {s with memory := fun a => if a = l + 16#64 then .word (cap * 2#64)
+        else if a = l then .word np else s.memory a}) := by
+  simp only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evalHOLExact, evalListHOLExact, hl, hp, hc, valueIsWord, valueWord, wordOpHOL, wordOp,
+    List.all, List.map, List.foldr, Option.map, BitVec.add_zero, Bool.and_self, ↓reduceIte,
+    flattenHOL, panMemStoresHOL, panMemStoreHOL, hd0, hd16, panOpHOL, FUPDATE]
+  simp [BitVec.add_zero, hd0, hd16, evalHOLExact, evalListHOLExact, hl, hp, hc,
+    valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL, flattenHOL,
+    panMemStoresHOL, panMemStoreHOL, FUPDATE]
+
+/-- Complete post-copy growth tail: install the buffer and doubled capacity,
+increment the original length, and return the new buffer's insertion slot. -/
+theorem lst_push_after_copy_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l np cap n esz : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hne8 : l ≠ l + 8#64) (hne16 : l ≠ l + 16#64) :
+    let header : ProgHOL 64 :=
+      .seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+        (.store (.op .add [.var .local (ofString "l"), .const 16])
+          (.panop .mul [.var .local (ofString "cap"), .const 2]))
+    let finish : ProgHOL 64 :=
+      .seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+        (.return (.op .add [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))
+    evaluateHOLFiniteState s (.seq header finish) =
+      (some (.returned (.val (.word (np + n * esz)))),
+        {s with
+          locals := HolFiniteMapExact.empty
+          memory := fun a => if a = l + 8#64 then .word (n + 1#64)
+            else if a = l + 16#64 then .word (cap * 2#64)
+            else if a = l then .word np else s.memory a}) := by
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780,
+    lst_push_growth_header_exact_g09 s l np cap hl hp hc hd0 hd16]
+  dsimp only
+  exact lst_push_finish_exact_g09 _ l esz n np hl he hn hd0 hd8
+    (by simp [hne16]) hne8
+
+/-- Concrete final store and return in `log_append`. -/
+theorem log_append_store_return_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (slot log : BitVec 64)
+    (hs : s.locals.lookup (ofString "slot") = some (.val (.word slot)))
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hd : s.memaddrs slot) :
+    evaluateHOLFiniteState s
+      (.seq (.store (.var .local (ofString "slot")) (.var .local (ofString "log")))
+        (.return (.const 0))) =
+      (some (.returned (.val (.word 0))),
+        {s with
+          locals := HolFiniteMapExact.empty
+          memory := fun a => if a = slot then .word log else s.memory a}) := by
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store,
+    evaluateHOLFiniteState_return, evalHOLExact, hs, hl, flattenHOL,
+    panMemStoresHOL, panMemStoreHOL, hd, FUPDATE, shapeOfHOLExact,
+    sizeOfShapeWithContextHOL, emptyLocalsHOLFinite]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
