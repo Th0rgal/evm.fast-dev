@@ -681,4 +681,31 @@ theorem phase1_sub_balance_shapes (h : PtxCallees) (args : List (ExpHOL 64)) :
   · exact Hoare.callLocal_resume (R16Shards.PtxP1.resume_ro_stage h.ro_u256_sub (by decide) _)
   · exact phase1_call_balance_shapes _ _
 
+theorem phase1_set_balance_shapes (h : PtxCallees) (args : List (ExpHOL 64)) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (none, none)) (ofString "set_account_balance") args)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact R16Shards.PtxP1.hoare_call_scratch_stage h.wk_set_account_balance
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) _
+  · exact phase1_call0_shapes _ _
+
+theorem phase1_set_balance_tail_strong (h : PtxCallees) (args : List (ExpHOL 64))
+    {tail : ProgHOL 64} {b : Nat} (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (none, none)) (ofString "set_account_balance") args) (.seq .skip tail))
+      ((K.set_account_balance + 1) + (0 + b)) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_set_account_balance none args s hc hp.1.1.1.1.1.1
+  · exact phase1_set_balance_shapes h args
+  · apply seq_bound_trans (Q := PtxValidatedStrong)
+    · intro F s hc hp
+      exact R16Shards.PtxP1.bound_of_clock (P := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+        (fun s => R16Shards.PtxP1.clock_skip s) s hc hp
+    · exact Hoare.skip (fun _ hp _ => phase1_stage4_strong hp.1 hp.2)
+    · exact htail
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
