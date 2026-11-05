@@ -10740,7 +10740,8 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
     (heff : ByteRegionEffect s post Rl)
     (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
     (hsys : globN post "vm_system_address" = globN s "vm_system_address")
-    (hdisj : ∀ x ∈ Rl, ∀ i ∈ frameObjects s ec, Disj x i) :
+    (hdisj : ∀ x ∈ Rl, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      Disj x (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40)) :
     ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
       let log := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
       LogEntryOK post log ∧ logOwnedIvls post log = logOwnedIvls s log := by
@@ -10767,8 +10768,49 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
       have hlimit : heapLimit ≤ 2 ^ 64 := by decide
       omega
     exact memW_eq_of_frameDisj_g09 hA.1.2.1 heff hhi hlog_ok.1.1
-      hk_bounds.2 hk_bounds.1 (fun x hx => hdisj x hx _ hlog_mem)
+      hk_bounds.2 hk_bounds.1 (fun x hx => hdisj x hx i hi)
   exact ⟨logEntryOK_of_record_agree_g09 heff.memaddrs hheap hrecord hlog_ok,
     logOwnedIvls_of_record_agree_g09 hsys hrecord⟩
+
+/-- Semantic append postcondition, including preservation of every pre-existing
+entry and the exact extension of the frame's owned log intervals. -/
+theorem log_append_post_of_frame_effect_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    {Rl : List Ivl} {log : Nat}
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (heff : ByteRegionEffect s post Rl)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hdisj : ∀ x ∈ Rl, ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      Disj x (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40))
+    (hheader : memW post (ec.1 + 88) = memW s (ec.1 + 88))
+    (hwords : WordsOK post (memW s (ec.1 + 88), 24))
+    (hallocated : Allocated post (memW s (ec.1 + 88), 24))
+    (hlen : memW post (memW s (ec.1 + 88) + 8) =
+      memW s (memW s (ec.1 + 88) + 8) + 1)
+    (hcap : memW s (memW s (ec.1 + 88) + 8) + 1 ≤
+      memW post (memW s (ec.1 + 88) + 16))
+    (hold : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      WordAt post (memW post (memW s (ec.1 + 88)) + 8 * i) ∧
+      memW post (memW post (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i))
+    (hslot : WordAt post (memW post (memW s (ec.1 + 88)) +
+      8 * memW s (memW s (ec.1 + 88) + 8)))
+    (hstore : memW post (memW post (memW s (ec.1 + 88)) +
+      8 * memW s (memW s (ec.1 + 88) + 8)) = log)
+    (hlog : LogEntryOK post log) :
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log := by
+  have hpres := log_entries_preserved_of_frame_effect_g09 hA hFW heff hheap hsys hdisj
+  constructor
+  · rw [hheader]
+    apply logsListOK_append_g09 hwords hallocated hlen
+      (frameWF_logs_cap_bounds hA.2 hFW).2.2.2.1 hcap
+      (fun i hi => ⟨(hold i hi).1, (hold i hi).2, (hpres i hi).1⟩)
+      hslot hstore hlog
+  · apply frameLogObjects_append_g09 hheader hlen _ hstore
+    intro i hi
+    rw [(hold i hi).2]
+    exact (hpres i hi).2
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
