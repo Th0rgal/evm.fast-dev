@@ -2562,4 +2562,296 @@ theorem hoare_prepare_dispatch_delegated_stores (gw : List String) (hp : Nat)
   intro F s v _ _ hv
   exact ⟨1, (Option.some.inj hv).symm⟩
 
+/-! ## Resuming loop rule for authorization processing -/
+
+/-- A loop whose body preserves `P` on normal and resuming exits preserves `P`
+on those exits too. `break` and `continue` are excluded explicitly, as they are
+not covered by `Fall`. -/
+theorem Hoare.while_fall {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : Hoare (fun s => P s ∧ CondTrue cond s) body (Fall P))
+    (hcontrol : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s →
+      (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      (evaluateHOLFiniteState s body).1 ≠ some .continue) :
+    Hoare P (.while cond body) (Fall P) := by
+  refine ⟨fun {F} s hcode hP hnt hr => ?_⟩
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → P st →
+      (evaluateHOLFiniteState st (.while cond body)).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState st (.while cond body)).1 = none ∨
+        Resumes (evaluateHOLFiniteState st (.while cond body)).1) →
+      P (evaluateHOLFiniteState st (.while cond body)).2 from
+    this s.clock s rfl hcode hP hnt hr
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hPs hnt hr
+    rw [evaluateHOLFiniteState_while_total] at hnt hr ⊢
+    split at hnt
+    · rename_i w hw
+      simp only [hw] at hr ⊢
+      split at hnt
+      · rename_i hwnz
+        simp only [if_pos hwnz] at hr ⊢
+        split at hnt
+        · simp at hnt
+        · rename_i hnz
+          simp only [if_neg hnz] at hr ⊢
+          dsimp only at hnt
+          rw [fixClockHOLFinite_evaluateState] at hnt hr ⊢
+          have hPd := hdec st hPs
+          have hct : CondTrue cond (decClockHOLFinite st) := by
+            obtain ⟨_, hw', hwnz'⟩ := loopActive_decClock (s := st) ⟨w, hw, hwnz⟩
+            exact ⟨_, hw', hwnz'⟩
+          have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hctrl := hcontrol (decClockHOLFinite st) hPd
+          rcases hb : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hb] at hnt hr hmeta hclk hctrl
+          have hmid (hntb : r ≠ some .timeOut) (hrb : r = none ∨ Resumes r) : P mid := by
+            have hp := hbody.run (decClockHOLFinite st) hc ⟨hPd, hct⟩
+              (by rw [hb]; exact hntb)
+            rw [hb] at hp
+            exact hp hrb
+          cases r with
+          | none =>
+            exact ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hmeta.trans hc) (hmid (by simp) (Or.inl rfl)) hnt hr
+          | some r =>
+            cases r with
+            | «break» => exact (hctrl.1 rfl).elim
+            | «continue» => exact (hctrl.2 rfl).elim
+            | timeOut => simp at hnt
+            | _ => exact hmid (by simp) hr
+      · rename_i hz
+        simpa only [if_neg hz] using hPs
+    · rename_i hbad
+      simp only [hbad] at hr ⊢
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+
+/-- Loading the owned message pointer establishes the common body invariant of
+`set_delegation` and `prepare_dispatch`, retaining the original step origin. -/
+theorem d0Pre_msg_init (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (hP : EvmMsgReady s ∧ StepFrom gw hp G ch s)
+    (hv : ev s (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) = some v) :
+    D0Pre gw hp G ch (setVarHOLFinite (ofString "msg") v s) := by
+  obtain ⟨m, rfl, hm⟩ := dec_msg_init s hP.1 v hv
+  refine ⟨⟨localsFree_evmMsgReady s _ _ hP.1,
+    localsFree_stepFrom gw hp G ch s _ _ hP.2⟩, m, ?_, hm⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Common message-pointer binder for the two depth-zero callees. The body's
+postcondition is locals-free, so leaving the scope restores the caller's locals. -/
+theorem hoare_dec_msg_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (body : ProgHOL 64)
+    (hbody : Hoare (D0Pre gw hp G ch) body
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+      (.dec (ofString "msg") .one
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) body)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.dec_fall (P' := D0Pre gw hp G ch) ?_ hbody ?_
+  · intro F s v hP hv
+    exact d0Pre_msg_init gw hp G ch s v hP hv
+  · intro F s locals k hP
+    exact ⟨localsFree_evmMsgReady s locals k hP.1,
+      localsFree_stepFrom gw hp G ch s locals k hP.2⟩
+
+/-- The source authorization loop contains no escaping loop-control statements.
+The syntactic checks avoid a separate semantic side proof at every loop entry. -/
+theorem Hoare.while_fall_checked {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : Hoare (fun s => P s ∧ CondTrue cond s) body (Fall P))
+    (hbreak : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hcontinue : noTopContinue body = true) :
+    Hoare P (.while cond body) (Fall P) :=
+  Hoare.while_fall hdec hbody (fun s _ =>
+    ⟨InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hbreak s,
+      evaluate_noTopContinue body hcontinue s⟩)
+
+theorem lookup_set_delegation :
+    originalRuntimeCode.lookup (ofString "set_delegation") =
+      some ([], sourceFnBody Guest.Software.guestFn_set_delegation, .one) :=
+  lookup_of_guestAst_getElem 575 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_set_delegation) rfl
+
+theorem lookup_prepare_dispatch :
+    originalRuntimeCode.lookup (ofString "prepare_dispatch") =
+      some ([], sourceFnBody Guest.Software.guestFn_prepare_dispatch, .one) :=
+  lookup_of_guestAst_getElem 576 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_prepare_dispatch) rfl
+
+/-- Convert a body proof carrying the entry heap, globals and chain into the
+callee's exact `EvmKeeps` contract. -/
+theorem evmKeeps_of_stepFrom_body {fname : MlS} {params : List (MlS × ShapeHOL)}
+    {body : ProgHOL 64} {ret : ShapeHOL} (gw : List String)
+    (hlookup : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) body
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    EvmKeeps EvmMsgReady gw fname := by
+  refine ⟨params, body, ret, hlookup, fun s hc hP _ hnt hr => ?_⟩
+  have h := (hbody (globN s "heap_ptr") s.globals.lookup (evmChain s)).run s hc
+    ⟨hP, stepFrom_refl gw s (evmInv_of_evmMsgReady s hP)⟩ hnt (Or.inr hr)
+  exact (evmStep_iff_stepFrom gw s _).2 h.2
+
+theorem ek_set_delegation_of_body
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s)
+        (sourceFnBody Guest.Software.guestFn_set_delegation)
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s))) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "set_delegation") :=
+  evmKeeps_of_stepFrom_body _ lookup_set_delegation hbody
+
+theorem ek_prepare_dispatch_of_body
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s)
+        (sourceFnBody Guest.Software.guestFn_prepare_dispatch)
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s))) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "prepare_dispatch") :=
+  evmKeeps_of_stepFrom_body _ lookup_prepare_dispatch hbody
+
+/-- Local assignments in dispatch retain the owned message and step origin. -/
+theorem hoare_assign_d0_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (name : MlS)
+    (hne : name ≠ ofString "msg") (source : ExpHOL 64)
+    (L L' : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hlocal : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      L s.locals → ev s source = some v → L' (setVarHOLFinite name v s).locals) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.assign .local name source) (Fall (fun s => D0Pre gw hp G ch s ∧ L' s.locals)) := by
+  apply Hoare.assign
+  · intro F s v hP hv _
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, hlocal s v hP.2 hv⟩
+    simp only [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update]
+    simp [FUPDATE, hne]
+  · intro F s _ hr
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+
+/-- An assignment cannot resume, so sequencing it needs no implication from
+the intermediate local predicate to the final one. -/
+theorem Hoare.seq_assign_fall {P R Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name : MlS} {source : ExpHOL 64} {tail : ProgHOL 64}
+    (ha : Hoare P (.assign .local name source) (Fall R))
+    (ht : Hoare R tail (Fall Q)) :
+    Hoare P (.seq (.assign .local name source) tail) (Fall Q) := by
+  refine Hoare.seq (R := R) ?_ ht
+  refine ⟨fun {F} s hc hP hnt => ?_⟩
+  have h := ha.run s hc hP hnt
+  refine ⟨fun hn => h (Or.inl hn), fun hn hr => ?_⟩
+  have hnr : ¬ Resumes (evaluateHOLFiniteState s (.assign .local name source)).1 := by
+    rw [evaluateHOLFiniteState_assign]
+    repeat' split
+    all_goals first | exact not_resumes_error | rintro (⟨_, h⟩ | ⟨_, _, h, _⟩) <;> cases h
+  rcases hr with hr | hr
+  · exact (hn hr).elim
+  · exact (hnr hr).elim
+
+/-- The delegated-code branch's final four instructions: unpack the returned
+code pair, mark delegation and record the copied address. Both code words are
+retained for the subsequent common dispatch tail. -/
+theorem hoare_prepare_dispatch_delegated_finish (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)) ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))) := by
+  let L0 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr))
+  let L1 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr)) ∧
+    l.lookup (ofString "code") = some (.val (.word code))
+  let L2 : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun l =>
+    l.lookup (ofString "code") = some (.val (.word code)) ∧
+    l.lookup (ofString "code_n") = some (.val (.word code_n)) ∧
+    l.lookup (ofString "daddr") = some (.val (.word daddr))
+  have hcd : ofString "code" ≠ ofString "dcode" := by decide
+  have hca : ofString "code" ≠ ofString "daddr" := by decide
+  have hnc : ofString "code_n" ≠ ofString "code" := by decide
+  have hna : ofString "code_n" ≠ ofString "daddr" := by decide
+  refine Hoare.seq_assign_fall
+    (hoare_assign_d0_step gw hp G ch (ofString "code") (by decide) _ L0 L1 ?_) ?_
+  · intro F s v hL hv
+    have hv' : v = .val (.word code) := by
+      simpa [ev, evalHOLExact, hL.1] using hv.symm
+    subst v
+    dsimp [L1]
+    simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hcd, hca, L0] using
+      (show L0 s.locals ∧ True from ⟨hL, trivial⟩)
+  · refine Hoare.seq_assign_fall
+      (hoare_assign_d0_step gw hp G ch (ofString "code_n") (by decide) _ L1 L2 ?_)
+      ?_
+    · intro F s v hL hv
+      have hv' : v = .val (.word code_n) := by
+        simpa [ev, evalHOLExact, hL.1] using hv.symm
+      subst v
+      dsimp [L2]
+      simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hnc, hna] using
+        (show s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+          s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) from ⟨hL.2.2, hL.2.1⟩)
+    · exact Hoare.seq_fall'
+        (hoare_store_msg_word_step_with gw hp G ch 168 (by decide) (.const 1) L2
+          (fun _ v _ _ hv => ⟨1, (Option.some.inj hv).symm⟩))
+        (hoare_store_msg_local_step gw hp G ch 104 (by decide) (ofString "daddr") daddr L2
+          (fun _ h => h.2.2)) (fun _ h => h)
+
+/-- After finishing the delegated branch, the common message-code stores
+retain the code locals needed by the head-frame update. -/
+theorem hoare_prepare_dispatch_delegated_msg_tail (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq
+        (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+          (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+              (.store (.op .add [.var .local (ofString "msg"), .const 104])
+                (.var .local (ofString "daddr"))))))
+        (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112])
+            (.var .local (ofString "code")))
+          (.store (.op .add [.var .local (ofString "msg"), .const 120])
+            (.var .local (ofString "code_n")))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))) := by
+  have hfinish := hoare_prepare_dispatch_delegated_finish gw hp G ch code code_n daddr
+  have hfinish' := Hoare.weaken (Q' := Fall (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))))
+    hfinish (fun _ _ h hr => let h' := h hr; ⟨h'.1, h'.2.1, h'.2.2.1⟩)
+  exact Hoare.seq_fall' hfinish'
+    (hoare_prepare_dispatch_msg_stores gw hp G ch code code_n) (fun _ h => h)
+
+/-- Reassociate a verified sequence to the right-associated source AST. -/
+theorem Hoare.seq_assoc_fall
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {a b c : ProgHOL 64}
+    (h : Hoare P (.seq (.seq a b) c) (Fall Q)) :
+    Hoare P (.seq a (.seq b c)) (Fall Q) := by
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have heq := srd_eval_seq_assoc s a b c
+  rw [← heq] at hnt ⊢
+  exact h.run s hc hp hnt
+
 end HeadStore
