@@ -7441,4 +7441,20 @@ theorem phase2_packed_ready_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F)
   obtain ⟨S, Nd, hw, _, _⟩ := hp.2.2.2.2
   exact ⟨ha, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩
 
+/-- Copy postconditions recover the complete precondition of the following packed call. -/
+theorem phase2_packed_next_call_pre {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (ha : ArenaReady { post with locals := s.locals })
+    (hp : PtxPackedSeparatedCopy { post with locals := s.locals })
+    (hk : ∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hg : GlobalsKept [] s { post with locals := s.locals })
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    let out := { post with locals := s.locals }
+    WorldOK out ∧ PtxPackedSeparatedCopy out ∧
+      (∃ k : BitVec 64, out.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN out "heap_ptr" ≤ 2 ^ 64 := by
+  refine ⟨phase2_packed_ready_worldOK _ ha hp.1.1, hp, hk, ?_⟩
+  rw [phase2_copy_globals_heap_eq s _ hg]
+  exact hb
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
