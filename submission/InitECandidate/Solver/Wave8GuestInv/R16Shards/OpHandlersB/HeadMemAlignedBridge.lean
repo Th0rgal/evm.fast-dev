@@ -8608,34 +8608,39 @@ theorem pc_add_return_aligned {F : Type} (s : PanSemStateFiniteExact 64 F)
       EvmInvA post ∧ evmChain post = evmChain s ∧
       R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
       EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals) := by
+  refine Ret.seq_call00 fun values body callee ret v post hargs hl hr => ?_
+  have hv : values = [.val (.word (1#64))] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact] using hargs.symm
+  subst values
+  have hl0 := pan_one_word_lookup s.code.lookup (ofString "pc_add") (ofString "n")
+    _ (1#64) (by rw [hc]; exact lookup_pc_add)
+  rw [hl0] at hl
+  obtain ⟨rfl, rfl, rfl⟩ := Option.some.inj hl
   let ce := callEntryStateHOLFinite s
     (HolFiniteMapExact.empty.update (ofString "n", .val (.word (1#64))))
-  have hbody : Ret ce (sourceFnBody Guest.Software.guestFn_pc_add)
-      (fun _ post => EvmInvA post ∧ evmChain post = evmChain s ∧
-        R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR s ∧
-        EvmEkFk.ChainCellsAgree s post ∧ post.globals = s.globals) := by
-    intro v hr
-    generalize hpost : (evaluateHOLFiniteState ce (sourceFnBody Guest.Software.guestFn_pc_add)).2 = post
-    have hrun : evaluateHOLFiniteState ce (sourceFnBody Guest.Software.guestFn_pc_add) =
-        (some (.returned v), post) := Prod.ext hr hpost
-    have hh := pc_add_body_aligned ce post (localsFree_evmInvA s _ _ hi) hc e pc 1 v
-      (by simp [ce, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
-      he hp hd
-      (by
-        refine ⟨[.val (.word (1#64))], ?_⟩
-        exact pan_one_word_lookup originalRuntimeCode.lookup (ofString "pc_add")
-          (ofString "n") _ 1 lookup_pc_add) hrun
-    obtain ⟨hI, hch, hR, hcells, hg⟩ := hh
-    obtain ⟨_, eR, _, _⟩ := R11Shards.OpDispatchSpec.evm_congr (s := s) (t := ce) rfl rfl
-    have eCh : evmChain ce = evmChain s :=
-      R11Shards.OpDispatchSpec.evmChain_congr (s := s) (t := ce) rfl rfl
-    refine ⟨hI, hch.trans eCh, hR.trans_eq eR.symm, ?_, hg⟩
-    intro ec hec
-    exact hcells ec (eCh.symm ▸ hec)
-  refine Ret.seq_call1W hc lookup_pc_add (by simp [ev, evalHOLExact]) _ hbody ?_
-  rintro v post ⟨hI, hch, hR, hcells, hg⟩
+  obtain ⟨hI, hch, hR, hcells, hg⟩ := pc_add_body_aligned ce post
+    (localsFree_evmInvA s _ _ hi) hc e pc 1 v
+    (by simp [ce, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    he hp hd
+    ⟨[.val (.word (1#64))], pan_one_word_lookup originalRuntimeCode.lookup
+      (ofString "pc_add") (ofString "n") _ 1 lookup_pc_add⟩ hr
+  have hch0 : evmChain ce = evmChain s :=
+    R11Shards.OpDispatchSpec.evmChain_congr (s := s) (t := ce) rfl rfl
+  have hR0 : R11Shards.OpDispatchSpec.evmR ce = R11Shards.OpDispatchSpec.evmR s :=
+    (R11Shards.OpDispatchSpec.evm_congr (s := s) (t := ce) rfl rfl).2.1
+  have hchRest : evmChain (emptyLocalsHOLFinite { post with locals := s.locals }) = evmChain post :=
+    R11Shards.OpDispatchSpec.evmChain_congr (s := post)
+      (t := emptyLocalsHOLFinite { post with locals := s.locals }) rfl rfl
+  have hRRest : R11Shards.OpDispatchSpec.evmR (emptyLocalsHOLFinite { post with locals := s.locals }) =
+      R11Shards.OpDispatchSpec.evmR post :=
+    (R11Shards.OpDispatchSpec.evm_congr (s := post)
+      (t := emptyLocalsHOLFinite { post with locals := s.locals }) rfl rfl).2.1
   refine Ret.ret fun _ _ => ?_
-  exact ⟨localsFree_evmInvA post _ _ hI, hch, hR, hcells, hg⟩
+  refine ⟨localsFree_evmInvA post _ _ hI, ?_, ?_, ?_, hg⟩
+  · exact hchRest.trans (hch.trans hch0)
+  · exact hRRest.le.trans (hR.trans_eq hR0)
+  · intro ec hec
+    exact hcells ec (hch0.symm ▸ hec)
 
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
