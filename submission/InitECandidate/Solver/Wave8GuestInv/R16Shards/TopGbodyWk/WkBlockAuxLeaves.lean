@@ -5567,4 +5567,36 @@ theorem progWithdrawalStep_call0 {fname : MlS} {args : List (ExpHOL 64)}
             simp only [ent, hrun] at hspec
             exact (hspec hres_ex).from_entry
 
+/-- The credit loop fits the weakened mask needed after replacing `ts`. -/
+theorem progWithdrawalStep_credit_loop
+    (cond e_w e_amt : ExpHOL 64) (args_mul args_ce : List (ExpHOL 64)) :
+    ProgWithdrawalStep
+      (.while cond
+        (.dec (ofString "w") .one e_w
+          (.dec (ofString "amt") (.comb [.one, .one, .one, .one]) e_amt
+            (.decCall (ofString "wei") (.comb [.one, .one, .one, .one])
+              (ofString "u256_mul") args_mul
+              (.seq (.call (some (none, none)) (ofString "create_ether") args_ce)
+                (.seq (.assign .global (ofString "journal_n") (.const 0#64))
+                  (.assign .local (ofString "i")
+                    (.op .add [.var .local (ofString "i"), .const 1#64])))))))) := by
+  apply progWithdrawalStep_of_progWStep (B := withdrawalBufs)
+    (gw := ["heap_ptr", "journal_n", "scratch_ptr"])
+    (fun _ h => h) (by decide)
+  exact progWStep_withdrawal_loop withdrawalBufs _ validBufList_withdrawal
+    (by
+      intro g hg
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+      rcases hg with rfl | rfl | rfl <;> simp)
+    (by decide) (fun _ h => h) cond e_w e_amt args_mul args_ce
+
+/-- Initialize the fresh transaction and compose its effect with any
+withdrawal-framed continuation, including the complete credit loop. -/
+theorem progWithdrawalStep_fresh_then {p : ProgHOL 64}
+    (hp : ProgWithdrawalStep p) :
+    ProgWithdrawalStep
+      (.seq (.call (some (none, none)) (ofString "state_fresh_tx") []) p) :=
+  progWithdrawalStep_seq
+    (progWithdrawalStep_call0 wkSc_state_fresh_tx_withdrawal) hp
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
