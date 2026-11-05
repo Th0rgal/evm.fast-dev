@@ -4147,6 +4147,15 @@ theorem stableCopySpatial_with_locals {F : Type} (s : PanSemStateFiniteExact 64 
   simp only [el, es, ec]
   exact ⟨ho, hw, hh, hd, ha, he⟩
 
+/-- Updating a local other than the three spatial roots preserves separation. -/
+theorem stableCopySpatial_setVar {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : MlS) (v : ValueHOL 64)
+    (hl : name ≠ ofString "logs") (hs : name ≠ ofString "stable_logs")
+    (hc : name ≠ ofString "stable_log_cap") (hp : StableCopySpatial s) :
+    StableCopySpatial (setVarHOLFinite name v s) := by
+  apply stableCopySpatial_with_locals s _ s.clock _ _ _ hp
+  all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE, hl, hs, hc]
+
 /-- All copy-entry spatial obligations survive the stable length write. -/
 theorem stableLengthPre_spatial {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
