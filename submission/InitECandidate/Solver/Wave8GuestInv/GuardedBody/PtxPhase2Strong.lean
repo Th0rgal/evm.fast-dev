@@ -11331,4 +11331,29 @@ theorem phase2_count_cases_alloc_live (h : PtxCallees)
     rw [hptr, hcount]
     exact Or.inr (Or.inr (Or.inl (hbuf.1.2.trans hf.2.1.1)))
 
+/-- Allocation and both packing loops compose while retaining a saved caller buffer. -/
+theorem phase2_alloc_packing_live_bound (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedKeysReady s) ∧ PtxPackedLiveFrame buffer contents s) tail b) :
+    TerminatingProgBoundedOn (fun s => PtxAddressCountExit s ∧
+      ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]]
+        (.seq
+          (.dec (ofString "k") .one (.const 0)
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+                phase2_packed_source_outer_body))) tail))
+      (K.alloc + ((2 ^ 63 + 1) * ((2 ^ 63 + 1) *
+        ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧ PtxPackedLiveFrame buffer contents s) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr := phase2_count_exit_access_ready hp.1
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_cases_alloc_live h buffer contents
+  · exact phase2_packed_live_continuation_bound h buffer contents ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
