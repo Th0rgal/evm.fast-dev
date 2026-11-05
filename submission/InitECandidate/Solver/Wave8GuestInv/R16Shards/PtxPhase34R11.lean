@@ -1621,6 +1621,38 @@ theorem phase4LogCount_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "nl" ≠ ofString "logs" from by decide] using hwe
 
+theorem localsOnly_phase4LogCountReady :
+    LocalsOnly ["index", "out", "logs", "rc", "nl"] Phase4LogCountReady := by
+  intro F s locals k hl hp
+  refine ⟨localsOnly_phase4ReceiptEncoded s locals k (fun n hn => hl n (by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+    rcases hn with rfl | rfl | rfl | rfl <;> simp)) hp.1, ?_⟩
+  change locN {s with locals := locals, clock := k} "nl" =
+    memW s (locN {s with locals := locals, clock := k} "logs" + 8)
+  rw [locN_congr s locals k "nl" (hl "nl" (by simp)),
+    locN_congr s locals k "logs" (hl "logs" (by simp))]
+  exact hp.2
+
+def Phase4LogPointersReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogCountReady s ∧ locN s "lp" = memW s (locN s "logs")
+
+theorem phase4LogPointer_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : Phase4LogCountReady s)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "logs"), .const 0])) = some v) :
+    Phase4LogPointersReady (setVarHOLFinite (ofString "lp") v s) := by
+  obtain ⟨w, rfl, hw⟩ := evalAt_load_local s "logs" 0 v he
+  have hlt : locN s "logs" < 2 ^ 64 := by
+    rcases h.1.2.1 with hz | hl
+    · rw [hz]; norm_num
+    · have hb := (ivl_allocated_bound h.1.1.1.1.1.2 hl.2.1).2
+      dsimp at hb; omega
+  have hwe : w.toNat = memW s (locN s "logs") := by
+    simpa only [show (0 : BitVec 64).toNat = 0 from rfl, Nat.add_zero,
+      Nat.mod_eq_of_lt hlt] using hw
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogCountReady (by decide) _ s h, ?_⟩
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "lp" ≠ ofString "logs" from by decide] using hwe
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
