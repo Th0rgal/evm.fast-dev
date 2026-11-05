@@ -1068,7 +1068,7 @@ theorem lst_push_capacity_tail_returned (h : PtxCallees) {F : Type}
     (hb : memW s l.toNat ≠ 0)
     (hr : evaluateHOLFiniteState s
       (.seq
-        (.ite (.cmp .equal (.var .local (ofString "n")) (.var .local (ofString "cap")))
+        (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
           (.decCall (ofString "np") .one (ofString "alloc")
             [.panop .mul [.panop .mul
               [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
@@ -1102,6 +1102,64 @@ theorem lst_push_capacity_tail_returned (h : PtxCallees) {F : Type}
   obtain ⟨hbmid, hlocals⟩ := lst_push_capacity_branch_fall h s mid l cap hc hA hl hcap hb _ hm
   exact lst_push_branch_to_tail s mid post l n v _ hc hm hbmid
     (hlocals _ (by decide)) (hlocals _ (by decide)) hl hn hr
+
+/-- A returning word declaration exposes a word-valued initializer and the
+returned continuation; scope restoration does not change memory. -/
+theorem dec_word_returned_inv {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {x : MlS} {e : ExpHOL 64} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.dec x .one e cont) = (some (.returned v), post)) :
+    ∃ w : BitVec 64, ∃ mid,
+      evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont =
+        (some (.returned v), mid) ∧ post.memory = mid.memory := by
+  rw [evaluateHOLFiniteState_dec_total] at hr
+  dsimp only at hr
+  split at hr
+  · cases hr
+  · rename_i value he
+    split at hr
+    · rename_i hshape
+      have hw : ∃ w : BitVec 64, value = .val (.word w) := by
+        cases value with
+        | val z => cases z with
+          | word w => exact ⟨w, rfl⟩
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hshape
+      obtain ⟨w, rfl⟩ := hw
+      rcases he : evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont with ⟨r, mid⟩
+      rw [he] at hr
+      exact ⟨w, mid, by rw [← (Prod.mk.inj hr).1]; exact he,
+        congrArg (fun t => t.memory) (Prod.mk.inj hr).2.symm⟩
+    · cases hr
+
+/-- The entire concrete push body preserves a nonzero backing word. The two
+header reads are exposed from the returned execution, without extra evaluation
+or branch-selection premises. -/
+theorem lst_push_body_backing_nonzero (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_lst_push,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hr
+  obtain ⟨n, mid, hr, hm⟩ := dec_word_returned_inv hr
+  obtain ⟨cap, last, hr, hm'⟩ := dec_word_returned_inv hr
+  have hs := lst_push_capacity_tail_returned h
+    (setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s)) last l n cap v hc
+    ((arenaReady_with_locals s _ s.clock).mpr hA) (by
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hl,
+        show ofString "cap" ≠ ofString "l" by decide,
+        show ofString "n" ≠ ofString "l" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "cap" ≠ ofString "n" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hb hr
+  simpa only [memW, hm, hm'] using hs
 
 /-- A push may relocate either backing array. Preserve the outer header
 pointers, and allow each data word either to stay fixed or to become a fresh
