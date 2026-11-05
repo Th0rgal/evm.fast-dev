@@ -14085,4 +14085,34 @@ theorem phase2_htab_set_ts8_backing (key value : ExpHOL 64) :
   exact phase2_htabExit_callEntry_backing callee hp.1.1 hp.2.1 hw
     (ht.symm ▸ hmem) hp.2.2 (hx v rfl)
 
+/-- The concrete world-state lookup preserves the complete nested backing guard. -/
+theorem phase2_ws_get_account_optional_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 := by
+  have hx := R16Shards.worldEff_ws_get_account_optional s s ha.2
+    (R16Shards.WorldEff.refl s [] R16Shards.wsBufs R16Shards.wsGw ha hc) hnt hr
+  apply phase2_backing_of_header_unhit ha he hw hb
+  · have hg := hx.gw_kept (ofString "bo") (by decide)
+    simp only [globN, hg]
+  · have hm : (globN s "bo", 88) ∈ fixedObjects s := by
+      simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    have hf := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    apply phase2_ws_get_account_optional_unhit s hc ha ⟨hf.2.1, by norm_num⟩ hf.1 _ hnt hr
+    intro b hmem
+    have hbg : b ∈ globalBuffers := by
+      simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hmem
+      rcases hmem with rfl | rfl | rfl <;> decide
+    exact disj_symm (bufferRegion_disj_le hw b hbg (by
+      simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hmem
+      rcases hmem with rfl | rfl | rfl <;> decide) b.2 (by omega)
+      (globN s "bo", 88) (R16Shards.PtxP1.bo_mem_typed he.bo_nz))
+  · exact phase2_ws_get_account_optional_nested_unhit s hc ha he hw hnt hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
