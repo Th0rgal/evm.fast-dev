@@ -1723,6 +1723,36 @@ theorem logPointers_heapStep {F : Type}
   · change locN s "lp" = memW post (locN s "logs")
     rw [hh.1]; exact h.2
 
+theorem localsOnly_phase4LogPointersReady :
+    LocalsOnly ["index", "out", "logs", "rc", "nl", "lp"] Phase4LogPointersReady := by
+  intro F s locals k hl hp
+  refine ⟨localsOnly_phase4LogCountReady s locals k (fun n hn => hl n (by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+    rcases hn with rfl | rfl | rfl | rfl | rfl <;> simp)) hp.1, ?_⟩
+  change locN {s with locals := locals, clock := k} "lp" =
+    memW s (locN {s with locals := locals, clock := k} "logs")
+  rw [locN_congr s locals k "lp" (hl "lp" (by simp)),
+    locN_congr s locals k "logs" (hl "logs" (by simp))]
+  exact hp.2
+
+theorem lst_push_logPointers_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hp : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0)
+    (harg : BoListArg (callEntryStateHOLFinite s callee)) :
+    Phase4LogPointersReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _
+    (logPointers_heapStep hs' hp hn)
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
