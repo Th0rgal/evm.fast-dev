@@ -159,6 +159,30 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 namespace PtxP34
 open PtxP1
 
+/-- Lift a concrete word store to the backing invariant. The destination
+separation obligations are stated on evaluated addresses, so callers can use
+the existing spatial store proofs without unfolding the store semantics. -/
+theorem hoare_store_backing
+    (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (dst src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      P s → evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w)
+    (hsep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64),
+      P s → evalAt s dst = some (.val (.word x)) →
+      ∀ k ∈ ([40, 72] : List Nat),
+        BitVec.ofNat 64 (globN s "bo" + k) ≠ x ∧
+        BitVec.ofNat 64 (memW s (globN s "bo" + k)) ≠ x) :
+    Hoare (fun s => P s ∧ TxBacking s) (.store dst src)
+      (fun r post => r = none → TxBacking post) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨w, rfl⟩ := hword s v hp.1 hv
+  obtain ⟨_, _, hframe⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  exact txBacking_store hp.2 hframe
+    (fun k hk => (hsep s x hp.1 hx k hk).1)
+    (fun k hk => (hsep s x hp.1 hx k hk).2)
+
 /-- Spatial form of backing transport: preserving the block-output record and
 the two list headers preserves both levels of pointer lookup. -/
 theorem txBacking_of_unhit_headers {F : Type}
@@ -202,8 +226,220 @@ theorem backing_nonzero_of_length_store {F : Type}
     rw [he]
   rwa [he]
 
-/-- `lst_new(8,16)` supplies a nonzero data pointer because its backing block
-starts at or above the positive heap frontier. -/
+/-- Concrete growth write: storing the allocator's nonzero result into the
+list data word establishes nonzero backing. The header address is fixed across
+the store; no return-slot contract is used. -/
+theorem hoare_store_grown_backing (l : BitVec 64) :
+    Hoare (fun s =>
+      s.locals.lookup (ofString "l") = some (.val (.word l)) ∧
+      ∃ np : BitVec 64, s.locals.lookup (ofString "np") = some (.val (.word np)) ∧
+        np.toNat ≠ 0)
+      (.store (.var .local (ofString "l")) (.var .local (ofString "np")))
+      (fun r post => r = none → memW post l.toNat ≠ 0) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨hl, np, hnp, hn⟩ := hp
+  have hx' : x = l := by
+    change s.locals.lookup (ofString "l") = some (.val (.word x)) at hx
+    rw [hl] at hx
+    cases hx
+    rfl
+  subst x
+  have hv' : v = .val (.word np) := by
+    change s.locals.lookup (ofString "np") = some v at hv
+    rw [hnp] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  obtain ⟨_, hwrite, _⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  change (match mem' (BitVec.ofNat 64 l.toNat) with | .word w => w.toNat) ≠ 0
+  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hwrite]
+  exact hn
+
+/-- The actual growth-branch data write establishes nonzero backing from the
+allocator result in `np`. -/
+theorem hoare_lst_push_data_write (l : BitVec 64) :
+    Hoare (fun s =>
+      s.locals.lookup (ofString "l") = some (.val (.word l)) ∧
+      ∃ np : BitVec 64, s.locals.lookup (ofString "np") = some (.val (.word np)) ∧
+        np.toNat ≠ 0)
+      (.store (.op .add [.var .local (ofString "l"), .const 0])
+        (.var .local (ofString "np")))
+      (fun r post => r = none → memW post l.toNat ≠ 0) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨hl, np, hnp, hn⟩ := hp
+  have hd : evalAt s (.op .add [.var .local (ofString "l"), .const 0]) =
+      some (.val (.word l)) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord,
+      wordOpHOL, wordOp]
+  rw [hd] at hx
+  have he : x = l := by cases hx; rfl
+  subst x
+  have he : v = .val (.word np) := by
+    change s.locals.lookup (ofString "np") = some v at hv
+    rw [hnp] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  obtain ⟨_, hwrite, _⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  change (match mem' (BitVec.ofNat 64 l.toNat) with | .word w => w.toNat) ≠ 0
+  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hwrite]
+  exact hn
+
+/-- A length-only word store preserves the data word. -/
+theorem hoare_store_list_length (l : BitVec 64) (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare (fun s => memW s l.toNat ≠ 0)
+      (.store (.const (l + 8)) src)
+      (fun r post => r = none → memW post l.toNat ≠ 0) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  have hx' : x = l + 8 := by
+    change some (ValueHOL.val (.word (l + 8))) = some (ValueHOL.val (.word x)) at hx
+    cases hx
+    rfl
+  subst x
+  obtain ⟨w, rfl⟩ := hword s v hv
+  obtain ⟨_, _, hframe⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  have hne : l ≠ l + 8 := by
+    intro he
+    have he' : (0 : BitVec 64) = 8 := by
+      apply add_left_cancel (a := l)
+      simpa using he
+    exact (by decide : (0 : BitVec 64) ≠ 8) he'
+  change (match mem' (BitVec.ofNat 64 l.toNat) with | .word w => w.toNat) ≠ 0
+  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hframe l hne]
+  simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using hp
+
+/-- The actual `lst_push` length-write expression preserves nonzero backing,
+including modular evaluation of the address and increment. -/
+theorem hoare_lst_push_length_write (l n : BitVec 64) :
+    Hoare (fun s =>
+      s.locals.lookup (ofString "l") = some (.val (.word l)) ∧
+      s.locals.lookup (ofString "n") = some (.val (.word n)) ∧
+      memW s l.toNat ≠ 0)
+      (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+      (fun r post => r = none → memW post l.toNat ≠ 0) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨hl, hn, hb⟩ := hp
+  have hd : evalAt s (.op .add [.var .local (ofString "l"), .const 8]) =
+      some (.val (.word (l + 8))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord,
+      wordOpHOL, wordOp]
+  have hs : evalAt s (.op .add [.var .local (ofString "n"), .const 1]) =
+      some (.val (.word (n + 1))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      wordOpHOL, wordOp]
+  rw [hd] at hx
+  have he : x = l + 8 := by cases hx; rfl
+  subst x
+  rw [hs] at hv
+  have he : v = .val (.word (n + 1)) := (Option.some.inj hv).symm
+  subst v
+  obtain ⟨_, _, hframe⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  have hne : l ≠ l + 8 := by
+    intro he
+    have he' : (0 : BitVec 64) = 8 := by
+      apply add_left_cancel (a := l)
+      simpa using he
+    exact (by decide : (0 : BitVec 64) ≠ 8) he'
+  change (match mem' (BitVec.ofNat 64 l.toNat) with | .word w => w.toNat) ≠ 0
+  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hframe l hne]
+  simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using hb
+
+/-- The growth branch's capacity update preserves its newly installed backing
+word, including modular multiplication of the capacity. -/
+theorem hoare_lst_push_capacity_write (l cap : BitVec 64) :
+    Hoare (fun s =>
+      s.locals.lookup (ofString "l") = some (.val (.word l)) ∧
+      s.locals.lookup (ofString "cap") = some (.val (.word cap)) ∧
+      memW s l.toNat ≠ 0)
+      (.store (.op .add [.var .local (ofString "l"), .const 16])
+        (.panop .mul [.var .local (ofString "cap"), .const 2]))
+      (fun r post => r = none → memW post l.toNat ≠ 0) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨hl, hn, hb⟩ := hp
+  have hd : evalAt s (.op .add [.var .local (ofString "l"), .const 16]) =
+      some (.val (.word (l + 16))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord,
+      wordOpHOL, wordOp]
+  have hs : evalAt s (.panop .mul [.var .local (ofString "cap"), .const 2]) =
+      some (.val (.word (cap * 2))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      panOpHOL]
+  rw [hd] at hx
+  have he : x = l + 16 := by cases hx; rfl
+  subst x
+  rw [hs] at hv
+  have he : v = .val (.word (cap * 2)) := (Option.some.inj hv).symm
+  subst v
+  obtain ⟨_, _, hframe⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hm)
+  have hne : l ≠ l + 16 := by
+    intro he
+    have he' : (0 : BitVec 64) = 16 := by
+      apply add_left_cancel (a := l)
+      simpa using he
+    exact (by decide : (0 : BitVec 64) ≠ 16) he'
+  change (match mem' (BitVec.ofNat 64 l.toNat) with | .word w => w.toNat) ≠ 0
+  rw [BitVec.ofNat_toNat, BitVec.setWidth_eq, hframe l hne]
+  simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using hb
+
+/-- The tail after either branch keeps nonzero backing through its return. -/
+theorem lst_push_tail_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hb : memW s l.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+        (.return (.op .add
+          [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))) =
+      (some (.returned v), post)) :
+    memW post l.toNat ≠ 0 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s
+      (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1])) with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | none =>
+    have hm := (hoare_lst_push_length_write l n).run s hc ⟨hl, hn, hb⟩
+      (by rw [hs]; simp)
+    rw [hs] at hm
+    have hm' := hm rfl
+    dsimp only at hr
+    rw [evaluateHOLFiniteState_return] at hr
+    split at hr
+    · cases hr
+    · split at hr
+      · have he := (Prod.mk.inj hr).2
+        subst post
+        exact hm'
+      · cases hr
+  | some r =>
+    have hs' := hs
+    rw [evaluateHOLFiniteState_store] at hs'
+    dsimp only at hr
+    have he := (Prod.mk.inj hr).1
+    cases he
+    split at hs'
+    · split at hs'
+      · split at hs' <;> cases hs'
+      · cases hs'
+    · cases hs'
+
+/-- A fresh backing block starts above the positive source base. -/
 theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p n : Nat} (hA : ArenaOK s) (hf : FreshBlock s post p n) : p ≠ 0 := by
   have hlo := hA.1.trans hf.2.1.1
