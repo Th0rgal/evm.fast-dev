@@ -4420,6 +4420,33 @@ theorem hoare_stableCopy_body_loop :
     hoare_stableCopy_store_length_word.run s hc hp.2 hnt hr,
     hoare_stableCopy_store_for_increment.run s hc hp.1 hnt hr⟩
 
+/-- An active loop head supplies the concrete body's full precondition. -/
+theorem hoare_stableCopy_active_body :
+    Hoare (fun s => StableCopyLoopInv s ∧
+      LoopActive (.cmp .less (.var .local (ofString "i"))
+        (.var .local (ofString "nl"))) s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  obtain ⟨i, n, hi, hn⟩ := hp.1.2.1
+  exact hoare_stableCopy_body_loop.run s hc
+    ⟨stableCopyLoopInv_active s hp.1 hp.2, n, hn⟩ hnt hr
+
+/-- At an active loop head the concrete body restores the full loop invariant. -/
+theorem hoare_stableCopy_body_active :
+    Hoare (fun s => StableCopyLoopInv s ∧
+      LoopActive (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl"))) s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply hoare_stableCopy_body_loop.mono
+  intro F s hp
+  obtain ⟨i, n, hi, hn⟩ := hp.1.2.1
+  exact ⟨stableCopyLoopInv_active s hp.1 hp.2, n, hn⟩
+
 /-- The indexed copy store followed by the real increment preserves the invariant. -/
 theorem hoare_stableCopy_body :
     Hoare StableCopyStorePre
