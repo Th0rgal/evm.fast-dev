@@ -2038,4 +2038,18 @@ theorem pBounded_callLocal_csr
             · simp at hr
           | _ => simp at hr
 
+def CsrTablesAt {F : Type} (s : PanSemStateFiniteExact 64 F) (cache roots : Nat) : Prop :=
+  ArenaReady s ∧ cache ≠ roots ∧ ∃ S Nd,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧ roots ∈ S ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots)
+
+theorem localsFree_csrTablesAt (cache roots : Nat) :
+    LocalsFree (fun s => CsrTablesAt s cache roots) := by
+  intro F s locals k h
+  obtain ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩ := h
+  exact ⟨localsFree_arenaReady s locals k hA, hne, S, Nd,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
+    hc, hr, hcl, hrl⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
