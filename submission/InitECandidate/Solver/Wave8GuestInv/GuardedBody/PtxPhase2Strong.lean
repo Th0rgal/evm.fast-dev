@@ -2711,4 +2711,26 @@ theorem phase2_address_store_count {F : Type} {s : PanSemStateFiniteExact 64 F}
   rw [he]
   exact hp.1.2.2
 
+/-- A store into the address buffer preserves its word extent and separation
+from the transaction's nonempty access-list record array. -/
+theorem phase2_address_store_spatial {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    let post : PanSemStateFiniteExact 64 F := { s with memory := mem }
+    WordsOK post (locN post "al_addrs", (locN post "nal" + 1) * 8) ∧
+    (0 < memW post (locN post "tx" + 216) →
+      Disj (memW post (locN post "tx" + 208), 24 * memW post (locN post "tx" + 216))
+        (locN post "al_addrs", (locN post "nal" + 1) * 8)) := by
+  obtain ⟨hv, _⟩ := phase2_address_store_validated hp hx hin hm
+  refine ⟨?_, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.2.2.2.2.1
+  · change 0 < memW { s with memory := mem } (locN s "tx" + 216) →
+      Disj (memW { s with memory := mem } (locN s "tx" + 208),
+        24 * memW { s with memory := mem } (locN s "tx" + 216))
+        (locN s "al_addrs", (locN s "nal" + 1) * 8)
+    simpa only [phase2_address_store_header hp hin hm 216 (by decide) (by decide),
+      phase2_address_store_header hp hin hm 208 (by decide) (by decide)] using hp.2.2.2.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
