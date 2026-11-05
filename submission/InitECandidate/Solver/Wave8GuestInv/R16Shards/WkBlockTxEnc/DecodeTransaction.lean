@@ -7459,6 +7459,24 @@ private theorem tx_list_item_ret_sub_vvh {F : Type}
     · simp at hrest
   · simp at hargs
 
+private theorem memW_stride_sum_kept_of_worldEff_vvh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hAs : ArenaReady s) (heff : WorldEff s post [] [] wsGw)
+    (base stride count offset : Nat)
+    (hoff : offset + 8 ≤ stride)
+    (hheap : base + stride * count ≤ globN s "heap_ptr") :
+    ((List.range count).map (fun i => memW post (base + stride * i + offset))).sum =
+      ((List.range count).map (fun i => memW s (base + stride * i + offset))).sum := by
+  have hmaps : (List.range count).map (fun i => memW post (base + stride * i + offset)) =
+      (List.range count).map (fun i => memW s (base + stride * i + offset)) := by
+    apply List.map_congr_left
+    intro i hi
+    have hi_lt : i < count := List.mem_range.mp hi
+    have hmul := Nat.mul_le_mul_left stride (Nat.succ_le_of_lt hi_lt)
+    rw [Nat.mul_succ] at hmul
+    exact memW_kept_of_worldEff_lt_hp hAs heff (by omega)
+  rw [hmaps]
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
