@@ -1375,6 +1375,31 @@ theorem evalAt_load_local {F : Type} (t : PanSemStateFiniteExact 64 F)
     · simp [hl, valueIsWord] at h
     · simp [hl, valueIsWord] at h
 
+theorem evalAt_load_local_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hg : GuestInv s) (l : String) (v : ValueHOL 64)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString l), .const 8])) = some v) :
+    locN s l ≠ 0 := by
+  intro hz
+  rcases hlu : s.locals.lookup (ofString l) with _ | val
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu] at he
+  rcases val with w | fs | ⟨nm, fs⟩
+  · cases w with
+    | word w =>
+      have hw : w.toNat = 0 := by simpa [locN, hlu] using hz
+      have hw0 : w = 0 := BitVec.eq_of_toNat_eq hw
+      subst w
+      have hdom : ¬ s.memaddrs (8 : BitVec 64) := by
+        rw [hg.memaddrs]
+        intro hd
+        have hb := ((ordinaryDomain_iff (8 : BitVec 64)).mp hd).2.1
+        change sourceBase ≤ 8 at hb
+        norm_num [sourceBase] at hb
+      simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord, valueWord,
+        wordOpHOL, wordOp, memLoadHOLExact, hdom] at he
+      exact hdom he.1
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord] at he
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord] at he
+
 theorem phase4LogsReady_load {F : Type} (s : PanSemStateFiniteExact 64 F)
     (v : ValueHOL 64) (h : TxAfterCallStrong s)
     (he : evalAt s (.load .one (.op .add [.var .local (ofString "out"), .const 16])) = some v) :
@@ -1654,12 +1679,13 @@ theorem receiptEncoded_heapStep {F : Type}
   · exact logsWorldOwned_with_locals s.locals post.clock hlogs.2
 
 def Phase4LogCountReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => Phase4ReceiptEncoded s ∧ locN s "nl" = memW s (locN s "logs" + 8)
+  fun s => Phase4ReceiptEncoded s ∧ locN s "nl" = memW s (locN s "logs" + 8) ∧ locN s "logs" ≠ 0
 
 theorem phase4LogCount_load {F : Type} (s : PanSemStateFiniteExact 64 F)
     (v : ValueHOL 64) (h : Phase4ReceiptEncoded s)
     (he : evalAt s (.load .one (.op .add [.var .local (ofString "logs"), .const 8])) = some v) :
     Phase4LogCountReady (setVarHOLFinite (ofString "nl") v s) := by
+  have hn := evalAt_load_local_nonzero s h.1.1.1.1.1 "logs" v he
   obtain ⟨w, rfl, hw⟩ := evalAt_load_local s "logs" 8 v he
   have hlt : locN s "logs" + 8 < 2 ^ 64 := by
     rcases h.2.1 with hz | hl
@@ -1670,7 +1696,7 @@ theorem phase4LogCount_load {F : Type} (s : PanSemStateFiniteExact 64 F)
     simpa only [show (8 : BitVec 64).toNat = 8 from rfl, Nat.mod_eq_of_lt hlt] using hw
   refine ⟨LocalsOnly.setVar localsOnly_phase4ReceiptEncoded (by decide) _ s h, ?_⟩
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
-    show ofString "nl" ≠ ofString "logs" from by decide] using hwe
+    show ofString "nl" ≠ ofString "logs" from by decide] using And.intro hwe hn
 
 theorem localsOnly_phase4LogCountReady :
     LocalsOnly ["index", "out", "logs", "rc", "nl"] Phase4LogCountReady := by
@@ -1679,7 +1705,8 @@ theorem localsOnly_phase4LogCountReady :
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
     rcases hn with rfl | rfl | rfl | rfl <;> simp)) hp.1, ?_⟩
   change locN {s with locals := locals, clock := k} "nl" =
-    memW s (locN {s with locals := locals, clock := k} "logs" + 8)
+    memW s (locN {s with locals := locals, clock := k} "logs" + 8) ∧
+      locN {s with locals := locals, clock := k} "logs" ≠ 0
   rw [locN_congr s locals k "nl" (hl "nl" (by simp)),
     locN_congr s locals k "logs" (hl "logs" (by simp))]
   exact hp.2
@@ -1717,9 +1744,9 @@ theorem logPointers_heapStep {F : Type}
     Phase4LogPointersReady {post with locals := s.locals} := by
   obtain ⟨a, b, _, _, _, _, hw⟩ := h.1.1.2.2.2
   have hh := logsWorldOwned_heapStep_header hs h.1.1.1.1.1.1 h.1.1.2.1 hw hn
-  refine ⟨⟨receiptEncoded_heapStep hs h.1.1 hn, ?_⟩, ?_⟩
+  refine ⟨⟨receiptEncoded_heapStep hs h.1.1 hn, ?_, hn⟩, ?_⟩
   · change locN s "nl" = memW post (locN s "logs" + 8)
-    rw [hh.2]; exact h.1.2
+    rw [hh.2]; exact h.1.2.1
   · change locN s "lp" = memW post (locN s "logs")
     rw [hh.1]; exact h.2
 
@@ -1936,7 +1963,7 @@ theorem logPointers_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hx : ∀ S Nd, WorldTypedWith s S Nd →
       ∃ i ∈ worldOwned s S Nd, Inside (x.toNat, 8) i.1 (i.1 + i.2)) :
     Phase4LogPointersReady {s with memory := mem'} := by
-  obtain ⟨⟨⟨ho, hl, hlen, a, b, he, hi, ha, hb, S, Nd, hWT, hown⟩, hnl⟩, hlp⟩ := h
+  obtain ⟨⟨⟨ho, hl, hlen, a, b, he, hi, ha, hb, S, Nd, hWT, hown⟩, hnl, _⟩, hlp⟩ := h
   let post := {s with memory := mem'}
   have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl ho.1.1.1.1
   obtain ⟨hWT', heq, _⟩ := hpres S Nd hWT
@@ -1953,7 +1980,7 @@ theorem logPointers_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
   have h8 : memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) :=
     memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hbnd ⟨by omega, by omega⟩
   refine ⟨⟨⟨txAfterCallStrong_worldStore ho hm hpres hx, hlogs.1, ?_,
-    a, b, he, hi, ha, hb, S, Nd, hWT', hlogs.2⟩, ?_⟩, ?_⟩
+    a, b, he, hi, ha, hb, S, Nd, hWT', hlogs.2⟩, ?_, hn⟩, ?_⟩
   · change memW post (locN s "logs" + 8) < 2 ^ 28
     rw [h8]; exact hlen
   · change locN s "nl" = memW post (locN s "logs" + 8)
