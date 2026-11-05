@@ -1704,6 +1704,25 @@ theorem phase4LogPointer_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "lp" ≠ ofString "logs" from by decide] using hwe
 
+theorem logPointers_heapStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] Q s r post)
+    (h : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0) :
+    Phase4LogPointersReady {post with locals := s.locals} := by
+  obtain ⟨a, b, _, _, _, _, hw⟩ := h.1.1.2.2.2
+  have hh := logsWorldOwned_heapStep_header hs h.1.1.1.1.1.1 h.1.1.2.1 hw hn
+  refine ⟨⟨receiptEncoded_heapStep hs h.1.1 hn, ?_⟩, ?_⟩
+  · change locN s "nl" = memW post (locN s "logs" + 8)
+    rw [hh.2]; exact h.1.2
+  · change locN s "lp" = memW post (locN s "logs")
+    rw [hh.1]; exact h.2
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
