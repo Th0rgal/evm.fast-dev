@@ -8,6 +8,7 @@ set_option maxHeartbeats 4000000
 namespace InitECandidate.Solver.Wave8GuestInv.R13Shards
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
+open InitECandidate.Solver.PanTerminatingBounded
 
 /-- Shape information needed by the untyped stores of Phase 2. `price` is
 the four-word fee value, whereas `mgas` and `reservoir` are scalar words. -/
@@ -633,5 +634,32 @@ theorem phase1_stage4_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hw : R16Shards.PtxP1.StageP 4 s) (hs : PtxPhase2LocalShapes s) :
     PtxValidatedStrong s :=
   ⟨R16Shards.PtxP1.stage4_validated hw, hs⟩
+
+/-- Bounded composition of the regular-budget, min, and reservoir segment.
+The continuation receives all local shapes and the final numeric stage. -/
+theorem phase1_gas_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (.dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
+        (.decCall (ofString "mgas") .one (ofString "min")
+          [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")]
+          (.dec (ofString "reservoir") .one
+            (.op .sub [.var .local (ofString "execution_gas"), .var .local (ofString "mgas")]) tail)))
+      (K.min + b + 1) := by
+  apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
+    (fun s v hp he => phase1_declare_regular_budget_shapes s v hp he)
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w))) h.fb_min
+  · intro F s vs body callee ret hc hp ha hl
+    exact R16Shards.PtxP1.stage_entry 3 _ _ s vs body callee ret hc hp.1 ha hl
+  · exact phase1_resume_min_shapes h
+  · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+    · intro F s v hp he
+      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1,
+        phase1_reservoir_shapes s hp.2.1 hp.2.2 v he⟩
+    · exact htail
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
