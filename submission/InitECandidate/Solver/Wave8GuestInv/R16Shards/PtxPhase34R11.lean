@@ -9697,4 +9697,52 @@ theorem gbody_process_transaction_backing_strong_of_h12
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
     (hb (F := F) s hc hp)
 
+open PtxP34
+
+/-- Stable-copy exit guard consumed by the proved receipt push/store suffix. -/
+def Phase4StableBackingReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => (PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+    locN s "stable_logs" ≠ 0 ∧
+    ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+    TxBacking s
+
+/-- Remaining Phase-4 integration obligation: retain backing through the
+credit, log-push, allocation and stable-copy prefix. -/
+def Phase4BackingPrefix : Prop :=
+  ∀ (tail : ProgHOL 64) (b : Nat),
+    TerminatingProgBoundedOn Phase4StableBackingReady tail b →
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (spinePlug 38 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + (2 ^ 28 + 1 + b) + 1)) + 1)))
+
+/-- Close Phase 4 from its backing-aware prefix and the concrete receipt suffix. -/
+theorem ptxPhase4_cut_backing_strong (h : PtxCallees)
+    (hprefix : Phase4BackingPrefix)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+      (ptxPhase4 tail) (ptxCost4 + b) := by
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hb := hprefix _ _ (phase4ReceiptPush_backing_cut h htail) (F := F)
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
+
+/-- The quantified Phase-4 interface expected by transaction composition. -/
+theorem h4_backing_strong (h : PtxCallees) (hprefix : Phase4BackingPrefix) :
+    ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCallBackingStrong s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b) := by
+  intro tail b ht F s hc hp
+  exact ptxPhase4_cut_backing_strong h hprefix ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
