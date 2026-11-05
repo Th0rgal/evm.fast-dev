@@ -14649,4 +14649,27 @@ theorem phase2_get_account_optional_resume_backing (name : MlS) (args : List (Ex
   rw [hr] at hb
   exact hb
 
+/-- Fresh allocation effects preserve the three existing transaction backing headers. -/
+theorem phase2_fresh_worldEff_backing {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String}
+    (ha : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hf : R16Shards.WorldEff s post [] [] gw) : R16Shards.TxBacking post := by
+  apply phase2_backing_of_header_unhit ha he hw hb hg
+  · have hm : (globN s "bo", 88) ∈ fixedObjects s := by
+      simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    have hi := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
+      (by simp) (by simp)
+  · intro k hk
+    have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+    have hi := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
+      (by simp) (by simp)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
