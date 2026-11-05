@@ -8028,4 +8028,33 @@ theorem merge_roles_transport_inner {F : Type}
   obtain ⟨hm, hk'⟩ := hnew.1 a ha
   exact ⟨hm, (hh a.1 hm).trans hk'⟩
 
+/-- Table insertion preserves journal roles and journal typing. -/
+theorem merge_set_journal_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    journalRoleSlots post = journalRoleSlots s ∧ JournalTyped post S := by
+  have hg := he.2.2.2.2.2.2.2
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (hg (ofString "scratch_ptr") (by decide))
+  have hag : AllocatorGrows s post := ⟨he.2.2.2.2.1, by rw [hsp]⟩
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg'
+    apply globN_eq_of_lookup (hg (ofString g) ?_)
+    revert g hg'; decide
+  apply journalRoleSlots_eq_of_unhit hA.1 he.1.1 hA.2 hag
+    (fun _ hx => hx) hW.2.1 hW.2.2.1 hcore
+  · intro hnz
+    have hm := typedRecord_mem_fixedObjects s (r := ("ts", 72)) (by simp [typedRecords])
+    simp only [hnz, ↓reduceIte] at hm
+    exact merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  · intro hnz
+    apply merge_set_fixed_unhit hA hW ht he
+    · unfold fixedObjects
+      apply List.mem_append.2; left
+      apply List.mem_append.2; left
+      apply List.mem_append.2; right
+      simp [hnz]
+    · dsimp; omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
