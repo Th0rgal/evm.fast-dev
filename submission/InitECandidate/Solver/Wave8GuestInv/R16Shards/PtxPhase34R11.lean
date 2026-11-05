@@ -13034,4 +13034,61 @@ theorem receipt_advance_finish_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The concrete log-encoding suffix threads the entry frame through the
+returned length, cursor advance, and final RLP list write. -/
+theorem receipt_logs_finish_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs old : BitVec 64) (bound : Nat)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ p.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+          [.var .local (ofString "p"), .var .local (ofString "logs")])
+        (.seq (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+          (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+            [.var .local (ofString "start"), .var .local (ofString "p")]))) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+        [.var .local (ofString "p"), .var .local (ofString "logs")]) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | some r => simp at hr
+  | none =>
+    dsimp only at hr
+    obtain ⟨he, w, hb, _, hloc⟩ := receipt_encode_logs_frame_result hA hma hpre "w"
+      (.var .local (ofString "p")) (.var .local (ofString "logs")) p logs bound
+      ⟨by omega, hfresh.2⟩ hnz hL hD hfit ⟨old, hw⟩ hp hl hc
+    apply receipt_advance_finish_frame he start p w
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "start" by decide] using hs
+    · rw [hloc]
+      simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "w" ≠ ofString "p" by decide] using hp
+    · rw [hloc]
+      simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    · exact hle
+    · exact ⟨hfresh.1, by omega⟩
+    · exact hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
