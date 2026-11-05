@@ -1375,6 +1375,31 @@ theorem evalAt_load_local {F : Type} (t : PanSemStateFiniteExact 64 F)
     · simp [hl, valueIsWord] at h
     · simp [hl, valueIsWord] at h
 
+theorem evalAt_load_local_nonzero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hg : GuestInv s) (l : String) (v : ValueHOL 64)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString l), .const 8])) = some v) :
+    locN s l ≠ 0 := by
+  intro hz
+  rcases hlu : s.locals.lookup (ofString l) with _ | val
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu] at he
+  rcases val with w | fs | ⟨nm, fs⟩
+  · cases w with
+    | word w =>
+      have hw : w.toNat = 0 := by simpa [locN, hlu] using hz
+      have hw0 : w = 0 := BitVec.eq_of_toNat_eq hw
+      subst w
+      have hdom : ¬ s.memaddrs (8 : BitVec 64) := by
+        rw [hg.memaddrs]
+        intro hd
+        have hb := ((ordinaryDomain_iff (8 : BitVec 64)).mp hd).2.1
+        change sourceBase ≤ 8 at hb
+        norm_num [sourceBase] at hb
+      simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord, valueWord,
+        wordOpHOL, wordOp, memLoadHOLExact, hdom] at he
+      exact hdom he.1
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord] at he
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hlu, valueIsWord] at he
+
 theorem phase4LogsReady_load {F : Type} (s : PanSemStateFiniteExact 64 F)
     (v : ValueHOL 64) (h : TxAfterCallStrong s)
     (he : evalAt s (.load .one (.op .add [.var .local (ofString "out"), .const 16])) = some v) :
