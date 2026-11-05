@@ -1589,6 +1589,19 @@ def Phase4ReceiptEncoded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
       Inside (a.toNat, b.toNat) sourceBase (globN s "heap_ptr") ∧
       a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧ LogsWorldOwned s (locN s "logs")
 
+theorem localsOnly_phase4ReceiptEncoded :
+    LocalsOnly ["index", "out", "logs", "rc"] Phase4ReceiptEncoded := by
+  intro F s locals k hl hp
+  have hg := locN_congr s locals k "logs" (hl "logs" (by simp))
+  obtain ⟨ho, hL, hn, a, b, he, hi, ha, hb, hw⟩ := hp
+  refine ⟨txAfterCallStrong_with_locals s locals k
+    (hl "index" (by simp)) (hl "out" (by simp)) ho, ?_, ?_, a, b, ?_, hi, ha, hb, ?_⟩
+  · rw [hg]; exact (R13Shards.logsListOK_with_locals s locals k _).mpr hL
+  · change memW s (locN {s with locals := locals, clock := k} "logs" + 8) < 2 ^ 28
+    rw [hg]; exact hn
+  · exact (hl "rc" (by simp)).trans he
+  · rw [hg]; exact logsWorldOwned_with_locals locals k hw
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
