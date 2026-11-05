@@ -6040,4 +6040,122 @@ theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
       exact ⟨localsFree_worldOK s callee (s.clock - 1) hW,
         off.toNat, hoff, hbs, hd, by rw [hd]; exact hnz⟩
 
+/-- A union iteration cannot finish its insertion when the destination is null. -/
+theorem union_zero_set_no_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hz : locN s "dst" = 0) (rest : List (ExpHOL 64)) :
+    ¬ Wave8M19.Htab.FlowR (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest))).1 := by
+  intro hflow
+  have hnr := Wave8M19.Htab.call0_noRetBrk s (ofString "htab_set")
+    (.var .local (ofString "dst") :: rest)
+  have hflow2 : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") (.var .local (ofString "dst") :: rest))).1 = none ∨
+    (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") (.var .local (ofString "dst") :: rest))).1 = some .continue := by
+    rcases hflow with h | h | h
+    · exact Or.inl h
+    · exact Or.inr h
+    · exact absurd h hnr.1.2
+  obtain ⟨values, body, callee, ret, v, post, ha, hl, hr, _⟩ :=
+    Wave8M19.Htab.call0_flow s _ _ hflow2
+  obtain ⟨tv, vs, rfl, htv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+  obtain ⟨_, hct⟩ := Wave8M19.Htab.lookupCodeHOLFinite_param_at s.code.lookup
+    (ofString "htab_set") [] (ofString "t") .one
+    [(ofString "key", .one), (ofString "value", .one)] _ _
+    (by simp only [List.mem_cons, List.not_mem_nil, or_false]; rintro _ (rfl | rfl) <;> decide)
+    (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set) (vpre := []) (by simp) hl
+  have ht : callee.lookup (ofString "t") = s.locals.lookup (ofString "dst") := by
+    rw [hct]
+    simp only [evalHOLExact] at htv
+    exact htv.symm
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc _ body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hne := hn (Or.inl ⟨v, rfl⟩)
+  apply hne
+  simpa only [locN, callEntryStateHOLFinite, ht] using hz
+
+/-- A flowing conditional insertion into a null table must take the skip arm. -/
+theorem union_zero_ite_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hz : locN s "dst" = 0) (cond : ExpHOL 64) (rest : List (ExpHOL 64))
+    (hf : Wave8M19.Htab.FlowR (evaluateHOLFiniteState s
+      (.ite cond (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest)) .skip)).1) :
+    evaluateHOLFiniteState s
+      (.ite cond (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest)) .skip) = (none, s) := by
+  rcases HtabUnionInto.ite_flow_split s _ _ _ hf with ⟨hy, _⟩ | ⟨_, hn⟩
+  · exact (union_zero_set_no_flow s hc hG hz rest hy).elim
+  · rw [hn, evaluateHOLFiniteState_skip]
+
+/-- Null-destination union iterations only change locals and the clock. -/
+theorem union_zero_iter {F : Type} (x : PanSemStateFiniteExact 64 F)
+    (hc : x.code = originalRuntimeCode) (hG : GuestInv x) (hz : locN x "dst" = 0)
+    (itemArgs : List (ExpHOL 64)) (cond : ExpHOL 64) (rest : List (ExpHOL 64))
+    (inc : ExpHOL 64)
+    (hf : Wave8M19.Htab.FlowR (evaluateHOLFiniteState (decClockHOLFinite x)
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq (.ite cond (.call (some (none, none)) (ofString "htab_set")
+          (.var .local (ofString "dst") :: rest)) .skip)
+          (.assign .local (ofString "i") inc)))).1) :
+    let post := (evaluateHOLFiniteState (decClockHOLFinite x)
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq (.ite cond (.call (some (none, none)) (ofString "htab_set")
+          (.var .local (ofString "dst") :: rest)) .skip)
+          (.assign .local (ofString "i") inc)))).2
+    post = { x with locals := post.locals, clock := post.clock } ∧
+      post.locals.lookup (ofString "dst") = x.locals.lookup (ofString "dst") := by
+  intro post
+  obtain ⟨values, body, callee, ret, rv, cpost, ha, hl, hr, hcont, hp⟩ :=
+    HtabUnionInto.decCall_flow (decClockHOLFinite x) _ _ _ _ _ hf
+  have hro : FunSpec GuestInv
+      (fun s r post => Resumes r → post = { s with locals := post.locals, clock := post.clock })
+      (ofString "htab_item") := InitECandidate.Solver.Wave8Contracts.M15.ro_htab_item
+  have hitem := FunSpec.at_lookup hro
+    (decClockHOLFinite x) hc values body callee ret hl
+    (guestInv_with_locals_clock x callee _ hG) (by rw [hr]; simp)
+  rw [hr] at hitem
+  have hcp : cpost = { x with locals := cpost.locals, clock := cpost.clock } :=
+    hitem (Or.inl ⟨rv, rfl⟩)
+  let s1 := setVarHOLFinite (ofString "s") rv { cpost with locals := x.locals }
+  have hs1 : s1 = { x with locals := x.locals.update (ofString "s", rv), clock := cpost.clock } := by
+    dsimp only [s1]; rw [hcp]; rfl
+  have hG1 : GuestInv s1 := by rw [hs1]; exact guestInv_with_locals_clock x _ _ hG
+  have hz1 : locN s1 "dst" = 0 := by
+    rw [hs1]; simpa [locN, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "s" ≠ ofString "dst" by decide] using hz
+  let ip : ProgHOL 64 := .ite cond
+    (.call (some (none, none)) (ofString "htab_set") (.var .local (ofString "dst") :: rest)) .skip
+  have hip : ∀ h : Wave8M19.Htab.FlowR (evaluateHOLFiniteState s1 ip).1,
+      evaluateHOLFiniteState s1 ip = (none, s1) := fun h =>
+    union_zero_ite_flow s1 (by rw [hs1]; exact hc) hG1 hz1 cond rest h
+  rcases HtabUnionInto.seq_flow_split s1 ip (.assign .local (ofString "i") inc) hcont with
+    ⟨mid, hm, ha', hseq⟩ | ⟨hne, hi, hseq⟩
+  · have he := hip (Or.inl (by rw [hm]))
+    have hmid : mid = s1 := by rw [he] at hm; exact (Prod.mk.inj hm).2.symm
+    subst mid
+    obtain ⟨iv, _, hasg⟩ := HtabUnionInto.assign_local_flow s1 _ _ ha'
+    have hpost : post = { s1 with locals := (HolFiniteMapExact.resVarEq
+        (setVarHOLFinite (ofString "i") iv s1).locals
+        (ofString "s", x.locals.lookup (ofString "s"))) } := by
+      dsimp only [post]; rw [hp]
+      change { (evaluateHOLFiniteState s1 (.seq ip (.assign .local (ofString "i") inc))).2 with
+        locals := HolFiniteMapExact.resVarEq
+          (evaluateHOLFiniteState s1 (.seq ip (.assign .local (ofString "i") inc))).2.locals
+          (ofString "s", x.locals.lookup (ofString "s")) } = _
+      rw [hseq, hasg]; rfl
+    rw [hpost, hs1]
+    constructor
+    · rfl
+    · rw [PanRunBounded.resVarEq_lookup]
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "dst" ≠ ofString "s" by decide,
+        show ofString "s" ≠ ofString "dst" by decide,
+        show ofString "i" ≠ ofString "dst" by decide]
+  · have he := hip hi
+    simp [he] at hne
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
