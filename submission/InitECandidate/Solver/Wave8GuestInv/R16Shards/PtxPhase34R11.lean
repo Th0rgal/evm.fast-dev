@@ -439,6 +439,114 @@ theorem lst_push_tail_backing_nonzero {F : Type}
       · cases hs'
     · cases hs'
 
+/-- A returned store sequence exposes a falling store with unchanged locals
+and code, followed by a returned continuation. -/
+theorem store_seq_returned {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {dst src : ExpHOL 64} {tail : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.seq (.store dst src) tail) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.store dst src) = (none, mid) ∧
+      mid.locals = s.locals ∧ mid.code = s.code ∧
+      evaluateHOLFiniteState mid tail = (some (.returned v), post) := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s (.store dst src) with ⟨r, mid⟩
+  rw [hs] at hr
+  have hs' := hs
+  rw [evaluateHOLFiniteState_store] at hs'
+  cases r with
+  | none =>
+    refine ⟨mid, rfl, ?_, ?_, hr⟩
+    · split at hs'
+      · split at hs'
+        · split at hs'
+          · cases hs'; rfl
+          · cases hs'
+        · cases hs'
+      · cases hs'
+    · have he := (evaluateHOLFiniteState_metadata s (.store dst src)).1
+      simpa only [hs] using he
+  | some r =>
+    dsimp only at hr
+    have he := (Prod.mk.inj hr).1
+    cases he
+    split at hs'
+    · split at hs'
+      · split at hs' <;> cases hs'
+      · cases hs'
+    · cases hs'
+
+/-- The growth branch's data, capacity, and length writes compose with return
+to establish nonzero backing from the allocator result. -/
+theorem lst_push_growth_writes_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+          (.var .local (ofString "np")))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2]))
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+              (.op .add [.var .local (ofString "n"), .const 1]))
+            (.return (.op .add
+              [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+               .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  obtain ⟨mid, hs, hloc, hcode, ht⟩ := store_seq_returned hr
+  have hm := (hoare_lst_push_data_write l).run s hc ⟨hl, np, hnp, hnz⟩
+    (by rw [hs]; simp)
+  rw [hs] at hm
+  have hml : mid.locals.lookup (ofString "l") = some (.val (.word l)) := by
+    rw [hloc]; exact hl
+  have hmc : mid.locals.lookup (ofString "cap") = some (.val (.word cap)) := by
+    rw [hloc]; exact hcap
+  obtain ⟨last, hs2, hloc2, hcode2, ht2⟩ := store_seq_returned ht
+  have hm2 := (hoare_lst_push_capacity_write l cap).run mid (hcode.trans hc)
+    ⟨hml, hmc, hm rfl⟩ (by rw [hs2]; simp)
+  rw [hs2] at hm2
+  exact lst_push_tail_backing_nonzero last post l n v (hcode2.trans (hcode.trans hc))
+    (by rw [hloc2, hloc]; exact hl) (by rw [hloc2, hloc]; exact hn) (hm2 rfl) ht2
+
+/-- Reassociate the growth branch's two stores with the common tail without
+changing execution, including any non-falling result. -/
+theorem evaluate_seq_assoc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq (.seq a b) c) =
+      evaluateHOLFiniteState s (.seq a (.seq b c)) := by
+  simp only [evaluateHOLFiniteState_seq_line780]
+  rcases ha : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  cases r <;> simp only
+
+/-- The exact grouped growth-store suffix of `lst_push` retains the new
+nonzero backing through the shared length update and return. -/
+theorem lst_push_grouped_growth_backing_nonzero {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hnz : np.toNat ≠ 0)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.seq
+          (.store (.op .add [.var .local (ofString "l"), .const 0])
+            (.var .local (ofString "np")))
+          (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2])))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+            (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  rw [evaluate_seq_assoc] at hr
+  exact lst_push_growth_writes_backing_nonzero s post l n cap np v
+    hc hl hn hcap hnp hnz hr
+
 /-- A fresh backing block starts above the positive source base. -/
 theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p n : Nat} (hA : ArenaOK s) (hf : FreshBlock s post p n) : p ≠ 0 := by
@@ -456,6 +564,24 @@ theorem backing_nonzero_of_grow {F : Type}
   have hlo := hA.1
   rw [hdata, hnp]
   omega
+
+/-- The existing allocator return contract supplies the nonzero word needed
+by the concrete growth stores, including for a zero-sized request. -/
+theorem alloc_return_nonzero (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hA : ArenaReady (callEntryStateHOLFinite s callee))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ np : BitVec 64, v = .val (.word np) ∧ np.toNat ≠ 0 ∧ ArenaReady post := by
+  have ha := funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl hA
+    (by rw [hr]; simp)
+  rw [hr] at ha
+  obtain ⟨np, hv, hpost, _, hf⟩ := ha v rfl
+  exact ⟨np, hv, fresh_backing_nonzero hA.2 hf, hpost⟩
 
 /-- A push may relocate either backing array. Preserve the outer header
 pointers, and allow each data word either to stay fixed or to become a fresh
