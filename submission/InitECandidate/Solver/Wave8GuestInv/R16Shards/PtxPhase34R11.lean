@@ -1800,6 +1800,23 @@ theorem phase4LogPointer_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "lp" ≠ ofString "logs" from by decide] using hwe
 
+/-- Loading the source pointer preserves the typed length and supplies a typed pointer. -/
+theorem phase4LogPointer_load_typed {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : Phase4LogCountReady s)
+    (hn : ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "logs"), .const 0])) = some v) :
+    let t := setVarHOLFinite (ofString "lp") v s
+    Phase4LogPointersReady t ∧ ∃ n p : BitVec 64,
+      t.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+      t.locals.lookup (ofString "lp") = some (.val (.word p)) := by
+  refine ⟨phase4LogPointer_load s v h he, ?_⟩
+  obtain ⟨n, hn⟩ := hn
+  obtain ⟨p, rfl, _⟩ := evalAt_load_local s "logs" 0 v he
+  refine ⟨n, p, ?_, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "lp" ≠ ofString "nl" by decide] using hn
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 theorem logPointers_heapStep {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
     {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
@@ -2462,6 +2479,18 @@ theorem phase4StableCap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   have hlu : s.locals.lookup (ofString "nl") = some v := he
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hlu,
     show ofString "stable_log_cap" ≠ ofString "nl" from by decide]
+
+/-- Capacity initialization and adjustment preserve both typed copy operands. -/
+theorem stable_capacity_copy_operands {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64)
+    (hn : ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hp : ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) :
+    let t := setVarHOLFinite (ofString "stable_log_cap") v s
+    (∃ n : BitVec 64, t.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    (∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_log_cap" ≠ ofString "nl" by decide,
+    show ofString "stable_log_cap" ≠ ofString "lp" by decide] using And.intro hn hp
 
 def Phase4StableCapReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => Phase4LogPointersReady s ∧
@@ -6360,6 +6389,24 @@ theorem lst_new_stable_length_write (h : PtxCallees) {F : Type}
     (by rw [he]; simp)
   rw [he] at hout
   exact hout rfl
+
+/-- The concrete allocation call preserves the complete spatial and operand package. -/
+theorem hoare_lst_new_stable_copy (h : PtxCallees) :
+    Hoare (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.call (some (VarKind.local, ofString "stable_logs")) (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")])
+      (fun r t => r = none → StableLengthPre t ∧ StableCopySpatial t ∧
+        locN t "logs" ≠ 0 ∧ WordsOK t (locN t "stable_logs", 24) ∧
+        ∃ p : BitVec 64, t.locals.lookup (ofString "lp") = some (.val (.word p))) := by
+  apply Hoare.callLocal_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hpre, hs⟩ := lst_new_stable_length_spatial h s vs body callee ret v post hc hp.1
+    (stable_length_canonical_operand s hp.2.1) ha hl hr
+  exact ⟨hpre, hs,
+    lst_new_stable_copy_operands h s vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
