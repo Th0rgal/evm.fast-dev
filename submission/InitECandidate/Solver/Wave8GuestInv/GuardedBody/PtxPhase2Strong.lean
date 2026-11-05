@@ -3624,4 +3624,18 @@ theorem phase2_key_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
       wordOpHOL, wordOp, panOpHOL]
   · simp [locN, hn, BitVec.toNat_add, BitVec.toNat_mul, Nat.add_mod, Nat.mul_mod]
 
+/-- A bounded cumulative count removes the key-allocation word modulus. -/
+theorem phase2_key_alloc_size_nonwrapping {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hb : locN s "nkeys" * 52 + 8 < 2 ^ 64) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 52 + 8 ∧
+      locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
+  obtain ⟨w, he, hw⟩ := phase2_key_alloc_size s hp
+  rw [Nat.mod_eq_of_lt hb] at hw
+  refine ⟨w, he, hw, ?_⟩
+  rw [hw]
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
