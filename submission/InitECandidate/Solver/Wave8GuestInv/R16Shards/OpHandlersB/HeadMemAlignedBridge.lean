@@ -5484,6 +5484,88 @@ theorem stack_push_run {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end StackPushRun
 
+section FinishLeaves4
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+/-- A store at `global g + k` of any word-valued expression. -/
+theorem Ret.storeGlobAny {F : Type} {S : PanSemStateFiniteExact 64 F} {g : MlS} {a k : BitVec 64}
+    {x : ExpHOL 64} {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hg : S.globals.lookup g = some (.val (.word a)))
+    (hx : ∀ v, ev S x = some v → ∃ w, v = .val (.word w))
+    (hb : ∀ (w : BitVec 64), Ret { S with memory := updW S.memory (a + k) w } b Φ) :
+    Ret S (.seq (.store (.op .add [.var .global g, .const k]) x) b) Φ :=
+  Ret.seq_storeWv _ (ev_globOff S g a k hg) hx (fun w _ _ => hb w)
+
+theorem ev_load_word {F : Type} (S : PanSemStateFiniteExact 64 F) (y : ExpHOL 64) (v : ValueHOL 64)
+    (h : ev S (.load .one y) = some v) : ∃ w, v = .val (.word w) := by
+  simp only [ev] at h
+  rw [evalHOLExact] at h
+  split at h
+  · split at h
+    · rename_i a _
+      rw [memLoadHOLExact] at h
+      split at h
+      · cases hm : S.toExact.memory a with
+        | word w => rw [hm] at h; exact ⟨w, (Option.some.inj h).symm⟩
+      · cases h
+    · cases h
+  · cases h
+
+attribute [local irreducible] Ret in
+/-- `refill_frame_state_gas()` writes only `ev+64`, `ev+72`, `ev+192`. -/
+theorem refill_frame_state_gas_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_refill_frame_state_gas) (fun _ post =>
+      post.globals = s.globals ∧ (∃ w1 w2 w3 : BitVec 64, post.memory =
+        updW (updW (updW s.memory (e + 64) w1) (e + 72) w2) (e + 192) w3) ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_refill_frame_state_gas =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_refill_frame_state_gas).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_refill_frame_state_gas,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.dec fun mv _ => ?_
+  refine Ret.storeGlobOp he fun w1 => ?_
+  refine Ret.storeGlobAny he (fun v hv => ev_load_word _ _ v hv) fun w2 => ?_
+  refine Ret.storeGlobAny he (fun v hv => ⟨0, by simpa [ev, evalHOLExact] using hv.symm⟩) fun w3 => ?_
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, ⟨w1, w2, w3, rfl⟩, rfl, rfl⟩
+
+attribute [local irreducible] Ret in
+/-- `frame_halt(err)` writes only `ev+184`, `ev+64`, `ev+160`. -/
+theorem frame_halt_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e ew : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (herr : s.locals.lookup (ofString "err") = some (.val (.word ew))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_halt) (fun _ post =>
+      post.globals = s.globals ∧ (∃ w1 w2 w3 : BitVec 64, post.memory =
+        updW (updW (updW s.memory (e + 184) w1) (e + 64) w2) (e + 160) w3) ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_halt =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_halt).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_halt,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.storeGlobOp he fun w1 => ?_
+  refine Ret.storeGlobAny he (fun v hv => ⟨0, by simpa [ev, evalHOLExact] using hv.symm⟩) fun w2 => ?_
+  refine Ret.storeGlobAny he (fun v hv => ⟨ew, by simpa [ev, evalHOLExact, herr] using hv.symm⟩)
+    fun w3 => ?_
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, ⟨w1, w2, w3, rfl⟩, rfl, rfl⟩
+
+end FinishLeaves4
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
