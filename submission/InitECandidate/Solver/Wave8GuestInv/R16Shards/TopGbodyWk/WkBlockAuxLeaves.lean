@@ -5294,4 +5294,137 @@ theorem wkSc_state_fresh_tx :
   have hn := globN_eq_of_lookup heq
   exact Nat.le_of_eq hn
 
+/-- Compose sequential world effects with arbitrary record masks. Only roots with a
+nonempty preservation mask need to remain fixed. -/
+theorem worldStepSc_trans_mask {F : Type}
+    {B : BufList} {gw : List String} {keep : List (String × List Nat)}
+    {s1 s2 s3 : PanSemStateFiniteExact 64 F}
+    {r1 r2 : Option (PanSemResultExact 64)}
+    (hB : ValidBufList B)
+    (hbuf : bufRegions B s2 = bufRegions B s1)
+    (hframe : globN s2 "frame_mem_ptr" = globN s1 "frame_mem_ptr")
+    (hroots : ∀ rec ∈ keep, ∀ k ∈ rec.2, globN s2 rec.1 = globN s1 rec.1)
+    (h12 : WorldStepSc (bufRegions B) gw keep NoExtra s1 r1 s2)
+    (h23 : WorldStepSc (bufRegions B) gw keep NoExtra s2 r2 s3) :
+    WorldStepSc (bufRegions B) gw keep NoExtra s1 r2 s3 := by
+  obtain ⟨⟨hA2, hhp12, hG12, hK12, hW12⟩, hsc12⟩ := h12
+  obtain ⟨⟨hA3, hhp23, hG23, hK23, hW23⟩, hsc23⟩ := h23
+  refine ⟨⟨hA3, le_trans hhp12 hhp23,
+    fun k hk => (hG12 k hk).trans (hG23 k hk), ?_, ?_⟩, le_trans hsc23 hsc12⟩
+  · intro rec hrec hnz k hk hno
+    have hg := hroots rec hrec k hk
+    have h2 := hK23 rec hrec (by rw [hg]; exact hnz) k hk
+      (by change ∀ i ∈ bufRegions B s2, ¬ CellHits (globN s2 rec.1 + k) i
+          rw [hbuf, hg]; exact hno)
+    rw [hg] at h2
+    exact h2.trans (hK12 rec hrec hnz k hk hno)
+  · intro S Nd hWT1 hD1
+    obtain ⟨S2, Nd2, hsub12, hWT2, hOG12, hFO12, _⟩ := hW12 S Nd hWT1 hD1
+    obtain ⟨S3, Nd3, hsub23, hWT3, hOG23, hFO23, _⟩ :=
+      hW23 S2 Nd2 hWT2 (validBufList_disj hB hWT2)
+    refine ⟨S3, Nd3, fun t ht => hsub23 t (hsub12 t ht), hWT3, ?_, ?_, trivial⟩
+    · intro o ho
+      rcases hOG23 o ho with rfl | ⟨j, hj, hin_oj⟩ | hin_o23
+      · exact Or.inl rfl
+      · rcases hOG12 j hj with rfl | ⟨k, hk, hin_jk⟩ | hin_j12
+        · left
+          rcases o with ⟨o1, o2⟩
+          dsimp only [Inside] at hin_oj
+          have ho1 : o1 = 0 := by omega
+          have ho2 : o2 = 0 := by omega
+          rw [ho1, ho2]
+        · exact Or.inr (Or.inl ⟨k, hk, le_trans hin_jk.1 hin_oj.1, le_trans hin_oj.2 hin_jk.2⟩)
+        · exact Or.inr (Or.inr ⟨le_trans hin_j12.1 hin_oj.1,
+            le_trans hin_oj.2 (le_trans hin_j12.2 hhp23)⟩)
+      · exact Or.inr (Or.inr ⟨le_trans hhp12 hin_o23.1, hin_o23.2⟩)
+    · intro a ha hhf
+      have hm12 : s2.memory a = s1.memory a := hFO12 a ha hhf
+      have hm23 : s3.memory a = s2.memory a := by
+        apply hFO23 a
+        · intro i hi hch
+          obtain ⟨hc1, hc2⟩ := hch
+          rcases List.mem_append.1 hi with hi1 | hfg2
+          · rcases List.mem_append.1 hi1 with hwo2 | hR2
+            · rcases hOG12 i hwo2 with rfl | ⟨k, hk, hin_ik⟩ | hin_i12
+              · dsimp only at hc2; omega
+              · exact ha k (List.mem_append_left _ (List.mem_append_left _ hk))
+                  ⟨by dsimp only [Inside] at hin_ik; omega,
+                   by dsimp only [Inside] at hin_ik; omega⟩
+              · have hp2_lim : globN s2 "heap_ptr" ≤ heapLimit := hA2.2.2.1
+                exact hhf ⟨by unfold heapFree; dsimp only [Inside] at hin_i12 ⊢; omega,
+                           by unfold heapFree; dsimp only [Inside] at hin_i12 ⊢; omega⟩
+            · change i ∈ bufRegions B s2 at hR2
+              rw [hbuf] at hR2
+              exact ha i (List.mem_append_left _ (List.mem_append_right _ hR2)) ⟨hc1, hc2⟩
+          · simp only [List.mem_singleton] at hfg2
+            subst hfg2
+            exact ha (freeGap s1) (List.mem_append_right _ (List.mem_singleton.2 rfl))
+              ⟨by unfold freeGap at hc1 ⊢; dsimp only at hc1 ⊢; omega,
+               by unfold freeGap at hc2 ⊢; dsimp only at hc2 ⊢; omega⟩
+        · intro ⟨hc1, hc2⟩
+          have hp2_lim : globN s2 "heap_ptr" ≤ heapLimit := hA2.2.2.1
+          exact hhf ⟨by unfold heapFree at hc1 hc2 ⊢; dsimp only at hc1 hc2 ⊢; omega,
+                     by unfold heapFree at hc1 hc2 ⊢; dsimp only at hc1 hc2 ⊢; omega⟩
+      exact hm23.trans hm12
+
+/-- Weaken buffer, global, and record effects together, including empty masks
+for record roots replaced by transaction initialization. -/
+theorem worldStepSc_mono_mask {F : Type}
+    {B1 B2 : BufList} {gw1 gw2 : List String}
+    {keep1 keep2 : List (String × List Nat)}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hB : ∀ p ∈ B1, p ∈ B2)
+    (hgw : ∀ g ∈ gw1, g ∈ gw2)
+    (hkeep : ∀ rec ∈ keep2, ∀ k ∈ rec.2,
+      ∃ ks, (rec.1, ks) ∈ keep1 ∧ k ∈ ks)
+    (h : WorldStepSc (bufRegions B1) gw1 keep1 NoExtra s r post) :
+    WorldStepSc (bufRegions B2) gw2 keep2 NoExtra s r post := by
+  obtain ⟨⟨hAp, hhp, hG, hK, hW⟩, hsc⟩ := h
+  have hsubR : ∀ i ∈ bufRegions B1 s, i ∈ bufRegions B2 s := by
+    intro i hi
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hi
+    exact List.mem_map.2 ⟨p, hB p hp, rfl⟩
+  refine ⟨⟨hAp, hhp, ?_, ?_, ?_⟩, hsc⟩
+  · intro k hk
+    apply hG k
+    intro hm
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk (List.mem_map.2 ⟨g, hgw g hg, rfl⟩)
+  · intro rec hrec hnz k hk hno
+    obtain ⟨ks, hks, hk'⟩ := hkeep rec hrec k hk
+    exact hK (rec.1, ks) hks hnz k hk' (fun i hi => hno i (hsubR i hi))
+  · intro S Nd hWT hD
+    obtain ⟨S', Nd', hsub, hWT', hOG, hFO, _⟩ :=
+      hW S Nd hWT (fun i hi j hj => hD i (hsubR i hi) j hj)
+    refine ⟨S', Nd', hsub, hWT', hOG, ?_, trivial⟩
+    intro a ha hhf
+    apply hFO a _ hhf
+    intro i hi
+    rcases List.mem_append.1 hi with hi1 | hfg
+    · rcases List.mem_append.1 hi1 with hwo | hR1
+      · exact ha i (List.mem_append_left _ (List.mem_append_left _ hwo))
+      · exact ha i (List.mem_append_left _ (List.mem_append_right _ (hsubR i hR1)))
+    · exact ha i (List.mem_append_right _ hfg)
+
+def withdrawalBufs : BufList :=
+  [("bal_key_buf", 64), ("keccak_pad", 136), ("keccak_st", 200),
+   ("mpt_nib_scratch", 64), ("sk_buf", 52)]
+
+def withdrawalGlobals : List String := ["heap_ptr", "journal_n", "scratch_ptr", "ts"]
+
+def withdrawalKeep : List (String × List Nat) :=
+  [("ws", [0, 8, 16, 24, 32]),
+   ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []),
+   ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+
+theorem wkSc_state_fresh_tx_withdrawal :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "state_fresh_tx") := by
+  obtain ⟨params, body, ret, hlookup, hbody⟩ := wkSc_state_fresh_tx
+  refine ⟨params, body, ret, hlookup, ?_⟩
+  intro F s hc hW hex hnt hres
+  exact worldStepSc_mono_mask (B1 := []) (by simp)
+    (by decide) (fun rec hrec k hk => ⟨rec.2, hrec, hk⟩)
+    (hbody s hc hW hex hnt hres)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
