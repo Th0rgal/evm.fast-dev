@@ -10739,4 +10739,30 @@ theorem Flw.seq_memcpy_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
   obtain ⟨_, c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ := hspec
   exact hk _ ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ rfl
 
+/-- Aligned list reallocation retains every complete copied entry. -/
+theorem Flw.seq_memcpy_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {ed es en : ExpHOL 64} {cont : ProgHOL 64}
+    {Ψ : Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode) (dst src n : BitVec 64)
+    (hd_nw : dst.toNat + n.toNat < 2 ^ 64)
+    (hs_nw : src.toNat + n.toNat < 2 ^ 64)
+    (hn_small : n.toNat + 32 < 2 ^ 63)
+    (hdisj : Disj (dst.toNat, n.toNat) (src.toNat, n.toNat))
+    (hd8 : dst.toNat % 8 = 0) (hs8 : src.toNat % 8 = 0)
+    (hed : ev s ed = some (.val (.word dst)))
+    (hes : ev s es = some (.val (.word src)))
+    (hen : ev s en = some (.val (.word n)))
+    (hk : ∀ s' : PanSemStateFiniteExact 64 F,
+      SoloHtabSet.MemCopyRel s s' dst src n.toNat n.toNat →
+      (∀ i, 8 * i + 8 ≤ n.toNat →
+        memW s' (dst.toNat + 8 * i) = memW s (src.toNat + 8 * i)) →
+      s'.locals = s.locals → Flw s' cont Ψ) :
+    Flw s (.seq (.call (some (none, none)) (ofString "memcpy") [ed, es, en]) cont) Ψ := by
+  refine Flw.seq_memcpy_disj (cont := cont) (Ψ := Ψ) hcode dst src n
+    hd_nw hs_nw hn_small hdisj hed hes hen ?_
+  intro s' hr hl
+  apply hk s' hr _ hl
+  intro i hi
+  exact SoloHtabSet.memW_copied_of_memCopyRel hr hd8 hs8 (by omega) hi hd_nw hs_nw
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
