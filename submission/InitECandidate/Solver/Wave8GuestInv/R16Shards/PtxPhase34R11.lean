@@ -12594,4 +12594,32 @@ theorem heapByteEff_rlp_finish_list_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc PtxP1
+
+theorem txBacking_of_scratch_heapByteEff {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gs : List (String × Nat × Nat)}
+    (hgs : ScratchSpec gs) (hW : TxWorld s) (hb : TxBacking s)
+    (he : HeapByteEff s post (gs.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post := by
+  apply txBacking_of_scratch_frame hgs hW hb he.arena.2
+    ⟨he.hp_le, he.sp_le⟩
+    (R16Shards.globN_eq_of_lookup (he.globals _ (by decide)))
+  intro a hk hf
+  by_contra hn
+  rcases he.cell_frame a hn with ⟨i, hi, hhit⟩ | hgap | hheap
+  · exact hk i (List.mem_append_left _ hi) hhit.2
+  · exact hk _ (List.mem_append_right _ (by simp)) hgap.2
+  · exact hf hheap.2
+
+theorem receipt_backing_of_body_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (he : HeapByteEff s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post :=
+  txBacking_of_scratch_heapByteEff receiptScratchSpec_ok hp.1.1 hb he
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
