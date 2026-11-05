@@ -11781,4 +11781,150 @@ theorem lst_push_alloc_branch_allocated_frame (h : PtxCallees) {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Both capacity branches and the common length/return tail frame an old cell. -/
+theorem lst_push_capacity_tail_memory_frame (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap esz a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hle : n.toNat ≤ cap.toNat) (hbound : esz.toNat * cap.toNat * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8)) (h0 : a ≠ l) (h8 : a ≠ l + 8) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s
+      (.seq
+        (.ite (.cmp .notLower (.var .local (ofString "n")) (.var .local (ofString "cap")))
+          (.decCall (ofString "np") .one (ofString "alloc")
+            [.panop .mul [.panop .mul
+              [.var .local (ofString "esz"), .var .local (ofString "cap")], .const 2]]
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.var .local (ofString "np"),
+                 .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+                 .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+              (.seq
+                (.store (.op .add [.var .local (ofString "l"), .const 0])
+                  (.var .local (ofString "np")))
+                (.store (.op .add [.var .local (ofString "l"), .const 16])
+                  (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip)
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  obtain ⟨mid, hm, ht⟩ := seq_returned_of_not_returned (by
+    apply ite_not_returned
+    · apply dec_call_not_returned
+      intro t
+      apply seq_not_returned
+      · exact ignored_call_not_returned _ _ _ _
+      · intro t
+        apply seq_not_returned
+        · exact store_not_returned _ _ _ _
+        · intro t; exact store_not_returned _ _ _ _
+    · simp [evaluateHOLFiniteState_skip]) hr
+  rcases ite_skip_fall_inv hm with hg | rfl
+  · have hf := lst_push_alloc_branch_allocated_frame h s mid l n cap esz a
+      hc hA hl hn hcap hesz hle hbound ha h0 h16 hg
+    have hloc := lst_push_alloc_branch_lookup s mid _ hg
+    have hmeta : ∀ p, evaluateHOLFiniteState s p = (none, mid) → mid.code = s.code := by
+      intro p hp
+      have hm := (evaluateHOLFiniteState_metadata s p).1
+      rw [hp] at hm
+      exact hm
+    have hcode := hmeta _ hg
+    exact (lst_push_tail_memory_frame mid post l n a v (hcode.trans hc)
+      ((hloc _ (by decide)).trans hl) ((hloc _ (by decide)).trans hn) h8 ht).trans hf
+  · exact lst_push_tail_memory_frame mid post l n a v hc hl hn h8 ht
+
+/-- Expose the initializer value as well as memory-preserving scope restoration. -/
+theorem dec_word_returned_inv_eval {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {x : MlS} {e : ExpHOL 64} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (hr : evaluateHOLFiniteState s (.dec x .one e cont) = (some (.returned v), post)) :
+    ∃ w : BitVec 64, ∃ mid,
+      evalAt s e = some (.val (.word w)) ∧
+      evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont =
+        (some (.returned v), mid) ∧ post.memory = mid.memory := by
+  rw [evaluateHOLFiniteState_dec_total] at hr
+  dsimp only at hr
+  split at hr
+  · cases hr
+  · rename_i value he
+    split at hr
+    · rename_i hshape
+      have hw : ∃ w : BitVec 64, value = .val (.word w) := by
+        cases value with
+        | val z => cases z with
+          | word w => exact ⟨w, rfl⟩
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hshape
+      obtain ⟨w, rfl⟩ := hw
+      rcases hb : evaluateHOLFiniteState (setVarHOLFinite x (.val (.word w)) s) cont with ⟨r, mid⟩
+      rw [hb] at hr
+      exact ⟨w, mid, he, by rw [← (Prod.mk.inj hr).1]; exact hb,
+        congrArg (fun t => t.memory) (Prod.mk.inj hr).2.symm⟩
+    · cases hr
+
+theorem loaded_header_word_nat {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {l w : BitVec 64} {k : Nat}
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hb : l.toNat + k < 2 ^ 64)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "l"), .const (BitVec.ofNat 64 k)])) =
+      some (.val (.word w))) : w.toNat = memW s (l.toNat + k) := by
+  have haddr : l + BitVec.ofNat 64 k = BitVec.ofNat 64 (l.toNat + k) := by
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
+    have hk : k < 2 ^ 64 := by omega
+    rw [Nat.mod_eq_of_lt hk]
+  simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp,
+    haddr, memLoadHOLExact] at he
+  simp [memW, he.2]
+
+/-- The complete concrete push frames an allocated cell outside its header. -/
+theorem lst_push_body_memory_frame (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l esz a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hlb : l.toNat + 24 ≤ 2 ^ 64)
+    (hlen : memW s (l.toNat + 8) ≤ memW s (l.toNat + 16))
+    (hbound : esz.toNat * memW s (l.toNat + 16) * 2 < 2 ^ 64)
+    (ha : Allocated s (a.toNat, 8)) (h0 : a ≠ l) (h8 : a ≠ l + 8) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  dsimp only [sourceFunctionEntry, Guest.Software.guestFn_lst_push,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural, List.map, Option.map] at hr
+  obtain ⟨n, mid, hen, hr, hm⟩ := dec_word_returned_inv_eval hr
+  obtain ⟨cap, last, hec, hr, hm'⟩ := dec_word_returned_inv_eval hr
+  have hnval := loaded_header_word_nat hl (by omega : l.toNat + 8 < 2 ^ 64) hen
+  have hcl : (setVarHOLFinite (ofString "n") (.val (.word n)) s).locals.lookup (ofString "l") =
+      some (.val (.word l)) := by
+    simpa [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "l" by decide] using hl
+  have hcval := loaded_header_word_nat hcl (by omega : l.toNat + 16 < 2 ^ 64) hec
+  change cap.toNat = memW s (l.toNat + 16) at hcval
+  have hf := lst_push_capacity_tail_memory_frame h
+    (setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) s)) last l n cap esz a v hc
+    ((arenaReady_with_locals s _ s.clock).2 hA)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hl,
+      show ofString "cap" ≠ ofString "l" by decide, show ofString "n" ≠ ofString "l" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "cap" ≠ ofString "n" by decide])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hesz,
+      show ofString "cap" ≠ ofString "esz" by decide, show ofString "n" ≠ ofString "esz" by decide])
+    (by rw [hnval, hcval]; exact hlen) (by rw [hcval]; exact hbound) ha h0 h8 h16 hr
+  rw [hm, hm']
+  exact hf
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
