@@ -191,6 +191,23 @@ theorem logsOwnedDisj_array_survives {F : Type}
   · exact (R13Shards.ivl_allocated_bound hAs (Or.inl hin)).2
   · constructor <;> dsimp <;> omega
 
+/-- A nonempty log list does provide alignment of its backing pointer, through
+the ordinary-domain membership of its first live cell. This does not bound
+that cell by the current allocation frontier. -/
+theorem logsListOK_array_aligned {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {logs : Nat} (hg : GuestInv s) (h : LogsListOK s logs) (hn : logs ≠ 0)
+    (hlen : 0 < memW s (logs + 8)) : memW s logs % 8 = 0 := by
+  rcases h with hz | hl
+  · exact False.elim (hn hz)
+  obtain ⟨w, hdom, _⟩ := (hl.2.2.2.2 0 hlen).1
+  rw [hg.memaddrs] at hdom
+  have ha := (R13Shards.ordinaryDomain_iff _).mp hdom
+  have hlt : memW s logs < 2 ^ 64 := by
+    unfold memW
+    cases s.memory (BitVec.ofNat 64 logs) with
+    | word v => exact v.isLt
+  simpa only [Nat.mul_zero, Nat.add_zero, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] using ha.1
+
 /-- A framed world step preserves the entire log list when its live array is
 heap-resident and all live log storage avoids the explicit write footprint. -/
 theorem logsListOK_of_framed_step {F : Type}
@@ -219,6 +236,38 @@ theorem logsListOK_of_framed_step {F : Type}
   intro i hi
   exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
     hold0 hR0 hog hfr (hRe i hi)).2.2
+
+/-- Empty arrays need no placement premise. For nonempty arrays, alignment
+follows from `LogsListOK`, leaving only heap placement as an extra obligation. -/
+theorem logsListOK_of_framed_step_live {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs)
+    (harray : logs ≠ 0 → 0 < memW s (logs + 8) →
+      Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsListOK post logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  have hh := logsOwnedDisj_header_survives hAs hhp hlogs hd hn hold0 hR0 hog hfr hRh
+  apply logsListOK_congr_header_unhit hAs hgS hgP hhp hlogs
+    (fun _ => Or.inl hh.1) hh.2.2
+  · intro i hi
+    have hpos : 0 < memW s (logs + 8) := by omega
+    exact (logsOwnedDisj_array_survives hAs hhp hd hn
+      (logsListOK_array_aligned hgS hlogs hn hpos) (harray hn hpos)
+      hold0 hR0 hog hfr hRa).1 i hi
+  · intro i hi
+    exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
+      hold0 hR0 hog hfr (hRe i hi)).2.2
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
