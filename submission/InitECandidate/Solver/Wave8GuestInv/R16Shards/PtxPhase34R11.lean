@@ -12462,4 +12462,32 @@ theorem rlp_encode_bytes_heapByteEff {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Zeroing the fresh bloom buffer preserves the original receipt frame. -/
+theorem heapByteEff_memzero_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw) (dstExp nExp : ExpHOL 64) (dst n : BitVec 64)
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hn : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) nExp = some (.val (.word n)))
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + n.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "memzero") [dstExp, nExp]) = (none, post)) :
+    HeapByteEff s post R gw := by
+  have hz := eval_call_memzero_heap mid dstExp nExp dst n
+    (R ++ [(dst.toNat, n.toNat)]) gw hpre.arena.1.code hpre.arena hd hn
+    (fun _ => ⟨(dst.toNat, n.toNat), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩)
+    (by rw [hr]; simp)
+  rw [hr] at hz
+  apply heapByteEff_trans_fresh hpre (hz.1 rfl).2.1
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
