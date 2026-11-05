@@ -10694,4 +10694,47 @@ theorem icsTail_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
   obtain ⟨_, _, hw⟩ := harrWp
   exact hw i (by dsimp only; omega)
 
+/-- Content-preserving copy rule for the list-growth branch. -/
+theorem Flw.seq_memcpy_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {ed es en : ExpHOL 64} {cont : ProgHOL 64}
+    {Ψ : Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode)
+    (dst src n : BitVec 64)
+    (hd_nw : dst.toNat + n.toNat < 2 ^ 64)
+    (hs_nw : src.toNat + n.toNat < 2 ^ 64)
+    (hn_small : n.toNat + 32 < 2 ^ 63)
+    (hdisj : Disj (dst.toNat, n.toNat) (src.toNat, n.toNat))
+    (hed : ev s ed = some (.val (.word dst)))
+    (hes : ev s es = some (.val (.word src)))
+    (hen : ev s en = some (.val (.word n)))
+    (hk : ∀ s' : PanSemStateFiniteExact 64 F,
+      SoloHtabSet.MemCopyRel s s' dst src n.toNat n.toNat →
+      s'.locals = s.locals → Flw s' cont Ψ) :
+    Flw s (.seq (.call (some (none, none)) (ofString "memcpy") [ed, es, en]) cont) Ψ := by
+  refine Flw.seq_call00 fun values body callee ret v post h1 h2 h3 => ?_
+  have hv : values = [.val (.word dst), .val (.word src), .val (.word n)] := by
+    simp only [evalListHOLFinite, evalListHOLExact] at h1
+    unfold ev at hed hes hen
+    rw [hed, hes, hen] at h1; simp at h1; exact h1.symm
+  subst hv
+  have hl := pan_three_word_lookup s.code.lookup (ofString "memcpy") (ofString "dst") (ofString "src")
+    (ofString "n") _ dst src n (by decide) (by decide) (by decide)
+    (by rw [hcode]; exact SoloHtabSet.lookup_memcpy_fn)
+  rw [hl] at h2
+  simp only [Option.some.injEq, Prod.mk.injEq] at h2
+  obtain ⟨rfl, rfl, rfl⟩ := h2
+  let entry := callEntryStateHOLFinite s
+    (((HolFiniteMapExact.empty.update (ofString "dst", .val (.word dst))).update
+      (ofString "src", .val (.word src))).update (ofString "n", .val (.word n)))
+  have hspec := SoloHtabSet.memcpy_body_spec entry dst src n hd_nw hs_nw hn_small hdisj
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "dst" by decide, show ofString "src" ≠ ofString "dst" by decide])
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "src" by decide])
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    v (by rw [h3])
+  rw [h3] at hspec
+  obtain ⟨_, c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ := hspec
+  exact hk _ ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
