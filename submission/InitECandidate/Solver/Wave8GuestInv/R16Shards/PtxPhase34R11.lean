@@ -3583,6 +3583,23 @@ theorem stable_length_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
     Nat.mod_eq_of_lt (stable_length_address_bound s hA hh).1]
   constructor <;> dsimp <;> omega
 
+/-- The length-store precondition discharges source-array framing without
+requiring a separate allocation or alignment hypothesis. -/
+theorem stableLengthPre_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    ∀ j, j < memW s (locN s "logs" + 8) →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j) := by
+  obtain ⟨S, Nd, hW, ho, hs, hh, ha, he⟩ := hp.2.2.2.2
+  have hptr := hp.1.1.1.1
+  have htw := hptr.1.1.1.1
+  intro j hj
+  exact stable_length_source_cells s mem' _ _ htw.1.1.2 hp.2.1
+    (ho hptr.1.2.2).1
+    (logsListOK_array_aligned htw.1.1.1 hptr.1.1.2.1 hptr.1.2.2 (by omega))
+    ha hm j hj
+
 /-- Specialize source-array framing to the current stable-copy write. -/
 theorem stableCopyInv_source_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
