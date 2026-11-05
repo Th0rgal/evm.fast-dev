@@ -6318,4 +6318,121 @@ theorem ws_get_code_compare_return {F : Type} (s : PanSemStateFiniteExact 64 F)
     cases hw
     exact ⟨0, 0, rfl, by decide⟩
 
+/-- The concrete nonempty-hash lookup continuation of `ws_get_code`. -/
+def wsCodeLookupTail : ProgHOL 64 :=
+  .decCall (ofString "r") (.comb [.one, .one, .one]) (ofString "nodedb_lookup")
+    [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+      .var .local (ofString "code_hash")]
+    (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+      (.raise (ofString "StateErr") (.const 2)) .skip)
+      (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+        .rfield 2 (.var .local (ofString "r"))])))
+
+theorem ws_get_code_body_eq :
+    sourceFnBody Guest.Software.guestFn_ws_get_code =
+      .decCall (ofString "eq") .one (ofString "memeq")
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) wsCodeLookupTail) := by rfl
+
+/-- Full-body return composition, with the remaining nonempty lookup
+obligation exposed at the comparison's concrete resumed state. -/
+theorem ws_get_code_body_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcompare : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∃ eqw : BitVec 64, v = .val (.word eqw) ∧
+        (eqw = 0 → Ret (setVarHOLFinite (ofString "eq") v {post with locals := s.locals}) wsCodeLookupTail
+          (fun v _ => ∃ code code_n : BitVec 64,
+            v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [ws_get_code_body_eq]
+  exact ws_get_code_compare_return s _ wsCodeLookupTail hcompare
+
+/-- Returning declaration calls expose their successful result-shape check
+to the continuation proof. -/
+theorem Ret.decCall_gen_shape {F : Type} {s : PanSemStateFiniteExact 64 F} {x fname : MlS}
+    {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hk : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret) = true →
+      Ret (setVarHOLFinite x v {post with locals := s.locals}) cont
+        (fun w t => Φ w {t with locals := HolFiniteMapExact.resVarEq t.locals (x, s.locals.lookup x)})) :
+    Ret s (.decCall x sh fname args cont) Φ := by
+  intro v hv
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hv ⊢
+  revert hv
+  split
+  · simp
+  · rename_i values ha
+    split
+    · simp
+    · rename_i body callee ret hl
+      split
+      · simp
+      · dsimp only
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        dsimp only
+        rcases r with _ | r
+        · simp
+        · cases r with
+          | returned w =>
+            dsimp only
+            split
+            · rename_i hs
+              intro hv
+              exact hk values body callee ret w post ha hl hr hs v hv
+            · simp
+          | exception _ _ => simp
+          | _ => simp
+
+/-- The comparison result is a word by the call's shape check; only the
+zero-comparison continuation remains as a callee obligation. -/
+theorem ws_get_code_compare_return_of_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64)) (tail : ProgHOL 64)
+    (htail : ∀ values body callee ret eqw post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned (.val (.word eqw))), post) →
+      eqw = 0 → Ret (setVarHOLFinite (ofString "eq") (.val (.word eqw)) {post with locals := s.locals}) tail
+        (fun v _ => ∃ code code_n : BitVec 64,
+          v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40)) :
+    Ret s (.decCall (ofString "eq") .one (ofString "memeq") args
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+        (.return (.rstruct [.const 0, .const 0])) .skip) tail))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen_shape
+  intro values body callee ret v post ha hl hb hs
+  rcases v with ⟨⟨eqw⟩⟩ | _ | _ <;> try (simp [shapeOfHOLExact, shapeEqHOL] at hs)
+  let st := setVarHOLFinite (ofString "eq") (.val (.word eqw)) {post with locals := s.locals}
+  have heq : st.locals.lookup (ofString "eq") = some (.val (.word eqw)) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  by_cases hz : eqw = 0
+  · have he : ev st (.cmp .notEqual (.var .local (ofString "eq")) (.const 0)) =
+        some (.val (.word 0)) := by
+      simp [ev, evalHOLExact, heq, hz, Compiler.Encoders.Asm.wordCmpHOL]
+    have hi : evaluateHOLFiniteState st
+        (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) = (none, st) := by
+      rw [evaluateHOLFiniteState_ite]
+      unfold ev at he
+      rw [he]
+      simp [evaluateHOLFiniteState_skip]
+    intro w hw
+    rw [evaluateHOLFiniteState_seq_line780, hi] at hw
+    exact htail values body callee ret eqw post ha hl hb hz w hw
+  · intro w hw
+    rw [ws_get_code_empty_tail st eqw heq hz tail] at hw
+    cases hw
+    exact ⟨0, 0, rfl, by decide⟩
+
 end HeadStore
