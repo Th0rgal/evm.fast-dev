@@ -8925,6 +8925,91 @@ theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
     exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
 
+/-- Error incorporation's three head writes avoid every chain alignment cell. -/
+theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
+  have hkbound : k < 280 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+  have hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+  obtain ⟨_, S, _, hrest⟩ := hi
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
+  let e := globN s "ev"
+  let c := globN s "cur_cont"
+  have hhead := hFW _ (head_mem_evmChain s)
+  have heB := (hhead.1 (e, 280) (by simp [e])).1.2
+  have hcB := (hhead.1 (c, 104) (by simp [c])).1.2
+  dsimp only at heB hcB
+  have hbound : scratchEnd < 2 ^ 64 := by rw [R11Shards.scratchEnd_val]; decide
+  have hneq (a : Nat) (ha : a < 2 ^ 64) (hne : a ≠ e + k) :
+      BitVec.ofNat 64 a ≠ BitVec.ofNat 64 (e + k) := by
+    intro hx
+    have hh := congrArg BitVec.toNat hx
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha,
+      Nat.mod_eq_of_lt (show e + k < 2 ^ 64 by omega)] at hh
+    exact hne hh
+  have hcs : evmChain s = (e, c) :: (evmChain s).tail := evmChain_cons s
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdc : Disj (e, 280) (c, 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | ht
+  · unfold Disj at hdc; dsimp only at hdc
+    refine ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+  · have hF := hFW ec (by rw [hcs]; exact List.mem_cons_of_mem _ ht)
+    have hrB := (hF.1 (ec.1, 280) (by simp)).1.2
+    have hkB := (hF.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hrB hkB
+    have hmem (i : Ivl) (hm : i ∈ frameObjects s ec) :
+        i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+      List.mem_flatten.mpr ⟨frameObjects s ec, List.mem_map_of_mem ht, hm⟩
+    have hd1 := hcross (e, 280) (by simp [frameObjects])
+      (ec.1, 280) (hmem _ (by simp [frameObjects]))
+    have hd2 := hcross (e, 280) (by simp [frameObjects])
+      (ec.2, 104) (hmem _ (by simp [frameObjects]))
+    unfold Disj at hd1 hd2; dsimp only at hd1 hd2
+    exact ⟨hneq _ (by omega) (by omega), hneq _ (by omega) (by omega),
+      hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
+
+/-- The error incorporation callee preserves the chain's memory contract. -/
+theorem incorporate_child_on_error_cells {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (hi : EvmInv s)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, ⟨w1, w2, w3, hm⟩, _, _⟩ :=
+    Ret.apply (incorporate_child_on_error_run s e he) hr
+  have heq : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have h64 := chain_cells_ne_head_error s hi 64 (by simp)
+  have h72 := chain_cells_ne_head_error s hi 72 (by simp)
+  have h184 := chain_cells_ne_head_error s hi 184 (by simp)
+  rw [BitVec.ofNat_add (globN s "ev") 64, heq] at h64
+  rw [BitVec.ofNat_add (globN s "ev") 72, heq] at h72
+  rw [BitVec.ofNat_add (globN s "ev") 184, heq] at h184
+  intro ec hec
+  obtain ⟨h1, h2, h3, h4⟩ := h64 ec hec
+  obtain ⟨h5, h6, h7, h8⟩ := h72 ec hec
+  obtain ⟨h9, h10, h11, h12⟩ := h184 ec hec
+  have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e + 64)
+      (hb : BitVec.ofNat 64 a ≠ e + 72) (hc : BitVec.ofNat 64 a ≠ e + 184) :
+      memW post a = memW s a := by
+    unfold memW
+    rw [hm, updW_ne _ _ _ _ hc, updW_ne _ _ _ _ hb, updW_ne _ _ _ _ ha]
+  exact ⟨hkeep _ h1 h5 h9, hkeep _ h2 h6 h10,
+    hkeep _ h3 h7 h11, hkeep _ h4 h8 h12⟩
+
 /-- The concrete cleanup restores the saved frame-memory mark and preserves
 every chain alignment cell.  The only memory write is the parent's pc. -/
 theorem finish_child_cleanup_cells {F : Type} (t post : PanSemStateFiniteExact 64 F)
