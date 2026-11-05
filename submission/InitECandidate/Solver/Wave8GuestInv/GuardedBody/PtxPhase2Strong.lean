@@ -1500,4 +1500,97 @@ theorem phase2_teLive_store {F : Type} {s : PanSemStateFiniteExact 64 F}
   · rw [how]
     exact hd
 
+/-- Store-ready environment: transaction and environment separation use the
+same world witness, so successive stores need no witness reconciliation. -/
+def PtxTeStoreReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxTeLive s ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧
+      TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd) ∧
+      Disj (locN s "tx", 384) (locN s "te", 200) ∧
+      (0 < memW s (locN s "tx" + 216) →
+        Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+          (locN s "te", 200))
+
+theorem phase2_teStoreReady_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeStoreReady s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxTeStoreReady { s with memory := mem } := by
+  obtain ⟨hl, S, Nd, hW, hT, hd, htx, hrec⟩ := hp
+  obtain ⟨hv, hW', how⟩ := phase2_store_validated_outside hl.1 hW hT
+    (blk := (locN s "te", 200)) (fun o ho => hd _ (by simp) o ho)
+    hx hin htx hrec hm
+  have hA := hl.1.1.1.1.1.1
+  have hAp := hv.1.1.1.1.1
+  have hu : IvlUnhit s { s with memory := mem } (locN s "tx", 384) :=
+    ivlUnhit_single hm (by simp) (disj_of_inside_right hin htx)
+  have hur : 0 < memW s (locN s "tx" + 216) →
+      IvlUnhit s { s with memory := mem }
+        (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) := by
+    intro hn
+    exact ivlUnhit_single hm (by dsimp; omega) (disj_of_inside_right hin (hrec hn))
+  have hT' := R16Shards.PtxP1.txAccessListAt_congr_unhit
+    (post := { s with memory := mem }) hA.2 hA.1 hAp.1 le_rfl hT
+    (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2) hu hur
+  have hd' : IvlsDisj [(locN s "te", 200)] (worldOwned { s with memory := mem } S Nd) := by
+    rw [how]; exact hd
+  have hl' : PtxTeLive { s with memory := mem } :=
+    ⟨hv, hl.2.1, hl.2.2.1, hl.2.2.2.1,
+      wordsOK_transfer hA.1 hAp.1 hl.2.2.2.2.1, S, Nd, hW', hd'⟩
+  have htwords := hT.1.1
+  have hthi := (ivl_allocated_bound hA.2 (Or.inl hT.1.2.1)).2
+  have heq : ∀ k, k % 8 = 0 → k + 8 ≤ 384 →
+      memW { s with memory := mem } (locN s "tx" + k) = memW s (locN s "tx" + k) := by
+    intro k hk hle
+    exact memW_eq_of_ivlUnhit hu (by have := htwords.1; omega) hthi
+      ⟨by dsimp; omega, by dsimp; omega⟩
+  refine ⟨hl', S, Nd, hW', hT', hd', htx, ?_⟩
+  change 0 < memW { s with memory := mem } (locN s "tx" + 216) →
+    Disj (memW { s with memory := mem } (locN s "tx" + 208),
+      24 * memW { s with memory := mem } (locN s "tx" + 216)) (locN s "te", 200)
+  simpa only [heq 216 (by decide) (by decide), heq 208 (by decide) (by decide)] using hrec
+
+/-- Every aligned word offset of the live environment denotes an allocated
+address, without modular wraparound. -/
+theorem phase2_teLive_slot {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s) (k : Nat) (hk : k < 25) :
+    let x := BitVec.ofNat 64 (locN s "te" + 8 * k)
+    x.toNat = locN s "te" + 8 * k ∧ s.memaddrs x ∧
+      Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200) := by
+  have hA := hp.1.1.1.1.1.1
+  have hhi := (ivl_allocated_bound hA.2 (Or.inl hp.2.2.1)).2
+  have hlt : locN s "te" + 8 * k < 2 ^ 64 := by dsimp at hhi; omega
+  have heq : (BitVec.ofNat 64 (locN s "te" + 8 * k)).toNat = locN s "te" + 8 * k := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  refine ⟨heq, ?_, ?_⟩
+  · rw [hA.1.memaddrs]
+    apply (ordinaryDomain_iff _).mpr
+    rw [heq]
+    have hlo := hp.2.2.1.1
+    have hal := hp.2.2.2.1
+    constructor
+    · omega
+    · constructor
+      · exact Nat.le_trans hlo (by omega)
+      · have hbound := hA.2
+        have hinside := hp.2.2.1
+        unfold Inside at hinside
+        rcases hbound with ⟨_, _, _, _⟩
+        unfold heapLimit at *
+        have : InitE.scratchStart ≤ InitE.heapEnd := by decide
+        omega
+  · rw [heq]
+    constructor <;> dsimp <;> omega
+
+/-- Instantiation of the store frame at a concrete environment word slot.
+The slot lemma discharges both address validity and extent containment. -/
+theorem phase2_teStoreReady_slot_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeStoreReady s) (k : Nat) (hk : k < 25)
+    {mem : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "te" + 8 * k) → mem a = s.memory a) :
+    PtxTeStoreReady { s with memory := mem } := by
+  obtain ⟨_, hx, hin⟩ := phase2_teLive_slot hp.1 k hk
+  exact phase2_teStoreReady_store hp hx hin hm
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
