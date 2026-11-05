@@ -4406,4 +4406,14 @@ theorem phase2_storage_keys_alloc_fresh (h : PtxCallees) {F : Type}
   obtain ⟨w, hv, _, _, hf⟩ := hr v rfl
   exact ⟨w, hv, by simpa only [hcn] using hf⟩
 
+/-- Every storage-key destination stays below the fresh allocation's heap frontier. -/
+theorem phase2_storage_keys_fresh_slot {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {base count k : Nat}
+    (hf : FreshBlock s post base (count * 32)) (hk : k < count) :
+    Inside (base + 32 * k, 32) (globN s "heap_ptr") (globN post "heap_ptr") := by
+  obtain ⟨_, hlo, _⟩ := hf
+  rcases hlo with ⟨hl, hu⟩
+  dsimp at hl hu
+  constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
