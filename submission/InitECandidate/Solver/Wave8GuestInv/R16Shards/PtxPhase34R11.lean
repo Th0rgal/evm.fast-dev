@@ -3707,7 +3707,7 @@ theorem stable_copy_store_semantics {F : Type} (s : PanSemStateFiniteExact 64 F)
   subst v
   obtain ⟨hd, he, hm⟩ := R13Shards.panMemStoresHOL_word_spec
     (by simpa only [flattenHOL] using hst)
-  exact ⟨hd, (stable_copy_store_value s mem' w p hp hw hl hi _ hv he).2, hm⟩
+  exact ⟨hd, stable_copy_written_value s mem' hp hi he, hm⟩
 
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
@@ -3833,6 +3833,22 @@ theorem stableCopyInv_store_increment {F : Type} (s : PanSemStateFiniteExact 64 
   intro j hj _
   exact stableCopyInv_store_prefix s mem' hp hi hwrite hm hsource hsrc hdst j
     (by simpa only [hiw] using hj)
+
+/-- The termination measure decreases across both the memory write and the
+counter assignment; the write cannot alter either counter local. -/
+theorem stableCopyInv_store_increment_decreases {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (mem' : BitVec 64 → HolWordLab 64)
+    (w : BitVec 64) (v : ValueHOL 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : locN s "i" < locN s "nl")
+    (he : evalAt {s with memory := mem'}
+      (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    locN (setVarHOLFinite (ofString "i") v {s with memory := mem'}) "nl" -
+        locN (setVarHOLFinite (ofString "i") v {s with memory := mem'}) "i" <
+      locN s "nl" - locN s "i" := by
+  have he' : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v := by
+    simpa only [evalAt, evalHOLExact, evalListHOLExact] using he
+  exact stableCopyInv_increment_decreases s w v hp hw hi he'
 
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
