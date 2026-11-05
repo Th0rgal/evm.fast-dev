@@ -4673,13 +4673,15 @@ end CreateFinish
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
 
-namespace InitECandidate.Solver.Wave8GuestInv
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
 
 open Flapjack.Basis.Pure.MlString
 
+/-- Primitive-shaped export (statement identical to `Primitives.lean`'s `ek_create_finish`),
+namespaced to avoid clashing with the `ContractParts.C08` placeholder. -/
 theorem «ek_create_finish» :
     EvmKeeps (EvmAvoids (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)]))
     ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "create_finish") :=
-  R16Shards.EvmEkFk.StorageCreateFinish.ek_create_finish_proof
+  StorageCreateFinish.ek_create_finish_proof
 
-end InitECandidate.Solver.Wave8GuestInv
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk

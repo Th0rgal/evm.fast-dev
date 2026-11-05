@@ -82,6 +82,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateIn
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
+import InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -233,7 +235,7 @@ theorem primitives : Primitives where
   «wk_add_balance_change» := R16Shards.WkBal.«wk_add_balance_change»
   «wk_add_code_change» := R16Shards.WkBal.«wk_add_code_change»
   «wk_add_nonce_change» := R16Shards.WkBal.«wk_add_nonce_change»
-  «wk_add_storage_write» := «wk_add_storage_write»
+  «wk_add_storage_write» := R16Shards.WkBal.«wk_add_storage_write»
   «wk_bal_remove_change» := R16Shards.PrimC08Closure.«wk_bal_remove_change»
   «wk_get_code» := R16Shards.«wk_get_code»
   «wk_idx_start_account» := R16Shards.WkBalStateInit.«wk_idx_start_account»
@@ -261,7 +263,7 @@ theorem primitives : Primitives where
   «fb_set_retdata» := Merged.fb_set_retdata
   «fb_stack_push» := Merged.fb_stack_push
   «fb_state_restore» := Merged.fb_state_restore
-  «ek_create_finish» := «ek_create_finish»
+  «ek_create_finish» := R16Shards.EvmEkFk.«ek_create_finish»
   «ek_frame_halt» := EvmFrameSpecs.ek_frame_halt
   «ek_refill_frame_state_gas» := EvmFrameSpecs.ek_refill_frame_state_gas
   «ek_state_restore» := R16Shards.StateRestoreEpilogue.ek_state_restore
