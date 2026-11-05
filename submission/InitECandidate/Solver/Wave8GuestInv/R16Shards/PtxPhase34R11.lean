@@ -3821,6 +3821,26 @@ theorem stable_copy_record_separation {F : Type} (s : PanSemStateFiniteExact 64 
   rw [hs, hd, ha j hj]
   exact he j hj
 
+/-- Framing the destination header and world footprint retains separation
+from every world-owned interval after the copy store. -/
+theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (S Nd : List Nat)
+    (hd : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs"))
+    (hw : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd)
+    (hp : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) :
+    let t := {s with memory := mem'}
+    ∀ o ∈ worldOwned t S Nd,
+      Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o := by
+  dsimp only
+  intro o ho
+  rw [hw] at ho
+  change Disj (memW {s with memory := mem'} (locN s "stable_logs"),
+    8 * locN s "stable_log_cap") o
+  rw [hd]
+  exact hp o ho
+
 /-- Loop-head contract: operand shapes, bounded counter, and the separated
 store precondition whenever the current index is active. -/
 def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -3830,6 +3850,27 @@ def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
     locN s "i" ≤ locN s "nl" ∧
     (locN s "i" < locN s "nl" → StableCopyStorePre s)
+
+/-- Clock decrement preserves the separated store contract. -/
+theorem stableCopyStorePre_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyStorePre s) : StableCopyStorePre (decClockHOLFinite s) := by
+  obtain ⟨hinv, hi, hshape, S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  refine ⟨stableCopyInv_with_locals s s.locals (s.clock - 1) (by intros; rfl) hinv,
+    hi, hshape, S, Nd, ?_, ho, hworld, hh, hd, ha, he⟩
+  exact (R13Shards.worldTypedWith_with_locals s s.locals (s.clock - 1) S Nd).mpr hW
+
+/-- The loop-head contract survives the loop's clock decrement. -/
+theorem stableCopyLoopInv_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyLoopInv s) : StableCopyLoopInv (decClockHOLFinite s) := by
+  refine ⟨stableCopyInv_with_locals s s.locals (s.clock - 1) (by intros; rfl) hp.1,
+    hp.2.1, hp.2.2.1, ?_⟩
+  intro hi
+  exact stableCopyStorePre_decClock s (hp.2.2.2 hi)
+
+theorem stableCopyLoopInv_rank {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyLoopInv s) : locN s "nl" - locN s "i" ≤ 2 ^ 28 := by
+  have hb := (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1
+  omega
 
 theorem stableCopyLoopInv_active {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyLoopInv s)
