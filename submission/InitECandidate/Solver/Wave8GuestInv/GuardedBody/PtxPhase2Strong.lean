@@ -4879,4 +4879,65 @@ theorem phase2_packed_keys_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F
   refine ⟨phase2_packed_keys_set_other s hp _ _ (by decide), ?_⟩
   simp [locN, phase2_key_prefix, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- The inner copy pass relates its flattened index to the current record prefix. -/
+def PtxPackedCopyIndex {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedKeysReady s ∧
+  locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+  locN s "i" < memW s (locN s "tx" + 216) ∧
+  locN s "j" < memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) ∧
+  locN s "k" = phase2_key_prefix s (locN s "i") + locN s "j"
+
+/-- A guarded inner iteration addresses an allocated packed record. -/
+theorem phase2_packed_copy_index_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) : locN s "k" < locN s "nkeys" := by
+  rw [hp.2.2.2.2, hp.2.1]
+  exact phase2_key_copy_index_lt_total s hp.2.2.1 hp.2.2.2.1
+
+/-- Both concrete copy destinations have backing words under the inner-loop invariant. -/
+theorem phase2_packed_copy_index_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    (∀ j, j < 20 → WordAt s ((locN s "al_keys" + 52 * locN s "k" + j) / 8 * 8)) ∧
+    (∀ j, j < 32 → WordAt s ((locN s "al_keys" + 52 * locN s "k" + 20 + j) / 8 * 8)) := by
+  exact phase2_packed_copy_words hp.1.2.2.2.1 (phase2_packed_copy_index_bound hp)
+
+/-- Both concrete copy ranges lie inside the packed buffer under the same invariant. -/
+theorem phase2_packed_copy_index_destinations {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    Inside (locN s "al_keys" + 52 * locN s "k", 20) (locN s "al_keys")
+      (locN s "al_keys" + (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+    Inside (locN s "al_keys" + 52 * locN s "k" + 20, 32) (locN s "al_keys")
+      (locN s "al_keys" + (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  exact phase2_key_copy_destinations _ _ _ (phase2_packed_copy_index_bound hp)
+
+/-- The nested copy indices identify a valid allocated record under both guards. -/
+theorem phase2_packed_copy_guard_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hk : locN s "k" = phase2_key_prefix s (locN s "i") + locN s "j")
+    (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (hj : locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN s "k" < locN s "nkeys" := by
+  rw [hn, hk]
+  exact phase2_key_copy_index_lt_total s hi hj
+
+/-- Rounded packed-key memory remains above all existing transaction inputs. -/
+theorem phase2_packed_keys_input_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (base : Nat)
+    (hp : PtxAddressCountInv s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post base (locN s "nkeys" * 52 + 8)) :
+    let size := (locN s "nkeys" * 52 + 8 + 7) / 8 * 8
+    Disj (locN s "te", 200) (base, size) ∧
+    Disj (locN s "tx", 384) (base, size) ∧
+    (0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (base, size)) := by
+  have hr : PtxAccessCountReady s := hp.1.1.1.1
+  have hstart : globN s "heap_ptr" ≤ base := hf.2.1.1
+  obtain ⟨S, Nd, _, ht, _⟩ := hr.1.2
+  refine ⟨Or.inr (Or.inr (Or.inl ?_)), Or.inr (Or.inr (Or.inl ?_)), ?_⟩
+  · exact hr.1.1.2.2.1.2.trans hstart
+  · exact ht.1.2.1.2.trans hstart
+  · intro hn
+    exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
