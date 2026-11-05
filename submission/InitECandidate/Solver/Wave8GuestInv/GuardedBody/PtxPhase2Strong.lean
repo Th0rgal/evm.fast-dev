@@ -3281,4 +3281,310 @@ theorem phase2_address_copy_with_locals {F : Type} (s : PanSemStateFiniteExact 6
       locN_congr s locals clock "nal" (hl "nal" (by simp))]
     exact hp.2.2.2
 
+/-- The complete address-copy body preserves the joint copy invariant. -/
+theorem phase2_address_copy_body_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.dec (names := ["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+    "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"])
+    (P' := fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") (by decide)
+  · intro F s v hp _
+    exact phase2_address_copy_set_acc s hp v
+  · exact phase2_address_copy_inner_hoare
+  · intro F r s locals hl hp hr
+    exact phase2_address_copy_with_locals s locals s.clock hl (hp hr)
+  · exact fun _ _ hr => by cases hr
+
+/-- Allocation bounds keep both copy counters in the nonnegative signed range. -/
+theorem phase2_address_copy_signed_bounds {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) :
+    locN s "i" < 2 ^ 63 ∧ locN s "nal" < 2 ^ 63 := by
+  have hj := hp.1
+  have hA := hj.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl hj.1.2.2.1)).2
+  have hi := hp.2.2.2
+  dsimp at hb
+  constructor <;> omega
+
+/-- A true signed AST comparison yields the natural copy-loop guard. -/
+theorem phase2_address_copy_guard {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (w : BitVec 64)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word w)))
+    (hnz : w ≠ 0) : locN s "i" < locN s "nal" := by
+  obtain ⟨i, hi⟩ := hp.2.1
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  obtain ⟨hib, hnb⟩ := phase2_address_copy_signed_bounds hp
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nal" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib ⊢
+  rw [hnl] at hnb ⊢
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .less i n = true := by
+    by_contra hc
+    simp [evalAt, evalHOLExact, hi, hn, hc] at he
+    exact hnz he.symm
+  norm_num at hib hnb
+  simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
+    hib, hnb] using hc
+
+/-- A false copy-loop comparison identifies the completed address count. -/
+theorem phase2_address_copy_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word 0))) :
+    locN s "i" = locN s "nal" := by
+  obtain ⟨i, hi⟩ := hp.2.1
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  obtain ⟨hib, hnb⟩ := phase2_address_copy_signed_bounds hp
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nal" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib
+  rw [hnl] at hnb
+  norm_num at hib hnb
+  have hnot : ¬ i.toNat < n.toNat := by
+    simpa [evalAt, evalHOLExact, hi, hn, Compiler.Encoders.Asm.wordCmpHOL,
+      Compiler.Encoders.Asm.holAsmSignedLess, hib, hnb] using he
+  have hle := hp.2.2.2
+  rw [hil, hnl] at hle ⊢
+  omega
+
+/-- Guarded copy-body preservation lifts to the whole loop. -/
+theorem phase2_address_copy_while_hoare {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") body
+      (fun r s => r = none → PtxAddressCopyInv s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" = locN s "nal") := by
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s
+    (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxAddressCopyInv st →
+      evaluateHOLFiniteState st
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+          (none, post) → PtxAddressCopyInv post ∧ locN post "i" = locN post "nal" from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd : PtxAddressCopyInv (decClockHOLFinite st) :=
+            phase2_address_copy_with_locals st st.locals (st.clock - 1) (by intros; rfl) hp
+          have hg := phase2_address_copy_guard hp w hw hnz
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc ⟨hd, hg⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r =>
+            cases r <;> simp_all
+      · rename_i hz
+        have hwz : w = 0 := by simpa using hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, phase2_address_copy_exit hp (by simpa [evalAt, hwz] using hw)⟩
+    · simp at he
+
+/-- The actual address-copy loop retains the joint world through completion. -/
+theorem phase2_address_copy_loop_hoare :
+    Hoare PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" = locN s "nal") := by
+  exact phase2_address_copy_while_hoare phase2_address_copy_body_hoare (by decide) (by decide)
+
+/-- Every successful copy-body execution advances its counter exactly once. -/
+theorem phase2_address_copy_body_incr :
+    IncrBody (ofString "i")
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1]))))) := by
+  ptx_incr
+
+/-- Sequencing clock-neutral fragments remains clock-neutral. -/
+theorem phase2_clock_seq {p q : ProgHOL 64}
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s p).2.clock = s.clock)
+    (hq : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s q).2.clock = s.clock)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s (.seq p q)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_seq]
+  dsimp only
+  rw [fixClockHOLFinite_evaluateState]
+  rcases he : evaluateHOLFiniteState s p with ⟨r, t⟩
+  have ht := hp s
+  rw [he] at ht
+  cases r <;> simp_all
+
+/-- A local declaration around a clock-neutral body is clock-neutral. -/
+theorem phase2_clock_dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
+    {body : ProgHOL 64}
+    (hb : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s body).2.clock = s.clock)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s (.dec name shape init body)).2.clock = s.clock := by
+  rw [evaluateHOLFiniteState_dec_total]
+  dsimp only
+  split
+  · rfl
+  · split
+    · dsimp only
+      simpa [setVarHOLFinite] using hb (setVarHOLFinite name _ s)
+    · rfl
+
+/-- The actual copy body consumes no clock ticks. -/
+theorem phase2_address_copy_body_clock {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))).2.clock = s.clock := by
+  apply phase2_clock_dec
+  intro F t
+  apply phase2_clock_seq
+  · intro F u; exact clock_store u _ _
+  · intro F u
+    exact phase2_clock_seq (fun v => clock_assign v _ _ _) (fun v => clock_assign v _ _ _) u
+
+/-- A clock-neutral guarded copy body terminates by its increasing index. -/
+theorem phase2_address_copy_while_bound {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") body
+      (fun r s => r = none → PtxAddressCopyInv s))
+    (hclock : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s body).2.clock = s.clock)
+    (hinc : IncrBody (ofString "i") body) :
+    TerminatingProgBoundedOn PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      ((2 ^ 63 + 1) * (0 + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "i")
+  · intro F s hp
+    exact phase2_address_copy_with_locals s s.locals (s.clock - 1) (by intros; rfl) hp
+  · intro F s hc hp hn
+    rw [hclock]
+    exact ⟨by omega, le_rfl⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := phase2_address_copy_guard hp w hw hnz
+    have hd : PtxAddressCopyInv (decClockHOLFinite s) :=
+      phase2_address_copy_with_locals s s.locals (s.clock - 1) (by intros; rfl) hp
+    obtain ⟨i, hi⟩ := hp.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) i hi
+    have hnone := hf.resolve_right hnc
+    have hpost := hb.run (decClockHOLFinite s) hc ⟨hd, hg⟩
+      (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hil : locN s "i" = i.toNat := by simp [locN, hi]
+    have hilt := (phase2_address_copy_signed_bounds hp).1
+    have hpl := (phase2_address_copy_signed_bounds hpost).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "i" =
+        (i.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hil] at hilt ⊢
+    rw [hpn]
+    have hmod : (i.toNat + 1) % 2 ^ 64 = i.toNat + 1 := Nat.mod_eq_of_lt (by omega)
+    rw [hmod] at *
+    omega
+
+/-- The actual address-copy loop has a uniform terminating clock bound. -/
+theorem phase2_address_copy_loop_bound :
+    TerminatingProgBoundedOn PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (2 ^ 63 + 1) := by
+  intro F s hc hp
+  simpa only [Nat.zero_add, Nat.mul_one] using
+    phase2_address_copy_while_bound phase2_address_copy_body_hoare
+      phase2_address_copy_body_clock phase2_address_copy_body_incr s hc hp
+
+/-- Resetting the outer index prepares another pass over the access list. -/
+theorem phase2_address_copy_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+  refine ⟨phase2_address_joint_set_other s hp.1 _ _ (by decide), ⟨0, ?_⟩, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
