@@ -7612,6 +7612,47 @@ theorem ptxReceiptsDone_set_rl {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [he]
     exact hp.2.2
 
+/-- The receipt push retains the owned stable list and returns a writable slot. -/
+theorem resume_lst_push_owned_receiptSlot (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero) :
+    DecCallResumeOn (fun s => PtxReceiptsDone s ∧
+      LogsWorldOwned s (locN s "stable_logs") ∧ locN s "stable_logs" ≠ 0 ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      Phase4ReceiptSlotReady (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo72_arg s vs body callee ret hc hp.1.1 ha hl
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  obtain ⟨hdone, hown⟩ := ptxReceiptsDone_heapStep hs' hp.1 hp.2.1 hp.2.2.1
+  have hn := funSpec_at_lookup hnonzero s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hn
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  have hback : memW post (memW post (globN post "bo" + 72)) ≠ 0 := by
+    rw [hbo, hm]
+    simpa only [harg.2] using hn v rfl
+  obtain ⟨q, rfl, _, hin⟩ := lst_push_bo72_slot_result h s vs body callee ret v post hc hp.1.1 ha hl hr
+  have he : locN (setVarHOLFinite (ofString "rl") (.val (.word q))
+      {post with locals := s.locals}) "stable_logs" = locN s "stable_logs" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide]
+  refine ⟨ptxReceiptsDone_set_rl _ _ hdone, ?_, ?_, hback, ?_, ?_⟩
+  · rw [he]; exact hp.2.2.1
+  · rw [he]
+    exact logsWorldOwned_with_locals _ post.clock hown
+  · simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+  · obtain ⟨w, hw⟩ := hp.2.2.2
+    exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide] using hw⟩
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
