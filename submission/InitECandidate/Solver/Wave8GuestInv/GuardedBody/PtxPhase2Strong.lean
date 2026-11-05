@@ -7769,4 +7769,23 @@ theorem phase2_packed_body_iteration_hoare (h : PtxCallees) (addressSrc keySrc :
     (Hoare.seq_fall (phase2_packed_storage_copy_next_hoare h keySrc)
       phase2_packed_counters_full_hoare)
 
+/-- Decrementing the loop clock preserves the complete inclusive iteration state. -/
+theorem phase2_packed_iteration_decClock {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hp : WorldOK s ∧ PtxPackedSeparatedInner s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64) :
+    WorldOK (decClockHOLFinite s) ∧ PtxPackedSeparatedInner (decClockHOLFinite s) ∧
+      (∃ k : BitVec 64, (decClockHOLFinite s).locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      (∃ j : BitVec 64, (decClockHOLFinite s).locals.lookup (ofString "j") = some (.val (.word j))) ∧
+      globN (decClockHOLFinite s) "heap_ptr" ≤ 2 ^ 64 := by
+  have hready := phase2_packed_keys_with_locals s s.locals (s.clock - 1)
+    hp.2.1.1.1 (by intros; rfl)
+  have hi : PtxPackedSeparatedInner (decClockHOLFinite s) :=
+    ⟨⟨hready, hp.2.1.1.2⟩, hp.2.1.2⟩
+  exact ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s s.locals (s.clock - 1)).mpr hp.1.1) hready,
+    hi, hp.2.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
