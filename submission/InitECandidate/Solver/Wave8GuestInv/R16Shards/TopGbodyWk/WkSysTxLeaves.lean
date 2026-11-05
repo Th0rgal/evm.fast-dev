@@ -1951,6 +1951,50 @@ theorem progSysTxStep_decCall_htab_new
   rw [hr_eq, hs_eq]
   exact worldStep_sysTx_trans_prefix hW.1 hstep_mid hstep2'
 
+theorem rolesOK_sysTx_msgReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hT : TablesTyped s S) {aa ak : Nat}
+    (haa : aa ∈ S) (hak : ak ∈ S) (hne : aa ≠ ak)
+    (hka : hdr s aa 0 = 20) (hkk : hdr s ak 0 = 52)
+    (hla : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ aa)
+    (hlk : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ ak) :
+    RolesOK s S (worldRoleSlots s ++ [(aa, "frame.addr"), (ak, "frame.key")])
+      (journalRoleSlots s) := by
+  obtain ⟨hr1, hr2, hr3⟩ := hT.2.2.2.2.2.2.2.2.2.2.2
+  refine ⟨?_, ?_, ?_⟩
+  · intro a ha
+    rw [List.append_assoc] at ha
+    rcases List.mem_append.1 ha with hw | ht
+    · exact hr1 a (List.mem_append_left _ hw)
+    · rcases List.mem_append.1 ht with hf | hj
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+        rcases hf with rfl | rfl
+        · exact ⟨haa, hka⟩
+        · exact ⟨hak, hkk⟩
+      · exact hr1 a (List.mem_append_right _ hj)
+  · rw [List.pairwise_append]
+    refine ⟨hr2, ?_, ?_⟩
+    · rw [List.pairwise_cons]
+      refine ⟨?_, List.pairwise_singleton _ _⟩
+      intro b hb heq
+      simp only [List.mem_singleton] at hb
+      subst b
+      exact (hne heq).elim
+    · intro a ha b hb heq
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+      rcases hb with rfl | rfl
+      · exact (hla a (List.mem_append_left _ ha) heq).elim
+      · exact (hlk a (List.mem_append_left _ ha) heq).elim
+  · intro a ha b hb heq
+    rw [List.append_assoc] at hb
+    rcases List.mem_append.1 hb with hw | ht
+    · exact hr3 a ha b (List.mem_append_left _ hw) heq
+    · rcases List.mem_append.1 ht with hf | hj
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at hf
+        rcases hf with rfl | rfl
+        · exact (hla a (List.mem_append_right _ ha) heq).elim
+        · exact (hlk a (List.mem_append_right _ ha) heq).elim
+      · exact hr3 a ha b (List.mem_append_right _ hj) heq
+
 theorem msgReady_of_sysTx_owned {F : Type} {s : PanSemStateFiniteExact 64 F}
     {S Nd : List Nat} (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
     (hin : Inside (locN s "msg", 176) sourceBase (globN s "heap_ptr"))
