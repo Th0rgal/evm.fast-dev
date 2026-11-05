@@ -5934,6 +5934,73 @@ theorem run_precompile_zero_index {F : Type} (s : PanSemStateFiniteExact 64 F)
   split <;> simp_all
   split_ifs at * <;> simp_all
 
+theorem run_precompile_invalid_index {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hinvalid : idx ∉ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64))) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_run_precompile) =
+      evaluateHOLFiniteState s (.raise (ofString "BlockErr") (.const 99)) := by
+  have hb : sourceFnBody Guest.Software.guestFn_run_precompile =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_run_precompile).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_run_precompile,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural]
+  simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at hinvalid
+  rcases hinvalid with ⟨h1, h2, h3, h4, h6, h7, h8, h5, h9, h10, h11, h12, h13,
+    h14, h15, h16, h17, h18⟩
+  change idx ≠ 1#64 at h1
+  change idx ≠ 2#64 at h2
+  change idx ≠ 3#64 at h3
+  change idx ≠ 4#64 at h4
+  change idx ≠ 5#64 at h5
+  change idx ≠ 6#64 at h6
+  change idx ≠ 7#64 at h7
+  change idx ≠ 8#64 at h8
+  change idx ≠ 9#64 at h9
+  change idx ≠ 10#64 at h10
+  change idx ≠ 11#64 at h11
+  change idx ≠ 12#64 at h12
+  change idx ≠ 13#64 at h13
+  change idx ≠ 14#64 at h14
+  change idx ≠ 15#64 at h15
+  change idx ≠ 16#64 at h16
+  change idx ≠ 17#64 at h17
+  change idx ≠ 18#64 at h18
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite,
+    evaluateHOLFiniteState_skip, evalHOLExact, hidx,
+    Compiler.Encoders.Asm.wordCmpHOL, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+    h11, h12, h13, h14, h15, h16, h17, h18]
+  split <;> simp_all
+  split <;> simp_all
+  split_ifs at * <;> simp_all
+
+theorem run_precompile_invalid_no_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hinvalid : idx ∉ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64))) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_run_precompile)).1 ≠
+      some (.returned v) := by
+  rw [run_precompile_invalid_index s idx hidx hinvalid]
+  simp [evaluateHOLFiniteState_raise, evalHOLExact]
+  split <;> simp_all
+  split_ifs <;> simp
+
+theorem run_precompile_index_mem_of_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hreturn : ∃ v, (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_run_precompile)).1 = some (.returned v)) :
+    idx ∈ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64)) := by
+  by_contra hinvalid
+  obtain ⟨v, hv⟩ := hreturn
+  exact run_precompile_invalid_no_return s idx hidx hinvalid v hv
+
 theorem ek_cc_run_precompile_of_dispatch (h : PrecompileDispatchSpecs) :
     EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "run_precompile") ∧
       ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "run_precompile") := by
