@@ -4297,4 +4297,27 @@ theorem phase2_address_count_loop_hoare :
   exact phase2_address_count_while_hoare phase2_address_count_body_hoare
     (by decide) (by decide)
 
+/-- Each packed key record lies inside the rounded key allocation. -/
+theorem phase2_key_record_inside (base count k : Nat) (hk : k < count) :
+    Inside (base + 52 * k, 52) base
+      (base + (count * 52 + 8 + 7) / 8 * 8) := by
+  constructor <;> dsimp <;> omega
+
+/-- At counting-loop exit the allocation expression uses the full transaction total. -/
+theorem phase2_key_alloc_exit_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = txAccessSlots s (locN s "tx") * 52 + 8 ∧
+      ∀ base k, k < txAccessSlots s (locN s "tx") →
+        Inside (base + 52 * k, 52) base (base + (w.toNat + 7) / 8 * 8) := by
+  obtain ⟨w, he, hw, _⟩ := phase2_address_count_alloc_size s hp
+  have ht := phase2_address_count_exit_total hp hi
+  rw [ht] at hw
+  refine ⟨w, he, hw, ?_⟩
+  intro base k hk
+  rw [hw]
+  exact phase2_key_record_inside base _ k hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
