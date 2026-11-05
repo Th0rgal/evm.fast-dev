@@ -2206,10 +2206,10 @@ theorem indexed_lengths_preserved_frame {F : Type}
   · exact indexed_lengths_preserved hw hfit
       (P3MptSet.ivlUnhit_of_frameOutside hfr hk hf_al hf (by dsimp; omega)) hlen
 
-theorem indexed_lengths_preserved_below_mark {F : Type}
+theorem indexed_unhit_below_mark {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {arr n mark : Nat}
     {buffers owned : List Ivl}
-    (hw : WordsOK s (arr, 16 * n))
+    (_hw : WordsOK s (arr, 16 * n))
     (hin : Inside (arr, 16 * n) sourceBase mark)
     (hmark : mark ≤ globN s "heap_ptr")
     (hA : ArenaReady s)
@@ -2218,15 +2218,14 @@ theorem indexed_lengths_preserved_below_mark {F : Type}
       (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj (arr, 16 * n) j) ∨
         j.1 + j.2 + 8 ≤ arr)
     (howned : ∀ j ∈ owned,
-      j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ mark ≤ j.1) 
-    (hlen : ∀ i, i < n → memW s (arr + 16 * i + 8) < 2 ^ 40) :
-    ∀ i, i < n → memW post (arr + 16 * i + 8) < 2 ^ 40 := by
+      j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ mark ≤ j.1)
+    (hn : n ≠ 0) :
+    P3MptSet.IvlUnhit s post (arr, 16 * n) := by
   have hAcopy := hA
   obtain ⟨_, _, hheap, _, _, _, hhp8, hfm8, hsp8⟩ := hAcopy
-  have hlim : heapLimit ≤ 2 ^ 64 := by decide
   have halloc : Allocated s (arr, 16 * n) :=
     Or.inl ⟨hin.1, hin.2.trans hmark⟩
-  apply indexed_lengths_preserved_frame hw (by have := hin.2; dsimp at this; omega) hfr
+  apply P3MptSet.ivlUnhit_of_frameOutside hfr
   · intro j hj
     simp only [List.mem_append, List.mem_singleton] at hj
     rcases hj with (hj | hj) | rfl
@@ -2240,6 +2239,119 @@ theorem indexed_lengths_preserved_below_mark {F : Type}
     dsimp [heapFree]
     omega
   · exact P3MptSet.disj_allocated_heapFree hA.2 halloc
-  · exact hlen
+  · dsimp; omega
+
+theorem indexed_lengths_preserved_below_mark {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {arr n mark : Nat}
+    {buffers owned : List Ivl}
+    (hw : WordsOK s (arr, 16 * n))
+    (hin : Inside (arr, 16 * n) sourceBase mark)
+    (hmark : mark ≤ globN s "heap_ptr")
+    (hA : ArenaReady s)
+    (hfr : FrameOutside s post (buffers ++ owned ++ [freeGap s]) (heapFree s))
+    (hbuf : ∀ j ∈ buffers,
+      (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj (arr, 16 * n) j) ∨
+        j.1 + j.2 + 8 ≤ arr)
+    (howned : ∀ j ∈ owned,
+      j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ mark ≤ j.1)
+    (hlen : ∀ i, i < n → memW s (arr + 16 * i + 8) < 2 ^ 40) :
+    ∀ i, i < n → memW post (arr + 16 * i + 8) < 2 ^ 40 := by
+  by_cases hn : n = 0
+  · subst n
+    intro i hi
+    omega
+  · apply indexed_lengths_preserved hw ?_
+      (indexed_unhit_below_mark hw hin hmark hA hfr hbuf howned hn) hlen
+    have hlim : heapLimit ≤ 2 ^ 64 := by decide
+    have hheap := hA.2.2.1
+    have hbound := hin.2.trans hmark
+    dsimp only at hbound
+    omega
+
+theorem buildMptIndexedReady_of_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (h : BuildMptIndexedReady s)
+    (hW : WorldOK post)
+    (hl : ∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      post.locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hbuf : ∀ gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+        ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion post gn = bufferRegion s gn)
+    (hu : P3MptSet.IvlUnhit s post (locN s "slice_arr", 16 * locN s "n")) :
+    BuildMptIndexedReady post := by
+  have harr : locN post "slice_arr" = locN s "slice_arr" := by
+    simp only [locN, hl "slice_arr" (by simp)]
+  have hn : locN post "n" = locN s "n" := by
+    simp only [locN, hl "n" (by simp)]
+  obtain ⟨hWs, hlocals, hnb, hin, hw, hd, hlen⟩ := h
+  refine ⟨hW, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · intro name hname
+    obtain ⟨w, he⟩ := hlocals name hname
+    exact ⟨w, (hl name hname).trans he⟩
+  · rw [hn]; exact hnb
+  · rw [harr, hn]
+    exact ⟨hin.1, hin.2.trans hhp⟩
+  · rw [harr, hn]
+    exact P3MptSet.wordsOK_transfer hWs.1.1 hW.1.1 hw
+  · rw [harr, hn]
+    intro i hi j hj
+    obtain ⟨gn, hgn, rfl⟩ := List.mem_map.mp hj
+    rw [hbuf gn hgn]
+    exact hd i hi _ (List.mem_map.mpr ⟨gn, hgn, rfl⟩)
+  · rw [harr, hn]
+    apply indexed_lengths_preserved hw ?_ hu hlen
+    have hheap := hW.1.2.2.1
+    have hlim : heapLimit ≤ 2 ^ 64 := by decide
+    have hbound := hin.2.trans hhp
+    dsimp only at hbound
+    omega
+
+theorem buildMptIndexedReady_preserved_below_mark {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {mark : Nat}
+    {buffers owned : List Ivl}
+    (h : BuildMptIndexedReady s)
+    (hW : WorldOK post)
+    (hl : ∀ name ∈ (["slice_arr", "n", "out"] : List String),
+      post.locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hbuf : ∀ gn ∈ ([("mpt_hash_scratch", 40), ("mpt_key_scratch", 16),
+        ("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+      bufferRegion post gn = bufferRegion s gn)
+    (hin : Inside (locN s "slice_arr", 16 * locN s "n") sourceBase mark)
+    (hmark : mark ≤ globN s "heap_ptr")
+    (hfr : FrameOutside s post (buffers ++ owned ++ [freeGap s]) (heapFree s))
+    (hbuffers : ∀ j ∈ buffers,
+      (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj (locN s "slice_arr", 16 * locN s "n") j) ∨
+        j.1 + j.2 + 8 ≤ locN s "slice_arr")
+    (howned : ∀ j ∈ owned,
+      j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ mark ≤ j.1) :
+    BuildMptIndexedReady post := by
+  by_cases hn : locN s "n" = 0
+  · have harr : locN post "slice_arr" = locN s "slice_arr" := by
+      simp only [locN, hl "slice_arr" (by simp)]
+    have hnpost : locN post "n" = 0 := by
+      simpa only [locN, hl "n" (by simp)] using hn
+    obtain ⟨hWs, hlocals, _, hins, hw, hd, _⟩ := h
+    refine ⟨hW, ?_, by rw [hnpost]; decide, ?_, ?_, ?_, ?_⟩
+    · intro name hname
+      obtain ⟨w, he⟩ := hlocals name hname
+      exact ⟨w, (hl name hname).trans he⟩
+    · rw [harr, hnpost]
+      simpa only [hn] using (show Inside (locN s "slice_arr", 16 * locN s "n")
+        sourceBase (globN post "heap_ptr") from ⟨hins.1, hins.2.trans hhp⟩)
+    · rw [harr, hnpost]
+      simpa only [hn] using P3MptSet.wordsOK_transfer hWs.1.1 hW.1.1 hw
+    · rw [harr, hnpost]
+      intro i hi j hj
+      obtain ⟨gn, hgn, rfl⟩ := List.mem_map.mp hj
+      rw [hbuf gn hgn]
+      apply hd i (by simpa only [hn] using hi)
+      exact List.mem_map.mpr ⟨gn, hgn, rfl⟩
+    · intro i hi
+      rw [hnpost] at hi
+      omega
+  · exact buildMptIndexedReady_of_unhit h hW hl hhp hbuf
+      (indexed_unhit_below_mark h.2.2.2.2.1 hin hmark h.1.1 hfr hbuffers howned hn)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
