@@ -3631,6 +3631,36 @@ theorem stable_copy_source_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F
   simp [valueIsWord, valueWord, memLoadHOLExact, hd, hm, hn,
     BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
+/-- A successful semantic copy store writes the indexed source value. -/
+theorem stable_copy_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
+    (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hi : locN s "i" < locN s "nl") (v : ValueHOL 64)
+    (hv : evalAt s phase4LogCopySrc = some v)
+    (he : mem' (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")) =
+      .word (BitVec.ofNat 64 (memW s (locN s "lp" + 8 * locN s "i")))) :
+    v = .val (.word (BitVec.ofNat 64
+      (memW s (memW s (locN s "logs") + 8 * locN s "i")))) ∧
+    memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i") := by
+  have hv' := stable_copy_source_load_eval s w p hp hw hl hi
+  have hn : memW s (locN s "lp" + 8 * locN s "i") < 2 ^ 64 := by
+    unfold memW
+    cases s.memory (BitVec.ofNat 64 (locN s "lp" + 8 * locN s "i")) with
+    | word a => exact a.isLt
+  constructor
+  · rw [hv] at hv'
+    rw [hp.1.2.2.2.2.1] at hv'
+    exact Option.some.inj hv'
+  · change (match mem' _ with | .word a => a.toNat) = _
+    rw [he]
+    dsimp only
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn, hp.1.2.2.2.2.1]
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
