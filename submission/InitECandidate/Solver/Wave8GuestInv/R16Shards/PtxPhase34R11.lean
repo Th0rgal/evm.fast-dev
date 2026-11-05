@@ -2887,6 +2887,33 @@ theorem phase4Logs_capacity_typed_cut (h : PtxCallees)
   intro F s hcode hp
   exact hb s hcode hp
 
+/-- The receipt prefix reaches stable allocation with all copy operands retained. -/
+theorem phase4ThroughCapacity_typed_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 33 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) + 1))) := by
+  have hb := @phase4ThroughReceiptStores_cut h _ _
+    (phase4Logs_capacity_typed_cut h hresume htail)
+  have he : spinePlug 33 (spineAt 99 ptxCode) tail =
+      spinePlug 27 (spineAt 99 ptxCode) (spinePlug 6 (spineAt 126 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
     TerminatingProgBoundedOn Phase4LogPointersReady
