@@ -11245,4 +11245,47 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
   · exact log_append_store_contents X arr n lg (fun i => memW s (arr0.toNat + 8 * i))
       hbound hprefix
 
+/-- Contents component of the child-log loop invariant.  It follows the current
+array through reallocations while indexing both segments in the entry state. -/
+def LAContents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 n0 : BitVec 64) (child : Nat → Nat) (i : Nat)
+    (u : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ arr : BitVec 64, u.memory L = .word arr ∧
+    (∀ k, k < n0.toNat → memW u (arr.toNat + 8 * k) = memW s (arr0.toNat + 8 * k)) ∧
+    ∀ k, k < i → memW u (arr.toNat + 8 * (n0.toNat + k)) = child k
+
+theorem laContents_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (L arr0 n0 : BitVec 64) (child : Nat → Nat)
+    (hm : s.memory L = .word arr0) : LAContents s L arr0 n0 child 0 s := by
+  exact ⟨arr0, hm, fun _ _ => rfl, fun _ h => by omega⟩
+
+theorem laContents_locals {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u) (M : HolFiniteMapExact MlS (ValueHOL 64)) :
+    LAContents s L arr0 n0 child i { u with locals := M } := h
+
+/-- A uniform append extends the contents invariant by exactly one child log. -/
+theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr0 n0 arr n lg : BitVec 64} {child : Nat → Nat} {i : Nat}
+    (h : LAContents s L arr0 n0 child i u)
+    (hm : u.memory L = .word arr) (hn : n.toNat = n0.toNat + i)
+    (hlg : lg.toNat = child i)
+    (hp : ∃ next : BitVec 64, post.memory L = .word next ∧
+      (∀ k, k < n.toNat →
+        memW post (next.toNat + 8 * k) = memW u (arr.toNat + 8 * k)) ∧
+      memW post (next.toNat + 8 * n.toNat) = lg.toNat) :
+    LAContents s L arr0 n0 child (i + 1) post := by
+  obtain ⟨old, hold, hprefix, hsuffix⟩ := h
+  have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
+  subst old
+  obtain ⟨next, hnext, hkeep, hnew⟩ := hp
+  refine ⟨next, hnext, ?_⟩
+  apply append_contents_step
+    (fun k => memW s (arr0.toNat + 8 * k)) child
+    (fun k => memW u (arr.toNat + 8 * k))
+    (fun k => memW post (next.toNat + 8 * k)) n0.toNat i hprefix hsuffix
+  · intro k hk
+    exact hkeep k (by omega)
+  · simpa only [hn, hlg] using hnew
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
