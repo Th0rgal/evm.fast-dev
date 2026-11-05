@@ -1,7 +1,8 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C12
-import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Core
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_CsrLoops
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet_Memory
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -24,11 +25,10 @@ open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase1
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase2
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.FastPhase5
+open InitECandidate.Solver.Wave8GuestInv.P3Csr
 open InitECandidate.Solver.Wave8GuestInv.P3MptSet
 open InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 open InitECandidate.Solver.Wave8GuestInv.R16Rlp
 
@@ -724,7 +724,7 @@ theorem mptObjInWith_disj_buffer_csr {F : Type} {s : PanSemStateFiniteExact 64 F
     exact List.mem_append.mpr (Or.inl (List.mem_append.mpr
       (Or.inl (List.mem_append.mpr
         (Or.inl (List.mem_map.mpr ⟨gn, hg, rfl⟩))))))
-  apply disj_symm
+  apply Disj.flip
   rcases List.mem_cons.mp ho with rfl | ho
   · exact hm.2.2.2.1 _ hb
   · exact (hm.2.2.2.2.2.2 o ho).2.2 _ hb
@@ -834,7 +834,7 @@ theorem ivlsDisj_ownedGrows_csr {F : Type} {s post : PanSemStateFiniteExact 64 F
   · rcases hg j hj with rfl | ⟨i, hi, hin⟩ | hin
     · exact Or.inr (Or.inl rfl)
     · exact R10Shards.P26_P28.disj_of_inside_right hin (hd o ho i hi)
-    · exact disj_symm (disj_allocated_fresh_heap hs hp (ha o ho hz) hin)
+    · exact (disj_allocated_fresh_heap hs hp (ha o ho hz) hin).flip
 
 theorem nodeHeap_extents_congr_unhit_csr {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
@@ -1010,8 +1010,8 @@ theorem htab_frame_liveMpt_csr {F : Type}
     obtain rfl := List.mem_singleton.mp hj
     by_cases hz : o.2 = 0
     · exact Or.inl hz
-    · exact disj_symm (disj_allocated_fresh_heap hs.2 hp.2
-        (mptObjInWith_allocated_csr hm o ho hz) ⟨le_rfl, by dsimp; omega⟩)
+    · exact (disj_allocated_fresh_heap hs.2 hp.2
+        (mptObjInWith_allocated_csr hm o ho hz) ⟨le_rfl, by dsimp; omega⟩).flip
   obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hp hbe hag hm hd hog hfr
     (fun o ho hnz j hj => Or.inl
       ⟨((hW.1.2.1 t ht).1.1 j hj).2.1,
