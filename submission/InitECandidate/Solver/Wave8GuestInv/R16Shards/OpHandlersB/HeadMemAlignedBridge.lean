@@ -3265,6 +3265,60 @@ theorem hb_arenaReady_update_scratch_ptr {F : Type} {s post : PanSemStateFiniteE
   · rw [hsp]; exact hq8
 
 
+/-! ## 3p. `frame_new` leaf callees: `scratch_mark` / `frame_mem_mark` -/
+
+section FrameNewLeaves
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+attribute [local irreducible] Ret in
+/-- `scratch_mark()` is `return global scratch_ptr`: no state change besides locals. -/
+theorem scratch_mark_run {F : Type} (s : PanSemStateFiniteExact 64 F) (p : BitVec 64)
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_scratch_mark) (fun v post =>
+      v = .val (.word p) ∧ post.globals = s.globals ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_scratch_mark =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_scratch_mark).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_scratch_mark,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.ret fun val hval => ?_
+  have hv : val = .val (.word p) := by
+    simp [ev, evalHOLExact, hp] at hval; exact hval.symm
+  exact ⟨hv, rfl, rfl, rfl, rfl⟩
+
+attribute [local irreducible] Ret in
+/-- `frame_mem_mark()` is `return global frame_mem_ptr`: no state change besides locals. -/
+theorem frame_mem_mark_run {F : Type} (s : PanSemStateFiniteExact 64 F) (f : BitVec 64)
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_frame_mem_mark) (fun v post =>
+      v = .val (.word f) ∧ post.globals = s.globals ∧
+        post.memory = s.memory ∧ post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_frame_mem_mark =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_frame_mem_mark).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_frame_mem_mark,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.ret fun val hval => ?_
+  have hv : val = .val (.word f) := by
+    simp [ev, evalHOLExact, hf] at hval; exact hval.symm
+  exact ⟨hv, rfl, rfl, rfl, rfl⟩
+
+
+end FrameNewLeaves
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
