@@ -4206,4 +4206,74 @@ theorem phase2_address_count_body_hoare :
     exact phase2_address_count_with_locals s locals s.clock (hp hr) hl
   · exact fun _ _ hr => by cases hr
 
+/-- Counting-body preservation lifts to the complete guarded loop. -/
+theorem phase2_address_count_while_hoare {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal") body
+      (fun r s => r = none → PtxAddressCountInv s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" = locN s "nal") := by
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s
+    (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxAddressCountInv st →
+      evaluateHOLFiniteState st
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+          (none, post) → PtxAddressCountInv post ∧ locN post "i" = locN post "nal" from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd : PtxAddressCountInv (decClockHOLFinite st) :=
+            phase2_address_count_with_locals st st.locals (st.clock - 1) hp (by intros; rfl)
+          have hg := phase2_address_copy_guard hp.1 w hw hnz
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc ⟨hd, hg⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        have hwz : w = 0 := by simpa using hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, phase2_address_copy_exit hp.1 (by simpa [evalAt, hwz] using hw)⟩
+    · simp at he
+
+/-- The key-copy pass retains the completed total while restarting its outer index. -/
+theorem phase2_key_pass_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    let post := setVarHOLFinite (ofString "i") (.val (.word 0)) s
+    PtxAddressCopyInv post ∧
+      locN post "nkeys" = txAccessSlots post (locN post "tx") := by
+  refine ⟨phase2_address_copy_reset s hp.1, ?_⟩
+  have ht := phase2_address_count_exit_total hp hi
+  simpa [txAccessSlots, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "i" ≠ ofString "nkeys" by decide,
+    show ofString "i" ≠ ofString "tx" by decide] using ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
