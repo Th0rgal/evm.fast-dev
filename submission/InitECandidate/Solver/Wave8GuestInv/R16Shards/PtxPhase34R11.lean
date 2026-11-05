@@ -2674,6 +2674,28 @@ theorem stable_backing_allocated {F : Type} {s post : PanSemStateFiniteExact 64 
   rw [hround] at hi hw
   exact ⟨halign, Or.inl ⟨hA.1.trans hi.1, hi.2⟩, hw⟩
 
+theorem lst_new_stable_backing_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    let p := memW resumed (locN resumed "stable_logs")
+    p % 8 = 0 ∧ Allocated resumed (p, 8 * locN resumed "stable_log_cap") ∧
+      WordsOK resumed (p, 8 * locN resumed "stable_log_cap") := by
+  obtain ⟨w, rfl, _, hb, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hb' := stable_backing_allocated
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hb
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hb'
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
