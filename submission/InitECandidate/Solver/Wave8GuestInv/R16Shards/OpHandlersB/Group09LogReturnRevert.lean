@@ -12130,4 +12130,85 @@ theorem log_growth_buffer_of_allocated_g09 {F : Type}
     apply hword i
     omega
 
+/-- Complete local growth postcondition: valid list and backing array, exact
+extension of owned logs, and preservation of the containing frame invariant. -/
+theorem log_growth_frame_post_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8 * i) = memW s (memW s l.toNat + 8 * i))
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hsys : globN copy "vm_system_address" = globN s "vm_system_address")
+    (hscratch : globN copy "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN copy "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hempty : globN copy "evm_empty" = globN s "evm_empty")
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr")
+    (hrecords : ∀ i, i < n.toNat →
+      let oldLog := memW s (memW s l.toNat + 8 * i)
+      LogEntryOK s oldLog ∧ oldLog + 40 ≤ 2 ^ 64 ∧
+      Disj (oldLog, 40) (l.toNat, 24) ∧
+      Disj (oldLog, 40) (p.toNat, q.toNat - p.toNat) ∧
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW copy (oldLog + k) = memW s (oldLog + k)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    (∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k)) →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    MsgOwned post S (memW s (ec.1 + 112)) → LogEntryOK post log.toNat →
+    FrameWF post S ec ∧ LogsListOK post (memW post (ec.1 + 88)) ∧
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hfields hheaderWords hallocated hmsg hlog
+  have hec := (hfields 88 (by simp)).trans hl
+  obtain ⟨hbuffer, hbufferWords, hslots⟩ := log_growth_buffer_of_allocated_g09
+    copy ec l p n cap q log objects hheader hfresh hl_bound hcap_pos hcap_bound
+    hlen hgrow hfit hwords hlo hq hec
+  obtain ⟨hlist, howned⟩ := log_growth_post_of_separated_records_g09
+    s copy ec l p n cap q log objects hl hn hheader hfresh hl_bound
+    hcap_pos hcap_bound hlen hgrow hfit hcopy hdom hheap hsys hrecords
+    hec hheaderWords hallocated hslots hlog
+  refine ⟨?_, hlist, howned⟩
+  refine frameWF_of_log_growth_g09 hFW ?_ ?_ ?_ ?_ ?_ hfields ?_ ?_ ?_ ?_ ?_ ?_
+  · exact hdom
+  · exact hscratch
+  · exact hframe
+  · exact hheap
+  · exact hempty
+  · obtain ⟨_, _, h16, hcap, _, _⟩ := log_growth_readback_of_fresh_g09
+      copy l p n cap q log objects hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+      rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt (by omega)
+    rw [hl, ← hl16, h16]
+    omega
+  · simpa only [hec, hl] using hlist
+  · obtain ⟨_, h8, h16, hcap, _, _⟩ := log_growth_readback_of_fresh_g09
+      copy l p n cap q log objects hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+    have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+      rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt (by omega)
+    have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+      rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+      exact Nat.mod_eq_of_lt (by omega)
+    rw [hl, ← hl8, ← hl16, h8, h16]
+    exact hcap
+  · exact Or.inl hbuffer
+  · exact hbufferWords
+  · exact hmsg
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

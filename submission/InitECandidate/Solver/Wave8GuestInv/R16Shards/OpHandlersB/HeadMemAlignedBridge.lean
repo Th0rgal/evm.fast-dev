@@ -8858,6 +8858,66 @@ theorem icsTail_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
   · change readW post (e + BitVec.ofNat 64 192) = readW s (e + BitVec.ofNat 64 192)
     unfold readW; rw [hkeep 192 (Or.inr rfl)]
 
+/-- Appending child logs preserves the parent's two gas words, including when
+the append loop reallocates its backing array. -/
+theorem laInv_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (heS : heapLimit ≤ e.toNat)
+    (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hcap : 0 < cap.toNat)
+    (hL : Disj (e.toNat, 280) (L.toNat, 24))
+    (hA : Disj (e.toNat, 280) (arr.toNat, 8 * cap.toNat)) :
+    readW post (e + 64) = readW s (e + 64) ∧
+      readW post (e + 192) = readW s (e + 192) := by
+  have ne_of_not_hits {a x : BitVec 64} {b n : Nat} (hn : ¬ CellHits a.toNat (b, n))
+      (hx : b ≤ x.toNat ∧ x.toNat + 8 ≤ b + n) : a ≠ x := by
+    rintro rfl; apply hn; unfold CellHits; omega
+  obtain ⟨_, _, hAR, _, hhp, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hfr⟩ := h
+  have hbound : globN post "heap_ptr" ≤ heapLimit := hAR.2.2.1
+  have hkeep (k : Nat) (hk : k = 64 ∨ k = 192) :
+      post.memory (e + BitVec.ofNat 64 k) = s.memory (e + BitVec.ofNat 64 k) := by
+    have hkb : k < 200 := by omega
+    have hkn : (e + BitVec.ofNat 64 k).toNat = e.toNat + k :=
+      tn_add e k (by omega) (by omega)
+    have hL0 : ¬ CellHits (e + BitVec.ofNat 64 k).toNat (L.toNat, 24) :=
+      noHit_of_disj hL (by dsimp only; omega) (by rw [hkn]; dsimp only; omega)
+    apply hfr
+    · exact noHit_of_disj hA (by dsimp only; omega) (by rw [hkn]; dsimp only; omega)
+    · unfold CellHits; rw [hkn]; dsimp only; omega
+    · exact ne_of_not_hits hL0 (by omega)
+    · apply ne_of_not_hits hL0
+      change L.toNat ≤ (L + BitVec.ofNat 64 8).toNat ∧
+        (L + BitVec.ofNat 64 8).toNat + 8 ≤ L.toNat + 24
+      rw [tn_add L 8 (by omega) (by omega)]; omega
+    · apply ne_of_not_hits hL0
+      change L.toNat ≤ (L + BitVec.ofNat 64 16).toNat ∧
+        (L + BitVec.ofNat 64 16).toNat + 8 ≤ L.toNat + 24
+      rw [tn_add L 16 (by omega) (by omega)]; omega
+  constructor
+  · change readW post (e + BitVec.ofNat 64 64) = readW s (e + BitVec.ofNat 64 64)
+    unfold readW; rw [hkeep 64 (Or.inl rfl)]
+  · change readW post (e + BitVec.ofNat 64 192) = readW s (e + BitVec.ofNat 64 192)
+    unfold readW; rw [hkeep 192 (Or.inr rfl)]
+
+/-- A log-array reallocation stays below the heap pointer; without reallocation
+the saved scratch-release mark remains valid for the original backing array. -/
+theorem laInv_logs_release {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    {cm : Nat}
+    (hold : Inside (arr.toNat, 8 * cap.toNat) sourceBase (globN s "heap_ptr") ∨
+      Inside (arr.toNat, 8 * cap.toNat) cm scratchEnd)
+    (hsource : sourceBase ≤ globN s "heap_ptr") :
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat)
+      sourceBase (globN post "heap_ptr") ∨
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat) cm scratchEnd := by
+  obtain ⟨_, _, _, _, hhp, _, i, arr', cap', _, _, hm0, _, hm16, _, _, _, _, hloc, _⟩ := h
+  simp only [readW, hm0, hm16]
+  rcases hloc with ⟨rfl, rfl⟩ | ⟨hlo, hhi⟩
+  · rcases hold with ⟨hlo, hhi⟩ | hs
+    · exact Or.inl ⟨hlo, hhi.trans hhp⟩
+    · exact Or.inr hs
+  · exact Or.inl ⟨hsource.trans hlo, hhi⟩
+
 /-- Frame of a full `incorporate_child_on_success` run. -/
 def ICSFrame {F : Type} (s : PanSemStateFiniteExact 64 F) (e L arr0 cap0 tw : BitVec 64)
     (post : PanSemStateFiniteExact 64 F) : Prop :=
@@ -9095,6 +9155,57 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
     noHit_mono hF uh ph (Nat.le_refl _)
   rw [pm a (ne_of_not_hits hE (by rw [hE96]; omega)) (by rw [hfpeq]; exact hfp) hF2]
   exact hTs a hE hL hAr hF1
+
+/-- Every allocated object separated from the success-incorporation write
+footprint is untouched, including across fresh heap allocation. -/
+theorem icsFrame_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i)
+    (hE : Disj i (e.toNat + 64, 136))
+    (hL : Disj i (L.toNat, 24))
+    (hAr : Disj i (arr.toNat, 8 * cap.toNat)) (hcap : 0 < cap.toNat)
+    (hwf : HtabWF s tw.toNat)
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, Disj i j) :
+    Wave8Contracts.M08.IvlUnhit s post i := by
+  intro a _ h1 h2
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := ⟨h1, h2⟩
+  apply h.2.2.2.2.2
+  · exact noHit_of_disj hE (by simp) hin
+  · exact noHit_of_disj hL (by simp) hin
+  · exact noHit_of_disj hAr (by dsimp only; omega) hin
+  · intro j hj; exact noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hin
+  · apply noFresh_of_alloc hA.2 hi hin _ h.2.2.2.2.1
+    have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    omega
+
+/-- Cell-level success frame, allowing protected alignment cells in the same
+parent record as the gas writes. -/
+theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i) {a : Nat}
+    (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+    (hE : ¬ CellHits a (e.toNat + 64, 136))
+    (hL : ¬ CellHits a (L.toNat, 24))
+    (hAr : ¬ CellHits a (arr.toNat, 8 * cap.toNat))
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, ¬ CellHits a j) :
+    memW post a = memW s a := by
+  apply memW_of
+  apply h.2.2.2.2.2
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hE
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hL
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hAr
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hT
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
 
 end IcsRun
 

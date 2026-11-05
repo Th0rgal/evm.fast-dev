@@ -12144,4 +12144,87 @@ theorem phase4BackingPrefix_of_credit_encode (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- A concrete frame outside old allocated headers retains both backing words.
+The write regions may contain byte-sized scratch buffers. -/
+theorem txBacking_of_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hW : TxWorld s) (hb : TxBacking s) (hAp : ArenaOK post)
+    (hgrow : AllocatorGrows s post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hfr : FrameOutside s post (R ++ [freeGap s]) (heapFree s))
+    (hR0 : ∀ i ∈ R, i.2 = 0 → i.1 % 8 = 0)
+    (hRb : ∀ i ∈ R, Disj (globN s "bo", 88) i)
+    (hRl : ∀ k ∈ ([40, 72] : List Nat), ∀ i ∈ R,
+      Disj (memW s (globN s "bo" + k), 24) i) : TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hbw := bo_words hWT.2.2.1 hE.bo_nz
+  have hlf : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have hlt : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+      WordsOK s (memW s (globN s "bo" + k), 24) := by
+    intro k hk
+    exact (hWT.2.2.1.1 _ (hlf k hk)).resolve_left (by simp)
+  have hu : ∀ i : Ivl, Allocated s i → WordsOK s i →
+      (∀ j ∈ R, Disj i j) → IvlUnhit s post i := by
+    intro i ha hw hd
+    exact (allocated_ivl_survives_step (old := []) (new := [])
+      hW.1.1.2 hAp hgrow (by simp) hR0 (by intro o ho; cases ho)
+      (by simpa using hfr) hw.1 hw.2.1 ha (by simp) hd).2.2
+  exact txBacking_of_unhit_headers hb hbo hbw.2.1
+    (ivl_allocated_bound hW.1.1.2 hbw.1).2 (hu _ hbw.1 hbw.2 hRb)
+    (fun k hk => (hlt k hk).2.1)
+    (fun k hk => (ivl_allocated_bound hW.1.1.2 (hlt k hk).1).2)
+    (fun k hk => hu _ (hlt k hk).1 (hlt k hk).2 (hRl k hk))
+
+/-- Scratch-buffer separation from the record and both nested headers follows
+from world typing; only the concrete callee frame remains to be supplied. -/
+theorem txBacking_of_scratch_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {gs : List (String × Nat × Nat)} (hgs : ScratchSpec gs)
+    (hW : TxWorld s) (hb : TxBacking s) (hAp : ArenaOK post)
+    (hgrow : AllocatorGrows s post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hfr : FrameOutside s post
+      (gs.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s]) (heapFree s)) :
+    TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  obtain ⟨Nd, htyped⟩ := (worldTyped_iff_with s S).mp hWT
+  have hdisj : ∀ j ∈ worldTypedIvls s S Nd,
+      ∀ i ∈ gs.map (fun e => bufferRegion s (e.1, e.2.2)), Disj j i := by
+    intro j hj i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact disj_symm (bufferRegion_disj_le htyped (e.1, e.2.1)
+      (hgs e he).1 (hgs e he).2.1 e.2.2 (hgs e he).2.2.2 j hj)
+  apply txBacking_of_allocated_frame hW hb hAp hgrow hbo hfr
+  · intro i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_zero_aligned s e.1 e.2.2
+      (by have := (hgs e he).2.2.1; omega)
+  · exact hdisj _ (bo_mem_typed hW.2.bo_nz)
+  · intro k hk
+    apply hdisj
+    unfold worldTypedIvls
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40]
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo72]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
