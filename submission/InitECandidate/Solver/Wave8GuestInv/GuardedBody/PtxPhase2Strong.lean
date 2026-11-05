@@ -8439,4 +8439,50 @@ theorem phase2_packed_outer_iteration_while {guard : ExpHOL 64} {body : ProgHOL 
           (fun hlt => hz (hguard.mpr hlt))).2⟩
     · simp at he
 
+/-- A live outer record lies wholly in the allocated access-list interval. -/
+theorem phase2_packed_outer_record_bound {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxPackedOuterIteration s)
+    (hi : locN s "i" < memW s (locN s "tx" + 216)) :
+    memW s (locN s "tx" + 208) + 24 * locN s "i" + 24 ≤ 2 ^ 64 := by
+  obtain ⟨S, Nd, _, ht, _⟩ := hp.2.1.1.2.2.2.2
+  have hn : 0 < memW s (locN s "tx" + 216) := by omega
+  have hb := (ivl_allocated_bound hp.1.1.2 (Or.inl (ht.2.2 hn).1)).2
+  dsimp at hb
+  omega
+
+/-- The outer record initializer evaluates without address wraparound. -/
+theorem phase2_packed_outer_acc_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      w.toNat = memW s (locN s "tx" + 208) + 24 * locN s "i" := by
+  obtain ⟨i, hiw⟩ := hp.2.2.2.2.2.1
+  cases hl : evalAt s (.load .one (.op .add [.var .local (ofString "tx"), .const 208])) with
+  | none =>
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    simp at he
+  | some u =>
+    obtain ⟨a, rfl, ha⟩ := phase2_count_load_local s "tx" 208 u hl
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    have hv : v = .val (.word (a + i * 24)) := by
+      simpa [hiw, valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using he.symm
+    refine ⟨a + i * 24, hv, ?_⟩
+    have hin : locN s "i" = i.toNat := by simp [locN, hiw]
+    have han : a.toNat = memW s (locN s "tx" + 208) := by simpa using ha
+    have hb := phase2_packed_outer_record_bound hp hi
+    have hlt : memW s (locN s "tx" + 208) + 24 * locN s "i" < 2 ^ 64 := by omega
+    rw [BitVec.toNat_add, BitVec.toNat_mul]
+    rw [show (24 : BitVec 64).toNat = 24 from rfl]
+    rw [Nat.add_mod_mod, han, ← hin, Nat.mul_comm (locN s "i") 24]
+    exact Nat.mod_eq_of_lt hlt
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
