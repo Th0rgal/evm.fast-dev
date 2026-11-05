@@ -14308,4 +14308,76 @@ theorem phase2_htab_set_bs72_world_backing (key value : ExpHOL 64) :
   rw [← hl] at he
   exact he
 
+/-- Returning from a lookup clears locals but retains its backing-aware guard. -/
+theorem phase2_return_world_backing (e : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.return e) (fun r s => Resumes r → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_return] at hr ⊢
+  split
+  · exact hp
+  · split
+    · refine ⟨?_, ?_, hp.2.2⟩
+      · obtain ⟨S, hS⟩ := hp.1.2
+        obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+        exact ⟨(arenaReady_with_locals s _ s.clock).mpr hp.1.1,
+          S, (worldTyped_iff_with _ S).mpr ⟨Nd,
+            (worldTypedWith_with_locals s _ s.clock S Nd).mpr hw⟩⟩
+      · have he := hp.2.1
+        refine ⟨he.bo_nz, he.bo24, he.bo32, he.bo40, he.bo72, ?_, he.jcap_nz⟩
+        have hi := he.idx_lt
+        change 0 < memW s (globN s "bo" + 80)
+        omega
+    · exact hp
+
+/-- A destination-free call consumes its callee's return rather than returning itself. -/
+theorem phase2_call0_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fname : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · split <;> simp_all
+        split <;> simp
+
+/-- Compose the concrete pre-state-read insertion and return with backing intact. -/
+theorem phase2_record_pre_state_read_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hp : WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hr : evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) :
+    R16Shards.TxBacking post := by
+  change evaluateHOLFiniteState s (.seq
+    (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  rw [evaluateHOLFiniteState_seq] at hr
+  dsimp only at hr
+  rw [fixClockHOLFinite_evaluateState] at hr
+  generalize he : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1]) = out at hr
+  obtain ⟨r, t⟩ := out
+  cases r with
+  | none =>
+    have hb := (phase2_htab_set_bs72_backing (.var .local (ofString "addr")) (.const 1)).run
+      s hc hp (by rw [he]; simp) (by rw [he])
+    rw [he] at hb
+    simp only [evaluateHOLFiniteState_return] at hr
+    simp [evalHOLExact, shapeOfHOLExact] at hr
+    obtain ⟨_, rfl⟩ := hr
+    exact hb
+  | some r =>
+    have hn := phase2_call0_ne_returned s (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+        .var .local (ofString "addr"), .const 1] v
+    rw [he] at hn
+    exact (hn (congrArg Prod.fst hr)).elim
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
