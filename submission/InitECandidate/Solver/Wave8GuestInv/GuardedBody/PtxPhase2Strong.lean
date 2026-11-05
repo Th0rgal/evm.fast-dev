@@ -7347,4 +7347,21 @@ theorem phase2_packed_separated_inner_exit {F : Type}
       (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) :=
   ⟨(phase2_packed_inner_exit hp.1 hg).2, hp.2⟩
 
+/-- Call-level preservation for the concrete packed address copy. -/
+theorem phase2_packed_address_copy_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedSeparatedCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  exact phase2_packed_address_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) hp.1.1 hp.2.1 hbase hk hp.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
