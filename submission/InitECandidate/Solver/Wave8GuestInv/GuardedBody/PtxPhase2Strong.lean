@@ -10296,4 +10296,54 @@ theorem phase2_packed_source_outer_loop_bound (h : PtxCallees) :
     rw [hpn, Nat.mod_eq_of_lt (by omega : i.toNat + 1 < 2 ^ 64)]
     omega
 
+/-- Counter initialization and the disabled-access branch share the concrete
+packing-loop budget. -/
+theorem phase2_packed_cases_initialized_loop_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedInitCases
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+  let P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+    ∃ before, PtxPackedInitCases before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+    PtxPackedNalIteration s ∨ (PtxPackedKeysReady s ∧
+      s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+      s.locals.lookup (ofString "nal") = some (.val (.word 0)))
+  apply dec_bound_trans (Q := P)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · have ha : Hoare P (.assign .local (ofString "i") (.const 0))
+        (fun r s => r = none → Q s) := by
+      apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        rcases hp with hp | hp
+        · exact Or.inl (phase2_packed_init_state before hp)
+        · exact Or.inr (phase2_packed_zero_init before hp.1 hp.2)
+      · exact fun _ _ hr => by cases hr
+    have hb : TerminatingProgBoundedOn P
+        (.assign .local (ofString "i") (.const 0)) 0 := by
+      intro F s hc hp hn
+      rw [clock_assign]
+      exact ⟨by omega, le_rfl⟩
+    have hl : TerminatingProgBoundedOn Q
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+          phase2_packed_source_outer_body)
+        ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+      intro F s hc hp hn
+      rcases hp with hp | hp
+      · exact phase2_packed_source_outer_loop_bound h s hc hp hn
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hp.2.1 hp.2.2]
+        exact ⟨by dsimp; omega, le_rfl⟩
+    intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans hb ha hl s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
