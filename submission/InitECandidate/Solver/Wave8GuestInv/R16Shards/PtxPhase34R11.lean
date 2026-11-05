@@ -1415,6 +1415,44 @@ theorem encode_receipt_output_resume (h : PtxCallees) {F : Type}
     (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
         rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
 
+/-- The receipt contract also returns bounded slice words and valid live logs. -/
+theorem encode_receipt_result (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    ∃ a b : BitVec 64, v = .rStruct [.val (.word a), .val (.word b)] ∧
+      Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr") ∧
+      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧
+      memW post (locN s "logs" + 8) < 2 ^ 28 ∧ LogsListOK post (locN s "logs") := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hWT, _, _⟩ := hp.1.2.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  have hR : IvlsDisj
+      (receiptScratchSpec.map (fun e => bufferRegion (callEntryStateHOLFinite s callee) (e.1, e.2.2)))
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd) := by
+    intro i hi j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_disj_le hWTc (e.1, e.2.1) (receiptScratchSpec_ok e he).1
+      (receiptScratchSpec_ok e he).2.1 e.2.2 (receiptScratchSpec_ok e he).2.2.2 j hj
+  obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc hR
+  simpa only [hg] using hret v rfl
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
