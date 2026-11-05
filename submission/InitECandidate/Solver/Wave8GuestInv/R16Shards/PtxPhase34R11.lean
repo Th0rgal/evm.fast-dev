@@ -7560,6 +7560,32 @@ theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
   intro F s hc hp
   exact hb s hc hp
 
+/-- The complete prefix delivers stable receipts with their world ownership. -/
+theorem phase4ThroughStableCopy_owned_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 38 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + (2 ^ 28 + 1 + b) + 1)) + 1))) := by
+  have hb := @phase4ThroughCapacity_typed_cut h hresume _ _
+    (stable_allocation_decl_loop_owned_cut h htail)
+  have he : spinePlug 38 (spineAt 99 ptxCode) tail =
+      spinePlug 33 (spineAt 99 ptxCode) (spinePlug 5 (spineAt 132 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 /-- The existing slot-return proof also retains the typed source operands. -/
 theorem resume_lst_push_typed_logSlot (h : PtxCallees)
     (hnonzero : LstPushBackingNonzero) :
