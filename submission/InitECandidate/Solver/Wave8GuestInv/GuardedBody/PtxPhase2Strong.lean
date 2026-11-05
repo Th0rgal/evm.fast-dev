@@ -6855,4 +6855,39 @@ theorem phase2_memcpy_eval_ready (h : PtxCallees) {F : Type}
   exact phase2_packed_ready_restored_frame s post S Nd S' Nd' _ _ hready ha
     step.1.1 step.2.2.1 hw hw' ht hsep ho hf htx (fun _ => hrec) hlen
 
+/-- A separated positive copy frame alone supplies the metadata needed for guarded restoration. -/
+theorem phase2_packed_guarded_of_copy_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat) (dst len : Nat)
+    (hp : PtxPackedCopyIndex s) (ha : ArenaReady s) (hpost : GuestInv post)
+    (hg : GlobalsKept [] s post)
+    (hw : WorldTypedWith s S Nd) (hw' : WorldTypedWith post S' Nd')
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hs : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ [(dst, len)] ++ [freeGap s]) (heapFree s))
+    (htx : Disj (locN s "tx", 384) (dst, len))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (dst, len))
+    (hlen : 0 < len) :
+    PtxPackedCopyIndex { post with locals := s.locals } := by
+  have hz : ∀ region ∈ ([(dst, len)] : List Ivl), region.2 = 0 → region.1 % 8 = 0 := by
+    intro region hm he
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at he
+    omega
+  have htx' : ∀ region ∈ ([(dst, len)] : List Ivl), Disj (locN s "tx", 384) region := by
+    simpa only [List.mem_singleton, forall_eq] using htx
+  have hrec' : ∀ region ∈ ([(dst, len)] : List Ivl),
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) region := by
+    simpa only [List.mem_singleton, forall_eq] using hrec
+  apply phase2_packed_guarded_restored_frame s post S Nd S' Nd' dst len hp ha hpost hg
+    hw hw' ht hs ho hf htx hrec hlen
+  · exact ⟨phase2_tx_header_world_frame s post S Nd _ _ 208 ha.2 hw ht
+      (by decide) (by decide) hf htx' hz,
+      phase2_tx_header_world_frame s post S Nd _ _ 216 ha.2 hw ht
+      (by decide) (by decide) hf htx' hz⟩
+  · intro i hi
+    exact phase2_tx_count_world_frame s post S Nd _ _ i ha.2 hw ht hi hf hrec' hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
