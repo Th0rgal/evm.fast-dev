@@ -7096,6 +7096,19 @@ theorem ptxPhase4_cut_strong_of_slots (h : PtxCallees)
   simp only [Nat.max_eq_left (Nat.zero_le _)]
   omega
 
+/-- Full Phase 4 with the concrete store proof and typed log return discharged. -/
+theorem ptxPhase4_cut_strong_of_receipt_resume (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero)
+    (hreceipt : DecCallResumeOn PtxReceiptsDone Phase4ReceiptSlotReady
+      (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (ptxPhase4 tail) (ptxCost4 + b) := by
+  intro F s hc hp
+  exact ptxPhase4_cut_strong_of_slots h (resume_lst_push_typed_logSlot h hnonzero)
+    Phase4ReceiptSlotReady hreceipt hoare_receiptSlot_store htail s hc hp
+
 /-- The concrete allocator call adds its callee budget before a copy-ready tail. -/
 theorem stable_allocation_copy_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn (fun t => StableLengthPre t ∧ StableCopySpatial t ∧
