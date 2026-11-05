@@ -2169,6 +2169,7 @@ private def CountRetInv_vvh {F : Type} (P m : BitVec 64) (s : PanSemStateFiniteE
     s.locals.lookup (ofString "len") = some (.val (.word m)) ∧
     s.locals.lookup (ofString "count") = some (.val (.word c)) ∧
     c.toNat = vis.card ∧
+    c.toNat ≤ y.toNat ∧ y.toNat ≤ m.toNat ∧
     ∀ k ∈ vis, ∃ d : BitVec 64, d.toNat < y.toNat ∧
       sourceBase ≤ (P + d).toNat ∧ (P + d).toNat < heapEnd ∧
       k.val = (P + d).toNat - sourceBase
@@ -2238,7 +2239,7 @@ private theorem while_countRetInv_vvh {F : Type} (P m : BitVec 64)
           rw [hbr] at hrun rem hbc
           cases r1 with
           | none =>
-            obtain ⟨hc_s, hG_s, vis, y, c, hp, hy, hm, hc_cnt, hcard, hvis⟩ := hinv
+            obtain ⟨hc_s, hG_s, vis, y, c, hp, hy, hm, hc_cnt, hcard, hcy, hym, hvis⟩ := hinv
             have hlt : y.toNat < m.toNat := by
               simp [countCond_vvh, evalHOLExact, hy, hm, Compiler.Encoders.Asm.wordCmpHOL] at hcond
               by_contra hge
@@ -2277,7 +2278,7 @@ private theorem while_countRetInv_vvh {F : Type} (P m : BitVec 64)
               BitVec.toNat_add_of_lt (by have := m.isLt; omega)
             have hinv_mid : CountRetInv_vvh P m mid := by
               refine ⟨hmeta.trans hc_s, hG_mid, insert k_now vis, y + T, c + 1#64,
-                hm_p, hm_off, hm_len, hm_cnt, by omega, ?_⟩
+                hm_p, hm_off, hm_len, hm_cnt, by omega, by omega, by omega, ?_⟩
               intro k' hk'
               rcases Finset.mem_insert.mp hk' with rfl | hk'
               · exact ⟨y, by omega, hpy_lo, hpy_hi, rfl⟩
@@ -2385,15 +2386,17 @@ private theorem while_count_no_return_vvh {F : Type} (rv : ValueHOL 64) :
               exact hb_nr rfl
             | _ => simp
 
-private theorem rlp_list_count_ret_bound_vvh {F : Type}
+private theorem rlp_list_count_ret_le_len_vvh {F : Type}
     (s cpost : PanSemStateFiniteExact 64 F) (vals : List (ValueHOL 64)) (rv : ValueHOL 64)
     (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
     (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_count") vals =
       some (sourceFnBody Guest.Software.guestFn_rlp_list_count, s.locals, .one))
     (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_count) =
       (some (.returned rv), cpost)) :
-    ∃ wcnt : BitVec 64, rv = .val (.word wcnt) ∧ wcnt.toNat ≤ domainBytes := by
+    ∃ wcnt : BitVec 64, rv = .val (.word wcnt) ∧
+      wcnt.toNat ≤ domainBytes ∧ wcnt.toNat ≤ locN s "len" := by
   obtain ⟨P, m, rfl, hp, hm⟩ := lookupCode_two_words_any_vvh (by decide) lookup_rlp_list_count_vvh hl
+  have hloc_m : locN s "len" = m.toNat := by simp [locN, hm]
   have hbody : sourceFnBody Guest.Software.guestFn_rlp_list_count =
       .dec (ofString "count") .one (.const 0)
         (.dec (ofString "off") .one (.const 0)
@@ -2404,7 +2407,8 @@ private theorem rlp_list_count_ret_bound_vvh {F : Type}
   clear hret
   rw [hbody] at hret1
   revert rv hret1
-  change RetOK_vvh (fun rv => ∃ wcnt : BitVec 64, rv = .val (.word wcnt) ∧ wcnt.toNat ≤ domainBytes) s _
+  change RetOK_vvh (fun rv => ∃ wcnt : BitVec 64, rv = .val (.word wcnt) ∧
+    wcnt.toNat ≤ domainBytes ∧ wcnt.toNat ≤ locN s "len") s _
   refine R_dec_vvh (fun vcnt hvcnt _ => ?_)
   have hvcnt_eq : vcnt = .val (.word 0) := by simp [evalHOLExact] at hvcnt; exact hvcnt.symm
   subst hvcnt_eq
@@ -2414,7 +2418,8 @@ private theorem rlp_list_count_ret_bound_vvh {F : Type}
   let s2 := setVarHOLFinite (ofString "off") (.val (.word 0))
     (setVarHOLFinite (ofString "count") (.val (.word 0)) s)
   have hinv2 : CountRetInv_vvh P m s2 := by
-    refine ⟨hc, guestInv_setVar _ _ _ (guestInv_setVar _ _ _ hG), ∅, 0, 0, ?_, ?_, ?_, ?_, by simp, by simp⟩
+    refine ⟨hc, guestInv_setVar _ _ _ (guestInv_setVar _ _ _ hG), ∅, 0, 0, ?_, ?_, ?_, ?_,
+      by simp, by simp, by simp, by simp⟩
     · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hp,
         show ofString "off" ≠ ofString "p" by decide, show ofString "count" ≠ ofString "p" by decide]
     · simp [s2, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
@@ -2425,11 +2430,23 @@ private theorem rlp_list_count_ret_bound_vvh {F : Type}
   refine R_seq_vvh ?_ (fun mid hmid => ?_)
   · intro rv hwhile_ret
     exact absurd hwhile_ret (while_count_no_return_vvh rv s2.clock s2 le_rfl)
-  · obtain ⟨_, _, vis, _, c, _, _, _, hm_cnt, hcard, _⟩ := while_countRetInv_vvh P m s2.clock s2 mid le_rfl hinv2 hmid
+  · obtain ⟨_, _, vis, _, c, _, _, _, hm_cnt, hcard, hcy, hym, _⟩ :=
+      while_countRetInv_vvh P m s2.clock s2 mid le_rfl hinv2 hmid
     refine R_ret_vvh (fun v hv => ?_)
     simp [evalHOLExact, hm_cnt] at hv; subst hv
     have hle : vis.card ≤ domainBytes := by simpa using Finset.card_le_univ vis
-    exact ⟨c, rfl, by omega⟩
+    exact ⟨c, rfl, by omega, by omega⟩
+
+private theorem rlp_list_count_ret_bound_vvh {F : Type}
+    (s cpost : PanSemStateFiniteExact 64 F) (vals : List (ValueHOL 64)) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_count") vals =
+      some (sourceFnBody Guest.Software.guestFn_rlp_list_count, s.locals, .one))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_count) =
+      (some (.returned rv), cpost)) :
+    ∃ wcnt : BitVec 64, rv = .val (.word wcnt) ∧ wcnt.toNat ≤ domainBytes := by
+  obtain ⟨wcnt, hrv, hdom, _⟩ := rlp_list_count_ret_le_len_vvh s cpost vals rv hc hG hl hret
+  exact ⟨wcnt, hrv, hdom⟩
 
 private def ltsLoopBody_vvh : ProgHOL 64 :=
   .decCall (ofString "total") .one (ofString "rlp_item_total_unchecked")

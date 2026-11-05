@@ -679,6 +679,471 @@ theorem create_ether_logs_resume {F : Type} (s : PanSemStateFiniteExact 64 F)
     (R13Shards.logsListOK_with_locals post s.locals post.clock logs).mpr hL',
     hOr, logsLiveOwned_disjFixed hOr⟩
 
+/-- Changing only the caller locals transports the strong post-message cut. -/
+theorem txAfterCallStrong_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hi : locals.lookup (ofString "index") = s.locals.lookup (ofString "index"))
+    (ho : locals.lookup (ofString "out") = s.locals.lookup (ofString "out"))
+    (h : TxAfterCallStrong s) :
+    TxAfterCallStrong { s with locals := locals, clock := k } := by
+  have hout := locN_congr s locals k "out" ho
+  obtain ⟨hW, hw, hin, hl, S, Nd, hWT, hd, hown⟩ := h
+  refine ⟨⟨localsFree_worldOK s locals k hW.1,
+    txEnv_with_locals s locals k hi hW.2⟩, ?_, ?_, ?_, S, Nd,
+    (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hWT, ?_, ?_⟩
+  · change WordsOK s (locN { s with locals := locals, clock := k } "out", 96)
+    rw [hout]; exact hw
+  · change Inside (locN { s with locals := locals, clock := k } "out", 96)
+      sourceBase (globN s "heap_ptr")
+    rw [hout]; exact hin
+  · rw [hout]
+    exact (R13Shards.logsListOK_with_locals s locals k _).mpr hl
+  · change IvlsDisj [(locN { s with locals := locals, clock := k } "out", 96)]
+      (worldOwned s S Nd)
+    rw [hout]; exact hd
+  · change LogsLiveOwned s S Nd
+      (memW s (locN { s with locals := locals, clock := k } "out" + 16))
+    rw [hout]; exact hown
+
+theorem localsOnly_txAfterCallStrong : LocalsOnly ["index", "out"] TxAfterCallStrong := by
+  intro F s locals k hl h
+  exact txAfterCallStrong_with_locals s locals k
+    (hl "index" (by simp)) (hl "out" (by simp)) h
+
+/-- A scratch-buffer world step preserves the complete output record and its
+live logs under one common exit world typing. -/
+theorem txAfterCallStrong_scratchStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)} {boKeep : List Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hstep : WorldStep R gw keep Q s r post) (h : TxAfterCallStrong s)
+    (hgrow : AllocatorGrows s post)
+    {gs : List (String × Nat × Nat)} (hgs : ScratchSpec gs)
+    (hR : R s = gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+    (hbo : ofString "bo" ∉ gw.map ofString)
+    (hjcap : ofString "journal_cap" ∉ gw.map ofString)
+    (hsys : ofString "vm_system_address" ∉ gw.map ofString)
+    (hkeep : ("bo", boKeep) ∈ keep)
+    (hoffs : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat), k ∈ boKeep) :
+    TxAfterCallStrong { post with locals := s.locals } := by
+  obtain ⟨hW, hw, hin, hl, S, Nd, hWT, hd, hown⟩ := h
+  have hRdisj : IvlsDisj (R s) (worldTypedIvls s S Nd) := by
+    rw [hR]
+    intro i hi j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_disj_le hWT (e.1, e.2.1) (hgs e he).1
+      (hgs e he).2.1 e.2.2 (hgs e he).2.2.2 j hj
+  obtain ⟨S', Nd', _, hWT', hog, hfr, _⟩ := hstep.2.2.2.2 S Nd hWT hRdisj
+  have hR0 : ∀ i ∈ R s, i.2 = 0 → i.1 % 8 = 0 := by
+    rw [hR]
+    intro i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_zero_aligned s e.1 e.2.2
+      (by have := (hgs e he).2.2.1; omega)
+  have hRout : ∀ i ∈ R s, Disj (locN s "out", 96) i := by
+    rw [hR]
+    intro i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact heap_ivl_disj_bufferRegion_le (fun j hj => hd _ (by simp) j hj)
+      (e.1, e.2.1) (hgs e he).1 e.2.2 (hgs e he).2.2.2
+  obtain ⟨hin', hd', hu⟩ := R13Shards.heap_ivl_survives_step hW.1.1.2 hgrow.1
+    (R13Shards.worldOwned_zero_aligned hWT) hR0 hog hfr hw.1 (by norm_num)
+    hin (fun j hj => hd _ (by simp) j hj) hRout
+  have hout16 : memW post (locN s "out" + 16) = memW s (locN s "out" + 16) :=
+    memW_eq_of_ivlUnhit hu (by have := hw.1; omega)
+      (ivl_allocated_bound hW.1.1.2 (Or.inl hin)).2 ⟨by omega, by omega⟩
+  have hsysEq : globN post "vm_system_address" = globN s "vm_system_address" :=
+    R16Shards.globN_eq_of_lookup (hstep.2.2.1 _ hsys)
+  have hfr' : FrameOutside s post
+      (worldOwned s S Nd ++ gs.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s) := by simpa only [hR] using hfr
+  have hlogs := logsLiveOwned_scratchStep hgs hW.1.1.2 hstep.1.2
+    hW.1.1.1 hstep.1.1 hWT hgrow hl hown hsysEq hog hfr'
+  have hRbo : ∀ i ∈ R s, Disj i (globN s "bo", 88) :=
+    fun i hi => hRdisj i hi _ (bo_mem_typed hW.2.bo_nz)
+  have hE := txEnv_preserved_by_worldStep hstep hbo hjcap hkeep hoffs hRbo
+    (bo_words hWT.2.2.1 hW.2.bo_nz).2.1 hR0 hW.2 rfl
+  refine ⟨⟨worldOK_of_parts
+    ((arenaReady_with_locals post s.locals post.clock).mpr hstep.1)
+    ((R13Shards.worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hWT'),
+    hE⟩, ?_, hin', ?_, S', Nd',
+    (R13Shards.worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hWT',
+    ?_, ?_⟩
+  · exact wordsOK_transfer hW.1.1.1 hstep.1.1 hw
+  · change LogsListOK { post with locals := s.locals } (memW post (locN s "out" + 16))
+    rw [hout16]
+    exact (R13Shards.logsListOK_with_locals post s.locals post.clock _).mpr hlogs.1
+  · intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hd' j hj
+  · change LogsLiveOwned post S' Nd' (memW post (locN s "out" + 16))
+    rw [hout16]; exact hlogs.2
+
+/-- Both ether credits retain the output record and its live logs. -/
+theorem create_ether_txAfterCallStrong_resume {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (h : TxAfterCallStrong s) :
+    TxAfterCallStrong { post with locals := s.locals } := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl
+    (worldOK_callEntry h.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs.1 s.locals s.clock
+  exact txAfterCallStrong_scratchStep
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    hs' h ⟨hs.1.2.1, hs.2⟩ etherScratchSpec_ok
+    rfl (by decide) (by decide) (by decide) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+
+theorem hoare_create_ether_txAfterCallStrong (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallStrong (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallStrong t) := by
+  apply R13Shards.Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp _ hl hb
+  exact create_ether_txAfterCallStrong_resume s vs body callee ret v post hc hl hb hp
+
+theorem resume_ro_txAfterCallStrong {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ k ∈ (["index", "out"] : List String), ofString k ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn TxAfterCallStrong TxAfterCallStrong name fname args := by
+  intro F s vs body callee ret v post hc hp _ hl hb
+  have hs := funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have he' : ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) =
+      { s with clock := post.clock } := by rw [he]; rfl
+  apply LocalsOnly.setVar localsOnly_txAfterCallStrong hne v
+  rw [he']
+  exact txAfterCallStrong_with_locals s s.locals post.clock rfl rfl hp
+
+theorem txAfterCallStrong_guest_entry (fn : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn TxAfterCallStrong GuestInv fn args := by
+  intro F s vs body callee ret hc hp ha hl
+  exact guestInv_callEntry s callee hp.1.1.1.1
+
+/-- The refund arithmetic and both ether credits, before updating block totals. -/
+def phase4CreditPrefix (tail : ProgHOL 64) : ProgHOL 64 :=
+  spinePlug 11 (spineAt 99 ptxCode) tail
+
+def phase4CreditCost : Nat :=
+  (K.udiv_small5 + 1) + (K.min + 1) + (K.max + 1) +
+  (K.fee_mul + 1) + (K.u256_sub + 1) + (K.fee_mul + 1) +
+  (K.create_ether + 1) + (K.create_ether + 1)
+
+theorem phase4CreditPrefix_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (phase4CreditPrefix tail)
+      (phase4CreditCost + b) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallStrong (phase4CreditPrefix tail)
+      (K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1) := by
+    unfold phase4CreditPrefix ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_udiv_small5 _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_udiv_small5 (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_min _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_min (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_max (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_fee_mul (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_u256_sub _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_u256_sub (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_fee_mul (by decide) _) ?_
+    refine seq_bound_trans ?_ (hoare_create_ether_txAfterCallStrong _) ?_
+    · exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+        (fun s hp => hp.1.1.1.1)
+    refine seq_bound_trans ?_ (hoare_create_ether_txAfterCallStrong _) htail
+    exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+      (fun s hp => hp.1.1.1.1)
+  have he : K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1 =
+      phase4CreditCost + b := by unfold phase4CreditCost; omega
+  rw [he] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+/-- A single write inside world storage cannot change an owned live log list. -/
+theorem logsLiveOwned_single_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hA : ArenaOK s) (hg : GuestInv s) (hgp : GuestInv {s with memory := mem'})
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hwrite : ∃ o ∈ worldOwned s S Nd, Inside (x.toNat, 8) o.1 (o.1 + o.2))
+    (howned : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    LogsListOK {s with memory := mem'} logs ∧
+      LogsLiveOwned {s with memory := mem'} S Nd logs := by
+  let post := {s with memory := mem'}
+  by_cases hn : logs = 0
+  · exact ⟨Or.inl hn, fun h => False.elim (h hn)⟩
+  have hl' := hl.resolve_left hn
+  obtain ⟨o, ho, hin⟩ := hwrite
+  have hdisj : ∀ b, (∀ j ∈ worldOwned s S Nd, Disj b j) → Disj b (x.toNat, 8) :=
+    fun b hb => disj_of_inside_right hin (hb o ho)
+  have hh : IvlUnhit s post (logs, 24) :=
+    ivlUnhit_single hm (by simp) (hdisj _ (fun j hj => (hd hn).2.1 _ (by simp) j hj))
+  have hb := (ivl_allocated_bound hA hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    memW_eq_of_ivlUnhit hh hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    memW_eq_of_ivlUnhit hh (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩
+  have hp : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+    intro i hi
+    have ha := logsListOK_array_aligned hg hl hn (by omega)
+    have hu : IvlUnhit s post (memW s logs, 8 * memW s (logs + 8)) :=
+      ivlUnhit_single hm (fun _ => ha)
+        (hdisj _ (fun j hj => (hd hn).2.1 _ (by simp) j hj))
+    exact memW_eq_of_ivlUnhit hu (by omega)
+      (ivl_allocated_bound hA (hd hn).1).2 ⟨by dsimp; omega, by dsimp; omega⟩
+  have he : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40) := by
+    intro i hi
+    exact ivlUnhit_single hm (by simp)
+      (hdisj _ (fun j hj => (hd hn).2.2 i hi _ (by simp [logOwnedIvls, logRecordIvls]) j hj))
+  refine ⟨logsListOK_congr_header_unhit hA hg hgp (by rfl) hl
+    (fun h => h) hh hp he, ?_⟩
+  intro _
+  change Allocated post (memW post logs, 8 * memW post (logs + 8)) ∧ _
+  rw [h0, h8]
+  refine ⟨(hd hn).1, ?_, ?_⟩
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.1
+  · intro i hi
+    rw [hp i hi]
+    rw [logOwnedIvls_eq_of_unhit hA (hl'.2.2.2.2 i hi).2 (he i hi) rfl]
+    change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.2 i hi
+
+/-- The four block-total cells are untyped and disjoint from the output/logs. -/
+theorem txAfterCallStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallStrong s) {off : Nat} (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    {x : BitVec 64} (hx : s.memaddrs x) (hxe : x.toNat = globN s "bo" + off)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxAfterCallStrong {s with memory := mem'} := by
+  obtain ⟨hW, hw, hin, hl, S, Nd, hWT, hd, hown⟩ := h
+  let post := {s with memory := mem'}
+  have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl hW.1.1.1
+  obtain ⟨hWT', howned, hE⟩ := store_bo_untyped_world hW.1.1 hW.2 hWT hoff hx hxe hm
+  have hbo : (globN s "bo", 88) ∈ worldOwned s S Nd :=
+    R13Shards.worldTypedIvls_sub_worldOwned (bo_mem_typed hW.2.bo_nz)
+  have hix : Inside (x.toNat, 8) (globN s "bo") (globN s "bo" + 88) := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    unfold Inside
+    dsimp
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  have hu : IvlUnhit s post (locN s "out", 96) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hix (hd _ (by simp) _ hbo))
+  have h16 : memW post (locN s "out" + 16) = memW s (locN s "out" + 16) :=
+    memW_eq_of_ivlUnhit hu (by have := hw.1; omega)
+      (ivl_allocated_bound hW.1.1.2 (Or.inl hin)).2 ⟨by omega, by omega⟩
+  have hlogs := logsLiveOwned_single_store hW.1.1.2 hW.1.1.1 hg hl hown hm
+    ⟨_, hbo, hix⟩ howned
+  refine ⟨⟨worldOK_of_parts ⟨hg, hW.1.1.2⟩ hWT', hE⟩,
+    wordsOK_transfer hW.1.1.1 hg hw, hin, ?_, S, Nd, hWT', ?_, ?_⟩
+  · change LogsListOK post (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.1
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]; exact hd
+  · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.2
+
+theorem eval_add_global_const {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {g : String} {k x : BitVec 64}
+    (hx : evalAt s (.op .add [.var .global (ofString g), .const k]) = some (.val (.word x))) :
+    x.toNat = (globN s g + k.toNat) % 2 ^ 64 := by
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at hx
+  rcases hg : s.globals.lookup (ofString g) with _ | vg
+  · simp [hg] at hx
+  · rcases vg with wg | _ | _
+    · cases wg with
+      | word gw =>
+        simp only [hg, valueIsWord, valueWord, wordOpHOL, wordOp, List.all, List.map,
+          Option.map, Bool.and_self, ↓reduceIte, List.foldr, Option.some.injEq,
+          ValueHOL.val.injEq, HolWordLab.word.injEq] at hx
+        have hgn : globN s g = gw.toNat := by simp [globN, hg]
+        have hx' : x = gw + (k + 0) := hx.symm
+        have hz0 : (0 : BitVec 64).toNat = 0 := by decide
+        rw [hx', BitVec.toNat_add, BitVec.toNat_add, hz0, Nat.add_zero, Nat.add_mod_mod, hgn]
+    · simp [hg, valueIsWord] at hx
+    · simp [hg, valueIsWord] at hx
+
+theorem hoare_store_bo_total (off : Nat) (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    (op : BinOp) (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallStrong
+      (.store (.op .add [.var .global (ofString "bo"), .const (BitVec.ofNat 64 off)])
+        (.op op args)) (fun r t => r = none → TxAfterCallStrong t) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' h hx hv hm
+  obtain ⟨w, rfl⟩ := PtxP1.eval_is_word_op hv
+  have hs := panMemStoresHOL_word_spec (s := s) (x := x) (w := .word w)
+    (mem' := mem') (by simpa only [flattenHOL] using hm)
+  apply txAfterCallStrong_store_bo h hoff hs.1 _ hs.2.2
+  have he := eval_add_global_const hx
+  obtain ⟨S, Nd, hWT, _⟩ := h.2.2.2.2
+  have hb := (ivl_allocated_bound h.1.1.1.2
+    (bo_words hWT.2.2.1 h.1.2.bo_nz).1).2
+  have hoff64 : off < 2 ^ 64 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> norm_num
+  have hsum : globN s "bo" + off < 2 ^ 64 := by
+    dsimp at hb
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hoff64, Nat.mod_eq_of_lt hsum] using he
+
+/-- The four consecutive block-total writes preserve the strong cut at zero cost. -/
+theorem phase4TotalStores_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) (0 + (0 + (0 + (0 + b)))) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 0 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 8 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 48 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 16 (by simp) _ _) ?_
+    change TerminatingProgBoundedOn TxAfterCallStrong (.seq .skip tail) b
+    intro F s hc hp hnt
+    simpa only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip] using
+      htail s hc hp (by simpa only [evaluateHOLFiniteState_seq_line780,
+        evaluateHOLFiniteState_skip] using hnt)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+/-- State-gas normalization, regular-gas computation, and all block totals. -/
+theorem phase4Totals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (K.max + b + 1) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 9 (spineAt 110 ptxCode) tail) (0 + (K.max + b + 1)) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine seq_bound_trans (Q := TxAfterCallStrong) ?_ ?_ ?_
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallStrong) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_txAfterCallStrong
+            (name := ofString "tx_state_gas_nat") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+    · refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+        (txAfterCallStrong_guest_entry _ _)
+        (resume_ro_txAfterCallStrong h.ro_max (by decide) _) ?_
+      have hh := @phase4TotalStores_cut tail b htail
+      unfold ptxCode at hh
+      intro F s hc hp
+      exact hh s hc hp
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+/-- The first twenty Phase-4 steps preserve the complete output/log invariant. -/
+theorem phase4CreditTotals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 20 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hb := @phase4CreditPrefix_cut h _ _ (phase4Totals_cut h htail)
+  have he : spinePlug 20 (spineAt 99 ptxCode) tail =
+      phase4CreditPrefix (spinePlug 9 (spineAt 110 ptxCode) tail) := by
+    unfold phase4CreditPrefix ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hr := hb s hc hp
+  convert hr using 1 <;> omega
+
+def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxAfterCallStrong s ∧
+    locN s "logs" = memW s (locN s "out" + 16) ∧
+    LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs")
+
+theorem evalAt_load_local {F : Type} (t : PanSemStateFiniteExact 64 F)
+    (l : String) (k : BitVec 64) (v : ValueHOL 64)
+    (h : evalAt t (.load .one (.op .add [.var .local (ofString l), .const k])) = some v) :
+    ∃ a : BitVec 64, v = .val (.word a) ∧ a.toNat = memW t ((locN t l + k.toNat) % 2 ^ 64) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact] at h
+  rcases hl : t.locals.lookup (ofString l) with _ | w
+  · simp [hl] at h
+  · rcases w with x | fs | ⟨nm, fs⟩
+    · cases x with
+      | word x =>
+        simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+        rcases hm : t.memory (x + k) with ⟨y⟩
+        refine ⟨y, by rw [← h.2, hm], ?_⟩
+        have hadd : BitVec.ofNat 64 ((x.toNat + k.toNat) % 2 ^ 64) = x + k := by
+          apply BitVec.eq_of_toNat_eq
+          simp [BitVec.toNat_add]
+        simp only [locN, memW, hl, hadd, h.2, hm]
+    · simp [hl, valueIsWord] at h
+    · simp [hl, valueIsWord] at h
+
+theorem phase4LogsReady_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : TxAfterCallStrong s)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "out"), .const 16])) = some v) :
+    Phase4LogsReady (setVarHOLFinite (ofString "logs") v s) := by
+  obtain ⟨w, rfl, hw⟩ := evalAt_load_local s "out" 16 v he
+  have hb := (ivl_allocated_bound h.1.1.1.2 (Or.inl h.2.2.1)).2
+  have hlt : locN s "out" + 16 < 2 ^ 64 := by dsimp at hb; omega
+  have hwe : w.toNat = memW s (locN s "out" + 16) := by
+    simpa only [show (16 : BitVec 64).toNat = 16 from rfl, Nat.mod_eq_of_lt hlt] using hw
+  let post := setVarHOLFinite (ofString "logs") (.val (.word w)) s
+  have hout : locN post "out" = locN s "out" := by
+    simp [post, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "logs" ≠ ofString "out" from by decide]
+  have hlogs : locN post "logs" = w.toNat := by
+    simp [post, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hp : TxAfterCallStrong post :=
+    LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) _ s h
+  refine ⟨hp, ?_, ?_, ?_⟩
+  · change locN post "logs" = memW s (locN post "out" + 16)
+    rw [hlogs, hout, hwe]
+  · rw [hlogs, hwe]
+    exact (R13Shards.logsListOK_with_locals s post.locals s.clock _).mpr h.2.2.2.1
+  · obtain ⟨S, Nd, _, _, ho⟩ := h.2.2.2.2
+    rw [hlogs, hwe]
+    exact logsLiveOwned_disjFixed (s := post) ho
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=

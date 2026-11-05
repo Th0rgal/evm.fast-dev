@@ -823,4 +823,102 @@ theorem mptObjStep_ready_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
   · rw [hl]
     exact hd'
 
+theorem ivlsDisj_ownedGrows_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaOK s) (hp : ArenaOK post) {old new objects : List Ivl}
+    (hg : OwnedGrows s post old new)
+    (ha : ∀ o ∈ objects, o.2 ≠ 0 → Allocated s o)
+    (hd : IvlsDisj objects old) : IvlsDisj objects new := by
+  intro o ho j hj
+  by_cases hz : o.2 = 0
+  · exact Or.inl hz
+  · rcases hg j hj with rfl | ⟨i, hi, hin⟩ | hin
+    · exact Or.inr (Or.inl rfl)
+    · exact R10Shards.P26_P28.disj_of_inside_right hin (hd o ho i hi)
+    · exact disj_symm (disj_allocated_fresh_heap hs hp (ha o ho hz) hin)
+
+theorem nodeHeap_extents_congr_unhit_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hp : ArenaReady post) (hbe : post.be = s.be)
+    (hag : AllocatorGrows s post) {Nm : List Nat} (hn : NodeHeap s Nm)
+    (hu : ∀ o ∈ nodeExtents s Nm, o.2 ≠ 0 → P3MptSet.IvlUnhit s post o) :
+    NodeHeap post Nm ∧ nodeExtents post Nm = nodeExtents s Nm := by
+  apply nodeHeap_congr_bytes hs.1 hp.1 hag hn
+  · intro n hnm
+    apply hu _ (List.mem_flatMap.mpr ⟨n, hnm, by simp⟩)
+    have hsz : 32 ≤ nodeSize (memW s n) := by unfold nodeSize; split_ifs <;> omega
+    change nodeSize (memW s n) ≠ 0
+    omega
+  · intro n hnm hk hl k hkl
+    have hpath : nodePath s n = (memW s (n + 32), memW s (n + 40)) :=
+      if_pos ⟨hk, hl⟩
+    have hmem : nodePath s n ∈ nodeExtents s Nm :=
+      List.mem_flatMap.mpr ⟨n, hnm, by simp⟩
+    rw [hpath] at hmem
+    have hal : Allocated s (memW s (n + 32), memW s (n + 40)) := by
+      rcases (hn.1 n hnm).2.2.2.2.2.2.1 hk with hz | ha
+      · exact (hl hz).elim
+      · exact ha.2.1
+    exact P3MptSet.memB_eq_of_ivlUnhit (hu _ hmem hl) hbe
+      (P3MptSet.ivl_allocated_bound hs.2 hal) ⟨by omega, by omega⟩
+
+theorem mptObjInWith_transfer_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hp : ArenaReady post) (hbe : post.be = s.be)
+    (hag : AllocatorGrows s post) {S S' Nd Nd' Nm : List Nat} {m : Nat}
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hg : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hu : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → P3MptSet.IvlUnhit s post o) :
+    MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m := by
+  obtain ⟨hn, hext⟩ := nodeHeap_extents_congr_unhit_csr hs hp hbe hag
+    hm.2.2.2.2.1 (fun o ho => hu o (List.mem_cons_of_mem _ ho))
+  have hivl : mptObjIvls post Nm m = mptObjIvls s Nm m := by
+    simp only [mptObjIvls, hext]
+  have hdis : IvlsDisj (mptObjIvls post Nm m) (worldOwned post S' Nd') := by
+    rw [hivl]
+    exact ivlsDisj_ownedGrows_csr hs.2 hp.2 hg (mptObjInWith_allocated_csr hm)
+      (mptObjInWith_disj_world_csr hm hd)
+  have hroot : memW post m = memW s m :=
+    P3MptSet.memW_eq_of_ivlUnhit (hu _ (by simp [mptObjIvls]) (by dsimp; omega))
+      hm.2.1.1 (P3MptSet.ivl_allocated_bound hs.2 hm.1) ⟨le_rfl, by omega⟩
+  refine ⟨mptObjInWith_of_parts_csr (hag.allocated hm.1)
+    (P3MptSet.wordsOK_transfer hs.1 hp.1 hm.2.1) hn ?_ hdis ?_, ?_, hivl⟩
+  · rw [hroot]
+    exact hm.2.2.2.2.2.1
+  · intro o ho
+    rw [hext] at ho
+    exact (hm.2.2.2.2.2.2 o ho).1
+  · intro o ho j hj
+    exact hdis o ho j (List.mem_append.mpr (Or.inr hj))
+
+theorem worldStep_liveMpt_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    (hs : ArenaReady s) (hstep : WorldStep R gw keep Q s r post)
+    (hbe : post.be = s.be) (hag : AllocatorGrows s post)
+    {S Nd Nm : List Nat} {m : Nat}
+    (hW : WorldTypedWith s S Nd) (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hcells : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 →
+      ∀ a : BitVec 64, a.toNat % 8 = 0 → CellHits a.toNat o →
+        (∀ j ∈ worldOwned s S Nd ++ R s ++ [freeGap s], ¬ CellHits a.toNat j) ∧
+        ¬ CellHits a.toNat (heapFree s)) :
+    ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+      MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m ∧ Q s r post S' Nd' := by
+  obtain ⟨S', Nd', hsub, hW', hg, hf, hQ⟩ := hstep.2.2.2.2 S Nd hW hR
+  have hu : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → P3MptSet.IvlUnhit s post o := by
+    intro o ho hnz a ha hh
+    obtain ⟨hkeep, hfresh⟩ := hcells o ho hnz a ha hh
+    exact hf a hkeep hfresh
+  obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_csr hs hstep.1 hbe hag hm hd hg hu
+  exact ⟨S', Nd', hsub, hW', hm', hd', heq, hQ⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
