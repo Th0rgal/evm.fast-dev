@@ -12019,4 +12019,51 @@ theorem log_growth_post_of_separated_records_g09 {F : Type}
       (by omega) hbound hdH hdB' hdom hheap hsys hagree hok
   · exact hlog
 
+/-- Reinstall the structural frame invariant after changing a log list's backing
+array, length and capacity. Existing frame fields and non-log buffers are kept. -/
+theorem frameWF_of_log_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hFW : FrameWF s S ec)
+    (hdom : post.memaddrs = s.memaddrs)
+    (hscratch : globN post "scratch_ptr" = globN s "scratch_ptr")
+    (hframe : globN post "frame_mem_ptr" = globN s "frame_mem_ptr")
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hempty : globN post "evm_empty" = globN s "evm_empty")
+    (hfields : ∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcapacity : 1 ≤ memW post (memW s (ec.1 + 88) + 16))
+    (hlist : LogsListOK post (memW s (ec.1 + 88)))
+    (hlen : memW post (memW s (ec.1 + 88) + 8) ≤
+      memW post (memW s (ec.1 + 88) + 16))
+    (hbuffer : Inside (frameLogs post ec) sourceBase (globN post "heap_ptr") ∨
+      Inside (frameLogs post ec) (globN post "scratch_ptr") scratchEnd)
+    (hwords : WordsOK post (frameLogs post ec))
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) :
+    FrameWF post S ec := by
+  have hwcongr : ∀ i, WordsOK post i ↔ WordsOK s i :=
+    fun _ => wordsOK_congr_of_dom_g09 hdom
+  have hret : frameRet post ec = frameRet s ec := by
+    unfold frameRet
+    rw [hfields 144 (by simp), hfields 216 (by simp)]
+  unfold FrameWF at hFW ⊢
+  dsimp only at hFW ⊢
+  obtain ⟨hblocks, hmem, hmwords, hcap, hsp, hcapmax, hmemlen,
+    ht1, ht2, ht3, _, _, _, _, hreturn, _, _⟩ := hFW
+  simp only [hfields 8 (by simp), hfields 16 (by simp), hfields 24 (by simp),
+    hfields 32 (by simp), hfields 40 (by simp), hfields 88 (by simp),
+    hfields 112 (by simp), hfields 136 (by simp), hfields 144 (by simp),
+    hfields 168 (by simp), hfields 176 (by simp), hfields 216 (by simp),
+    hfields 232 (by simp)]
+  refine ⟨?_, ?_, (hwcongr _).2 hmwords, hcap, hsp, hcapmax, hmemlen,
+    ht1, ht2, ht3, hcapacity, hlen, hbuffer, hwords, ?_, hlist, hmsg⟩
+  · intro i hi
+    obtain ⟨hiB, hiW⟩ := hblocks i hi
+    exact ⟨by rw [hscratch]; exact hiB, (hwcongr _).2 hiW⟩
+  · rw [hframe]; exact hmem
+  · rcases hreturn with hnull | ⟨hinside, hw⟩
+    · exact Or.inl ⟨hnull.1, by rw [hempty]; exact hnull.2⟩
+    · right
+      rw [hret]
+      exact ⟨⟨hinside.1, le_trans hinside.2 hheap⟩, (hwcongr _).2 hw⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

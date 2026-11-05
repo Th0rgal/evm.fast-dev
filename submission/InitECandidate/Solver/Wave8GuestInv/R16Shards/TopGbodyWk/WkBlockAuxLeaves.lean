@@ -7739,4 +7739,51 @@ theorem merge_set_call_bound_member {F : Type}
   · have hm := (merge_set_values_membership hp.2.1).1
     simpa [locN, hl, hi] using hm
 
+/-- Insertion into an outer table preserves every separately owned inner table. -/
+theorem merge_set_other_table_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t u : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hu : u ∈ S) (hne : u ≠ t)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    HtabWF post u ∧ htabFootprint post u = htabFootprint s u ∧
+      (∀ k, k < 11 → hdr post u k = hdr s u k) := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  have hunhit : ∀ i ∈ htabFootprint s u, IvlUnhit s post i := by
+    intro i hi
+    exact ivlUnhit_of_frameOutside_aligned
+      (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
+      (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
+      (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
+        (Or.inr ((hW.1.2.1 u hu).2 i hi).1))
+  have hheader : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+  have hfp := (hW.1.2.1 u hu).1.1
+  have h264 : heapEnd ≤ 2 ^ 64 := by decide
+  have hh := htabFootprint_eq_of_hdr_unhit ((hfp _ hheader).2.1)
+    (by have := (hfp _ hheader).1.2; dsimp at this; omega) (hunhit _ hheader)
+  exact ⟨htabWF_congr_unhit hA.1 hAp.1 (hW.1.2.1 u hu).1 hunhit, hh.2, hh.1⟩
+
+/-- Inserting an owned inner pointer preserves the outer table's value ownership. -/
+theorem merge_set_values_owned {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t value : Nat} {S : List Nat}
+    (hv : WkBal.HtabSetValuesPost s post t value)
+    (hold : HtabValuesIn s t S) (hvalue : value ∈ S) :
+    HtabValuesIn post t S := by
+  intro i hi
+  have hm : nodeF post (hdr post t 5) (memW post (hdr post t 6 + 8 * i)) 8 ∈
+      htabValues post t := List.mem_map.2 ⟨i, List.mem_range.2 hi, rfl⟩
+  rcases (merge_set_values_membership hv).2 _ hm with hm | heq
+  · obtain ⟨j, hj, heq⟩ := List.mem_map.1 hm
+    rw [← heq]
+    exact hold j (List.mem_range.1 hj)
+  · rw [heq]; exact hvalue
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

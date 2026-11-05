@@ -13560,4 +13560,65 @@ theorem phase2_message_table_store_ready_of_unhit {ι F : Type}
   rw [hm, show 40 = 8 * 5 from rfl, phase2_message_unhit_fields hp.1.1 hu 5 (by decide)]
   exact hp.2.2.2.2.1
 
+/-- The create-branch account lookup retains the transaction environment. -/
+theorem phase2_get_account_txEnv (h : PtxCallees) (name : MlS) (args : List (ExpHOL 64))
+    (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s) TxEnv name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" := by
+    have hg := hs.2.2.1 (ofString "bo") (by decide)
+    change s.globals.lookup (ofString "bo") = post.globals.lookup (ofString "bo") at hg
+    simp only [globN, hg]
+  have hj : globN post "journal_cap" = globN s "journal_cap" := by
+    have hg := hs.2.2.1 (ofString "journal_cap") (by decide)
+    change s.globals.lookup (ofString "journal_cap") = post.globals.lookup (ofString "journal_cap") at hg
+    simp only [globN, hg]
+  have hk : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hk
+    apply hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz k
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+    · intro i hi
+      change i ∈ [("keccak_pad", 136, 136), ("keccak_st", 200, 200),
+        ("mpt_nib_scratch", 64, 64)].map
+          (fun e => bufferRegion s (e.1, e.2.2)) at hi
+      obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+      have hspec : PtxP1.ScratchSpec [("keccak_pad", 136, 136),
+          ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)] := by
+        unfold PtxP1.ScratchSpec; decide
+      obtain ⟨hgb, hnu, hpos, hle⟩ := hspec e he
+      obtain ⟨S, hW⟩ := hp.1.2
+      obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hW
+      have hd := bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle
+        (globN s "bo", 88) (PtxP1.bo_mem_typed hp.2.bo_nz)
+      have h8 := (bo_words hw.2.2.1 hp.2.bo_nz).2.1
+      apply not_cellHits_of_disj (i := (globN s "bo", 88))
+      · change (globN s "bo" + k) % 8 = 0
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp [Nat.add_mod, h8]
+      · exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by omega)
+      · change globN s "bo" ≤ globN s "bo" + k ∧ globN s "bo" + k + 8 ≤ globN s "bo" + 88
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+      · exact disj_symm hd
+  have hi' : locN (setVarHOLFinite name v {post with locals := s.locals}) "index" =
+      locN s "index" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hi]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "bo" ≠ 0; rw [hbo]; exact hp.2.bo_nz
+  · change memW post (globN post "bo" + 24) ≠ 0; rw [hbo, hk 24 (by simp)]; exact hp.2.bo24
+  · change memW post (globN post "bo" + 32) ≠ 0; rw [hbo, hk 32 (by simp)]; exact hp.2.bo32
+  · change memW post (globN post "bo" + 40) ≠ 0; rw [hbo, hk 40 (by simp)]; exact hp.2.bo40
+  · change memW post (globN post "bo" + 72) ≠ 0; rw [hbo, hk 72 (by simp)]; exact hp.2.bo72
+  · change locN (setVarHOLFinite name v {post with locals := s.locals}) "index" <
+      memW post (globN post "bo" + 80)
+    rw [hi', hbo, hk 80 (by simp)]; exact hp.2.idx_lt
+  · change globN post "journal_cap" ≠ 0; rw [hj]; exact hp.2.jcap_nz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

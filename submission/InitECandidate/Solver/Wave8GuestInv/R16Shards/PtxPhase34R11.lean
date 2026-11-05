@@ -12092,4 +12092,56 @@ theorem txBacking_of_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Receipt encoding threads backing once its callee memory contract is supplied. -/
+theorem phase4EncodeReceipt_backing_cut (h : PtxCallees)
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 123 ptxCode) tail) (K.encode_receipt + b + 1) := by
+  unfold ptxCode
+  refine @TerminatingProgBoundedOn.decCall_on
+    (fun s => Phase4ReceiptReady s ∧ TxBacking s) GuestInv
+    (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) _ _ _
+    h.fb_encode_receipt _ _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    have hg := encode_receipt_logs_param s _ _ _ vs body callee ret hc ha hl
+    refine ⟨encode_receipt_encoded_resume h s vs body callee ret v post hc hl hr hp.1 hg, ?_⟩
+    exact hkeep s vs body callee ret v post hc hp.1 hp.2 hl hr hg
+
+/-- The remaining Phase-4 prefix contracts are credit and receipt encoding;
+log pushes and stable copying are discharged concretely. -/
+theorem phase4BackingPrefix_of_credit_encode (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post) :
+    Phase4BackingPrefix := by
+  intro tail b ht
+  have hb := @phase4BeforeReceipt_backing_cut h hcredit _ _
+    (phase4EncodeReceipt_backing_cut h hkeep (phase4Encoded_stable_txBacking_cut h ht))
+  have he : spinePlug 38 (spineAt 99 ptxCode) tail =
+      spinePlug 24 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 123 ptxCode) (spinePlug 13 (spineAt 124 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp.1
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
