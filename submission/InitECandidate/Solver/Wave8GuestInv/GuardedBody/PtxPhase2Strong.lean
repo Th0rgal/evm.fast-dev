@@ -3996,4 +3996,20 @@ theorem phase2_count_add_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
     have hnn : locN s "nkeys" = n.toNat := by simp [locN, hn]
     simpa [ha, hnn] using congrArg (fun k => n.toNat + k) hw
 
+/-- The key-count assignment establishes the next-prefix intermediate state. -/
+theorem phase2_address_count_nkeys_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" < locN s "nal" ∧
+        locN s "nal" = memW s (locN s "tx" + 216) ∧
+        locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1)) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    rw [phase2_count_add_eval s hp.1 v hp.2.2 he]
+    exact fun _ => phase2_address_count_add s hp.1 hp.2.1
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
