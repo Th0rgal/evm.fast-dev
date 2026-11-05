@@ -7877,4 +7877,33 @@ theorem phase2_packed_iteration_guarded_body (h : PtxCallees)
   exact (phase2_packed_body_iteration_hoare h addressSrc keySrc).run s hc
     (phase2_packed_iteration_guard_pre s hp.1 hp.2) hn
 
+/-- Signed comparison agrees with the natural inner-loop bound for small words. -/
+theorem phase2_packed_guard_word_compare {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (rhs : ExpHOL 64) (j n w : BitVec 64)
+    (hj : s.locals.lookup (ofString "j") = some (.val (.word j)))
+    (hn : evalAt s rhs = some (.val (.word n)))
+    (hjb : j.toNat < 2 ^ 63) (hnb : n.toNat < 2 ^ 63)
+    (he : evalAt s (.cmp .less (.var .local (ofString "j")) rhs) =
+      some (.val (.word w))) :
+    w ≠ 0 ↔ locN s "j" < n.toNat := by
+  have hjv : locN s "j" = j.toNat := by simp [locN, hj]
+  rw [hjv]
+  norm_num at hjb hnb
+  have hn' := hn
+  unfold evalAt at hn'
+  simp only [evalAt, evalHOLExact, hj, hn'] at he
+  by_cases hlt : j.toNat < n.toNat
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .less j n = true := by
+      simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
+        hjb, hnb] using hlt
+    simp [hc] at he
+    subst w
+    simp [hlt]
+  · have hc : Compiler.Encoders.Asm.wordCmpHOL .less j n = false := by
+      simp [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
+        hjb, hnb, hlt]
+    simp [hc] at he
+    subst w
+    simp [hlt]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
