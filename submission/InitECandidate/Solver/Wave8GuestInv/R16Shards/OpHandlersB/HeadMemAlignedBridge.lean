@@ -9207,6 +9207,27 @@ theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
     simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
       noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
 
+/-- Normal loop exit fixes the exact combined log count, without modular
+wraparound. -/
+theorem laInv_exit_count {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    (hnc : nc.toNat < 2 ^ 63)
+    (hsum : n.toNat + nc.toNat < 2 ^ 64)
+    (hexit : evalAt post (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    (readW post (L + 8)).toNat = n.toNat + nc.toNat := by
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _, hm8, _⟩ := h
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  simp only [readW, hm8, BitVec.toNat_add, hieq, Nat.mod_eq_of_lt hsum]
+
 /-- Table union leaves the separated parent log header unchanged. -/
 theorem icsTail_logHeader {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {e L : BitVec 64} {T : Nat} (h : ICSTail s e T post)
@@ -9256,6 +9277,38 @@ theorem laInv_icsTail_logs_release {F : Type}
   rcases laInv_logs_release hloop hold hsource with hh | hh
   · exact Or.inl ⟨hh.1, hh.2.trans htail.2.2.2.2.1⟩
   · exact Or.inr hh
+
+/-- The exact combined log count survives the table-union tail. -/
+theorem laInv_icsTail_exit_count {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {e L arr cap n nc : BitVec 64}
+    {T : Nat} (hloop : LAInv s L arr cap n nc mid)
+    (htail : ICSTail mid e T post)
+    (hL : Allocated mid (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint mid T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF mid T) (hnc : nc.toNat < 2 ^ 63)
+    (hsum : n.toNat + nc.toNat < 2 ^ 64)
+    (hexit : evalAt mid (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    (readW post (L + 8)).toNat = n.toNat + nc.toNat := by
+  obtain ⟨_, h8, _⟩ := icsTail_logHeader htail hloop.2.2.1 hL hLB hE hT hwf
+  rw [h8]
+  exact laInv_exit_count hloop hnc hsum hexit
+
+/-- An exact count in a nonnull valid log list satisfies the invariant's
+strict count bound. -/
+theorem logsListOK_count_of_readW {F : Type} {post : PanSemStateFiniteExact 64 F}
+    {L : BitVec 64} {n : Nat} (hL : L.toNat ≠ 0)
+    (hLB : L.toNat + 16 ≤ 2 ^ 64)
+    (hcount : (readW post (L + 8)).toNat = n)
+    (hlogs : LogsListOK post L.toNat) : n < 2 ^ 28 := by
+  rcases hlogs with hz | hh
+  · exact False.elim (hL hz)
+  · have hc := hh.2.2.1
+    rw [readW_toNat] at hcount
+    change memW post (L + BitVec.ofNat 64 8).toNat = n at hcount
+    rw [tn_add L 8 (by omega) (by omega)] at hcount
+    simpa only [hcount] using hc
 
 /-- The success write frame preserves all four protected cells of every live
 frame.  Separation follows from the input invariant, including for the parent

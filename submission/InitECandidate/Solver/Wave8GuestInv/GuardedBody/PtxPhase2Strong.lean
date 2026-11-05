@@ -13988,4 +13988,37 @@ theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     unfold CellHits
     rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
 
+/-- World table typing discharges the footprint separation for fixed headers. -/
+theorem phase2_htabExit_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {i : Ivl} (him : i ∈ fixedObjects s) (hin : i.2 ≠ 0)
+    (hi8 : i.2 % 8 = 0) : IvlUnhit s post i := by
+  have hf := (hw.2.2.1.1 i him).resolve_left hin
+  have htab := hw.1.2.1 _ ht
+  exact phase2_htabExit_unhit hs hx ⟨hf.2.1, hi8⟩ hf.1
+    (fun j hj => (htab.1.1 j hj).2.1)
+    (fun j hj => disj_symm ((htab.2 j hj).2 i him))
+
+/-- Inserting into an existing world table preserves the transaction's nested backing. -/
+theorem phase2_htabExit_backing {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd) (ht : locN s "t" ∈ S)
+    (hb : R16Shards.TxBacking s) (hx : HtabExit s post) : R16Shards.TxBacking post := by
+  apply phase2_backing_of_header_unhit hs he hw hb
+  · have hg := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    simp only [globN, ← hg]
+  · apply phase2_htabExit_fixed_unhit hs hw ht hx
+    · simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    · simp
+    · norm_num
+  · intro k hk
+    apply phase2_htabExit_fixed_unhit hs hw ht hx
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+    · simp
+    · norm_num
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
