@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkAcctWsBase
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
@@ -5653,5 +5654,32 @@ theorem wkSc_incorporate_tx_into_block_of_steps
       (by simp) (by simp) (progWStep_return [] [] _)
   intro F s hc hW _ hnt hres
   exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
+
+/-- A union into an ordinary world table preserves the world when its new
+footprint is confined to the old footprint and freshly allocated heap. -/
+theorem unionExit_worldStepSc_nonValue {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hW : WorldOK s) (hbe : post.be = s.be)
+    (ht : ∀ S, TablesTyped s S → locN s "dst" ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "dst") ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "dst") ∧
+      globN s "bal_accounts" ≠ locN s "dst" ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ locN s "dst") ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "dst"))
+    (hu : UnionExit s post)
+    (hprov : ∀ i ∈ htabFootprint post (locN s "dst"),
+      (∃ j ∈ htabFootprint s (locN s "dst"), Inside i j.1 (j.1 + j.2)) ∨
+      Inside i (globN s "heap_ptr")
+        (globN s "heap_ptr" + (globN post "heap_ptr" - globN s "heap_ptr"))) :
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post := by
+  obtain ⟨hA, hwf, hh0, _, hhp, halloc, hframe, hglobals⟩ := hu
+  have hstep := R16WkMarkAccountCreated.worldStep_of_htabExit_nonValue
+    (r := r) (gw := ["heap_ptr"]) hW hbe
+    hglobals hglobals ht hA hwf hh0 hhp
+    (fun i hi => ⟨halloc i hi, hprov i hi⟩) hframe
+  refine ⟨hstep, ?_⟩
+  have hs : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (hglobals (ofString "scratch_ptr") (by decide))
+  exact Nat.le_of_eq hs
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
