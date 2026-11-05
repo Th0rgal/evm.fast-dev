@@ -7665,6 +7665,66 @@ theorem incorporate_child_on_error_gas {F : Type}
   exact h
 
 
+theorem list_array_cell_ne_header (arr l : BitVec 64) (cap i : Nat)
+    (hi : i < cap) (hw : arr.toNat + 8 * cap ≤ 2 ^ 64)
+    (hlw : l.toNat + 24 ≤ 2 ^ 64)
+    (hsep : l.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap ≤ l.toNat) :
+    BitVec.ofNat 64 (arr.toNat + 8 * i) ≠ l ∧
+    BitVec.ofNat 64 (arr.toNat + 8 * i) ≠ l + 8 ∧
+    BitVec.ofNat 64 (arr.toNat + 8 * i) ≠ l + 16 := by
+  have ha : (BitVec.ofNat 64 (arr.toNat + 8 * i)).toNat = arr.toNat + 8 * i := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have h8 : (l + 8).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by change l.toNat + 8 < 2 ^ 64; omega)
+  have h16 : (l + 16).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by change l.toNat + 16 < 2 ^ 64; omega)
+  refine ⟨fun h => ?_, fun h => ?_, fun h => ?_⟩ <;>
+    have he := congrArg BitVec.toNat h <;> simp only [ha, h8, h16] at he <;> omega
+
+/-- The existing push postcondition already retains contents in the no-growth branch. -/
+theorem lstPushPost_prefix_no_growth {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {l arr0 n cap : BitVec 64} {v : ValueHOL 64}
+    (h : LstPushPost s l 8 n cap v post)
+    (hma : s.memory l = .word arr0) (hlt : n.toNat < cap.toNat)
+    (hw : arr0.toNat + 8 * cap.toNat ≤ 2 ^ 64) (hlw : l.toNat + 24 ≤ 2 ^ 64)
+    (hsep : l.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap.toNat ≤ l.toNat) :
+    post.memory l = .word arr0 ∧
+      ∀ i, i < n.toNat → memW post (arr0.toNat + 8 * i) = memW s (arr0.toNat + 8 * i) := by
+  obtain ⟨_, _, _, _, _, _, _, _, arr, d, len, hml, _, _, halt, hkeep⟩ := h
+  rcases halt with ⟨_, rfl, rfl, hm, _⟩ | ⟨heq, _⟩
+  · have ha : arr = arr0 := by simpa using hm.symm.trans hma
+    subst arr
+    refine ⟨hml, ?_⟩
+    intro i hi
+    obtain ⟨h0, h8, h16⟩ := list_array_cell_ne_header arr0 l cap.toNat i (by omega) hw hlw hsep
+    have hm := hkeep (BitVec.ofNat 64 (arr0.toNat + 8 * i))
+      (by simp [CellHits]) h0 h8 h16
+    unfold memW
+    rw [hm]
+  · have : n.toNat = cap.toNat := congrArg BitVec.toNat heq
+    omega
+
+/-- Header stores following a growth copy preserve all copied entries. -/
+theorem lst_push_growth_prefix {F : Type} {s copied : PanSemStateFiniteExact 64 F}
+    (l dst src n : BitVec 64)
+    (hcopy : SoloHtabSet.MemCopyRel s copied dst src (8 * n.toNat) (8 * n.toNat))
+    (hd8 : dst.toNat % 8 = 0) (hs8 : src.toNat % 8 = 0)
+    (hdw : dst.toNat + 8 * n.toNat < 2 ^ 64)
+    (hsw : src.toNat + 8 * n.toNat < 2 ^ 64)
+    (hlw : l.toNat + 24 ≤ 2 ^ 64)
+    (hsep : l.toNat + 24 ≤ dst.toNat ∨ dst.toNat + 8 * n.toNat ≤ l.toNat) :
+    ∀ i, i < n.toNat →
+      memW { copied with memory := updW (updW (updW copied.memory l dst) (l + 16) (n * 2)) (l + 8) (n + 1) }
+        (dst.toNat + 8 * i) = memW s (src.toNat + 8 * i) := by
+  intro i hi
+  obtain ⟨h0, h8, h16⟩ := list_array_cell_ne_header dst l n.toNat i hi (by omega) hlw hsep
+  have hc := SoloHtabSet.memW_copied_of_memCopyRel hcopy hd8 hs8 (by omega)
+    (show 8 * i + 8 ≤ 8 * n.toNat by omega) hdw hsw
+  unfold memW at hc ⊢
+  dsimp only
+  rw [updW_ne _ _ _ _ h8, updW_ne _ _ _ _ h16, updW_ne _ _ _ _ h0]
+  exact hc
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
@@ -10818,5 +10878,35 @@ theorem append_contents_step (old child current next : Nat → Nat) (n i : Nat)
     · have : k = i := by omega
       subst k
       exact hnew
+
+theorem lst_push_run_no_growth_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (l arr0 n cap : BitVec 64) (hA : ArenaReady s)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hesz : s.locals.lookup (ofString "esz") = some (.val (.word 8)))
+    (hma : s.memory l = .word arr0)
+    (hmn : s.memory (l + 8) = .word n) (hmc : s.memory (l + 16) = .word cap)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8)) (hd16 : s.memaddrs (l + 16))
+    (hlt : n.toNat < cap.toNat) (hcap : n.toNat < 2 ^ 59)
+    (hw : arr0.toNat + 8 * cap.toNat ≤ 2 ^ 64) (hlw : l.toNat + 24 ≤ 2 ^ 64)
+    (hsep : l.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap.toNat ≤ l.toNat) :
+    Ret s (sourceFnBody Guest.Software.guestFn_lst_push)
+      (fun v post => LstPushPost s l 8 n cap v post ∧
+        post.memory l = .word arr0 ∧
+        ∀ i, i < n.toNat → memW post (arr0.toNat + 8 * i) = memW s (arr0.toNat + 8 * i)) := by
+  refine Ret.mono (lst_push_run s l 8 n cap hA hl hesz hmn hmc hd0 hd8 hd16
+    (by omega) hcap (by decide)) ?_
+  intro v post hp
+  exact ⟨hp, lstPushPost_prefix_no_growth hp hma hlt hw hlw hsep⟩
+
+theorem log_append_store_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (arr n lg : BitVec 64) (old : Nat → Nat)
+    (hw : arr.toNat + 8 * n.toNat < 2 ^ 64)
+    (hp : ∀ i, i < n.toNat → memW s (arr.toNat + 8 * i) = old i) :
+    (∀ i, i < n.toNat →
+      memW { s with memory := updW s.memory (arr + n * 8) lg } (arr.toNat + 8 * i) = old i) ∧
+    memW { s with memory := updW s.memory (arr + n * 8) lg }
+      (arr.toNat + 8 * n.toNat) = lg.toNat := by
+  exact ⟨fun i hi => (log_store_prefix s arr n lg hw i hi).trans (hp i hi),
+    log_store_new s arr n lg hw⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
