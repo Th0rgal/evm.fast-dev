@@ -10655,6 +10655,123 @@ private theorem decode_access_list_ret_spec_vvh {F : Type}
       · simp at hret
     | _ => simp at hret
 
+private theorem call_local_none_inv_vvh {F : Type}
+    {cur mid : PanSemStateFiniteExact 64 F}
+    {nm fname : MlS} {args : List (ExpHOL 64)}
+    (hrun : evaluateHOLFiniteState cur (.call (some (some (.local, nm), none)) fname args) = (none, mid)) :
+    ∃ (vs : List (ValueHOL 64)) (b' : ProgHOL 64) (c' : HolFiniteMapExact MlS (ValueHOL 64))
+      (r' : ShapeHOL) (rv : ValueHOL 64) (pb : PanSemStateFiniteExact 64 F),
+      evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) args = some vs ∧
+      lookupCodeHOLFinite cur.code.lookup fname vs = some (b', c', r') ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite cur c') b' = (some (.returned rv), pb) ∧
+      shapeEqHOL (shapeOfHOLExact rv) r' = true ∧
+      mid.memory = pb.memory ∧
+      mid.globals = pb.globals ∧
+      (∀ key : MlS, key ≠ nm → mid.locals.lookup key = cur.locals.lookup key) ∧
+      mid.locals.lookup nm = some rv := by
+  rw [evaluateHOLFiniteState_call] at hrun
+  rcases hargs : evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) args with _ | vs
+  · rw [hargs] at hrun; cases hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hlk : lookupCodeHOLFinite cur.code.lookup fname vs with _ | ⟨b', c', r'⟩
+    · rw [hlk] at hrun; cases hrun
+    · rw [hlk] at hrun; dsimp only at hrun
+      by_cases hz : cur.clock = 0
+      · rw [if_pos hz] at hrun; cases hrun
+      · rw [if_neg hz] at hrun
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite cur c') b' with ⟨res_b, pb⟩
+        rw [hb] at hrun
+        cases res_b with
+        | none => cases hrun
+        | some rb =>
+          cases rb with
+          | returned rv =>
+            dsimp only at hrun
+            by_cases hsh : shapeEqHOL (shapeOfHOLExact rv) r' = true
+            · rw [if_pos hsh] at hrun
+              by_cases hval : isValidValueHOLExact cur.toExact .local nm rv = true
+              · rw [if_pos hval] at hrun
+                injection hrun with _ hm; subst hm
+                refine ⟨vs, b', c', r', rv, pb, rfl, hlk, hb, hsh, rfl, rfl, fun key hne => ?_, ?_⟩
+                · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+                · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+              · rw [if_neg hval] at hrun; cases hrun
+            · rw [if_neg hsh] at hrun; cases hrun
+          | _ => cases hrun
+
+private theorem assign_local_none_inv_vvh {F : Type}
+    {cur mid : PanSemStateFiniteExact 64 F}
+    {nm : MlS} {e : ExpHOL 64}
+    (hrun : evaluateHOLFiniteState cur (.assign .local nm e) = (none, mid)) :
+    ∃ rv : ValueHOL 64,
+      @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) e = some rv ∧
+      mid.memory = cur.memory ∧
+      mid.globals = cur.globals ∧
+      (∀ key : MlS, key ≠ nm → mid.locals.lookup key = cur.locals.lookup key) ∧
+      mid.locals.lookup nm = some rv := by
+  rw [evaluateHOLFiniteState_assign] at hrun
+  rcases hv : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) e with _ | rv
+  · rw [hv] at hrun; cases hrun
+  · rw [hv] at hrun; dsimp only at hrun
+    by_cases hval : isValidValueHOLFinite cur .local nm rv = true
+    · rw [if_pos hval] at hrun
+      injection hrun with _ hm; subst hm
+      refine ⟨rv, rfl, rfl, rfl, fun key hne => ?_, ?_⟩
+      · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+      · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    · rw [if_neg hval] at hrun; cases hrun
+
+private theorem memW_tx_off_store_disj_vvh {F : Type}
+    {cur post : PanSemStateFiniteExact 64 F}
+    {ptx : BitVec 64} {off sz qoff : Nat} {valExp : ExpHOL 64}
+    (hG : GuestInv cur)
+    (htx : cur.locals.lookup (ofString "tx") = some (.val (.word ptx)))
+    (hhi : ptx.toNat + 400 ≤ heapLimit)
+    (hoff : off + sz ≤ 400)
+    (hqoff : qoff + 8 ≤ 400)
+    (hdj : qoff + 8 ≤ off ∨ off + sz ≤ qoff)
+    (hsz : ∀ v, @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) valExp =
+      some v → 8 * (flattenHOL v).length ≤ sz)
+    (hflow : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp) = (none, post)) :
+    memW post (ptx.toNat + qoff) = memW cur (ptx.toNat + qoff) := by
+  have hhl : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hoff_bv : (BitVec.ofNat 64 off).toNat = off := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hadd : (ptx + BitVec.ofNat 64 off).toNat = ptx.toNat + off := by
+    rw [BitVec.toNat_add_of_lt (by rw [hoff_bv]; omega), hoff_bv]
+  have hdst : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a))
+      (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (ptx + BitVec.ofNat 64 off))) := by
+    simp [evalHOLExact, evalListHOLExact, htx, wordOpHOL, wordOp, valueIsWord, valueWord]
+  exact memW_store_disj hG hdst hsz (by rw [hadd]; omega) hflow (by omega)
+    (by rw [hadd]; rcases hdj with h | h; exact Or.inl (by omega); exact Or.inr (by omega))
+
+private theorem memW_tx_off_store_word_vvh {F : Type}
+    {cur post : PanSemStateFiniteExact 64 F}
+    {ptx w : BitVec 64} {off : Nat} {valExp : ExpHOL 64}
+    (hG : GuestInv cur)
+    (htx : cur.locals.lookup (ofString "tx") = some (.val (.word ptx)))
+    (hhi : ptx.toNat + 400 ≤ heapLimit)
+    (hoff : off + 8 ≤ 400)
+    (hval : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) valExp =
+      some (.val (.word w)))
+    (hflow : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) valExp) = (none, post)) :
+    memW post (ptx.toNat + off) = w.toNat ∧
+    (∀ a : Nat, a < 2 ^ 64 → a ≠ ptx.toNat + off → memW post a = memW cur a) := by
+  have hhl : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hoff_bv : (BitVec.ofNat 64 off).toNat = off := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hadd : (ptx + BitVec.ofNat 64 off).toNat = ptx.toNat + off := by
+    rw [BitVec.toNat_add_of_lt (by rw [hoff_bv]; omega), hoff_bv]
+  have hdst : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a))
+      (.op .add [.var .local (ofString "tx"), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (ptx + BitVec.ofNat 64 off))) := by
+    simp [evalHOLExact, evalListHOLExact, htx, wordOpHOL, wordOp, valueIsWord, valueWord]
+  have hex := memW_store_word_exact hG hdst hval hflow
+  rwa [hadd] at hex
+
 private theorem txAccessListAt_of_fresh_vvh {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {tx : Nat}
     (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
