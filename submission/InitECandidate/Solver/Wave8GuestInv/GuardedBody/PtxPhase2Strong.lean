@@ -8246,4 +8246,34 @@ theorem phase2_packed_acc_while {body : ProgHOL 64}
           (fun hlt => hz (hguard.mpr hlt))).1⟩
     · simp at he
 
+/-- The packed copy loop closes with its concrete guard and both concrete copy destinations. -/
+theorem phase2_packed_inner_acc_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedAccIteration
+      (.while (.cmp .less (.var .local (ofString "j"))
+        (.load .one (.op .add [.var .local (ofString "acc"), .const 16])))
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+          (.seq
+            (.call (some (none, none)) (ofString "memcpy")
+              [.op .add [.var .local (ofString "al_keys"),
+                .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+            (.seq
+              (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+              (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+      (fun r s => r = none → PtxPackedAccIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
+  exact phase2_packed_acc_while (phase2_packed_body_acc_hoare h addressSrc keySrc) rfl rfl
+
+/-- The flattened-prefix exit equation recovers the exhausted inner guard. -/
+theorem phase2_packed_acc_exit_guard {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedAccIteration s)
+    (hk : locN s "k" = phase2_key_prefix s (locN s "i" + 1)) :
+    ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  have he := hp.1.2.1.1.2.2.2.2
+  rw [phase2_key_prefix_succ] at hk
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
