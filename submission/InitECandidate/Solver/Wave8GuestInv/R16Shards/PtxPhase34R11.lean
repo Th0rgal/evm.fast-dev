@@ -11172,4 +11172,44 @@ theorem phase4Encoded_stable_backing_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Only preservation of the other list's data word remains to strengthen the
+typed log-push resume: the concrete push already supplies active backing. -/
+theorem resume_lst_push_typed_logSlot_backing_of_other_header (h : PtxCallees)
+    (hother : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → (Phase4TypedLogPointers s ∧ TxBacking s) →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs →
+      lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned v), post) →
+      memW post (memW s (globN s "bo" + 72)) = memW s (memW s (globN s "bo" + 72))) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hout := resume_lst_push_typed_logSlot_backing h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hout, hout.1.2.1, ?_⟩
+  have hW := hp.1.1.1.1.1.1
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 72) = memW s (globN s "bo" + 72) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hW.2.bo_nz 72 (by simp) (by intro i hi; cases hi)
+  change memW post (memW post (globN post "bo" + 72)) ≠ 0
+  rw [hbo, hm, hother s vs body callee ret v post hc hp ha hl hr]
+  exact hp.2.2
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
