@@ -149,6 +149,73 @@ theorem allocated_ivl_survives_step {F : Type}
       dsimp at hf1 hf2
       omega
 
+/-- Separation from newly owned world storage needs placement, but no cell
+alignment. This also covers byte-sized log payload intervals. -/
+theorem allocated_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new : List Ivl} {b : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hb : Allocated s b)
+    (hog : OwnedGrows s post old new) (hd : ∀ j ∈ old, Disj b j) :
+    ∀ o ∈ new, Disj b o := by
+  intro o ho
+  rcases hog o ho with rfl | ⟨j, hj, hin⟩ | hfresh
+  · exact R13Shards.disj_zero_right b
+  · exact R13Shards.disj_of_inside_right hin (hd j hj)
+  · rcases hb with hh | hs
+    · exact Or.inr (Or.inr (Or.inl (hh.2.trans hfresh.1)))
+    · have hsep : heapLimit ≤ scratchStart := by decide
+      have hfm := hAs.2.2.1
+      have hsc := hAs.2.2.2.1
+      have hhp := hAp.2.1
+      exact Or.inr (Or.inr (Or.inr (by have := hs.1; have := hfresh.2; omega)))
+
+/-- All four log intervals are heap-resident, including the byte payloads. -/
+theorem logEntryOK_record_placed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {log : Nat} (hl : LogEntryOK s log) :
+    ∀ o ∈ logRecordIvls s log, Inside o sourceBase (globN s "heap_ptr") := by
+  intro o ho
+  simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl | rfl | rfl
+  · exact hl.2.1
+  · exact hl.2.2.2.2.1
+  · exact hl.2.2.2.2.2.1
+  · exact hl.2.2.2.2.2.2
+
+/-- Framing the record fixes the payload intervals used by the receipt guard.
+The shared system address is filtered identically when its global is retained. -/
+theorem logOwnedIvls_eq_of_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hAs : ArenaOK s) (hl : LogEntryOK s log)
+    (hu : IvlUnhit s post (log, 40))
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address") :
+    logOwnedIvls post log = logOwnedIvls s log := by
+  have hb := (R13Shards.ivl_allocated_bound hAs (Or.inl hl.2.1)).2
+  have ha := hl.1.1
+  have hm : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (log + k) = memW s (log + k) := by
+    intro k hk
+    apply R13Shards.memW_eq_of_ivlUnhit hu
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    · exact hb
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> (constructor <;> omega)
+  have h0 : memW post log = memW s log := by simpa using hm 0 (by simp)
+  simp only [logOwnedIvls, logRecordIvls, hsys, h0,
+    hm 8 (by simp), hm 16 (by simp), hm 24 (by simp), hm 32 (by simp)]
+
+theorem logOwnedIvls_disj_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new : List Ivl} {log : Nat}
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hl : LogEntryOK s log)
+    (hu : IvlUnhit s post (log, 40))
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hog : OwnedGrows s post old new) (hd : IvlsDisj (logOwnedIvls s log) old) :
+    IvlsDisj (logOwnedIvls post log) new := by
+  rw [logOwnedIvls_eq_of_unhit hAs hl hu hsys]
+  intro o ho
+  have hmem := (List.mem_filter.mp ho).1
+  exact allocated_disj_ownedGrows hAs hAp
+    (Or.inl (logEntryOK_record_placed hl o hmem)) hog (hd o ho)
+
 /-- Reassemble the log-list invariant from preservation of the header, live
 pointer cells and individual log records. This isolates the memory obligations
 of the two ether-creation calls from the list invariant itself. -/
