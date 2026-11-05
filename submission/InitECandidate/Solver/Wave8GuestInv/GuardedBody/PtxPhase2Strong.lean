@@ -8485,4 +8485,46 @@ theorem phase2_packed_outer_acc_eval {F : Type} (s : PanSemStateFiniteExact 64 F
     rw [Nat.add_mod_mod, han, ← hin, Nat.mul_comm (locN s "i") 24]
     exact Nat.mod_eq_of_lt hlt
 
+/-- Declaring the current record preserves all live outer-loop resources. -/
+theorem phase2_packed_outer_set_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (v : ValueHOL 64) :
+    PtxPackedOuterIteration (setVarHOLFinite (ofString "acc") v s) := by
+  have hr := phase2_packed_keys_set_other s hp.2.1.1 (ofString "acc") v (by decide)
+  have hout : PtxPackedOuterInv (setVarHOLFinite (ofString "acc") v s) := by
+    refine ⟨hr, ?_⟩
+    simpa [locN, memW, txAccessSlots, phase2_key_prefix, setVarHOLFinite,
+      HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "tx" by decide,
+      show ofString "acc" ≠ ofString "nkeys" by decide,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "k" by decide] using hp.2.1.2
+  refine ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s _ s.clock).mpr hp.1.1) hr, hout, ?_⟩
+  simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "acc" ≠ ofString "tx" by decide,
+    show ofString "acc" ≠ ofString "al_keys" by decide,
+    show ofString "acc" ≠ ofString "nkeys" by decide,
+    show ofString "acc" ≠ ofString "i" by decide,
+    show ofString "acc" ≠ ofString "k" by decide] using hp.2.2
+
+/-- Record declaration establishes exactly the precondition of the inner reset. -/
+theorem phase2_packed_outer_declare_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    let post := setVarHOLFinite (ofString "acc") v s
+    PtxPackedOuterIteration post ∧
+      locN post "i" < memW post (locN post "tx" + 216) ∧
+      locN post "acc" = memW post (locN post "tx" + 208) + 24 * locN post "i" := by
+  obtain ⟨w, rfl, hw⟩ := phase2_packed_outer_acc_eval s hp hi v he
+  refine ⟨phase2_packed_outer_set_acc s hp _, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hw
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
