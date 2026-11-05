@@ -8809,4 +8809,81 @@ theorem phase2_packed_body_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL
     (Hoare.seq_fall (phase2_packed_storage_copy_ns_hoare h keySrc)
       phase2_packed_counters_ns_hoare)
 
+/-- Clock induction for the actual source guard `j < ns`. -/
+theorem phase2_packed_ns_while {body : ProgHOL 64}
+    (hb : Hoare PtxPackedNsCopy body (fun r s => r = none → PtxPackedNsIteration s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxPackedNsIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))) body)
+      (fun r s => r = none → PtxPackedNsIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
+  let guard : ExpHOL 64 := .cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s (.while guard body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxPackedNsIteration st →
+      evaluateHOLFiniteState st (.while guard body) = (none, post) →
+      PtxPackedNsIteration post ∧ locN post "k" = phase2_key_prefix post (locN post "i" + 1) from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      have hguard := phase2_packed_ns_guard_eval st w hp (by simpa [evalAt, guard] using hw)
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd := phase2_packed_ns_iteration_decClock st hp
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc
+              ⟨phase2_packed_iteration_guard_pre _ hd.1 (hguard.mp hnz), hd.2⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, (phase2_packed_separated_inner_exit hp.1.2.1
+          (fun hlt => hz (hguard.mpr hlt))).1⟩
+    · simp at he
+
+/-- The source inner packing loop preserves the cached count and completes the record prefix. -/
+theorem phase2_packed_inner_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedNsIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns")))
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+          (.seq
+            (.call (some (none, none)) (ofString "memcpy")
+              [.op .add [.var .local (ofString "al_keys"),
+                .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+            (.seq
+              (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+              (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+      (fun r s => r = none → PtxPackedNsIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
+  exact phase2_packed_ns_while (phase2_packed_body_ns_hoare h addressSrc keySrc) rfl rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
