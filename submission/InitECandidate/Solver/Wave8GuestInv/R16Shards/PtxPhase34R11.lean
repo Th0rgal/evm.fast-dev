@@ -6464,6 +6464,37 @@ theorem stable_allocation_copy_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat
     (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1.1.1.1.1)
     s hc hp
 
+/-- Allocation, length initialization, and the complete copy loop have one bound. -/
+theorem stable_allocation_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.seq (.call (some (some (.local, ofString "stable_logs"), none)) (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")])
+        (.seq (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+          (.var .local (ofString "nl")))
+          (.seq (.assign .local (ofString "stable_lp")
+            (.load .one (.var .local (ofString "stable_logs"))))
+            (.seq (.assign .local (ofString "i") (.const 0))
+              (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+                (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+                  .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+                  (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+                tail))))) ((K.lst_new + 1) + (2 ^ 28 + 1 + b)) := by
+  intro F s hc hp
+  refine seq_bound_trans ?_ (hoare_lst_new_stable_joint h)
+    (stable_length_setup_loop_cut htail) s hc hp
+  intro G t hcode hpre
+  exact TerminatingProgBoundedOn.call_on (P := fun u => Phase4StableCapReady u ∧
+    (∃ n : BitVec 64, u.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN u "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, u.locals.lookup (ofString "lp") = some (.val (.word p)))
+    h.fb_lst_new _ _
+    (fun u vs body callee ret hc hp ha hl => guestInv_callEntry u callee hp.1.1.1.1.1.1.1.1.1)
+    t hcode hpre
+
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
