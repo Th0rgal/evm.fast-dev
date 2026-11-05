@@ -10711,4 +10711,39 @@ theorem phase2_memcpy_eval_packed_live_destination (h : PtxCallees) {F : Type}
       change locN (callEntryStateHOLFinite s callee) "n" = 32 at heq'
       omega
 
+/-- Evaluated source arguments connect the live-resource invariant to either
+of the actual packing calls. -/
+theorem phase2_memcpy_packed_arguments_live (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src len : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (d n : BitVec 64)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedLiveCopy s buffer contents)
+    (hb : Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hlen : evalAt s len = some (.val (.word n)))
+    (hpair : (d.toNat, n.toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents ∧
+      Disj buffer (locN {post with locals := s.locals} "al_keys",
+        (locN {post with locals := s.locals} "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  refine ⟨?_, hb⟩
+  have hentry := phase2_memcpy_entry_destination s dst src len vs body callee ret d n
+    hc hargs hl hd hlen
+  apply phase2_memcpy_eval_packed_live_destination h s post vs body callee ret r
+    buffer contents hc hl he hn hr hp ha hi hb
+  change (locN {s with locals := callee, clock := s.clock - 1} "dst",
+    locN {s with locals := callee, clock := s.clock - 1} "n") ∈ _
+  rw [hentry.1, hentry.2]
+  exact hpair
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
