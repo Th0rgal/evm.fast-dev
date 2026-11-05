@@ -6465,4 +6465,68 @@ theorem ws_get_code_return_of_nodedb {F : Type} (s : PanSemStateFiniteExact 64 F
   obtain ⟨hs, hn⟩ := hlookup values body callee ret post ha hl hb
   exact ws_get_code_nodedb_return _ _ hs hn
 
+/-- Live database values designate two-word records and heap-contained code.
+`WorldOK` types the database table, but does not type its payload records. -/
+def NodeDbEntriesStrong {F : Type} (s : PanSemStateFiniteExact 64 F) (db : Nat) : Prop :=
+  ∀ p ∈ htabValues s db, WordsOK s (p, 16) ∧
+    Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr")
+
+theorem nodedb_lookup_return_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (db hash : BitVec 64) (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hdb : s.locals.lookup (ofString "db") = some (.val (.word db)))
+    (hhash : s.locals.lookup (ofString "hash") = some (.val (.word hash)))
+    (hW : HtabWF s db.toNat) (hentries : NodeDbEntriesStrong s db.toNat) :
+    Ret s (sourceFnBody Guest.Software.guestFn_nodedb_lookup)
+      (fun v _ => ∃ found code code_n : BitVec 64,
+        v = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ (found = 0 ∨ found = 1)) := by
+  change Ret s (.decCall (ofString "r") (.comb [.one, .one]) (ofString "htab_get")
+    [.var .local (ofString "db"), .var .local (ofString "hash")] _) _
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  have hvals : values = [.val (.word db), .val (.word hash)] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact, hdb, hhash] using ha.symm
+  subst values
+  obtain ⟨hbody, ht⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [] (ofString "t") .one [(ofString "key", .one)]
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by intro p hp; simp at hp; rw [hp]; decide)
+    (by rw [hcode]; exact WkBal.lookup_htab_get) (vpre := []) (by simp) hl
+  obtain ⟨_, hk⟩ := lookupCodeHOLFinite_param_at
+    s.code.lookup (ofString "htab_get") [(ofString "t", .one)] (ofString "key") .one []
+    (sourceFnBody Guest.Software.guestFn_htab_get) (.comb [.one, .one])
+    (by simp) (by rw [hcode]; exact WkBal.lookup_htab_get)
+    (vpre := [.val (.word db)]) (by simp) hl
+  subst body
+  let ce := callEntryStateHOLFinite s callee
+  have hWce : HtabWF ce db.toNat := WkBal.htabWF_with_locals s callee (s.clock - 1) db.toNat |>.2 hW
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values ce db hash hcode ht hk hWce v
+    (congrArg Prod.fst hb)
+  have hframe := R16WkAcctWs.evaluate_roProgR16 R16WkAcctWs.wsGetCodeCallees
+    R16WkAcctWs.wsGetCodeCallees_good (sourceFnBody Guest.Software.guestFn_htab_get)
+    (by decide) ce hcode
+  rw [hb] at hframe
+  have hpost : post = {s with locals := post.locals, clock := post.clock} := by
+    simpa [R16WkAcctWs.LocFrameR16, ce, callEntryStateHOLFinite] using hframe
+  subst v
+  let st := setVarHOLFinite (ofString "r")
+    (.rStruct [.val (.word found), .val (.word ptr)]) {post with locals := s.locals}
+  have hst : st = {s with locals := st.locals, clock := st.clock} := by
+    dsimp only [st, setVarHOLFinite]; rw [hpost]
+  have hr : st.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hAst : ArenaReady st := by rw [hst]; exact localsFree_arenaReady s _ _ hA
+  have hrecord : found ≠ 0 → WordsOK st (ptr.toNat, 16) ∧
+      Inside (memW st ptr.toNat, memW st (ptr.toNat + 8)) sourceBase (globN st "heap_ptr") := by
+    intro hf
+    have hin : ptr.toNat ∈ htabValues s db.toNat := by
+      simpa [ce, callEntryStateHOLFinite, htabValues, hdr, nodeF, memW] using hm hf
+    have he := hentries ptr.toNat hin
+    rw [hst]
+    simpa [WordsOK, WordAt, memW, globN] using he
+  intro w hw
+  obtain ⟨f, c, n, hv, hn, hf, _⟩ := nodedb_lookup_code_tail_cases st hAst found ptr hr hrecord w hw
+  exact ⟨f, c, n, hv, hn, hf⟩
+
 end HeadStore
