@@ -12816,4 +12816,37 @@ theorem receipt_encode_logs_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_logs_bloom_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (logsExp outExp : ExpHOL 64) (logs out : BitVec 64)
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (ho : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) outExp = some (.val (.word out)))
+    (hfresh : globN s "heap_ptr" ≤ out.toNat ∧ out.toNat + 256 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "logs_bloom") [logsExp, outExp]) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  have hp : globN mid "keccak_pad" = globN s "keccak_pad" :=
+    R16Shards.globN_eq_of_lookup (hpre.globals _ (by decide))
+  have hs : globN mid "keccak_st" = globN s "keccak_st" :=
+    R16Shards.globN_eq_of_lookup (hpre.globals _ (by decide))
+  apply heapByteEff_logs_bloom_fresh hpre logsExp outExp logs out hl ho hfresh ?_ ?_ hr
+  · intro hn
+    rw [hp] at hn ⊢
+    refine ⟨(globN s "keccak_pad", 136), ?_, le_rfl, le_rfl⟩
+    simp [WkBlockTxEnc.receiptKeccakIvls, hn]
+  · intro hn
+    rw [hs] at hn ⊢
+    refine ⟨(globN s "keccak_st", 200), ?_, le_rfl, le_rfl⟩
+    simp [WkBlockTxEnc.receiptKeccakIvls, hn]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
