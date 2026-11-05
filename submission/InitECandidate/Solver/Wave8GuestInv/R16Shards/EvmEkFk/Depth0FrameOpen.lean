@@ -5733,4 +5733,33 @@ theorem hoare_prepare_dispatch_alloc_memcpy (gw : List String) (hp : Nat)
     (StateRestoreEpilogue.htabMutCallees_good _ (by decide) values body callee ret hl)
     (callEntryStateHOLFinite s callee) hc e v he
 
+/-- A code slice contained in the allocated heap has the length bound needed
+by the dispatch bitmap allocator. -/
+theorem dispatch_code_length_lt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {p n : Nat}
+    (hin : Inside (p, n) sourceBase (globN s "heap_ptr")) : n < 2 ^ 40 := by
+  have hh : globN s "heap_ptr" ≤ heapLimit := hA.2.2.1
+  have hl : heapLimit < 2 ^ 40 := by decide
+  obtain ⟨_, hhi⟩ := hin
+  dsimp only at hhi
+  exact lt_of_le_of_lt (le_trans (Nat.le_add_left n p) (le_trans hhi hh)) hl
+
+/-- Loading a typed code record produces two actual words and preserves the
+heap-derived length bound, without relying on its structural return shape. -/
+theorem dispatch_code_record_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {v : Nat} (hwords : WordsOK s (v, 16))
+    (hin : Inside (memW s v, memW s (v + 8)) sourceBase (globN s "heap_ptr")) :
+    ∃ code code_n : BitVec 64,
+      s.memory (BitVec.ofNat 64 v) = .word code ∧
+      s.memory (BitVec.ofNat 64 (v + 8)) = .word code_n ∧
+      code_n.toNat < 2 ^ 40 := by
+  obtain ⟨hal, hlen, hw⟩ := hwords
+  obtain ⟨code, hc⟩ := hw 0 (by omega)
+  obtain ⟨code_n, hn⟩ := hw 1 (by omega)
+  simp only [Nat.mul_zero, Nat.add_zero] at hc
+  simp only [Nat.mul_one] at hn
+  refine ⟨code, code_n, hc.2, hn.2, ?_⟩
+  have hb := dispatch_code_length_lt hA hin
+  simpa [memW, hn.2] using hb
+
 end HeadStore
