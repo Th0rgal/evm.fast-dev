@@ -8445,6 +8445,46 @@ chain invariant explicitly, so callers can use `CreateFinishSpecs` without
 identifying two separately recursive definitions by reduction.
 -/
 
+/-- Releasing the child's two arena marks establishes the aligned parent
+invariant before the final pc increment.  The memory/chain facts are those
+obtained after the finish-child branches; the restored head end is the saved
+child frame-memory mark. -/
+theorem finish_child_release_aligned {F : Type}
+    (st : PanSemStateFiniteExact 64 F) (cmw cmmw : BitVec 64) {S : List Nat}
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (halign : ∀ ec ∈ evmChain st,
+      memW st (ec.1 + 32) % 32 = 0 ∧ memW st (ec.1 + 40) % 8 = 0)
+    (hlinks : ChainLinks (memW st) (evmChain st))
+    (hend : memW st (globN st "ev" + 24) + memW st (globN st "ev" + 40) = cmmw.toNat)
+    (hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState st EvmEkFk.fcCleanup =
+        evaluateHOLFiniteState mid
+          (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+            (.return (.const 0#64))) ∧
+      EvmInvA mid ∧ mid.memory = st.memory ∧
+      evmChain mid = evmChain st ∧
+      globN mid "frame_mem_ptr" = cmmw.toNat ∧
+      R11Shards.OpDispatchSpec.evmR mid = R11Shards.OpDispatchSpec.evmR st := by
+  obtain ⟨mid, heval, _, hm, _, _, _, hfmp, hg, hAmid, hImid, hch, hR, _⟩ :=
+    EvmEkFk.release_pair_step st (.var .local (ofString "child_mark"))
+      (.var .local (ofString "child_mem_mark")) cmw cmmw hAs hInv hRel
+      (by simp [evalHOLExact, hcm]) (by intro g ck; simp [evalHOLExact, hcmm]) hnt
+  have hmw : memW mid = memW st := by
+    funext a; unfold memW; rw [hm]
+  have hev : globN mid "ev" = globN st "ev" := by
+    unfold globN
+    rw [hg _ (by decide) (by decide)]
+  have hAligned : HeadMemChainWF mid := by
+    unfold HeadMemChainWF
+    rw [hch, hmw, hev, hfmp]
+    exact ⟨halign, hend, hlinks⟩
+  exact ⟨mid, heval, ⟨⟨hAmid, S, hImid⟩, hAligned⟩, hm, hch, hfmp, hR⟩
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
