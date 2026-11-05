@@ -6026,6 +6026,58 @@ theorem transfer_topic_padding_prefix {F : Type}
     rfl
   exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
 
+theorem transfer_topic_party_copy_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics party : BitVec 64)
+    (name : MlS) (offset : Nat) (cont : ProgHOL 64)
+    (hoff : offset = 44 ∨ offset = 76)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hparty : cur.locals.lookup name = some (.val (.word party)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)],
+          .var .local name, .const 20]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)],
+            .var .local name, .const 20]) cont) = evaluateHOLFiniteState mid cont := by
+  let dst : ExpHOL 64 := .op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)]
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "memcpy") [dst, .var .local name, .const 20]
+  have hleft := transfer_seq_resumes_left cur call cont hr
+  have hbound : topics.toNat + 96 ≤ heapLimit := le_trans hin.2 hstep.1.1.1.2.2.1
+  have ho : offset ≤ 76 := by rcases hoff with rfl | rfl <;> omega
+  have hadd : (topics + BitVec.ofNat 64 offset).toNat = topics.toNat + offset := by
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt]
+    omega
+  obtain ⟨hz, hstep', heff, hl, hout', hbyte'⟩ :=
+    transfer_accumulated_memcpy_step s cur dst (.var .local name) (.const 20)
+      (topics + BitVec.ofNat 64 offset) party 20 [(topics.toNat, 96)]
+      hInv hstep hbe hout hbyte
+      (by simp [dst, evalHOLExact, evalListHOLExact, ht, wordOpHOL, wordOp, valueIsWord, valueWord])
+      (by simpa [evalHOLExact] using hparty)
+      rfl
+      (fun _ => ⟨(topics.toNat, 96), by simp, by rw [hadd]; omega, by rw [hadd]; simp; omega⟩)
+      (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hleft
+  let mid := (evaluateHOLFiniteState cur call).2
+  have heq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    change (evaluateHOLFiniteState cur call).1 = none at hz
+    simp only [hz]
+    rfl
+  exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
+
 theorem transfer_topics_alloc_prefix {F : Type}
     (s : PanSemStateFiniteExact 64 F) (logp p : BitVec 64) (cont : ProgHOL 64)
     (hInv : EvmInv s)
