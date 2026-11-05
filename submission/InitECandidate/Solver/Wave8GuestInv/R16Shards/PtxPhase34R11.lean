@@ -5828,6 +5828,30 @@ theorem lst_new_stable_post_record_separation (h : PtxCallees) {F : Type}
   rw [hptr, he i hi]
   exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
 
+/-- Every source record remains separate from the returned backing region. -/
+theorem lst_new_stable_post_backing_records (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ i, i < memW post (locN s "logs" + 8) →
+        Disj (memW post (memW post (locN s "logs") + 8 * i), 40)
+          (memW post w.toNat, 8 * locN s "stable_log_cap") := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells h s vs body callee ret v post hc hp hl hr
+  have he := lst_new_stable_source_entries h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  intro i hi
+  rw [hlen] at hi
+  rw [hptr, he i hi]
+  exact R13Shards.disj_symm ((hs _ (by simp)).2.2 i hi)
+
 /-- Restore caller locals in the source-record separation conclusion. -/
 theorem lst_new_stable_resumed_record_separation (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
