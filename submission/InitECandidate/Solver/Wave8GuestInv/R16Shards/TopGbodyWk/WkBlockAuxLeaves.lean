@@ -7667,4 +7667,49 @@ theorem merge_set_call_flow_props {F : Type}
   exact ⟨(arenaReady_with_locals mid _ _).2 hA,
     (WkBal.htabWF_with_locals mid _ _ _).2 hW, h0, h1, hhp, hfp, hframe, hgl⟩
 
+/-- The void outer insertion preserves the fresh inner-table local binding. -/
+theorem merge_set_call_flow_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw vw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hv : evalAt s ev = some (.val (.word vw)))
+    (hc : s.code = originalRuntimeCode)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).2.locals = s.locals := by
+  have hn := merge_set_call_flow_none s et ek ev tw kw vw ht hk hv hc hfr
+  rw [evaluateHOLFiniteState_call] at hn ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [et, ek, ev] = some [.val (.word tw), .val (.word kw), .val (.word vw)] := by
+    unfold evalAt at ht hk hv
+    simp [evalListHOLFinite, evalListHOLExact, ht, hk, hv]
+  have hl := pan_three_word_lookup s.code.lookup (ofString "htab_set")
+    (ofString "t") (ofString "key") (ofString "value")
+    (sourceFnBody Guest.Software.guestFn_htab_set) tw kw vw
+    (by decide) (by decide) (by decide) (by rw [hc]; exact R16WkMarkAccountCreated.lookup_htab_set)
+  rw [ha] at hn ⊢
+  dsimp only at hn ⊢
+  rw [hl] at hn ⊢
+  dsimp only at hn ⊢
+  split at hn
+  · simp at hn
+  · rename_i hnz
+    rw [if_neg hnz]
+    rcases hr : evaluateHOLFiniteState _ _ with ⟨r, post⟩
+    rw [hr] at hn
+    cases r with
+    | none => simp at hn
+    | some r =>
+      cases r with
+      | returned v =>
+        dsimp only at hn ⊢
+        split at hn
+        · rename_i hshape
+          rw [if_pos hshape]
+        · simp at hn
+      | exception e v => simp at hn
+      | error | «break» | «continue» | timeOut | finalFfi _ => simp at hn
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
