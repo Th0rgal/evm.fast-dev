@@ -3611,4 +3611,17 @@ theorem phase2_address_copy_set_other {F : Type} (s : PanSemStateFiniteExact 64 
   intro n hn
   simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
 
+/-- Evaluate the actual key-allocation size, retaining its word modulus. -/
+theorem phase2_key_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = (locN s "nkeys" * 52 + 8) % 2 ^ 64 := by
+  obtain ⟨n, hn⟩ := hp.2.2.1
+  refine ⟨n * 52 + 8, ?_, ?_⟩
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      wordOpHOL, wordOp, panOpHOL]
+  · simp [locN, hn, BitVec.toNat_add, BitVec.toNat_mul, Nat.add_mod, Nat.mul_mod]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
