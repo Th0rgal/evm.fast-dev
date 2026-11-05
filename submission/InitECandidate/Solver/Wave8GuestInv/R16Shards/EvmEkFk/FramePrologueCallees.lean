@@ -7363,6 +7363,96 @@ theorem transfer_world_footprints_of_accumulated_frame {F : Type}
   · intro t ht
     exact htabFootprint_eq cell ht (hWT.1.2.1 t ht).1
 
+theorem transfer_memW_of_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {i : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (hi : Allocated s i) (a : Nat) (hlo : i.1 ≤ a) (hhi : a + 8 ≤ i.1 + i.2) :
+    memW post a = memW s a := by
+  apply transfer_memW_of_accumulated_frame hInv hbe hout hbyte
+  · have hb := ivl_allocated_bound hInv.1.2 hi
+    omega
+  · rcases hi with hh | hs
+    · exact Or.inl (le_trans hhi hh.2)
+    · have hp := hstep.1.1.1.2.2.1
+      have hf := hInv.1.2.2.2.1
+      have hg := hInv.1.2.2.2.2.1
+      have hlow := hs.1
+      rw [R11Shards.heapLimit_val] at hp
+      rw [R11Shards.scratchStart_val] at hf
+      exact Or.inr (by omega)
+
+theorem transfer_frame_footprints_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hFW : FrameWF s S ec) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    frameLogObjects post ec = frameLogObjects s ec ∧
+      frameObjects post ec = frameObjects s ec := by
+  obtain ⟨hscr, _, _, _, _, _, _, _, _, _, _, hlen, hlogs_in, _, _, hlogs_ok, _⟩ := hFW
+  have field : ∀ k, k + 8 ≤ 280 → memW post (ec.1 + k) = memW s (ec.1 + k) := by
+    intro k hk
+    exact transfer_memW_of_allocated_frame hInv hstep hbe hout hbyte
+      (Or.inr (hscr (ec.1, 280) (by simp)).1) _ (by omega) (by simpa using hk)
+  have header : ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k) := by
+    intro k hk
+    exact transfer_memW_of_allocated_frame hInv hstep hbe hout hbyte
+      (Or.inr (hscr (memW s (ec.1 + 88), 24) (by simp)).1) _ (by omega) (by simpa using hk)
+  have hzero := header 0 (by decide)
+  simp only [Nat.add_zero] at hzero
+  have ptr : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+        memW s (memW s (memW s (ec.1 + 88)) + 8 * i) := by
+    intro i hi
+    have hal : Allocated s (frameLogs s ec) := hlogs_in
+    apply transfer_memW_of_allocated_frame hInv hstep hbe hout hbyte hal
+    · simp only [frameLogs]; omega
+    · simp only [frameLogs]; omega
+  have logwords : ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let log := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
+      ∀ k, k + 8 ≤ 40 → memW post (log + k) = memW s (log + k) := by
+    intro i hi log k hk
+    have hnonzero : memW s (ec.1 + 88) ≠ 0 := by
+      have hlo := (hscr (memW s (ec.1 + 88), 24) (by simp)).1.1
+      have hf := hInv.1.2.2.2.1
+      have hg := hInv.1.2.2.2.2.1
+      rw [R11Shards.scratchStart_val] at hf
+      intro hz
+      rw [hz] at hlo
+      omega
+    rcases hlogs_ok with hz | ⟨_, _, _, _, entries⟩
+    · exact False.elim (hnonzero hz)
+    · exact transfer_memW_of_allocated_frame hInv hstep hbe hout hbyte
+        (Or.inl (entries i hi).2.2.1) _ (by dsimp only [log]; omega)
+        (by dsimp only [log]; omega)
+  have logs : frameLogObjects post ec = frameLogObjects s ec := by
+    unfold frameLogObjects
+    dsimp only
+    rw [field 88 (by decide), header 8 (by decide)]
+    apply List.flatMap_congr
+    intro i hi
+    rw [List.mem_range] at hi
+    rw [hzero, ptr i hi]
+    have w0 := logwords i hi 0 (by decide)
+    simp only [Nat.add_zero] at w0
+    unfold logOwnedIvls logRecordIvls
+    have hg : globN post "vm_system_address" = globN s "vm_system_address" := by
+      unfold globN
+      rw [hstep.1.2.2.1 _ (by decide)]
+    rw [w0, logwords i hi 8 (by decide), logwords i hi 16 (by decide),
+      logwords i hi 24 (by decide), logwords i hi 32 (by decide), hg]
+  refine ⟨logs, ?_⟩
+  unfold frameObjects frameLogs frameRet
+  rw [field 8 (by decide), field 232 (by decide), field 24 (by decide),
+    field 40 (by decide), field 88 (by decide), field 216 (by decide),
+    field 144 (by decide), hzero, header 16 (by decide), logs]
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
