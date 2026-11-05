@@ -1686,6 +1686,20 @@ theorem receiptEncoded_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     change memW post (locN s "logs" + 8) < 2 ^ 28
     rw [he]; exact hn
 
+theorem store_receiptSlot (off : Bool) :
+    Hoare Phase4ReceiptEncoded
+      (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
+      (fun r t => r = none → Phase4ReceiptEncoded t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' h hx hv hst => ?_
+  obtain ⟨a, b, he, _⟩ := h.2.2.2
+  have hvw : ∃ w : HolWordLab 64, v = .val w := by
+    cases off <;> simp [evalAt, evalHOLExact, he] at hv <;> subst v
+    · exact ⟨_, rfl⟩
+    · exact ⟨_, rfl⟩
+  obtain ⟨w, rfl⟩ := hvw
+  obtain ⟨hdom, _, hmem⟩ := R13Shards.panMemStoresHOL_word_spec (by simpa only [flattenHOL] using hst)
+  exact receiptEncoded_store h hdom (receiptDst_inside h.1 off hx) hmem
+
 theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
