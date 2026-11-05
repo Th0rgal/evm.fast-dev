@@ -11662,4 +11662,50 @@ theorem log_growth_final_cells_g09 {F : Type}
     obtain ⟨hs, h8, h16, h0⟩ := hold i hi
     simp [memW, hs, h8, h16, h0]
 
+/-- Interval separation of the fresh buffer and list header discharges every
+word-address inequality needed for final growth readback. -/
+theorem log_growth_write_disjoint_g09 {l p n : BitVec 64}
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hd : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24)) :
+    l ≠ l + 8#64 ∧ l ≠ l + 16#64 ∧ l + 8#64 ≠ l + 16#64 ∧
+    p + n * 8#64 ≠ l ∧ p + n * 8#64 ≠ l + 8#64 ∧
+    p + n * 8#64 ≠ l + 16#64 ∧
+    (∀ i : Nat, i < n.toNat →
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ p + n * 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 16#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l) := by
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8]
+    rw [Nat.mod_eq_of_lt (by omega)]
+    omega
+  have hsep : p.toNat + 8 * n.toNat + 8 ≤ l.toNat ∨
+      l.toNat + 24 ≤ p.toNat := by
+    rcases hd with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · dsimp only at hz; omega
+    · exact Or.inl hleft
+    · exact Or.inr hright
+  have hne : ∀ (a b : BitVec 64), a.toNat ≠ b.toNat → a ≠ b := by
+    intro a b hab heq; exact hab (congrArg BitVec.toNat heq)
+  refine ⟨hne _ _ (by rw [hl8]; omega), hne _ _ (by rw [hl16]; omega),
+    hne _ _ (by rw [hl8, hl16]; omega), hne _ _ (by rw [hs]; omega),
+    hne _ _ (by rw [hs, hl8]; omega), hne _ _ (by rw [hs, hl16]; omega), ?_⟩
+  intro i hi
+  have hiNat : (BitVec.ofNat 64 (p.toNat + 8 * i)).toNat = p.toNat + 8 * i := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  exact ⟨hne _ _ (by rw [hiNat, hs]; omega),
+    hne _ _ (by rw [hiNat, hl8]; omega),
+    hne _ _ (by rw [hiNat, hl16]; omega), hne _ _ (by rw [hiNat]; omega)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
