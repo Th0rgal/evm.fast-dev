@@ -3102,6 +3102,30 @@ theorem stable_length_operand_resume {F : Type}
   simpa [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
     show ofString "stable_logs" ≠ ofString "nl" by decide] using hn
 
+/-- Package the storage and operand premises needed before the length write. -/
+theorem lst_new_stable_length_operands (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Phase4StableStorageReady t ∧ Allocated t (locN t "stable_logs", 24) ∧
+      t.locals.lookup (ofString "stable_logs") =
+        some (.val (.word (BitVec.ofNat 64 (locN t "stable_logs")))) ∧
+      t.locals.lookup (ofString "nl") =
+        some (.val (.word (BitVec.ofNat 64 (locN t "nl")))) := by
+  exact ⟨lst_new_stable_storage_resume h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_header_allocated h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_pointer_resume h s vs body callee ret v post hc hp ha hl hr,
+    stable_length_operand_resume s post v hn⟩
+
 def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
     LogsWorldOwned s (locN s "logs") ∧
