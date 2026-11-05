@@ -10207,4 +10207,93 @@ theorem phase2_packed_ns_nal_body_bound (h : PtxCallees) (addressSrc keySrc : Ex
     (fun t ht hpt => seq_bound_trans (phase2_packed_ns_nal_memcpy_bound h _)
       (phase2_packed_storage_copy_ns_nal_hoare h keySrc) hc t ht hpt) s hcode hp
 
+/-- The actual source inner loop and following record increment have the
+advertised nested-loop clock budget. -/
+theorem phase2_packed_source_inner_tail_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedNsNalIteration phase2_packed_source_inner_tail
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) := by
+  unfold phase2_packed_source_inner_tail
+  have hb : TerminatingProgBoundedOn PtxPackedNsNalIteration _
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) :=
+    phase2_packed_ns_nal_while_bound
+    (phase2_packed_body_ns_nal_hoare h
+      (.load .one (.op .add [.var .local (ofString "acc2"), .const 0]))
+      (.op .add [.load .one (.op .add [.var .local (ofString "acc2"), .const 8]),
+        .panop .mul [.var .local (ofString "j"), .const 32]]))
+    (phase2_packed_ns_nal_body_bound h _ _) (by ptx_incr)
+  have ht : TerminatingProgBoundedOn
+      (fun s => PtxPackedNsNalIteration s ∧ locN s "k" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])) 0 := by
+    intro F s hc hp hn
+    rw [clock_assign]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.add_zero] using seq_bound_trans hb
+    (phase2_packed_ns_nal_while (phase2_packed_body_ns_nal_hoare h _ _) (by decide) (by decide))
+    ht s hc hp
+
+/-- The record-local declarations preserve the inner-loop clock budget. -/
+theorem phase2_packed_source_outer_body_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn (fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) phase2_packed_source_outer_body
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) := by
+  unfold phase2_packed_source_outer_body
+  apply dec_bound_trans (Q := fun s => PtxPackedNalIteration s ∧
+    locN s "i" < memW s (locN s "tx" + 216) ∧
+    locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+  · intro F s v hp he
+    have hd := phase2_packed_outer_declare_acc2 s hp.1.1 hp.2 v he
+    exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+  · apply dec_bound_trans (Q := fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+      locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))
+    · intro F s v hp he
+      have hd := phase2_packed_outer_declare_ns s hp.1.1 hp.2.1 hp.2.2 v he
+      exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+    · apply dec_bound_trans (Q := PtxPackedNsNalIteration)
+      · intro F s v hp he
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        refine ⟨phase2_packed_ns_reset s hp.1.1 hp.2.1 hp.2.2.1 hp.2.2.2, ?_⟩
+        exact (phase2_packed_nal_set_other s hp.1 (ofString "j") (.val (.word 0)) (by decide)).2
+      · exact phase2_packed_source_inner_tail_bound h
+
+/-- A decreasing record counter bounds the concrete outer packing loop. -/
+theorem phase2_packed_source_outer_loop_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedNalIteration
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        phase2_packed_source_outer_body)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "i")
+  · intro F s hp
+    exact phase2_packed_nal_iteration_decClock s hp
+  · intro F s hc hp
+    obtain ⟨w, hw, hnz⟩ := hp.2
+    have hg := (phase2_packed_outer_nal_guard s w hp.1.1 hp.1.2.1 hp.1.2.2 hw).mp hnz
+    exact phase2_packed_source_outer_body_bound h s hc ⟨hp.1, hg⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := (phase2_packed_outer_nal_guard s w hp.1 hp.2.1 hp.2.2 hw).mp hnz
+    have hd := phase2_packed_nal_iteration_decClock s hp
+    have hinc : IncrBody (ofString "i") phase2_packed_source_outer_body := by
+      unfold phase2_packed_source_outer_body phase2_packed_source_inner_tail
+      ptx_incr
+    obtain ⟨i, hi⟩ := hp.1.2.2.2.2.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) i hi
+    have hnone := hf.resolve_right hnc
+    have hpost := (phase2_packed_source_outer_body_nal_hoare h).run
+      (decClockHOLFinite s) hc ⟨hd, hg⟩ (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hin : locN s "i" = i.toNat := by simp [locN, hi]
+    have hlt := (phase2_packed_outer_signed_bounds hp.1).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s)
+        phase2_packed_source_outer_body).2 "i" = (i.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hin] at hlt ⊢
+    rw [hpn, Nat.mod_eq_of_lt (by omega : i.toNat + 1 < 2 ^ 64)]
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
