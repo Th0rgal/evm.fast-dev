@@ -8797,6 +8797,41 @@ theorem finish_child_pop_step {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
         (.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) := by
   exact finish_child_pop_of_prelude hpre _ (finish_child_prelude_cont_load hpre _)
 
+/-- Popping the two frame globals preserves the arena for arbitrary pointer words. -/
+theorem finish_child_pop_arena {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (parent next : BitVec 64) :
+    ArenaReady (setGlobalHOLFinite (ofString "cur_cont") (.val (.word next))
+      (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s)) := by
+  have ha : ∀ (u : PanSemStateFiniteExact 64 F) (n : String) (w : BitVec 64),
+      n = "ev" ∨ n = "cur_cont" → ArenaReady u →
+      ArenaReady (setGlobalHOLFinite (ofString n) (.val (.word w)) u) := by
+    intro u n w hn hu
+    have hnheap : ofString n ≠ ofString "heap_ptr" := by rcases hn with rfl | rfl <;> decide
+    have hnframe : ofString n ≠ ofString "frame_mem_ptr" := by rcases hn with rfl | rfl <;> decide
+    have hnscratch : ofString n ≠ ofString "scratch_ptr" := by rcases hn with rfl | rfl <;> decide
+    refine ⟨guestInv_congr (s := u) rfl rfl rfl rfl hu.1, ?_⟩
+    have hp : globN (setGlobalHOLFinite (ofString n) (.val (.word w)) u) "heap_ptr" = globN u "heap_ptr" := by
+      simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, hnheap]
+    have hf : globN (setGlobalHOLFinite (ofString n) (.val (.word w)) u) "frame_mem_ptr" = globN u "frame_mem_ptr" := by
+      simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, hnframe]
+    have hs : globN (setGlobalHOLFinite (ofString n) (.val (.word w)) u) "scratch_ptr" = globN u "scratch_ptr" := by
+      simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, hnscratch]
+    obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, hw⟩ := hu.2
+    unfold ArenaOK
+    rw [hp, hf, hs]
+    exact ⟨h1, h2, h3, h4, h5, h6, h7, h8, globalsWord_update _ w rfl hw⟩
+  exact ha _ "cur_cont" next (Or.inr rfl) (ha s "ev" parent (Or.inl rfl) hA)
+
+/-- Other globals are preserved when their actual byte-string keys are distinct. -/
+theorem finish_child_pop_other_global {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (parent next : BitVec 64) (name : String)
+    (he : ofString name ≠ ofString "ev")
+    (hc : ofString name ≠ ofString "cur_cont") :
+    globN (setGlobalHOLFinite (ofString "cur_cont") (.val (.word next))
+      (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s)) name =
+      globN s name := by
+  simp [globN, setGlobalHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm he, Ne.symm hc]
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
