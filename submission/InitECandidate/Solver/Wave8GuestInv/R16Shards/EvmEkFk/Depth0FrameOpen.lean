@@ -6118,4 +6118,56 @@ theorem nodedb_lookup_code_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
   exact nodedb_code_record_return s hA found ptr hr hw hin v hv
 
+/-- The missing-table-entry branch returns three zero words without loading
+the unconstrained value pointer. -/
+theorem nodedb_lookup_missing_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word 0), .val (.word ptr)])) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) ) =
+      (some (.returned (.rStruct [.val (.word 0), .val (.word 0), .val (.word 0)])),
+        emptyLocalsHOLFinite s) := by
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_return, evalHOLExact, evalListHOLExact,
+    shapeOfHOLExact, sizeOfShapeWithContextHOL]
+
+/-- Both `nodedb_lookup` suffix branches return bounded word triples when
+present table values designate heap-contained code records. -/
+theorem nodedb_lookup_code_tail_cases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hrecord : found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+      Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) )
+      (fun v post => ∃ flag code code_n : BitVec 64,
+        v = .rStruct [.val (.word flag), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ (flag = 0 ∨ flag = 1) ∧
+        post = {s with locals := post.locals, clock := post.clock}) := by
+  by_cases hf : found = 0
+  · subst found
+    intro v hv
+    rw [nodedb_lookup_missing_tail s ptr hr] at hv ⊢
+    cases hv
+    exact ⟨0, 0, 0, rfl, by decide, Or.inl rfl, rfl⟩
+  · intro v hv
+    obtain ⟨hw, hin⟩ := hrecord hf
+    obtain ⟨code, code_n, hv, hn, hp⟩ := nodedb_lookup_code_tail s hA found ptr hr hf hw hin v hv
+    exact ⟨1, code, code_n, hv, hn, Or.inr rfl, hp⟩
+
 end HeadStore

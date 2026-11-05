@@ -14616,4 +14616,60 @@ theorem phase2_get_account_optional_backing :
   exact phase2_decCall_backing (phase2_get_pre_state_account_optional_resume_backing _ _)
     (phase2_return_backing _)
 
+/-- Lift the complete optional account lookup to a caller-local restoration boundary. -/
+theorem phase2_get_account_optional_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "get_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_get_account_optional] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account_optional,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_get_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account_optional) =
+      (some (.returned v), post) at hr
+  have hb := phase2_get_account_optional_backing.run (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+    (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
+/-- Fresh allocation effects preserve the three existing transaction backing headers. -/
+theorem phase2_fresh_worldEff_backing {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gw : List String}
+    (ha : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hf : R16Shards.WorldEff s post [] [] gw) : R16Shards.TxBacking post := by
+  apply phase2_backing_of_header_unhit ha he hw hb hg
+  · have hm : (globN s "bo", 88) ∈ fixedObjects s := by
+      simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    have hi := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
+      (by simp) (by simp)
+  · intro k hk
+    have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+    have hi := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
+      (by simp) (by simp)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

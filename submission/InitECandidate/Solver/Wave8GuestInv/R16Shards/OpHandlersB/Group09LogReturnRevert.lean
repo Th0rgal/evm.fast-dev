@@ -12634,4 +12634,93 @@ theorem evmInvAt_of_log_growth_cells_g09 {F : Type}
   apply List.mem_map.2
   exact ⟨ec, hchain.symm ▸ hec, rfl⟩
 
+/-- Specialize concrete write preservation to all EVM frame and continuation
+records. The copy prefix may have changed the heap pointer and detached buffer. -/
+theorem log_growth_chain_records_preserved_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hbounds : ∀ ec ∈ evmChain s, ec.1 + 280 ≤ 2 ^ 64 ∧ ec.2 + 104 ≤ 2 ^ 64)
+    (hheader : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (l.toNat, 24) ∧ Disj (ec.2, 104) (l.toNat, 24))
+    (hbuffer : ∀ ec ∈ evmChain s,
+      Disj (ec.1, 280) (p.toNat, 8 * n.toNat + 8) ∧
+      Disj (ec.2, 104) (p.toNat, 8 * n.toNat + 8))
+    (hcopy : ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW copy (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW copy (ec.2 + k) = memW s (ec.2 + k))) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW post (ec.2 + k) = memW s (ec.2 + k)) := by
+  dsimp only
+  intro ec hec
+  constructor
+  · intro k hk hk8
+    exact (log_growth_protected_words_g09 copy l p n cap log (ec.1, 280)
+      hl hp (hbounds ec hec).1 (hheader ec hec).1 (hbuffer ec hec).1 k hk).trans
+      ((hcopy ec hec).1 k hk hk8)
+  · intro k hk hk8
+    exact (log_growth_protected_words_g09 copy l p n cap log (ec.2, 104)
+      hl hp (hbounds ec hec).2 (hheader ec hec).2 (hbuffer ec hec).2 k hk).trans
+      ((hcopy ec hec).2 k hk hk8)
+
+private theorem log_growth_store_effect_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (a w : BitVec 64) (Rl : List Ivl)
+    (hma : s.memaddrs = ordinaryDomain) (hd : s.memaddrs a)
+    (hin : ∃ i ∈ Rl, i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2) :
+    ByteRegionEffect s {s with memory := fun b => if b = a then .word w else s.memory b} Rl := by
+  have hrun : evaluateHOLFiniteState s (.store (.const a) (.const w)) =
+      (none, {s with memory := fun b => if b = a then .word w else s.memory b}) := by
+    simp [evaluateHOLFiniteState_store, evalHOLExact, flattenHOL, panMemStoresHOL,
+      panMemStoreHOL, hd]
+  exact (ByteRegionEffect.of_store_word hma hrun
+    (by intro v hv; simp [evalHOLExact] at hv; exact ⟨w, hv.symm⟩)
+    (by intro addr ha _; simp [evalHOLExact] at ha; subst addr; exact hin)).1
+
+/-- The concrete growth tail writes only the list header and fresh buffer.
+Its byte-accurate effect feeds typed-cell and old-log preservation directly. -/
+theorem log_growth_final_effect_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hma : s.memaddrs = ordinaryDomain)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64))
+    (hd16 : s.memaddrs (l + 16#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else s.memory a}
+    ByteRegionEffect s post [(l.toNat, 24), (p.toNat, 8 * n.toNat + 8)] := by
+  dsimp only
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  let Rl : List Ivl := [(l.toNat, 24), (p.toNat, 8 * n.toNat + 8)]
+  let s0 := {s with memory := fun a => if a = l then .word p else s.memory a}
+  let s16 := {s0 with memory := fun a => if a = l + 16#64 then .word (cap * 2#64) else s0.memory a}
+  let s8 := {s16 with memory := fun a => if a = l + 8#64 then .word (n + 1#64) else s16.memory a}
+  have h0 : ByteRegionEffect s s0 Rl := log_growth_store_effect_g09 s l p Rl hma hd0
+    ⟨(l.toNat, 24), by simp [Rl], by simp⟩
+  have h16 : ByteRegionEffect s0 s16 Rl := log_growth_store_effect_g09 s0 _ _ Rl hma hd16
+    ⟨(l.toNat, 24), by simp [Rl], by dsimp only; rw [hl16]; omega⟩
+  have h8 : ByteRegionEffect s16 s8 Rl := log_growth_store_effect_g09 s16 _ _ Rl hma hd8
+    ⟨(l.toNat, 24), by simp [Rl], by dsimp only; rw [hl8]; omega⟩
+  have hslot := log_growth_store_effect_g09 s8 (p + n * 8#64) log Rl hma hdslot
+    ⟨(p.toNat, 8 * n.toNat + 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
+  exact (h0.trans h16).trans (h8.trans hslot)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
