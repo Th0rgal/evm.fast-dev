@@ -10458,4 +10458,56 @@ theorem hoare_stable_length_txBacking :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Every stable-copy pointer write is separated from the transaction backings. -/
+theorem hoare_stableCopy_store_txBacking :
+    Hoare (fun s => StableCopyStorePre s ∧ TxBacking s)
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩, hback⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨_, _, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  apply txBacking_store_disjoint_fixed hinv.1.1 hback
+    (i := (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) _ _ hm
+  · rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (stableCopyInv_destination_bound s hinv hi).2]
+    have hc := hinv.2.2.2.2.1
+    constructor <;> dsimp <;> omega
+  · intro j hj
+    exact hworld j (List.mem_append_left _ (List.mem_append_right _ hj))
+
+/-- The copy store and counter increment retain transaction backing. -/
+theorem hoare_stableCopy_body_txBacking :
+    Hoare (fun s => StableCopyStorePre s ∧ TxBacking s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → TxBacking t) := by
+  apply Hoare.seq_fall hoare_stableCopy_store_txBacking
+  exact Hoare.assign (fun _ _ hp _ _ => txBacking_set_local _ _ hp)
+    (fun _ _ hr => absurd hr (by simp))
+
+/-- The complete stable-copy loop retains both transaction backings. -/
+theorem hoare_stableCopy_loop_txBacking :
+    Hoare (fun s => StableCopyLoopInv s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r t => r = none → PtxReceiptsDone t ∧ TxBacking t) := by
+  have hf := hoare_stableCopy_loop_done_frame TxBacking
+    (fun _ hp => hp) hoare_stableCopy_body_txBacking
+  exact ⟨fun s hc hp hnt hr => let h := hf.run s hc hp hnt hr; ⟨h.1, h.2.1⟩⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
