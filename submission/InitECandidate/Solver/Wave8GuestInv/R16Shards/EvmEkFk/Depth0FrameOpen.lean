@@ -2516,4 +2516,29 @@ theorem hoare_store_msg_const_step (gw : List String) (hp : Nat)
   intro F s v _ hv
   exact ⟨w, (Option.some.inj hv).symm⟩
 
+/-- The final two message stores of `prepare_dispatch`, preserving the code locals
+for the subsequent head-frame stores and jump-destination computation. -/
+theorem hoare_prepare_dispatch_msg_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.seq
+        (.store (.op .add [.var .local (ofString "msg"), .const 112])
+          (.var .local (ofString "code")))
+        (.store (.op .add [.var .local (ofString "msg"), .const 120])
+          (.var .local (ofString "code_n"))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "code") = some (.val (.word code)) ∧
+    locals.lookup (ofString "code_n") = some (.val (.word code_n))
+  exact Hoare.seq_fall'
+    (hoare_store_msg_local_step gw hp G ch 112 (by decide) (ofString "code") code L
+      (fun _ h => h.1))
+    (hoare_store_msg_local_step gw hp G ch 120 (by decide) (ofString "code_n") code_n L
+      (fun _ h => h.2))
+    (fun _ h => h)
+
 end HeadStore
