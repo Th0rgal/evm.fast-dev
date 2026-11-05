@@ -6046,4 +6046,49 @@ theorem phase2_memcpy_globals_contract (h : PtxCallees) :
   intro F s hc hp he hn hr
   exact (hs s hc hp he hn hr).2.2.1
 
+/-- Extract the world witness and memory frame supplied by the concrete memcpy contract. -/
+theorem phase2_memcpy_world_frame_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r →
+        ∀ S Nd, WorldTypedWith s S Nd →
+          IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd) →
+          ∃ S' Nd', WorldTypedWith post S' Nd' ∧
+            OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+            FrameOutside s post
+              (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s])
+              (heapFree s))
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := h.wk_memcpy
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr S Nd hw hd
+  have step := hs s hc hp he hn hr
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := step.2.2.2.2 S Nd hw hd
+  exact ⟨S', Nd', hw', hg, hf⟩
+
+/-- Preserve a live record count using the actual memcpy world-step contract. -/
+theorem phase2_memcpy_step_count {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (r : Option (PanSemResultExact 64))
+    (S Nd : List Nat) (tx i : Nat) (ha : ArenaOK s)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd tx)
+    (hi : i < memW s (tx + 216))
+    (step : WorldStep (fun s => [(locN s "dst", locN s "n")]) []
+      [("ws", [0, 8, 16, 24]); ("bs", [0, 8, 16, 24]); ("ts", [0, 8, 16, 24]);
+       ("bo", [24, 32, 40, 72, 80])] NoExtra s r post)
+    (hworld : IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd))
+    (hrec : Disj (memW s (tx + 208), 24 * memW s (tx + 216))
+      (locN s "dst", locN s "n")) (hn : 0 < locN s "n") :
+    memW post (memW s (tx + 208) + 24 * i + 16) =
+      memW s (memW s (tx + 208) + 24 * i + 16) := by
+  obtain ⟨S', Nd', _, _, _, hf, _⟩ := step.2.2.2.2 S Nd hw hworld
+  apply phase2_tx_count_world_frame s post S Nd _ tx i ha hw ht hi hf
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hrec
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
