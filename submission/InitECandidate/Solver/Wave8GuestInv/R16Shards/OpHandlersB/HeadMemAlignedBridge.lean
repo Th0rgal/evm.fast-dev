@@ -8642,6 +8642,52 @@ theorem pc_add_return_aligned {F : Type} (s : PanSemStateFiniteExact 64 F)
   · intro ec hec
     exact hcells ec (hch0.symm ▸ hec)
 
+/-- The concrete cleanup restores the aligned parent invariant through both releases
+and the final pc increment. -/
+theorem finish_child_cleanup_aligned {F : Type}
+    (st post : PanSemStateFiniteExact 64 F) (cmw cmmw e pc : BitVec 64) {S : List Nat}
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (halign : ∀ ec ∈ evmChain st,
+      memW st (ec.1 + 32) % 32 = 0 ∧ memW st (ec.1 + 40) % 8 = 0)
+    (hlinks : ChainLinks (memW st) (evmChain st))
+    (hend : memW st (globN st "ev" + 24) + memW st (globN st "ev" + 40) = cmmw.toNat)
+    (he : st.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hp : st.memory e = .word pc) (hd : st.memaddrs e)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState st EvmEkFk.fcCleanup = (some (.returned v), post)) :
+    EvmInvA post ∧ evmChain post = evmChain st ∧
+    EvmEkFk.ChainCellsAgree st post ∧
+    globN post "ev" = globN st "ev" ∧
+    globN post "frame_mem_ptr" = cmmw.toNat ∧
+    R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR st := by
+  have hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut := by rw [hr]; simp
+  obtain ⟨mid, heval, _, hm, hd', _, _, hfmp, hg, hAmid, hImid, hch, hR, _⟩ :=
+    EvmEkFk.release_pair_step st (.var .local (ofString "child_mark"))
+      (.var .local (ofString "child_mem_mark")) cmw cmmw hAs hInv hRel
+      (by simp [evalHOLExact, hcm]) (by intro g ck; simp [evalHOLExact, hcmm]) hnt
+  have hev : globN mid "ev" = globN st "ev" := by
+    unfold globN; rw [hg _ (by decide) (by decide)]
+  have hmw : memW mid = memW st := by funext a; unfold memW; rw [hm]
+  have hA : HeadMemChainWF mid := by
+    unfold HeadMemChainWF; rw [hch, hmw, hev, hfmp]; exact ⟨halign, hend, hlinks⟩
+  have hret := pc_add_return_aligned mid ⟨⟨hAmid, S, hImid⟩, hA⟩ hAmid.1.code e pc
+    (by rw [hg _ (by decide) (by decide)]; exact he)
+    (by rw [hm]; exact hp) (by rw [hd']; exact hd)
+  have hrmid : evaluateHOLFiniteState mid
+      (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+        (.return (.const 0#64))) = (some (.returned v), post) := heval.symm.trans hr
+  obtain ⟨hi, hcp, hrp, hcells, hgp⟩ := Ret.apply hret hrmid
+  refine ⟨hi, hcp.trans hch, ?_, ?_, ?_, hrp.trans_eq hR⟩
+  · intro ec hec
+    have hh := hcells ec (hch.symm ▸ hec)
+    simpa only [hmw] using hh
+  · exact (show globN post "ev" = globN mid "ev" by simp [globN, hgp]).trans hev
+  · exact (show globN post "frame_mem_ptr" = globN mid "frame_mem_ptr" by simp [globN, hgp]).trans hfmp
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
