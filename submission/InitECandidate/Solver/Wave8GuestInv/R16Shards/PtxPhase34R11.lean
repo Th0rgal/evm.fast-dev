@@ -4566,6 +4566,18 @@ theorem stableCopy_loop_bound :
   rw [hlen, hidx, Nat.mod_eq_of_lt (by omega)]
   omega
 
+/-- The concrete loop's budget is one clock tick per possible iteration,
+plus the final guard check. -/
+theorem stableCopy_loop_budget :
+    TerminatingProgBoundedOn StableCopyLoopInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (2 ^ 28 + 1) := by
+  intro F s hc hp
+  simpa only [Nat.zero_add, Nat.mul_one] using stableCopy_loop_bound s hc hp
+
 /-- Continue from the actual copy body without adding to the tail budget. -/
 theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn StableCopyInv tail b) :
