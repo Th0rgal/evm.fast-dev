@@ -6905,6 +6905,32 @@ theorem stable_allocation_decl_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b 
         (stable_length_canonical_operand t hp.2.1) ha hl hr,
       lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
+/-- A world-owned slot write preserves a separately owned stable receipt list. -/
+theorem ptxReceiptsDone_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxReceiptsDone s) (hn : locN s "stable_logs" ≠ 0)
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hown : LogsLiveOwned s S Nd (locN s "stable_logs"))
+    {x : BitVec 64} {mem' : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hwrite : ∃ o ∈ worldOwned s S Nd, Inside (x.toNat, 8) o.1 (o.1 + o.2))
+    (hpost : TxWorld {s with memory := mem'})
+    (heq : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    PtxReceiptsDone {s with memory := mem'} := by
+  have hl := logsLiveOwned_single_store hp.1.1.1.2 hp.1.1.1.1 hpost.1.1.1
+    hp.2.1 hown hm hwrite heq
+  obtain ⟨o, ho, hin⟩ := hwrite
+  have hu : IvlUnhit s {s with memory := mem'} (locN s "stable_logs", 24) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hin ((hown hn).2.1 _ (by simp) o ho))
+  have hh := hp.2.1.resolve_left hn
+  have h8 := memW_eq_of_ivlUnhit (a := locN s "stable_logs" + 8) hu
+    (by have := hh.1.1; omega) (ivl_allocated_bound hp.1.1.1.2 hh.2.1).2
+    ⟨by omega, by omega⟩
+  refine ⟨hpost, hl.1, ?_⟩
+  change memW {s with memory := mem'} (locN s "stable_logs" + 8) < 2 ^ 28
+  rw [h8]
+  exact hp.2.2
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
