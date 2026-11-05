@@ -1093,6 +1093,57 @@ theorem phase4CreditTotals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   have hr := hb s hc hp
   convert hr using 1 <;> omega
 
+def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxAfterCallStrong s ∧
+    locN s "logs" = memW s (locN s "out" + 16) ∧
+    LogsListOK s (locN s "logs") ∧ LogsDisjFixed s (locN s "logs")
+
+theorem evalAt_load_local {F : Type} (t : PanSemStateFiniteExact 64 F)
+    (l : String) (k : BitVec 64) (v : ValueHOL 64)
+    (h : evalAt t (.load .one (.op .add [.var .local (ofString l), .const k])) = some v) :
+    ∃ a : BitVec 64, v = .val (.word a) ∧ a.toNat = memW t ((locN t l + k.toNat) % 2 ^ 64) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact] at h
+  rcases hl : t.locals.lookup (ofString l) with _ | w
+  · simp [hl] at h
+  · rcases w with x | fs | ⟨nm, fs⟩
+    · cases x with
+      | word x =>
+        simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+        rcases hm : t.memory (x + k) with ⟨y⟩
+        refine ⟨y, by rw [← h.2, hm], ?_⟩
+        have hadd : BitVec.ofNat 64 ((x.toNat + k.toNat) % 2 ^ 64) = x + k := by
+          apply BitVec.eq_of_toNat_eq
+          simp [BitVec.toNat_add]
+        simp only [locN, memW, hl, hadd, h.2, hm]
+    · simp [hl, valueIsWord] at h
+    · simp [hl, valueIsWord] at h
+
+theorem phase4LogsReady_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : TxAfterCallStrong s)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "out"), .const 16])) = some v) :
+    Phase4LogsReady (setVarHOLFinite (ofString "logs") v s) := by
+  obtain ⟨w, rfl, hw⟩ := evalAt_load_local s "out" 16 v he
+  have hb := (ivl_allocated_bound h.1.1.1.2 (Or.inl h.2.2.1)).2
+  have hlt : locN s "out" + 16 < 2 ^ 64 := by dsimp at hb; omega
+  have hwe : w.toNat = memW s (locN s "out" + 16) := by
+    simpa only [show (16 : BitVec 64).toNat = 16 from rfl, Nat.mod_eq_of_lt hlt] using hw
+  let post := setVarHOLFinite (ofString "logs") (.val (.word w)) s
+  have hout : locN post "out" = locN s "out" := by
+    simp [post, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "logs" ≠ ofString "out" from by decide]
+  have hlogs : locN post "logs" = w.toNat := by
+    simp [post, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hp : TxAfterCallStrong post :=
+    LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) _ s h
+  refine ⟨hp, ?_, ?_, ?_⟩
+  · change locN post "logs" = memW s (locN post "out" + 16)
+    rw [hlogs, hout, hwe]
+  · rw [hlogs, hwe]
+    exact (R13Shards.logsListOK_with_locals s post.locals s.clock _).mpr h.2.2.2.1
+  · obtain ⟨S, Nd, _, _, ho⟩ := h.2.2.2.2
+    rw [hlogs, hwe]
+    exact logsLiveOwned_disjFixed (s := post) ho
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
