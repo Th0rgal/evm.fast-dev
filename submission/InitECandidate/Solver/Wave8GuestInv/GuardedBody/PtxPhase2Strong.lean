@@ -11734,4 +11734,34 @@ theorem phase2_alloc_live_family_bound (h : PtxCallees) {ι : Type}
   · exact phase2_alloc_live_family_resume h buffers contents name args
   · exact ht
 
+/-- Stores to a separate caller allocation preserve a saved buffer's contents.
+The same world witness is retained, allowing subsequent stores to reuse it. -/
+theorem phase2_live_buffer_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (hE : TxEnv s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd) {buffer blk : Ivl} {contents : Nat → BitVec 64}
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    (hsep : Disj buffer blk) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    WorldTypedWith {s with memory := mem} S Nd ∧ TxEnv {s with memory := mem} ∧
+      PtxLiveBufferAt {s with memory := mem} S Nd buffer contents := by
+  obtain ⟨hw, how, he⟩ := store_outside_worldOwned hA hE hW hd hx hin hm
+  refine ⟨hw, he, hb.1, ?_, ?_⟩
+  · rw [how]; exact hb.2.1
+  · intro p hlo hhi hal
+    have hbound := (ivl_allocated_bound hA.2 (Or.inl hb.1)).2
+    have hp : p < 2 ^ 64 := by omega
+    have hne : BitVec.ofNat 64 p ≠ x := by
+      intro heq
+      have hp' : p = x.toNat := by
+        have hh := congrArg BitVec.toNat heq
+        simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp] using hh
+      have hs := disj_of_inside_right hin hsep
+      rcases hs with hs | hs | hs | hs <;> omega
+    change memW {s with memory := mem} p = (contents p).toNat
+    change (match mem (BitVec.ofNat 64 p) with | .word w => w.toNat) = (contents p).toNat
+    rw [hm _ hne]
+    exact hb.2.2 p hlo hhi hal
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
