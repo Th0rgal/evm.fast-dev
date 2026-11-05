@@ -11160,4 +11160,122 @@ theorem phase2_packed_source_outer_loop_live_hoare (h : PtxCallees)
   exact phase2_packed_live_outer_while buffer contents
     (phase2_packed_source_outer_body_live_hoare h buffer contents) rfl rfl
 
+theorem phase2_packed_live_frame_set_other {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hp : PtxPackedLiveFrame buffer contents s) (name : MlS) (v : ValueHOL 64)
+    (ht : name ≠ ofString "tx") (ha : name ≠ ofString "al_keys")
+    (hn : name ≠ ofString "nkeys") :
+    PtxPackedLiveFrame buffer contents (setVarHOLFinite name v s) := by
+  apply phase2_packed_live_frame_locals s _ s.clock buffer contents hp
+  all_goals simp [locN, HolFiniteMapExact.update, FUPDATE, ht, ha, hn]
+
+theorem phase2_packed_cases_initialized_live_hoare (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧ PtxPackedLiveFrame buffer contents s)
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → (WorldOK s ∧ PtxPackedKeysReady s) ∧ PtxPackedLiveFrame buffer contents s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before,
+      ((WorldOK before ∧ PtxPackedInitCases before) ∧ PtxPackedLiveFrame buffer contents before) ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := fun s => (PtxPackedNalIteration s ∨
+      (WorldOK s ∧ PtxPackedKeysReady s ∧
+        s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+        s.locals.lookup (ofString "nal") = some (.val (.word 0)))) ∧
+      PtxPackedLiveFrame buffer contents s)
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        refine ⟨?_, phase2_packed_live_frame_set_other _ buffer contents
+          (phase2_packed_live_frame_set_other before buffer contents hp.2 _ _
+            (by decide) (by decide) (by decide)) _ _ (by decide) (by decide) (by decide)⟩
+        rcases hp.1.2 with hp' | hp'
+        · exact Or.inl (phase2_packed_init_state before hp')
+        · have hz := phase2_packed_zero_init before hp'.1 hp'.2
+          exact Or.inr ⟨phase2_packed_ready_worldOK _
+            ((arenaReady_with_locals before _ before.clock).mpr hp.1.1.1) hz.1, hz⟩
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      rcases hp.1 with hi | hi
+      · have ho := (phase2_packed_source_outer_loop_live_hoare h buffer contents).run s hc ⟨hi, hp.2⟩ hnt hr
+        exact ⟨⟨ho.1.1.1.1, ho.1.1.1.2.1.1⟩, ho.2⟩
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hi.2.2.1 hi.2.2.2]
+        exact ⟨⟨hi.1, hi.2.1⟩, hp.2⟩
+  · intro F r s locals hl hp hr
+    have hk := phase2_packed_keys_with_locals s locals s.clock (hp hr).1.2 hl
+    refine ⟨⟨phase2_packed_ready_worldOK _
+      ((arenaReady_with_locals s locals s.clock).mpr (hp hr).1.1.1) hk, hk⟩, ?_⟩
+    apply phase2_packed_live_frame_locals s locals s.clock buffer contents (hp hr).2
+    · simp only [locN, hl "tx" (by simp)]
+    · simp only [locN, hl "al_keys" (by simp)]
+    · simp only [locN, hl "nkeys" (by simp)]
+  · exact fun _ _ hr => by cases hr
+
+theorem phase2_packed_live_continuation_bound (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedKeysReady s) ∧ PtxPackedLiveFrame buffer contents s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧ PtxPackedLiveFrame buffer contents s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
+    (phase2_packed_cases_initialized_live_hoare h buffer contents) ht s hc hp
+
+/-- Several saved caller buffers can be carried through the same packing run.
+Each buffer retains its own joint world witness and its original contents. -/
+theorem phase2_packed_cases_initialized_live_family_hoare (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    Hoare (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧
+      ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s)
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → (WorldOK s ∧ PtxPackedKeysReady s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  refine ⟨(phase2_packed_cases_initialized_world_hoare h).run s hc hp.1 hnt hr, ?_⟩
+  intro i
+  exact ((phase2_packed_cases_initialized_live_hoare h (buffers i) (contents i)).run
+    s hc ⟨hp.1, hp.2 i⟩ hnt hr).2
+
+/-- The warm-state continuation may consume all retained buffers at once. -/
+theorem phase2_packed_live_family_continuation_bound (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedKeysReady s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
+    (phase2_packed_cases_initialized_live_family_hoare h buffers contents) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
