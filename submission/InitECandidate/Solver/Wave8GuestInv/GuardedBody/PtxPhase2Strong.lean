@@ -8962,4 +8962,58 @@ theorem phase2_packed_ns_reset {F : Type}
       show ofString "j" ≠ ofString "tx" by decide,
       show ofString "j" ≠ ofString "i" by decide] using he
 
+/-- Scratch declarations frame all fields of the outer iteration invariant. -/
+theorem phase2_packed_outer_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k"] : List String), ofString n ≠ name) :
+    PtxPackedOuterIteration (setVarHOLFinite name v s) := by
+  apply phase2_packed_outer_iteration_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- The actual `acc2` declaration establishes the source record address. -/
+theorem phase2_packed_outer_declare_acc2 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    let post := setVarHOLFinite (ofString "acc2") v s
+    PtxPackedOuterIteration post ∧
+      locN post "i" < memW post (locN post "tx" + 216) ∧
+      locN post "acc2" = memW post (locN post "tx" + 208) + 24 * locN post "i" := by
+  obtain ⟨w, rfl, hw⟩ := phase2_packed_outer_acc_eval s hp hi v he
+  refine ⟨phase2_packed_outer_set_other s hp _ _ (by decide), ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc2" ≠ ofString "i" by decide,
+      show ofString "acc2" ≠ ofString "tx" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc2" ≠ ofString "i" by decide,
+      show ofString "acc2" ≠ ofString "tx" by decide] using hw
+
+/-- Loading `ns` from `acc2` establishes the cached-count precondition. -/
+theorem phase2_packed_outer_declare_ns {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterIteration s) (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (ha : locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+    (v : ValueHOL 64)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "acc2"), .const 16])) = some v) :
+    let post := setVarHOLFinite (ofString "ns") v s
+    PtxPackedOuterIteration post ∧
+      locN post "i" < memW post (locN post "tx" + 216) ∧
+      (∃ n : BitVec 64, post.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+      locN post "ns" = memW post
+        (memW post (locN post "tx" + 208) + 24 * locN post "i" + 16) := by
+  obtain ⟨n, rfl, hn⟩ := phase2_count_load_local s "acc2" 16 v he
+  have hnat : n.toNat = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+    simpa only [ha, show (16 : BitVec 64).toNat = 16 by decide] using hn
+  refine ⟨phase2_packed_outer_set_other s hp _ _ (by decide), ?_, ⟨n, ?_⟩, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "ns" ≠ ofString "i" by decide,
+      show ofString "ns" ≠ ofString "tx" by decide] using hi
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "ns" ≠ ofString "i" by decide,
+      show ofString "ns" ≠ ofString "tx" by decide] using hnat
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
