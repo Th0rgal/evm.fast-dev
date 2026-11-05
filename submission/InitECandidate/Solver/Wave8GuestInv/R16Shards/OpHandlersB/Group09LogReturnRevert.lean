@@ -11500,4 +11500,71 @@ theorem log_growth_word_bounds_g09 {n cap p q : BitVec 64}
   · rw [h8]; omega
   · rw [h8]; omega
 
+/-- Concrete growing `log_append`: the allocation/copy execution determines
+the final buffer, capacity, length, insertion slot, and returned zero. -/
+theorem log_append_growth_exact_g09 {F : Type}
+    (s allocPost copyPost : PanSemStateFiniteExact 64 F) (e log l n cap p : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hclock : s.clock ≠ 0)
+    (hpushclock : s.clock - 1 ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hge : cap.toNat ≤ n.toNat) :
+    let cal : HolFiniteMapExact MlS (ValueHOL 64) :=
+      (HolFiniteMapExact.empty.update (ofString "l", .val (.word l))).update
+        (ofString "esz", .val (.word 8#64))
+    let entry := callEntryStateHOLFinite s cal
+    let growEntry := setVarHOLFinite (ofString "cap") (.val (.word cap))
+      (setVarHOLFinite (ofString "n") (.val (.word n)) entry)
+    let copyEntry := setVarHOLFinite (ofString "np") (.val (.word p))
+      {allocPost with locals := growEntry.locals}
+    evaluateHOLFiniteState
+      (callEntryStateHOLFinite growEntry (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (8#64 * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) =
+        (some (.returned (.val (.word p))), allocPost) →
+    evaluateHOLFiniteState copyEntry
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) =
+        (none, copyPost) →
+    copyPost.locals = copyEntry.locals →
+    copyPost.memaddrs l → copyPost.memaddrs (l + 8#64) → copyPost.memaddrs (l + 16#64) →
+    l ≠ l + 8#64 → l ≠ l + 16#64 → copyPost.memaddrs (p + n * 8#64) →
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append) =
+      (some (.returned (.val (.word 0))),
+        {copyPost with
+          locals := HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot"))
+          memory := fun a => if a = p + n * 8#64 then .word log
+            else if a = l + 8#64 then .word (n + 1#64)
+            else if a = l + 16#64 then .word (cap * 2#64)
+            else if a = l then .word p else copyPost.memory a}) := by
+  dsimp only
+  intro halloc hcopy hlocals hd0' hd8' hd16' hne8 hne16 hdslot
+  let cal : HolFiniteMapExact MlS (ValueHOL 64) :=
+    (HolFiniteMapExact.empty.update (ofString "l", .val (.word l))).update
+      (ofString "esz", .val (.word 8#64))
+  let entry := callEntryStateHOLFinite s cal
+  have hel : entry.locals.lookup (ofString "l") = some (.val (.word l)) := by
+    have hne' : ofString "esz" ≠ ofString "l" := by decide
+    simp [entry, cal, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne']
+  have hez : entry.locals.lookup (ofString "esz") = some (.val (.word 8#64)) := by
+    simp [entry, cal, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hpush := lst_push_growth_alloc_copy_exact_g09 entry allocPost copyPost l 8#64 n cap p
+    hcode hel hez hd8 hd16 hm8 hm16 hge hpushclock halloc hcopy hlocals
+    hd0' hd8' hd16' hne8 hne16
+  have hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8] =
+        some [.val (.word l), .val (.word 8#64)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, he, hde, hme,
+      valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact]
+  have hlook := pan_two_word_lookup s.code.lookup (ofString "lst_push")
+    (ofString "l") (ofString "esz") (sourceFnBody Guest.Software.guestFn_lst_push)
+    l 8#64 (by decide) (by rw [hcode]; exact lookup_lst_push_g09)
+  exact log_append_of_lst_push_execution_g09 s _ _ cal (p + n * 8#64) log
+    hlg hargs hlook hclock hpush hdslot
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

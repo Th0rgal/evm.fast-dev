@@ -10493,4 +10493,396 @@ theorem hoare_stableCopy_loop_txBacking :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Stable-copy exit supplies the full backing-aware receipt continuation guard. -/
+theorem hoare_stableCopy_loop_owned_txBacking :
+    Hoare (fun s => (StableCopyLoopInv s ∧ StableCopyOwnedFrame s) ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r t => r = none → Phase4StableBackingReady t) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hoare_stableCopy_loop_owned.run s hc hp.1 hnt hr,
+    (hoare_stableCopy_loop_txBacking.run s hc ⟨hp.1.1, hp.2⟩ hnt hr).2⟩
+
+/-- The backing-aware stable-copy loop uses the same concrete clock budget. -/
+theorem stableCopy_loop_owned_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (StableCopyLoopInv s ∧ StableCopyOwnedFrame s) ∧ TxBacking s)
+      (.seq
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+          (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+            .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+            (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+        tail) (2 ^ 28 + 1 + b) := by
+  intro F s hc hp
+  exact seq_bound_trans (fun t ht h => stableCopy_loop_budget t ht h.1.1)
+    hoare_stableCopy_loop_owned_txBacking htail s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Scoped backing-pointer loading and counter initialization retain transaction backing. -/
+theorem stableCopy_backing_decl_owned_txBacking_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => (StableCopyLoopInv s ∧ StableCopyOwnedFrame s) ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => ((StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      StableCopyOwnedFrame s) ∧ TxBacking s)
+      (.dec (ofString "stable_lp") .one
+        (.load .one (.op .add [.var .local (ofString "stable_logs"), .const 0]))
+        (.seq (.assign .local (ofString "i") (.const 0)) tail)) b := by
+  have hf := hoare_stableCopyOwnedFrame_assign (ofString "i") (.const 0)
+    (by decide) (by decide) (by decide)
+  have hback : Hoare TxBacking (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → TxBacking t) :=
+    Hoare.assign (fun _ _ hp _ _ => txBacking_set_local _ _ hp)
+      (fun _ _ hr => absurd hr (by simp))
+  have hi : TerminatingProgBoundedOn (fun s =>
+      (StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+      StableCopyOwnedFrame s) ∧ TxBacking s)
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) b := by
+    intro F s hc hp
+    have hj : Hoare (fun s =>
+        (StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+        StableCopyOwnedFrame s) ∧ TxBacking s) (.assign .local (ofString "i") (.const 0))
+        (fun r t => r = none → (StableCopyLoopInv t ∧ StableCopyOwnedFrame t) ∧ TxBacking t) :=
+      ⟨fun t ht h hnt hr => ⟨⟨hoare_stableCopy_zero_entry.run t ht h.1.1 hnt hr,
+        hf.run t ht h.1.2 hnt hr⟩, hback.run t ht h.2 hnt hr⟩⟩
+    simpa only [Nat.zero_add] using seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "i") (.const 0)
+      exact ⟨by omega, by omega⟩) hj htail s hc hp
+  intro G t ht hpre
+  refine dec_bound_trans (P := fun s => ((StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      StableCopyOwnedFrame s) ∧ TxBacking s) (Q := fun s =>
+      (StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+      StableCopyOwnedFrame s) ∧ TxBacking s) ?_ hi t ht hpre
+  intro F s v hp he
+  obtain ⟨⟨⟨hp, hz, hh, ha, hc, hs, hword, n, p, w, hn, hl, hw⟩, hframe⟩, hb⟩ := hp
+  refine ⟨⟨?_, ?_⟩, hb⟩
+  · apply stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword
+    simpa [evalAt, evalHOLExact, hw, valueIsWord, valueWord, evalListHOLExact,
+      wordOpHOL, wordOp] using he
+  · apply stableCopyOwnedFrame_with_locals s _ s.clock _ _ _ hframe
+    all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "stable_lp" ≠ ofString "logs" by decide,
+      show ofString "stable_lp" ≠ ofString "stable_logs" by decide,
+      show ofString "stable_lp" ≠ ofString "stable_log_cap" by decide]
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Length storage, scoped setup and the entire copy loop preserve backing. -/
+theorem stable_length_decl_loop_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => ((StableLengthPre s ∧ StableCopyOwnedFrame s ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+      locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (spinePlug 4 (spineAt 133 ptxCode) tail) (2 ^ 28 + 1 + b) := by
+  have he : spinePlug 4 (spineAt 133 ptxCode) tail =
+    (.seq (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+      (.var .local (ofString "nl")))
+      (.dec (ofString "stable_lp") .one
+        (.load .one (.op .add [.var .local (ofString "stable_logs"), .const 0]))
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+            (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+              .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+              (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+            tail)))) := by
+    unfold ptxCode phase4LogCopySrc
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hs := hoare_stable_length_owned_copy_ready
+  have hb := hoare_stable_length_txBacking
+  simpa only [Nat.zero_add] using seq_bound_trans (a := 0)
+    (P := fun s => ((StableLengthPre s ∧ StableCopyOwnedFrame s ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+      locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    (fun t _ _ _ => by
+      have ht := clock_store t (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl"))
+      exact ⟨by omega, by omega⟩)
+    (⟨fun t ht h hnt hr => ⟨hs.run t ht h.1 hnt hr,
+      hb.run t ht ⟨h.1.1.1, h.2⟩ hnt hr⟩⟩)
+    (stableCopy_backing_decl_owned_txBacking_cut
+      (stableCopy_loop_owned_backing_cut htail)) s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Stable allocation through copy exit retains the full backing-aware guard. -/
+theorem stable_allocation_decl_loop_backing_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (spinePlug 5 (spineAt 132 ptxCode) tail)
+      (K.lst_new + (2 ^ 28 + 1 + b) + 1) := by
+  have he : spinePlug 5 (spineAt 132 ptxCode) tail =
+      .decCall (ofString "stable_logs") .one (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")]
+        (spinePlug 4 (spineAt 133 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  refine TerminatingProgBoundedOn.decCall_on
+    (P := fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    h.fb_lst_new _ _ _ ?_ ?_ (stable_length_decl_loop_backing_cut htail) s hc hp
+  · intro G t vs body callee ret hc hp ha hl
+    exact guestInv_callEntry t callee hp.1.1.1.1.1.1.1.1.1.1
+  · intro G t vs body callee ret v post hc hp ha hl hr
+    refine ⟨⟨lst_new_stable_length_joint_pre h t vs body callee ret v post hc hp.1.1
+        (stable_length_canonical_operand t hp.1.2.1) ha hl hr,
+      lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1.1 hp.1.2.2.1 hp.1.2.2.2 ha hl hr⟩, ?_⟩
+    exact lst_new_stable_txBacking_resume t vs body callee ret v post hc ⟨hp.1.1, hp.2⟩ ha hl hr
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Capacity normalization retains the transaction backing frame. -/
+theorem stable_capacity_copy_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => (Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (.seq (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip) tail) b := by
+  have hb : Hoare TxBacking
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → TxBacking t) := by
+    apply Hoare.ite
+    · exact Hoare.assign (fun _ _ hp _ _ => txBacking_set_local _ _ hp.1)
+        (fun _ _ hr => absurd hr (by simp))
+    · exact Hoare.skip (fun _ hp _ => hp.1)
+    · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  rw [← Nat.zero_add b]
+  refine seq_bound_trans (P := fun s => (Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    ?_ ⟨fun t ht h hnt hr => ⟨hoare_phase4StableCap_copy_ready.run t ht h.1 hnt hr,
+      hb.run t ht h.2 hnt hr⟩⟩ htail s hc hp
+  intro G t ht hp
+  exact TerminatingProgBoundedOn.ite_on (a := 0) (b := 0)
+    (P := fun s => (Phase4StableCapInit s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "stable_log_cap") (.const 1)
+      exact ⟨by omega, by omega⟩)
+    (fun u _ _ _ => by
+      have hu := clock_skip u
+      exact ⟨by omega, by omega⟩) t ht hp
+
+/-- Capacity declaration and adjustment preserve backing and all copy operands. -/
+theorem stable_capacity_setup_copy_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => (Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => (Phase4LogPointersReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (spinePlug 2 (spineAt 130 ptxCode) tail) b := by
+  unfold ptxCode
+  intro F t hc ht
+  refine dec_bound_trans (P := fun s => (Phase4LogPointersReady s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN s "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    ?_ (stable_capacity_copy_backing_cut htail) t hc ht
+  intro F s v hp he
+  obtain ⟨hn, hl⟩ := stable_capacity_copy_operands s v hp.1.2.1 hp.1.2.2.2
+  refine ⟨⟨phase4StableCap_init s v hp.1.1 he, hn, ?_, hl⟩, hp.2⟩
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_log_cap" ≠ ofString "logs" by decide] using hp.1.2.2.1
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Writes within the block-output log array cannot hit either backing header. -/
+theorem txBacking_store_log_array {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (memW s (memW s (globN s "bo" + 40)))
+      (memW s (memW s (globN s "bo" + 40)) +
+        8 * memW s (memW s (globN s "bo" + 40) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxBacking {s with memory := mem'} := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  obtain ⟨_, hpw, hsep, _, _⟩ := fixedObjects_disj_parts hWT.2.2.1
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hE hWT.1
+  let arr := (memW s (memW s (globN s "bo" + 40)),
+    8 * memW s (memW s (globN s "bo" + 40) + 16))
+  have hpos : 8 * memW s (memW s (globN s "bo" + 40) + 16) ≠ 0 := by
+    unfold Inside at hin
+    dsimp at hin
+    omega
+  have hlen : (blockOutObjects s).length = 7 := by rw [hbo]; rfl
+  have harr : (blockOutObjects s)[4]'(by omega) = arr := by
+    simp [hbo, arr, hE.bo_nz, hback.1, hpos]
+  have hmem : arr ∈ blockOutObjects s := harr ▸ List.getElem_mem (by omega : 4 < (blockOutObjects s).length)
+  have hdbo : Disj (globN s "bo", 88) arr := by
+    apply hsep _ (List.mem_map.2 ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩)
+    exact List.mem_append_left _ (List.mem_append_right _ hmem)
+  have hdhead : ∀ k ∈ ([40, 72] : List Nat), Disj (memW s (globN s "bo" + k), 24) arr := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · have hd := List.pairwise_iff_getElem.1 hpw 3 4 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using hd
+    · have hd := List.pairwise_iff_getElem.1 hpw 4 5 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using disj_symm hd
+  have hbound := (ivl_allocated_bound hW.1.1.2 (bo_words hWT.2.2.1 hE.bo_nz).1).2
+  apply txBacking_store hback hm
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    have hlt : globN s "bo" + k < 2 ^ 64 := by dsimp at hbound; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin hdbo
+    unfold Disj at hd
+    dsimp at hd
+    omega
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hlt : memW s (globN s "bo" + k) < 2 ^ 64 := by
+      unfold memW
+      split
+      · exact BitVec.isLt _
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin (hdhead k hk)
+    unfold Disj at hd
+    dsimp at hd
+    omega
+
+/-- The concrete log-slot copy store retains both transaction backing facts. -/
+theorem hoare_logSlot_store_txBacking :
+    Hoare (fun s => Phase4LogSlotReady s ∧ TxBacking s)
+      (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+      (fun r t => r = none → TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨w, rfl⟩ := phase4LogCopySrc_word s v hv
+  obtain ⟨_, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hlu : s.locals.lookup (ofString "slot") = some (.val (.word x)) := hx
+  have hslot : locN s "slot" = x.toNat := by simp only [locN, hlu]
+  apply txBacking_store_log_array hp.1.1.1.1.1.1 hp.2 _ hm
+  simpa only [hslot] using hp.1.2.2
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- The typed log-copy guard and backing frame ignore temporary locals. -/
+theorem localsOnly_phase4TypedLogPointers_backing :
+    LocalsOnly ["index", "out", "logs", "rc", "nl", "lp"]
+      (fun s => Phase4TypedLogPointers s ∧ TxBacking s) := by
+  intro F s locals k hl hp
+  exact ⟨localsOnly_phase4TypedLogPointers s locals k hl hp.1, hp.2⟩
+
+/-- A backing-preserving push resume lifts through the concrete log-copy body. -/
+theorem hoare_phase4LogCopyBody_backing
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare (fun s => Phase4TypedLogPointers s ∧ TxBacking s) phase4LogCopyBody
+      (fun r t => r = none → Phase4TypedLogPointers t ∧ TxBacking t) := by
+  apply Hoare.decCall_fall (R := fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    (by decide) localsOnly_phase4TypedLogPointers_backing hresume
+  apply Hoare.seq_fall (R := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+  · exact ⟨fun s hc hp hnt hr =>
+      ⟨(hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word).run s hc hp.1 hnt hr,
+        hoare_logSlot_store_txBacking.run s hc ⟨hp.1.1, hp.2⟩ hnt hr⟩⟩
+  · apply Hoare.assign
+    · intro F s v hp _ _
+      exact LocalsOnly.setVar localsOnly_phase4TypedLogPointers_backing (by decide) v s hp
+    · intro F s _ hr
+      cases hr
+
+/-- The full log-copy loop retains backing given its push-resume contract. -/
+theorem hoare_phase4LogCopyLoop_backing
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody)
+      (fun r t => r = none → Phase4TypedLogPointers t ∧ TxBacking t) := by
+  exact hoare_while_less_localsOnly localsOnly_phase4TypedLogPointers_backing _ _
+    (hoare_phase4LogCopyBody_backing hresume)
+    (by unfold phase4LogCopyBody; ptx_incr) (by decide)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

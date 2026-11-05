@@ -2981,10 +2981,10 @@ theorem frameWF_of_dispatch_slots {F : Type}
 
 /-- The three dispatch fields are outside every structural frame projection.
 This packages their transport into the complete chain invariant. -/
-theorem evmInvAt_of_dispatch_transport {F : Type}
+theorem evmInvAt_of_frame_transport {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
     (hInv : EvmInvAt s S) (hAs : ArenaReady s) (hAp : ArenaReady post)
-    (hg : ∀ name, globN post name = globN s name)
+    (hfwpost : ∀ ec ∈ evmChain s, FrameWF post S ec)
     (hch : evmChain post = evmChain s)
     (hworld : WorldTyped post S)
     (hkeep : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
@@ -3033,10 +3033,7 @@ theorem evmInvAt_of_dispatch_transport {F : Type}
   refine ⟨hn, hlen, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · obtain ⟨ec, hec, hz⟩ := hlast
     exact ⟨ec, hec, by rw [hc ec (List.mem_of_mem_getLast? hec) 16 (by decide)]; exact hz⟩
-  · intro ec hec
-    apply frameWF_of_dispatch_slots (hfw ec hec) hAs hAp hg (hkeep ec hec)
-      (hh ec hec) (hl ec hec).2
-    exact hm _ (hfw ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  · exact hfwpost
   · intro ec hec
     have he := List.mem_of_mem_tail hec
     unfold FrameRoom
@@ -3106,6 +3103,38 @@ theorem evmInvAt_of_dispatch_transport {F : Type}
       rw [hkeep ec hec 64 (by decide) (by decide), hkeep ec hec 192 (by decide) (by decide)]
     rw [heq]
     exact hgas
+
+/-- Dispatch-slot specialization of the chain-invariant assembly rule. -/
+theorem evmInvAt_of_dispatch_transport {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hInv : EvmInvAt s S) (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hg : ∀ name, globN post name = globN s name)
+    (hch : evmChain post = evmChain s)
+    (hworld : WorldTyped post S)
+    (hkeep : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      k ∉ ([48, 56, 80] : List Nat) → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hc : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hh : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hl : ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec ∧
+      LogsListOK post (memW s (ec.1 + 88)))
+    (hm : ∀ m, MsgOwned s S m → MsgOwned post S m)
+    (hfix : fixedObjects post = fixedObjects s)
+    (hfp : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (htries : ∀ Nd, TriesTypedWith s S Nd →
+      TriesTypedWith post S Nd ∧ nodeExtents post Nd = nodeExtents s Nd)
+    (hwr : worldRoleSlots post = worldRoleSlots s)
+    (hjr : journalRoleSlots post = journalRoleSlots s)
+    (hwrefs : worldTableRefs post S = worldTableRefs s S)
+    (htag : ∀ t ∈ S, memW post t = memW s t) :
+    EvmInvAt post S := by
+  apply evmInvAt_of_frame_transport hInv hAs hAp ?_ hch hworld hkeep hc hh hl hm
+    hfix hfp htries hwr hjr hwrefs htag
+  intro ec hec
+  have hfw := hInv.2.2.2.2.1 ec hec
+  exact frameWF_of_dispatch_slots hfw hAs hAp hg (hkeep ec hec) (hh ec hec)
+    (hl ec hec).2 (hm _ hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2)
 
 /-- A dispatch-field write preserves the structural words of every frame,
 every continuation and every logs header, including suspended ancestors. -/
@@ -3904,5 +3933,291 @@ theorem frameWF_of_fresh_scratch {F : Type}
   · rcases c15 with hz | ⟨hin, hw⟩
     · exact Or.inl hz
     · exact Or.inr ⟨hin, (wordsOK_congr_of_dom hdom).2 hw⟩
+
+/-- Aligned cells intersecting an allocated interval cannot intersect the
+fresh scratch interval. -/
+theorem fresh_scratch_allocated_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hA : ArenaOK s)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    {i : Ivl} (hi : Allocated s i) :
+    R10Shards.GbodyProcessMsg.IvlUnhit s post i := by
+  right
+  intro a ha hh
+  apply hmem a
+  have hsep : heapLimit ≤ scratchStart := by decide
+  have hhp := hA.2.1
+  have hfm := hA.2.2.1
+  have hsp8 := hA.2.2.2.2.2.2.2.1
+  have hfm8 := hA.2.2.2.2.2.2.1
+  have hlow8 : a.toNat + 8 ≤ globN s "frame_mem_ptr" ∨ globN s "scratch_ptr" ≤ a.toNat := by
+    rcases hi with hi | hi <;> unfold Inside at hi <;> unfold CellHits at hh
+    · left
+      have hfmpos : 0 < globN s "frame_mem_ptr" := by
+        have hs : 0 < scratchStart := by decide
+        omega
+      omega
+    · right
+      omega
+  unfold CellHits
+  dsimp only
+  rcases hlow8 with h | h <;> omega
+
+/-- Fresh scratch writes preserve both words and bytes used by world typing. -/
+theorem fresh_scratch_sameTypedCells {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a) :
+    EvmBase.SameTypedCells s post S Nd := by
+  refine ⟨hbe, hdom, hAs.1.memaddrs, hout, ?_, ?_⟩
+  · intro a ha ⟨i, hi, ha1, ha2⟩
+    have hal : Allocated s i := by
+      rcases worldTypedIvls_allocated hWT hi with hz | hal
+      · omega
+      · exact hal
+    have hu := fresh_scratch_allocated_unhit hAs.2 q n hlo hhi hmem hal
+    rcases hu with hz | hu
+    · omega
+    · apply hmem
+      have hh : ¬ CellHits a (q, n) := by
+        have hsep : heapLimit ≤ scratchStart := by decide
+        have hhp := hAs.2.2.1
+        have hfm := hAs.2.2.2.1
+        rcases hal with hal | hal <;> unfold Inside at hal <;> unfold CellHits <;> dsimp only at hal ⊢ <;> omega
+      rwa [show (BitVec.ofNat 64 a).toNat = a from Nat.mod_eq_of_lt ha]
+  · intro b hb ⟨i, hi, hb1, hb2⟩
+    have hal : Allocated s i := by
+      rcases worldTypedIvls_allocated hWT hi with hz | hal
+      · omega
+      · exact hal
+    exact R10Shards.GbodyProcessMsg.memB_eq_of_ivlUnhit
+      (fresh_scratch_allocated_unhit hAs.2 q n hlo hhi hmem hal) hbe
+      (allocated_le_2pow64 hAs.2 hal) ⟨hb1, hb2⟩
+
+/-- World typing, fixed objects, trie extents and role slots are retained
+through fresh scratch writes with a lowered frontier. -/
+theorem fresh_scratch_world_transport {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post) (hWT : WorldTypedWith s S Nd)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, name ≠ "scratch_ptr" →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
+    WorldTypedWith post S Nd ∧ fixedObjects post = fixedObjects s ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s ∧
+      (∀ t ∈ S, htabFootprint post t = htabFootprint s t) := by
+  have hc := fresh_scratch_sameTypedCells hAs hWT q n hlo hhi hmem hbe hdom hout
+  have hfix := fixedObjects_eq_of_nonHeapGlobalsKept hAs.2 hWT.1 hWT.2.2.1 hc
+    (fun name _ hs _ => hglob name hs)
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hg _ (by decide)]
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hhp hsp hfix
+  have hcg : ∀ name ∈ coreWorldGlobals, globN post name = globN s name := by
+    intro name hn
+    apply hg
+    intro heq
+    subst name
+    exact (by decide : "scratch_ptr" ∉ coreWorldGlobals) hn
+  have hW := (worldTypedWith_congr_w1 hAs hAp hhp hsp hcg hc hWT
+    ⟨hFT, fun o ho => Or.inl (by rw [← hfix]; exact ho)⟩).1
+  exact ⟨hW, hfix, nodeExtents_eq hWT.2.2.2.1 hc,
+    worldRoleSlots_eq hAs.2 hWT.1 hWT.2.2.1 hc hcg,
+    journalRoleSlots_eq hAs.2 hWT.2.1 hWT.2.2.1 hc hcg,
+    fun t ht => htabFootprint_eq hc ht (hWT.1.2.1 t ht).1⟩
+
+/-- Every previously owned message remains owned through fresh scratch
+writes, including messages of suspended ancestors. -/
+theorem fresh_scratch_msgOwned {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hI : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, name ≠ "scratch_ptr" →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
+    ∀ m, MsgOwned s S m → MsgOwned post S m := by
+  have hInv : EvmInv s := ⟨hAs, S, hI⟩
+  have hw := fresh_scratch_chain_words hInv q n hhi hmem
+  have hch := fresh_scratch_chain_eq hInv q n hhi hmem (hg _ (by decide)) (hg _ (by decide))
+  have hl := fresh_scratch_log_objects hInv q n hlo hhi hmem (hg _ (by decide))
+  have hfo : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec := by
+    intro ec hec
+    exact (frameObjects_eq_of_dispatch_slots ec
+      (fun k hk _ => hw.1 ec hec k hk) (hw.2.2 ec hec) (hl ec hec)).1
+  have hc := fresh_scratch_sameTypedCells hAs hWT q n hlo hhi hmem hbe hdom hout
+  have ht := fresh_scratch_world_transport hAs hAp hWT q n hlo hhi hmem hbe hdom hout hg hglob hsp
+  intro m hm
+  exact msgOwned_congr hAs.2 hWT.1 hWT.2.2.2 hc (by rw [hg _ (by decide)]) hsp
+    (hg _ (by decide)) hWT.2.2.1 ht.1.2.2.1 ht.2.1 ht.1.1 hch hfo hm
+
+/-- Typed-cell preservation fixes every world-side reference, independently
+of changes to the scratch allocator frontier. -/
+theorem worldTableRefs_eq_of_typedCells {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
+    (hc : EvmBase.SameTypedCells s post S Nd)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name) :
+    worldTableRefs post S = worldTableRefs s S := by
+  have hrec : ∀ name sz, (name, sz) ∈ typedRecords → ∀ k, k + 8 ≤ sz →
+      globN s name ≠ 0 → memW post (globN s name + k) = memW s (globN s name + k) := by
+    intro name sz hr k hk hn
+    exact memW_typedRec_eq hAs hWT.2.2.1 hc hr hn hk
+  have hslots : ∀ name ks sz, (name, sz) ∈ typedRecords →
+      name ≠ "scratch_ptr" → (∀ k ∈ ks, k + 8 ≤ sz) →
+      recordSlots post name ks = recordSlots s name ks := by
+    intro name ks sz hr hn hk
+    unfold recordSlots
+    rw [hg name hn]
+    split
+    · rfl
+    · rename_i hnz
+      exact List.map_congr_left (fun k h => hrec name sz hr k (hk k h) hnz)
+  have hn : ∀ name sz, (name, sz) ∈ typedRecords → name ≠ "scratch_ptr" → 40 ≤ sz →
+      (if globN post name ≠ 0 ∧ memW post (globN post name + 32) ∈ S then
+        htabValues post (memW post (globN post name + 32)) else []) =
+      (if globN s name ≠ 0 ∧ memW s (globN s name + 32) ∈ S then
+        htabValues s (memW s (globN s name + 32)) else []) := by
+    intro name sz hr hne hsz
+    rw [hg name hne]
+    by_cases hz : globN s name = 0
+    · simp [hz]
+    · rw [hrec name sz hr 32 (by omega) hz]
+      by_cases hm : memW s (globN s name + 32) ∈ S
+      · simp [hz, hm, htabValues_eq hc hm (hWT.1.2.1 _ hm).1]
+      · simp [hz, hm]
+  have hw := hslots "ws" wsTableSlots 40 (by decide) (by decide) (by
+    intro k hk; simp [wsTableSlots] at hk; rcases hk with rfl | rfl <;> decide)
+  have hb := hslots "bs" bsTableSlots 80 (by decide) (by decide) (by
+    intro k hk; simp [bsTableSlots] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  have ht := hslots "ts" tsTableSlots 72 (by decide) (by decide) (by
+    intro k hk; simp [tsTableSlots] at hk
+    omega)
+  have hbal : (balRecords s).flatMap (fun ad => [memW post ad, memW post (ad + 8)]) =
+      (balRecords s).flatMap (fun ad => [memW s ad, memW s (ad + 8)]) := by
+    apply List.flatMap_congr
+    intro ad had
+    have hm := balRecord_ivl_mem had
+    rcases fixedObject_le_2pow64 hAs hWT.2.2.1 (bal_in_fixedObjects hm) with hz | hbound
+    · dsimp only at hz; omega
+    · dsimp only at hbound
+      have hi := mem_worldTypedIvls_bal (S := S) (Nd := Nd) hm
+      rw [memW_eq_of_cellHits hc (by omega) hi ⟨by dsimp only; omega, by dsimp only; omega⟩,
+        memW_eq_of_cellHits hc (by omega) hi ⟨by dsimp only; omega, by dsimp only; omega⟩]
+  have hj : (List.range (globN s "journal_n")).map (fun k => memW post (globN s "journal" + 32 * k)) =
+      (List.range (globN s "journal_n")).map (fun k => memW s (globN s "journal" + 32 * k)) := by
+    apply List.map_congr_left
+    intro k hk
+    have hk := List.mem_range.1 hk
+    have hnz : globN s "journal_cap" ≠ 0 := by have := hWT.2.1.1; omega
+    rcases hWT.2.1.2.2.1 with hz | ⟨hal, _⟩
+    · exact absurd hz hnz
+    · have hb := allocated_le_2pow64 hAs hal
+      dsimp only at hb
+      have hlen := hWT.2.1.1
+      have hi := mem_worldTypedIvls_journal (s := s) (S := S) (Nd := Nd)
+      simp only [hnz, ↓reduceIte] at hi
+      exact memW_eq_of_cellHits hc (by omega) hi
+        ⟨by dsimp only; omega, by dsimp only; omega⟩
+  unfold worldTableRefs
+  dsimp only
+  rw [hw, hb, ht, hn "bs" 80 (by decide) (by decide) (by decide),
+    hn "ts" 72 (by decide) (by decide) (by decide),
+    show globalTableRoots.map (globN post) = globalTableRoots.map (globN s) by
+      simp only [globalTableRoots, List.map, hg "bal_accounts" (by decide),
+        hg "bal_idx_accts" (by decide), hg "bal_idx_stor" (by decide)],
+    balRecords_eq hWT.1 hc (hg _ (by decide)), hg "journal_n" (by decide), hg "journal" (by decide),
+    hbal, hj]
+
+/-- Full invariant transport through fresh scratch writes and a lowered
+scratch frontier. -/
+theorem evmInvAt_of_fresh_scratch {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post) (hI : EvmInvAt s S)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, name ≠ "scratch_ptr" →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
+    EvmInvAt post S := by
+  have hInv : EvmInv s := ⟨hAs, S, hI⟩
+  obtain ⟨Nd, htr⟩ := hI.1.2.2.2
+  have hWT : WorldTypedWith s S Nd := ⟨hI.1.1, hI.1.2.1, hI.1.2.2.1, htr⟩
+  have ht := fresh_scratch_world_transport hAs hAp hWT q n hlo hhi hmem hbe hdom hout hg hglob hsp
+  have hc := fresh_scratch_sameTypedCells hAs hWT q n hlo hhi hmem hbe hdom hout
+  have hm := fresh_scratch_msgOwned hAs hAp hI hWT q n hlo hhi hmem hbe hdom hout hg hglob hsp
+  have hw := fresh_scratch_chain_words hInv q n hhi hmem
+  have htries : ∀ Ns, TriesTypedWith s S Ns →
+      TriesTypedWith post S Ns ∧ nodeExtents post Ns = nodeExtents s Ns := by
+    intro Ns hs
+    have hW : WorldTypedWith s S Ns := ⟨hI.1.1, hI.1.2.1, hI.1.2.2.1, hs⟩
+    have ht' := fresh_scratch_world_transport hAs hAp hW q n hlo hhi hmem hbe hdom hout hg hglob hsp
+    exact ⟨ht'.1.2.2.2, ht'.2.2.1⟩
+  apply evmInvAt_of_frame_transport hI hAs hAp
+    (fun ec hec => frameWF_of_fresh_scratch hInv q n hlo hhi hmem hg hsp hdom hec
+      (hI.2.2.2.2.1 ec hec) (hm _ (hI.2.2.2.2.1 ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2))
+    (fresh_scratch_chain_eq hInv q n hhi hmem (hg _ (by decide)) (hg _ (by decide)))
+    ⟨ht.1.1, ht.1.2.1, ht.1.2.2.1, Nd, ht.1.2.2.2⟩
+    (fun ec hec k hk _ => hw.1 ec hec k hk) hw.2.1 hw.2.2
+    (fun ec hec => ⟨fresh_scratch_log_objects hInv q n hlo hhi hmem (hg _ (by decide)) ec hec,
+      fresh_scratch_logs_ok hInv q n hlo hhi hmem hdom (hg _ (by decide)) hsp ec hec⟩)
+    hm ht.2.1 ht.2.2.2.2.2 htries ht.2.2.2.1 ht.2.2.2.2.1
+    (worldTableRefs_eq_of_typedCells hAs.2 hWT hc hg)
+  intro t htS
+  have he := htab_hdr_eq hc htS
+    ((hWT.1.2.1 t htS).1.1 (t, 88) (by simp [htabFootprint])).1 0 (by decide)
+  simpa [hdr] using he
+
+/-- Fresh scratch effects give an EVM step with only `scratch_ptr` writable. -/
+theorem evmMsgReady_fresh_scratch {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hP : EvmMsgReady s)
+    (hAp : ArenaReady post)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
+    (hglob : ∀ name : MlS, name ∉ (["scratch_ptr"] : List String).map ofString →
+      post.globals.lookup name = s.globals.lookup name)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hgl : ∀ name, name ≠ "scratch_ptr" →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
+    EvmMsgReady post ∧ EvmStep ["scratch_ptr"] s post := by
+  have hInv := evmInv_of_evmMsgReady s hP
+  have hch := fresh_scratch_chain_eq hInv q n hhi hmem (hg _ (by decide)) (hg _ (by decide))
+  obtain ⟨hAs, S, hI, hm⟩ := hP
+  have hi := evmInvAt_of_fresh_scratch hAs hAp hI q n hlo hhi hmem hbe hdom hout hg hgl hsp
+  obtain ⟨Nd, ht⟩ := hI.1.2.2.2
+  have hWT : WorldTypedWith s S Nd := ⟨hI.1.1, hI.1.2.1, hI.1.2.2.1, ht⟩
+  have hm' := fresh_scratch_msgOwned hAs hAp hI hWT q n hlo hhi hmem hbe hdom hout hg hgl hsp _ hm
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain; exact List.mem_cons_self
+  have hslot := (fresh_scratch_chain_words hInv q n hhi hmem).1 _ hhead 112 (by decide)
+  refine ⟨⟨hAp, S, hi, ?_⟩, ⟨hAp, S, hi⟩, ?_, ?_, hch⟩
+  · rw [hg "ev" (by decide), hslot]
+    exact hm'
+  · rw [hg "heap_ptr" (by decide)]
+  · intro name hn
+    exact (hglob name hn).symm
 
 end HeadStore
