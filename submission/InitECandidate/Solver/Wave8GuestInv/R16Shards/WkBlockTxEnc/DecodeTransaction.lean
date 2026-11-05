@@ -5964,6 +5964,30 @@ private theorem ivlsDisj_mono_hp {P0 L0 hp1 hp2 : Nat}
   · exact Or.inr (Or.inr (Or.inl (by dsimp at h1 ⊢; omega)))
   · exact Or.inr (Or.inr (Or.inr (by dsimp at h2 ⊢; omega)))
 
+private theorem input_subregion_worldEff_vvh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hAs : ArenaReady s) (heff : WorldEff s post [] [] wsGw)
+    {P L p len : Nat} (hfit : P + L ≤ 2 ^ 64)
+    (hdj : IvlsDisj [(P, L)] [(globN s "heap_ptr", scratchEnd - globN s "heap_ptr")])
+    (hlo : P ≤ p) (hhi : p + len ≤ P + L) :
+    p + len ≤ 2 ^ 64 ∧
+      IvlsDisj [(p, len)] [(globN post "heap_ptr", scratchEnd - globN post "heap_ptr")] ∧
+      ∀ j < len, memB post (p + j) = memB s (p + j) := by
+  have hsub : IvlsDisj [(p, len)]
+      [(globN s "heap_ptr", scratchEnd - globN s "heap_ptr")] := by
+    intro i hi k hk
+    simp only [List.mem_singleton] at hi
+    subst hi
+    exact disj_of_inside_left ⟨hlo, hhi⟩
+      (hdj (P, L) (List.mem_singleton.2 rfl) k hk)
+  have hhp : globN post "heap_ptr" ≤ scratchEnd := by
+    have hh := heff.arena.2.2.1
+    have hsep : heapLimit ≤ scratchEnd := by decide
+    omega
+  refine ⟨by omega, ivlsDisj_mono_hp heff.hp_lo hhp hsub, ?_⟩
+  intro j hj
+  exact memB_kept_of_worldEff_disj hAs heff hfit hdj (by omega) (by omega)
+
 private theorem memW_store_word_exact {F : Type}
     {cur post : PanSemStateFiniteExact 64 F}
     {dstExp valExp : ExpHOL 64} {dst w : BitVec 64}
