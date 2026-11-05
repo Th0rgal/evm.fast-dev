@@ -437,6 +437,24 @@ theorem phase1_blobBranch_prefix :
         exact fun _ => LocalsOnly.setVar phase1_prefix_localsOnly (by decide) v s hp
       · exact fun _ _ hr => by cases hr
 
+theorem phase1_blobBranch_stage_prefix (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      R16Shards.PtxP1.blobBranch
+      (fun r s => r = none → R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.blobBranch_hoare h).run s hc hp.1 hnt hr,
+    phase1_blobBranch_prefix.run s hc hp.2 hnt hr⟩
+
+theorem phase1_stage_prefix_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (stage : Nat) (name : MlS) (v : ValueHOL 64)
+    (hs : ∀ n ∈ R16Shards.PtxP1.stageNames stage, ofString n ≠ name)
+    (hp : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String), ofString n ≠ name)
+    (h : R16Shards.PtxP1.StageP stage s ∧ PtxPhase1ShapePrefix s) :
+    R16Shards.PtxP1.StageP stage (setVarHOLFinite name v s) ∧
+      PtxPhase1ShapePrefix (setVarHOLFinite name v s) := by
+  exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage stage) hs v s h.1,
+    LocalsOnly.setVar phase1_prefix_localsOnly hp v s h.2⟩
+
 theorem phase1_resume_frame_prefix
     {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
     {name fn : MlS} {args : List (ExpHOL 64)}
