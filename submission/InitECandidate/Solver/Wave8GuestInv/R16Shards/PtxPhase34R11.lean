@@ -359,6 +359,40 @@ theorem logsListOK_of_framed_step_live {F : Type}
     exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
       hold0 hR0 hog hfr (hRe i hi)).2.2
 
+/-- Live arrays retain both their pointer cells and their separation from the
+new world. Empty arrays need no alignment, even when their pointer is arbitrary. -/
+theorem logsLiveOwned_array_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hgS : GuestInv s) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs) (hn : logs ≠ 0)
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j) :
+    Allocated post (memW s logs, 8 * memW s (logs + 8)) ∧
+    (∀ o ∈ new, Disj (memW s logs, 8 * memW s (logs + 8)) o) ∧
+    (∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i)) := by
+  refine ⟨hgrow.allocated (hd hn).1, ?_⟩
+  by_cases hz : memW s (logs + 8) = 0
+  · constructor
+    · intro o ho
+      exact Or.inl (by simp [hz])
+    · intro i hi
+      omega
+  have hp : 0 < memW s (logs + 8) := by omega
+  have ha := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
+    (logsListOK_array_aligned hgS hl hn hp) (by simp)
+    (hd hn).1 (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRa
+  refine ⟨ha.2.1, ?_⟩
+  intro i hi
+  apply R13Shards.memW_eq_of_ivlUnhit ha.2.2
+  · have := logsListOK_array_aligned hgS hl hn hp; omega
+  · exact (R13Shards.ivl_allocated_bound hAs (hd hn).1).2
+  · constructor <;> dsimp <;> omega
+
 /-- Preservation for the actual temporary lists returned by the guest: both
 heap and live scratch headers/arrays are allowed, and empty arrays are ignored. -/
 theorem logsLiveOwned_list_survives {F : Type}
@@ -384,14 +418,8 @@ theorem logsLiveOwned_list_survives {F : Type}
   apply logsListOK_congr_header_unhit hAs hgS hgP hgrow.1 hl
     (fun _ => hh.1) hh.2.2
   · intro i hi
-    have hp : 0 < memW s (logs + 8) := by omega
-    have ha := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
-      (logsListOK_array_aligned hgS hl hn hp) (by simp)
-      (hd hn).1 (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRa
-    apply R13Shards.memW_eq_of_ivlUnhit ha.2.2
-    · have := logsListOK_array_aligned hgS hl hn hp; omega
-    · exact (R13Shards.ivl_allocated_bound hAs (hd hn).1).2
-    · constructor <;> dsimp <;> omega
+    exact (logsLiveOwned_array_survives hAs hAp hgS hgrow hl hd hn
+      hold0 hR0 hog hfr hRa).2.2 i hi
   · intro i hi
     have he := (hl'.2.2.2.2 i hi).2
     have hmem : (memW s (memW s logs + 8 * i), 40) ∈
