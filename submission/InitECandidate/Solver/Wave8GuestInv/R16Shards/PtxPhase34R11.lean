@@ -4797,6 +4797,25 @@ theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [hd0]
     exact hb o ho
 
+/-- The concrete indexed store retains the coherent ownership frame. -/
+theorem hoare_stableCopy_store_ownedFrame :
+    Hoare (fun s => StableCopyStorePre s ∧ StableCopyOwnedFrame s)
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩, hf⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, _, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  exact stableCopyOwnedFrame_store s mem' hinv hf
+    ⟨S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ hi hdom hm
+
 /-- Local initialization and clock changes preserve the coherent ownership frame. -/
 theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
