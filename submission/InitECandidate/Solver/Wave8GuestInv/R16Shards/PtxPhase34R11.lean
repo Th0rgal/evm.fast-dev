@@ -3879,6 +3879,29 @@ theorem stableCopyStorePre_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [hs, hn, hd]; exact harr
   · exact stable_copy_record_separation s mem' hs hn hd ha he
 
+/-- The copy write preserves the already copied prefix as well as the
+length postcondition, before the counter is advanced. -/
+theorem stableCopyInv_after_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hpost : StableLengthPost {s with memory := mem'})
+    (hi : locN s "i" < locN s "nl")
+    (hwrite : memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a)
+    (hsource : ∀ j, j < locN s "nl" →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (hs : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hd : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs")) : StableCopyInv {s with memory := mem'} := by
+  refine ⟨hpost, hp.2.1, ?_, hp.2.2.2.1, hp.2.2.2.2.1, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1 hpost.1.1.1.1 hp.2.2.1
+  · intro j hj hjn
+    change j < locN s "i" at hj
+    exact stableCopyInv_store_prefix s mem' hp hi hwrite hm hsource hs hd j (by omega)
+
 /-- Loop-head contract: operand shapes, bounded counter, and the separated
 store precondition whenever the current index is active. -/
 def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -4064,6 +4087,32 @@ theorem stable_copy_increment_operands {F : Type} (s : PanSemStateFiniteExact 64
     t.locals.lookup (ofString "nl") = some (.val (.word n)) := by
   refine ⟨stable_copy_increment_word s w v hw he, ?_⟩
   simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using ⟨hp, hq, hn⟩
+
+/-- Updating only the counter retains all store separation and operand facts
+whenever the new counter remains active. -/
+theorem stableCopyStorePre_counter {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (w : BitVec 64) (hp : StableCopyStorePre s)
+    (hv : v = .val (.word w))
+    (hinv : StableCopyInv (setVarHOLFinite (ofString "i") v s))
+    (hi : locN (setVarHOLFinite (ofString "i") v s) "i" < locN s "nl") :
+    StableCopyStorePre (setVarHOLFinite (ofString "i") v s) := by
+  subst v
+  obtain ⟨_, _, ⟨iw, p, q, _, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hW' : WorldTypedWith (setVarHOLFinite (ofString "i") (.val (.word w)) s) S Nd :=
+    (R13Shards.worldTypedWith_with_locals s _ s.clock S Nd).mpr hW
+  have hn0 : ofString "i" ≠ ofString "nl" := by decide
+  have hl0 : ofString "i" ≠ ofString "lp" := by decide
+  have hq0 : ofString "i" ≠ ofString "stable_lp" := by decide
+  have hs0 : ofString "i" ≠ ofString "stable_logs" := by decide
+  have hc0 : ofString "i" ≠ ofString "stable_log_cap" := by decide
+  have hg0 : ofString "i" ≠ ofString "logs" := by decide
+  refine ⟨hinv, ?_, ⟨w, p, q, ?_, ?_, ?_, ?_⟩,
+    S, Nd, hW', ?_, ?_, ?_, ?_, ?_, ?_⟩ <;>
+    simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      if_pos rfl, if_neg hn0, if_neg hl0, if_neg hq0, if_neg hs0, if_neg hc0,
+      if_neg hg0] at *
+  all_goals first | assumption | rfl
 
 /-- Once the store has extended the prefix, the actual counter assignment
 re-establishes the loop invariant. -/
