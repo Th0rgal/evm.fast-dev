@@ -8,6 +8,7 @@ set_option maxHeartbeats 4000000
 namespace InitECandidate.Solver.Wave8GuestInv.R13Shards
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
+open InitECandidate.Solver.PanTerminatingBounded
 
 /-- Shape information needed by the untyped stores of Phase 2. `price` is
 the four-word fee value, whereas `mgas` and `reservoir` are scalar words. -/
@@ -53,6 +54,30 @@ theorem phase1_index_word_of_add {F : Type} {s : PanSemStateFiniteExact 64 F}
     · exact ⟨w, rfl⟩
     · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
     · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
+
+theorem phase1_assign_bal_index_shapes :
+    Hoare (R16Shards.PtxP1.StageP 0)
+      (.assign .global (ofString "bal_index")
+        (.op .add [.var .local (ofString "index"), .const 1#64]))
+      (fun r s => r = none → R16Shards.PtxP1.StageP 0 s ∧
+        ∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hstage := R16Shards.PtxP1.hoare_assign_bal_index.run s hc hp hnt hr
+  refine ⟨hstage, ?_⟩
+  rw [evaluateHOLFiniteState_assign] at hr ⊢
+  revert hr
+  split
+  · simp
+  · rename_i v hv
+    split
+    · intro _ n hn
+      obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op hv
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl
+      · simpa [setKvarHOLFinite, setGlobalHOLFinite] using phase1_txReadyStrong_tx_word hp.1
+      · simpa [setKvarHOLFinite, setGlobalHOLFinite] using phase1_index_word_of_add hv
+    · simp
 
 /-- R11 entry interface for the strengthened Phase 2 proof. -/
 def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -171,6 +196,64 @@ theorem phase1_resume_encode_shapes (h : PtxCallees) :
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
     rcases hn with rfl | rfl <;> decide
   simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2 n hn
+
+theorem phase1_store_encSlot_shapes (off : Bool) :
+    Hoare (fun s => R16Shards.PtxP1.EncReady s ∧
+      ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (.store (R16Shards.PtxP1.encDst off)
+        (.rfield (if off then 1 else 0) (.var .local (ofString "enc"))))
+      (fun r s => r = none → R16Shards.PtxP1.EncReady s ∧
+        ∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+  have hs : Hoare
+      (fun s => ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (.store (R16Shards.PtxP1.encDst off)
+        (.rfield (if off then 1 else 0) (.var .local (ofString "enc"))))
+      (fun r s => r = none → ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+    apply Hoare.store_fall
+    intro F s x v mem hp hx hv hst
+    exact hp
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.store_encSlot off).run s hc hp.1 hnt hr,
+    hs.run s hc hp.2 hnt hr⟩
+
+theorem phase1_chainGuard_keeps
+    (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) :
+    Hoare P R16Shards.PtxP1.chainGuard (fun r s => r = none → P s) := by
+  apply Hoare.ite
+  · apply Hoare.ite
+    · exact ⟨fun s _ _ _ hr => (R16Shards.PtxP1.raise_ne_none s _ _ hr).elim⟩
+    · exact Hoare.skip (fun _ hp _ => hp.1.1)
+    · exact fun _ _ hr => by cases hr
+  · exact Hoare.skip (fun _ hp _ => hp.1)
+  · exact fun _ _ hr => by cases hr
+
+theorem phase1_resume_chain_id_shapes (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => R16Shards.PtxP1.StageP 0 s ∧
+        (∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (fun s => R16Shards.PtxP1.StageP 0 s ∧
+        (∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (ofString "cid") (ofString "tx_chain_id") [.var .local (ofString "tx")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨R16Shards.PtxP1.resume_ro_stage h.ro_tx_chain_id (by decide) _
+    s vs body callee ret v post hc hp.1 ha hl hb, ?_, ?_⟩
+  · intro n hn
+    have hne : ofString "cid" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl <;> decide
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2.1 n hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "cid" ≠ ofString "enc" from by decide] using hp.2.2
 
 theorem phase1_resume_alloc_sender_shapes (h : PtxCallees) :
     DecCallResumeOn
@@ -327,6 +410,93 @@ theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64
   · simpa only [hk "enc" (by simp)] using hp.2.2.1
   · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
 
+theorem phase1_prefix_localsOnly :
+    LocalsOnly ["tx", "index", "sender", "price", "enc", "intrinsic"] PtxPhase1ShapePrefix := by
+  intro F s locals k hl hp
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro n hn
+    change ∃ w : BitVec 64, locals.lookup (ofString n) = some (.val (.word w))
+    rw [hl n (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)]
+    exact hp.1 n hn
+  · simpa only [hl "price" (by simp)] using hp.2.1
+  · simpa only [hl "enc" (by simp)] using hp.2.2.1
+  · simpa only [hl "intrinsic" (by simp)] using hp.2.2.2
+
+theorem phase1_blobBranch_prefix :
+    Hoare PtxPhase1ShapePrefix R16Shards.PtxP1.blobBranch
+      (fun r s => r = none → PtxPhase1ShapePrefix s) := by
+  apply Hoare.decCall_fall (names := ["tx", "index", "sender", "price", "enc", "intrinsic"])
+    (by decide) phase1_prefix_localsOnly
+  · intro F s vs body callee ret v post hc hp ha hl hb
+    exact phase1_shapePrefix_resume s post hp _ v (by decide)
+  · apply Hoare.decCall_fall (names := ["tx", "index", "sender", "price", "enc", "intrinsic"])
+      (by decide) phase1_prefix_localsOnly
+    · intro F s vs body callee ret v post hc hp ha hl hb
+      exact phase1_shapePrefix_resume s post hp _ v (by decide)
+    · apply Hoare.assign
+      · intro F s v hp _
+        exact fun _ => LocalsOnly.setVar phase1_prefix_localsOnly (by decide) v s hp
+      · exact fun _ _ hr => by cases hr
+
+theorem phase1_blobBranch_stage_prefix (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      R16Shards.PtxP1.blobBranch
+      (fun r s => r = none → R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.blobBranch_hoare h).run s hc hp.1 hnt hr,
+    phase1_blobBranch_prefix.run s hc hp.2 hnt hr⟩
+
+theorem phase1_stage_prefix_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (stage : Nat) (name : MlS) (v : ValueHOL 64)
+    (hs : ∀ n ∈ R16Shards.PtxP1.stageNames stage, ofString n ≠ name)
+    (hp : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String), ofString n ≠ name)
+    (h : R16Shards.PtxP1.StageP stage s ∧ PtxPhase1ShapePrefix s) :
+    R16Shards.PtxP1.StageP stage (setVarHOLFinite name v s) ∧
+      PtxPhase1ShapePrefix (setVarHOLFinite name v s) := by
+  exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage stage) hs v s h.1,
+    LocalsOnly.setVar phase1_prefix_localsOnly hp v s h.2⟩
+
+theorem phase1_resume_frame_prefix
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fn : MlS} {args : List (ExpHOL 64)}
+    (hr : DecCallResumeOn P Q name fn args)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    DecCallResumeOn (fun s => P s ∧ PtxPhase1ShapePrefix s)
+      (fun s => Q s ∧ PtxPhase1ShapePrefix s) name fn args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact ⟨hr s vs body callee ret v post hc hp.1 ha hl hb,
+    phase1_shapePrefix_resume s post hp.2 name v hne⟩
+
+theorem phase1_resume_blob_gas_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "tx_blob_gas_used") (ofString "calculate_total_blob_gas")
+      [.var .local (ofString "tx")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_ro_stage h.ro_calculate_total_blob_gas (by decide) _
+  · decide
+
+theorem phase1_resume_account_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "acct") (ofString "get_account") [.var .local (ofString "sender")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_scratch_stage h.wk_get_account
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) (by decide) _
+  · decide
+
+theorem phase1_resume_fee_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "egf") (ofString "fee_mul")
+      [.var .local (ofString "gas"), .var .local (ofString "price")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_ro_stage h.ro_fee_mul (by decide) _
+  · decide
+
 /-- The validation stage already retains the complete intrinsic triple. -/
 theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hstage : R16Shards.PtxP1.StageP 2 s)
@@ -464,5 +634,136 @@ theorem phase1_stage4_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hw : R16Shards.PtxP1.StageP 4 s) (hs : PtxPhase2LocalShapes s) :
     PtxValidatedStrong s :=
   ⟨R16Shards.PtxP1.stage4_validated hw, hs⟩
+
+/-- Bounded composition of the regular-budget, min, and reservoir segment.
+The continuation receives all local shapes and the final numeric stage. -/
+theorem phase1_gas_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (.dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
+        (.decCall (ofString "mgas") .one (ofString "min")
+          [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")]
+          (.dec (ofString "reservoir") .one
+            (.op .sub [.var .local (ofString "execution_gas"), .var .local (ofString "mgas")]) tail)))
+      (K.min + b + 1) := by
+  apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
+    (fun s v hp he => phase1_declare_regular_budget_shapes s v hp he)
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w))) h.fb_min
+  · intro F s vs body callee ret hc hp ha hl
+    exact R16Shards.PtxP1.stage_entry 3 _ _ s vs body callee ret hc hp.1 ha hl
+  · exact phase1_resume_min_shapes h
+  · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+    · intro F s v hp he
+      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1,
+        phase1_reservoir_shapes s hp.2.1 hp.2.2 v he⟩
+    · exact htail
+
+theorem phase1_nonce_shapes (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact R16Shards.PtxP1.hoare_call_scratch_stage h.wk_increment_nonce
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) _
+  · exact phase1_call0_shapes _ _
+
+theorem phase1_sub_balance_shapes (h : PtxCallees) (args : List (ExpHOL 64)) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub") args)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact Hoare.callLocal_resume (R16Shards.PtxP1.resume_ro_stage h.ro_u256_sub (by decide) _)
+  · exact phase1_call_balance_shapes _ _
+
+theorem phase1_set_balance_shapes (h : PtxCallees) (args : List (ExpHOL 64)) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (none, none)) (ofString "set_account_balance") args)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact R16Shards.PtxP1.hoare_call_scratch_stage h.wk_set_account_balance
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) _
+  · exact phase1_call0_shapes _ _
+
+theorem phase1_set_balance_tail_strong (h : PtxCallees) (args : List (ExpHOL 64))
+    {tail : ProgHOL 64} {b : Nat} (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (none, none)) (ofString "set_account_balance") args) (.seq .skip tail))
+      ((K.set_account_balance + 1) + (0 + b)) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_set_account_balance none args s hc hp.1.1.1.1.1.1
+  · exact phase1_set_balance_shapes h args
+  · apply seq_bound_trans (Q := PtxValidatedStrong)
+    · intro F s hc hp
+      exact R16Shards.PtxP1.bound_of_clock (P := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+        (fun s => R16Shards.PtxP1.clock_skip s) s hc hp
+    · exact Hoare.skip (fun _ hp _ => phase1_stage4_strong hp.1 hp.2)
+    · exact htail
+
+theorem phase1_sub_balance_tail_strong (h : PtxCallees) (args : List (ExpHOL 64))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub") args) tail)
+      ((K.u256_sub + 1) + b) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_u256_sub
+      (some (.local, ofString "bal")) args s hc hp.1.1.1.1.1.1
+  · exact phase1_sub_balance_shapes h args
+  · exact htail
+
+theorem phase1_nonce_balance_decl_strong (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+        (.dec (ofString "bal") (.comb [.one, .one, .one, .one])
+          (.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "acct"), .const 8])) tail))
+      ((K.increment_nonce + 1) + b) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_increment_nonce none _ s hc hp.1.1.1.1.1.1
+  · exact phase1_nonce_shapes h
+  · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+    · intro F s v hp he
+      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1,
+        ptxPhase2LocalShapes_set_other s hp.2 _ v (by decide)⟩
+    · exact htail
+
+/-- The complete Phase 1 suffix after the reservoir declaration. -/
+def phase1BalanceSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+    (.dec (ofString "bal") (.comb [.one, .one, .one, .one])
+      (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "acct"), .const 8]))
+      (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub")
+        [.var .local (ofString "bal"), .var .local (ofString "effective_gas_fee")])
+        (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub")
+          [.var .local (ofString "bal"), .var .local (ofString "blob_gas_fee")])
+          (.seq (.call (some (none, none)) (ofString "set_account_balance")
+            [.var .local (ofString "sender"), .var .local (ofString "bal")]) (.seq .skip tail)))))
+
+theorem phase1_balance_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (phase1BalanceSuffix tail)
+      ((K.increment_nonce + 1) + ((K.u256_sub + 1) + ((K.u256_sub + 1) +
+        ((K.set_account_balance + 1) + (0 + b))))) := by
+  unfold phase1BalanceSuffix
+  apply phase1_nonce_balance_decl_strong h
+  apply phase1_sub_balance_tail_strong h
+  apply phase1_sub_balance_tail_strong h
+  exact phase1_set_balance_tail_strong h _ htail
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
