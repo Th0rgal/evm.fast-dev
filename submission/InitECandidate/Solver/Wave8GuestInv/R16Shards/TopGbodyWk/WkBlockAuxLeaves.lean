@@ -7988,4 +7988,44 @@ theorem merge_roles_replace_inner {F : Type} {s : PanSemStateFiniteExact 64 F}
       · exact False.elim (hf a (List.mem_append_right _ ha) heq)
     · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
 
+/-- Transport filtered nested roles across insertion and preserved key-length headers. -/
+theorem merge_roles_transport_inner {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {pre suf jr : List (Nat × String)} {t inner : Nat}
+    (h : RolesOK s S (pre ++ (nestRoles s "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) jr)
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ (pre ++ (nestRoles s "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) ++ jr, a.1 ≠ inner)
+    (hh : ∀ u ∈ S, hdr post u 0 = hdr s u 0)
+    (hbs : globN s "bs" ≠ 0) (ht : t = memW s (globN s "bs" + 32))
+    (ht0 : t ≠ 0) (hg : globN post "bs" = globN s "bs")
+    (hp : memW post (globN post "bs" + 32) = t)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    RolesOK post S (pre ++ (nestRoles post "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) jr := by
+  have hprov := (merge_set_nestRoles_provenance hbs ht ht0 hg hp hv).2
+  have hnew := merge_roles_replace_inner h hi hk hf
+    (new := (nestRoles post "bs" "bs.inner").filter (fun a => a.1 != 0))
+    (by
+      intro a ha
+      obtain ⟨ha, hn⟩ := List.mem_filter.1 ha
+      rcases hprov a ha with ha | ha
+      · exact Or.inl (List.mem_filter.2 ⟨ha, hn⟩)
+      · exact Or.inr ha)
+    (by
+      intro a ha
+      have ha := (List.mem_filter.1 ha).1
+      unfold nestRoles at ha
+      split at ha
+      · simp at ha
+      · split at ha
+        · simp at ha
+        · obtain ⟨v, _, rfl⟩ := List.mem_map.1 ha
+          rfl)
+  refine ⟨?_, hnew.2⟩
+  intro a ha
+  obtain ⟨hm, hk'⟩ := hnew.1 a ha
+  exact ⟨hm, (hh a.1 hm).trans hk'⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
