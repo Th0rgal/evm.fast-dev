@@ -5523,4 +5523,19 @@ theorem phase2_packed_inner_reset_hoare :
     exact phase2_packed_inner_reset s hp.1 hp.2
   · exact fun _ _ hr => by cases hr
 
+/-- Preserving the transaction header and record interval preserves each live count. -/
+theorem phase2_packed_record_counts_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (ht : locN post "tx" = locN s "tx")
+    (hh : ∀ off, off < 384 → memW post (locN s "tx" + off) = memW s (locN s "tx" + off))
+    (hr : ∀ off, off < 24 * memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + off) =
+        memW s (memW s (locN s "tx" + 208) + off)) :
+    ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
+  intro i hi
+  rw [ht, hh 208 (by omega)]
+  simpa only [Nat.add_assoc] using hr (24 * i + 16) (by omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
