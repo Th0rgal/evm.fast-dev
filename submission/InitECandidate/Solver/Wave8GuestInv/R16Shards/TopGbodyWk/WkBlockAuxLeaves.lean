@@ -8492,4 +8492,91 @@ theorem merge_set_fixed_typed {F : Type}
   exact ⟨hf, InitECandidate.Solver.Wave8Contracts.M08.fixedTyped_transfer
     hA.1 he.1.1 hag hW.2.2.1 hf⟩
 
+/-- The updated table's footprint remains separate from other owned objects. -/
+theorem merge_set_footprint_disjoint {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ htabFootprint post t,
+      (∀ u ∈ S, u ≠ t → ∀ j ∈ htabFootprint s u, Disj i j) ∧
+      (∀ j ∈ fixedObjects s, Disj i j) ∧
+      (∀ o ∈ nodeExtents s Nd, Disj i o) := by
+  intro i hi
+  rcases (he.2.2.2.2.2.1 i hi).2 with ⟨k, hk, hin⟩ | hfresh
+  · refine ⟨?_, ?_, ?_⟩
+    · intro u hu hn j hj
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        (hW.1.2.2.1 t ht u hu hn.symm k hk j hj)
+    · intro j hj
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        (((hW.1.2.1 t ht).2 k hk).2 j hj)
+    · intro o ho
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        ((hW.2.2.2.2.1 o ho).1 t ht k hk).flip
+  · have hf : ∀ j, (j.2 = 0 ∨ Allocated s j) → Disj i j := by
+      intro j hj
+      exact (InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right hfresh
+        (R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+          he.2.2.2.2.1 hj)).flip
+    refine ⟨?_, ?_, ?_⟩
+    · intro u hu _ j hj
+      exact hf j (Or.inr ((hW.1.2.1 u hu).2 j hj).1)
+    · intro j hj
+      apply hf
+      rcases hW.2.2.1.1 j hj with hz | ⟨hal, _⟩
+      · exact Or.inl hz
+      · exact Or.inr hal
+    · intro o ho
+      apply hf
+      unfold nodeExtents at ho
+      obtain ⟨n, hn, hno⟩ := List.mem_flatMap.1 ho
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hno
+      rcases hno with rfl | rfl
+      · exact Or.inr (hW.2.2.2.1.1 n hn).2.1
+      · unfold nodePath
+        split_ifs with hc
+        · rcases (hW.2.2.2.1.1 n hn).2.2.2.2.2.2.1 hc.1 with hz | ⟨_, hal, _⟩
+          · exact False.elim (hc.2 hz)
+          · exact Or.inr hal
+        · exact Or.inl rfl
+
+/-- Table well-formedness, allocation, and separation survive outer insertion. -/
+theorem merge_set_tables_geometry {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hfix : fixedObjects post = fixedObjects s) :
+    (∀ u ∈ S, HtabWF post u ∧ ∀ i ∈ htabFootprint post u,
+      Allocated post i ∧ ∀ j ∈ fixedObjects post, Disj i j) ∧
+    (∀ u ∈ S, ∀ v ∈ S, u ≠ v → ∀ i ∈ htabFootprint post u,
+      ∀ j ∈ htabFootprint post v, Disj i j) := by
+  have hag : AllocatorGrows s post := by
+    refine ⟨he.2.2.2.2.1, ?_⟩
+    rw [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))]
+  have hd := merge_set_footprint_disjoint hA hW ht he
+  have ho := fun {u : Nat} (hu : u ∈ S) (hn : u ≠ t) =>
+    merge_set_other_table_frame (post := post) hA hW ht hu hn
+  constructor
+  · intro u hu
+    by_cases hn : u = t
+    · subst u
+      rw [hfix]
+      exact ⟨he.2.1, fun i hi => ⟨(he.2.2.2.2.2.1 i hi).1, (hd i hi).2.1⟩⟩
+    · obtain ⟨hwf, hfp, _⟩ := ho hu hn he
+      rw [hfp, hfix]
+      exact ⟨hwf, fun i hi => ⟨hag.allocated ((hW.1.2.1 u hu).2 i hi).1,
+        ((hW.1.2.1 u hu).2 i hi).2⟩⟩
+  · intro u hu v hv hn i hi j hj
+    by_cases hut : u = t
+    · subst u
+      rw [(ho hv hn.symm he).2.1] at hj
+      exact (hd i hi).1 v hv hn.symm j hj
+    · by_cases hvt : v = t
+      · subst v
+        rw [(ho hu hut he).2.1] at hi
+        exact ((hd j hj).1 u hu hut i hi).flip
+      · rw [(ho hu hut he).2.1] at hi
+        rw [(ho hv hvt he).2.1] at hj
+        exact hW.1.2.2.1 u hu v hv hn i hi j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
