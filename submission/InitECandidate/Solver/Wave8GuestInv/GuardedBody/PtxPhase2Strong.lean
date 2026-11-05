@@ -2637,4 +2637,21 @@ theorem phase2_address_store_validated {F : Type} {s : PanSemStateFiniteExact 64
     (fun o ho => hd _ (by simp) o ho) hx hin htx hrec hm
   exact ⟨hv, S, Nd, hW, hW', how⟩
 
+/-- Address-array writes leave the transaction header unchanged. -/
+theorem phase2_address_store_header {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (k : Nat) (hk : k % 8 = 0) (hkle : k + 8 ≤ 384) :
+    memW { s with memory := mem } (locN s "tx" + k) = memW s (locN s "tx" + k) := by
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  obtain ⟨S, Nd, _, hT, _⟩ := hp.1.1.2
+  have htx := hp.2.2.2.2.2.2.1
+  have hu : IvlUnhit s { s with memory := mem } (locN s "tx", 384) :=
+    ivlUnhit_single hm (by simp) (disj_of_inside_right hin htx)
+  exact memW_eq_of_ivlUnhit hu (by have := hT.1.1.1; omega)
+    (ivl_allocated_bound hA.2 (Or.inl hT.1.2.1)).2
+    ⟨by dsimp; omega, by dsimp; omega⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
