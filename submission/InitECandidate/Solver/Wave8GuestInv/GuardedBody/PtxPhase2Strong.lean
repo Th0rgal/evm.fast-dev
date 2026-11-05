@@ -7107,8 +7107,8 @@ theorem phase2_packed_copy_spatial_premises {F : Type}
     have hrec := phase2_packed_guarded_input_disjoint s hp.1 _ hp.2.2
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hdest
     rcases hdest with rfl | rfl
-    · exact ⟨htx.1, hrec.1, by dsimp; omega⟩
-    · exact ⟨htx.2, hrec.2, by dsimp; omega⟩
+    · exact ⟨htx.1, hrec.1, by change 0 < (20 : Nat); decide⟩
+    · exact ⟨htx.2, hrec.2, by change 0 < (32 : Nat); decide⟩
 
 /-- Either concrete packed destination preserves the separated caller invariant. -/
 theorem phase2_memcpy_packed_eval (h : PtxCallees) {F : Type}
