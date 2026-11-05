@@ -943,6 +943,40 @@ theorem logsLiveOwned_single_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [howned]
     exact (hd hn).2.2 i hi
 
+/-- The four block-total cells are untyped and disjoint from the output/logs. -/
+theorem txAfterCallStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallStrong s) {off : Nat} (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    {x : BitVec 64} (hx : s.memaddrs x) (hxe : x.toNat = globN s "bo" + off)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxAfterCallStrong {s with memory := mem'} := by
+  obtain ⟨hW, hw, hin, hl, S, Nd, hWT, hd, hown⟩ := h
+  let post := {s with memory := mem'}
+  have hg : GuestInv post := guestInv_congr (s := s) rfl rfl rfl rfl hW.1.1.1
+  obtain ⟨hWT', howned, hE⟩ := store_bo_untyped_world hW.1.1 hW.2 hWT hoff hx hxe hm
+  have hbo : (globN s "bo", 88) ∈ worldOwned s S Nd :=
+    R13Shards.worldTypedIvls_sub_worldOwned (bo_mem_typed hW.2.bo_nz)
+  have hix : Inside (x.toNat, 8) (globN s "bo") (globN s "bo" + 88) := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    unfold Inside
+    dsimp
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  have hu : IvlUnhit s post (locN s "out", 96) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hix (hd _ (by simp) _ hbo))
+  have h16 : memW post (locN s "out" + 16) = memW s (locN s "out" + 16) :=
+    memW_eq_of_ivlUnhit hu (by have := hw.1; omega)
+      (ivl_allocated_bound hW.1.1.2 (Or.inl hin)).2 ⟨by omega, by omega⟩
+  have hlogs := logsLiveOwned_single_store hW.1.1.2 hW.1.1.1 hg hl hown hm
+    ⟨_, hbo, hix⟩ howned
+  refine ⟨⟨worldOK_of_parts ⟨hg, hW.1.1.2⟩ hWT', hE⟩,
+    wordsOK_transfer hW.1.1.1 hg hw, hin, ?_, S, Nd, hWT', ?_, ?_⟩
+  · change LogsListOK post (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.1
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]; exact hd
+  · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
+    rw [h16]; exact hlogs.2
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
