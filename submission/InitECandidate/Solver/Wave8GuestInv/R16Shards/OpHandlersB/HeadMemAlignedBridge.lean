@@ -4900,6 +4900,58 @@ theorem frame_open_headMemChainWF_B' :
 
 end FrameOpenRun
 
+section FinishLeaves2
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem lookup_incorporate_child_on_error :
+    originalRuntimeCode.lookup (ofString "incorporate_child_on_error") =
+      some ([(ofString "child", .one)],
+        sourceFnBody Guest.Software.guestFn_incorporate_child_on_error, .one) :=
+  lookup_of_guestAst_getElem 591 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_incorporate_child_on_error) rfl
+
+theorem ev_globOff {F : Type} (s : PanSemStateFiniteExact 64 F) (g : MlS) (a k : BitVec 64)
+    (h : s.globals.lookup g = some (.val (.word a))) :
+    ev s (.op .add [.var .global g, .const k]) = some (.val (.word (a + k))) := by
+  simp [ev, evalHOLExact, evalListHOLExact, wordOpHOL, wordOp, valueIsWord, valueWord, h]
+
+/-- A store at `global g + k` of a sum: memory becomes an `updW` at `a + k`. -/
+theorem Ret.storeGlobOff {F : Type} {S : PanSemStateFiniteExact 64 F} {g : MlS} {a k : BitVec 64}
+    {args : List (ExpHOL 64)} {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hg : S.globals.lookup g = some (.val (.word a)))
+    (hb : ∀ (w : BitVec 64), Ret { S with memory := updW S.memory (a + k) w } b Φ) :
+    Ret S (.seq (.store (.op .add [.var .global g, .const k]) (.op .add args)) b) Φ :=
+  Ret.seq_storeWv _ (ev_globOff S g a k hg) (fun v hv => ev_op_word S _ _ v hv)
+    (fun w _ _ => hb w)
+
+attribute [local irreducible] Ret in
+/-- `incorporate_child_on_error(child)` writes only the words `ev+64`, `ev+72`, `ev+184`. -/
+theorem incorporate_child_on_error_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) (fun _ post =>
+      post.globals = s.globals ∧ (∃ w1 w2 w3 : BitVec 64, post.memory =
+        updW (updW (updW s.memory (e + 64) w1) (e + 72) w2) (e + 184) w3) ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_incorporate_child_on_error =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_incorporate_child_on_error).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_incorporate_child_on_error,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.storeGlobOff he fun w1 => ?_
+  refine Ret.storeGlobOff he fun w2 => ?_
+  refine Ret.storeGlobOff he fun w3 => ?_
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, ⟨w1, w2, w3, rfl⟩, rfl, rfl⟩
+
+end FinishLeaves2
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
