@@ -6524,4 +6524,21 @@ theorem unionNonValueEntry_bs_inner {F : Type} {s : PanSemStateFiniteExact 64 F}
   simp only [List.mem_append]
   exact Or.inl (Or.inl (Or.inr hm))
 
+/-- Inner-storage unions cover both allocated and null values of the outer table. -/
+theorem wkSc_htab_union_into_bs_inner :
+    WorldKeepsSc (fun s => WorldOK s ∧ globN s "bs" ≠ 0 ∧
+      memW s (globN s "bs" + 32) ≠ 0 ∧
+      locN s "dst" ∈ htabValues s (memW s (globN s "bs" + 32)))
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := wkSc_htab_union_into_nonValue
+  obtain ⟨params0, body0, ret0, hl0, hb0⟩ := wkSc_htab_union_into_zero
+  have heq := Option.some.inj (hl.symm.trans hl0)
+  cases heq
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  by_cases hz : locN s "dst" = 0
+  · exact hb0 s hc ⟨hP.1, hz⟩ hex hnt hres
+  · exact hb s hc
+      (unionNonValueEntry_bs_inner hP.1 hP.2.1 hP.2.2.1 hP.2.2.2 hz) hex hnt hres
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
