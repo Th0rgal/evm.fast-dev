@@ -113,6 +113,113 @@ theorem logsListOK_congr_header_unhit {F : Type}
   · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
     rcases hk with rfl | rfl | rfl <;> (constructor <;> omega)
 
+/-- The alternate scratch branch in the R11 ownership predicate is empty:
+a 24-byte header cannot start at or above `scratchEnd` and end below it. -/
+theorem logsOwnedDisj_header_heap {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} (h : LogsOwnedDisj s S Nd logs) (hn : logs ≠ 0) :
+    Inside (logs, 24) sourceBase (globN s "heap_ptr") := by
+  rcases (h hn).1 with hh | ⟨hs, he⟩
+  · exact hh
+  · unfold Inside at hs
+    simp only [he] at hs
+    omega
+
+/-- The log header is protected by the world-step frame once its scratch-write
+disjointness is established. It remains disjoint from the new owned world. -/
+theorem logsOwnedDisj_header_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs) (hn : logs ≠ 0)
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hR : ∀ j ∈ R, Disj (logs, 24) j) :
+    Inside (logs, 24) sourceBase (globN post "heap_ptr") ∧
+    (∀ o ∈ new, Disj (logs, 24) o) ∧ IvlUnhit s post (logs, 24) := by
+  rcases hlogs with hz | hl
+  · exact False.elim (hn hz)
+  exact R13Shards.heap_ivl_survives_step hAs hhp hold0 hR0 hog hfr
+    hl.1.1 (by norm_num) (logsOwnedDisj_header_heap hd hn)
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj) hR
+
+theorem logsOwnedDisj_entry_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs i : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs) (hn : logs ≠ 0)
+    (hi : i < memW s (logs + 8))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hR : ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    Inside (memW s (memW s logs + 8 * i), 40) sourceBase (globN post "heap_ptr") ∧
+    (∀ o ∈ new, Disj (memW s (memW s logs + 8 * i), 40) o) ∧
+    IvlUnhit s post (memW s (memW s logs + 8 * i), 40) := by
+  rcases hlogs with hz | hl
+  · exact False.elim (hn hz)
+  have he := (hl.2.2.2.2 i hi).2
+  exact R13Shards.heap_ivl_survives_step hAs hhp hold0 hR0 hog hfr
+    he.1.1 (by norm_num) he.2.1
+    (fun j hj => (hd hn).2.2 i hi _ (by simp) j hj) hR
+
+/-- Live pointer-array preservation additionally needs its heap placement.
+`LogsOwnedDisj` itself specifies disjointness but not placement of this array. -/
+theorem logsOwnedDisj_array_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hd : LogsOwnedDisj s S Nd logs) (hn : logs ≠ 0)
+    (halign : memW s logs % 8 = 0)
+    (hin : Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hR : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j) :
+    (∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i)) ∧
+    (∀ o ∈ new, Disj (memW s logs, 8 * memW s (logs + 8)) o) := by
+  have hs := R13Shards.heap_ivl_survives_step hAs hhp hold0 hR0 hog hfr
+    halign (by simp) hin (fun j hj => (hd hn).2.1 _ (by simp) j hj) hR
+  refine ⟨?_, hs.2.1⟩
+  intro i hi
+  apply R13Shards.memW_eq_of_ivlUnhit hs.2.2
+  · omega
+  · exact (R13Shards.ivl_allocated_bound hAs (Or.inl hin)).2
+  · constructor <;> dsimp <;> omega
+
+/-- A framed world step preserves the entire log list when its live array is
+heap-resident and all live log storage avoids the explicit write footprint. -/
+theorem logsListOK_of_framed_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs)
+    (harray : logs ≠ 0 → memW s logs % 8 = 0 ∧
+      Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsListOK post logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  have hh := logsOwnedDisj_header_survives hAs hhp hlogs hd hn hold0 hR0 hog hfr hRh
+  have ha := logsOwnedDisj_array_survives hAs hhp hd hn
+    (harray hn).1 (harray hn).2 hold0 hR0 hog hfr hRa
+  apply logsListOK_congr_header_unhit hAs hgS hgP hhp hlogs
+    (fun _ => Or.inl hh.1) hh.2.2 ha.1
+  intro i hi
+  exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
+    hold0 hR0 hog hfr (hRe i hi)).2.2
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
