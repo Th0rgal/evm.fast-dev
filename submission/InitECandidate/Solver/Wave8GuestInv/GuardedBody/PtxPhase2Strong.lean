@@ -3833,4 +3833,42 @@ theorem phase2_address_count_advance {F : Type} (s : PanSemStateFiniteExact 64 F
       show ofString "i" ≠ ofString "nkeys" by decide,
       show ofString "i" ≠ ofString "tx" by decide] using hk
 
+/-- Installing the nonwrapping sum establishes the next-prefix equality used
+by the subsequent index increment. -/
+theorem phase2_address_count_add {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    let post := setVarHOLFinite (ofString "nkeys")
+      (.val (.word (BitVec.ofNat 64 (locN s "nkeys" +
+        memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))))) s
+    PtxAddressCopyInv post ∧ locN post "i" < locN post "nal" ∧
+      locN post "nal" = memW post (locN post "tx" + 216) ∧
+      locN post "nkeys" = phase2_key_prefix post (locN post "i" + 1) := by
+  have hb := phase2_address_count_next_bound hp hi
+  have hlt : locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) < 2 ^ 64 := by omega
+  refine ⟨phase2_address_copy_set_nkeys s hp.1 _, ?_, ?_, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "nal" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide] using hp.2.1
+  · have he := phase2_key_prefix_succ s (locN s "i")
+    rw [← hp.2.2] at he
+    simp [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide,
+      BitVec.toNat_ofNat]
+    change (locN s "nkeys" + memW s (memW s (locN s "tx" + 208) +
+      24 * locN s "i" + 16)) % 2 ^ 64 = phase2_key_prefix s (locN s "i" + 1)
+    rw [Nat.mod_eq_of_lt hlt]
+    exact he.symm
+
+/-- On normal counting-loop exit the accumulator is the full input key count. -/
+theorem phase2_address_count_exit_total {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    locN s "nkeys" = txAccessSlots s (locN s "tx") := by
+  rw [hp.2.2, hi, hp.2.1]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
