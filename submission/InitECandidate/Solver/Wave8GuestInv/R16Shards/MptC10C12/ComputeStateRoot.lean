@@ -1475,7 +1475,10 @@ theorem worldStep_preserves_two_local_tables_csr {F : Type}
       htabFootprint post t1 = htabFootprint s t1 ∧
       htabFootprint post t2 = htabFootprint s t2 ∧
       hdr post t1 0 = hdr s t1 0 ∧ hdr post t2 0 = hdr s t2 0 ∧
-      Q s r post S0' Nd' := by
+      Q s r post S0' Nd' ∧
+      OwnedGrows s post (worldOwned s S Nd)
+        (worldOwned post (S0' ++ [t1, t2]) Nd') ∧
+      FrameOutside s post (worldOwned s S Nd ++ R s ++ [freeGap s]) (heapFree s) := by
   obtain ⟨hAp, hhp, _, _, hWS⟩ := hstep
   obtain ⟨S1', _, hsub1, hW1', _, _, _⟩ := hWS S Nd hW hR_ti
   have ht1_S1' : t1 ∈ S1' := hsub1 t1 ht1_S
@@ -1587,7 +1590,452 @@ theorem worldStep_preserves_two_local_tables_csr {F : Type}
     adjoin_local_table hW_t1 hwf_t2 hsurv_t2' (klen := hdr s t2 0) hhdr_t2
   have hassoc : (S0' ++ [t1]) ++ [t2] = S0' ++ [t1, t2] := by simp
   rw [hassoc] at hW_both
+  have hsub_ow0 : ∀ j ∈ worldOwned s S0 Nd, j ∈ worldOwned s S Nd :=
+    fun j hj => worldOwned_erase_sub_csr s S Nd t1 j
+      (worldOwned_erase_sub_csr s S_1 Nd t2 j hj)
+  have hog_both : OwnedGrows s post (worldOwned s S Nd)
+      (worldOwned post (S0' ++ [t1, t2]) Nd0') := by
+    intro o ho
+    unfold worldOwned at ho
+    rcases List.mem_append.1 ho with h1 | hnd
+    · rcases List.mem_append.1 h1 with htab | hfix
+      · rw [List.flatMap_append] at htab
+        rcases List.mem_append.1 htab with htab' | htab_loc
+        · have ho0 : o ∈ worldOwned post S0' Nd0' :=
+            List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl htab')))
+          rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+          · exact Or.inl rfl
+          · exact Or.inr (Or.inl ⟨j, hsub_ow0 j hj0, hin_j⟩)
+          · exact Or.inr (Or.inr hfresh)
+        · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil, List.mem_append] at htab_loc
+          rcases htab_loc with ho_t1 | ho_t2
+          · rw [hfp_t1] at ho_t1
+            exact Or.inr (Or.inl ⟨o, List.mem_append.2 (Or.inl (List.mem_append.2
+              (Or.inl (List.mem_flatMap.2 ⟨t1, ht1_S, ho_t1⟩)))), ⟨le_rfl, le_rfl⟩⟩)
+          · rw [hfp_t2] at ho_t2
+            exact Or.inr (Or.inl ⟨o, List.mem_append.2 (Or.inl (List.mem_append.2
+              (Or.inl (List.mem_flatMap.2 ⟨t2, ht2_S, ho_t2⟩)))), ⟨le_rfl, le_rfl⟩⟩)
+      · have ho0 : o ∈ worldOwned post S0' Nd0' :=
+          List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hfix)))
+        rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+        · exact Or.inl rfl
+        · exact Or.inr (Or.inl ⟨j, hsub_ow0 j hj0, hin_j⟩)
+        · exact Or.inr (Or.inr hfresh)
+    · have ho0 : o ∈ worldOwned post S0' Nd0' := List.mem_append.2 (Or.inr hnd)
+      rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+      · exact Or.inl rfl
+      · exact Or.inr (Or.inl ⟨j, hsub_ow0 j hj0, hin_j⟩)
+      · exact Or.inr (Or.inr hfresh)
+  have hfr_both : FrameOutside s post (worldOwned s S Nd ++ R s ++ [freeGap s]) (heapFree s) := by
+    intro a hkeep hfresh
+    refine hfr0 a (fun j hj hcj => hkeep j ?_ hcj) hfresh
+    rcases List.mem_append.1 hj with hj12 | hfg
+    · apply List.mem_append.2; left
+      rcases List.mem_append.1 hj12 with hj0 | hjR
+      · exact List.mem_append.2 (Or.inl (hsub_ow0 j hj0))
+      · exact List.mem_append.2 (Or.inr hjR)
+    · exact List.mem_append.2 (Or.inr hfg)
   exact ⟨S0', Nd0', hW_both, by simp, by simp, ht1_unass, ht2_unass,
-    hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hQ0⟩
+    hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hQ0, hog_both, hfr_both⟩
+
+theorem mptObjInWith_erase_sub_csr {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nm : List Nat} {m t : Nat}
+    (hm : MptObjInWith s S Nm m) :
+    MptObjInWith s (S.erase t) Nm m :=
+  ⟨hm.1, hm.2.1,
+    fun u hu => hm.2.2.1 u (List.mem_of_mem_erase hu),
+    hm.2.2.2.1, hm.2.2.2.2.1, hm.2.2.2.2.2.1,
+    fun o ho => ⟨(hm.2.2.2.2.2.2 o ho).1,
+      fun u hu => (hm.2.2.2.2.2.2 o ho).2.1 u (List.mem_of_mem_erase hu),
+      (hm.2.2.2.2.2.2 o ho).2.2⟩⟩
+
+theorem mptObjInWith_adjoin_local_csr {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nm : List Nat} {m t : Nat}
+    (hm : MptObjInWith s S Nm m)
+    (hdisj : ∀ o ∈ mptObjIvls s Nm m, ∀ i ∈ htabFootprint s t, Disj o i) :
+    MptObjInWith s (S ++ [t]) Nm m := by
+  refine ⟨hm.1, hm.2.1, ?_, hm.2.2.2.1, hm.2.2.2.2.1, hm.2.2.2.2.2.1, ?_⟩
+  · intro u hu i hi
+    rcases List.mem_append.1 hu with huS | hut
+    · exact hm.2.2.1 u huS i hi
+    · simp only [List.mem_singleton] at hut; subst hut
+      exact hdisj (m, 16) (by simp [mptObjIvls]) i hi
+  · intro o ho
+    refine ⟨(hm.2.2.2.2.2.2 o ho).1, ?_, (hm.2.2.2.2.2.2 o ho).2.2⟩
+    intro u hu i hi
+    rcases List.mem_append.1 hu with huS | hut
+    · exact (hm.2.2.2.2.2.2 o ho).2.1 u huS i hi
+    · simp only [List.mem_singleton] at hut; subst hut
+      exact hdisj o (List.mem_cons_of_mem _ ho) i hi
+
+theorem worldStep_two_local_liveMpt_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {S Nd Nm : List Nat} {t1 t2 m : Nat}
+    (hs : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht1_S : t1 ∈ S) (ht2_S : t2 ∈ S) (hne : t1 ≠ t2)
+    (ht1_loc : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t1)
+    (ht2_loc : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t2)
+    (hstep : WorldStep R gw keep Q s r post)
+    (hbe : post.be = s.be) (hag : AllocatorGrows s post)
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR_ti : IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hsep : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 →
+      ∀ j ∈ worldOwned s S Nd ++ R s ++ [freeGap s],
+        (j.1 % 8 = 0 ∧ j.2 % 8 = 0 ∧ Disj o j) ∨ j.1 + j.2 + 8 ≤ o.1) :
+    ∃ S0' Nd',
+      WorldTypedWith post (S0' ++ [t1, t2]) Nd' ∧
+      t1 ∈ S0' ++ [t1, t2] ∧ t2 ∈ S0' ++ [t1, t2] ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t1) ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t2) ∧
+      htabFootprint post t1 = htabFootprint s t1 ∧
+      htabFootprint post t2 = htabFootprint s t2 ∧
+      hdr post t1 0 = hdr s t1 0 ∧ hdr post t2 0 = hdr s t2 0 ∧
+      MptObjInWith post (S0' ++ [t1, t2]) Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m ∧
+      Q s r post S0' Nd' ∧
+      OwnedGrows s post (worldOwned s S Nd)
+        (worldOwned post (S0' ++ [t1, t2]) Nd') := by
+  obtain ⟨S0', Nd', hW_both, ht1', ht2', ht1_unass, ht2_unass,
+    hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hQ0, hog_both, hfr_both⟩ :=
+    worldStep_preserves_two_local_tables_csr hs hW ht1_S ht2_S hne ht1_loc ht2_loc
+      hstep hR_z hR_ti
+  have hfa : (heapFree s).1 % 8 = 0 ∧ (heapFree s).2 % 8 = 0 := by
+    have hal := hs.2.2.2.2.2.2.1
+    have hlim : heapLimit % 8 = 0 := by decide
+    dsimp [heapFree]
+    exact ⟨hal, by omega⟩
+  have hf : IvlsDisj (mptObjIvls s Nm m) [heapFree s] := by
+    intro o ho j hj
+    obtain rfl := List.mem_singleton.mp hj
+    by_cases hz : o.2 = 0
+    · exact Or.inl hz
+    · exact P3MptSet.disj_allocated_heapFree hs.2 (mptObjInWith_allocated_csr hm o ho hz)
+  obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hstep.1 hbe hag
+    hm hd hog_both hfr_both hsep hfa hf
+  exact ⟨S0', Nd', hW_both, ht1', ht2', ht1_unass, ht2_unass,
+    hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hm', hd', heq, hQ0, hog_both⟩
+
+theorem mptObjStep_preserves_two_local_tables_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {S Nd Nm : List Nat} {t1 t2 : Nat}
+    (hAs : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht1_S : t1 ∈ S) (ht2_S : t2 ∈ S) (hne : t1 ≠ t2)
+    (ht1_loc : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t1)
+    (ht2_loc : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t2)
+    (hm : MptObjInWith s S Nm (locN s "m"))
+    (hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd))
+    (hstep : MptObjStep R gw keep s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR_ti : IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hRN : IvlsDisj (R s) (nodeExtents s Nd)) :
+    ∃ S0' Nd' Nm',
+      WorldTypedWith post (S0' ++ [t1, t2]) Nd' ∧
+      t1 ∈ S0' ++ [t1, t2] ∧ t2 ∈ S0' ++ [t1, t2] ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t1) ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t2) ∧
+      htabFootprint post t1 = htabFootprint s t1 ∧
+      htabFootprint post t2 = htabFootprint s t2 ∧
+      hdr post t1 0 = hdr s t1 0 ∧ hdr post t2 0 = hdr s t2 0 ∧
+      MptObjInWith post (S0' ++ [t1, t2]) Nm' (locN s "m") ∧
+      IvlsDisj (mptObjIvls post Nm' (locN s "m")) (nodeExtents post Nd') ∧
+      OwnedGrows s post (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
+        (worldOwned post (S0' ++ [t1, t2]) Nd' ++ mptObjIvls post Nm' (locN s "m")) ∧
+      FrameOutside s post
+        (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s ++ [freeGap s])
+        (heapFree s) := by
+  have hAp := hstep.1
+  obtain ⟨S1', _, _, hsub1, hW1', _, _, _, _⟩ :=
+    mptObjStep_parts_csr hstep hW hm hd hR_ti hRN
+  have ht1_S1' : t1 ∈ S1' := hsub1 t1 ht1_S
+  have ht2_S1' : t2 ∈ S1' := hsub1 t2 ht2_S
+  let S_1 := S.erase t1
+  let S0 := S_1.erase t2
+  have hW_1 : WorldTypedWith s S_1 Nd := worldTypedWith_erase_local hW ht1_loc
+  have hW0 : WorldTypedWith s S0 Nd := worldTypedWith_erase_local hW_1 ht2_loc
+  have hm0 : MptObjInWith s S0 Nm (locN s "m") :=
+    mptObjInWith_erase_sub_csr (mptObjInWith_erase_sub_csr hm)
+  have hsub0 : ∀ u ∈ S0, u ∈ S :=
+    fun u hu => List.mem_of_mem_erase (List.mem_of_mem_erase hu)
+  have hsub_ti0 : ∀ i ∈ worldTypedIvls s S0 Nd, i ∈ worldTypedIvls s S Nd :=
+    fun i hi => worldTypedIvls_erase_sub_csr s S Nd t1 i
+      (worldTypedIvls_erase_sub_csr s S_1 Nd t2 i hi)
+  have hsub_ow0 : ∀ j ∈ worldOwned s S0 Nd, j ∈ worldOwned s S Nd :=
+    fun j hj => worldOwned_erase_sub_csr s S Nd t1 j
+      (worldOwned_erase_sub_csr s S_1 Nd t2 j hj)
+  have hR_ti0 : IvlsDisj (R s) (worldTypedIvls s S0 Nd ++ mptObjIvls s Nm (locN s "m")) := by
+    intro x hx i hi
+    rcases List.mem_append.1 hi with hi_w | hi_m
+    · exact hR_ti x hx i (List.mem_append.2 (Or.inl (hsub_ti0 i hi_w)))
+    · exact hR_ti x hx i (List.mem_append.2 (Or.inr hi_m))
+  obtain ⟨S0', Nd0', Nm0', _, hW0', hm0', hd0', hog0, hfr0⟩ :=
+    mptObjStep_parts_csr hstep hW0 hm0 hd hR_ti0 hRN
+  obtain ⟨hT, _, _, hTr⟩ := hW
+  have ht1_not_S0 : t1 ∉ S0 := fun hm_in =>
+    ((List.Nodup.mem_erase_iff hT.1).1 (List.mem_of_mem_erase hm_in)).1 rfl
+  have ht2_not_S0 : t2 ∉ S0 := fun hm_in =>
+    ((List.Nodup.mem_erase_iff (hT.1.erase t1)).1 hm_in).1 rfl
+  have hsep : heapLimit ≤ scratchStart := by decide
+  obtain ⟨_, hs_hp, hs_fm, hs_sc, _⟩ := hAs.2
+  obtain ⟨_, hp_hp, _, _, _⟩ := hAp.2
+  have hm_z_al : ∀ j ∈ mptObjIvls s Nm (locN s "m"), j.2 = 0 → j.1 % 8 = 0 := by
+    intro j hj hj0
+    rcases List.mem_cons.1 hj with rfl | hj_ext
+    · dsimp at hj0; omega
+    · obtain ⟨n, hn, hj_np⟩ := List.mem_flatMap.1 hj_ext
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hj_np
+      rcases hj_np with rfl | rfl
+      · have hsz : 32 ≤ nodeSize (memW s n) := by unfold nodeSize; split_ifs <;> omega
+        dsimp [nodeIvl] at hj0; omega
+      · by_cases hp : (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0
+        · rw [show nodePath s n = (memW s (n + 32), memW s (n + 40)) from if_pos hp] at hj0
+          exact absurd hj0 hp.2
+        · rw [show nodePath s n = (0, 0) from if_neg hp]; simp
+  have htab_surv : ∀ {t : Nat} (htS : t ∈ S) (htS1' : t ∈ S1') (ht0 : t ∉ S0),
+      HtabWF post t ∧ htabFootprint post t = htabFootprint s t ∧ hdr post t 0 = hdr s t 0 ∧
+      (∀ i ∈ htabFootprint post t, Allocated post i ∧
+        (∀ o ∈ worldOwned post S0' Nd0', Disj i o) ∧
+        (∀ o ∈ mptObjIvls post Nm0' (locN s "m"), Disj o i)) := by
+    intro t htS htS1' ht0
+    have hwf_s := (hT.2.1 t htS).1
+    have hdisj_ow0 : ∀ i ∈ htabFootprint s t,
+        ∀ j ∈ worldOwned s S0 Nd ++ mptObjIvls s Nm (locN s "m"), Disj i j := by
+      intro i hi j hj
+      rcases List.mem_append.1 hj with hj_ow | hj_m
+      · unfold worldOwned at hj_ow
+        rcases List.mem_append.1 hj_ow with h1 | hnd
+        · rcases List.mem_append.1 h1 with htab | hfix
+          · obtain ⟨u, hu0, hj_fp⟩ := List.mem_flatMap.1 htab
+            exact hT.2.2.1 t htS u (hsub0 u hu0) (fun heq => ht0 (heq ▸ hu0)) i hi j hj_fp
+          · exact ((hT.2.1 t htS).2 i hi).2 j hfix
+        · exact ((hTr.2.1 j hnd).1 t htS i hi).flip
+      · rcases List.mem_cons.1 hj_m with rfl | hj_ext
+        · exact (hm.2.2.1 t htS i hi).flip
+        · exact ((hm.2.2.2.2.2.2 j hj_ext).2.1 t htS i hi).flip
+    have hunhit_t : ∀ i ∈ htabFootprint s t, GbodyC17ToC21Common.IvlUnhit s post i := by
+      intro i hi
+      have hw := (hwf_s.1 i hi).2
+      have hal_i := ((hT.2.1 t htS).2 i hi).1
+      intro a ha8 hhit
+      apply hfr0 a
+      · intro j hj hcj
+        rcases List.mem_append.1 hj with hj12 | hfg
+        · rcases List.mem_append.1 hj12 with hj_owm | hj_R
+          · have hza : j.2 = 0 → j.1 % 8 = 0 := by
+              rcases List.mem_append.1 hj_owm with hj_ow | hj_m
+              · exact worldOwned_zero_aligned hW0 j hj_ow
+              · exact hm_z_al j hj_m
+            exact GbodyC17ToC21Common.not_cellHits_of_disj hw.1 hw.2.1 ha8 hza hhit
+              (hdisj_ow0 i hi j hj_owm) hcj
+          · have hi_ti : i ∈ worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m") := by
+              apply List.mem_append.2; left
+              unfold worldTypedIvls
+              apply List.mem_append.2; left; apply List.mem_append.2; left
+              apply List.mem_append.2; left; apply List.mem_append.2; left
+              apply List.mem_append.2; left
+              exact List.mem_flatMap.2 ⟨t, htS, hi⟩
+            exact GbodyC17ToC21Common.not_cellHits_of_disj hw.1 hw.2.1 ha8
+              (hR_z j hj_R) hhit (hR_ti j hj_R i hi_ti).flip hcj
+        · simp only [List.mem_singleton] at hfg; subst hfg
+          obtain ⟨hc1, hc2⟩ := hhit
+          obtain ⟨hj1, hj2⟩ := hcj
+          unfold freeGap at hj1 hj2; dsimp at hj1 hj2
+          rcases hal_i with ⟨_, hhi_i⟩ | ⟨hlo_i, _⟩ <;> omega
+      · intro ⟨hf1, hf2⟩
+        obtain ⟨hc1, hc2⟩ := hhit
+        unfold heapFree at hf1 hf2; dsimp at hf1 hf2
+        rcases hal_i with ⟨_, hhi_i⟩ | ⟨hlo_i, _⟩ <;> omega
+    have hwf_post : HtabWF post t :=
+      GbodyC17ToC21Common.htabWF_congr_unhit hAs.1 hAp.1 hwf_s hunhit_t
+    have ht_fp : (t, 88) ∈ htabFootprint s t := by simp [htabFootprint]
+    have ht8 : t % 8 = 0 := (hwf_s.1 _ ht_fp).2.1
+    have h264 : heapEnd ≤ 2 ^ 64 := by decide
+    have hhi : t + 88 ≤ 2 ^ 64 := by have := (hwf_s.1 _ ht_fp).1.2; omega
+    obtain ⟨hhdr_eq, hfp_eq⟩ :=
+      GbodyC17ToC21Common.htabFootprint_eq_of_hdr_unhit ht8 hhi (hunhit_t _ ht_fp)
+    refine ⟨hwf_post, hfp_eq, hhdr_eq 0 (by omega), fun i hi => ?_⟩
+    have hal_post_i : Allocated post i := ((hW1'.1.2.1 t htS1').2 i hi).1
+    rw [hfp_eq] at hi
+    have hal_s_i : Allocated s i := ((hT.2.1 t htS).2 i hi).1
+    have hdisj_comb : ∀ o ∈ worldOwned post S0' Nd0' ++ mptObjIvls post Nm0' (locN s "m"),
+        Disj i o := by
+      intro o ho
+      rcases hog0 o ho with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+      · exact GbodyC17ToC21Common.disj_zero_right i
+      · exact GbodyC17ToC21Common.disj_of_inside_right hin_j (hdisj_ow0 i hi j hj0)
+      · rcases hal_s_i with ⟨_, hhi_i⟩ | ⟨hlo_i, _⟩
+        · exact Or.inr (Or.inr (Or.inl (Nat.le_trans hhi_i hfresh.1)))
+        · exact Or.inr (Or.inr (Or.inr (by unfold Inside at hfresh; omega)))
+    refine ⟨hal_post_i,
+      fun o ho => hdisj_comb o (List.mem_append.2 (Or.inl ho)),
+      fun o ho => (hdisj_comb o (List.mem_append.2 (Or.inr ho))).flip⟩
+  obtain ⟨hwf_t1, hfp_t1, hhdr_t1, hsurv_t1⟩ := htab_surv ht1_S ht1_S1' ht1_not_S0
+  obtain ⟨hwf_t2, hfp_t2, hhdr_t2, hsurv_t2⟩ := htab_surv ht2_S ht2_S1' ht2_not_S0
+  obtain ⟨_, _, ht1_unass, hW_t1⟩ := adjoin_local_table hW0' hwf_t1
+    (fun i hi => ⟨(hsurv_t1 i hi).1, (hsurv_t1 i hi).2.1⟩) (klen := hdr s t1 0) hhdr_t1
+  have hsurv_t2' : ∀ i ∈ htabFootprint post t2,
+      Allocated post i ∧ ∀ o ∈ worldOwned post (S0' ++ [t1]) Nd0', Disj i o := by
+    intro i hi
+    refine ⟨(hsurv_t2 i hi).1, fun o ho => ?_⟩
+    unfold worldOwned at ho
+    rcases List.mem_append.1 ho with h1 | hnd
+    · rcases List.mem_append.1 h1 with htab | hfix
+      · rw [List.flatMap_append] at htab
+        rcases List.mem_append.1 htab with htab' | htab_t1
+        · apply (hsurv_t2 i hi).2.1 o
+          unfold worldOwned; exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl htab')))
+        · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil] at htab_t1
+          rw [hfp_t2] at hi; rw [hfp_t1] at htab_t1
+          exact hT.2.2.1 t2 ht2_S t1 ht1_S hne.symm i hi o htab_t1
+      · apply (hsurv_t2 i hi).2.1 o
+        unfold worldOwned; exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hfix)))
+    · apply (hsurv_t2 i hi).2.1 o
+      unfold worldOwned; exact List.mem_append.2 (Or.inr hnd)
+  obtain ⟨_, _, ht2_unass, hW_both⟩ :=
+    adjoin_local_table hW_t1 hwf_t2 hsurv_t2' (klen := hdr s t2 0) hhdr_t2
+  have hm_t1 : MptObjInWith post (S0' ++ [t1]) Nm0' (locN s "m") :=
+    mptObjInWith_adjoin_local_csr hm0' (fun o ho i hi => (hsurv_t1 i hi).2.2 o ho)
+  have hm_both : MptObjInWith post ((S0' ++ [t1]) ++ [t2]) Nm0' (locN s "m") :=
+    mptObjInWith_adjoin_local_csr hm_t1 (fun o ho i hi => (hsurv_t2 i hi).2.2 o ho)
+  have hassoc : (S0' ++ [t1]) ++ [t2] = S0' ++ [t1, t2] := by simp
+  rw [hassoc] at hW_both hm_both
+  have hog_both : OwnedGrows s post (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))
+      (worldOwned post (S0' ++ [t1, t2]) Nd0' ++ mptObjIvls post Nm0' (locN s "m")) := by
+    have hsub_owm : ∀ j ∈ worldOwned s S0 Nd ++ mptObjIvls s Nm (locN s "m"),
+        j ∈ worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") := by
+      intro j hj
+      rcases List.mem_append.1 hj with hj0 | hjm
+      · exact List.mem_append.2 (Or.inl (hsub_ow0 j hj0))
+      · exact List.mem_append.2 (Or.inr hjm)
+    intro o ho
+    rcases List.mem_append.1 ho with ho_ow | ho_m
+    · unfold worldOwned at ho_ow
+      rcases List.mem_append.1 ho_ow with h1 | hnd
+      · rcases List.mem_append.1 h1 with htab | hfix
+        · rw [List.flatMap_append] at htab
+          rcases List.mem_append.1 htab with htab' | htab_loc
+          · have ho0 : o ∈ worldOwned post S0' Nd0' ++ mptObjIvls post Nm0' (locN s "m") :=
+              List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl htab')))))
+            rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+            · exact Or.inl rfl
+            · exact Or.inr (Or.inl ⟨j, hsub_owm j hj0, hin_j⟩)
+            · exact Or.inr (Or.inr hfresh)
+          · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil, List.mem_append] at htab_loc
+            rcases htab_loc with ho_t1 | ho_t2
+            · rw [hfp_t1] at ho_t1
+              exact Or.inr (Or.inl ⟨o, List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl
+                (List.mem_append.2 (Or.inl (List.mem_flatMap.2 ⟨t1, ht1_S, ho_t1⟩)))))),
+                ⟨le_rfl, le_rfl⟩⟩)
+            · rw [hfp_t2] at ho_t2
+              exact Or.inr (Or.inl ⟨o, List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl
+                (List.mem_append.2 (Or.inl (List.mem_flatMap.2 ⟨t2, ht2_S, ho_t2⟩)))))),
+                ⟨le_rfl, le_rfl⟩⟩)
+        · have ho0 : o ∈ worldOwned post S0' Nd0' ++ mptObjIvls post Nm0' (locN s "m") :=
+            List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hfix)))))
+          rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+          · exact Or.inl rfl
+          · exact Or.inr (Or.inl ⟨j, hsub_owm j hj0, hin_j⟩)
+          · exact Or.inr (Or.inr hfresh)
+      · have ho0 : o ∈ worldOwned post S0' Nd0' ++ mptObjIvls post Nm0' (locN s "m") :=
+          List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr hnd)))
+        rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+        · exact Or.inl rfl
+        · exact Or.inr (Or.inl ⟨j, hsub_owm j hj0, hin_j⟩)
+        · exact Or.inr (Or.inr hfresh)
+    · have ho0 : o ∈ worldOwned post S0' Nd0' ++ mptObjIvls post Nm0' (locN s "m") :=
+        List.mem_append.2 (Or.inr ho_m)
+      rcases hog0 o ho0 with rfl | ⟨j, hj0, hin_j⟩ | hfresh
+      · exact Or.inl rfl
+      · exact Or.inr (Or.inl ⟨j, hsub_owm j hj0, hin_j⟩)
+      · exact Or.inr (Or.inr hfresh)
+  have hfr_both : FrameOutside s post
+      (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s ++ [freeGap s])
+      (heapFree s) := by
+    intro a hkeep hfresh
+    refine hfr0 a (fun j hj hcj => hkeep j ?_ hcj) hfresh
+    rcases List.mem_append.1 hj with hj12 | hfg
+    · apply List.mem_append.2; left
+      rcases List.mem_append.1 hj12 with hj0m | hjR
+      · apply List.mem_append.2; left
+        rcases List.mem_append.1 hj0m with hj0 | hjm
+        · exact List.mem_append.2 (Or.inl (hsub_ow0 j hj0))
+        · exact List.mem_append.2 (Or.inr hjm)
+      · exact List.mem_append.2 (Or.inr hjR)
+    · exact List.mem_append.2 (Or.inr hfg)
+  exact ⟨S0', Nd0', Nm0', hW_both, by simp, by simp, ht1_unass, ht2_unass,
+    hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hm_both, hd0', hog_both, hfr_both⟩
+
+theorem pBounded_return_csr {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (e : ExpHOL 64) : PBounded P (.return e) 0 :=
+  ⟨TerminatingProgBoundedOn.of_clock (fun s => by
+      rw [evaluateHOLFiniteState_return]
+      split
+      · rfl
+      · split <;> rfl),
+   ⟨fun s _ _ _ hr => absurd hr (return_ne_none s e)⟩⟩
+
+theorem pBounded_call0_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (post : PanSemStateFiniteExact 64 F)
+      (v : ValueHOL 64), s.code = originalRuntimeCode → P s →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      P { post with locals := s.locals }) :
+    PBounded P (.call (some (none, none)) fname args) (B + 1) :=
+  ⟨TerminatingProgBoundedOn.call_on hfb none args hentry,
+   Hoare.call0 hspec hentry (fun s callee post v hc hP hQc _ => hret s callee post v hc hP hQc)
+     (fun _ _ hr _ h => absurd h hr)⟩
+
+theorem pBounded_callLocal_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hentry : CallEntryOn P Pc fname args)
+    (hres : DecCallResumeOn P P name fname args) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) := by
+  refine ⟨TerminatingProgBoundedOn.call_on hfb (some (.local, name)) args hentry, ?_⟩
+  refine ⟨fun {F} s hc hP _ hr => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · rw [ha] at hr; simp at hr
+  · simp only [ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hb] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh]
+              split at hr
+              · rename_i hv
+                rw [if_pos hv]
+                exact hres s vs body callee ret v post hc hP ha hl hb
+              · simp at hr
+            · simp at hr
+          | _ => simp at hr
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
