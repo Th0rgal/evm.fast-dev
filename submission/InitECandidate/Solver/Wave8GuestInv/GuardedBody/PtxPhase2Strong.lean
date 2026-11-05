@@ -14021,4 +14021,68 @@ theorem phase2_htabExit_backing {F : Type} {s post : PanSemStateFiniteExact 64 F
     · simp
     · norm_num
 
+/-- Table calls preserve backing even though callee locals do not retain the transaction index. -/
+theorem phase2_htabExit_callEntry_backing {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hs : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hb : R16Shards.TxBacking s)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    R16Shards.TxBacking {post with locals := s.locals} := by
+  have hu : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → i.2 % 8 = 0 → IvlUnhit s post i := by
+    intro i hi hn hi8
+    exact phase2_htabExit_fixed_unhit
+      ((arenaReady_with_locals s callee (s.clock - 1)).mpr hs)
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      ht hx hi hn hi8
+  apply phase2_backing_of_header_unhit hs he hw hb
+  · have hg := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    simp only [globN, ← hg]; rfl
+  · apply hu _ _ (by simp) (by norm_num)
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  · intro k hk
+    apply hu _ _ (by simp) (by norm_num)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+
+/-- The concrete table insertion shared by both account lookup bodies preserves backing. -/
+theorem phase2_htab_set_ts8_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hts⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1.1 "ts" 8
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "ts" + 8) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "ts" + 8) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl
+    harg (by rw [hr]; simp)
+  rw [hr] at hx
+  exact phase2_htabExit_callEntry_backing callee hp.1.1 hp.2.1 hw
+    (ht.symm ▸ hmem) hp.2.2 (hx v rfl)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
