@@ -3587,4 +3587,17 @@ theorem phase2_address_copy_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
       show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- The AST reset preserves the shared witness before the key-copy pass. -/
+theorem phase2_address_copy_reset_hoare :
+    Hoare PtxAddressCopyInv
+      (.assign .local (ofString "i") (.const 0))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by
+      simpa [evalHOLExact] using he.symm
+    subst v
+    exact fun _ => phase2_address_copy_reset s hp
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
