@@ -6,6 +6,7 @@ import InitECandidate.Solver.GuestFrameMemKeep
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M28.ww_memzero
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M29.zv_memzero
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.U256WsSpecs
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FrameStartFinishChild
 
 /-! # `HeadMemAligned` as a frame-chain invariant through `run_frames`
 
@@ -8353,4 +8354,43 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
   exact hTs a hE hL hAr hF1
 
 end IcsRun
+
+/-! ## Create-finish prelude interface
+
+The frame-start/finish-child leaf is independent of this bridge.  Transport its
+chain invariant explicitly, so callers can use `CreateFinishSpecs` without
+identifying two separately recursive definitions by reduction.
+-/
+
+theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
+    ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
+  induction xs with
+  | nil => rfl
+  | cons a rest ih =>
+    cases rest with
+    | nil => rfl
+    | cons b tail =>
+      exact and_congr Iff.rfl ih
+
+theorem headMemChainWF_iff_finishChild {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    HeadMemChainWF s ↔ EvmEkFk.HeadMemChainWF s := by
+  exact and_congr Iff.rfl (and_congr Iff.rfl (chainLinks_iff_finishChild _ _))
+
+/-- The create-finish prelude preserves the aligned chain invariant whenever it
+falls through.  Its callee requirements are exactly `CreateFinishSpecs`. -/
+theorem fcPrelude_headMemChainWF (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
+    {s0 s1 : PanSemStateFiniteExact 64 F}
+    (hRel : EvmEkFk.PreludeRel s0 s1) (hAligned : HeadMemChainWF s0)
+    (hnt : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 ≠ some .timeOut)
+    (hflow : (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).1 = none)
+    (hfmp : globN (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).2 "frame_mem_ptr" =
+      globN s0 "frame_mem_ptr") :
+    HeadMemChainWF (evaluateHOLFiniteState s1 EvmEkFk.fcPrelude).2 := by
+  have hpost := (EvmEkFk.fcPrelude_step hCF hRel hnt).1 hflow
+  apply headMemChainWF_of_agree hAligned hpost.chain_eq hpost.cells
+  · have hh := congrArg List.head? hpost.chain_eq
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).1
+  · exact hfmp
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
