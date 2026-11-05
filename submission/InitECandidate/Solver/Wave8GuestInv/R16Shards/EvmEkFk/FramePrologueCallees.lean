@@ -3373,6 +3373,46 @@ theorem transfer_allocated_store_step {F : Type}
   obtain ⟨heff, hl⟩ := m23_bre_of_store_word halloc.1.1.1.1.memaddrs hrun hword hdst
   exact ⟨evmStepCC_of_allocated_heap_effect hInv halloc hmem hbe heff hin, heff, hl⟩
 
+theorem transfer_log_address_store_spec {F : Type}
+    (s allocated : PanSemStateFiniteExact 64 F) (logw sysw : BitVec 64)
+    (hInv : EvmInv s) (halloc : EvmStepCC ["heap_ptr"] s allocated)
+    (hmem : allocated.memory = s.memory) (hbe : allocated.be = s.be)
+    (hlog : allocated.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hsys : allocated.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)))
+    (hwords : WordsOK allocated (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    let out := evaluateHOLFiniteState allocated
+      (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address")))
+    out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
+      memW out.2 logw.toNat = globN out.2 "vm_system_address" ∧
+      ByteRegionEffect allocated out.2 [(logw.toNat, 40)] ∧ out.2.locals = allocated.locals := by
+  dsimp only
+  have hd : allocated.memaddrs logw := by
+    have hw := hwords.2.2 0 (by omega)
+    obtain ⟨w, hdom, _⟩ := hw
+    simpa using hdom
+  have hrun : evaluateHOLFiniteState allocated
+      (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address"))) =
+      (none, { allocated with memory := fun a => if a = logw then .word sysw else allocated.memory a }) := by
+    simp [evaluateHOLFiniteState_store, evalHOLExact, evalListHOLExact, hlog, hsys,
+      wordOpHOL, wordOp, valueIsWord, valueWord, flattenHOL, panMemStoresHOL,
+      panMemStoreHOL, hd]
+  rw [hrun]
+  obtain ⟨hstep, heff, hl⟩ := transfer_allocated_store_step hInv halloc hmem hbe hrun
+    (Rl := [(logw.toNat, 40)])
+    (fun v hv => ⟨sysw, by simpa [evalHOLExact, hsys] using hv.symm⟩)
+    (fun addr ha _ => by
+      have heq : addr = logw := by
+        simpa [evalHOLExact, evalListHOLExact, hlog, wordOpHOL, wordOp, valueIsWord, valueWord]
+          using ha.symm
+      subst addr
+      exact ⟨(logw.toNat, 40), by simp, le_rfl, by omega⟩)
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin)
+  refine ⟨rfl, hstep, ?_, heff, hl⟩
+  simp [memW, globN, hsys]
+
 private theorem word_dom_lt_heapEnd_local {s_ma : BitVec 64 → Prop} (hma : s_ma = ordinaryDomain)
     (addr : BitVec 64) (hdom : s_ma addr) :
     addr.toNat + 8 ≤ heapEnd := by
