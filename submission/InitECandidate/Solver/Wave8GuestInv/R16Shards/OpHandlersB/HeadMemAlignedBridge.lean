@@ -5919,6 +5919,25 @@ theorem rollback_child_access_run {F : Type} (s : PanSemStateFiniteExact 64 F)
 
 end RollbackRun
 
+section ReadOnlyRun
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+/-- `address_to_u256(a)` is read-only: on a normal return only locals/clock change. -/
+theorem address_to_u256_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) :
+    Ret s (sourceFnBody Guest.Software.guestFn_address_to_u256) (fun _ post =>
+      post = { s with locals := post.locals, clock := post.clock }) := by
+  intro v hv
+  have hsafe := R14Shards.OpHandlersA.evaluate_readOnlyProg R14Shards.OpHandlersA.opRoCallees
+    R14Shards.OpHandlersA.opRoCallees_good
+    (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+      (extractFn Guest.Software.guestFn_address_to_u256).body) rfl s hcode
+  exact hsafe.to_resumes (Or.inl ⟨v, hv⟩)
+
+end ReadOnlyRun
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
