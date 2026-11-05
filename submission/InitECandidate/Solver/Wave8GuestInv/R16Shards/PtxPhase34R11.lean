@@ -6092,7 +6092,9 @@ theorem hoare_stableCopy_loop_done_frame
         (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
           .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
           (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
-      (fun r t => r = none → PtxReceiptsDone t ∧ Frame t) := by
+      (fun r t => r = none → PtxReceiptsDone t ∧ Frame t ∧ StableCopyLoopInv t ∧
+        evalAt t (.cmp .less (.var .local (ofString "i"))
+          (.var .local (ofString "nl"))) = some (.val (.word 0))) := by
   let body : ProgHOL 64 := .seq
     (.store (.op .add [.var .local (ofString "stable_lp"),
       .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
@@ -6109,7 +6111,9 @@ theorem hoare_stableCopy_loop_done_frame
       st.clock = k → st.code = originalRuntimeCode → (StableCopyLoopInv st ∧ Frame st) →
       evaluateHOLFiniteState st (.while
         (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl"))) body) =
-        (none, post) → PtxReceiptsDone post ∧ Frame post from
+        (none, post) → PtxReceiptsDone post ∧ Frame post ∧ StableCopyLoopInv post ∧
+          evalAt post (.cmp .less (.var .local (ofString "i"))
+            (.var .local (ofString "nl"))) = some (.val (.word 0)) from
     this s.clock s rfl hc hp hrun
   intro k
   induction k using Nat.strongRecOn with
@@ -6161,7 +6165,7 @@ theorem hoare_stableCopy_loop_done_frame
         subst w
         simp at hrun
         obtain ⟨_, rfl⟩ := hrun
-        exact ⟨stableCopyLoopInv_done _ hp.1 hw, hp.2⟩
+        exact ⟨stableCopyLoopInv_done _ hp.1 hw, hp.2, hp.1, hw⟩
     · simp at hrun
 
 /-- The complete copy loop retains its coherent ownership frame. -/
@@ -6172,10 +6176,25 @@ theorem hoare_stableCopy_loop_ownedFrame :
           .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
           (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
       (fun r t => r = none → PtxReceiptsDone t ∧ StableCopyOwnedFrame t) := by
-  apply hoare_stableCopy_loop_done_frame StableCopyOwnedFrame
-    (hframe := hoare_stableCopy_body_ownedFrame)
-  intro F s hp
-  exact stableCopyOwnedFrame_with_locals s s.locals (s.clock - 1) rfl rfl rfl hp
+  have hf := hoare_stableCopy_loop_done_frame StableCopyOwnedFrame
+    (fun s hp => stableCopyOwnedFrame_with_locals s s.locals (s.clock - 1) rfl rfl rfl hp)
+    hoare_stableCopy_body_ownedFrame
+  exact ⟨fun s hc hp hnt hr => let h := hf.run s hc hp hnt hr; ⟨h.1, h.2.1⟩⟩
+
+/-- Normal copy-loop exit establishes ownership of the completed stable list. -/
+theorem hoare_stableCopy_loop_owned :
+    Hoare (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r t => r = none → PtxReceiptsDone t ∧ LogsWorldOwned t (locN t "stable_logs")) := by
+  have hf := hoare_stableCopy_loop_done_frame StableCopyOwnedFrame
+    (fun s hp => stableCopyOwnedFrame_with_locals s s.locals (s.clock - 1) rfl rfl rfl hp)
+    hoare_stableCopy_body_ownedFrame
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have h := hf.run s hc hp hnt hr
+  exact stableCopyLoopInv_done_owned _ h.2.2.1 h.2.1 h.2.2.2
 
 /-- The unframed copy-loop rule is the trivial-frame specialization. -/
 theorem hoare_stableCopy_loop_done :
