@@ -20,6 +20,54 @@ open InitE InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.GuestCodeLookup
 open InitECandidate.Solver.GuestTrapAndLookup
 
+def WitnessSliceOK {F : Type} (s : PanSemStateFiniteExact 64 F) (v : Nat) : Prop :=
+  WordsOK s (v, 16) ∧ Inside (v, 16) sourceBase (globN s "heap_ptr") ∧
+    memW s (v + 8) < 2 ^ 40 ∧
+    Inside (memW s v, memW s (v + 8)) sourceBase (globN s "heap_ptr")
+
+def WitnessDbAt {F : Type} (s : PanSemStateFiniteExact 64 F) (S Nd : List Nat) : Prop :=
+  globN s "ws" ≠ 0 →
+    let db := memW s (globN s "ws")
+    db ≠ 0 → HtabWF s db ∧ hdr s db 0 = 32 ∧
+      (∀ i ∈ htabFootprint s db, Inside i sourceBase (globN s "heap_ptr")) ∧
+      IvlsDisj (htabFootprint s db) (worldOwned s S Nd) ∧
+      ∀ v ∈ htabValues s db, WitnessSliceOK s v ∧
+        ∀ j ∈ worldOwned s S Nd, Disj (v, 16) j
+
+def WitnessDbOK {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ WitnessDbAt s S Nd
+
+def getStorageOriginalAvoids {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+   (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+   (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)]
+
+theorem witnessSliceOK_of_preserved {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {v : Nat} (h : WitnessSliceOK s v)
+    (hwords : WordsOK post (v, 16))
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hp : memW post v = memW s v)
+    (hn : memW post (v + 8) = memW s (v + 8)) :
+    WitnessSliceOK post v := by
+  refine ⟨hwords, ⟨h.2.1.1, le_trans h.2.1.2 hhp⟩, ?_, ?_⟩
+  · rw [hn]; exact h.2.2.1
+  · rw [hp, hn]
+    exact ⟨h.2.2.2.1, le_trans h.2.2.2.2 hhp⟩
+
+theorem witnessSliceOK_with_locals_clock {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {v : Nat} (h : WitnessSliceOK s v)
+    (L : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    WitnessSliceOK { s with locals := L, clock := k } v := h
+
+theorem witnessSliceOK_subslice {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {v p n : Nat} (h : WitnessSliceOK s v)
+    (hp : memW s v ≤ p) (hn : p + n ≤ memW s v + memW s (v + 8)) :
+    Inside (p, n) sourceBase (globN s "heap_ptr") ∧ n < 2 ^ 40 := by
+  obtain ⟨_, _, hlen, hlo, hhi⟩ := h
+  constructor
+  · exact ⟨le_trans hlo hp, le_trans hn hhi⟩
+  · omega
+
 theorem lookup_create_finish :
     originalRuntimeCode.lookup (ofString "create_finish") =
       some ((sourceFunctionEntry Guest.Software.guestFn_create_finish).2) :=
@@ -129,6 +177,36 @@ theorem ownedGrows_nodeExtents_of_fresh {F : Type}
     · rcases (hfresh x hx hxNd).2 with hz | hin
       · exact Or.inl hz
       · exact Or.inr (Or.inr hin)
+
+theorem keyIn_of_fresh_nibbles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat} {p len : Nat}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hNd : NodeHeap s Nd)
+    (hkinds : ∀ n ∈ Nd, memW post n = memW s n)
+    (hnib : NibblesOK post p len)
+    (hfresh : Inside (p, len) (globN s "heap_ptr") (globN post "heap_ptr")) :
+    KeyIn post Nd p len := by
+  by_cases hz : len = 0
+  · exact Or.inl hz
+  · right
+    have hlo : sourceBase ≤ globN s "heap_ptr" := hAs.1
+    have hhi : globN post "heap_ptr" ≤ heapLimit := hAp.2.1
+    refine ⟨hnib, Or.inl ⟨?_, hfresh.2⟩, ⟨?_, ?_⟩, ?_⟩
+    · exact Nat.le_trans hlo hfresh.1
+    · exact Nat.le_trans hlo hfresh.1
+    · exact Nat.le_trans hfresh.2 hhi
+    · intro n hn
+      have hd := allocated_disj_fresh_extent hAs hAp hhp (hNd.1 n hn).2.1 hfresh
+      have hivl : nodeIvl post n = nodeIvl s n := by
+        simp only [nodeIvl, hkinds n hn]
+      rw [hivl]
+      unfold Disj at hd ⊢
+      rcases hd with h | h | h | h
+      · exact Or.inr (Or.inl h)
+      · exact Or.inl h
+      · exact Or.inr (Or.inr (Or.inr h))
+      · exact Or.inr (Or.inr (Or.inl h))
 
 theorem rootIn_lt_word_limit {F : Type} {s : PanSemStateFiniteExact 64 F}
     {Nd : List Nat} {node : Nat} (hh : NodeHeap s Nd) (hr : RootIn Nd node) :

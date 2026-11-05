@@ -2454,4 +2454,878 @@ theorem mptObjStep_csrLiveAt {F : Type}
   exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm', hWp,
     hc', hr', hcl', hrl', hmp, hdp⟩
 
+theorem csrTablesAt_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (h : CsrTablesAt s cache roots) : WorldOK s := by
+  obtain ⟨hA, _, S, Nd, hW, _⟩ := h
+  exact ⟨hA, S, (worldTyped_iff_with s S).2 ⟨Nd, hW⟩⟩
+
+theorem csrLiveAt_mptObjReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (h : CsrLiveAt s cache roots (locN s "m")) :
+    MptObjReady s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, _, _, _, _, hm, hd⟩ := h
+  exact mptObjReady_of_parts_csr hA hW hm hd
+
+theorem htabExit_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots : Nat}
+    (hs : CsrTablesAt s cache roots)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrTablesAt post cache roots := by
+  obtain ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hwrs, hjrs, _⟩ :=
+    worldTypedWith_htab_set_local_csr hA hW htS htl hexit hbe
+  exact ⟨hexit.1, hne, S, Nd, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl⟩
+
+theorem htabExit_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hmp, hdp, _, hwrs, hjrs, _⟩ :=
+    htabExit_local_liveMpt_csr hA hW htS htl hexit hbe hm hd
+  exact ⟨hexit.1, hne, S, Nd, Nm, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl, hmp, hdp⟩
+
+theorem worldStep_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {cache roots : Nat}
+    (hs : CsrTablesAt s cache roots)
+    (hstep : WorldStep R gw keep Q s r post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR : ∀ S Nd, WorldTypedWith s S Nd →
+      IvlsDisj (R s) (worldTypedIvls s S Nd)) :
+    CsrTablesAt post cache roots := by
+  obtain ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩ := hs
+  obtain ⟨S', Nd', hWp, hc', hr', hcl', hrl', _⟩ :=
+    worldStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl
+      hstep hR_z (hR S Nd hW)
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', hWp, hc', hr', hcl', hrl'⟩
+
+theorem worldStep_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (hstep : WorldStep R gw keep Q s r post)
+    (hbe : post.be = s.be) (hag : AllocatorGrows s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR : ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm m))
+    (hcells : ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 →
+      ∀ a : BitVec 64, a.toNat % 8 = 0 → CellHits a.toNat o →
+        (∀ j ∈ worldOwned s S Nd ++ R s ++ [freeGap s], ¬ CellHits a.toNat j) ∧
+        ¬ CellHits a.toNat (heapFree s)) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have hR_all := hR S Nd Nm hW hm hd
+  have hR_wti : IvlsDisj (R s) (worldTypedIvls s S Nd) :=
+    fun r' hr' i hi => hR_all r' hr' i (List.mem_append_left _ hi)
+  obtain ⟨S', Nd', hWp, hc', hr', hcl', hrl', _, _, _, _, _, hog, hfr⟩ :=
+    worldStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl
+      hstep hR_z hR_wti
+  have hu : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → P3MptSet.IvlUnhit s post o := by
+    intro o ho hnz a ha hh
+    obtain ⟨hkeep, hfresh⟩ := hcells S Nd Nm hW hm hd o ho hnz a ha hh
+    exact hfr a hkeep hfresh
+  obtain ⟨hm', hd', _⟩ :=
+    mptObjInWith_transfer_csr hA hstep.1 hbe hag hm hd hog hu
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm, hWp,
+    hc', hr', hcl', hrl', hm', hd'⟩
+
+def CsrTabs : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrTablesAt s (locN s "cache") (locN s "new_roots")
+
+def CsrMpt (name : String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrLiveAt s (locN s "cache") (locN s "new_roots") (locN s name)
+
+theorem localsOnly_csrTabs : LocalsOnly ["cache", "new_roots"] CsrTabs := by
+  intro F s locals k hl hs
+  unfold CsrTabs
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp))]
+  exact localsFree_csrTablesAt _ _ s locals k hs
+
+theorem localsOnly_csrMpt (name : String) :
+    LocalsOnly ["cache", "new_roots", name] (CsrMpt name) := by
+  intro F s locals k hl hs
+  unfold CsrMpt
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp)),
+    locN_congr s locals k name (hl name (by simp))]
+  exact localsFree_csrLiveAt _ _ _ s locals k hs
+
+theorem csrTabs_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrTabs s) : WorldOK s := csrTablesAt_worldOK hs
+
+theorem csrMpt_tabs (name : String) {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrMpt name s) : CsrTabs s := csrLiveAt_tables hs
+
+def CsrBound (name : String) (bound : Nat)
+    (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => P s ∧ locN s name ≤ bound
+
+theorem localsOnly_csrBound {names : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : LocalsOnly names P) (name : String) (bound : Nat) :
+    LocalsOnly (name :: names) (CsrBound name bound P) := by
+  intro F s locals k hl hs
+  refine ⟨hP s locals k (fun n hn => hl n (by simp [hn])) hs.1, ?_⟩
+  change locN { s with locals := locals, clock := k } name ≤ bound
+  rw [locN_congr s locals k name (hl name (by simp))]
+  exact hs.2
+
+theorem callEntryOn_guestInv_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P GuestInv fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact guestInv_callEntry s callee (hP s hs)
+
+theorem pBounded_readOnlyLocal_csr
+    {names : List String} {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hP : LocalsOnly names P)
+    (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hfb : TerminatingFunBoundedOn GuestInv fname B)
+    (hro : ReadOnlyFn fname) (hne : ∀ n ∈ names, ofString n ≠ name) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) :=
+  pBounded_callLocal_csr hfb (callEntryOn_guestInv_csr hG fname args)
+    (hro.resumeOn hP hG name hne args)
+
+theorem funSpec_resumeOn_csr
+    {P Pc R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)}
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      R (setVarHOLFinite name v { post with locals := s.locals })) :
+    DecCallResumeOn P R name fname args := by
+  intro F s values body callee ret v post hc hs ha hl hb
+  have hq := FunSpec.at_lookup hspec s hc values body callee ret hl
+    (hentry s values body callee ret hc hs ha hl) (by rw [hb]; simp)
+  rw [hb] at hq
+  exact hret s values body callee ret v post hc hs ha hl hb hq
+
+theorem pBounded_specLocal_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      P (setVarHOLFinite name v { post with locals := s.locals })) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) :=
+  pBounded_callLocal_csr hfb hentry (funSpec_resumeOn_csr hspec hentry hret)
+
+theorem pBounded_readOnlyDecCall_csr
+    {names : List String} {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B Bc : Nat}
+    {shape : ShapeHOL} {cont : ProgHOL 64}
+    (hP : LocalsOnly names P)
+    (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hfb : TerminatingFunBoundedOn GuestInv fname B)
+    (hro : ReadOnlyFn fname) (hne : ∀ n ∈ names, ofString n ≠ name)
+    (hb : PBounded P cont Bc) :
+    PBounded P (.decCall name shape fname args cont) (B + Bc + 1) :=
+  PBounded.decCallTrans hfb hP name hne shape args
+    (callEntryOn_guestInv_csr hG fname args) (hro.resumeOn hP hG name hne args)
+    hb.bounded hb.hoare
+
+theorem callee_param_five_exp_csr {F : Type} (state : PanSemStateFiniteExact 64 F)
+    (fname p1 p2 p3 p4 p5 : MlS) (s1 s2 s3 s4 s5 : ShapeHOL)
+    (body : ProgHOL 64) (ret : ShapeHOL)
+    (hl : state.code.lookup fname =
+      some ([(p1, s1), (p2, s2), (p3, s3), (p4, s4), (p5, s5)], body, ret))
+    (e1 e2 e3 e4 e5 : ExpHOL 64) (values : List (ValueHOL 64)) (body' : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret' : ShapeHOL)
+    (hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [e1, e2, e3, e4, e5] = some values)
+    (hlook : lookupCodeHOLFinite state.code.lookup fname values = some (body', callee, ret')) :
+    ∃ v1 v2 v3 v4 v5,
+      evalAt state e1 = some v1 ∧ evalAt state e2 = some v2 ∧
+      evalAt state e3 = some v3 ∧ evalAt state e4 = some v4 ∧
+      evalAt state e5 = some v5 ∧
+      callee.lookup p1 = some v1 ∧ callee.lookup p2 = some v2 ∧
+      callee.lookup p3 = some v3 ∧ callee.lookup p4 = some v4 ∧
+      callee.lookup p5 = some v5 := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  simp only [evalListHOLExact] at hargs
+  rcases he1 : evalAt state e1 with _ | v1 <;>
+  rcases he2 : evalAt state e2 with _ | v2 <;>
+  rcases he3 : evalAt state e3 with _ | v3 <;>
+  rcases he4 : evalAt state e4 with _ | v4 <;>
+  rcases he5 : evalAt state e5 with _ | v5 <;>
+    simp only [evalAt] at he1 he2 he3 he4 he5 <;>
+    simp only [he1, he2, he3, he4, he5, Option.some.injEq] at hargs <;>
+    cases hargs
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hlook
+  split at hlook
+  · cases hlook
+  · rename_i exactBody exactLocals exactShape raw
+    have heq := Option.some.inj hlook
+    rcases Prod.mk.inj heq with ⟨rfl, hrest⟩
+    rcases Prod.mk.inj hrest with ⟨rfl, _⟩
+    unfold lookupCodeHOLExact at raw
+    rw [hl] at raw
+    dsimp only at raw
+    split at raw
+    · rename_i hcond
+      have rawEq := Option.some.inj raw
+      rcases Prod.mk.inj rawEq with ⟨-, hrest2⟩
+      rcases Prod.mk.inj hrest2 with ⟨hloc, -⟩
+      subst hloc
+      obtain ⟨hnd, -, -⟩ := hcond
+      simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+        not_or, List.not_mem_nil, or_false] at hnd
+      refine ⟨v1, v2, v3, v4, v5, rfl, rfl, rfl, rfl, rfl, ?_, ?_, ?_, ?_, ?_⟩
+      · simp [List.zip, List.foldl, hnd.1.1, hnd.1.2.1, hnd.1.2.2.1, hnd.1.2.2.2]
+      · simp [List.zip, List.foldl, hnd.2.1.1, hnd.2.1.2.1, hnd.2.1.2.2]
+      · simp [List.zip, List.foldl, hnd.2.2.1.1, hnd.2.2.1.2]
+      · simp [List.zip, List.foldl, hnd.2.2.2]
+      · simp [List.zip, List.foldl]
+    · cases raw
+
+theorem csrLiveAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} (hs : CsrLiveAt s cache roots m)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, hc, hr, _⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  exact ⟨hA, (hW.1.2.1 _ htS).1, fun i hi => (hW.1.2.1 _ htS).2 i hi |>.1⟩
+
+theorem csrTablesAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (hs : CsrTablesAt s cache roots)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s := by
+  obtain ⟨hA, _, S, Nd, hW, hc, hr, _⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  exact ⟨hA, (hW.1.2.1 _ htS).1, fun i hi => (hW.1.2.1 _ htS).2 i hi |>.1⟩
+
+theorem csrLiveAt_mptSetReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (hs : CsrLiveAt s cache roots (locN s "m"))
+    (hk : locN s "klen" ≤ 32) (hv : locN s "vlen" ≤ 110) : MptSetReady s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, _, _, _, _, hm, hd⟩ := hs
+  exact mptSetReady_of_parts_csr hA hW hm hd hk hv
+
+theorem pBounded_specDecCall_csr
+    {names : List String}
+    {P Pc R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B Bc : Nat}
+    {shape : ShapeHOL} {cont : ProgHOL 64}
+    (hP : LocalsOnly names P)
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hne : ∀ n ∈ names, ofString n ≠ name)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (values : List (ValueHOL 64)) (body : ProgHOL 64)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+      (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → P s →
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      R (setVarHOLFinite name v { post with locals := s.locals }))
+    (hb : TerminatingProgBoundedOn R cont Bc)
+    (hh : Hoare R cont (fun r t => r = none → P t)) :
+    PBounded P (.decCall name shape fname args cont) (B + Bc + 1) :=
+  PBounded.decCallTrans hfb hP name hne shape args hentry
+    (funSpec_resumeOn_csr hspec hentry hret) hb hh
+
+ theorem callEntryOn_worldOK_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → WorldOK s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P WorldOK fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact localsFree_worldOK s _ _ (hP s hs)
+
+ theorem callEntryOn_arenaReady_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → ArenaReady s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P ArenaReady fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact localsFree_arenaReady s _ _ (hP s hs)
+
+ theorem csrMpt_worldOK (name : String) {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrMpt name s) : WorldOK s := csrTabs_worldOK (csrMpt_tabs name hs)
+
+theorem csrBuffers_disj_worldTyped_csr {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {buffers : List (String × Nat)} (hW : WorldTypedWith s S Nd)
+    (hb : ∀ b ∈ buffers, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst) :
+    IvlsDisj (buffers.map (bufferRegion s)) (worldTypedIvls s S Nd) := by
+  intro i hi j hj
+  obtain ⟨b, hmem, rfl⟩ := List.mem_map.mp hi
+  exact bufferRegion_disj hW b (hb b hmem).1 (hb b hmem).2 j hj
+
+theorem worldStep_buffers_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots : Nat}
+    {buffers : List (String × Nat)} {gw : List String}
+    {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : CsrTablesAt s cache roots)
+    (hb : ∀ b ∈ buffers, b ∈ globalBuffers ∧ b.1 ∉ typedRecords.map Prod.fst)
+    (hstep : WorldStep (fun t => buffers.map (bufferRegion t)) gw keep Q s r post) :
+    CsrTablesAt post cache roots := by
+  apply worldStep_csrTablesAt hs hstep
+  · intro j hj hz
+    obtain ⟨b, _, rfl⟩ := List.mem_map.mp hj
+    dsimp only [bufferRegion] at hz ⊢
+    by_cases hzero : globN s b.1 = 0
+    · simp [hzero]
+    · simp only [hzero, ↓reduceIte] at hz
+      have hbuf := (hb b (by assumption)).1
+      have hpos : b.2 ≠ 0 := by
+        revert hbuf
+        have : ∀ b ∈ globalBuffers, b.2 ≠ 0 := by decide
+        exact this b
+      exact False.elim (hpos hz)
+  · intro S Nd hW
+    exact csrBuffers_disj_worldTyped_csr hW hb
+
+def CsrHeapBufAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (b : Ivl) (owned : List Ivl) : Prop :=
+  Inside b sourceBase (globN s "heap_ptr") ∧ WordsOK s b ∧ IvlsDisj [b] owned
+
+theorem csrHeapBufAt_fresh {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} {owned : List Ivl}
+    (hs : ArenaOK s) (hf : FreshBlock s post p n)
+    (hd : IvlsDisj [(p, (n + 7) / 8 * 8)] owned) :
+    CsrHeapBufAt post (p, (n + 7) / 8 * 8) owned := by
+  exact ⟨⟨Nat.le_trans hs.1 hf.2.1.1, hf.2.1.2⟩, hf.2.2, hd⟩
+
+theorem csrHeapBufAt_transfer {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {b : Ivl} {old new : List Ivl}
+    (hs : ArenaReady s) (hp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hb : CsrHeapBufAt s b old) (hg : OwnedGrows s post old new) :
+    CsrHeapBufAt post b new := by
+  refine ⟨⟨hb.1.1, Nat.le_trans hb.1.2 hhp⟩,
+    P3MptSet.wordsOK_transfer hs.1 hp.1 hb.2.1, ?_⟩
+  exact ivlsDisj_ownedGrows_csr hs.2 hp.2 hg
+    (by intro o ho _; obtain rfl := List.mem_singleton.mp ho; exact Or.inl hb.1) hb.2.2
+
+theorem csrHeapBufAt_subregion_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {b i : Ivl} {owned : List Ivl} (hb : CsrHeapBufAt s b owned)
+    (hi : Inside i b.1 (b.1 + b.2)) : IvlsDisj [i] owned := by
+  intro o ho j hj
+  obtain rfl := List.mem_singleton.mp ho
+  exact (GbodyC17ToC21Common.disj_of_inside_right hi
+    (hb.2.2 b (by simp) j hj).flip).flip
+
+theorem localsFree_csrHeapBufAt (b : Ivl) :
+    LocalsFree (fun s => CsrHeapBufAt s b []) := by
+  intro F s locals k hb
+  exact hb
+
+theorem csrHeapBufAt_worldTyped_disj {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {b : Ivl} {S Nd : List Nat}
+    (hb : CsrHeapBufAt s b (worldOwned s S Nd)) :
+    IvlsDisj [b] (worldTypedIvls s S Nd) := by
+  intro o ho j hj
+  exact hb.2.2 o ho j (worldTypedIvls_sub_worldOwned s S Nd j hj)
+
+theorem mptObjStep_csrHeapBufAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {S Nd Nm : List Nat} {cache roots : Nat} {b : Ivl}
+    (hs : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (hc : cache ∈ S) (hr : roots ∈ S) (hne : cache ≠ roots)
+    (hcl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache)
+    (hrl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots)
+    (hm : MptObjInWith s S Nm (locN s "m"))
+    (hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd))
+    (hb : CsrHeapBufAt s b (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hstep : MptObjStep R gw keep s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hRN : IvlsDisj (R s) (nodeExtents s Nd)) :
+    ∃ S' Nd' Nm',
+      WorldTypedWith post S' Nd' ∧ cache ∈ S' ∧ roots ∈ S' ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ cache) ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ roots) ∧
+      MptObjInWith post S' Nm' (locN s "m") ∧
+      IvlsDisj (mptObjIvls post Nm' (locN s "m")) (nodeExtents post Nd') ∧
+      CsrHeapBufAt post b (worldOwned post S' Nd' ++ mptObjIvls post Nm' (locN s "m")) := by
+  obtain ⟨S', Nd', Nm', hWp, hc', hr', hcl', hrl', _, _, _, _, hmp, hdp, hog, _⟩ :=
+    mptObjStep_preserves_two_local_tables_csr hs hW hc hr hne hcl hrl hm hd
+      hstep hR_z hR hRN
+  exact ⟨S' ++ [cache, roots], Nd', Nm', hWp, hc', hr', hcl', hrl', hmp, hdp,
+    csrHeapBufAt_transfer hs hstep.1 hstep.2.1 hb hog⟩
+
+def CsrLiveBufAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cache roots m : Nat) (b : Ivl) : Prop :=
+  ArenaReady s ∧ cache ≠ roots ∧ ∃ S Nd Nm,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧ roots ∈ S ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots) ∧
+    MptObjInWith s S Nm m ∧
+    IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) ∧
+    CsrHeapBufAt s b (worldOwned s S Nd ++ mptObjIvls s Nm m)
+
+theorem localsFree_csrLiveBufAt (cache roots m : Nat) (b : Ivl) :
+    LocalsFree (fun s => CsrLiveBufAt s cache roots m b) := by
+  intro F s locals k h
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hb⟩ := h
+  refine ⟨localsFree_arenaReady s locals k hA, hne, S, Nd, Nm,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
+    hc, hr, hcl, hrl, (mptObjInWith_with_locals_csr s locals k S Nm m).2 hm, hd, ?_⟩
+  exact ⟨hb.1, hb.2.1, hb.2.2⟩
+
+theorem csrLiveBufAt_liveAt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots m b) : CsrLiveAt s cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, _⟩ := hs
+  exact ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩
+
+theorem csrLiveBufAt_mptObjReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots (locN s "m") b) : MptObjReady s :=
+  csrLiveAt_mptObjReady (csrLiveBufAt_liveAt hs)
+
+theorem csrLiveBufAt_mptSetReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots (locN s "m") b)
+    (hk : locN s "klen" ≤ 32) (hv : locN s "vlen" ≤ 110) : MptSetReady s :=
+  csrLiveAt_mptSetReady (csrLiveBufAt_liveAt hs) hk hv
+
+theorem csrLiveBufAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots m b)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s :=
+  csrLiveAt_htabArgWF (csrLiveBufAt_liveAt hs) ht
+
+theorem htabExit_csrLiveBufAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots m b)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrLiveBufAt post cache roots m b := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hb⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hmp, hdp, heq, hwrs, hjrs, _, hog⟩ :=
+    htabExit_local_liveMpt_csr hA hW htS htl hexit hbe hm hd
+  have hog_all : OwnedGrows s post
+      (worldOwned s S Nd ++ mptObjIvls s Nm m)
+      (worldOwned post S Nd ++ mptObjIvls post Nm m) := by
+    intro o ho
+    rcases List.mem_append.mp ho with how | hom
+    · rcases hog o how with rfl | ⟨j, hj, hin⟩ | hf
+      · exact Or.inl rfl
+      · exact Or.inr (Or.inl ⟨j, List.mem_append_left _ hj, hin⟩)
+      · exact Or.inr (Or.inr hf)
+    · rw [heq] at hom
+      exact Or.inr (Or.inl ⟨o, List.mem_append_right _ hom, ⟨le_rfl, le_rfl⟩⟩)
+  exact ⟨hexit.1, hne, S, Nd, Nm, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl,
+    hmp, hdp, csrHeapBufAt_transfer hA hexit.1 hexit.2.2.2.2.1 hb hog_all⟩
+
+def CsrLiveBufsAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cache roots m : Nat) (bs : List Ivl) : Prop :=
+  ArenaReady s ∧ cache ≠ roots ∧ ∃ S Nd Nm,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧ roots ∈ S ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots) ∧
+    MptObjInWith s S Nm m ∧
+    IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) ∧
+    (∀ b ∈ bs, CsrHeapBufAt s b (worldOwned s S Nd ++ mptObjIvls s Nm m)) ∧
+    bs.Pairwise Disj
+
+theorem localsFree_csrLiveBufsAt (cache roots m : Nat) (bs : List Ivl) :
+    LocalsFree (fun s => CsrLiveBufsAt s cache roots m bs) := by
+  intro F s locals k h
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, hpw⟩ := h
+  refine ⟨localsFree_arenaReady s locals k hA, hne, S, Nd, Nm,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
+    hc, hr, hcl, hrl, (mptObjInWith_with_locals_csr s locals k S Nm m).2 hm, hd,
+    fun b hb => ⟨(hbs b hb).1, (hbs b hb).2.1, (hbs b hb).2.2⟩, hpw⟩
+
+theorem csrLiveBufsAt_of_liveAt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} (hs : CsrLiveAt s cache roots m) :
+    CsrLiveBufsAt s cache roots m [] := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  exact ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd,
+    fun _ h => False.elim (List.not_mem_nil h), List.Pairwise.nil⟩
+
+theorem csrLiveBufsAt_liveAt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs) : CsrLiveAt s cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, _, _⟩ := hs
+  exact ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩
+
+theorem csrLiveBufsAt_singleton_iff {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {b : Ivl} :
+    CsrLiveBufsAt s cache roots m [b] ↔ CsrLiveBufAt s cache roots m b := by
+  constructor
+  · intro ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, _⟩
+    exact ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs b (by simp)⟩
+  · intro ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hb⟩
+    refine ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, ?_, List.pairwise_singleton _ _⟩
+    intro x hx; obtain rfl := List.mem_singleton.mp hx; exact hb
+
+theorem csrLiveBufsAt_sub {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs1 bs2 : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs1)
+    (hsub : ∀ b ∈ bs2, b ∈ bs1) (hpw2 : bs2.Pairwise Disj) :
+    CsrLiveBufsAt s cache roots m bs2 := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, _⟩ := hs
+  exact ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, fun b hb => hbs b (hsub b hb), hpw2⟩
+
+theorem worldEff_csrLiveBufsAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs)
+    (hB_ok : ∀ gs ∈ B, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst)
+    (hcore_out : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (heff : R16Shards.WorldEff s post Rl B gw)
+    (hR : ∀ iv ∈ Rl, iv.2 ≠ 0 → ∃ b ∈ bs, Inside iv b.1 (b.1 + b.2)) :
+    CsrLiveBufsAt post cache roots m bs := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, hpw⟩ := hs
+  have hR_disj : IvlsDisj Rl (worldTypedIvls s S Nd ++ mptObjIvls s Nm m) := by
+    intro iv hiv j hj
+    by_cases hz : iv.2 = 0
+    · exact Or.inl hz
+    · obtain ⟨b, hb_mem, hin⟩ := hR iv hiv hz
+      have hsub : j ∈ worldOwned s S Nd ++ mptObjIvls s Nm m := by
+        rcases List.mem_append.mp hj with hjw | hjm
+        · exact List.mem_append_left _ (worldTypedIvls_sub_worldOwned s S Nd j hjw)
+        · exact List.mem_append_right _ hjm
+      exact csrHeapBufAt_subregion_disj (hbs b hb_mem) hin iv (by simp) j hsub
+  obtain ⟨hWp, hmp, hdp, hm_ivl_eq, _, _, _, hroles, hog⟩ :=
+    worldEff_liveMpt_csr hA hB_ok hcore_out heff hW hm hd hR_disj
+  have hog_all : OwnedGrows s post
+      (worldOwned s S Nd ++ mptObjIvls s Nm m)
+      (worldOwned post S Nd ++ mptObjIvls post Nm m) := by
+    intro o ho
+    rcases List.mem_append.mp ho with how | hom
+    · rcases hog o how with rfl | ⟨j, hj, hin⟩ | hf
+      · exact Or.inl rfl
+      · exact Or.inr (Or.inl ⟨j, List.mem_append_left _ hj, hin⟩)
+      · exact Or.inr (Or.inr hf)
+    · rw [hm_ivl_eq] at hom
+      exact Or.inr (Or.inl ⟨o, List.mem_append_right _ hom, ⟨le_rfl, le_rfl⟩⟩)
+  exact ⟨heff.arena, hne, S, Nd, Nm, hWp, hc, hr,
+    fun a ha => hcl a (hroles a ha), fun a ha => hrl a (hroles a ha),
+    hmp, hdp, fun b hb => csrHeapBufAt_transfer hA heff.arena heff.hp_lo (hbs b hb) hog_all, hpw⟩
+
+theorem worldEff_csrLiveBufAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {cache roots m : Nat} {b : Ivl}
+    (hs : CsrLiveBufAt s cache roots m b)
+    (hB_ok : ∀ gs ∈ B, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst)
+    (hcore_out : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (heff : R16Shards.WorldEff s post Rl B gw)
+    (hR : ∀ iv ∈ Rl, iv.2 ≠ 0 → Inside iv b.1 (b.1 + b.2)) :
+    CsrLiveBufAt post cache roots m b := by
+  rw [← csrLiveBufsAt_singleton_iff] at hs ⊢
+  exact worldEff_csrLiveBufsAt hs hB_ok hcore_out heff
+    (fun iv hiv hz => ⟨b, List.mem_singleton_self b, hR iv hiv hz⟩)
+
+theorem mptObjStep_csrLiveBufsAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {cache roots : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots (locN s "m") bs)
+    (hstep : MptObjStep R gw keep s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR_ti : ∀ S Nd Nm, WorldTypedWith s S Nd →
+      MptObjInWith s S Nm (locN s "m") →
+      IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd) →
+      (∀ b ∈ bs, CsrHeapBufAt s b (worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m"))) →
+      IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m"))) :
+    CsrLiveBufsAt post cache roots (locN s "m") bs := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, hpw⟩ := hs
+  have hR := hR_ti S Nd Nm hW hm hd hbs
+  have hRN : IvlsDisj (R s) (nodeExtents s Nd) := by
+    intro r hr_mem i hi
+    exact hR r hr_mem i (List.mem_append_left _ (by
+      unfold worldTypedIvls
+      exact List.mem_append_right _ hi))
+  obtain ⟨S', Nd', Nm', hWp, hc', hr', hcl', hrl', _, _, _, _, hmp, hdp, hog, _⟩ :=
+    mptObjStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl hm hd
+      hstep hR_z hR hRN
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm', hWp, hc', hr', hcl', hrl', hmp, hdp,
+    fun b hb => csrHeapBufAt_transfer hA hstep.1 hstep.2.1 (hbs b hb) hog, hpw⟩
+
+theorem htabExit_csrLiveBufsAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrLiveBufsAt post cache roots m bs := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, hpw⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hmp, hdp, heq, hwrs, hjrs, _, hog⟩ :=
+    htabExit_local_liveMpt_csr hA hW htS htl hexit hbe hm hd
+  have hog_all : OwnedGrows s post
+      (worldOwned s S Nd ++ mptObjIvls s Nm m)
+      (worldOwned post S Nd ++ mptObjIvls post Nm m) := by
+    intro o ho
+    rcases List.mem_append.mp ho with how | hom
+    · rcases hog o how with rfl | ⟨j, hj, hin⟩ | hf
+      · exact Or.inl rfl
+      · exact Or.inr (Or.inl ⟨j, List.mem_append_left _ hj, hin⟩)
+      · exact Or.inr (Or.inr hf)
+    · rw [heq] at hom
+      exact Or.inr (Or.inl ⟨o, List.mem_append_right _ hom, ⟨le_rfl, le_rfl⟩⟩)
+  exact ⟨hexit.1, hne, S, Nd, Nm, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl,
+    hmp, hdp,
+    fun b hb => csrHeapBufAt_transfer hA hexit.1 hexit.2.2.2.2.1 (hbs b hb) hog_all, hpw⟩
+
+theorem worldEff_alloc_body_csr {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode)
+    (hA : ArenaReady s)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)
+    ∃ p : BitVec 64,
+      out.1 = some (.returned (.val (.word p))) ∧
+      p.toNat = globN s "heap_ptr" ∧
+      FreshBlock s out.2 p.toNat (locN s "n") ∧
+      out.2.memory = s.memory ∧
+      out.2.be = s.be ∧
+      R16Shards.WorldEff s out.2 [] [] ["heap_ptr"] := by
+  dsimp only
+  obtain ⟨p, q, hrv, hp_eq, hq_eq, hq_hi, _, hp_le_q, hpost_g, hpost_m, hpost_be,
+    hpost_ma, hA_post, hpost_hp, hpost_sp⟩ :=
+    R13Shards.alloc_body_resumes_props s hcode hA hres
+  set post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2
+  have hhp_al : p.toNat % 8 = 0 := by rw [hp_eq]; exact hA.2.2.2.2.2.2.1
+  have hsb_le : sourceBase ≤ p.toNat := by rw [hp_eq]; exact hA.2.1
+  have hlim_le_he : heapLimit ≤ heapEnd := by decide
+  have hf : FreshBlock s post p.toNat (locN s "n") := by
+    refine ⟨hhp_al, ?_, ?_⟩
+    · rw [← hp_eq, hpost_hp]
+      exact ⟨le_rfl, le_of_eq hq_eq.symm⟩
+    · exact R13.wordsOK_of_guestInv post hA_post.1 p.toNat ((locN s "n" + 7) / 8 * 8)
+        hhp_al (by omega) hsb_le (by omega)
+  have hgw : GlobalsKept ["heap_ptr"] s post := by
+    intro k hk
+    have hne : ofString "heap_ptr" ≠ k := fun h => hk (by simp [h])
+    rw [hpost_g]; simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  have hfb : R10Shards.P26_P28.FreshBufsOK s post :=
+    R16Shards.freshBufsOK_of_no_globalBuf_writes hgw
+      (by intro gs hgs; revert gs hgs; decide)
+  have hpost_fmp : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" :=
+    (R10Shards.P26_P28.globN_eq_of_lookup (hgw (ofString "frame_mem_ptr") (by decide)))
+  have heff : R16Shards.WorldEff s post [] [] ["heap_ptr"] :=
+    ⟨hA_post, hA_post.1.code, hpost_ma, hpost_be,
+     (evaluateHOLFiniteState_metadata s (sourceFnBody Guest.Software.guestFn_alloc)).2.2.2.2,
+     by rw [← hp_eq, hpost_hp]; exact hp_le_q,
+     hpost_fmp,
+     by rw [hpost_sp],
+     hgw, hfb,
+     fun a hne => absurd (hpost_m ▸ rfl) hne,
+     fun a hne => absurd (hpost_m ▸ rfl) hne,
+     fun b _ hne => absurd (by unfold memB; rw [hpost_m, hpost_be]) hne⟩
+  exact ⟨p, hrv, hp_eq, hf, hpost_m, hpost_be, heff⟩
+
+theorem fixedObjects_eq_of_mem_globals_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hm : post.memory = s.memory)
+    (hgw : GlobalsKept ["heap_ptr"] s post) :
+    fixedObjects post = fixedObjects s := by
+  have hg : ∀ name : String, ofString name ≠ ofString "heap_ptr" → globN post name = globN s name :=
+    fun name hne => R10Shards.P26_P28.globN_eq_of_lookup
+      (hgw (ofString name) (fun h => hne (by simp only [List.map, List.mem_cons, List.not_mem_nil, or_false] at h; exact h)))
+  have hmw : ∀ a : Nat, memW post a = memW s a := fun a => by simp [memW, hm]
+  have hbo : blockOutObjects post = blockOutObjects s := by
+    simp only [blockOutObjects, hg "bo" (by decide), hmw]
+  have hbal_rec : balRecords post = balRecords s := by
+    simp only [balRecords, hg "bal_accounts" (by decide), hdr, nodeF, hmw]
+  have hbal : balObjects post = balObjects s := by
+    simp only [balObjects, hbal_rec, lstObjects, htabValues, hdr, nodeF, hmw]
+  have hgb : globalBuffers.map (fun gn => (globN post gn.1, if globN post gn.1 = 0 then 0 else gn.2)) =
+      globalBuffers.map (fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
+    rw [hg gn.1 hne]
+  unfold fixedObjects
+  rw [hgb, hbo, hbal, hg "journal" (by decide), hg "journal_cap" (by decide)]
+
+theorem alloc_csrLiveBufsAt {F : Type}
+    {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)
+    ∃ p : BitVec 64,
+      out.1 = some (.returned (.val (.word p))) ∧
+      CsrLiveBufsAt out.2 cache roots m
+        ((p.toNat, (locN s "n" + 7) / 8 * 8) :: bs) := by
+  dsimp only
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd, hbs, hpw⟩ := hs
+  obtain ⟨p, hrv, hp_eq, hf, hpost_m, _, heff⟩ :=
+    worldEff_alloc_body_csr s hA.1.code hA hres
+  set post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2
+  obtain ⟨hWp, hmp, hdp, hm_ivl_eq, hne_eq, hfp_eq, _, hroles, hog⟩ :=
+    worldEff_liveMpt_csr hA (fun _ h => False.elim (List.not_mem_nil h))
+      (by intro g hg; revert g hg; decide) heff hW hm hd
+      (fun _ h => False.elim (List.not_mem_nil h))
+  have hwo_eq : worldOwned post S Nd = worldOwned s S Nd := by
+    unfold worldOwned
+    rw [fixedObjects_eq_of_mem_globals_csr hpost_m heff.gw_kept, hne_eq]
+    congr 2
+    exact List.flatMap_congr fun t ht => hfp_eq t ht
+  have hog_all : OwnedGrows s post
+      (worldOwned s S Nd ++ mptObjIvls s Nm m)
+      (worldOwned post S Nd ++ mptObjIvls post Nm m) := by
+    intro o ho
+    rw [hwo_eq, hm_ivl_eq] at ho
+    exact Or.inr (Or.inl ⟨o, ho, ⟨le_rfl, le_rfl⟩⟩)
+  let nb : Ivl := (p.toNat, (locN s "n" + 7) / 8 * 8)
+  have hd_nb : IvlsDisj [nb] (worldOwned post S Nd ++ mptObjIvls post Nm m) := by
+    rw [hwo_eq, hm_ivl_eq]
+    intro x hx o ho
+    obtain rfl := List.mem_singleton.mp hx
+    rcases List.mem_append.mp ho with how | hom
+    · rcases worldOwned_zero_or_allocated hW o how with rfl | ⟨_, hal_o⟩
+      · exact Or.inr (Or.inl rfl)
+      · exact disj_allocated_fresh_heap hA.2 heff.arena.2 hal_o (f := nb) hf.2.1
+    · by_cases hoz : o.2 = 0
+      · exact Or.inr (Or.inl hoz)
+      · exact disj_allocated_fresh_heap hA.2 heff.arena.2
+          (mptObjInWith_allocated_csr hm o hom hoz) (f := nb) hf.2.1
+  have hnb : CsrHeapBufAt post nb (worldOwned post S Nd ++ mptObjIvls post Nm m) :=
+    csrHeapBufAt_fresh hA.2 hf hd_nb
+  have hpw_cons : (nb :: bs).Pairwise Disj := by
+    refine List.Pairwise.cons (fun b hb => ?_) hpw
+    have hb_in := (hbs b hb).1
+    exact Or.inr (Or.inr (Or.inr (by dsimp [nb]; unfold Inside at hb_in; omega)))
+  refine ⟨p, hrv, heff.arena, hne, S, Nd, Nm, hWp, hc, hr,
+    fun a ha => hcl a (hroles a ha), fun a ha => hrl a (hroles a ha),
+    hmp, hdp, ?_, hpw_cons⟩
+  intro b hb
+  rcases List.mem_cons.mp hb with rfl | hb_tl
+  · exact hnb
+  · exact csrHeapBufAt_transfer hA heff.arena heff.hp_lo (hbs b hb_tl) hog_all
+
+def CsrMptBufs (name : String) (buffers : List (String × Nat)) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s name)
+    (buffers.map fun b => (locN s b.1, b.2))
+
+theorem localsOnly_csrMptBufs (name : String) (buffers : List (String × Nat)) :
+    LocalsOnly (["cache", "new_roots", name] ++ buffers.map Prod.fst)
+      (CsrMptBufs name buffers) := by
+  intro F s locals k hl hs
+  have hbuf : buffers.map (fun b => (locN { s with locals := locals, clock := k } b.1, b.2)) =
+      buffers.map (fun b => (locN s b.1, b.2)) := by
+    apply List.map_congr_left
+    intro b hb
+    rw [locN_congr s locals k b.1 (hl b.1 (List.mem_append_right _
+      (List.mem_map.mpr ⟨b, hb, rfl⟩)))]
+  unfold CsrMptBufs
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp)),
+    locN_congr s locals k name (hl name (by simp)), hbuf]
+  exact localsFree_csrLiveBufsAt _ _ _ _ s locals k hs
+
+theorem csrMptBufs_mpt (name : String) (buffers : List (String × Nat))
+    {F : Type} {s : PanSemStateFiniteExact 64 F} (hs : CsrMptBufs name buffers s) :
+    CsrMpt name s := csrLiveBufsAt_liveAt hs
+
+theorem csrMptBufs_worldOK (name : String) (buffers : List (String × Nat))
+    {F : Type} {s : PanSemStateFiniteExact 64 F} (hs : CsrMptBufs name buffers s) :
+    WorldOK s := csrMpt_worldOK name (csrMptBufs_mpt name buffers hs)
+
+theorem csrMptBufs_nil_iff (name : String) {F : Type}
+    {s : PanSemStateFiniteExact 64 F} : CsrMptBufs name [] s ↔ CsrMpt name s :=
+  ⟨csrLiveBufsAt_liveAt, csrLiveBufsAt_of_liveAt⟩
+
+theorem csrLiveBufsAt_mptObjReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots (locN s "m") bs) : MptObjReady s :=
+  csrLiveAt_mptObjReady (csrLiveBufsAt_liveAt hs)
+
+theorem csrLiveBufsAt_mptSetReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots (locN s "m") bs)
+    (hk : locN s "klen" ≤ 32) (hv : locN s "vlen" ≤ 110) : MptSetReady s :=
+  csrLiveAt_mptSetReady (csrLiveBufsAt_liveAt hs) hk hv
+
+theorem csrLiveBufsAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s :=
+  csrLiveAt_htabArgWF (csrLiveBufsAt_liveAt hs) ht
+
+theorem csrLiveBufsAt_buffer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl} {b : Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs) (hb : b ∈ bs) :
+    CsrLiveBufAt s cache roots m b := by
+  apply csrLiveBufsAt_singleton_iff.mp
+  exact csrLiveBufsAt_sub hs (fun x hx => (List.mem_singleton.mp hx) ▸ hb)
+    (List.pairwise_singleton _ _)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
