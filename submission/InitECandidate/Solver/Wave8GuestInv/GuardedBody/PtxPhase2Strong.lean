@@ -9284,4 +9284,47 @@ theorem phase2_memcpy_packed_arguments_nal (h : PtxCallees) {F : Type}
   rw [hentry.1, hentry.2]
   exact hpair
 
+/-- Copy state retaining both source-loop cached counts. -/
+def PtxPackedNsNalCopy {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedNsCopy s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+    locN s "nal" = memW s (locN s "tx" + 216)
+
+/-- The concrete address copy retains both cached loop bounds. -/
+theorem phase2_packed_address_copy_ns_nal_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare PtxPackedNsNalCopy
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedNsNalCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  have hs := hp.1
+  obtain ⟨base, hbase⟩ := hs.1.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hs.1.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hs.1.1 callee
+  have hcopy := phase2_packed_address_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hs.1.1.1 hs.1.2.1 hbase hk hs.1.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hs.1.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  have hd := phase2_packed_destination_eval s base k hbase hk
+  have hlen : evalAt s (.const 20) = some (.val (.word (20 : BitVec 64))) := by
+    simp [evalAt, evalHOLExact]
+  have hpair : ((base + k * 52).toNat, (20 : BitVec 64).toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)] := by
+    rw [phase2_packed_destination_toNat s hs.1.2.1.1 base k hbase hk hs.1.2.2.2]
+    simp
+  refine ⟨⟨phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hs.1.2.2.2,
+    hs.2.1, ?_⟩, hp.2.1, ?_⟩
+  · exact phase2_memcpy_packed_arguments_ns h s post _ src (.const 20) vs body callee ret
+      (some (.returned v)) (base + k * 52) 20 hc hargs hl he (by simp)
+      (by simp [Resumes]) hentry hs.1.1.1 hs.1.2.1 hd hlen hpair hs.2.2
+  · exact phase2_memcpy_packed_arguments_nal h s post _ src (.const 20) vs body callee ret
+      (some (.returned v)) (base + k * 52) 20 hc hargs hl he (by simp)
+      (by simp [Resumes]) hentry hs.1.1.1 hs.1.2.1 hd hlen hpair hp.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
