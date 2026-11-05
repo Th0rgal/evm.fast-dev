@@ -5041,4 +5041,65 @@ theorem phase2_packed_copy_increment_k_hoare :
     exact fun _ => phase2_packed_keys_set_other s hp.1 _ _ (by decide)
   · exact fun _ _ hr => by cases hr
 
+/-- Even the full backing cells of unaligned packed writes avoid world-owned objects. -/
+theorem phase2_packed_copy_world_cells {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      ∀ input ∈ worldOwned s S Nd, ∀ offset, offset < 52 →
+        Disj input ((locN s "al_keys" + 52 * locN s "k" + offset) / 8 * 8, 8) := by
+  obtain ⟨S, Nd, hW, hT, hd⟩ := hp.1.2.2.2.2
+  refine ⟨S, Nd, hW, hT, ?_⟩
+  intro input hin offset ho
+  have hsep := hd (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+    (by simp) input hin
+  exact disj_of_inside_right
+    (phase2_packed_copy_cell_inside _ _ _ offset hp.1.2.2.1
+      (phase2_packed_copy_index_bound hp) ho) (disj_symm hsep)
+
+/-- Copy effects that preserve transaction counts retain the guarded index relation. -/
+theorem phase2_packed_copy_index_preserved {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["nkeys", "i", "j", "k"] : List String), locN post n = locN s n)
+    (ht : txAccessSlots post (locN post "tx") = txAccessSlots s (locN s "tx"))
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex post := by
+  have hi := hl "i" (by simp)
+  have hj := hl "j" (by simp)
+  have hk := hl "k" (by simp)
+  have hn := hl "nkeys" (by simp)
+  refine ⟨hr, ?_, ?_, ?_, ?_⟩
+  · rw [hn, ht]; exact hp.2.1
+  · rw [hi, hc]; exact hp.2.2.1
+  · rw [hj, hi, hm]; exact hp.2.2.2.1
+  · rw [hk, hi, hj]
+    have he := phase2_key_prefix_congr post s (locN s "i") (fun i _ => hm i)
+    rw [he]
+    exact hp.2.2.2.2
+
+/-- Updating both inner counters retains their exact flattened-prefix relation. -/
+theorem phase2_packed_copy_update_indices {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    PtxPackedKeysReady post ∧
+      locN post "k" = phase2_key_prefix post (locN post "i") + locN post "j" := by
+  dsimp only
+  have hready := phase2_packed_keys_set_other s hp.1 (ofString "k")
+    (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) (by decide)
+  refine ⟨phase2_packed_keys_set_other _ hready (ofString "j") _ (by decide), ?_⟩
+  obtain ⟨hk, hj⟩ := phase2_packed_copy_counter_bounds hp
+  have hrel := hp.2.2.2.2
+  simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "j" ≠ ofString "k" by decide,
+    show ofString "j" ≠ ofString "i" by decide,
+    show ofString "k" ≠ ofString "i" by decide,
+    show ofString "j" ≠ ofString "tx" by decide,
+    show ofString "k" ≠ ofString "tx" by decide,
+    Nat.mod_eq_of_lt hk, Nat.mod_eq_of_lt hj, Nat.add_assoc]
+    using congrArg (fun n => n + 1) hrel
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
