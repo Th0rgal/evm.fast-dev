@@ -3238,21 +3238,20 @@ theorem stableCopyInv_init {F : Type} (s : PanSemStateFiniteExact 64 F)
       show ofString "i" ≠ ofString "stable_log_cap" from by decide] using hcap
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
-theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
 /-- Hoare rule for the counter initialization before the stable-copy loop. -/
 theorem hoare_stableCopy_init :
     Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
       WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
       locN s "nl" ≤ locN s "stable_log_cap")
-      (.assign (ofString "i") (.const 0))
+      (.assign .local (ofString "i") (.const 0))
       (fun r t => r = none → StableCopyInv t) := by
   apply Hoare.assign
-  · intro s v hp hv _
+  · intro F s v hp hv _
     have hv' : v = .val (.word 0) := by
       simpa [evalAt, evalHOLExact] using hv.symm
     subst v
     exact stableCopyInv_init s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
-  · intro s hp hr
+  · intro F s hp hr
     exact absurd hr (by simp)
 
 theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -3556,6 +3555,19 @@ theorem stable_copy_mul_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [BitVec.toNat_mul]
   change (w.toNat * 8) % 2 ^ 64 = 8 * locN s "i"
   rw [Nat.mod_eq_of_lt (by omega), ← hwi, Nat.mul_comm]
+
+/-- Identify the evaluated offset directly with the natural copy index. -/
+theorem stable_copy_offset_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : locN s "i" < locN s "nl") :
+    evalAt s (.panop .mul [.var .local (ofString "i"), .const 8]) =
+      some (.val (.word (BitVec.ofNat 64 (8 * locN s "i")))) := by
+  rw [stable_copy_mul_eval s w hw]
+  have he : w * 8 = BitVec.ofNat 64 (8 * locN s "i") := by
+    rw [← stable_copy_mul_nat s w hp hw hi]
+    simp
+  rw [he]
 
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
