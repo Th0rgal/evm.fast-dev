@@ -4010,6 +4010,29 @@ theorem stableLengthPre_record_separation {F : Type} (s : PanSemStateFiniteExact
   exact stable_copy_record_separation s mem' hf.2.2.2.2.2.1 hf.2.2.2.2.2.2 hd
     (stableLengthPre_source_cells s hp mem' hm) he
 
+/-- Both header/backing separation facts survive the stable length update. -/
+theorem stableLengthPre_headers_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hs : Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hd : Disj (locN s "stable_logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    let t := {s with memory := mem'}
+    Disj (locN t "logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+    Disj (locN t "stable_logs", 24)
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  have hb := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  dsimp only
+  change Disj (locN s "logs", 24)
+    (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    Disj (locN s "stable_logs", 24)
+    (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+  rw [hb]
+  exact ⟨hs, hd⟩
+
 /-- Source-array/backing separation survives the stable length update. -/
 theorem stableLengthPre_array_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
@@ -5120,6 +5143,26 @@ theorem lst_new_stable_post_header_separation (h : PtxCallees) {F : Type}
   refine ⟨w, hv, R13Shards.disj_symm hd.1, ?_⟩
   rw [hptr, hlen]
   exact R13Shards.disj_symm hd.2.1
+
+/-- Express header/source separation with the caller locals restored. -/
+theorem lst_new_stable_resumed_header_separation (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (locN t "logs", 24) (locN t "stable_logs", 24) ∧
+      Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+        (locN t "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, hb⟩ :=
+    lst_new_stable_post_header_separation h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide] using And.intro hh hb
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
