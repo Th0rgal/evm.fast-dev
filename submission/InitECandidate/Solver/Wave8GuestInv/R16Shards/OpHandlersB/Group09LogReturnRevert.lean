@@ -10980,4 +10980,38 @@ theorem lst_push_growth_header_exact_g09 {F : Type}
     valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL, flattenHOL,
     panMemStoresHOL, panMemStoreHOL, FUPDATE]
 
+/-- Complete post-copy growth tail: install the buffer and doubled capacity,
+increment the original length, and return the new buffer's insertion slot. -/
+theorem lst_push_after_copy_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l np cap n esz : BitVec 64)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (hc : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hne8 : l ≠ l + 8#64) (hne16 : l ≠ l + 16#64) :
+    let header : ProgHOL 64 :=
+      .seq (.store (.op .add [.var .local (ofString "l"), .const 0]) (.var .local (ofString "np")))
+        (.store (.op .add [.var .local (ofString "l"), .const 16])
+          (.panop .mul [.var .local (ofString "cap"), .const 2]))
+    let finish : ProgHOL 64 :=
+      .seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+        (.return (.op .add [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))
+    evaluateHOLFiniteState s (.seq header finish) =
+      (some (.returned (.val (.word (np + n * esz)))),
+        {s with
+          locals := HolFiniteMapExact.empty
+          memory := fun a => if a = l + 8#64 then .word (n + 1#64)
+            else if a = l + 16#64 then .word (cap * 2#64)
+            else if a = l then .word np else s.memory a}) := by
+  dsimp only
+  rw [evaluateHOLFiniteState_seq_line780,
+    lst_push_growth_header_exact_g09 s l np cap hl hp hc hd0 hd16]
+  dsimp only
+  exact lst_push_finish_exact_g09 _ l esz n np hl he hn hd0 hd8
+    (by simp [hne16]) hne8
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
