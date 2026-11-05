@@ -1126,6 +1126,24 @@ theorem hoare_store_ev_192_zero :
     · simp
     · simp
 
+/-- `EvmInv` already owns the head frame's message (`FrameWF`'s last conjunct for the head
+`(ev, cur_cont)`), so `EvmMsgReady` follows from `EvmInv` for the same table set. -/
+theorem evmMsgReady_of_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmInv s) :
+    EvmMsgReady s := by
+  obtain ⟨hA, S, hInvAt⟩ := h
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain; exact List.mem_cons_self
+  exact ⟨hA, S, hInvAt, (hInvAt.2.2.2.2.1 _ hhead_mem).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+
+theorem evmMsgReady_iff_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    EvmMsgReady s ↔ EvmInv s :=
+  ⟨evmInv_of_evmMsgReady s, evmMsgReady_of_evmInv s⟩
+
+/-- `EvmStep gw s post` from an `EvmMsgReady` entry gives `EvmMsgReady post`. -/
+theorem evmMsgReady_of_evmStep {F : Type} {gw : List String} {s post : PanSemStateFiniteExact 64 F}
+    (h : EvmStep gw s post) : EvmMsgReady post :=
+  evmMsgReady_of_evmInv post h.1
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
