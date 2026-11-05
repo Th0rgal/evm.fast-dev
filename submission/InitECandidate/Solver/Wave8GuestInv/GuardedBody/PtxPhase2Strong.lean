@@ -54,6 +54,30 @@ theorem phase1_index_word_of_add {F : Type} {s : PanSemStateFiniteExact 64 F}
     · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
     · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
 
+theorem phase1_assign_bal_index_shapes :
+    Hoare (R16Shards.PtxP1.StageP 0)
+      (.assign .global (ofString "bal_index")
+        (.op .add [.var .local (ofString "index"), .const 1#64]))
+      (fun r s => r = none → R16Shards.PtxP1.StageP 0 s ∧
+        ∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hstage := R16Shards.PtxP1.hoare_assign_bal_index.run s hc hp hnt hr
+  refine ⟨hstage, ?_⟩
+  rw [evaluateHOLFiniteState_assign] at hr ⊢
+  revert hr
+  split
+  · simp
+  · rename_i v hv
+    split
+    · intro _ n hn
+      obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op hv
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl
+      · simpa [setKvarHOLFinite, setGlobalHOLFinite] using phase1_txReadyStrong_tx_word hp.1
+      · simpa [setKvarHOLFinite, setGlobalHOLFinite] using phase1_index_word_of_add hv
+    · simp
+
 /-- R11 entry interface for the strengthened Phase 2 proof. -/
 def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => PtxValidated s ∧ PtxPhase2LocalShapes s
