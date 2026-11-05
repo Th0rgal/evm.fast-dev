@@ -2251,6 +2251,15 @@ theorem phase4LogCopySrc_word {F : Type} (s : PanSemStateFiniteExact 64 F) (v : 
     · cases he
   · cases he
 
+theorem hoare_phase4LogCopyBody
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare Phase4LogPointersReady phase4LogCopyBody
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  exact Hoare.decCall_fall (by decide) localsOnly_phase4LogPointersReady hresume
+    (hoare_logSlot_store_increment phase4LogCopySrc phase4LogCopySrc_word)
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
