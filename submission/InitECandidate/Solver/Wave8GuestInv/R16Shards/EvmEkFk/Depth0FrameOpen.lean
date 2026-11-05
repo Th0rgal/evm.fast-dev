@@ -5070,4 +5070,28 @@ theorem hoare_prepare_dispatch_delegated_common (gw : List String) (hp : Nat)
   exact hoare_prepare_dispatch_delegated_cont gw hp G ch code code_n daddr _
     (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub)
 
+/-- The dispatch value test is read-only: its word result is available to
+the continuation while the owned message and original step frame are retained. -/
+theorem hoare_prepare_dispatch_value_zero (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ w : BitVec 64,
+      s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+        [.load (.comb [.one, .one, .one, .one])
+          (.op .add [.var .local (ofString "msg"), .const 56])] tail)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLO : LocalsOnly ["msg"] (D0Pre gw hp G ch) := by
+    intro F s l k hl h
+    exact d0Pre_locals gw hp G ch s l k (hl "msg" (by simp)) h
+  have hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), D0Pre gw hp G ch s → GuestInv s :=
+    fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1)
+  exact Hoare.decCall_ro_fall EvmFrameSpecs.ro_u256_is_zero hG
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (fun _ h => h.1)
+    (ReadOnlyFn.resumeOn hLO hG EvmFrameSpecs.ro_u256_is_zero (ofString "vz") (by decide) _)
+    htail
+
 end HeadStore
