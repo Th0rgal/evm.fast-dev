@@ -2619,4 +2619,22 @@ theorem phase2_address_alloc_ready (h : PtxCallees) :
   exact ⟨hc', hw, hin, halign, hwords, hte, htx, hrec,
     phase2_address_alloc_world h s vs body callee ret v post hc hp ha hl hb⟩
 
+/-- A single word written inside the address array preserves the validated
+transaction and the array's world witness. -/
+theorem phase2_address_store_validated {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxValidatedStrong { s with memory := mem } ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧
+      WorldTypedWith { s with memory := mem } S Nd ∧
+      worldOwned { s with memory := mem } S Nd = worldOwned s S Nd := by
+  have hv0 := hp.1.1.1.1
+  obtain ⟨_, _, _, _, _, _, htx, hrec, S, Nd, hW, hT, hd⟩ := hp
+  obtain ⟨hv, hW', how⟩ := phase2_store_validated_outside hv0 hW hT
+    (blk := (locN s "al_addrs", (locN s "nal" + 1) * 8))
+    (fun o ho => hd _ (by simp) o ho) hx hin htx hrec hm
+  exact ⟨hv, S, Nd, hW, hW', how⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
