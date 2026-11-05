@@ -13952,4 +13952,40 @@ theorem phase2_ws_get_account_optional_nested_unhit {F : Type}
   exact phase2_ws_get_account_optional_unhit s hc ha
     ⟨hf.2.1, by norm_num⟩ hf.1 (phase2_nested_header_disj_wsBufs he hw hk) hnt hr
 
+/-- Table insertion frames allocated headers separated from its old footprint. -/
+theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hx : HtabExit s post) {i : Ivl}
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (hal : Allocated s i)
+    (ht : ∀ j ∈ htabFootprint s (locN s "t"), j.1 % 8 = 0)
+    (hd : ∀ j ∈ htabFootprint s (locN s "t"), Disj i j) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  apply hx.2.2.2.2.2.2.1 a
+  · intro j hj
+    have hja := ht j hj
+    have hdis := hd j hj
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> omega
+  · have hdis : Disj i (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      rcases hal with h | h
+      · exact Or.inr (Or.inr (Or.inl h.2))
+      · apply Or.inr; apply Or.inr; apply Or.inr
+        have hsp := hs.2
+        have hpp := hx.1.2
+        have hmono := hx.2.2.2.2.1
+        have hsep : heapLimit ≤ InitE.scratchStart := by decide
+        unfold Inside at h
+        rcases hsp with ⟨_, hp, hf, hsc, _⟩
+        rcases hpp with ⟨_, hp', hf', hsc', _⟩
+        dsimp at *
+        omega
+    have hhp8 := hs.2.2.2.2.2.2.1
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
