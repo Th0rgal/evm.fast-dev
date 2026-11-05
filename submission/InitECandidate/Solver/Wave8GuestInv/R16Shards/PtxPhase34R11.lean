@@ -2444,6 +2444,22 @@ theorem hoare_phase4LogCopyBody_typed
   · intro F s _ hr
     cases hr
 
+/-- The full log-push loop retains the typed stable-allocation operands. -/
+theorem hoare_phase4LogCopyLoop_typed
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare Phase4TypedLogPointers
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody)
+      (fun r t => r = none → Phase4TypedLogPointers t) := by
+  exact hoare_while_less_localsOnly localsOnly_phase4TypedLogPointers _ _
+    (hoare_phase4LogCopyBody_typed hresume)
+    (by unfold phase4LogCopyBody; ptx_incr) (by decide)
+
 theorem hoare_phase4LogCopyBody
     (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
