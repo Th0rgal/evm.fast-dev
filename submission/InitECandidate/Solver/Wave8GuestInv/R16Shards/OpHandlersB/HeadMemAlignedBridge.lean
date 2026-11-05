@@ -6788,6 +6788,179 @@ theorem log_append_run2 {F : Type} (s : PanSemStateFiniteExact 64 F) (e L lg arr
 
 end LogAppend2
 
+section LogLoop
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem fl_lookup_log_append :
+    originalRuntimeCode.lookup (ofString "log_append") =
+      some ([(ofString "e", .one), (ofString "log", .one)],
+        sourceFnBody Guest.Software.guestFn_log_append, .one) :=
+  lookup_of_guestAst_getElem 523 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_log_append) rfl
+
+/-- Invariant of the `log_append` loop of `incorporate_child_on_success`: the parent's logs list
+`L` (at `e+88`) holds `n0 + i` entries in an array that is the original one or fresh heap; memory
+changes only at the header, in the original array and in fresh heap. -/
+def LAInv {F : Type} (s : PanSemStateFiniteExact 64 F) (L arr0 cap0 n0 nc : BitVec 64)
+    (u : PanSemStateFiniteExact 64 F) : Prop :=
+  u.code = s.code ∧ u.memaddrs = s.memaddrs ∧ ArenaReady u ∧
+  (∀ k : MlS, k ≠ ofString "heap_ptr" → u.globals.lookup k = s.globals.lookup k) ∧
+  globN s "heap_ptr" ≤ globN u "heap_ptr" ∧
+  u.locals.lookup (ofString "n") = some (.val (.word nc)) ∧
+  ∃ i arr cap : BitVec 64, u.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+    i.toNat ≤ nc.toNat ∧
+    u.memory L = .word arr ∧ u.memory (L + 8) = .word (n0 + i) ∧ u.memory (L + 16) = .word cap ∧
+    (n0 + i).toNat ≤ cap.toNat ∧ cap.toNat < 2 ^ 59 ∧ 1 ≤ cap.toNat ∧
+    arr.toNat + 8 * cap.toNat ≤ 2 ^ 64 ∧
+    ((arr = arr0 ∧ cap = cap0) ∨
+      (globN s "heap_ptr" ≤ arr.toNat ∧ arr.toNat + 8 * cap.toNat ≤ globN u "heap_ptr")) ∧
+    ∀ a : BitVec 64, ¬ CellHits a.toNat (arr0.toNat, 8 * cap0.toNat) →
+      ¬ CellHits a.toNat (globN s "heap_ptr", globN u "heap_ptr" - globN s "heap_ptr") →
+      a ≠ L → a ≠ L + 8 → a ≠ L + 16 → u.memory a = s.memory a
+
+theorem la_active {F : Type} (t : PanSemStateFiniteExact 64 F) (i nc : BitVec 64)
+    (hi : t.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hn : t.locals.lookup (ofString "n") = some (.val (.word nc)))
+    (hle : i.toNat ≤ nc.toNat) (hnc : nc.toNat < 2 ^ 63)
+    (h : InitECandidate.Solver.Wave8M19.LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) t) :
+    i.toNat < nc.toNat := by
+  obtain ⟨c, hc, hnz⟩ := h
+  change evalAt t _ = _ at hc
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp t .less _ _ c hc
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb hcw
+  by_contra hge
+  apply hnz
+  simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL, Flapjack.Compiler.Encoders.Asm.holAsmSignedLess]
+  intro h1; split at h1 <;> omega
+
+attribute [local irreducible] Ret in
+theorem la_step {F : Type} (s : PanSemStateFiniteExact 64 F) (e L arr0 cap0 n0 nc : BitVec 64)
+    (a2 : ExpHOL 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hd88 : s.memaddrs (e + 88)) (hm88 : s.memory (e + 88) = .word L)
+    (h88 : ¬ CellHits (e + 88).toNat (arr0.toNat, 8 * cap0.toNat) ∧
+      ((e + 88).toNat + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ (e + 88).toNat) ∧
+      e + 88 ≠ L ∧ e + 88 ≠ L + 8 ∧ e + 88 ≠ L + 16)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hLd : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap0.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58)
+    (ha2 : ∀ (t : PanSemStateFiniteExact 64 F) v, ev t a2 = some v → ∃ w, v = .val (.word w))
+    (u : PanSemStateFiniteExact 64 F) (hu : LAInv s L arr0 cap0 n0 nc u)
+    (hact : InitECandidate.Solver.Wave8M19.LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) u) :
+    Flw (decClockHOLFinite u)
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun _ t => LAInv s L arr0 cap0 n0 nc t) := by
+  obtain ⟨uc, ud, uA, ug, uh, un, i, arr, cap, ui, hile, umL, um8, um16, hle, hcap, hc1, hw,
+    hold, ufr⟩ := hu
+  have hilt := la_active u i nc ui un hile (by omega) hact
+  have hcl : ∀ k, k < 2 ^ 59 → True := fun _ _ => trivial
+  have hn0i : (n0 + i).toNat = n0.toNat + i.toNat := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega)
+  have hHL : heapLimit = 2952790016 := rfl
+  have hhu : globN u "heap_ptr" ≤ 2952790016 := uA.2.2.1
+  -- the frame of `u` gives the `e+88` cell
+  have hfr88 : u.memory (e + 88) = .word L := by
+    rw [ufr _ h88.1 (by unfold CellHits; simp only; rcases h88.2.1 with h | h <;> omega)
+      h88.2.2.1 h88.2.2.2.1 h88.2.2.2.2]; exact hm88
+  have hLd' : L.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap.toNat ≤ L.toNat := by
+    rcases hold with ⟨rfl, rfl⟩ | ⟨h1, h2⟩
+    · exact hLd
+    · rcases hLh with h | h <;> omega
+  generalize hU : decClockHOLFinite u = U
+  have hUc : U.code = u.code := by rw [← hU]; rfl
+  have hUd : U.memaddrs = u.memaddrs := by rw [← hU]; rfl
+  have hUm : U.memory = u.memory := by rw [← hU]; rfl
+  have hUg : U.globals = u.globals := by rw [← hU]; rfl
+  have hUl : U.locals = u.locals := by rw [← hU]; rfl
+  have hUA : ArenaReady U := by
+    rw [← hU]; exact ⟨guestInv_congr (s := u) rfl rfl rfl rfl uA.1, arenaOK_congr (s := u) rfl uA.2⟩
+  have hgU : ∀ g, globN U g = globN u g := fun g => by unfold globN; rw [hUg]
+  have hUe : U.globals.lookup (ofString "ev") = some (.val (.word e)) := by
+    rw [hUg, ug _ (by decide)]; exact he
+  refine Flw.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, v2, rfl, he1, he2⟩ := evalList2_inv _ _ _ h1
+  have hv1 : v1 = .val (.word e) := by
+    simp [ev, evalHOLExact, hUe] at he1; exact he1.symm
+  obtain ⟨lg, rfl⟩ := ha2 U v2 he2
+  subst hv1
+  obtain ⟨rfl, rfl⟩ := lk2 (hUc.trans uA.1.code) (by decide) fl_lookup_log_append e lg rfl h2
+  have hAE : ArenaReady (callEntryStateHOLFinite U
+      ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+        (ofString "log", .val (.word lg)))) :=
+    ⟨guestInv_callEntry _ _ hUA.1, arenaOK_congr (s := U) rfl hUA.2⟩
+  have hgE : ∀ g, globN (callEntryStateHOLFinite U
+      ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+        (ofString "log", .val (.word lg)))) g = globN u g := fun g => by
+    rw [← hgU g]; rfl
+  have hcap' : cap.toNat < 2 ^ 59 := hcap
+  obtain ⟨pc, pd, pA, pg, ph, arr', cap', pmL, pm8, pm16, plt, _, pold, pw, pfr⟩ := Ret.apply
+    (log_append_run2 (callEntryStateHOLFinite U _) e L lg arr (n0 + i) cap hAE
+      (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+      (by change U.memaddrs _; rw [hUd, ud]; exact hd88)
+      (by change U.memory _ = _; rw [hUm]; exact hfr88)
+      (by change U.memory _ = _; rw [hUm]; exact umL)
+      (by change U.memory _ = _; rw [hUm]; exact um8)
+      (by change U.memory _ = _; rw [hUm]; exact um16)
+      (by change U.memaddrs _; rw [hUd, ud]; exact hd0)
+      (by change U.memaddrs _; rw [hUd, ud]; exact hd8)
+      (by change U.memaddrs _; rw [hUd, ud]; exact hd16)
+      hle hcap' hw hLw hLd' (by rw [hgE]; rcases hLh with h | h <;> [left; right] <;> omega) hc1) h3
+  rw [hgE] at ph pold
+  apply Flw.assign
+  intro v hv
+  have hvi : v = .val (.word (i + 1)) := by
+    rw [ev_addr _ (ofString "i") i 1 (by change U.locals.lookup _ = _; rw [hUl]; exact ui)] at hv
+    exact (Option.some.inj hv).symm
+  subst hvi
+  have hpg : ∀ g, globN (setVarHOLFinite (ofString "i") (.val (.word (i + 1)))
+      { cpost with locals := U.locals }) g = globN cpost g := fun g => by unfold globN; rfl
+  have hi1 : (i + 1).toNat = i.toNat + 1 := by
+    rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by simp; omega)
+  have hn1 : n0 + (i + 1) = n0 + i + 1 := by rw [BitVec.add_assoc]
+  refine ⟨pc.trans (hUc.trans uc), pd.trans (hUd.trans ud),
+    arenaReady_setVar _ _ _ _ pA, fun k hk => ?_, by rw [hpg]; omega, ?_,
+    i + 1, arr', cap', ?_, by omega, pmL, by rw [hn1]; exact pm8, pm16, ?_, ?_, by omega, pw, ?_, ?_⟩
+  · change cpost.globals.lookup k = _
+    rw [pg k hk]; change U.globals.lookup k = _; rw [hUg]; exact ug k hk
+  · simp (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hUl, un]
+  · exact setVar_lookup_eq _ _ _
+  · rw [hn1, BitVec.toNat_add]; rw [Nat.mod_eq_of_lt (by simp; omega)]; simp; omega
+  · rcases pold with ⟨rfl, rfl⟩ | ⟨_, _, hc2⟩
+    · exact hcap
+    · omega
+  · rw [hpg]
+    rcases pold with ⟨rfl, rfl⟩ | ⟨h1, h2, _⟩
+    · rcases hold with h | ⟨h1, h2⟩
+      · exact Or.inl h
+      · exact Or.inr ⟨h1, by omega⟩
+    · exact Or.inr ⟨by omega, h2⟩
+  · intro a ha0 hah h0 h8 h16
+    rw [hpg] at hah
+    change cpost.memory a = _
+    have hna : ¬ CellHits a.toNat (arr'.toNat, 8 * cap'.toNat) := by
+      intro hc
+      unfold CellHits at hc ha0 hah; simp only at hc ha0 hah
+      rcases pold with ⟨rfl, rfl⟩ | ⟨h1, h2, _⟩
+      · rcases hold with ⟨rfl, rfl⟩ | ⟨h1, h2⟩
+        · exact ha0 hc
+        · omega
+      · omega
+    rw [pfr a hna h0 h8 h16]
+    change U.memory a = _; rw [hUm]
+    refine ufr a ha0 ?_ h0 h8 h16
+    unfold CellHits at hah ⊢; simp only at hah ⊢; omega
+
+end LogLoop
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
