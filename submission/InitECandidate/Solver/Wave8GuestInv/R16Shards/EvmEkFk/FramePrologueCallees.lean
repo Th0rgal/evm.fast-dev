@@ -2198,6 +2198,48 @@ theorem evmStepCC_of_allocated_heap_effect {F : Type}
     unfold memB
     rw [hmem, hbe]
 
+theorem evmStepCC_of_accumulated_heap_effect {F : Type}
+    {s allocated post : PanSemStateFiniteExact 64 F} {Rl : List Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s allocated)
+    (hbe : allocated.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → allocated.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") →
+      memB allocated b = memB s b)
+    (heff : InitECandidate.Solver.Wave8Contracts.M23.ByteRegionEffect allocated post Rl)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    EvmStepCC ["heap_ptr"] s post ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) := by
+  obtain ⟨hA, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+  have hAA : ArenaReady allocated := hstep.1.1.1
+  have hAP : ArenaReady post := ⟨guestInv_congr heff.code heff.memaddrs
+    heff.shMemaddrs heff.baseAddr hAA.1, arenaOK_congr heff.globals hAA.2⟩
+  have hhp : globN post "heap_ptr" = globN allocated "heap_ptr" := by
+    simp [globN, heff.globals]
+  have hout' : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a := by
+    intro a ha
+    rw [heff.out_dom a (by simpa [hAA.1.memaddrs, hA.1.memaddrs] using ha)]
+    exact hout a ha
+  have hbyte' : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b := by
+    intro b hb hn
+    rw [heff.byte_frame b hb (by
+      intro i hi hbi
+      have hi' := hin i hi
+      unfold Inside at hi'
+      unfold InIvl at hbi
+      exact hn ⟨by omega, by rw [hhp]; omega⟩)]
+    apply hbyte b hb
+    simpa only [hhp] using hn
+  refine ⟨evmStepCC_of_fresh_heap_step hA hAt hAP (heff.be.trans hbe) ?_ ?_ hout' hbyte',
+    hout', hbyte'⟩
+  · rw [hhp]; exact hstep.1.2.1
+  · intro k hk
+    rw [heff.globals]
+    exact hstep.1.2.2.1 k hk
+
 section HeadLogAppendInv
 
 open InitECandidate.Solver.Wave8GuestInv.R11Shards
