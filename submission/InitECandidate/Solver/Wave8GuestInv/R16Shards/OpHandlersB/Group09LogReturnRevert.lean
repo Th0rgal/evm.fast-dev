@@ -12066,4 +12066,68 @@ theorem frameWF_of_log_growth_g09 {F : Type}
       rw [hret]
       exact ⟨⟨hinside.1, le_trans hinside.2 hheap⟩, (hwcongr _).2 hw⟩
 
+/-- Allocation supplies both the complete doubled backing array and its insertion
+slot; final memory writes do not invalidate the allocated word domain. -/
+theorem log_growth_buffer_of_allocated_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat)
+    (hheap : q.toNat ≤ globN copy "heap_ptr") :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    Inside (frameLogs post ec) sourceBase (globN post "heap_ptr") ∧
+    WordsOK post (frameLogs post ec) ∧
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) := by
+  dsimp only
+  intro hec
+  obtain ⟨h0, _, h16, _, _, _⟩ :=
+    log_growth_readback_of_fresh_g09 copy l p n cap q log objects
+      hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  rw [hl16] at h16
+  obtain ⟨_, _, hsize, _, _, _, _, _, _, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  rw [hsize] at hfit
+  have hword : ∀ i, i < 2 * cap.toNat →
+      WordAt {copy with memory := fun a =>
+        if a = p + n * 8#64 then .word log
+        else if a = l + 8#64 then .word (n + 1#64)
+        else if a = l + 16#64 then .word (cap * 2#64)
+        else if a = l then .word p else copy.memory a} (p.toNat + 8 * i) := by
+    intro i hi
+    have hb : i < (q.toNat - p.toNat) / 8 := by omega
+    obtain ⟨_, hd, _⟩ := hwords.2.2 i hb
+    unfold WordAt
+    dsimp only
+    cases hm : (if BitVec.ofNat 64 (p.toNat + 8 * i) = p + n * 8#64 then .word log
+      else if BitVec.ofNat 64 (p.toNat + 8 * i) = l + 8#64 then .word (n + 1#64)
+      else if BitVec.ofNat 64 (p.toNat + 8 * i) = l + 16#64 then .word (cap * 2#64)
+      else if BitVec.ofNat 64 (p.toNat + 8 * i) = l then .word p
+      else copy.memory (BitVec.ofNat 64 (p.toNat + 8 * i))) with
+    | word w => exact ⟨w, hd, rfl⟩
+  unfold frameLogs
+  rw [hec, h0, h16]
+  refine ⟨⟨hlo, ?_⟩, ⟨hwords.1, by omega, ?_⟩, ?_⟩
+  · change p.toNat + 8 * (cap.toNat * 2) ≤ globN copy "heap_ptr"
+    omega
+  · intro i hi
+    apply hword i
+    omega
+  · intro i hi
+    apply hword i
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
