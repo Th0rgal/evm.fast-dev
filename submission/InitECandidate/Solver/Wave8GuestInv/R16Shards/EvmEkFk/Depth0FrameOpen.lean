@@ -5178,4 +5178,38 @@ theorem ro_get_delegated_code_address : ReadOnlyFn (ofString "get_delegated_code
   subst body
   rfl
 
+/-- The delegation-address call retains both code locals for the source
+branch and common suffix, and supplies a word-valued delegation address. -/
+theorem hoare_prepare_dispatch_delegation_address (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (tail : ProgHOL 64)
+    (htail : Hoare (fun s => (D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) ∧ ∃ da : BitVec 64,
+      s.locals.lookup (ofString "da") = some (.val (.word da))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.decCall (ofString "da") .one (ofString "get_delegated_code_address")
+        [.rfield 0 (.var .local (ofString "rcode")),
+          .rfield 1 (.var .local (ofString "rcode"))] tail)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  let P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+    D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))
+  have hLO : LocalsOnly ["msg", "code", "code_n"] P := by
+    intro F s l k hl h
+    exact ⟨d0Pre_locals gw hp G ch s l k (hl "msg" (by simp)) h.1,
+      (hl "code" (by simp)).trans h.2.1, (hl "code_n" (by simp)).trans h.2.2⟩
+  have hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s :=
+    fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1.1)
+  exact Hoare.decCall_ro_fall ro_get_delegated_code_address hG
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (fun _ h => h.1.1)
+    (ReadOnlyFn.resumeOn hLO hG ro_get_delegated_code_address (ofString "da") (by decide) _)
+    htail
+
 end HeadStore
