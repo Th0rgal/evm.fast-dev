@@ -2845,4 +2845,26 @@ theorem phase2_address_alloc_joint (h : PtxCallees) :
   exact ⟨phase2_address_alloc_ready h s vs body callee ret v post hc hp ha hl hb,
     phase2_address_alloc_world h s vs body callee ret v post hc hp ha hl hb⟩
 
+/-- Address stores preserve the shared witness, including access-list ownership. -/
+theorem phase2_address_joint_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxAddressJoint { s with memory := mem } := by
+  obtain ⟨hp, S, Nd, hW, hT, hd, hte⟩ := hp
+  obtain ⟨hr, hW', hd', hte'⟩ :=
+    phase2_address_store_ready_joint hp hW hT hd hte hx hin hm
+  obtain ⟨hv, _, how⟩ := phase2_store_validated_outside hp.1.1.1.1 hW hT
+    (blk := (locN s "al_addrs", (locN s "nal" + 1) * 8))
+    (fun o ho => hd _ (by simp) o ho) hx hin
+    hp.2.2.2.2.2.2.1 hp.2.2.2.2.2.2.2.1 hm
+  refine ⟨hr, S, Nd, hW', ?_, hd', hte'⟩
+  exact R16Shards.PtxP1.txAccessListAt_congr_unhit
+    hp.1.1.1.1.1.1.1.1.1.2 hp.1.1.1.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 le_rfl hT
+    (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2)
+    (ivlUnhit_single hm (by simp) (disj_of_inside_right hin hp.2.2.2.2.2.2.1))
+    (fun hn => ivlUnhit_single hm (by dsimp; omega)
+      (disj_of_inside_right hin (hp.2.2.2.2.2.2.2.1 hn)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
