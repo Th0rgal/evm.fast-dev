@@ -4916,6 +4916,20 @@ theorem hoare_stableCopy_backing_init :
     · intro F s hp hr
       cases hr
 
+/-- Zeroing the counter realizes the loop-entry weakest precondition. -/
+theorem hoare_stableCopy_zero_entry :
+    Hoare (fun s => StableCopyLoopInv
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) s))
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+    subst v
+    exact hp
+  · intro F s hp hr
+    cases hr
+
 /-- Concrete counter initialization from the post-length spatial contract. -/
 theorem hoare_stableCopy_init_spatial :
     Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
@@ -5372,6 +5386,73 @@ theorem stableCopy_loop_cut {tail : ProgHOL 64} {b : Nat}
         tail) (2 ^ 28 + 1 + b) := by
   intro F s hc hp
   exact seq_bound_trans stableCopy_loop_budget hoare_stableCopy_loop_done htail s hc hp
+
+/-- Counter initialization composes with any bounded full-loop continuation. -/
+theorem stableCopy_init_spatial_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableCopyLoopInv tail b) :
+    TerminatingProgBoundedOn (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      ∃ n p q : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+        q.toNat = memW s (locN s "stable_logs"))
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) b := by
+  rw [← Nat.zero_add b]
+  intro F s hc hp
+  refine seq_bound_trans (P := fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      ∃ n p q : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+        q.toNat = memW s (locN s "stable_logs"))
+    ?_ hoare_stableCopy_init_spatial htail s hc hp
+  intro F' t hcode hpre hclock
+  have ht := clock_assign t .local (ofString "i") (.const 0)
+  exact ⟨by omega, by omega⟩
+
+/-- The concrete right-associated setup adds no clock cost before a bounded
+copy-loop continuation. -/
+theorem stableCopy_backing_init_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableCopyLoopInv tail b) :
+    TerminatingProgBoundedOn (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (.seq (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+        (.seq (.assign .local (ofString "i") (.const 0)) tail)) b := by
+  have hi : Hoare (fun s => StableCopyLoopInv
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) s))
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+    apply Hoare.assign
+    · intro F s v hp hv _
+      have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+      subst v
+      exact hp
+    · intro F s hp hr
+      cases hr
+  intro F s hc hp
+  have hinit : TerminatingProgBoundedOn (fun s => StableCopyLoopInv
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) s))
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) (0 + b) := by
+    intro G t ht hq
+    exact seq_bound_trans (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "i") (.const 0)
+      exact ⟨by omega, by omega⟩) hi htail t ht hq
+  simpa only [Nat.zero_add] using seq_bound_trans (a := 0)
+    (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs")))
+      exact ⟨by omega, by omega⟩)
+    hoare_stableCopy_backing_entry hinit s hc hp
 
 /-- An active separated copy state can run the entire remaining loop and
 then any receipt-ready continuation. -/
