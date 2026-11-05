@@ -7562,4 +7562,58 @@ theorem merge_new_call_bound_owned {F : Type}
     worldTypedWith_htab_new_sysTx hAR hA hbe hh hsp hwf hkey hfp hd hframe hgl hWT
   exact ⟨tw, hbind, hlocals, hnS, hn0, hkey, hcnt, hroles, hWT', hrest⟩
 
+/-- A flowing or resumable outer insertion must actually fall through. -/
+theorem merge_set_call_flow_none {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw vw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hv : evalAt s ev = some (.val (.word vw)))
+    (hc : s.code = originalRuntimeCode)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1 = none := by
+  rw [evaluateHOLFiniteState_call] at hfr ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [et, ek, ev] = some [.val (.word tw), .val (.word kw), .val (.word vw)] := by
+    unfold evalAt at ht hk hv
+    simp [evalListHOLFinite, evalListHOLExact, ht, hk, hv]
+  have hl := pan_three_word_lookup s.code.lookup (ofString "htab_set")
+    (ofString "t") (ofString "key") (ofString "value")
+    (sourceFnBody Guest.Software.guestFn_htab_set) tw kw vw
+    (by decide) (by decide) (by decide) (by rw [hc]; exact R16WkMarkAccountCreated.lookup_htab_set)
+  rw [ha] at hfr ⊢
+  dsimp only at hfr ⊢
+  rw [hl] at hfr ⊢
+  dsimp only at hfr ⊢
+  split at hfr
+  · simp [FlowingOrResumes, Resumes] at hfr
+  · rename_i hnz
+    rw [if_neg hnz]
+    rcases hr : evaluateHOLFiniteState _ _ with ⟨r, post⟩
+    rw [hr] at hfr
+    cases r with
+    | none => exact absurd hfr not_flowingOrResumes_error
+    | some r =>
+      cases r with
+      | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+      | timeOut => simp [FlowingOrResumes, Resumes] at hfr
+      | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+      | returned v =>
+        dsimp only at hfr ⊢
+        split at hfr
+        · rename_i hshape
+          rw [if_pos hshape]
+        · exact absurd hfr not_flowingOrResumes_error
+      | exception e v =>
+        have he : Resumes (some (.exception e v)) := by
+          rcases hfr with h | h | h | h <;> try simp at h
+          exact h
+        obtain ⟨_, hv⟩ | ⟨e', v', hv, hne⟩ := he
+        · cases hv
+        · cases hv
+          exact False.elim (WkBal.htab_set_no_catchable_exn (callEntryStateHOLFinite s _) hc e v hne
+            (congrArg Prod.fst hr))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
