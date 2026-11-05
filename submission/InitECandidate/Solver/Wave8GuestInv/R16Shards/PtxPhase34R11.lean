@@ -3946,6 +3946,15 @@ def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     locN s "i" ≤ locN s "nl" ∧
     (locN s "i" < locN s "nl" → StableCopyStorePre s)
 
+/-- An active separated store state supplies every loop-head premise;
+positivity of the length recovers its word-shaped local. -/
+theorem stableCopyStorePre_loopInv {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyStorePre s) : StableCopyLoopInv s := by
+  obtain ⟨w, p, q, hw, _⟩ := hp.2.2.1
+  have hn : 0 < locN s "nl" := Nat.lt_of_le_of_lt (Nat.zero_le _) hp.2.1
+  exact ⟨hp.1, ⟨w, BitVec.ofNat 64 (locN s "nl"), hw,
+    stable_positive_local_word s "nl" hn⟩, Nat.le_of_lt hp.2.1, fun _ => hp⟩
+
 /-- A completed copy needs no further separation premise at the loop head. -/
 theorem stableCopyLoopInv_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s)
@@ -3987,6 +3996,15 @@ theorem hoare_stableCopy_init_empty :
       hp.2.2.2.2.1 hp.2.2.2.2.2
   · intro F s hp hr
     cases hr
+
+/-- A separated active-store state already satisfies the full loop-head
+contract; positivity supplies the length operand's word shape. -/
+theorem stableCopyLoopInv_of_storePre {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyStorePre s) : StableCopyLoopInv s := by
+  obtain ⟨w, p, q, hw, hl, hq, hptr⟩ := hp.2.2.1
+  have hn := stable_positive_local_word s "nl" (by have := hp.2.1; omega)
+  exact ⟨hp.1, ⟨w, BitVec.ofNat 64 (locN s "nl"), hw, hn⟩,
+    Nat.le_of_lt hp.2.1, fun _ => hp⟩
 
 /-- Clock decrement preserves the separated store contract. -/
 theorem stableCopyStorePre_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -4818,6 +4836,36 @@ theorem stable_length_cell_disj {F : Type} (s : PanSemStateFiniteExact 64 F)
   apply disj_of_inside_right ?_ hd
   rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (stable_length_address_bound s hA hh).1]
   constructor <;> dsimp <;> omega
+
+/-- Both allocations returned by the stable-list constructor are separated
+from the source header, backing cells, and entry records at call entry. -/
+theorem lst_new_stable_source_separation (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ a ∈ [(w.toNat, 24), (memW post w.toNat, 8 * locN s "stable_log_cap")],
+        Disj a (locN s "logs", 24) ∧
+        Disj a (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8)) ∧
+        ∀ i, i < memW s (locN s "logs" + 8) →
+          Disj a (memW s (memW s (locN s "logs") + 8 * i), 40) := by
+  obtain ⟨w, hv, hh, hb, _⟩ := lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hpost := (hw (Or.inl ⟨v, rfl⟩)).1
+  refine ⟨w, hv, ?_⟩
+  intro a ha
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl
+  · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hh (by decide) hp.1
+  · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hb (by omega) hp.1
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
