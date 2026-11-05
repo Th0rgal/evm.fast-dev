@@ -8057,4 +8057,32 @@ theorem merge_set_journal_kept {F : Type}
       simp [hnz]
     · dsimp; omega
 
+/-- Insertion preserves all aligned table-role fields of a fixed world record. -/
+theorem merge_set_recRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (g : String) (sz : Nat) (ks : List (Nat × String))
+    (hrec : (g, sz) ∈ typedRecords) (hsz : sz ≠ 0)
+    (hg : ofString g ≠ ofString "heap_ptr")
+    (hks : ∀ k ∈ ks, k.1 % 8 = 0 ∧ k.1 + 8 ≤ sz) :
+    recRoles post g ks = recRoles s g ks := by
+  have hglob : globN post g = globN s g := by
+    apply globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString g) ?_)
+    simpa using hg
+  unfold recRoles
+  rw [hglob]
+  split
+  · rfl
+  · rename_i hnz
+    have hm := typedRecord_mem_fixedObjects s (r := (g, sz)) hrec
+    simp only [hnz, ↓reduceIte] at hm
+    have hu := merge_set_fixed_unhit hA hW ht he _ hm hsz
+    apply List.map_congr_left
+    intro k hk
+    have hw := rec_word_eq_of_unhit hA.2 hW.2.2.1 g sz hrec hglob hnz hu
+      (hks k hk).1 (hks k hk).2
+    rw [hglob] at hw
+    exact congrArg (fun v => (v, k.2)) hw
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
