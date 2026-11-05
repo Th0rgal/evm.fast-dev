@@ -8551,4 +8551,30 @@ theorem phase2_packed_outer_iteration_with_locals {F : Type}
   · simpa only [hl "k" (by simp)] using hp.2.2.2.2.1
   · simpa only [hl "i" (by simp)] using hp.2.2.2.2.2.1
 
+/-- A record pass composes the reset, strengthened inner loop, and outer increment. -/
+theorem phase2_packed_record_pass_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.seq (.assign .local (ofString "j") (.const 0))
+        (.seq
+          (.while (.cmp .less (.var .local (ofString "j"))
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 16])))
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.op .add [.var .local (ofString "al_keys"),
+                  .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+              (.seq
+                (.call (some (none, none)) (ofString "memcpy")
+                  [.op .add [.var .local (ofString "al_keys"),
+                    .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+                (.seq
+                  (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+                  (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxPackedOuterIteration s) := by
+  exact Hoare.seq_fall phase2_packed_outer_iteration_reset_hoare
+    (Hoare.seq_fall (phase2_packed_inner_acc_hoare h addressSrc keySrc)
+      phase2_packed_outer_iteration_increment_hoare)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
