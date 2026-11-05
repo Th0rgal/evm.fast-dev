@@ -3347,6 +3347,34 @@ theorem resume_lst_push_logSlot (h : PtxCallees) (hnonzero : LstPushBackingNonze
   rw [hbo, hm]
   simpa only [harg.2] using hn'
 
+/-- At a backing-aware log cut the concrete push supplies its own nonzero
+result, rather than requiring the unguarded backing contract. -/
+theorem resume_lst_push_logSlot_backing (h : PtxCallees) :
+    DecCallResumeOn (fun s => Phase4LogPointersReady s ∧ TxBacking s) Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp.1.1.1.1.1 ha hl
+  have hstrong : BoListArgStrong (callEntryStateHOLFinite s callee) := by
+    refine ⟨harg.1.1, harg.1, ?_⟩
+    rw [harg.2]
+    exact hp.2.1
+  have hn := funSpec_at_lookup (lst_push_backing_nonzero_strong h) s hc vs body callee ret hl
+    hstrong (by rw [hr]; simp)
+  rw [hr] at hn
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.1.1.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  apply lst_push_logSlot_resume h s vs body callee ret v post hc hp.1 ha hl hr
+  rw [hbo, hm]
+  simpa only [harg.2] using hn v rfl
+
 theorem hoare_logSlot_store (src : ExpHOL 64)
     (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
       evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
