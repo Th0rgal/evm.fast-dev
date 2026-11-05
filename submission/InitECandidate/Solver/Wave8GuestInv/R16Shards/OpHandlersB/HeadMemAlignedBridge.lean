@@ -9207,6 +9207,56 @@ theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
     simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
       noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
 
+/-- Table union leaves the separated parent log header unchanged. -/
+theorem icsTail_logHeader {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hL : Allocated s (L.toNat, 24))
+    (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF s T) :
+    readW post L = readW s L ∧
+      readW post (L + 8) = readW s (L + 8) ∧
+      readW post (L + 16) = readW s (L + 16) := by
+  have hkeep (k : Nat) (hk : k ≤ 16) :
+      readW post (L + BitVec.ofNat 64 k) = readW s (L + BitVec.ofNat 64 k) := by
+    have hkn : (L + BitVec.ofNat 64 k).toNat = L.toNat + k :=
+      tn_add L k (by omega) (by omega)
+    have hin : L.toNat ≤ (L + BitVec.ofNat 64 k).toNat ∧
+        (L + BitVec.ofNat 64 k).toNat + 8 ≤ L.toNat + 24 := by rw [hkn]; omega
+    unfold readW
+    rw [h.2.2.2.2.2 _ (Ne.symm (ne_of_not_hits hE hin))
+      (fun j hj => noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hin) ?_]
+    have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    exact noFresh_of_alloc hA.2 hL hin (by omega) h.2.2.2.2.1
+  exact ⟨by simpa using hkeep 0 (by omega), hkeep 8 (by omega), hkeep 16 (by omega)⟩
+
+/-- Compose log-loop release bounds with the table-union tail. Both an
+unchanged scratch array and a freshly allocated heap array remain releasable. -/
+theorem laInv_icsTail_logs_release {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {e L arr cap n nc : BitVec 64}
+    {T cm : Nat} (hloop : LAInv s L arr cap n nc mid)
+    (htail : ICSTail mid e T post)
+    (hL : Allocated mid (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint mid T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF mid T)
+    (hold : Inside (arr.toNat, 8 * cap.toNat) sourceBase (globN s "heap_ptr") ∨
+      Inside (arr.toNat, 8 * cap.toNat) cm scratchEnd)
+    (hsource : sourceBase ≤ globN s "heap_ptr") :
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat)
+      sourceBase (globN post "heap_ptr") ∨
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat) cm scratchEnd := by
+  obtain ⟨h0, _, h16⟩ := icsTail_logHeader htail hloop.2.2.1 hL hLB hE hT hwf
+  rw [h0, h16]
+  rcases laInv_logs_release hloop hold hsource with hh | hh
+  · exact Or.inl ⟨hh.1, hh.2.trans htail.2.2.2.2.1⟩
+  · exact Or.inr hh
+
 /-- The success write frame preserves all four protected cells of every live
 frame.  Separation follows from the input invariant, including for the parent
 record that also contains the gas writes. -/

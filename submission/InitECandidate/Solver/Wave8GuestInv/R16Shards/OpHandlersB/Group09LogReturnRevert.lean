@@ -12244,4 +12244,40 @@ theorem log_records_of_frame_pairwise_g09 {F : Type}
   refine ⟨i, List.mem_range.2 hi, ?_⟩
   exact List.mem_filter.2 ⟨by simp [logRecordIvls, oldLog], by simp⟩
 
+/-- Replacing the backing array and appending separated log-owned intervals
+preserves pairwise disjointness of the frame's objects. -/
+theorem log_growth_objects_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat}
+    (before after : List Ivl)
+    (hold : frameObjects s ec = before ++ frameLogs s ec :: after)
+    (hpost : frameObjects post ec =
+      (before ++ frameLogs post ec :: after) ++ logOwnedIvls post log)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hbuffer : ∀ o ∈ frameObjects s ec, Disj (frameLogs post ec) o)
+    (hnew_pw : (logOwnedIvls post log).Pairwise Disj)
+    (hnew_old : ∀ n ∈ logOwnedIvls post log, ∀ o ∈ frameObjects s ec, Disj n o)
+    (hnew_buffer : ∀ n ∈ logOwnedIvls post log, Disj n (frameLogs post ec)) :
+    (frameObjects post ec).Pairwise Disj := by
+  rw [hold, List.pairwise_append] at hpw
+  rw [hpost, List.pairwise_append]
+  have hmem_before : ∀ o ∈ before, o ∈ frameObjects s ec := by
+    intro o ho; rw [hold]; exact List.mem_append_left _ ho
+  have hmem_after : ∀ o ∈ after, o ∈ frameObjects s ec := by
+    intro o ho; rw [hold]; exact List.mem_append_right _ (List.mem_cons_of_mem _ ho)
+  refine ⟨?_, hnew_pw, ?_⟩
+  · rw [List.pairwise_append, List.pairwise_cons]
+    refine ⟨hpw.1, ⟨?_, (List.pairwise_cons.1 hpw.2.1).2⟩, ?_⟩
+    · intro o ho; exact hbuffer o (hmem_after o ho)
+    · intro o ho x hx
+      rcases List.mem_cons.1 hx with rfl | hx
+      · exact R11Shards.Disj.symm (hbuffer o (hmem_before o ho))
+      · exact hpw.2.2 o ho x (List.mem_cons_of_mem _ hx)
+  · intro o ho n hn
+    apply R11Shards.Disj.symm
+    rcases List.mem_append.1 ho with ho | ho
+    · exact hnew_old n hn o (hmem_before o ho)
+    · rcases List.mem_cons.1 ho with rfl | ho
+      · exact hnew_buffer n hn
+      · exact hnew_old n hn o (hmem_after o ho)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

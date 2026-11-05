@@ -12384,4 +12384,82 @@ theorem ro_logs_encoded_bound : ReadOnlyFn (ofString "logs_encoded_bound") :=
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Effects on buffers freshly allocated since `s` fold into the original heap frame. -/
+theorem heapByteEff_trans_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R fresh : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw)
+    (hstep : HeapByteEff mid post (R ++ fresh) gw)
+    (hfresh : ∀ i ∈ fresh, globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit) :
+    HeapByteEff s post R gw := by
+  have hp : HeapByteEff s mid (R ++ fresh) gw := hpre.mono
+    (fun i hi _ => Or.inl ⟨i, List.mem_append_left _ hi, le_rfl, le_rfl⟩)
+    (fun _ h => h)
+  apply (hp.trans hstep).mono
+  · intro i hi _
+    rcases List.mem_append.mp hi with hi | hi
+    · exact Or.inl ⟨i, hi, le_rfl, le_rfl⟩
+    · exact Or.inr (Or.inr (hfresh i hi))
+  · exact fun _ h => h
+
+theorem heapByteEff_storeByte_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw) (addr value : ExpHOL 64)
+    (hr : evaluateHOLFiniteState mid (.storeByte addr value) = (none, post))
+    (haddr : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit) :
+    HeapByteEff s post R gw := by
+  obtain ⟨he, _⟩ := M11.ByteRegionEffect.of_storeByte hr
+    (Rl := [heapFree s]) (fun a ha _ => by
+      have hb := haddr a ha
+      exact ⟨heapFree s, by simp, hb.1, by dsimp [heapFree]; omega⟩)
+  have hs : HeapByteEff mid post (R ++ [heapFree s]) gw :=
+    (HeapByteEff.of_m11_bre hpre.arena he).mono
+      (fun i hi _ => Or.inl ⟨i, List.mem_append_right _ hi, le_rfl, le_rfl⟩)
+      (fun _ h => h)
+  apply heapByteEff_trans_fresh hpre hs
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  have hh := hpre.arena.2.2.1
+  have hbase := le_trans hpre.hp_le hh
+  dsimp [heapFree]
+  omega
+
+theorem rlp_encode_word_heapByteEff {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst w : BitVec 64) (v : ValueHOL 64)
+    (R : List Ivl) (gw : List String) (hA : ArenaReady s)
+    (hd : s.locals.lookup (ofString "dst") = some (.val (.word dst)))
+    (hw : s.locals.lookup (ofString "w") = some (.val (.word w)))
+    (hR : ∃ i ∈ R, i.1 ≤ dst.toNat ∧ dst.toNat + 9 ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_encode_word) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have ht := eval_rlp_encode_word_body_exact s dst w R hA.1.code hA.1.memaddrs hd hw hR
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨len, _, _, _, _, he⟩ := ht.1 v rfl
+  exact HeapByteEff.of_m11_bre hA he
+
+theorem rlp_encode_bytes_heapByteEff {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src n : BitVec 64) (v : ValueHOL 64)
+    (R : List Ivl) (gw : List String) (hA : ArenaReady s)
+    (hd : s.locals.lookup (ofString "dst") = some (.val (.word dst)))
+    (hs : s.locals.lookup (ofString "src") = some (.val (.word src)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hR : ∃ i ∈ R, i.1 ≤ dst.toNat ∧
+      dst.toNat + rlpHeaderLenPure n.toNat + n.toNat ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have ht := eval_rlp_encode_bytes_body_exact s dst src n R hA.1.code hA.1.memaddrs hd hs hn hR
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨len, _, _, _, he⟩ := ht.1 v rfl
+  exact HeapByteEff.of_m11_bre hA he
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

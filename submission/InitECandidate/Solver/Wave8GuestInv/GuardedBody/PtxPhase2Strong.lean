@@ -13908,4 +13908,84 @@ theorem phase2_ws_get_account_optional_unhit {F : Type}
     (R16Shards.WorldEff.refl s [] R16Shards.wsBufs R16Shards.wsGw ha hc) hnt hr
   exact phase2_worldEff_allocated_unhit he ha hi hal (by simp) hd
 
+/-- Fixed-object separation puts both nested list headers outside world-state scratch buffers. -/
+theorem phase2_nested_header_disj_wsBufs {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    {k : Nat} (hk : k ∈ ([40, 72] : List Nat)) :
+    ∀ b ∈ R16Shards.wsBufs,
+      Disj (memW s (globN s "bo" + k), 24) (bufferRegion s b) := by
+  have hm : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, he.bo_nz, he.bo40]
+    · simp [blockOutObjects, he.bo_nz, he.bo72]
+  obtain ⟨_, _, hd, _, _⟩ := fixedObjects_disj_parts hw.2.2.1
+  intro b hb
+  have hbg : b ∈ globalBuffers := by
+    simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl <;> decide
+  have hg := hd (bufferRegion s b) (List.mem_map.2 ⟨b, hbg, rfl⟩)
+    _ (List.mem_append_left _ (List.mem_append_right _ hm))
+  exact disj_symm hg
+
+/-- The concrete world-state lookup preserves both nested backing headers. -/
+theorem phase2_ws_get_account_optional_nested_unhit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s
+      (evaluateHOLFiniteState s
+        (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+      (memW s (globN s "bo" + k), 24) := by
+  intro k hk
+  have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  have hf := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+  exact phase2_ws_get_account_optional_unhit s hc ha
+    ⟨hf.2.1, by norm_num⟩ hf.1 (phase2_nested_header_disj_wsBufs he hw hk) hnt hr
+
+/-- Table insertion frames allocated headers separated from its old footprint. -/
+theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hx : HtabExit s post) {i : Ivl}
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (hal : Allocated s i)
+    (ht : ∀ j ∈ htabFootprint s (locN s "t"), j.1 % 8 = 0)
+    (hd : ∀ j ∈ htabFootprint s (locN s "t"), Disj i j) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  apply hx.2.2.2.2.2.2.1 a
+  · intro j hj
+    have hja := ht j hj
+    have hdis := hd j hj
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> omega
+  · have hdis : Disj i (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      rcases hal with h | h
+      · exact Or.inr (Or.inr (Or.inl h.2))
+      · apply Or.inr; apply Or.inr; apply Or.inr
+        have hsp := hs.2
+        have hpp := hx.1.2
+        have hmono := hx.2.2.2.2.1
+        have hsep : heapLimit ≤ InitE.scratchStart := by decide
+        unfold Inside at h
+        rcases hsp with ⟨_, hp, hf, hsc, _⟩
+        rcases hpp with ⟨_, hp', hf', hsc', _⟩
+        dsimp at *
+        omega
+    have hhp8 := hs.2.2.2.2.2.2.1
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
