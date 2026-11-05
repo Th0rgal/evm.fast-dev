@@ -1837,4 +1837,108 @@ theorem phase2_te_new_storeReady_bound (h : PtxCallees) {tail : ProgHOL 64} {b :
   · exact phase2_resume_te_storeReady h
   · exact ht
 
+/-- Store any fixed-width expression at an aligned environment offset. This
+also handles the transaction-header loads in the initialization sequence. -/
+theorem phase2_teStoreReady_expr_store (src : ExpHOL 64) (k n : Nat)
+    (hk : k + n ≤ 25)
+    (hlen : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxTeStoreReady s → evalAt s src = some v → (flattenHOL v).length = n) :
+    Hoare PtxTeStoreReady
+      (.store (.op .add [.var .local (ofString "te"), .const (8 * k)]) src)
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.2.1
+  have hl : locN s "te" = w.toNat := by simp [locN, hw]
+  have he : x = w + BitVec.ofNat 64 (8 * k) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr, BitVec.ofNat_mul] using hx.symm
+  have hx' : x = BitVec.ofNat 64 (locN s "te" + 8 * k) := by
+    simp [he, hl, BitVec.ofNat_add]
+  rw [hx'] at hst
+  exact phase2_teStoreReady_words (flattenHOL v) hp k (by rw [hlen s v hp hv]; exact hk) hst
+
+theorem phase2_load_one_length {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr : ExpHOL 64) (v : ValueHOL 64) (h : evalAt s (.load .one addr) = some v) :
+    (flattenHOL v).length = 1 := by
+  simp [evalAt, evalHOLExact] at h
+  split at h
+  · simp [memLoadHOLExact] at h
+    rcases h with ⟨_, rfl⟩
+    simp [flattenHOL]
+  · cases h
+
+theorem phase2_load_quad_length {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr : ExpHOL 64) (v : ValueHOL 64)
+    (h : evalAt s (.load (.comb [.one, .one, .one, .one]) addr) = some v) :
+    (flattenHOL v).length = 4 := by
+  simp only [evalAt, evalHOLExact, isWfShapeExactHOL, isWfShapesExactHOL,
+    Bool.and_true, ↓reduceIte] at h
+  rcases ha : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) addr
+    with _ | va
+  · simp [ha] at h
+  rcases va with ⟨wa⟩ | _ | _
+  · cases wa with
+    | word a =>
+      simp only [ha, memLoadHOLExact, memLoadsHOLExact] at h
+      split_ifs at h
+      simp only [Option.some.injEq] at h
+      subst h
+      simp [flattenHOL]
+  · simp [ha] at h
+  · simp [ha] at h
+
+/-- The six initialization stores, exactly the spine between `te_new` and
+the access-list count declaration. -/
+def phase2_teStores (tail : ProgHOL 64) : ProgHOL 64 :=
+  spinePlug 6 (spineAt 35 ptxCode) tail
+
+theorem phase2_teStores_bound {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxTeStoreReady tail b) :
+    TerminatingProgBoundedOn PtxTeStoreReady (phase2_teStores tail) b := by
+  have hs (addr src : ExpHOL 64) : TerminatingProgBoundedOn PtxTeStoreReady (.store addr src) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  unfold phase2_teStores
+  simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+  change TerminatingProgBoundedOn PtxTeStoreReady
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 0]) (.var .local (ofString "sender")))
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 8])
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 152])))
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 16])
+      (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "tx"), .const 160])))
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 48]) (.var .local (ofString "price")))
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 80]) (.var .local (ofString "mgas")))
+    (.seq (.store (.op .add [.var .local (ofString "te"), .const 88]) (.var .local (ofString "reservoir"))) tail)))))) b
+  have seq0 {a t : ProgHOL 64} (ha : TerminatingProgBoundedOn PtxTeStoreReady a 0)
+      (hh : Hoare PtxTeStoreReady a (fun r s => r = none → PtxTeStoreReady s))
+      (ht : TerminatingProgBoundedOn PtxTeStoreReady t b) :
+      TerminatingProgBoundedOn PtxTeStoreReady (.seq a t) b := by
+    intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans ha hh ht s hc hp
+  apply seq0 (hs _ _) (phase2_teStoreReady_offset_scalar 0 (by decide) "sender" (by simp))
+  apply seq0 (hs _ _) (phase2_teStoreReady_expr_store _ 1 1 (by decide)
+    (fun s v _ hv => phase2_load_one_length s _ v hv))
+  apply seq0 (hs _ _) (phase2_teStoreReady_expr_store _ 2 4 (by decide)
+    (fun s v _ hv => phase2_load_quad_length s _ v hv))
+  apply seq0 (hs _ _) (phase2_teStoreReady_offset_price 6 (by decide))
+  apply seq0 (hs _ _) (phase2_teStoreReady_offset_scalar 80 (by decide) "mgas" (by simp))
+  apply seq0 (hs _ _) (phase2_teStoreReady_offset_scalar 88 (by decide) "reservoir" (by simp))
+  exact ht
+
+/-- Bounded constructor and six-store prefix of Phase 2. -/
+theorem phase2_tePrefix_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxTeStoreReady tail b) :
+    TerminatingProgBoundedOn PtxValidatedStrong
+      (spinePlug 7 (spineAt 34 ptxCode) tail) (K.te_new + b + 1) := by
+  have he : spinePlug 7 (spineAt 34 ptxCode) tail =
+      .decCall (ofString "te") .one (ofString "te_new") [] (phase2_teStores tail) := by
+    simp only [phase2_teStores, ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+      spineAt, spinePlug]
+    rfl
+  rw [he]
+  apply phase2_te_new_storeReady_bound h
+  exact phase2_teStores_bound ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
