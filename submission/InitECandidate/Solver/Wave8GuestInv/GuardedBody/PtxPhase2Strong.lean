@@ -4781,4 +4781,49 @@ theorem phase2_packed_copy_words {F : Type} {s : PanSemStateFiniteExact 64 F}
     have h := phase2_packed_key_byte_word hw hk (offset := 20 + j) (by omega)
     simpa only [Nat.add_assoc] using h
 
+/-- Packed allocation combines live backing memory with a shared input/world witness. -/
+def PtxPackedKeysReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (∃ w : BitVec 64, s.locals.lookup (ofString "al_keys") = some (.val (.word w))) ∧
+  Inside (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+    InitE.sourceBase (globN s "heap_ptr") ∧
+  locN s "al_keys" % 8 = 0 ∧
+  WordsOK s (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd)
+
+theorem phase2_packed_keys_alloc_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv PtxPackedKeysReady
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hlive := phase2_packed_keys_alloc_live h s vs body callee ret v post hc hp ha hl hb
+  have hw := phase2_packed_keys_alloc_world h s vs body callee ret v post hc hp ha hl hb
+  exact ⟨hlive.1, hlive.2.1, hlive.2.2.1, hlive.2.2.2, hw⟩
+
+/-- The concrete allocation composes with any continuation on packed-buffer readiness. -/
+theorem phase2_packed_keys_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxPackedKeysReady tail b) :
+    TerminatingProgBoundedOn PtxAddressCountInv
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxPackedKeysReady) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hready : PtxAccessCountReady s := hp.1.1.1.1
+    exact guestInv_callEntry s callee hready.1.1.1.1.1.1.1.1.1
+  · exact phase2_packed_keys_alloc_ready h
+  · exact ht
+
+/-- Framing the access-record key counts preserves the nested copy-index relation. -/
+theorem phase2_key_copy_index_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (i j k : Nat)
+    (hk : k = phase2_key_prefix s i + j)
+    (hm : ∀ n, n < i →
+      memW post (memW post (locN post "tx" + 208) + 24 * n + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * n + 16)) :
+    k = phase2_key_prefix post i + j := by
+  rw [phase2_key_prefix_congr s post i hm]
+  exact hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
