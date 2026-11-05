@@ -4564,4 +4564,49 @@ theorem phase2_storage_keys_words_frame {F : Type}
   cases hm : post.memory (BitVec.ofNat 64 (base + 8 * k)) with
   | word v => exact ⟨v, hd _ ha, hm⟩
 
+/-- The concrete packed-record allocation returns the entire requested buffer. -/
+theorem phase2_packed_keys_alloc_fresh (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : PtxAddressCountInv s)
+    (ha : @evalListHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a))
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hb : (callEntryStateHOLFinite s callee).evaluateHOLFiniteState body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post w.toNat (locN s "nkeys" * 52 + 8) := by
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_address_count_alloc_size s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hready.1.1.1.1.1.1.1.1)
+    (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, hv, _, _, hf⟩ := hr v rfl
+  exact ⟨w, hv, by simpa only [hcn] using hf⟩
+
+/-- Storage allocation simultaneously provides writable memory and world separation. -/
+theorem phase2_storage_keys_alloc_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s =>
+        WordsOK s (locN s "storage_keys", locN s "nkeys" * 32) ∧
+        Inside (locN s "storage_keys", locN s "nkeys" * 32)
+          InitE.sourceBase (globN s "heap_ptr") ∧
+        ∃ S Nd, WorldTypedWith s S Nd ∧
+          TxAccessListAt s S Nd (locN s "tx") ∧
+          IvlsDisj [(locN s "storage_keys", locN s "nkeys" * 32)] (worldOwned s S Nd))
+      (ofString "storage_keys") (ofString "alloc")
+      [.panop .mul [.var .local (ofString "nkeys"), .const 32]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hlive := phase2_storage_keys_alloc_live h s vs body callee ret v post hc hp ha hl hb
+  have hworld := phase2_storage_keys_alloc_world h s vs body callee ret v post hc hp ha hl hb
+  exact ⟨hlive.2.2.2, hlive.2.1, hworld⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
