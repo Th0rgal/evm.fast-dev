@@ -3326,6 +3326,12 @@ theorem stableCopyInv_address_words {F : Type} (s : PanSemStateFiniteExact 64 F)
     Nat.mod_eq_of_lt hi', Nat.mod_eq_of_lt hs', Nat.mod_eq_of_lt hd',
     Nat.mod_eq_of_lt hs, Nat.mod_eq_of_lt hd]
 
+/-- The natural remaining-copy rank has a uniform bound from the source length. -/
+theorem stableCopyInv_rank_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) : locN s "nl" - locN s "i" < 2 ^ 28 := by
+  have hn := (stableLengthPost_length_bound s hp.1 hp.2.1).1
+  omega
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
     PtxReceiptsDone s := by
@@ -3748,6 +3754,36 @@ theorem hoare_stableCopy_store_post :
   obtain ⟨hdom, _, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
   exact stableCopyInv_store_post s mem' hinv hi S Nd hW ho hworld hh hd ha he hdom hm
 
+/-- The copy store establishes the extended prefix needed by the increment. -/
+theorem hoare_stableCopy_store_prefix :
+    Hoare StableCopyStorePre
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → ∀ j, j < locN t "i" + 1 → j < locN t "nl" →
+        memW t (memW t (locN t "stable_logs") + 8 * j) =
+          memW t (memW t (locN t "logs") + 8 * j)) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, hwrite, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  have hlogs := hinv.1.2.1.resolve_left hinv.2.1
+  have hs0 := (stableCopyInv_header_unhit s mem' hinv hi _ hlogs.2.1 hlogs.1.1 hh hm).1
+  have hd0 := (stableCopyInv_header_unhit s mem' hinv hi _
+    hinv.2.2.2.1 hinv.2.2.1.1 hd hm).1
+  have ha' : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") := by
+    rw [hinv.1.2.2.2.2.1, hinv.1.2.2.2.1]; exact ha
+  have harr := stableCopyInv_source_preserved s mem' hinv hi ha' hm
+  rw [hinv.1.2.2.2.2.1] at harr
+  intro j hj _
+  exact stableCopyInv_store_prefix s mem' hinv hi hwrite hm harr hs0 hd0 j hj
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -3902,6 +3938,47 @@ theorem stableCopyInv_separated_store_increment {F : Type}
   have harr := stableCopyInv_source_preserved s mem' hp hi ha hm
   rw [hp.1.2.2.2.2.1] at harr
   exact stableCopyInv_store_increment s mem' w v hp hi hpost hw hwrite hm harr hsrc hdst he
+
+/-- The semantic store establishes the precondition of the actual increment. -/
+theorem hoare_stableCopy_store_for_increment :
+    Hoare StableCopyStorePre
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → ∀ v,
+        evalAt t (.op .add [.var .local (ofString "i"), .const 1]) = some v →
+        StableCopyInv (setVarHOLFinite (ofString "i") v t)) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, hwrite, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  have hpost := stableCopyInv_store_post s mem' hinv hi S Nd hW ho hworld hh hd ha he hdom hm
+  have ha' : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") := by
+    rw [hinv.1.2.2.2.2.1, hinv.1.2.2.2.1]
+    exact ha
+  intro value hvalue
+  exact stableCopyInv_separated_store_increment s mem' w value hinv hi hpost hw
+    hwrite hm hh hd ha' hvalue
+
+/-- The indexed copy store followed by the real increment preserves the invariant. -/
+theorem hoare_stableCopy_body :
+    Hoare StableCopyStorePre
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyInv t) := by
+  apply Hoare.seq_fall hoare_stableCopy_store_for_increment
+  apply Hoare.assign
+  · intro F s v hp hv _
+    exact hp v hv
+  · intro F s hp hr
+    cases hr
 
 /-- The termination measure decreases across both the memory write and the
 counter assignment; the write cannot alter either counter local. -/
