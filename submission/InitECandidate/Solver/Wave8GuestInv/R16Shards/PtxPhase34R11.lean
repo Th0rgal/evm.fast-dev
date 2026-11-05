@@ -13787,4 +13787,69 @@ theorem receipt_bloom_logs_finish_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Gas serialization preserves the receipt frame and exposes its bounded
+encoded length together with the exact caller-local update. -/
+theorem receipt_gas_encode_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p gas old : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 9 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+        [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")]) = (none, post)) :
+    HeapByteEff s post R gw ∧ ∃ w : BitVec 64, 1 ≤ w.toNat ∧ w.toNat ≤ 9 ∧
+      post.locals = mid.locals.update (ofString "w", .val (.word w)) := by
+  have ht := eval_call_local_rlp_encode_word mid "w"
+    (.var .local (ofString "p")) (.var .local (ofString "cumulative_gas")) p gas
+    (R ++ [(p.toNat, 9)]) gw he.arena.1.code he.arena ⟨old, hw⟩ hp hg
+    ⟨(p.toNat, 9), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hlo, hhi, _, _, hloc, heff⟩ := ht.1 rfl
+  refine ⟨heapByteEff_trans_fresh he heff ?_, w, hlo, hhi, hloc⟩
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.call_noexc_ne_returned
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Carry gas encoding's bounded result and preserved locals into the receipt
+continuation, ruling out a premature return from the encoding call. -/
+theorem receipt_gas_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p gas old : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 9 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next : PanSemStateFiniteExact 64 F) (w : BitVec 64),
+      HeapByteEff s next R gw → 1 ≤ w.toNat → w.toNat ≤ 9 →
+      next.locals = mid.locals.update (ofString "w", .val (.word w)) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) →
+      HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+        [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")]) tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  obtain ⟨next, hc, ht⟩ := seq_returned_of_not_returned
+    (WkBlockTxEnc.call_noexc_ne_returned mid (some (.local, ofString "w"))
+      (ofString "rlp_encode_word")
+      [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")] v) hr
+  obtain ⟨he', w, hlo, hhi, hloc⟩ := receipt_gas_encode_frame he p gas old hp hg hw hfresh hc
+  exact hcont next w he' hlo hhi hloc ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
