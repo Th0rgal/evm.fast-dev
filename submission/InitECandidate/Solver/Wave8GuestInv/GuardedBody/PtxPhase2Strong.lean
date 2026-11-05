@@ -8738,4 +8738,75 @@ theorem phase2_packed_storage_copy_ns_hoare (h : PtxCallees) (src : ExpHOL 64) :
   rw [phase2_packed_key_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
   simp
 
+/-- Counter updates preserve the cached `ns` word and its record-count equation. -/
+theorem phase2_packed_ns_counters {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedNsCopy s) (k j : ValueHOL 64) :
+    let post := setVarHOLFinite (ofString "j") j (setVarHOLFinite (ofString "k") k s)
+    (∃ n : BitVec 64, post.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+    locN post "ns" = memW post (memW post (locN post "tx" + 208) + 24 * locN post "i" + 16) := by
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "j" ≠ ofString "ns" by decide,
+    show ofString "k" ≠ ofString "ns" by decide,
+    show ofString "j" ≠ ofString "tx" by decide,
+    show ofString "k" ≠ ofString "tx" by decide,
+    show ofString "j" ≠ ofString "i" by decide,
+    show ofString "k" ≠ ofString "i" by decide] using hp.2
+
+/-- The source counter pair restores the cached-count iteration invariant. -/
+theorem phase2_packed_counters_ns_hoare :
+    Hoare PtxPackedNsCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedNsIteration s) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, PtxPackedNsCopy before ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hp, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨phase2_packed_counters_iteration_state before hp.1.1 hp.1.2.1
+        hp.1.2.2.2, phase2_packed_ns_counters before hp _ _⟩
+    · exact fun _ _ hr => by cases hr
+
+/-- Both copies and both counters preserve the actual source-loop invariant. -/
+theorem phase2_packed_body_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedNsIteration s) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_ns_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_ns_hoare h keySrc)
+      phase2_packed_counters_ns_hoare)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
