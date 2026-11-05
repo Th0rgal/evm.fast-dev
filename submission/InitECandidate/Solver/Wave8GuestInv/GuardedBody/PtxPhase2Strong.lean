@@ -7856,4 +7856,25 @@ theorem phase2_packed_iteration_while {guard : ExpHOL 64} {body : ProgHOL 64}
           (fun hlt => hz (hguard.mpr hlt))).1⟩
     · simp at he
 
+/-- The concrete copy body discharges the body premise of inner-loop induction. -/
+theorem phase2_packed_iteration_guarded_body (h : PtxCallees)
+    (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => PtxPackedIteration s ∧ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedIteration s) := by
+  refine ⟨fun {F} s hc hp hn => ?_⟩
+  exact (phase2_packed_body_iteration_hoare h addressSrc keySrc).run s hc
+    (phase2_packed_iteration_guard_pre s hp.1 hp.2) hn
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
