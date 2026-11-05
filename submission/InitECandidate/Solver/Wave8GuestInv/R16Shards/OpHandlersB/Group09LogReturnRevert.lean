@@ -11748,4 +11748,74 @@ theorem log_growth_readback_of_fresh_g09 {F : Type}
     log_growth_final_cells_g09 s l p n cap log h08 h016 h816 hs0 hs8 hs16 hold
   exact ⟨h0, h8.trans hn1, h16.trans hcap2, hcap2 ▸ hcapacity, hstore, hprefix⟩
 
+/-- Fresh-buffer readback closes the semantic log append postcondition after
+growth, including all old records and their owned intervals. -/
+theorem log_growth_post_of_fresh_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap q log : BitVec 64) (objects Rl : List Ivl)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8 * i) = memW s (memW s l.toNat + 8 * i)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ByteRegionEffect s post Rl →
+    globN s "heap_ptr" ≤ globN post "heap_ptr" →
+    globN post "vm_system_address" = globN s "vm_system_address" →
+    (∀ x ∈ Rl, ∀ i, i < n.toNat →
+      Disj x (memW s (memW s l.toNat + 8 * i), 40)) →
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro heff hheap hsys hdisj hframe hwords hallocated hslots hlog
+  obtain ⟨h0, h8, h16, hcapacity, hstore, hprefix⟩ :=
+    log_growth_readback_of_fresh_g09 copy l p n cap q log objects
+      hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hslot : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    have hq := q.isLt
+    obtain ⟨_, _, _, hmul, _, _, _, _, hbound, _⟩ :=
+      log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by rw [hmul] at hbound; omega)]
+    omega
+  rw [hl8] at h8
+  rw [hl16] at h16
+  rw [hslot] at hstore
+  apply log_append_post_of_frame_effect_g09 hA hFW heff hheap hsys
+  · simpa only [hl, hn] using hdisj
+  · exact hframe.trans hl.symm
+  · simpa only [hl] using hwords
+  · simpa only [hl] using hallocated
+  · simpa only [hl, hn] using h8
+  · simpa only [hl, hn, h16] using hcapacity
+  · intro i hi
+    rw [hl, hn] at hi
+    simp only [hl, h0]
+    exact ⟨hslots i (Nat.le_of_lt hi), (hprefix i hi).trans (hcopy i hi)⟩
+  · simpa only [hl, hn, h0] using hslots n.toNat (le_refl _)
+  · simpa only [hl, hn, h0] using hstore
+  · exact hlog
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
