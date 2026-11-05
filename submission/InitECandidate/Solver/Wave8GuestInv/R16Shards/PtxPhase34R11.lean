@@ -1753,6 +1753,31 @@ theorem lst_push_logPointers_resume (h : PtxCallees) {F : Type}
   exact LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _
     (logPointers_heapStep hs' hp hn)
 
+theorem lst_push_bo40_arg {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret)) :
+    BoListArg (callEntryStateHOLFinite s callee) ∧
+      locN (callEntryStateHOLFinite s callee) "l" = memW s (globN s "bo" + 40) := by
+  have ha' := ha
+  rw [evalListHOLFinite_eq_toExact] at ha'
+  rcases hload : evalAt s (.load .one (.op .add [.var .global (ofString "bo"), .const 40])) with _ | vl
+  · simp only [evalListHOLExact, hload] at ha'; cases ha'
+  obtain ⟨w, rfl, hw⟩ := evalAt_loadG s "bo" 40 vl hload
+  have hparams := callee_param_two_exp s (ofString "lst_push") (ofString "l") (ofString "esz")
+    .one .one _ _ (by rw [hc]; exact lookup_lst_push)
+    (.load .one (.op .add [.var .global (ofString "bo"), .const 40])) (.const 8)
+    (.val (.word w)) (.val (.word 8)) vs body callee ret hload rfl ha hl
+  have hle : locN (callEntryStateHOLFinite s callee) "l" = memW s (globN s "bo" + 40) := by
+    simpa only [locN, callEntryStateHOLFinite, hparams.2.1,
+      show (40 : BitVec 64).toNat = 40 from rfl] using hw
+  refine ⟨⟨worldOK_callEntry hp.1 callee, hp.2.bo_nz, Or.inl hle, ?_⟩, hle⟩
+  simp only [locN, callEntryStateHOLFinite, hparams.2.2]
+  rfl
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
