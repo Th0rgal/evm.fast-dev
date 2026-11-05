@@ -2077,8 +2077,8 @@ private theorem eval_nibble_list_to_compact_returned {F : Type}
 
 end RelaxedNodeRlpStack
 
-/-- `BuildMptIndexedReady` / `buildMptIndexedReady_worldOK` now live in `ContractParts/C11.lean`
-(wave8 cutover rehearsal). -/
+-- `BuildMptIndexedReady` / `buildMptIndexedReady_worldOK` now live in `ContractParts/C11.lean`
+-- (wave8 cutover rehearsal).
 
 theorem localsOnly_buildMptIndexedReady :
     LocalsOnly ["slice_arr", "n", "out"] BuildMptIndexedReady := by
