@@ -662,4 +662,23 @@ theorem phase1_gas_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
         phase1_reservoir_shapes s hp.2.1 hp.2.2 v he⟩
     · exact htail
 
+theorem phase1_nonce_shapes (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact R16Shards.PtxP1.hoare_call_scratch_stage h.wk_increment_nonce
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) _
+  · exact phase1_call0_shapes _ _
+
+theorem phase1_sub_balance_shapes (h : PtxCallees) (args : List (ExpHOL 64)) :
+    Hoare (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub") args)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) := by
+  apply phase1_hoare_frame_shapes
+  · exact Hoare.callLocal_resume (R16Shards.PtxP1.resume_ro_stage h.ro_u256_sub (by decide) _)
+  · exact phase1_call_balance_shapes _ _
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
