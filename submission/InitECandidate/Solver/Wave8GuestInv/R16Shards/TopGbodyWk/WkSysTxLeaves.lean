@@ -3039,6 +3039,202 @@ theorem sysTxMsgTablesStep_store_word {F : Type}
   · rw [hhdr_eq p.1 hp_S1]; exact hp_hdr
   · rw [hwrs_eq, hjrs_eq]; exact hp_slot
 
+theorem lookupCode_unchecked_sysTx_words {vals : List (ValueHOL 64)}
+    {L : HolFiniteMapExact MlS (ValueHOL 64)}
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup
+      (ofString "process_unchecked_system_transaction") vals =
+        some (sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction, L, .one)) :
+    ∃ wt wd wdn : BitVec 64,
+      L.lookup (ofString "target") = some (.val (.word wt)) ∧
+      L.lookup (ofString "data") = some (.val (.word wd)) ∧
+      L.lookup (ofString "data_n") = some (.val (.word wdn)) := by
+  obtain ⟨wt, wd, wdn, _, ht, hd, hdn⟩ :=
+    lookupCode_three_words (by decide) (by decide) (by decide)
+      lookup_process_unchecked_system_transaction hl
+  exact ⟨wt, wd, wdn, ht, hd, hdn⟩
+
+theorem seq_call0_prefix_step {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hc : s.code = originalRuntimeCode) (hW0 : WorldOK s0)
+    (h0 : SysTxPrefixStep s0 none s)
+    (hf : FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post) fname)
+    (hnt : (evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont)).1) :
+    (SysTxPrefixStep s0
+      (evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont)).1
+      (evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont)).2 ∧
+     ∃ e ev, (evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont)).1 =
+       some (.exception e ev)) ∨
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      SysTxPrefixStep s0 none mid ∧
+      WorldOK mid ∧
+      mid.code = originalRuntimeCode ∧
+      mid.locals = s.locals ∧
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState mid cont).1 ∧
+      evaluateHOLFiniteState s (.seq (.call (some (none, none)) fname args) cont) =
+        evaluateHOLFiniteState mid cont := by
+  have hWs : WorldOK s := worldOK_of_sysTxStep hW0 h0.1
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s (.call (some (none, none)) fname args)).1
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hWs
+        have hmeta_c := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun hmeta_c
+        simp only [hrun] at hmeta_c hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            exact Or.inl ⟨sysTxPrefixStep_trans hW0.1 h0 (sysTxPrefixStep_from_entry (hspec hres_ex)),
+              eid, ev, rfl⟩
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : shapeEqHOL (shapeOfHOLExact v) ret' = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              set mid := { cpost with locals := s.locals }
+              have hs1 : SysTxPrefixStep s none mid :=
+                sysTxPrefixStep_from_entry (post := cpost) (L := s.locals) (hspec (Or.inl ⟨v, rfl⟩))
+              have hp_tot := sysTxPrefixStep_trans hW0.1 h0 hs1
+              exact Or.inr ⟨mid, hp_tot, worldOK_of_sysTxStep hW0 hp_tot.1, hmeta_c.trans hc, rfl, hnt, hfr, rfl⟩
+            · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem decCall_prefix_shaped_step {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    {x : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hc : s.code = originalRuntimeCode) (hW0 : WorldOK s0)
+    (h0 : SysTxPrefixStep s0 none s)
+    (hf : FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post) fname)
+    (hnt : (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1) :
+    (SysTxPrefixStep s0
+      (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1
+      (evaluateHOLFiniteState s (.decCall x sh fname args cont)).2 ∧
+     ∃ e ev, (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 =
+       some (.exception e ev)) ∨
+    ∃ (v : ValueHOL 64) (mid : PanSemStateFiniteExact 64 F),
+      SysTxPrefixStep s0 none mid ∧
+      WorldOK mid ∧
+      mid.code = originalRuntimeCode ∧
+      shapeOfHOLExact v = sh ∧
+      mid.locals.lookup x = some v ∧
+      (∀ y, y ≠ x → mid.locals.lookup y = s.locals.lookup y) ∧
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s (.decCall x sh fname args cont)).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s (.decCall x sh fname args cont)).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (evaluateHOLFiniteState mid cont).2.locals (x, s.locals.lookup x) } := by
+  have hWs : WorldOK s := worldOK_of_sysTxStep hW0 h0.1
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hWs
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun hmeta
+        simp only [hrun] at hmeta hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            exact Or.inl ⟨sysTxPrefixStep_trans hW0.1 h0 (sysTxPrefixStep_from_entry (hspec hres_ex)),
+              eid, ev, rfl⟩
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret') = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have hv_sh : shapeOfHOLExact v = sh :=
+                (shapeEqHOL_eq_true _ _).1 ((Bool.and_eq_true _ _ ▸ hsh).1)
+              have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              set mid := setVarHOLFinite x v { cpost with locals := s.locals }
+              have hs1 : SysTxPrefixStep s none mid :=
+                sysTxPrefixStep_from_entry (post := cpost) (L := mid.locals) (hspec (Or.inl ⟨v, rfl⟩))
+              have hp_tot := sysTxPrefixStep_trans hW0.1 h0 hs1
+              exact Or.inr ⟨v, mid, hp_tot, worldOK_of_sysTxStep hW0 hp_tot.1, hmeta.trans hc, hv_sh,
+                by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE],
+                fun y hy => by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hy],
+                hnt, hfr, rfl, rfl⟩
+            · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem msgReady_of_sysTxMsgTablesStep {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {w_m w_aa w_ak : BitVec 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)}
+    (hW0 : WorldOK s0)
+    (hstep : SysTxMsgTablesStep s0 s w_m [(w_aa.toNat, 20), (w_ak.toNat, 52)])
+    (hgas : memW s (w_m.toNat + 40) = 30000000)
+    (hm152 : memW s (w_m.toNat + 152) = w_aa.toNat)
+    (hm160 : memW s (w_m.toNat + 160) = w_ak.toNat)
+    (hcallee : callee.lookup (ofString "msg") = some (.val (.word w_m))) :
+    MsgReady (callEntryStateHOLFinite s callee) := by
+  obtain ⟨hp, hm8, hin_m, htabs_step⟩ := hstep
+  obtain ⟨hA0, S0, hS0⟩ := hW0
+  obtain ⟨Nd0, hWT0⟩ := (worldTyped_iff_with s0 S0).1 hS0
+  have hD0 : IvlsDisj (bufRegions sysTxBufs s0) (worldTypedIvls s0 S0 Nd0) :=
+    validBufList_disj validBufList_sysTxBufs hWT0
+  obtain ⟨S', Nd', _, hWT', _, _, hdisj', htabs⟩ := htabs_step S0 Nd0 hWT0 hD0
+  obtain ⟨haa_S, haa_hdr, haa_slot⟩ := htabs (w_aa.toNat, 20) (by simp)
+  obtain ⟨hak_S, hak_hdr, hak_slot⟩ := htabs (w_ak.toNat, 52) (by simp)
+  set ent := callEntryStateHOLFinite s callee
+  have hA_ent : ArenaReady ent := localsFree_arenaReady s callee (s.clock - 1) hp.1.1
+  have hWT_ent : WorldTypedWith ent S' Nd' :=
+    ⟨(tablesTyped_with_locals s callee (s.clock - 1) S').2 hWT'.1,
+      hWT'.2.1, hWT'.2.2.1, hWT'.2.2.2.1, hWT'.2.2.2.2.1, hWT'.2.2.2.2.2⟩
+  have hloc_msg : locN ent "msg" = w_m.toNat := by
+    simp [ent, callEntryStateHOLFinite, decClockHOLFinite, locN, hcallee]
+  have hin_m_ent : Inside (w_m.toNat, 176) sourceBase (globN ent "heap_ptr") :=
+    ⟨le_trans hA0.2.1 hin_m.1, hin_m.2⟩
+  exact msgReady_of_sysTx_parts hA_ent hWT_ent hloc_msg hm152 hm160
+    haa_S hak_S haa_hdr hak_hdr haa_slot hak_slot hin_m_ent hm8
+    (fun o ho => hdisj' (w_m.toNat, 176) (by simp) o ho) hgas
+
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
       WorldKeeps WorldOK
