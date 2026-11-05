@@ -10506,4 +10506,32 @@ theorem phase2_memcpy_eval_live_buffer (h : PtxCallees) {F : Type}
     dsimp at hz
     omega
 
+/-- Caller-owned word contents carried alongside a world witness. -/
+def PtxLiveBufferAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (buffer : Ivl) (contents : Nat → BitVec 64) : Prop :=
+  Inside buffer InitE.sourceBase (globN s "heap_ptr") ∧
+  IvlsDisj [buffer] (worldOwned s S Nd) ∧
+  ∀ p, buffer.1 ≤ p → p + 8 ≤ buffer.1 + buffer.2 → p % 8 = 0 →
+    memW s p = (contents p).toNat
+
+/-- A world step with separated writes preserves a caller buffer's contents
+and ownership, allowing the same frame to be reused by the next call. -/
+theorem phase2_live_buffer_step {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64) (writes : List Ivl)
+    (hp : PtxLiveBufferAt s S Nd buffer contents)
+    (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hg : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ writes ++ [freeGap s]) (heapFree s))
+    (hd : ∀ region ∈ writes, Disj buffer region)
+    (hz : ∀ region ∈ writes, region.2 = 0 → region.1 % 8 = 0) :
+    PtxLiveBufferAt post S' Nd' buffer contents := by
+  refine ⟨⟨hp.1.1, hp.1.2.trans hh⟩,
+    phase2_packed_owned_growth s post _ _ buffer hp.1 hg hp.2.1, ?_⟩
+  intro p hlo hhi hal
+  rw [phase2_world_frame_heap_disjoint s post _ writes buffer p ha hp.1
+    ⟨hlo, hhi⟩ hal hf (hp.2.1 buffer (by simp)) hd (worldOwned_zero_aligned hw) hz]
+  exact hp.2.2 p hlo hhi hal
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
