@@ -13621,4 +13621,50 @@ theorem phase2_get_account_txEnv (h : PtxCallees) (name : MlS) (args : List (Exp
     rw [hi', hbo, hk 80 (by simp)]; exact hp.2.idx_lt
   · change globN post "journal_cap" ≠ 0; rw [hj]; exact hp.2.jcap_nz
 
+/-- Account lookup frames all initialized message words, despite scratch writes. -/
+theorem phase2_get_account_message_fields (h : PtxCallees) {ι F : Type} [Nonempty ι]
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64)
+    (hc : s.code = GuestCodeLookup.originalRuntimeCode)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") vs = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, _, hd⟩ := hp.2.2.2.2.2 i
+  let gs : List (String × Nat × Nat) :=
+    [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+  have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+  have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+      (worldTypedIvls s S Nd) := by
+    intro x hx y hy
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨hgb, hnu, _, hle⟩ := hspec e he
+    exact bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle y hy
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+  intro k hk
+  apply phase2_world_frame_heap_disjoint s post (worldOwned s S Nd)
+    (gs.map (fun e => bufferRegion s (e.1, e.2.2))) (locN s "m", 176)
+    (locN s "m" + 8 * k) hp.1.1.2 hp.2.2.2.1
+  · constructor <;> dsimp <;> omega
+  · have hm := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hm]
+  · exact hf
+  · exact hd _ (by simp)
+  · intro x hx
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.heap_ivl_disj_bufferRegion_le (hd _ (by simp))
+      (e.1, e.2.1) (hspec e he).1 e.2.2 (hspec e he).2.2.2
+  · exact worldOwned_zero_aligned hw
+  · intro x hx hz
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hspec e he).2.2.1; omega) hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
