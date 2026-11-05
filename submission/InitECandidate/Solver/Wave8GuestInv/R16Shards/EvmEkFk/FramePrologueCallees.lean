@@ -6489,6 +6489,75 @@ theorem transfer_log_field_store_prefix {F : Type}
   have hword : BitVec.ofNat 64 (logw.toNat + off) = addr := by rw [← hnat]; simp
   simp [memW, mid, hword]
 
+theorem transfer_alloc_data_write_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data : BitVec 64)
+    (av : ValueHOL 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word data)))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+        (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+          [.var .local (ofString "amount"), .var .local (ofString "data")]) cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "data") = some (.val (.word data)) ∧
+      globN mid "heap_ptr" = data.toNat + 32 ∧
+      EvmStepCC ["heap_ptr"] s mid ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      (∀ k, k ≠ ofString "data" → mid.locals.lookup k = cur.locals.lookup k) ∧
+      (evaluateHOLFiniteState cur
+        (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+          (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+            [.var .local (ofString "amount"), .var .local (ofString "data")]) cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
+          (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+            [.var .local (ofString "amount"), .var .local (ofString "data")]) cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "data", cur.locals.lookup (ofString "data")) } := by
+  obtain ⟨allocated, hd, hheap, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec cur (ofString "data") _ data 32
+      (Or.inr (Or.inr rfl)) hstep.1.1 hp hr
+  have hboth : EvmStepCC ["heap_ptr"] s allocated := by
+    refine ⟨⟨st.1.1, le_trans hstep.1.2.1 st.1.2.1,
+      fun k hk => (hstep.1.2.2.1 k hk).trans (st.1.2.2.1 k hk),
+      st.1.2.2.2.trans hstep.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := hstep.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := st.2 ec (hstep.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  have hpNat : globN cur "heap_ptr" = data.toNat := by simp [globN, hp]
+  have hbAllocated : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") →
+      memB allocated b = memB s b := by
+    intro b hb64 hn
+    rw [show memB allocated b = memB cur b by simp only [memB, hm, hb]]
+    apply hbyte b hb64
+    have hmono := st.1.2.1
+    omega
+  obtain ⟨mid, step, eff, loc, resum, out, bytes, eq⟩ :=
+    transfer_data_write_prefix s allocated data av cont hInv hboth (hb.trans hbe)
+      (fun a hn => (congrFun hm a).trans (hout a hn)) hbAllocated
+      ((hl _ (by decide)).trans ha) hd hw.1
+      ⟨by rw [← hpNat]; exact hstep.1.2.1, by rw [hheap]⟩ (er ▸ hr)
+  refine ⟨mid, loc ▸ hd, ?_, step, resum, out, bytes, ?_,
+    er.trans (congrArg Prod.fst eq), ?_⟩
+  · simpa only [globN, eff.globals] using hheap
+  · intro k hk
+    rw [loc]
+    exact hl k hk
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "data", cur.locals.lookup (ofString "data"))) }) eq)
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
