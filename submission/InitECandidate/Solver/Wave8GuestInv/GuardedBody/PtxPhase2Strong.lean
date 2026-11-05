@@ -2184,4 +2184,42 @@ theorem phase2_count_load {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [hl, valueIsWord] at h
   · simp [hl, valueIsWord] at h
 
+/-- Concrete count setup reaches the allocation cut with bounded count data. -/
+theorem phase2_countPrefix_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAccessCountReady tail b) :
+    TerminatingProgBoundedOn PtxTeStoreReady
+      (spinePlug 3 (spineAt 41 ptxCode) tail) (K.tx_has_access_list + b + 1) := by
+  simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+  change TerminatingProgBoundedOn PtxTeStoreReady
+    (.dec (ofString "nal") .one (.const 0)
+      (.decCall (ofString "hal") .one (ofString "tx_has_access_list")
+        [.var .local (ofString "tx")]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "hal")) (.const 0))
+          (.assign .local (ofString "nal")
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 216]))) .skip) tail))) _
+  apply dec_bound_trans (Q := PtxAccessCountReady)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact phase2_accessCountReady_zero s hp
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxAccessCountReady) h.fb_tx_has_access_list
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1
+  · exact phase2_resume_has_access_list_count h
+  · have hi := phase2_count_cond_hoare
+      (.cmp .notEqual (.var .local (ofString "hal")) (.const 0))
+      (.load .one (.op .add [.var .local (ofString "tx"), .const 216]))
+      (fun s v _ he => phase2_count_load s v he)
+    have hb0 : TerminatingProgBoundedOn PtxAccessCountReady
+        (.ite (.cmp .notEqual (.var .local (ofString "hal")) (.const 0))
+          (.assign .local (ofString "nal")
+            (.load .one (.op .add [.var .local (ofString "tx"), .const 216]))) .skip) 0 := by
+      intro F s hc hp hn
+      simp only [evaluateHOLFiniteState_ite]
+      split
+      · split <;> simp only [clock_assign, clock_skip, Nat.zero_add] <;> exact ⟨le_rfl, le_rfl⟩
+      · exact ⟨le_rfl, le_rfl⟩
+    intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans hb0 hi ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
