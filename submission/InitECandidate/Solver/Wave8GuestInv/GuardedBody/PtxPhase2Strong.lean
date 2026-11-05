@@ -11590,4 +11590,34 @@ theorem phase2_warm_packed_buffer_ready {F₀ F : Type}
   · exact hk _ (by simp) o ho
   · exact hd _ (by simp) o ho
 
+/-- Saved numeric words determine the actual memory cells on an aligned buffer.
+This converts the snapshot interface to the frame interface used by later calls. -/
+theorem phase2_warm_packed_unhit {F : Type}
+    (before s : PanSemStateFiniteExact 64 F)
+    (hb : PtxAddressCountExit before) (hp : PtxWarmPacked before s)
+    (i : PtxWarmBuffer) : IvlUnhit before s (phase2_warm_buffer before i) := by
+  have hw := phase2_count_exit_warm_words before hb i
+  intro a ha hh
+  have hlo : (phase2_warm_buffer before i).1 ≤ a.toNat := by
+    have := hw.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hhi : a.toNat + 8 ≤
+      (phase2_warm_buffer before i).1 + (phase2_warm_buffer before i).2 := by
+    have := hw.1
+    have := hw.2.1
+    obtain ⟨h1, h2⟩ := hh
+    omega
+  have hm := phase2_warm_packed_word before s hp i a.toNat hlo hhi ha
+  simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] at hm
+  cases hs : s.memory a with
+  | word ws =>
+    cases hb' : before.memory a with
+    | word wb =>
+      have hsN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hs
+      have hbN := congrArg (fun v : HolWordLab 64 =>
+        match v with | .word w => w.toNat) hb'
+      exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq (hsN.symm.trans (hm.trans hbN)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
