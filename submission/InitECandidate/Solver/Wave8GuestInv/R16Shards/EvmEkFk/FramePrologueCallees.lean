@@ -7229,6 +7229,46 @@ theorem transfer_accumulated_topics_record_prefix {F : Type}
       { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
         (ofString "topics", cur.locals.lookup (ofString "topics"))) }) eq)
 
+theorem transfer_accumulated_topics_record_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (p topic sender recipient logw : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : cur.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : cur.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : cur.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hl : cur.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hw : WordsOK cur (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (transferRecordPairWrites 8 (ofString "topics") 3 cont)))).1)
+    (hcont : ∀ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) →
+      globN mid "heap_ptr" = p.toNat + 96 → EvmStepCC ["heap_ptr"] s mid →
+      mid.be = s.be → WordsOK mid (logw.toNat, 40) →
+      memW mid logw.toNat = memW cur logw.toNat →
+      memW mid (logw.toNat + 8) = p.toNat → memW mid (logw.toNat + 16) = 3 →
+      (∀ k, k ≠ ofString "topics" → mid.locals.lookup k = cur.locals.lookup k) →
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) →
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) →
+      Resumes (evaluateHOLFiniteState mid cont).1 →
+      EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState mid cont).2) :
+    EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (transferRecordPairWrites 8 (ofString "topics") 3 cont)))).2 := by
+  obtain ⟨mid, ht, heap, step, be, words, addr, tp, tn, loc, out, bytes, resum, er, es⟩ :=
+    transfer_accumulated_topics_record_prefix s cur p topic sender recipient logw cont
+      hInv hstep hbe hout hbyte hp htopic hsender hrecipient hl hw hin hr
+  have tail := hcont mid ht heap step be words addr tp tn loc out bytes resum
+  rw [es]
+  exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
