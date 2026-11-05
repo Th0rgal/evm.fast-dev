@@ -13852,4 +13852,42 @@ theorem receipt_gas_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Bloom allocation supplies fresh bounded storage to a returning continuation;
+restoring its scoped local does not change the receipt frame. -/
+theorem receipt_bloom_alloc_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (he : HeapByteEff s mid R ["heap_ptr"])
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next final : PanSemStateFiniteExact 64 F) (bloom : BitVec 64),
+      HeapByteEff s next R ["heap_ptr"] →
+      globN s "heap_ptr" ≤ bloom.toNat → bloom.toNat + 256 ≤ heapLimit →
+      next.locals = mid.locals.update (ofString "bloom", .val (.word bloom)) →
+      evaluateHOLFiniteState next tail = (some (.returned v), final) →
+      HeapByteEff s final R ["heap_ptr"])
+    (hr : evaluateHOLFiniteState mid
+      (.decCall (ofString "bloom") .one (ofString "alloc") [.const 256] tail) =
+      (some (.returned v), post)) : HeapByteEff s post R ["heap_ptr"] := by
+  obtain ⟨bloom, n, q, next, hn, hb, _, _, hfit, hlim, _, _, _, _, hloc,
+      he', _, _, hrun⟩ := eval_decCall_alloc_resumes mid "bloom" (.const 256) tail
+        R ["heap_ptr"] he.arena.1.code he.arena (by simp)
+        (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  have hn' : n = 256#64 := by simpa [evalHOLExact] using hn.symm
+  subst n
+  have hret : (evaluateHOLFiniteState next tail).1 = some (.returned v) := by
+    rw [hr] at hrun
+    exact (congrArg Prod.fst hrun).symm
+  have hf := hcont next (evaluateHOLFiniteState next tail).2 bloom (he.trans he')
+    (by rw [hb]; exact he.hp_le) (by change bloom.toNat + 256 ≤ q.toNat at hfit; omega)
+    hloc (Prod.ext hret rfl)
+  rw [hr] at hrun
+  have hp := congrArg Prod.snd hrun
+  dsimp only at hp
+  rw [hp]
+  exact hf.locals_clock _ _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
