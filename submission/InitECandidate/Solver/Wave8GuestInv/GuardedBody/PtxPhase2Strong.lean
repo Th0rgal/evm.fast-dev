@@ -3796,4 +3796,23 @@ theorem phase2_address_store_key_field {F : Type} {s : PanSemStateFiniteExact 64
   · exact (ivl_allocated_bound hA.2 (Or.inl (hT.2.2 hn).1)).2
   · constructor <;> dsimp <;> omega
 
+/-- A successful address-copy store preserves the full cumulative-count invariant. -/
+theorem phase2_address_count_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxAddressCountInv { s with memory := mem } := by
+  apply phase2_address_count_frame s _ hp
+    ⟨phase2_address_joint_store hp.1.1 hx hin hm, hp.1.2⟩ rfl rfl rfl
+  · exact phase2_address_store_header hp.1.1.1 hin hm 216 (by decide) (by decide)
+  · intro j hj
+    change memW { s with memory := mem }
+      (memW { s with memory := mem } (locN s "tx" + 208) + 24 * j + 16) = _
+    rw [phase2_address_store_header hp.1.1.1 hin hm 208 (by decide) (by decide)]
+    apply phase2_address_store_key_field hp.1.1.1 hin hm j
+    have hi := hp.1.2.2.2
+    rw [hp.2.1] at hi
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
