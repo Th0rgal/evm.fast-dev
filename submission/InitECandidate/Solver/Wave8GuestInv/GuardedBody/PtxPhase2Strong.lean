@@ -5688,4 +5688,71 @@ theorem phase2_copy_frame_disjoint_word {F : Type}
   · exact not_cellHits_of_disj ha hz hin hd
   · exact not_cellHits_of_disj ha hfresh hin hn
 
+/-- A copy disjoint from the transaction header preserves its access-list metadata. -/
+theorem phase2_copy_frame_tx_metadata {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (tx dst len : Nat) (fresh : Ivl)
+    (hf : FrameOutside s post [(dst, len)] fresh)
+    (hb : tx + 384 ≤ 2 ^ 64) (ha : tx % 8 = 0)
+    (hd : Disj (tx, 384) (dst, len)) (hn : Disj (tx, 384) fresh)
+    (hz : len = 0 → dst % 8 = 0)
+    (hfresh : fresh.2 = 0 → fresh.1 % 8 = 0) :
+    memW post (tx + 208) = memW s (tx + 208) ∧
+    memW post (tx + 216) = memW s (tx + 216) := by
+  constructor
+  · exact phase2_copy_frame_disjoint_word s post dst len (tx + 208) (tx, 384) fresh hf
+      (by omega) (by omega) (by constructor <;> dsimp <;> omega) hd hn hz hfresh
+  · exact phase2_copy_frame_disjoint_word s post dst len (tx + 216) (tx, 384) fresh hf
+      (by omega) (by omega) (by constructor <;> dsimp <;> omega) hd hn hz hfresh
+
+/-- Copying outside the record array preserves its live key-count words. -/
+theorem phase2_copy_frame_record_counts {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len base count : Nat) (fresh : Ivl)
+    (hf : FrameOutside s post [(dst, len)] fresh)
+    (hb : base + 24 * count ≤ 2 ^ 64) (ha : base % 8 = 0)
+    (hd : Disj (base, 24 * count) (dst, len))
+    (hn : Disj (base, 24 * count) fresh)
+    (hz : len = 0 → dst % 8 = 0)
+    (hfresh : fresh.2 = 0 → fresh.1 % 8 = 0) :
+    ∀ i, i < count → memW post (base + 24 * i + 16) = memW s (base + 24 * i + 16) := by
+  intro i hi
+  apply phase2_copy_frame_disjoint_word s post dst len _ (base, 24 * count) fresh hf
+  · omega
+  · omega
+  · dsimp; constructor <;> omega
+  · exact hd
+  · exact hn
+  · exact hz
+  · exact hfresh
+
+/-- A disjoint copy preserves the two transaction fields used by the nested loops. -/
+theorem phase2_copy_frame_tx_headers {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len : Nat)
+    (hf : FrameOutside s post [(dst, len)] (0, 0))
+    (hlen : 0 < len)
+    (hb : locN s "tx" + 384 ≤ 2 ^ 64)
+    (hd : Disj (locN s "tx", 384) (dst, len)) :
+    memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+    memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216) := by
+  have hword : ∀ off, off + 8 ≤ 384 →
+      memW post (locN s "tx" + off) = memW s (locN s "tx" + off) := by
+    intro off ho
+    apply phase2_copy_frame_word s post dst len _ (0, 0) hf (by omega)
+    · exact phase2_copy_protected_cell _ _ _ _ _ hlen ⟨by omega, by omega⟩ hd
+    · simp [CellHits]
+  exact ⟨hword 208 (by decide), hword 216 (by decide)⟩
+
+/-- Preserved metadata and record count words suffice to preserve the total. -/
+theorem phase2_copy_total_of_metadata {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (ht : locN post "tx" = locN s "tx")
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    txAccessSlots post (locN post "tx") = txAccessSlots s (locN s "tx") := by
+  apply phase2_packed_copy_total_frame s post
+  · rw [ht]; exact hh.2
+  · intro i hi; rw [ht, hh.1]; exact hm i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
