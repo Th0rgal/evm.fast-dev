@@ -5809,4 +5809,38 @@ theorem phase2_world_frame_word {F : Type}
     (by simpa only [he] using hk) (by simpa only [he] using hn)
   simp only [memW, hm]
 
+/-- Consecutive nonallocating copy frames combine into the union of their write regions. -/
+theorem phase2_copy_frames_compose {F : Type}
+    (s middle post : PanSemStateFiniteExact 64 F) (first second : List Ivl)
+    (hfirst : FrameOutside s middle first (0, 0))
+    (hsecond : FrameOutside middle post second (0, 0)) :
+    FrameOutside s post (first ++ second) (0, 0) := by
+  intro a ha hn
+  have h1 : ∀ region ∈ first, ¬ CellHits a.toNat region := by
+    intro region hr
+    exact ha region (List.mem_append_left _ hr)
+  have h2 : ∀ region ∈ second, ¬ CellHits a.toNat region := by
+    intro region hr
+    exact ha region (List.mem_append_right _ hr)
+  exact (hsecond a h2 hn).trans (hfirst a h1 hn)
+
+/-- Full world frames preserve live record counts when every permitted write is disjoint. -/
+theorem phase2_world_frame_record_counts {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (keep : List Ivl) (fresh : Ivl)
+    (base count : Nat) (hf : FrameOutside s post keep fresh)
+    (hb : base + 24 * count ≤ 2 ^ 64) (ha : base % 8 = 0)
+    (hk : ∀ region ∈ keep, Disj (base, 24 * count) region)
+    (hz : ∀ region ∈ keep, region.2 = 0 → region.1 % 8 = 0)
+    (hn : Disj (base, 24 * count) fresh)
+    (hzero : fresh.2 = 0 → fresh.1 % 8 = 0) :
+    ∀ i, i < count → memW post (base + 24 * i + 16) = memW s (base + 24 * i + 16) := by
+  intro i hi
+  have hal : (base + 24 * i + 16) % 8 = 0 := by omega
+  have hin : base ≤ base + 24 * i + 16 ∧ base + 24 * i + 16 + 8 ≤ base + 24 * count := by
+    constructor <;> omega
+  apply phase2_world_frame_word s post keep fresh _ hf (by omega)
+  · intro region hr
+    exact not_cellHits_of_disj hal (hz region hr) hin (hk region hr)
+  · exact not_cellHits_of_disj hal hzero hin hn
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
