@@ -6258,7 +6258,7 @@ theorem wkSc_htab_union_into_zero :
   · exfalso
     exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
 
-/-- Both null and allocated ordinary block tables admit the same union frame. -/
+/-- Both null and allocated ordinary block tables share the same union frame. -/
 theorem wkSc_htab_union_into_bs_all :
     WorldKeepsSc (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
       globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k))
