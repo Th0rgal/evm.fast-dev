@@ -2237,4 +2237,27 @@ theorem phase2_allocationEntry_bound (h : PtxCallees) {tail : ProgHOL 64} {b : N
   apply phase2_tePrefix_bound h
   exact phase2_countPrefix_bound h ht
 
+/-- The actual address-array allocation expression computes its natural size
+without either addition or multiplication wrapping. -/
+theorem phase2_address_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAccessCountReady s) :
+    ∃ w : BitVec 64,
+      evalAt s (.panop .mul
+        [.op .add [.var .local (ofString "nal"), .const 1], .const 8]) =
+          some (.val (.word w)) ∧
+      w.toNat = (locN s "nal" + 1) * 8 ∧ w.toNat % 8 = 0 ∧ 0 < w.toNat := by
+  obtain ⟨n, hn⟩ := hp.2.1
+  have hl : locN s "nal" = n.toNat := by simp [locN, hn]
+  have hb := phase2_accessCountReady_size hp
+  have ha : n.toNat + 1 < 2 ^ 64 := by rw [hl] at hb; omega
+  have hm : (n.toNat + 1) * 8 < 2 ^ 64 := by simpa only [hl] using hb.2
+  refine ⟨(n + 1) * 8, ?_, ?_, ?_, ?_⟩
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr]
+  all_goals
+    simp only [BitVec.toNat_mul, BitVec.toNat_add, show (1 : BitVec 64).toNat = 1 by decide,
+      show (8 : BitVec 64).toNat = 8 by decide,
+      Nat.reducePow, Nat.reduceMod, Nat.mod_eq_of_lt ha, Nat.mod_eq_of_lt hm, hl]
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
