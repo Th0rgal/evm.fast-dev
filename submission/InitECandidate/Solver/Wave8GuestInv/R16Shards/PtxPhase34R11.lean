@@ -1518,6 +1518,32 @@ theorem encode_receipt_logs_param {F : Type} (s : PanSemStateFiniteExact 64 F)
           have hs : s.locals.lookup (ofString "logs") = some v4 := h4
           simp only [locN, callEntryStateHOLFinite, hp.2.2.2, hs]
 
+theorem phase4EncodeReceipt_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptEncoded tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptReady
+      (spinePlug 1 (spineAt 123 ptxCode) tail) (K.encode_receipt + b + 1) := by
+  unfold ptxCode
+  refine TerminatingProgBoundedOn.decCall_on h.fb_encode_receipt _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    exact encode_receipt_encoded_resume h s vs body callee ret v post hc hl hr hp
+      (encode_receipt_logs_param s _ _ _ vs body callee ret hc ha hl)
+
+theorem phase4ThroughReceipt_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptEncoded tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 25 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + (K.encode_receipt + b + 1))) := by
+  have hb := @phase4BeforeReceipt_cut h _ _ (phase4EncodeReceipt_cut h htail)
+  have he : spinePlug 25 (spineAt 99 ptxCode) tail =
+      spinePlug 24 (spineAt 99 ptxCode) (spinePlug 1 (spineAt 123 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
