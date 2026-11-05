@@ -8577,4 +8577,36 @@ theorem phase2_packed_record_pass_hoare (h : PtxCallees) (addressSrc keySrc : Ex
     (Hoare.seq_fall (phase2_packed_inner_acc_hoare h addressSrc keySrc)
       phase2_packed_outer_iteration_increment_hoare)
 
+/-- The source loop caches the current record count in `ns`. -/
+def PtxPackedNsIteration {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedIteration s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+    locN s "ns" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)
+
+/-- Interpret the actual source guard, which compares against the cached `ns` word. -/
+theorem phase2_packed_ns_guard_eval {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (w : BitVec 64)
+    (hp : PtxPackedNsIteration s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "j"))
+      (.var .local (ofString "ns"))) = some (.val (.word w))) :
+    w ≠ 0 ↔ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+  obtain ⟨j, hj⟩ := hp.1.2.2.2.1
+  obtain ⟨n, hn⟩ := hp.2.1
+  have hb := phase2_packed_inner_signed_bounds hp.1.2.1.1
+  have hnat : n.toNat = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+    simpa [locN, hn] using hp.2.2
+  have hjb : j.toNat < 2 ^ 63 := by simpa [locN, hj] using hb.1
+  have hnb : n.toNat < 2 ^ 63 := by rw [hnat]; exact hb.2
+  simpa only [hnat] using phase2_packed_guard_word_compare s _ j n w hj
+    (by simp [evalAt, evalHOLExact, hn]) hjb hnb he
+
+/-- The cached source guard is unchanged by the loop clock decrement. -/
+theorem phase2_packed_ns_iteration_decClock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedNsIteration s) :
+    PtxPackedNsIteration (decClockHOLFinite s) :=
+  ⟨phase2_packed_iteration_decClock s hp.1, hp.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
