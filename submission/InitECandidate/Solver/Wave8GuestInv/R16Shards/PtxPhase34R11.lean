@@ -4887,6 +4887,35 @@ theorem hoare_stableCopy_backing_entry :
   · intro F s hp hr
     cases hr
 
+/-- Hoare rule for the concrete backing-load and zero-counter setup sequence. -/
+theorem hoare_stableCopy_backing_init :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (.seq (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+        (.assign .local (ofString "i") (.const 0)))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.seq_fall (R := fun s =>
+    StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s))
+  · apply Hoare.assign
+    · intro F s v hp hv _
+      obtain ⟨hp, hz, hh, ha, hc, hs, hword, n, p, w, hn, hl, hw⟩ := hp
+      exact stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword hv
+    · intro F s hp hr
+      cases hr
+  · apply Hoare.assign
+    · intro F s v hp hv _
+      have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+      subst v
+      exact hp
+    · intro F s hp hr
+      cases hr
+
 /-- Concrete counter initialization from the post-length spatial contract. -/
 theorem hoare_stableCopy_init_spatial :
     Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
