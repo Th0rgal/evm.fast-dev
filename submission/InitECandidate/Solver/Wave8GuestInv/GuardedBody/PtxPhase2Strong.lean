@@ -6728,4 +6728,41 @@ theorem phase2_memcpy_eval_guarded (h : PtxCallees) {F : Type}
   · exact phase2_memcpy_eval_counts h s post vs body callee ret r S Nd (locN s "tx")
       hc hl he hn hr hp ha hw ht hd hrec hlen
 
+/-- Retain input separation alongside guarded indices for the second copy call. -/
+def PtxPackedSeparatedCopy {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedCopyIndex s ∧
+  Disj (locN s "tx", 384)
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+
+/-- Restoring metadata retains all spatial premises needed by the next copy. -/
+theorem phase2_packed_separated_restore {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedSeparatedCopy s)
+    (hr : PtxPackedKeysReady { post with locals := s.locals })
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  refine ⟨phase2_packed_copy_restore_indices s post hp.1 hr hh hm, ?_⟩
+  exact phase2_packed_input_separation_frame s _ (fun _ _ => rfl) hh hp.2.1 hp.2.2
+
+/-- Restored caller metadata carries buffer separation to the next copy. -/
+theorem phase2_packed_restore_input_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (ht : Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hr : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) :
+    let out := { post with locals := s.locals }
+    Disj (locN out "tx", 384)
+      (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+    Disj (memW out (locN out "tx" + 208), 24 * memW out (locN out "tx" + 216))
+      (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  exact phase2_packed_input_separation_frame s _ (fun _ _ => rfl) hh ht hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
