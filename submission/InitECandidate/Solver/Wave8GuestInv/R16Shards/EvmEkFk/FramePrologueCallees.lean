@@ -2999,6 +2999,17 @@ theorem alloc_body_evmStepCC {F : Type} (s : PanSemStateFiniteExact 64 F)
     unfold memB
     rw [hm, hb]
 
+theorem ek_cc_alloc :
+    EvmKeeps EvmInv ["heap_ptr"] (ofString "alloc") ∧
+      ChainCellsKept EvmInv (ofString "alloc") := by
+  constructor
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).1
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).2
+
 private theorem lookup_lst_push_local :
     originalRuntimeCode.lookup (ofString "lst_push") =
       some ([(ofString "l", .one), (ofString "esz", .one)],
