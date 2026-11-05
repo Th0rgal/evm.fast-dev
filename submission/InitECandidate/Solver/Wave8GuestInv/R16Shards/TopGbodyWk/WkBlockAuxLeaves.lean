@@ -6258,7 +6258,7 @@ theorem wkSc_htab_union_into_zero :
   · exfalso
     exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
 
-/-- Both null and allocated ordinary block tables admit the same union frame. -/
+/-- Both null and allocated ordinary block tables share the same union frame. -/
 theorem wkSc_htab_union_into_bs_all :
     WorldKeepsSc (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
       globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k))
@@ -6294,5 +6294,38 @@ theorem progWithdrawalStep_union_bs_then (off : BitVec 64)
   refine progWithdrawalStep_seq ?_ hp
   exact progWithdrawalStep_of_progWStep (by simp)
     (by simp [withdrawalGlobals]) (progWStep_union_bs off hoff src)
+
+/-- The storage-table portion after the five ordinary block unions. -/
+def mergeStorageSuffix : ProgHOL 64 :=
+  match (sourceFunctionEntry Guest.Software.guestFn_merge_tx_into_block).2.2.1 with
+  | .seq _ (.seq _ (.seq _ (.seq _ (.seq _ p)))) => p
+  | _ => .skip
+
+/-- The ordinary union prefix is fully discharged; only storage ownership remains. -/
+theorem wkSc_merge_tx_into_block_of_storage_suffix
+    (hsuffix : ProgWithdrawalStep mergeStorageSuffix) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "merge_tx_into_block") := by
+  have hlookup : originalRuntimeCode.lookup (ofString "merge_tx_into_block") =
+      some (sourceFunctionEntry Guest.Software.guestFn_merge_tx_into_block).2 :=
+    originalRuntimeCode_lookup_of_guestAst_getElem 401 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_merge_tx_into_block) rfl
+  refine ⟨_, _, _, hlookup, ?_⟩
+  have hbody : ProgWithdrawalStep
+      (sourceFunctionEntry Guest.Software.guestFn_merge_tx_into_block).2.2.1 := by
+    simp only [sourceFunctionEntry, Guest.Software.guestFn_merge_tx_into_block,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+      Option.map_none, List.map_nil]
+    refine progWithdrawalStep_union_bs_then 24 (by decide) _ ?_
+    refine progWithdrawalStep_union_bs_then 8 (by decide) _ ?_
+    refine progWithdrawalStep_union_bs_then 40 (by decide) _ ?_
+    refine progWithdrawalStep_union_bs_then 16 (by decide) _ ?_
+    refine progWithdrawalStep_union_bs_then 48 (by decide) _ ?_
+    exact hsuffix
+  intro F s hc hW _ hnt hres
+  exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
