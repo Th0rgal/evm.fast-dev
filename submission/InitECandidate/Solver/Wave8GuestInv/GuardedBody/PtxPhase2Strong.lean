@@ -11620,4 +11620,44 @@ theorem phase2_warm_packed_unhit {F : Type}
         match v with | .word w => w.toNat) hb'
       exact congrArg HolWordLab.word (BitVec.eq_of_toNat_eq (hsN.symm.trans (hm.trans hbN)))
 
+/-- Warm snapshots are independent of bookkeeping locals and the execution clock. -/
+theorem phase2_warm_packed_with_locals {F₀ F : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxWarmPacked before s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxWarmPacked before {s with locals := locals, clock := clock} := by
+  refine ⟨⟨localsFree_worldOK s locals clock hp.1.1,
+    phase2_packed_keys_with_locals s locals clock hp.1.2 hl⟩, ?_⟩
+  intro i
+  apply phase2_packed_live_frame_locals s locals clock _ _ (hp.2 i)
+  · exact locN_congr s locals clock "tx" (hl "tx" (by simp))
+  · exact locN_congr s locals clock "al_keys" (hl "al_keys" (by simp))
+  · exact locN_congr s locals clock "nkeys" (hl "nkeys" (by simp))
+
+/-- Read-only classification calls in the suffix retain all three warm snapshots. -/
+theorem phase2_warm_packed_readonly_resume {F₀ : Type}
+    (before : PanSemStateFiniteExact 64 F₀) (name fn : MlS) (args : List (ExpHOL 64))
+    (hr : ReadOnlyFn fn)
+    (ha : name ≠ ofString "al_keys") (hn : name ≠ ofString "nkeys")
+    (ht : name ≠ ofString "tx") :
+    DecCallResumeOn (PtxWarmPacked before) (PtxWarmPacked before) name fn args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup hr s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hstate := hh (Or.inl ⟨v, rfl⟩)
+  dsimp only at hstate
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [hstate]; rfl
+  have hp' : PtxWarmPacked before {post with locals := s.locals} := by
+    rw [hrestore]
+    exact phase2_warm_packed_with_locals before s s.locals post.clock hp (fun _ _ => rfl)
+  apply phase2_warm_packed_with_locals before _ _ _ hp'
+  intro n hmem
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hmem
+  rcases hmem with rfl | rfl | rfl <;>
+    simp [HolFiniteMapExact.update, FUPDATE, ha, hn, ht]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
