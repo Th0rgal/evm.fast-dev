@@ -1589,6 +1589,61 @@ def Phase4ReceiptEncoded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
       Inside (a.toNat, b.toNat) sourceBase (globN s "heap_ptr") ∧
       a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧ LogsWorldOwned s (locN s "logs")
 
+def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
+  (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+
+theorem receiptArray_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hF : FixedTyped s) (hE : TxEnv s) : Allocated s (receiptArray s) ∧ WordsOK s (receiptArray s) := by
+  have hb : receiptArray s ∈ blockOutObjects s := by
+    unfold receiptArray blockOutObjects
+    simp [hE.bo_nz, hE.bo32]
+  exact (hF.1 _ (List.mem_append_left _ (List.mem_append_right _ hb))).resolve_left
+    (by simp [receiptArray])
+
+def receiptDst (high : Bool) : ExpHOL 64 :=
+  .op .add ([.load .one (.op .add [.var .global (ofString "bo"), .const 32]),
+    .panop .mul [.var .local (ofString "index"), .const 16]] ++
+      if high then [.const 8] else [])
+
+theorem receiptDst_inside {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallStrong s) (high : Bool) {x : BitVec 64}
+    (hx : evalAt s (receiptDst high) = some (.val (.word x))) :
+    Inside (x.toNat, 8) (receiptArray s).1 ((receiptArray s).1 + (receiptArray s).2) := by
+  have hE := h.1.2
+  obtain ⟨S, Nd, hW, _, _⟩ := h.2.2.2.2
+  have hhi := (ivl_allocated_bound h.1.1.1.2 (receiptArray_words hW.2.2.1 hE).1).2
+  dsimp only [receiptArray] at hhi ⊢
+  rcases hld : evalAt s (.load .one (.op .add [.var .global (ofString "bo"), .const 32])) with _ | vbase
+  · cases high <;> simp [receiptDst, evalAt, evalHOLExact, evalListHOLExact] at hx hld
+    all_goals rw [hld] at hx; simp at hx
+  obtain ⟨abase, rfl, habase_nat⟩ := evalAt_loadG s "bo" 32 vbase hld
+  have habase : abase.toNat = memW s (globN s "bo" + 32) := habase_nat
+  cases high <;> simp only [receiptDst, Bool.false_eq_true, if_false, if_true,
+    List.append_nil, List.cons_append, List.nil_append, evalAt, evalHOLExact, evalListHOLExact] at hx
+  all_goals
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at hld
+    rw [hld] at hx
+    rcases hidx_v : s.locals.lookup (ofString "index") with _ | vidx
+    · simp [hidx_v] at hx
+    rcases vidx with widx | _ | _
+    · cases widx with
+      | word idx_bv =>
+        simp only [hidx_v, valueIsWord, valueWord, List.all, List.map, Option.map, Bool.and_self,
+          ↓reduceIte, panOpHOL, wordOpHOL, wordOp, List.foldr, Option.some.injEq,
+          ValueHOL.val.injEq, HolWordLab.word.injEq] at hx
+        have hidx_nat : locN s "index" = idx_bv.toNat := by simp [locN, hidx_v]
+        have hidx_lt : idx_bv.toNat < memW s (globN s "bo" + 80) := hidx_nat ▸ hE.idx_lt
+        subst x
+        simp only [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat] at *
+        norm_num only [BitVec.toNat_ofNat] at *
+        unfold Inside; dsimp only
+        simp only [show (16 : BitVec 64).toNat = 16 from rfl,
+          show (8 : BitVec 64).toNat = 8 from rfl,
+          show (0 : BitVec 64).toNat = 0 from rfl]
+        omega
+    · simp [hidx_v, valueIsWord] at hx
+    · simp [hidx_v, valueIsWord] at hx
+
 theorem receiptEncoded_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : Phase4ReceiptEncoded s) {x : BitVec 64} (hx : s.memaddrs x)
     (hin : Inside (x.toNat, 8) (memW s (globN s "bo" + 32))
