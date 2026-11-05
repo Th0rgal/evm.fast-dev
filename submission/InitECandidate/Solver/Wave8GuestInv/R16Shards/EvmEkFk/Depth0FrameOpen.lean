@@ -1126,6 +1126,62 @@ theorem hoare_store_ev_192_zero :
     · simp
     · simp
 
+/-- `EvmInv` already owns the head frame's message (`FrameWF`'s last conjunct for the head
+`(ev, cur_cont)`), so `EvmMsgReady` follows from `EvmInv` for the same table set. -/
+theorem evmMsgReady_of_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) (h : EvmInv s) :
+    EvmMsgReady s := by
+  obtain ⟨hA, S, hInvAt⟩ := h
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain; exact List.mem_cons_self
+  exact ⟨hA, S, hInvAt, (hInvAt.2.2.2.2.1 _ hhead_mem).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+
+theorem evmMsgReady_iff_evmInv {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    EvmMsgReady s ↔ EvmInv s :=
+  ⟨evmInv_of_evmMsgReady s, evmMsgReady_of_evmInv s⟩
+
+/-- `EvmStep gw s post` from an `EvmMsgReady` entry gives `EvmMsgReady post`. -/
+theorem evmMsgReady_of_evmStep {F : Type} {gw : List String} {s post : PanSemStateFiniteExact 64 F}
+    (h : EvmStep gw s post) : EvmMsgReady post :=
+  evmMsgReady_of_evmInv post h.1
+
+/-- `st msg + 48, lds 1 (ev + 72)` (`depth0_prepare` writes the reservoir into the message) from
+`EvmMsgReady` with the local `msg` equal to the owned message `ev+112`: the message record is an
+`EvmAvoids` region, so the store is a byte-region effect that yields `EvmStep []`, hence
+`EvmMsgReady` again. -/
+theorem hoare_store_msg_48 :
+    Hoare (fun s => EvmMsgReady s ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (.store (.op .add [.var .local (ofString "msg"), .const 48])
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+      (fun r t => r = none → EvmMsgReady t) := by
+  refine ⟨fun {F} s _ ⟨hP, m, hm, hm_eq⟩ _ hr => ?_⟩
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .local (ofString "msg"), .const 48])
+      (.load .one (.op .add [.var .global (ofString "ev"), .const 72]))) with ⟨res, post⟩
+  rw [hev] at hr
+  dsimp only at hr ⊢
+  subst hr
+  have hAs : ArenaReady s := hP.1
+  have hm_bnd : memW s (globN s "ev" + 112) + 176 ≤ 2 ^ 64 := by
+    obtain ⟨_, S, _, hal, _⟩ := hP
+    exact allocated_le_2pow64 hAs.2 hal
+  obtain ⟨heff, _⟩ := M11.ByteRegionEffect.of_store_word
+    (Rl := [(memW s (globN s "ev" + 112), 176)]) hAs.1.memaddrs hev
+    (fun v hv => M11.eval_load_one_word s _ v hv)
+    (fun addr hdst _ => by
+      refine ⟨(memW s (globN s "ev" + 112), 176), List.mem_singleton.2 rfl, ?_⟩
+      have haddr : addr.toNat = m.toNat + 48 := by
+        simp [evalHOLExact, evalListHOLExact, hm, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+        subst hdst
+        have h48 : (48#64).toNat = 48 := by decide
+        rw [BitVec.toNat_add, h48, Nat.mod_eq_of_lt (by omega)]
+      dsimp only
+      omega)
+  exact evmMsgReady_of_evmStep
+    (ByteRegionEffect.to_evmStep_avoids (evmAvoids_msg_of_evmMsgReady s hP)
+      (m11Bre_to_evmBre (fun i hi => by simp only [List.mem_singleton] at hi; subst hi; simp) heff))
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
