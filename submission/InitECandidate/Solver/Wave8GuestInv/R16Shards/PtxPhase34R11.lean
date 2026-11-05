@@ -12490,4 +12490,76 @@ theorem heapByteEff_memzero_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.eval_call_logs_bloom WkBlockTxEnc.eval_call_local_encode_logs
+  WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem heapByteEff_logs_bloom_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hpre : HeapByteEff s mid R ["heap_ptr"])
+    (logsExp outExp : ExpHOL 64) (logs out : BitVec 64)
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (ho : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) outExp = some (.val (.word out)))
+    (hfresh : globN s "heap_ptr" ≤ out.toNat ∧ out.toNat + 256 ≤ heapLimit)
+    (hpad : globN mid "keccak_pad" ≠ 0 →
+      ∃ i ∈ R, i.1 ≤ globN mid "keccak_pad" ∧ globN mid "keccak_pad" + 136 ≤ i.1 + i.2)
+    (hst : globN mid "keccak_st" ≠ 0 →
+      ∃ i ∈ R, i.1 ≤ globN mid "keccak_st" ∧ globN mid "keccak_st" + 200 ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "logs_bloom") [logsExp, outExp]) = (none, post)) :
+    HeapByteEff s post R ["heap_ptr"] := by
+  have hb := WkBlockTxEnc.eval_call_logs_bloom mid logsExp outExp logs out (R ++ [(out.toNat, 256)])
+    hpre.arena.1.code hpre.arena hl ho
+    ⟨(out.toNat, 256), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩
+    (fun hn => by
+      obtain ⟨i, hi, hb⟩ := hpad hn
+      exact ⟨i, List.mem_append_left _ hi, hb⟩)
+    (fun hn => by
+      obtain ⟨i, hi, hb⟩ := hst hn
+      exact ⟨i, List.mem_append_left _ hi, hb⟩)
+    (by rw [hr]; simp) (by rw [hr]; simp)
+  rw [hr] at hb
+  apply heapByteEff_trans_fresh hpre hb.1
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+theorem heapByteEff_encode_logs_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hpre : HeapByteEff s mid R ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hlogframe : HeapByteEff s mid [(dst.toNat, bound)] ["heap_ptr"])
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hlogs : LogsListOK s logs.toNat)
+    (harr : Allocated s (memW s logs.toNat, 8 * memW s (logs.toNat + 8)))
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat) (memW s (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) :
+    HeapByteEff s post R ["heap_ptr"] := by
+  have he := WkBlockTxEnc.eval_call_local_encode_logs s mid lname dstExp logsExp dst logs bound
+    (R ++ [(dst.toNat, bound)]) ["heap_ptr"] hA hma hlogframe hfresh.1 hfresh.2
+    (by decide) hnz hlogs harr hfit
+    ⟨(dst.toNat, bound), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩ hold hd hl
+    (by rw [hr]; simp)
+  rw [hr] at he
+  obtain ⟨w, hw, hg, hl, heff⟩ := he.1 rfl
+  apply heapByteEff_trans_fresh hpre heff
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
