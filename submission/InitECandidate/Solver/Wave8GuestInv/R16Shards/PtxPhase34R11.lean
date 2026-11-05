@@ -4767,6 +4767,36 @@ def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
     ∀ o ∈ worldOwned s S Nd,
       Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
 
+/-- A separated copy write preserves the coherent header/backing ownership frame. -/
+theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hf : StableCopyOwnedFrame s) (hsp : StableCopySpatial s)
+    (hi : locN s "i" < locN s "nl")
+    (hx : s.memaddrs (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a) :
+    StableCopyOwnedFrame {s with memory := mem'} := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hf
+  obtain ⟨_, _, _, _, _, hsrc, hdst, harr, hentry⟩ := hsp
+  obtain ⟨hW', hw', _⟩ := stableCopyInv_world_preserved s mem' hp hi S Nd hW hb hx hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hp.1.1.1.1.1
+  have ho' := (stableCopyInv_logs_preserved s mem' hp hi S Nd ho hg hw'
+    hsrc harr hentry hm).2
+  have hd0 := (stableCopyInv_header_unhit s mem' hp hi _
+    hp.2.2.2.1 hp.2.2.1.1 hdst hm).1
+  refine ⟨S, Nd, hW', ho', ?_, ?_⟩
+  · intro o ho
+    rw [hw'] at ho
+    exact hh o ho
+  · intro o ho
+    rw [hw'] at ho
+    change Disj (memW {s with memory := mem'} (locN s "stable_logs"),
+      8 * locN s "stable_log_cap") o
+    rw [hd0]
+    exact hb o ho
+
 /-- Local initialization and clock changes preserve the coherent ownership frame. -/
 theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
