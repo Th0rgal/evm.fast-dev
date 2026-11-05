@@ -6544,14 +6544,21 @@ private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
     (hcell : SameTypedCells s post S Nd)
-    (hglob_eq : ∀ nm, globN post nm = globN s nm) :
+    (hglob_eq : ∀ nm ∈ coreWorldGlobals, globN post nm = globN s nm) :
     worldTableRefs post S = worldTableRefs s S := by
+  have hg : ∀ nm, nm ∈ coreWorldGlobals → globN post nm = globN s nm := hglob_eq
+  have hws := hg "ws" (by decide)
+  have hbs := hg "bs" (by decide)
+  have hts := hg "ts" (by decide)
+  have hbal := hg "bal_accounts" (by decide)
+  have hjn := hg "journal_n" (by decide)
+  have hj := hg "journal" (by decide)
   unfold worldTableRefs recordSlots
-  rw [hglob_eq "ws", hglob_eq "bs", hglob_eq "ts",
+  rw [hws, hbs, hts,
       show globalTableRoots.map (globN post) = globalTableRoots.map (globN s) by
-        simp only [globalTableRoots, List.map, hglob_eq],
-      balRecords_eq hWT.1 hcell (hglob_eq "bal_accounts"),
-      hglob_eq "journal_n", hglob_eq "journal"]
+        simp only [globalTableRoots, List.map,
+          hg "bal_accounts" (by decide), hg "bal_idx_accts" (by decide), hg "bal_idx_stor" (by decide)],
+      balRecords_eq hWT.1 hcell hbal, hjn, hj]
   have hws_sl : (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW post (globN s "ws" + k)) =
       (if globN s "ws" = 0 then [] else wsTableSlots.map fun k => memW s (globN s "ws" + k)) := by
     split
@@ -6621,7 +6628,7 @@ private theorem worldTableRefs_eq_of_cell_g09 {F : Type}
       exact memW_eq_of_cellHits hcell (by omega) (mem_worldTypedIvls_journal (S := S) (Nd := Nd) hjc_ne)
         ⟨by dsimp only; omega, by dsimp only; omega⟩
   dsimp only
-  rw [hglob_eq "bs", hglob_eq "ts", hws_sl, hbs_sl, hts_sl, hnest_bs, hnest_ts, hbal_fl, hjrn_mp]
+  rw [hbs, hts, hws_sl, hbs_sl, hts_sl, hnest_bs, hnest_ts, hbal_fl, hjrn_mp]
 
 private theorem sameTypedCells_sub_nd_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd Ndi : List Nat}
@@ -6915,7 +6922,7 @@ private theorem evmInvWith_of_bre {F : Type}
       refine ⟨Nd, hWT_post.2.2.2, fun o ho j hj => ?_⟩
       rw [hne_eq] at hj
       exact hAT o ho j hj
-    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hglob_eq
+    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell (fun g _ => hglob_eq g)
       have hdelEx_iff : ∀ i t, DelExclusive post S (evmChain s) i t ↔ DelExclusive s S (evmChain s) i t := by
         intro i t
         unfold DelExclusive
@@ -7514,7 +7521,7 @@ private theorem evmInvWith_of_head_sp_cell {F : Type}
       refine ⟨Nd, hWT_post.2.2.2, fun o ho j hj => ?_⟩
       rw [hne_eq] at hj
       exact hAT_at o ho j hj
-    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hglob_eq
+    · have hworldRefs_eq := worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell (fun g _ => hglob_eq g)
       have hdelEx_iff : ∀ i t, DelExclusive post S (evmChain s) i t ↔ DelExclusive s S (evmChain s) i t := by
         intro i t
         unfold DelExclusive
@@ -12453,5 +12460,58 @@ theorem evmInvAt_of_head_log_growth_g09 {F : Type}
       rw [hfields ec hec 64 (by omega) (by omega), hfields ec hec 192 (by omega) (by omega)]
     rw [hsum]
     exact hgas
+
+/-- Typed-cell preservation supplies all world and role readback facts used in
+log-growth reconstruction, while permitting allocation to advance the heap. -/
+theorem log_growth_world_preserved_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd) :
+    WorldTyped post S ∧ TriesTypedWith post S Nd ∧
+    worldTypedIvls post S Nd = worldTypedIvls s S Nd ∧
+    fixedObjects post = fixedObjects s ∧
+    worldTableRefs post S = worldTableRefs s S ∧
+    (∀ t ∈ S, htabFootprint post t = htabFootprint s t) ∧
+    worldRoleSlots post = worldRoleSlots s ∧
+    journalRoleSlots post = journalRoleSlots s ∧
+    (∀ t ∈ S, memW post t = memW s t) := by
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg
+    have hne : ofString g ≠ ofString "heap_ptr" ∧
+        ofString g ≠ ofString "scratch_ptr" ∧ ofString g ≠ ofString "frame_mem_ptr" := by
+      revert g hg
+      decide
+    exact hglobals g hne.1 hne.2.1 hne.2.2
+  have hfixed : fixedObjects post = fixedObjects s := by
+    unfold fixedObjects
+    rw [blockOutObjects_eq hAs.2 hWT.2.2.1 hcell (hcore "bo" (by decide)),
+      balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcell (hcore "bal_accounts" (by decide)),
+      hcore "journal" (by decide), hcore "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hne : ofString gn.1 ≠ ofString "heap_ptr" ∧
+        ofString gn.1 ≠ ofString "scratch_ptr" ∧ ofString gn.1 ≠ ofString "frame_mem_ptr" := by
+      revert gn hgn
+      decide
+    rw [hglobals gn.1 hne.1 hne.2.1 hne.2.2]
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hheap hscratch hfixed
+  obtain ⟨hpost, _⟩ := worldTypedWith_congr_w1 hAs hAp hheap hscratch hcore hcell hWT
+    ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩
+  refine ⟨⟨hpost.1, hpost.2.1, hpost.2.2.1, Nd, hpost.2.2.2⟩,
+    hpost.2.2.2, worldTypedIvls_eq_of_cell_g09 hAs.2 hWT hcell hglobals, hfixed,
+    worldTableRefs_eq_of_cell_g09 hAs.2 hWT hcell hcore,
+    fun t ht => htabFootprint_eq hcell ht (hWT.1.2.1 t ht).1,
+    worldRoleSlots_eq hAs.2 hWT.1 hWT.2.2.1 hcell hcore,
+    journalRoleSlots_eq hAs.2 hWT.2.1 hWT.2.2.1 hcell hcore, ?_⟩
+  intro t ht
+  have hb := ((hWT.1.2.1 t ht).1.1 (t, 88) (by simp [htabFootprint])).1
+  simpa only [hdr, Nat.mul_zero, Nat.add_zero] using htab_hdr_eq hcell ht hb 0 (by omega)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
