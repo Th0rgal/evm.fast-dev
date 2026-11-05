@@ -6164,6 +6164,19 @@ theorem hoare_stableCopy_loop_done_frame
         exact ⟨stableCopyLoopInv_done _ hp.1 hw, hp.2⟩
     · simp at hrun
 
+/-- The complete copy loop retains its coherent ownership frame. -/
+theorem hoare_stableCopy_loop_ownedFrame :
+    Hoare (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r t => r = none → PtxReceiptsDone t ∧ StableCopyOwnedFrame t) := by
+  apply hoare_stableCopy_loop_done_frame StableCopyOwnedFrame
+    (hframe := hoare_stableCopy_body_ownedFrame)
+  intro F s hp
+  exact stableCopyOwnedFrame_with_locals s s.locals (s.clock - 1) rfl rfl rfl hp
+
 /-- The unframed copy-loop rule is the trivial-frame specialization. -/
 theorem hoare_stableCopy_loop_done :
     Hoare StableCopyLoopInv
