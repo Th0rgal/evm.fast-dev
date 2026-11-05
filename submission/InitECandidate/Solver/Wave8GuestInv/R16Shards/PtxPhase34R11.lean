@@ -3569,6 +3569,28 @@ theorem stable_copy_offset_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
   rw [he]
 
+/-- Evaluate the source address used by the copy load without modular wrap. -/
+theorem stable_copy_source_address_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w p : BitVec 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hi : locN s "i" < locN s "nl") :
+    evalAt s (.op .add [.var .local (ofString "lp"),
+      .panop .mul [.var .local (ofString "i"), .const 8]]) =
+      some (.val (.word (BitVec.ofNat 64 (locN s "lp" + 8 * locN s "i")))) := by
+  have hpn : locN s "lp" = p.toNat := by simp [locN, hl]
+  have hpw : p = BitVec.ofNat 64 (locN s "lp") := by
+    rw [hpn, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+  have hoff := stable_copy_offset_eval s w hp hw hi
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at hoff ⊢
+  rw [hl, hoff]
+  simp only [valueIsWord, valueWord, List.all, List.map, Option.map,
+    Bool.and_self, ↓reduceIte, wordOpHOL, wordOp, List.foldr]
+  have he := (stableCopyInv_address_words s hp hi).1
+  rw [hpw]
+  rw [← he, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+  simp
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
