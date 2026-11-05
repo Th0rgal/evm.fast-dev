@@ -3566,7 +3566,7 @@ theorem stable_copy_offset_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [stable_copy_mul_eval s w hw]
   have he : w * 8 = BitVec.ofNat 64 (8 * locN s "i") := by
     rw [← stable_copy_mul_nat s w hp hw hi]
-    simp
+    rw [BitVec.ofNat_toNat, BitVec.setWidth_eq]
   rw [he]
 
 /-- The actual copy-loop counter increment agrees with natural-number
