@@ -3008,4 +3008,31 @@ theorem phase2_address_joint_set_other {F : Type} (s : PanSemStateFiniteExact 64
   intro n hn
   simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
 
+/-- The actual initial address is the block beneficiary loaded from `be + 32`. -/
+theorem phase2_address_beneficiary_hoare :
+    Hoare PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs"))
+        (.load .one (.op .add [.var .global (ofString "be"), .const 32])))
+      (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  apply phase2_address_joint_store hp hdom _ hmem
+  obtain ⟨a, ha⟩ := hp.1.2.1
+  have he : x = a := by simpa [evalAt, evalHOLExact, ha] using hx.symm
+  subst x
+  have hl : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  rw [hl]
+  constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
