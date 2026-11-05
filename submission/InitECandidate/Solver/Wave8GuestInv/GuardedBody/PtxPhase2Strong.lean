@@ -5565,4 +5565,22 @@ theorem phase2_packed_outer_increment_exit_hoare :
     exact fun _ => phase2_packed_outer_advance s hp.1 hp.2 hb
   · exact fun _ _ hr => by cases hr
 
+/-- Interval framing supplies all scalar memory premises of the copy invariant. -/
+theorem phase2_packed_copy_intervals_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["tx", "nkeys", "i", "j", "k"] : List String),
+      locN post n = locN s n)
+    (hh : ∀ off, off < 384 → memW post (locN s "tx" + off) = memW s (locN s "tx" + off))
+    (hm : ∀ off, off < 24 * memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + off) =
+        memW s (memW s (locN s "tx" + 208) + off)) :
+    PtxPackedCopyIndex post := by
+  have ht := hl "tx" (by simp)
+  apply phase2_packed_copy_live_frame s post hp hr
+  · intro n hn
+    exact hl n (List.mem_cons_of_mem _ hn)
+  · rw [ht]; exact hh 216 (by omega)
+  · exact phase2_packed_record_counts_frame s post ht hh hm
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
