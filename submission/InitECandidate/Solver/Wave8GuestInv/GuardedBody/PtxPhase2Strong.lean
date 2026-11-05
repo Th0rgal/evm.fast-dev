@@ -7641,4 +7641,22 @@ theorem phase2_packed_iteration_guard_pre {F : Type}
   exact ⟨hp.1, phase2_packed_separated_inner_guarded hp.2.1 hg,
     hp.2.2.1, hp.2.2.2.2⟩
 
+/-- The copy pair preserves all premises needed before the counter updates. -/
+theorem phase2_packed_copy_pair_next_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32]))
+      (fun r t => r = none → WorldOK t ∧ PtxPackedSeparatedCopy t ∧
+        (∃ k : BitVec 64, t.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        globN t "heap_ptr" ≤ 2 ^ 64) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (phase2_packed_storage_copy_next_hoare h keySrc)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
