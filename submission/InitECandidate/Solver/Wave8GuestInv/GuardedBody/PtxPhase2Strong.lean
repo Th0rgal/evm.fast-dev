@@ -12268,4 +12268,89 @@ theorem phase2_message_backing_nonzero {ι F : Type}
     memW s (globN s "bo" + 40) ≠ 0 ∧ memW s (globN s "bo" + 72) ≠ 0 :=
   ⟨hp.2.1.bo40, hp.2.1.bo72⟩
 
+/-- A world step with no caller-buffer writes preserves the allocated message
+and every saved buffer. The caller supplies its restored environment and message local. -/
+theorem phase2_message_store_ready_world_step {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (ha : ArenaReady post) (he : TxEnv post)
+    (hl : post.locals.lookup (ofString "m") = s.locals.lookup (ofString "m"))
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+        FrameOutside s post (worldOwned s S Nd ++ [] ++ [freeGap s]) (heapFree s)) :
+    PtxMessageStoreReady buffers contents post := by
+  have hm : locN post "m" = locN s "m" := by simp only [locN, hl]
+  have hf : ∀ i, ∃ S Nd, WorldTypedWith post S Nd ∧
+      PtxLiveBufferAt post S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned post S Nd) := by
+    intro i
+    obtain ⟨hd, S, Nd, hw, hb, hmd⟩ := hp.2.2.2.2.2 i
+    obtain ⟨S', Nd', hw', hg, hfr⟩ := hs S Nd hw
+    refine ⟨S', Nd', hw', ?_, ?_⟩
+    · exact phase2_live_buffer_step s post S Nd S' Nd' (buffers i) (contents i) []
+        hb hp.1.1.2 hw hh hg hfr (by simp) (by simp)
+    · exact phase2_packed_owned_growth s post _ _ (locN s "m", 176)
+        hp.2.2.2.1 hg hmd
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨S, Nd, hw, _, _⟩ := hf i
+  refine ⟨⟨ha, S, (worldTyped_iff_with post S).mpr ⟨Nd, hw⟩⟩, he, ?_, ?_, ?_, ?_⟩
+  · simpa only [hl] using hp.2.2.1
+  · rw [hm]
+    exact ⟨hp.2.2.2.1.1, hp.2.2.2.1.2.trans hh⟩
+  · rw [hm]
+    exact wordsOK_transfer hp.1.1.1 ha.1 hp.2.2.2.2.1
+  · intro j
+    rw [hm]
+    exact ⟨(hp.2.2.2.2.2 j).1, hf j⟩
+
+/-- Restoring caller locals transports the message-store cut when `m` and
+the transaction index are unchanged. -/
+theorem phase2_message_store_ready_with_locals {ι F : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (hp : PtxMessageStoreReady buffers contents s)
+    (hm : locals.lookup (ofString "m") = s.locals.lookup (ofString "m"))
+    (hi : locals.lookup (ofString "index") = s.locals.lookup (ofString "index")) :
+    PtxMessageStoreReady buffers contents {s with locals := locals, clock := clock} := by
+  have hm' := locN_congr s locals clock "m" hm
+  have hi' := locN_congr s locals clock "index" hi
+  refine ⟨localsFree_worldOK s locals clock hp.1, ?_, ?_, ?_, ?_, ?_⟩
+  · exact ⟨hp.2.1.bo_nz, hp.2.1.bo24, hp.2.1.bo32, hp.2.1.bo40,
+      hp.2.1.bo72, by rw [hi']; exact hp.2.1.idx_lt, hp.2.1.jcap_nz⟩
+  · simpa only [hm] using hp.2.2.1
+  · rw [hm']; exact hp.2.2.2.1
+  · rw [hm']; exact hp.2.2.2.2.1
+  · intro i
+    obtain ⟨hd, S, Nd, hw, hb, hmd⟩ := hp.2.2.2.2.2 i
+    rw [hm']
+    exact ⟨hd, S, Nd, (worldTypedWith_with_locals s locals clock S Nd).mpr hw, hb, hmd⟩
+
+/-- An allocation-style world step frames every initialized message field. -/
+theorem phase2_message_world_step_fields {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+        FrameOutside s post (worldOwned s S Nd ++ [] ++ [freeGap s]) (heapFree s)) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, _, hd⟩ := hp.2.2.2.2.2 i
+  obtain ⟨S', Nd', _, _, hf⟩ := hs S Nd hw
+  intro k hk
+  apply phase2_world_frame_heap_disjoint s post _ [] (locN s "m", 176)
+    (locN s "m" + 8 * k) hp.1.1.2 hp.2.2.2.1
+  · constructor <;> dsimp <;> omega
+  · have hal := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hal]
+  · exact hf
+  · exact hd _ (by simp)
+  · simp
+  · exact worldOwned_zero_aligned hw
+  · simp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
