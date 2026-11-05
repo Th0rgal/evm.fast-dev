@@ -6537,4 +6537,59 @@ theorem phase2_memcpy_restore_locals {F : Type}
       locN s name := by
   rfl
 
+/-- Apply header preservation to a concrete, resuming memcpy evaluation. -/
+theorem phase2_memcpy_eval_headers (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat) (tx : Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (ht : TxAccessListAt (callEntryStateHOLFinite s callee) S Nd tx)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hsep : Disj (tx, 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    memW post (tx + 208) = memW s (tx + 208) ∧
+    memW post (tx + 216) = memW s (tx + 216) := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup (phase2_memcpy_access_metadata_contract h)
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  exact hs hr S Nd tx ha hw ht hd hsep hlen
+
+/-- A resuming concrete copy supplies a shared post-world and restored-caller frame. -/
+theorem phase2_memcpy_eval_world_frame (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd)) :
+    ∃ S' Nd', WorldTypedWith post S' Nd' ∧
+      OwnedGrows (callEntryStateHOLFinite s callee) post
+        (worldOwned (callEntryStateHOLFinite s callee) S Nd) (worldOwned post S' Nd') ∧
+      FrameOutside s { post with locals := s.locals }
+        (worldOwned (callEntryStateHOLFinite s callee) S Nd ++
+          [(locN (callEntryStateHOLFinite s callee) "dst",
+            locN (callEntryStateHOLFinite s callee) "n")] ++
+          [freeGap (callEntryStateHOLFinite s callee)])
+        (heapFree (callEntryStateHOLFinite s callee)) := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup (phase2_memcpy_world_frame_contract h)
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  obtain ⟨S', Nd', hw', ho, hf⟩ := hs hr S Nd hw hd
+  exact ⟨S', Nd', hw', ho, phase2_memcpy_restore_frame s post callee _ _ hf⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
