@@ -2859,6 +2859,19 @@ theorem stable_length_store_header_unchanged {F : Type}
   · rw [hm _ hn0]
   · rw [hm _ hn16]
 
+theorem stable_length_store_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    {i : Ivl} (hi : WordsOK s i) : WordsOK {s with memory := mem'} i := by
+  refine ⟨hi.1, hi.2.1, ?_⟩
+  intro k hk
+  obtain ⟨v, hd, hv⟩ := hi.2.2 k hk
+  by_cases ha : BitVec.ofNat 64 (i.1 + 8 * k) =
+      BitVec.ofNat 64 (locN s "stable_logs" + 8)
+  · exact ⟨w, hd, by change mem' _ = _; rw [ha, he]⟩
+  · exact ⟨v, hd, (hm _ ha).trans hv⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
