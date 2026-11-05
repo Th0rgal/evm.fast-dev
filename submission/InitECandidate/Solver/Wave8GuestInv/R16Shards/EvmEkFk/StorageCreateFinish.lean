@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -630,6 +631,151 @@ theorem adjoin_local_tables {F : Type} {post : PanSemStateFiniteExact 64 F}
     · exact ⟨ht_not_U, ht_nz, ht_unass⟩
     · obtain ⟨hnot_Ut, hnz_x, hunass_x⟩ := hrest_props x hxr
       exact ⟨fun hxU => hnot_Ut (List.mem_append.2 (Or.inl hxU)), hnz_x, hunass_x⟩
+
+theorem worldTableRefs_mem_S {F : Type} {s : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hT : TablesTyped s S) (hJ : JournalTyped s S) {u : Nat}
+    (hu : u ∈ worldTableRefs s S) (hnz : u ≠ 0) : u ∈ S := by
+  obtain ⟨_, _, _, hws, hbs, hts, hg, hbsN, htsN, hbal, _, _⟩ := hT
+  unfold worldTableRefs recordSlots at hu
+  dsimp only at hu
+  rcases List.mem_append.1 hu with h1 | hjr
+  · rcases List.mem_append.1 h1 with h2 | hbal_m
+    · rcases List.mem_append.1 h2 with h3 | hnts
+      · rcases List.mem_append.1 h3 with h4 | hnbs
+        · rcases List.mem_append.1 h4 with h5 | hgl
+          · rcases List.mem_append.1 h5 with h6 | hts_m
+            · rcases List.mem_append.1 h6 with hws_m | hbs_m
+              · split at hws_m
+                · cases hws_m
+                · rename_i hgnz
+                  obtain ⟨k, hk, rfl⟩ := List.mem_map.1 hws_m
+                  exact (hws k hk hgnz).resolve_left hnz
+              · split at hbs_m
+                · cases hbs_m
+                · rename_i hgnz
+                  obtain ⟨k, hk, rfl⟩ := List.mem_map.1 hbs_m
+                  exact (hbs k hk hgnz).resolve_left hnz
+            · split at hts_m
+              · cases hts_m
+              · rename_i hgnz
+                obtain ⟨k, hk, rfl⟩ := List.mem_map.1 hts_m
+                exact (hts k hk hgnz).resolve_left hnz
+          · obtain ⟨g, hgm, rfl⟩ := List.mem_map.1 hgl
+            exact (hg g hgm).resolve_left hnz
+        · split at hnbs
+          · rename_i hc
+            obtain ⟨i, hi, rfl⟩ := List.mem_map.1 hnbs
+            exact hbsN hc.1 hc.2 i (List.mem_range.1 hi)
+          · cases hnbs
+      · split at hnts
+        · rename_i hc
+          obtain ⟨i, hi, rfl⟩ := List.mem_map.1 hnts
+          exact htsN hc.1 hc.2 i (List.mem_range.1 hi)
+        · cases hnts
+    · obtain ⟨ad, had, hm⟩ := List.mem_flatMap.1 hbal_m
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+      rcases hm with rfl | rfl
+      · exact (hbal ad had).1
+      · exact (hbal ad had).2.1
+  · obtain ⟨k, hk, rfl⟩ := List.mem_map.1 hjr
+    exact hJ.2.2.2 k (List.mem_range.1 hk)
+
+theorem frameObject_zero_or_allocated {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ec o : Ivl} (hA : ArenaOK s) (hFW : FrameWF s S ec)
+    (ho : o ∈ frameObjects s ec) :
+    o.2 = 0 ∨ Allocated s o ∨ Inside o scratchStart (globN s "frame_mem_ptr") := by
+  obtain ⟨hscr, hmem_in, _, _, _, _, _, _, _, _, _, _, hlogs_in, _, hret_in, hll_ok, _⟩ := hFW
+  unfold frameObjects at ho
+  rcases List.mem_append.1 ho with ho7 | holog
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at ho7
+    rcases ho7 with rfl | rfl | rfl | rfl | rfl | rfl | rfl
+    · exact Or.inr (Or.inl (Or.inr (hscr (ec.1, 280) (by simp)).1))
+    · exact Or.inr (Or.inl (Or.inr (hscr (ec.2, 104) (by simp)).1))
+    · exact Or.inr (Or.inl (Or.inr (hscr (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)) (by simp)).1))
+    · exact Or.inr (Or.inr hmem_in)
+    · exact Or.inr (Or.inl (Or.inr (hscr (memW s (ec.1 + 88), 24) (by simp)).1))
+    · exact Or.inr (Or.inl hlogs_in)
+    · rcases hret_in with ⟨hz, _⟩ | ⟨h, _⟩
+      · unfold frameRet; simp [hz]
+      · exact Or.inr (Or.inl (Or.inl h))
+  · unfold frameLogObjects at holog; dsimp only at holog
+    obtain ⟨idx, hidx_mem, ho_own⟩ := List.mem_flatMap.1 holog
+    rw [List.mem_range] at hidx_mem
+    rcases hll_ok with hz | ⟨_, _, _, _, hent⟩
+    · exfalso
+      have hs0 := (hscr (memW s (ec.1 + 88), 24) (by simp)).1.1
+      rw [hz] at hs0
+      have hsc := hA.2.2.1; have hgap := hA.2.2.2.1
+      have hss0 : 0 < scratchStart := by decide
+      dsimp only at hs0; omega
+    · have hle := (hent idx hidx_mem).2
+      have ho_rec := (List.mem_filter.1 ho_own).1
+      simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at ho_rec
+      rcases ho_rec with rfl | rfl | rfl | rfl
+      · exact Or.inr (Or.inl (Or.inl hle.2.1))
+      · exact Or.inr (Or.inl (Or.inl hle.2.2.2.2.1))
+      · exact Or.inr (Or.inl (Or.inl hle.2.2.2.2.2.1))
+      · exact Or.inr (Or.inl (Or.inl hle.2.2.2.2.2.2))
+
+theorem triesTypedWith_inter {F : Type} {s : PanSemStateFiniteExact 64 F} {S Nd1 Nd2 : List Nat}
+    (h1 : TriesTypedWith s S Nd1) (h2 : TriesTypedWith s S Nd2) :
+    TriesTypedWith s S (Nd1.filter (fun n => decide (n ∈ Nd2))) := by
+  set Nd := Nd1.filter (fun n => decide (n ∈ Nd2))
+  have hsub1 : ∀ n ∈ Nd, n ∈ Nd1 := fun _ h => (List.mem_filter.1 h).1
+  have hsub2 : ∀ n ∈ Nd, n ∈ Nd2 := fun _ h => of_decide_eq_true (List.mem_filter.1 h).2
+  have hmem_iff : ∀ n, n ∈ Nd ↔ n ∈ Nd1 ∧ n ∈ Nd2 := fun n => by
+    simp only [Nd, List.mem_filter, decide_eq_true_eq]
+  have hroot_iff : ∀ r, RootIn Nd1 r → RootIn Nd2 r → RootIn Nd r := by
+    intro r hr1 hr2
+    rcases hr1 with rfl | hr1
+    · exact Or.inl rfl
+    · rcases hr2 with rfl | hr2
+      · exact Or.inl rfl
+      · exact Or.inr ((hmem_iff r).2 ⟨hr1, hr2⟩)
+  refine ⟨⟨?_, ?_⟩, ?_, ?_⟩
+  · intro n hn
+    obtain ⟨k1, k2, k3, k4, k5_1, k6_1, k7_1, k8, k9, k10⟩ := h1.1.1 n (hsub1 n hn)
+    obtain ⟨_, _, _, _, k5_2, k6_2, _, _, _, _⟩ := h2.1.1 n (hsub2 n hn)
+    refine ⟨k1, k2, k3, k4, ?_, ?_, ?_, k8, k9, k10⟩
+    · intro hm2; exact hroot_iff _ (k5_1 hm2) (k5_2 hm2)
+    · intro hm3 i hi; exact hroot_iff _ (k6_1 hm3 i hi) (k6_2 hm3 i hi)
+    · intro hm12
+      rcases k7_1 hm12 with hz | ⟨hnib, hal, hin, hdj⟩
+      · exact Or.inl hz
+      · exact Or.inr ⟨hnib, hal, hin, fun m hm => hdj m (hsub1 m hm)⟩
+  · intro n hn m hm hne
+    exact h1.1.2 n (hsub1 n hn) m (hsub1 m hm) hne
+  · intro o ho
+    obtain ⟨n, hn, ho_n⟩ := List.mem_flatMap.1 ho
+    exact h1.2.1 o (List.mem_flatMap.2 ⟨n, hsub1 n hn, ho_n⟩)
+  · intro hws
+    obtain ⟨hw1, hs1⟩ := h1.2.2 hws
+    obtain ⟨hw2, hs2⟩ := h2.2.2 hws
+    exact ⟨hroot_iff _ hw1 hw2, fun hm i hi => hroot_iff _ (hs1 hm i hi) (hs2 hm i hi)⟩
+
+theorem avoidsTries_combine {F : Type} {s : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {os1 os2 : List Ivl}
+    (h1 : AvoidsTries s S os1) (h2 : AvoidsTries s S os2) :
+    AvoidsTries s S (os1 ++ os2) := by
+  obtain ⟨Nd1, hT1, hd1⟩ := h1
+  obtain ⟨Nd2, hT2, hd2⟩ := h2
+  refine ⟨Nd1.filter (fun n => decide (n ∈ Nd2)), triesTypedWith_inter hT1 hT2, ?_⟩
+  intro o ho j hj
+  obtain ⟨n, hn, hj_n⟩ := List.mem_flatMap.1 hj
+  have hn1 : n ∈ Nd1 := (List.mem_filter.1 hn).1
+  have hn2 : n ∈ Nd2 := of_decide_eq_true (List.mem_filter.1 hn).2
+  rcases List.mem_append.1 ho with ho1 | ho2
+  · exact hd1 o ho1 j (List.mem_flatMap.2 ⟨n, hn1, hj_n⟩)
+  · exact hd2 o ho2 j (List.mem_flatMap.2 ⟨n, hn2, hj_n⟩)
+
+theorem avoidsTries_list_combine {F : Type} {s : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (h0 : AvoidsTries s S []) :
+    ∀ (xs : List Ivl), (∀ x ∈ xs, AvoidsTries s S [x]) → AvoidsTries s S xs
+  | [], _ => h0
+  | x :: xs, hx => by
+    have hcomb := avoidsTries_combine (hx x (List.mem_cons_self ..))
+      (avoidsTries_list_combine h0 xs (fun y hy => hx y (List.mem_cons_of_mem _ hy)))
+    simpa using hcomb
 
 theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
     (hn : n.toNat ≤ 65536) :
