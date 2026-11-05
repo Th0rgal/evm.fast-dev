@@ -1021,6 +1021,30 @@ theorem hoare_store_bo_total (off : Nat) (hoff : off ∈ ([0, 8, 16, 48] : List 
     rcases hoff with rfl | rfl | rfl | rfl <;> omega
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hoff64, Nat.mod_eq_of_lt hsum] using he
 
+/-- The four consecutive block-total writes preserve the strong cut at zero cost. -/
+theorem phase4TotalStores_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 5 (spineAt 114 ptxCode) tail) (0 + (0 + (0 + (0 + b)))) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 0 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 8 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 48 (by simp) _ _) ?_
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+      (hoare_store_bo_total 16 (by simp) _ _) ?_
+    change TerminatingProgBoundedOn TxAfterCallStrong (.seq .skip tail) b
+    intro F s hc hp hnt
+    simpa only [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip] using
+      htail s hc hp (by simpa only [evaluateHOLFiniteState_seq_line780,
+        evaluateHOLFiniteState_skip] using hnt)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
