@@ -2843,14 +2843,4 @@ theorem hoare_prepare_dispatch_delegated_msg_tail (gw : List String) (hp : Nat)
   exact Hoare.seq_fall' hfinish'
     (hoare_prepare_dispatch_msg_stores gw hp G ch code code_n) (fun _ h => h)
 
-#print axioms Hoare.seq_assign_fall
-#print axioms hoare_prepare_dispatch_delegated_msg_tail
-#print axioms hoare_prepare_dispatch_delegated_finish
-#print axioms Hoare.while_fall_checked
-#print axioms ek_set_delegation_of_body
-#print axioms ek_prepare_dispatch_of_body
-#print axioms Hoare.while_fall
-#print axioms d0Pre_msg_init
-#print axioms hoare_dec_msg_step
-
 end HeadStore
