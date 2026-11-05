@@ -5212,4 +5212,57 @@ theorem hoare_prepare_dispatch_delegation_address (gw : List String) (hp : Nat)
     (ReadOnlyFn.resumeOn hLO hG ro_get_delegated_code_address (ofString "da") (by decide) _)
     htail
 
+/-- The code words selected by either dispatch branch, including the bound
+required by `compute_jumpdests`. -/
+def DispatchCodeReady (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  D0Pre gw hp G ch s ∧ ∃ code code_n : BitVec 64,
+    s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+    s.locals.lookup (ofString "code_n") = some (.val (.word code_n)) ∧ code_n.toNat < 2 ^ 40
+
+theorem hoare_prepare_dispatch_common_ready (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (DispatchCodeReady gw hp G ch) prepareDispatchCommon
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  obtain ⟨hD, code, code_n, hcode, hn, hnb⟩ := hP
+  exact (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub).run
+    s hc ⟨hD, hcode, hn⟩ hnt hr
+
+/-- Compose the source delegation conditional with the common suffix once
+the delegated path has established code readiness. -/
+theorem hoare_prepare_dispatch_branch_common (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw)
+    (delegated : ProgHOL 64)
+    (hdelegated : Hoare (fun s => DispatchCodeReady gw hp G ch s ∧
+      CondTrue (.cmp .notEqual (.var .local (ofString "da")) (.const 0)) s)
+      delegated (Fall (DispatchCodeReady gw hp G ch))) :
+    Hoare (DispatchCodeReady gw hp G ch)
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "da")) (.const 0)) delegated .skip)
+        prepareDispatchCommon)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.seq_fall' (Hoare.ite_fall hdelegated ?_)
+    (hoare_prepare_dispatch_common_ready gw hp G ch hsub) (fun _ h => h.1.1)
+  exact Hoare.mono Hoare.skip_fall (fun _ h => h.1)
+
+/-- The delegated-code assignments preserve the callee's length bound while
+establishing readiness for the common suffix. -/
+theorem hoare_prepare_dispatch_delegated_finish_ready (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n daddr : BitVec 64,
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) ∧ code_n.toNat < 2 ^ 40)
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))))))
+      (Fall (DispatchCodeReady gw hp G ch)) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  obtain ⟨hD, code, code_n, daddr, hdcode, hdaddr, hnb⟩ := hP
+  have h := (hoare_prepare_dispatch_delegated_finish gw hp G ch code code_n daddr).run
+    s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
+  exact ⟨h.1, code, code_n, h.2.1, h.2.2.1, hnb⟩
+
 end HeadStore
