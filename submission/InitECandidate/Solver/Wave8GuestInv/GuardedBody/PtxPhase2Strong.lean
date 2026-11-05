@@ -6143,4 +6143,39 @@ theorem phase2_memcpy_frame_guarded {F : Type}
       dsimp at hz
       omega
 
+/-- Combine copy domain, global, world, and frame guarantees into the guarded invariant. -/
+theorem phase2_memcpy_restore_guarded {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hp : PtxPackedCopyIndex s) (ha : ArenaOK s)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n))
+    (hg : GlobalsKept [] s post) (hm : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hpost : ∃ S' Nd', WorldTypedWith post S' Nd' ∧ TxAccessListAt post S' Nd' (locN post "tx") ∧
+      IvlsDisj [(locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned post S' Nd'))
+    (hf : FrameOutside s post
+      (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s]) (heapFree s))
+    (hd : Disj (locN s "tx", 384) (locN s "dst", locN s "n"))
+    (hc : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "dst", locN s "n")) (hn : 0 < locN s "n") :
+    PtxPackedCopyIndex post := by
+  have hr : PtxPackedKeysReady post := by
+    apply phase2_packed_ready_globals_kept s post hp.1 _ hg hm hpost
+    intro n hmem
+    exact hl n (by simp at hmem ⊢; tauto)
+  apply phase2_memcpy_frame_guarded s post S Nd hp hr ha hw ht _ hf hd hc hn
+  intro n hmem
+  have he := hl n (by simp at hmem ⊢; tauto)
+  simp [locN, he]
+
+/-- Separation from the packed buffer implies separation from both concrete copy destinations. -/
+theorem phase2_packed_copy_input_disjoint (input : Ivl) (base count k : Nat)
+    (hk : k < count)
+    (hd : Disj input (base, (count * 52 + 8 + 7) / 8 * 8)) :
+    Disj input (base + 52 * k, 20) ∧
+    Disj input (base + 52 * k + 20, 32) := by
+  obtain ⟨ha, hb⟩ := phase2_key_copy_destinations base count k hk
+  exact ⟨disj_of_inside_right ha hd, disj_of_inside_right hb hd⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
