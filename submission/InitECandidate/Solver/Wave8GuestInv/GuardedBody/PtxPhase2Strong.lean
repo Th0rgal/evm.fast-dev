@@ -14823,4 +14823,50 @@ theorem phase2_get_account_optional_resume_world_backing (name : MlS)
     (R16WkAcctWs.WorldStepSc.of_pre_locals_clock (hh (Or.inl ⟨v, rfl⟩)))
   exact ⟨localsFree_worldOK post _ post.clock hwpost, he, hb⟩
 
+/-- A call installing a local result cannot propagate a returned result. -/
+theorem phase2_callLocal_ne_returned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name fname : MlS) (args : List (ExpHOL 64)) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args)).1 ≠ some (.returned v) := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · simp
+  · split
+    · simp
+    · split
+      · simp
+      · split <;> simp_all
+        split <;> try simp
+        split <;> simp
+
+/-- Full non-optional account lookup preserves backing on both existing and fresh accounts. -/
+theorem phase2_get_account_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_account)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_account,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_get_account_optional_resume_world_backing (ofString "a") _ (by decide))
+  apply Hoare.seq
+  · apply Hoare.ite
+    · refine ⟨fun s hc hp hn => ⟨?_, ?_⟩⟩
+      · exact (phase2_acct_empty_call_backing _ _).run s hc hp.1 hn
+      · intro hne hr
+        obtain ⟨v, hv⟩ := hr
+        exact (phase2_callLocal_ne_returned s _ _ _ v hv).elim
+    · exact Hoare.skip (fun s hp => ⟨fun _ => hp.1.2.2, fun hn => (hn rfl).elim⟩)
+    · intro F s hp
+      constructor
+      · intro h; cases h
+      · intro _ h
+        obtain ⟨v, hv⟩ := h
+        cases hv
+  · exact phase2_return_backing _
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
