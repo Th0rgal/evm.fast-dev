@@ -2416,16 +2416,17 @@ this rule.  The frame's message-pointer slot is preserved separately from the
 message payload: subsequent calls can therefore retain the caller's `msg` local.
 -/
 
-theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
+theorem hoare_store_msg_word_step_with (gw : List String) (hp : Nat)
     (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
     (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
     (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
-      D0Pre gw hp G ch s → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
-    Hoare (D0Pre gw hp G ch)
+      D0Pre gw hp G ch s → L s.locals → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
       (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
-      (Fall (D0Pre gw hp G ch)) := by
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
   apply Hoare.store_fall_of_none
-  refine ⟨fun {F} s _ hD _ hnone => ?_⟩
+  refine ⟨fun {F} s _ ⟨hD, hL⟩ _ hnone => ?_⟩
   obtain ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ := hD
   have hD : D0Pre gw hp G ch s := ⟨⟨hP, hS⟩, m, hm, hm_eq⟩
   rcases hrun : evaluateHOLFiniteState s
@@ -2439,7 +2440,7 @@ theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
     exact allocated_le_2pow64 hP.1.2 hP.2.choose_spec.2.1
   obtain ⟨heff, hloc⟩ := M11.ByteRegionEffect.of_store_word
     (Rl := [(m.toNat, 176)]) hP.1.1.memaddrs hrun
-    (fun v hv => hword s v hD (by simpa only [ev] using hv))
+    (fun v hv => hword s v hD hL (by simpa only [ev] using hv))
     (fun addr hdst _ => by
       refine ⟨(m.toNat, 176), List.mem_singleton.2 rfl, ?_⟩
       have haddr : addr.toNat = m.toNat + off := by
@@ -2472,9 +2473,38 @@ theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
       Nat.mod_eq_of_lt (by omega)
     rw [haddr] at hhit
     rcases hd with hd | hd | hd | hd <;> dsimp only at hd <;> omega
-  exact d0Pre_of_stepFrom gw hp G ch hD
+  refine ⟨d0Pre_of_stepFrom gw hp G ch hD
     (stepFrom_of_evmStep (fun g hg => by simp at hg) hS hstep) hloc
-    (congrArg (fun gs => gs.lookup (ofString "ev")) heff'.globals) hslot
+    (congrArg (fun gs => gs.lookup (ofString "ev")) heff'.globals) hslot, ?_⟩
+  rw [hloc]
+  exact hL
+
+theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      D0Pre gw hp G ch s → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (D0Pre gw hp G ch)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) value)
+      (Fall (D0Pre gw hp G ch)) := by
+  have h := hoare_store_msg_word_step_with gw hp G ch off hoff value (fun _ => True)
+    (fun s v hD _ hv => hword s v hD hv)
+  exact Hoare.mono (Hoare.weaken h (fun _ _ h hr => (h hr).1)) (fun _ hD => ⟨hD, trivial⟩)
+
+/-- A message store preserves all caller-local facts, including the code words needed
+by the subsequent dispatch stores. -/
+theorem hoare_store_msg_local_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (name : MlS) (w : BitVec 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hL : ∀ locals, L locals → locals.lookup name = some (.val (.word w))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) (.var .local name))
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  apply hoare_store_msg_word_step_with gw hp G ch off hoff (.var .local name) L
+  intro F s v _ hlocals hv
+  simp only [ev, evalHOLExact, hL _ hlocals] at hv
+  exact ⟨w, (Option.some.inj hv).symm⟩
 
 theorem hoare_store_msg_const_step (gw : List String) (hp : Nat)
     (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
