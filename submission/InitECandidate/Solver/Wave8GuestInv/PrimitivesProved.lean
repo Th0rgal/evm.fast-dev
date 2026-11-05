@@ -81,6 +81,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.LogsBloom
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkBalAddChanges
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -229,9 +230,9 @@ theorem primitives : Primitives where
   «fb_idx_start_account» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_idx_start_account»
   «fb_remove_storage_write» := Wave8Leaves.S03.fb_remove_storage_write (Wave8Leaves.S03.fb_bal_list_remove_idx Merged.fb_memcpy) Merged.fb_htab_del Merged.fb_htab_get
   «fb_u256_eq» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_u256_eq»
-  «wk_add_balance_change» := «wk_add_balance_change»
-  «wk_add_code_change» := «wk_add_code_change»
-  «wk_add_nonce_change» := «wk_add_nonce_change»
+  «wk_add_balance_change» := R16Shards.WkBal.«wk_add_balance_change»
+  «wk_add_code_change» := R16Shards.WkBal.«wk_add_code_change»
+  «wk_add_nonce_change» := R16Shards.WkBal.«wk_add_nonce_change»
   «wk_add_storage_write» := «wk_add_storage_write»
   «wk_bal_remove_change» := R16Shards.PrimC08Closure.«wk_bal_remove_change»
   «wk_get_code» := R16Shards.«wk_get_code»
