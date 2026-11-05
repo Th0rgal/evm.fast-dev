@@ -6197,4 +6197,28 @@ theorem htab_get_code_record_words {F : Type}
   obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
   exact ⟨hw, code, code_n, by simpa using hc, hn, hb⟩
 
+/-- A returning `ws_get_code` lookup suffix must have found its entry. Missing
+entries take the catchable exception branch, so require no code-length premise. -/
+theorem ws_get_code_tail_return_cases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (found code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]))
+    (hn : found ≠ 0 → code_n.toNat < 2 ^ 40)
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))])))
+      (fun v post => found ≠ 0 ∧
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  by_cases hf : found = 0
+  · subst found
+    intro v hv
+    rw [ws_get_code_missing_tail s code code_n hr hshape] at hv
+    cases hv
+  · intro v hv
+    exact ⟨hf, ws_get_code_tail_return s found code code_n hr (hn hf) hf v hv⟩
+
 end HeadStore
