@@ -2998,4 +2998,14 @@ theorem phase2_address_copy_store {F : Type} {s : PanSemStateFiniteExact 64 F}
   obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
   exact phase2_address_joint_store hp hdom (phase2_address_copy_slot hp i hi).2 hmem
 
+/-- Updating a loop-local variable leaves the persistent joint world intact. -/
+theorem phase2_address_joint_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_addrs", "nal", "te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String), ofString n ≠ name) :
+    PtxAddressJoint (setVarHOLFinite name v s) := by
+  apply phase2_address_joint_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
