@@ -4502,6 +4502,42 @@ theorem hoare_stable_length_setup_frame :
   obtain ⟨hh', ha', hw'⟩ := stable_length_store_header_ready s mem' _ he hm hh hp.2.1
   exact ⟨hz, hh', ha', hc, hw', stableLengthPre_memory_operands s hp mem' p hl⟩
 
+/-- The length store establishes the complete backing-load setup contract. -/
+theorem hoare_stable_length_copy_ready :
+    Hoare (fun s => (StableLengthPre s ∧
+      (∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+        (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+        (∀ o ∈ worldOwned s S Nd,
+          Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o)) ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+      locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → StableLengthPost t ∧ locN t "logs" ≠ 0 ∧
+        WordsOK t (locN t "stable_logs", 24) ∧ Allocated t (locN t "stable_logs", 24) ∧
+        locN t "nl" ≤ locN t "stable_log_cap" ∧ StableCopySpatial t ∧
+        WordAt t (locN t "stable_logs") ∧ ∃ n p w : BitVec 64,
+          t.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+          t.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+          t.locals.lookup (ofString "stable_logs") = some (.val (.word w))) := by
+  constructor
+  intro F s hc hp hnt hr
+  obtain ⟨hpost, hs⟩ := hoare_stable_length_joint.run s hc hp.1 hnt hr
+  have hcap : locN s "nl" ≤ locN s "stable_log_cap" :=
+    stableLengthPre_copy_capacity s hp.1.1 s.memory
+  obtain ⟨hz, hh, ha, hcap', hw, hop⟩ := hoare_stable_length_setup_frame.run s hc
+    ⟨hp.1.1, hp.2.1, hp.2.2.1, hcap, hp.2.2.2⟩ hnt hr
+  exact ⟨hpost, hz, hh, ha, hcap', hs, hw, hop⟩
+
 /-- Reassemble the separated store contract from framed source cells and
 preserved ownership after a memory update. -/
 theorem stableCopyStorePre_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
