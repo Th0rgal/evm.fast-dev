@@ -3815,4 +3815,22 @@ theorem phase2_address_count_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [hp.2.1] at hi
     omega
 
+/-- After adding the current record count, advancing the index restores the
+counting invariant. The intervening key assignment changes no input fields. -/
+theorem phase2_address_count_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal")
+    (hn : locN s "nal" = memW s (locN s "tx" + 216))
+    (hk : locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1)) :
+    PtxAddressCountInv (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) := by
+  obtain ⟨hcopy, hidx⟩ := phase2_address_copy_increment s hp hi
+  refine ⟨hcopy, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nal" by decide,
+      show ofString "i" ≠ ofString "tx" by decide] using hn
+  · rw [hidx]
+    simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide,
+      show ofString "i" ≠ ofString "tx" by decide] using hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
