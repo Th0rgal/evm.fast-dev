@@ -6944,6 +6944,29 @@ private theorem rlp_item_total_agree_unchecked_vvh {F : Type}
   intro e2 hc2 hp2 hbytes rv2 hret2
   exact hagree e2 hc2 hp2 hbytes rv2 hret2
 
+private theorem rlp_item_total_worldEff_agree_vvh {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hAs : ArenaReady s)
+    (heff : WorldEff s post [] [] wsGw)
+    (P L : Nat) (p len : BitVec 64)
+    (hfit : P + L ≤ 2 ^ 64)
+    (hdj : IvlsDisj [(P, L)] [(globN s "heap_ptr", scratchEnd - globN s "heap_ptr")])
+    (hlo : P ≤ p.toNat) (hhi : p.toNat + len.toNat ≤ P + L)
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hlen : s.locals.lookup (ofString "len") = some (.val (.word len)))
+    (hppost : post.locals.lookup (ofString "p") = some (.val (.word p))) :
+    RetOK_vvh (fun v =>
+      ∃ T : BitVec 64, v = .val (.word T) ∧ 1 ≤ T.toNat ∧ T.toNat ≤ len.toNat ∧
+        ∀ rv : ValueHOL 64,
+          (evaluateHOLFiniteState post (sourceFnBody Guest.Software.guestFn_rlp_item_total_unchecked)).1 =
+            some (.returned rv) → rv = .val (.word T))
+      s (sourceFnBody Guest.Software.guestFn_rlp_item_total) := by
+  obtain ⟨hsubfit, _, hbytes⟩ := input_subregion_worldEff_vvh hAs heff hfit hdj hlo hhi
+  intro v hv
+  obtain ⟨T, hT, hpos, hbound, hagree⟩ :=
+    rlp_item_total_agree_unchecked_vvh s hc p len hsubfit hp hlen v hv
+  exact ⟨T, hT, hpos, hbound, hagree post heff.code hppost hbytes⟩
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
