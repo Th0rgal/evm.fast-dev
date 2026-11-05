@@ -4507,4 +4507,49 @@ theorem phase2_key_destination_nonwrapping (base count k : Nat) (hk : k < count)
   dsimp at hu
   constructor <;> rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
 
+/-- Storage-key allocation retains a joint world and transaction witness. -/
+theorem phase2_storage_keys_alloc_world (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "storage_keys", locN s "nkeys" * 32)] (worldOwned s S Nd))
+      (ofString "storage_keys") (ofString "alloc")
+      [.panop .mul [.var .local (ofString "nkeys"), .const 32]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_storage_keys_alloc_size s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 32 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hready.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hready.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hready.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hav⟩ := hret v rfl
+  dsimp only at hav
+  rw [hcn] at hav
+  have hround : (locN s "nkeys" * 32 + 7) / 8 * 8 = locN s "nkeys" * 32 := by omega
+  rw [hround] at hav
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post
+      (setVarHOLFinite (ofString "storage_keys") (.val (.word w)) { post with locals := s.locals }).locals
+      post.clock hTp
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "storage_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN (setVarHOLFinite (ofString "storage_keys") (.val (.word w))
+        { post with locals := s.locals }) "storage_keys",
+        locN (setVarHOLFinite (ofString "storage_keys") (.val (.word w))
+          { post with locals := s.locals }) "nkeys" * 32)] (worldOwned post S' Nd')
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "storage_keys" ≠ ofString "nkeys" by decide] using hav
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
