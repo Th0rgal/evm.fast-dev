@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -78,6 +79,23 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 
 namespace PtxP34
 open PtxP1
+
+/-- The concrete account proof supplies the scratch frontier bound omitted by
+the weaker `PtxCallees.wk_create_ether` interface. -/
+theorem create_ether_allocatorGrows {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hW : WorldOK (callEntryStateHOLFinite s callee))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠
+      some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1) :
+    AllocatorGrows (callEntryStateHOLFinite s callee)
+      (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).2 := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl hW hnt hr
+  exact ⟨hw.1.2.1, hw.2⟩
 
 /-- Receipt encoding's frozen guard asks for placement even for an empty array.
 The allocator-created backing buffer supplies it independently of live cells. -/
