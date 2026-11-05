@@ -2557,4 +2557,66 @@ theorem worldStep_csrLiveAt {F : Type}
   exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm, hWp,
     hc', hr', hcl', hrl', hm', hd'⟩
 
+def CsrTabs : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrTablesAt s (locN s "cache") (locN s "new_roots")
+
+def CsrMpt (name : String) : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrLiveAt s (locN s "cache") (locN s "new_roots") (locN s name)
+
+theorem localsOnly_csrTabs : LocalsOnly ["cache", "new_roots"] CsrTabs := by
+  intro F s locals k hl hs
+  unfold CsrTabs
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp))]
+  exact localsFree_csrTablesAt _ _ s locals k hs
+
+theorem localsOnly_csrMpt (name : String) :
+    LocalsOnly ["cache", "new_roots", name] (CsrMpt name) := by
+  intro F s locals k hl hs
+  unfold CsrMpt
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp)),
+    locN_congr s locals k name (hl name (by simp))]
+  exact localsFree_csrLiveAt _ _ _ s locals k hs
+
+theorem csrTabs_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrTabs s) : WorldOK s := csrTablesAt_worldOK hs
+
+theorem csrMpt_tabs (name : String) {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : CsrMpt name s) : CsrTabs s := csrLiveAt_tables hs
+
+def CsrBound (name : String) (bound : Nat)
+    (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => P s ∧ locN s name ≤ bound
+
+theorem localsOnly_csrBound {names : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : LocalsOnly names P) (name : String) (bound : Nat) :
+    LocalsOnly (name :: names) (CsrBound name bound P) := by
+  intro F s locals k hl hs
+  refine ⟨hP s locals k (fun n hn => hl n (by simp [hn])) hs.1, ?_⟩
+  change locN { s with locals := locals, clock := k } name ≤ bound
+  rw [locN_congr s locals k name (hl name (by simp))]
+  exact hs.2
+
+theorem callEntryOn_guestInv_csr
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hP : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (fname : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn P GuestInv fname args := by
+  intro F s values body callee ret hc hs ha hl
+  exact guestInv_callEntry s callee (hP s hs)
+
+theorem pBounded_readOnlyLocal_csr
+    {names : List String} {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname name : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hP : LocalsOnly names P)
+    (hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hfb : TerminatingFunBoundedOn GuestInv fname B)
+    (hro : ReadOnlyFn fname) (hne : ∀ n ∈ names, ofString n ≠ name) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) :=
+  pBounded_callLocal_csr hfb (callEntryOn_guestInv_csr hG fname args)
+    (hro.resumeOn hP hG name hne args)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
