@@ -3641,4 +3641,153 @@ theorem blockReadyExecStrong_tx_count {F : Type} {s : PanSemStateFiniteExact 64 
       16 * memW s (memW s (locN s "si") + 40))
       (by simp [ExecBlock.inputRegions])).2.1
 
+theorem callEntryOn_blockReadyExecStrong :
+    CallEntryOn
+      (fun s => BlockReadyStrong s ∧ ExecBlock.EntryAt s (locN s "si") (locN s "hdr"))
+      BlockReadyExecStrong
+      (ofString "execute_block")
+      [.var .local (ofString "si"), .var .local (ofString "hdr")] := by
+  intro F state values body' callee ret' hcode ⟨hBR, hEnt⟩ hargs hlook
+  have hfn : state.code.lookup (ofString "execute_block") =
+      some ([(ofString "si", .one), (ofString "hdr", .one)],
+        sourceFnBody Guest.Software.guestFn_execute_block, .one) := by
+    rw [hcode]; exact ExecBlock.lookup_execute_block
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  simp only [evalListHOLExact, evalHOLExact] at hargs
+  rcases hsi : state.locals.lookup (ofString "si") with _ | vsi
+  · simp [hsi] at hargs
+  · rcases hhdr : state.locals.lookup (ofString "hdr") with _ | vhdr
+    · simp [hsi, hhdr] at hargs
+    · simp only [hsi, hhdr, Option.some.injEq] at hargs
+      subst hargs
+      have hpc := callee_param_two state (ofString "execute_block") (ofString "si") (ofString "hdr")
+        .one .one _ _ hfn
+        (.var .local (ofString "si")) (.var .local (ofString "hdr"))
+        vsi vhdr [vsi, vhdr] body' callee ret'
+        (by simpa [evalAt, evalHOLExact] using hsi)
+        (by simpa [evalAt, evalHOLExact] using hhdr)
+        (by rw [evalListHOLFinite_eq_toExact]; simp [evalListHOLExact, evalHOLExact, hsi, hhdr])
+        hlook
+      have hsome := lookupCodeHOLFinite_eq_some state.code.lookup (ofString "execute_block")
+        [vsi, vhdr] body' callee ret' hlook
+      unfold lookupCodeHOLExact at hsome
+      rw [hfn] at hsome
+      dsimp only at hsome
+      split at hsome
+      · rename_i hcond
+        obtain ⟨_, _, hsh⟩ := hcond
+        simp only [List.zip, List.zipWith_cons_cons, List.zipWith_nil_left,
+          List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at hsh
+        obtain ⟨w1, rfl⟩ := shapeEqHOL_one_iff_word.1 hsh.1
+        obtain ⟨w2, rfl⟩ := shapeEqHOL_one_iff_word.1 hsh.2
+        exact localsOnly_blockReadyExecStrong state callee (state.clock - 1)
+          (fun name hn => by
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+            rcases hn with rfl | rfl
+            · exact hpc.2.1.trans hsi.symm
+            · exact hpc.2.2.trans hhdr.symm)
+          ⟨hBR, fun name hn => by
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+            rcases hn with rfl | rfl
+            · exact ⟨w1, hsi⟩
+            · exact ⟨w2, hhdr⟩, hEnt⟩
+      · cases hsome
+
+def GBody.«execute_block_strong» : Prop :=
+  (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
+  (TerminatingFunBoundedOn GuestInv (ofString "bal_init") K.«bal_init») →
+  (TerminatingFunBoundedOn GuestInv (ofString "build_block_access_list_rlp") K.«build_block_access_list_rlp») →
+  (TerminatingFunBoundedOn ExecBlock.BuildMptIndexedReady (ofString "build_mpt_indexed") K.«build_mpt_indexed») →
+  (TerminatingFunBoundedOn GuestInv (ofString "compute_requests_hash") K.«compute_requests_hash») →
+  (TerminatingFunBoundedOn WorldOK (ofString "compute_state_root") K.«compute_state_root») →
+  (TerminatingFunBoundedOn GuestInv (ofString "decode_transaction") K.«decode_transaction») →
+  (TerminatingFunBoundedOn GuestInv (ofString "keccak256") K.«keccak256») →
+  (TerminatingFunBoundedOn GuestInv (ofString "logs_bloom") K.«logs_bloom») →
+  (TerminatingFunBoundedOn GuestInv (ofString "lst_new") K.«lst_new») →
+  (TerminatingFunBoundedOn GuestInv (ofString "max") K.«max») →
+  (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
+  (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
+  (TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests») →
+  (TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction») →
+  (TerminatingFunBoundedOn SysTxReadyStrong (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
+  (TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals») →
+  (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
+  (TerminatingFunBoundedOn GuestInv (ofString "track_ancestor_access") K.«track_ancestor_access») →
+  (TerminatingFunBoundedOn GuestInv (ofString "validate_block_access_list_gas_limit") K.«validate_block_access_list_gas_limit») →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
+  (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
+    (ofString "alloc")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["bal_accounts", "bal_idx_accts", "bal_idx_stor", "bal_index", "bal_key_buf", "heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "bal_init")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "build_block_access_list_rlp")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16)])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "build_mpt_indexed")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "compute_state_root")) →
+  (WorldKeeps (fun s => WorldOK s ∧ ExecBlock.DecodeTxReady s) (fun _ => [])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetDecodedTx (ofString "decode_transaction")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "out", 256), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "logs_bloom")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoidsIf (fun s => locN s "esz" * locN s "cap" < 2 ^ 64)
+      (fun s post w => [(w, 24), (memW post w, locN s "esz" * locN s "cap")])) (ofString "lst_new")) →
+  (Returns ArenaReady (fun s post l =>
+      locN s "esz" * locN s "cap" < 2 ^ 64 → 1 ≤ locN s "cap" →
+        FreshBlock s post l 24 ∧ FreshBlock s post (memW post l) (locN s "esz" * locN s "cap") ∧
+        Disj (l, 24) (memW post l, locN s "esz" * locN s "cap") ∧
+        memW post (l + 8) = 0 ∧ memW post (l + 16) = locN s "cap")
+    (ofString "lst_new")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "memzero")) →
+  (WritesWithin (fun s => [(locN s "dst", locN s "n")])
+    [] (ofString "memzero")) →
+  (ZeroFills (ofString "memzero")) →
+  (WorldKeeps ReqsFresh (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 72, 80])]
+    NoExtra (ofString "process_general_purpose_requests")) →
+  (WorldKeeps TxReadyStrong (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+    (fun s r post S Nd => RetTransactionLogs s r post S Nd ∧ ExecBlock.RetTransactionSlices s r post S Nd)
+    (ofString "process_transaction")) →
+  (WorldKeeps WorldOK (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "process_unchecked_system_transaction")) →
+  (WorldKeeps WorldOK (fun s => [(globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52)])
+    ["heap_ptr", "journal_n", "scratch_ptr", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "process_withdrawals")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr", "journal_n", "ts"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "state_fresh_tx")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "track_ancestor_access")) →
+  (ReadOnlyFn (ofString "validate_block_access_list_gas_limit")) →
+  TerminatingFunBoundedOn BlockReadyExecStrong (ofString "execute_block") K.«execute_block»
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
