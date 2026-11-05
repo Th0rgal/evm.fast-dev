@@ -2407,6 +2407,58 @@ theorem phase4StableCap_bounds {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hp.2]
   omega
 
+theorem hoare_phase4StableCap_adjust :
+    Hoare Phase4StableCapInit
+      (.ite (.cmp .equal (.var .local (ofString "stable_log_cap")) (.const 0))
+        (.assign .local (ofString "stable_log_cap") (.const 1)) .skip)
+      (fun r t => r = none → Phase4StableCapReady t) := by
+  apply Hoare.ite
+  · apply Hoare.assign
+    · intro F s v hp he _
+      obtain ⟨w, hw, hn⟩ := hp.2
+      obtain ⟨a, b, ha, hb, hc⟩ := evalAt_cmp s .equal _ _ w hw
+      have hb0 : b = 0 := by cases hb; rfl
+      subst b
+      have ha0 : a = 0 := by
+        by_contra h
+        have hz : (0 : BitVec 64) = 0#64 := rfl
+        have h' : a ≠ 0#64 := h
+        simp [wordCmpHOL] at hc
+        rw [if_neg h'] at hc
+        exact hn hc
+      have hz : locN s "stable_log_cap" = 0 := by
+        change s.locals.lookup _ = some (.val (.word a)) at ha
+        simp [locN, ha, ha0]
+      have hv : v = .val (.word (1 : BitVec 64)) := by cases he; rfl
+      subst v
+      refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) _ s hp.1.1, ?_⟩
+      have hn0 : locN s "nl" = 0 := hp.1.2.symm.trans hz
+      simp [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "stable_log_cap" ≠ ofString "nl" from by decide] at hn0 ⊢
+      rw [hn0]
+      decide
+    · intro F s hp hr
+      cases hr
+  · apply Hoare.skip
+    intro F s hp _
+    obtain ⟨a, b, ha, hb, hc⟩ := evalAt_cmp s .equal _ _ 0 hp.2
+    have hb0 : b = 0 := by cases hb; rfl
+    subst b
+    have ha0 : a ≠ 0 := by
+      intro h
+      simp [wordCmpHOL, h] at hc
+    have hz : locN s "stable_log_cap" ≠ 0 := by
+      change s.locals.lookup _ = some (.val (.word a)) at ha
+      intro hz
+      apply ha0
+      apply BitVec.eq_of_toNat_eq
+      simpa [locN, ha] using hz
+    refine ⟨hp.1.1, ?_⟩
+    have he := hp.1.2
+    omega
+  · intro F s hp hr
+    cases hr
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
