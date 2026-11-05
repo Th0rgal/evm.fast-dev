@@ -134,6 +134,27 @@ theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64
   · simpa only [hk "enc" (by simp)] using hp.2.2.1
   · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
 
+/-- The validation stage already retains the complete intrinsic triple. -/
+theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hstage : R16Shards.PtxP1.StageP 2 s)
+    (hscalar : ∀ n ∈ (["tx", "index", "sender"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+    (hprice : ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+      some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]))
+    (henc : ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+      some (.rStruct [.val (.word a), .val (.word b)])) :
+    PtxPhase1ShapePrefix s := by
+  obtain ⟨a, b, c, hi, _⟩ := hstage.2.2.1 (by omega)
+  exact ⟨hscalar, hprice, henc, a, b, c, hi⟩
+
+theorem phase1_declare_regular_budget_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+    (he : evalAt s R16Shards.PtxP1.regularBudgetExp = some v) :
+    R16Shards.PtxP1.StageP 3 (setVarHOLFinite (ofString "regular_budget") v s) ∧
+      PtxPhase1ShapePrefix (setVarHOLFinite (ofString "regular_budget") v s) := by
+  exact ⟨R16Shards.PtxP1.declare_regular_budget s v hp.1 he,
+    phase1_shapePrefix_resume s s hp.2 (ofString "regular_budget") v (by decide)⟩
+
 theorem phase1_resume_min_shapes (h : PtxCallees) :
     DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
       (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
