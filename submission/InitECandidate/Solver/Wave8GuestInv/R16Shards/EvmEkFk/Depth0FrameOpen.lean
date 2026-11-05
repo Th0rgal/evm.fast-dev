@@ -2395,4 +2395,18 @@ theorem hoare_call_d0CallPost_of_evmKeeps {gw gw_sd : List String} {fname : MlS}
         | error => exact ⟨(fun h => by cases h), fun h => absurd h not_resumes_error⟩
         | _ => exact ⟨(fun h => by cases h), fun h => by rcases h with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h⟩
 
+/-- `ek_depth0_prepare` from pure callee contracts: `ek_set_delegation : EvmKeeps EvmMsgReady gw_sd`
+together with message-slot preservation, and `ek_prepare_dispatch : EvmKeeps EvmMsgReady gw_pd`,
+both `gw_* ⊆ ["heap_ptr", "journal_n", "scratch_ptr"]`. -/
+theorem ek_depth0_prepare_of_ek {gw_sd gw_pd : List String}
+    (hsd : EvmKeeps EvmMsgReady gw_sd (ofString "set_delegation"))
+    (hslot : KeepsMsgSlot (ofString "set_delegation"))
+    (hsub_sd : ∀ g ∈ gw_sd, g ∈ ["heap_ptr", "journal_n", "scratch_ptr"])
+    (hpd : EvmKeeps EvmMsgReady gw_pd (ofString "prepare_dispatch"))
+    (hsub_pd : ∀ g ∈ gw_pd, g ∈ ["heap_ptr", "journal_n", "scratch_ptr"]) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare") :=
+  ek_depth0_prepare_of_callees
+    (fun hp G ch => hoare_call_d0CallPost_of_evmKeeps hsd hslot hsub_sd (by decide) hp G ch)
+    hpd hsub_pd
+
 end HeadStore
