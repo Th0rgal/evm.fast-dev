@@ -3691,4 +3691,146 @@ theorem phase2_address_count_alloc_bound {F : Type} {s : PanSemStateFiniteExact 
   rw [← hp.2.1]
   exact hp.1.2.2.2
 
+/-- Zeroing the counters establishes the strengthened positive-branch invariant. -/
+theorem phase2_address_count_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) (hn : locN s "nal" ≠ 0) :
+    PtxAddressCountInv (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  have he : locN s "nal" = memW s (locN s "tx" + 216) :=
+    hp.1.1.2.2.resolve_left hn
+  refine ⟨phase2_address_copy_init s hp, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nal" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide,
+      show ofString "i" ≠ ofString "tx" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide] using he
+  · simp [locN, phase2_key_prefix, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Only the key-count fields of the processed records determine the prefix. -/
+theorem phase2_key_prefix_congr {F : Type} (s t : PanSemStateFiniteExact 64 F)
+    (i : Nat)
+    (hfields : ∀ j, j < i →
+      memW t (memW t (locN t "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16)) :
+    phase2_key_prefix t i = phase2_key_prefix s i := by
+  unfold phase2_key_prefix
+  congr 1
+  apply List.map_congr_left
+  intro j hj
+  exact hfields j (List.mem_range.mp hj)
+
+/-- The strengthened counting invariant discharges the actual allocation expression. -/
+theorem phase2_address_count_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 52 + 8 ∧
+      locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
+  exact phase2_key_alloc_size_nonwrapping s hp.1 (phase2_address_count_alloc_bound hp)
+
+/-- Transfer the strengthened invariant across a step preserving count fields. -/
+theorem phase2_address_count_frame {F : Type} (s t : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (ht : PtxAddressCopyInv t)
+    (hi : locN t "i" = locN s "i")
+    (hn : locN t "nkeys" = locN s "nkeys")
+    (ha : locN t "nal" = locN s "nal")
+    (hc : memW t (locN t "tx" + 216) = memW s (locN s "tx" + 216))
+    (hf : ∀ j, j < locN s "i" →
+      memW t (memW t (locN t "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16)) :
+    PtxAddressCountInv t := by
+  refine ⟨ht, ?_, ?_⟩
+  · rw [ha, hc]
+    exact hp.2.1
+  · rw [hn, hi, phase2_key_prefix_congr s t _ hf]
+    exact hp.2.2
+
+/-- The next cumulative count is small enough that the machine addition cannot wrap. -/
+theorem phase2_address_count_next_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) < 2 ^ 32 := by
+  rw [hp.2.2, ← phase2_key_prefix_succ]
+  have hb := phase2_key_prefix_le_total s
+    (i := locN s "i" + 1) (by rw [← hp.2.1]; omega)
+  exact lt_of_le_of_lt hb (phase2_address_copy_total_keys hp.1)
+
+/-- Scope and clock changes preserve the cumulative count when protected locals agree. -/
+theorem phase2_address_count_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ls : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxAddressCountInv s)
+    (hl : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ls.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxAddressCountInv { s with locals := ls, clock := clock } := by
+  apply phase2_address_count_frame s _ hp
+    (phase2_address_copy_with_locals s ls clock hl hp.1)
+  · simp [locN, hl "i" (by simp)]
+  · simp [locN, hl "nkeys" (by simp)]
+  · simp [locN, hl "nal" (by simp)]
+  · simp [memW, locN, hl "tx" (by simp)]
+  · intro j hj
+    simp [memW, locN, hl "tx" (by simp)]
+
+/-- Address-buffer writes leave every access-record key-count field unchanged. -/
+theorem phase2_address_store_key_field {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (j : Nat) (hj : j < memW s (locN s "tx" + 216)) :
+    memW { s with memory := mem } (memW s (locN s "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16) := by
+  have hn : 0 < memW s (locN s "tx" + 216) := by omega
+  obtain ⟨S, Nd, hW, hT, hd⟩ := hp.2.2.2.2.2.2.2.2
+  have hwords := hT.1.2.2.2.2.2.2.2.2.1 hn
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  have hu : IvlUnhit s { s with memory := mem }
+      (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) :=
+    ivlUnhit_single hm (by dsimp; omega)
+      (disj_of_inside_right hin (hp.2.2.2.2.2.2.2.1 hn))
+  apply memW_eq_of_ivlUnhit hu
+  · have ha := hwords.1
+    omega
+  · exact (ivl_allocated_bound hA.2 (Or.inl (hT.2.2 hn).1)).2
+  · constructor <;> dsimp <;> omega
+
+/-- A successful address-copy store preserves the full cumulative-count invariant. -/
+theorem phase2_address_count_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxAddressCountInv { s with memory := mem } := by
+  apply phase2_address_count_frame s _ hp
+    ⟨phase2_address_joint_store hp.1.1 hx hin hm, hp.1.2⟩ rfl rfl rfl
+  · exact phase2_address_store_header hp.1.1.1 hin hm 216 (by decide) (by decide)
+  · intro j hj
+    change memW { s with memory := mem }
+      (memW { s with memory := mem } (locN s "tx" + 208) + 24 * j + 16) = _
+    rw [phase2_address_store_header hp.1.1.1 hin hm 208 (by decide) (by decide)]
+    apply phase2_address_store_key_field hp.1.1.1 hin hm j
+    have hi := hp.1.2.2.2
+    rw [hp.2.1] at hi
+    omega
+
+/-- After adding the current record count, advancing the index restores the
+counting invariant. The intervening key assignment changes no input fields. -/
+theorem phase2_address_count_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal")
+    (hn : locN s "nal" = memW s (locN s "tx" + 216))
+    (hk : locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1)) :
+    PtxAddressCountInv (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) := by
+  obtain ⟨hcopy, hidx⟩ := phase2_address_copy_increment s hp hi
+  refine ⟨hcopy, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nal" by decide,
+      show ofString "i" ≠ ofString "tx" by decide] using hn
+  · rw [hidx]
+    simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide,
+      show ofString "i" ≠ ofString "tx" by decide] using hk
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
