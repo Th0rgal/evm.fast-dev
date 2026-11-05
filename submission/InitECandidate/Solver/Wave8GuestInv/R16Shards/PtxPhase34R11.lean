@@ -5592,6 +5592,32 @@ theorem stable_length_copy_setup_ready {F : Type} (s : PanSemStateFiniteExact 64
   obtain ⟨hh', ha', hw'⟩ := stable_length_store_header_ready s mem' w he hm hh hp.2.1
   exact ⟨hpost, hz, hh', ha', hc, hs, hw', stableLengthPre_memory_operands s hp mem' p hl⟩
 
+/-- After a framed length write, setup and copying reach any bounded receipt
+continuation with the concrete copy-loop budget. -/
+theorem stable_length_copy_continuation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
+    (hp : StableLengthPre s) (hz : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (hc : locN s "nl" ≤ locN s "stable_log_cap")
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hpost : StableLengthPost {s with memory := mem'})
+    (hs : StableCopySpatial {s with memory := mem'})
+    (hcode : s.code = originalRuntimeCode) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingRunBounded {s with memory := mem'}
+      (.seq (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+            (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+              .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+              (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+            tail))) (2 ^ 28 + 1 + b) := by
+  exact stableCopy_setup_loop_cut htail _ hcode
+    (stable_length_copy_setup_ready s mem' w p hp hz hh hc hl he hm hpost hs)
+
 /-- An active separated copy state can run the entire remaining loop and
 then any receipt-ready continuation. -/
 theorem stableCopy_active_loop_cut {tail : ProgHOL 64} {b : Nat}
