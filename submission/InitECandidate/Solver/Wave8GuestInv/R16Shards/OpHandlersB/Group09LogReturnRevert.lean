@@ -10813,4 +10813,40 @@ theorem log_append_post_of_frame_effect_g09 {F : Type}
     rw [(hold i hi).2]
     exact (hpres i hi).2
 
+/-- The final store in `log_append` writes exactly the returned list slot;
+all other word cells retain their values. -/
+theorem log_append_slot_store_exact_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {slot log : BitVec 64}
+    (hslot : s.locals.lookup (ofString "slot") = some (.val (.word slot)))
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hstore : evaluateHOLFiniteState s
+      (.store (.var .local (ofString "slot")) (.var .local (ofString "log"))) =
+      (none, post)) :
+    post.locals = s.locals ∧ post.globals = s.globals ∧
+    post.memaddrs = s.memaddrs ∧ post.code = s.code ∧
+    memW post slot.toNat = log.toNat ∧
+    (∀ a, BitVec.ofNat 64 a ≠ slot → memW post a = memW s a) := by
+  have hraw := hstore
+  rw [evaluateHOLFiniteState_store] at hraw
+  simp only [evalHOLExact, hslot, hlog] at hraw
+  by_cases hdom : s.memaddrs slot
+  · simp only [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom, ↓reduceIte] at hraw
+    injection hraw with _ hpost
+    have hmem : post.memory = fun a => if a = slot then .word log else s.memory a := by
+      have hm := congrArg PanSemStateFiniteExact.memory hpost
+      dsimp only at hm
+      exact hm.symm.trans (by
+        funext a
+        by_cases ha : a = slot
+        · subst a; simp [FUPDATE]
+        · simp [FUPDATE, ha])
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+    · exact (congrArg PanSemStateFiniteExact.locals hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.globals hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.memaddrs hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.code hpost).symm
+    · simp [memW, hmem]
+    · intro a ha; simp [memW, hmem, ha]
+  · simp [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom] at hraw
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
