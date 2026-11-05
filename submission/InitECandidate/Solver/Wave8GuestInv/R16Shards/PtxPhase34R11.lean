@@ -3069,6 +3069,16 @@ theorem lst_new_stable_pointer_resume (h : PtxCallees) {F : Type}
   obtain ⟨w, rfl, _⟩ := lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Returning the allocated header preserves the typed length operand. -/
+theorem stable_length_operand_resume {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl"))))) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    t.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN t "nl")))) := by
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hn
+
 def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
     LogsWorldOwned s (locN s "logs") ∧
@@ -4941,6 +4951,26 @@ theorem lst_new_stable_source_separation (h : PtxCallees) {F : Type}
   rcases ha with rfl | rfl
   · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hh (by decide) hp.1
   · exact fresh_stable_disj_source hp.1.1.1.1.1.1.1.2 hpost.2 hb (by omega) hp.1
+
+/-- Transport fresh allocation separation to the source array in post-call memory. -/
+theorem lst_new_stable_post_source_array (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Disj (memW post w.toNat, 8 * locN s "stable_log_cap")
+        (memW post (locN s "logs"), 8 * memW post (locN s "logs" + 8)) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells h s vs body callee ret v post hc hp hl hr
+  refine ⟨w, hv, ?_⟩
+  rw [hptr, hlen]
+  exact (hs _ (by simp)).2.1
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
