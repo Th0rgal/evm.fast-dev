@@ -1362,4 +1362,142 @@ theorem phase2_store_txReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
     (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2) hu hur
   exact R16Shards.PtxP1.txReadyStrong_of_parts hAp hE hW hT'
 
+/-- Lift the transaction frame to the actual Phase 2 entry invariant. Sender
+allocation and gas bounds are unaffected by a memory-only update. -/
+theorem phase2_store_validatedStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxValidatedStrong s) {S Nd : List Nat}
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    {x : BitVec 64} {mem : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (hW : WorldTypedWith { s with memory := mem } S Nd)
+    (how : worldOwned { s with memory := mem } S Nd = worldOwned s S Nd)
+    (hE : TxEnv { s with memory := mem })
+    (htx : Disj (locN s "tx", 384) (x.toNat, 8))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (x.toNat, 8)) :
+    PtxValidatedStrong { s with memory := mem } := by
+  have ht := phase2_store_txReadyStrong hp.1.1 hT hm hW how hE htx hrec
+  refine ⟨⟨ht, hp.1.2.1, ?_, hp.1.2.2.2⟩, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1 ht.1.1.1.1 hp.1.2.2.1
+  · exact ⟨hp.2.scalar, hp.2.price, hp.2.enc, hp.2.intrinsic⟩
+
+/-- Keep the transaction environment's allocated extent and world separation
+after a framed store. Zero-initialization is intentionally consumed by stores. -/
+def PtxTeLive : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxValidatedStrong s ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "te") = some (.val (.word w))) ∧
+    Inside (locN s "te", 200) InitE.sourceBase (globN s "heap_ptr") ∧
+    locN s "te" % 8 = 0 ∧ WordsOK s (locN s "te", 200) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+theorem phase2_teAllocated_live {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeAllocated s) : PtxTeLive s :=
+  ⟨hp.1, hp.2.1, hp.2.2.1, hp.2.2.2.1, hp.2.2.2.2.1, hp.2.2.2.2.2.2⟩
+
+theorem phase2_teLive_memory {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s) {mem : BitVec 64 → HolWordLab 64}
+    (hv : PtxValidatedStrong { s with memory := mem })
+    (hw : ∀ S Nd, WorldTypedWith s S Nd →
+      WorldTypedWith { s with memory := mem } S Nd ∧
+        worldOwned { s with memory := mem } S Nd = worldOwned s S Nd) :
+    PtxTeLive { s with memory := mem } := by
+  refine ⟨hv, hp.2.1, hp.2.2.1, hp.2.2.2.1, ?_, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.2.2.2.2.1
+  · obtain ⟨S, Nd, hW, hd⟩ := hp.2.2.2.2.2
+    obtain ⟨hW', heq⟩ := hw S Nd hW
+    exact ⟨S, Nd, hW', by rw [heq]; exact hd⟩
+
+/-- A single-word store in a buffer disjoint from all world-owned objects
+leaves every world-owned interval untouched. -/
+theorem phase2_store_world_unhit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    {p len : Nat} (hd : IvlsDisj [(p, len)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : Inside (x.toNat, 8) p (p + len))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    ∀ i ∈ worldOwned s S Nd, IvlUnhit s { s with memory := mem } i := by
+  intro i hi
+  exact ivlUnhit_single hm (worldOwned_zero_aligned hW i hi)
+    (disj_of_inside_right hx (disj_symm (hd (p, len) (by simp) i hi)))
+
+/-- In particular, the block-output header is untouched by a disjoint store;
+its six transaction-environment fields can therefore be transported together. -/
+theorem phase2_store_txEnv {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (hE : TxEnv s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd) {p len : Nat}
+    (hd : IvlsDisj [(p, len)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : Inside (x.toNat, 8) p (p + len))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    TxEnv { s with memory := mem } := by
+  have hfix : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa only [hE.bo_nz, if_false] using
+      typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by simp [typedRecords])
+  have how : (globN s "bo", 88) ∈ worldOwned s S Nd :=
+    List.mem_append.mpr (Or.inl (List.mem_append.mpr (Or.inr hfix)))
+  have hu := phase2_store_world_unhit hW hd hx hm _ how
+  have hb := bo_words hW.2.2.1 hE.bo_nz
+  have hhi := (ivl_allocated_bound hA.2 hb.1).2
+  have hk : ∀ k, k % 8 = 0 → k + 8 ≤ 88 →
+      memW { s with memory := mem } (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hkal hk
+    exact memW_eq_of_ivlUnhit hu (by have := hb.2.1; omega) hhi
+      ⟨by dsimp; omega, by dsimp; omega⟩
+  refine ⟨hE.bo_nz, ?_, ?_, ?_, ?_, ?_, hE.jcap_nz⟩
+  · change memW { s with memory := mem } (globN s "bo" + 24) ≠ 0
+    rw [hk 24 (by omega) (by omega)]; exact hE.bo24
+  · change memW { s with memory := mem } (globN s "bo" + 32) ≠ 0
+    rw [hk 32 (by omega) (by omega)]; exact hE.bo32
+  · change memW { s with memory := mem } (globN s "bo" + 40) ≠ 0
+    rw [hk 40 (by omega) (by omega)]; exact hE.bo40
+  · change memW { s with memory := mem } (globN s "bo" + 72) ≠ 0
+    rw [hk 72 (by omega) (by omega)]; exact hE.bo72
+  · change locN s "index" < memW { s with memory := mem } (globN s "bo" + 80)
+    rw [hk 80 (by omega) (by omega)]; exact hE.idx_lt
+
+/-- Complete single-word store frame for Phase 2: world ownership and the
+two live transaction buffers suffice to preserve the validated strong state. -/
+theorem phase2_store_validated_outside {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxValidatedStrong s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd)
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    {blk : Ivl} (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    (htx : Disj (locN s "tx", 384) blk)
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) blk)
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxValidatedStrong { s with memory := mem } ∧
+    WorldTypedWith { s with memory := mem } S Nd ∧
+    worldOwned { s with memory := mem } S Nd = worldOwned s S Nd := by
+  obtain ⟨hW', how, hE'⟩ := store_outside_worldOwned
+    hp.1.1.1.1.1 (R16Shards.PtxP1.txEnv_of_ready hp.1.1) hW hd hx hin hm
+  exact ⟨phase2_store_validatedStrong hp hT hm hW' how hE'
+    (disj_of_inside_right hin htx)
+    (fun hn => disj_of_inside_right hin (hrec hn)), hW', how⟩
+
+/-- A store in the live transaction environment preserves its allocation and
+world separation as well as the validated transaction. The access-list witness
+is supplied for the same world that separates the environment. -/
+theorem phase2_teLive_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s)
+    (hT : ∀ S Nd, WorldTypedWith s S Nd →
+      IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd) →
+      TxAccessListAt s S Nd (locN s "tx"))
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200))
+    (htx : Disj (locN s "tx", 384) (locN s "te", 200))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (locN s "te", 200))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxTeLive { s with memory := mem } := by
+  obtain ⟨S, Nd, hW, hd⟩ := hp.2.2.2.2.2
+  obtain ⟨hv, hW', how⟩ := phase2_store_validated_outside hp.1 hW (hT S Nd hW hd)
+    (blk := (locN s "te", 200)) (fun o ho => hd _ (by simp) o ho)
+    hx hin htx hrec hm
+  refine ⟨hv, hp.2.1, hp.2.2.1, hp.2.2.2.1, ?_, S, Nd, hW', ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.2.2.2.2.1
+  · rw [how]
+    exact hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
