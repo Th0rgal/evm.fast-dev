@@ -5354,6 +5354,136 @@ theorem set_retdata_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e pv nw : 
 
 end SetRetdataRun
 
+section StackPushRun
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+/-- Four consecutive word updates at `a, a+8, a+16, a+24`. -/
+def updW4 (m : BitVec 64 → HolWordLab 64) (a w0 w1 w2 w3 : BitVec 64) : BitVec 64 → HolWordLab 64 :=
+  updW (updW (updW (updW m a w0) (a + 8) w1) (a + 8 + 8) w2) (a + 8 + 8 + 8) w3
+
+/-- A 4-word struct store followed by the rest. -/
+theorem Ret.seq_store4 {F : Type} {s : PanSemStateFiniteExact 64 F} {d e : ExpHOL 64}
+    {b : ProgHOL 64} {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (a w0 w1 w2 w3 : BitVec 64) (hd : ev s d = some (.val (.word a)))
+    (he : ev s e = some (.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]))
+    (hb : Ret { s with memory := updW4 s.memory a w0 w1 w2 w3 } b Φ) :
+    Ret s (.seq (.store d e) b) Φ := by
+  apply Ret.seq_store
+  intro a' val m hd' he' hm
+  rw [hd] at hd'
+  simp only [Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq] at hd'
+  subst hd'
+  rw [he] at he'
+  cases he'
+  have hbw : panBytesInWord 64 = 8#64 := rfl
+  simp only [flattenHOL, List.map, List.flatten, List.flatMap, List.append, panMemStoresHOL,
+    panMemStoreHOL, hbw] at hm
+  split_ifs at hm <;> simp only [Option.some.injEq, reduceCtorEq] at hm
+  subst hm
+  exact hb
+
+theorem memLoad_one_word (a : BitVec 64) (dom : BitVec 64 → Prop) (m : BitVec 64 → HolWordLab 64)
+    (ctx : StructContextHOLM) (w : BitVec 64) (hd : dom a) (hm : m a = .word w) :
+    ∀ inst : DecidablePred dom, @memLoadHOLExact 64 _ .one a dom inst m ctx = some (.val (.word w)) := by
+  intro inst
+  unfold memLoadHOLExact; rw [if_pos hd, hm]
+
+theorem ev_stkslot {F : Type} (t : PanSemStateFiniteExact 64 F) (e stk sp : BitVec 64)
+    (he : t.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hsp : t.locals.lookup (ofString "sp") = some (.val (.word sp)))
+    (hd : t.memaddrs (e + 8)) (hm : t.memory (e + 8) = .word stk) :
+    ev t (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const 8]),
+      .panop .mul [.var .local (ofString "sp"), .const 32]]) = some (.val (.word (stk + sp * 32))) := by
+  have hd' := ev_globOff t _ e 8 he
+  have hml := memLoad_one_word (e + 8) t.memaddrs t.memory t.structs stk hd hm
+    (fun a => Classical.propDecidable (t.memaddrs a))
+  have hld : ev t (.load .one (.op .add [.var .global (ofString "ev"), .const 8])) =
+      some (.val (.word stk)) := by
+    simp only [ev] at hd' ⊢
+    rw [evalHOLExact]
+    simp only [hd']
+    exact hml
+  have hmul : ev t (.panop .mul [.var .local (ofString "sp"), .const 32]) =
+      some (.val (.word (sp * 32))) := by
+    simp [ev, evalHOLExact, evalListHOLExact, hsp, panOpHOL, valueIsWord, valueWord]
+  simp only [ev] at hld hmul ⊢
+  rw [evalHOLExact, evalListHOLExact, hld, evalListHOLExact, hmul, evalListHOLExact]
+  simp [wordOpHOL, wordOp, valueIsWord, valueWord]
+
+attribute [local irreducible] Ret in
+/-- `stack_push(v)` on a frame with room (`sp + 1 ≤ cap ≤ 1024`): writes the four words of `v`
+at `stk + 32*sp` and `sp + 1` at `ev+16`; nothing else changes. -/
+theorem stack_push_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e sp cap stk w0 w1 w2 w3 : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hv : s.locals.lookup (ofString "v") =
+      some (.rStruct [.val (.word w0), .val (.word w1), .val (.word w2), .val (.word w3)]))
+    (hsp : s.memory (e + 16) = .word sp) (hcap : s.memory (e + 232) = .word cap)
+    (hstk : s.memory (e + 8) = .word stk) (hd8 : s.memaddrs (e + 8))
+    (hroom : sp.toNat + 1 ≤ cap.toNat) (hcap_le : cap.toNat ≤ 1024) :
+    Ret s (sourceFnBody Guest.Software.guestFn_stack_push)
+      (fun _ post => post.code = s.code ∧ post.memaddrs = s.memaddrs ∧
+        post.shMemaddrs = s.shMemaddrs ∧ post.baseAddr = s.baseAddr ∧ post.be = s.be ∧
+        post.globals = s.globals ∧
+        post.memory = updW (updW4 s.memory (stk + sp * 32) w0 w1 w2 w3) (e + 16) (sp + 1)) := by
+  have hb : sourceFnBody Guest.Software.guestFn_stack_push =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_stack_push).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_stack_push,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.dec fun v1 hv1 => ?_
+  have h1 := ev_load_glob s _ e 16 he v1 hv1
+  rw [hsp] at h1; subst h1
+  refine Ret.dec fun v2 hv2 => ?_
+  have h2 := ev_load_glob _ _ e 232 he v2 hv2
+  rw [hcap] at h2
+  subst h2
+  refine Ret.seq_ite fun c hc => ⟨fun hcz => ?_, fun _ => ?_⟩
+  · exfalso
+    obtain ⟨a, b, ha, hb', hcw⟩ := evalAt_cmp _ _ _ _ c hc
+    simp (config := {decide := true}) [evalAt, evalHOLExact, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE] at ha hb'
+    subst ha hb'
+    apply hcz; rw [hcw]
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def]
+    omega
+  refine Ret.seq_skip ?_
+  refine Ret.seq_ite fun c hc => ⟨fun hcz => ?_, fun _ => ?_⟩
+  · exfalso
+    obtain ⟨a, b, ha, hb', hcw⟩ := evalAt_cmp _ _ _ _ c hc
+    simp (config := {decide := true}) [evalAt, evalHOLExact, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE] at ha hb'
+    subst ha hb'
+    apply hcz; rw [hcw]
+    have : sp ≠ 1024#64 := by
+      intro h; subst h; simp at hroom; omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL, this]
+  refine Ret.seq_skip ?_
+  refine Ret.seq_store4 (stk + sp * 32) w0 w1 w2 w3 ?_ ?_ ?_
+  · exact ev_stkslot _ e stk sp he (by simpa (config := {decide := true}) [setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE]) hd8 hstk
+  · simp (config := {decide := true}) [ev, evalHOLExact, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE, hv]
+  refine Ret.seq_storeWv (e + 16) (ev_globOff _ _ e 16 he)
+    (fun v hv => ⟨sp + 1, by simpa (config := {decide := true}) [ev, evalHOLExact,
+      evalListHOLExact, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, wordOpHOL,
+      wordOp, valueIsWord, valueWord] using hv.symm⟩) fun w hw _ => ?_
+  have hw' : w = sp + 1 := by
+    simpa (config := {decide := true}) [ev, evalHOLExact, evalListHOLExact, setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE, wordOpHOL, wordOp, valueIsWord, valueWord] using hw.symm
+  subst hw'
+  refine Ret.ret fun _ _ => ?_
+  exact ⟨rfl, rfl, rfl, rfl, rfl, rfl, rfl⟩
+
+end StackPushRun
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
