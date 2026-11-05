@@ -2476,4 +2476,14 @@ theorem hoare_store_msg_word_step (gw : List String) (hp : Nat)
     (stepFrom_of_evmStep (fun g hg => by simp at hg) hS hstep) hloc
     (congrArg (fun gs => gs.lookup (ofString "ev")) heff'.globals) hslot
 
+theorem hoare_store_msg_const_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off + 8 ≤ 176) (w : BitVec 64) :
+    Hoare (D0Pre gw hp G ch)
+      (.store (.op .add [.var .local (ofString "msg"), .const (BitVec.ofNat 64 off)]) (.const w))
+      (Fall (D0Pre gw hp G ch)) := by
+  apply hoare_store_msg_word_step gw hp G ch off hoff
+  intro F s v _ hv
+  exact ⟨w, (Option.some.inj hv).symm⟩
+
 end HeadStore
