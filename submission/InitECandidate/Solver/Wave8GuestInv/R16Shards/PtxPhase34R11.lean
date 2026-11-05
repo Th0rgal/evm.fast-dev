@@ -6071,6 +6071,43 @@ theorem stableCopy_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact stableCopy_backing_init_cut (stableCopy_loop_cut htail) s hc hp
 
+/-- The source-level backing declaration and counter initialization enter copying. -/
+theorem stableCopy_backing_decl_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableCopyLoopInv tail b) :
+    TerminatingProgBoundedOn (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (.dec (ofString "stable_lp") .one
+        (.load .one (.op .add [.var .local (ofString "stable_logs"), .const 0]))
+        (.seq (.assign .local (ofString "i") (.const 0)) tail)) b := by
+  have hi : TerminatingProgBoundedOn (fun s => StableCopyLoopInv
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) s))
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "i") (.const 0)
+      exact ⟨by omega, by omega⟩) hoare_stableCopy_zero_entry htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  intro G t ht hpre
+  refine dec_bound_trans (P := fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+    (Q := fun s => StableCopyLoopInv
+    (setVarHOLFinite (ofString "i") (.val (.word 0)) s)) ?_ hi t ht hpre
+  intro F s v hp he
+  obtain ⟨hp, hz, hh, ha, hc, hs, hword, n, p, w, hn, hl, hw⟩ := hp
+  apply stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword
+  simpa [evalAt, evalHOLExact, hw, valueIsWord, valueWord, evalListHOLExact,
+    wordOpHOL, wordOp] using he
+
 /-- The concrete length store, setup, and copy loop compose with a receipt tail. -/
 theorem stable_length_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
