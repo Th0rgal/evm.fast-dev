@@ -8674,4 +8674,68 @@ theorem phase2_memcpy_packed_arguments_ns (h : PtxCallees) {F : Type}
   rw [hentry.1, hentry.2]
   exact hpair
 
+/-- Copy state carrying the cached source count and its word witness. -/
+def PtxPackedNsCopy {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+    (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+    globN s "heap_ptr" ≤ 2 ^ 64) ∧
+  (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+  locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)
+
+/-- The address copy preserves the source loop's cached count. -/
+theorem phase2_packed_address_copy_ns_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedNsCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.1.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.1.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1.1 callee
+  have hcopy := phase2_packed_address_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1.1 hp.1.2.1 hbase hk hp.1.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.1.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  refine ⟨phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.1.2.2.2, hp.2.1, ?_⟩
+  apply phase2_memcpy_packed_arguments_ns h s post _ src (.const 20) vs body callee ret
+    (some (.returned v)) (base + k * 52) 20 hc hargs hl he (by simp)
+    (by simp [Resumes]) hentry hp.1.1.1 hp.1.2.1
+    (phase2_packed_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) _ hp.2.2
+  rw [phase2_packed_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
+  simp
+
+/-- The storage-key copy preserves the source loop's cached count. -/
+theorem phase2_packed_storage_copy_ns_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare PtxPackedNsCopy
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32])
+      (fun r t => r = none → PtxPackedNsCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.1.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.1.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1.1 callee
+  have hcopy := phase2_packed_storage_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    hentry hp.1.1.1 hp.1.2.1 hbase hk hp.1.2.2.2
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.1.2.2.2
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  refine ⟨phase2_packed_next_call_pre s post harena.1 hcopy ⟨k, hk⟩ hg hp.1.2.2.2, hp.2.1, ?_⟩
+  apply phase2_memcpy_packed_arguments_ns h s post _ src (.const 32) vs body callee ret
+    (some (.returned v)) (base + k * 52 + 20) 32 hc hargs hl he (by simp)
+    (by simp [Resumes]) hentry hp.1.1.1 hp.1.2.1
+    (phase2_packed_key_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) _ hp.2.2
+  rw [phase2_packed_key_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
+  simp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
