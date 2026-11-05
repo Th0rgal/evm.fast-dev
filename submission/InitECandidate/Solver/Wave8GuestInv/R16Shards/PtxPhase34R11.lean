@@ -3120,6 +3120,16 @@ def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       memW s (memW s (locN s "stable_logs") + 8 * i) =
         memW s (memW s (locN s "logs") + 8 * i)
 
+theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hj : locN s "j" = 0) : StableCopyInv s := by
+  refine ⟨hp, hn, hh, ha, hcap, ?_⟩
+  intro i hi _
+  omega
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "j") :
     PtxReceiptsDone s := by
@@ -3157,6 +3167,20 @@ theorem stable_copy_prefix_step {F : Type} (s : PanSemStateFiniteExact 64 F)
       simp only [memW]
       rw [hm _ hne]
     _ = memW s (src + 8 * j) := hprefix j hji
+
+/-- A destination write outside the source array preserves every source
+pointer cell, providing the frame premise of `stable_copy_prefix_step`. -/
+theorem stable_copy_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (src n : Nat) (x : BitVec 64)
+    (hA : ArenaOK s) (ha : Allocated s (src, 8 * n)) (hal : src % 8 = 0)
+    (hd : Disj (src, 8 * n) (x.toNat, 8))
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    ∀ j, j < n → memW {s with memory := mem'} (src + 8 * j) = memW s (src + 8 * j) := by
+  have hu : IvlUnhit s {s with memory := mem'} (src, 8 * n) :=
+    ivlUnhit_single hm (fun _ => hal) hd
+  intro j hj
+  exact memW_eq_of_ivlUnhit hu (by omega) (ivl_allocated_bound hA ha).2
+    ⟨by dsimp; omega, by dsimp; omega⟩
 
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
