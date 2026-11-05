@@ -11334,4 +11334,56 @@ theorem lst_push_growth_writes_memory_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+theorem txWorld_list_headers_disjoint {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) :
+    Disj (memW s (globN s "bo" + 40), 24) (memW s (globN s "bo" + 72), 24) := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  obtain ⟨_, hpw, _, _, _⟩ := fixedObjects_disj_parts hWT.2.2.1
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hW.2 hWT.1
+  have hlen : (blockOutObjects s).length = 7 := by rw [hbo]; rfl
+  have hd := List.pairwise_iff_getElem.1 hpw 3 5 (by omega) (by omega) (by omega)
+  simpa [hbo] using hd
+
+/-- Spatial separation discharges the three modular-address side conditions
+needed to frame the receipt header through the log push's header writes. -/
+theorem txWorld_other_header_ne_push_writes {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) :
+    let l := BitVec.ofNat 64 (memW s (globN s "bo" + 40))
+    let a := BitVec.ofNat 64 (memW s (globN s "bo" + 72))
+    a ≠ l ∧ a ≠ l + 8 ∧ a ≠ l + 16 := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hm : (memW s (globN s "bo" + 40), 24) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp [blockOutObjects, hE.bo_nz, hE.bo40]
+  have ha := ((hWT.2.2.1.1 _ hm).resolve_left (by simp)).1
+  have hb := (ivl_allocated_bound hW.1.1.2 ha).2
+  have ha64 : memW s (globN s "bo" + 72) < 2 ^ 64 := by
+    unfold memW
+    split
+    exact BitVec.isLt _
+  have hd := txWorld_list_headers_disjoint hW
+  dsimp only
+  have hne : ∀ k : Nat, k < 24 →
+      BitVec.ofNat 64 (memW s (globN s "bo" + 72)) ≠
+        BitVec.ofNat 64 (memW s (globN s "bo" + 40)) + BitVec.ofNat 64 k := by
+    intro k hk he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat] at he'
+    have hl : memW s (globN s "bo" + 40) < 2 ^ 64 := by dsimp at hb; omega
+    have hkl : k < 2 ^ 64 := by omega
+    rw [Nat.mod_eq_of_lt ha64, Nat.mod_eq_of_lt hl, Nat.mod_eq_of_lt hkl,
+      Nat.mod_eq_of_lt (by dsimp at hb; omega)] at he'
+    unfold Disj at hd
+    dsimp at hd
+    omega
+  exact ⟨by simpa using hne 0 (by decide), hne 8 (by decide), hne 16 (by decide)⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
