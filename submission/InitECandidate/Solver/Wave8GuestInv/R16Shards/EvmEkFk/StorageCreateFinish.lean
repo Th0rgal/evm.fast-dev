@@ -102,6 +102,34 @@ theorem allocated_disj_growing_nodeExtents {F : Type}
   intro j hj
   exact allocated_disj_old_or_fresh_extent hAs hAp hhp ho hold (hgrow j hj)
 
+theorem ownedGrows_nodeExtents_of_fresh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd Nd' : List Nat}
+    (hold : ∀ n ∈ Nd, n ∈ Nd' ∧ nodeIvl post n = nodeIvl s n ∧ nodePath post n = nodePath s n)
+    (hfresh : ∀ x ∈ Nd', x ∉ Nd →
+      Inside (nodeIvl post x) (globN s "heap_ptr") (globN post "heap_ptr") ∧
+      (nodePath post x = (0, 0) ∨
+        Inside (nodePath post x) (globN s "heap_ptr") (globN post "heap_ptr"))) :
+    OwnedGrows s post (nodeExtents s Nd) (nodeExtents post Nd') := by
+  intro j hj
+  simp only [nodeExtents, List.mem_flatMap, List.mem_cons, List.not_mem_nil, or_false] at hj
+  rcases hj with ⟨x, hx, rfl | rfl⟩
+  · by_cases hxNd : x ∈ Nd
+    · obtain ⟨_, hivl, _⟩ := hold x hxNd
+      refine Or.inr (Or.inl ⟨nodeIvl s x, ?_, ?_⟩)
+      · simp only [nodeExtents, List.mem_flatMap, List.mem_cons, List.not_mem_nil, or_false]
+        exact ⟨x, hxNd, Or.inl rfl⟩
+      · rw [hivl]; exact ⟨le_rfl, le_rfl⟩
+    · exact Or.inr (Or.inr (hfresh x hx hxNd).1)
+  · by_cases hxNd : x ∈ Nd
+    · obtain ⟨_, _, hpath⟩ := hold x hxNd
+      refine Or.inr (Or.inl ⟨nodePath s x, ?_, ?_⟩)
+      · simp only [nodeExtents, List.mem_flatMap, List.mem_cons, List.not_mem_nil, or_false]
+        exact ⟨x, hxNd, Or.inr rfl⟩
+      · rw [hpath]; exact ⟨le_rfl, le_rfl⟩
+    · rcases (hfresh x hx hxNd).2 with hz | hin
+      · exact Or.inl hz
+      · exact Or.inr (Or.inr hin)
+
 theorem rootIn_lt_word_limit {F : Type} {s : PanSemStateFiniteExact 64 F}
     {Nd : List Nat} {node : Nat} (hh : NodeHeap s Nd) (hr : RootIn Nd node) :
     node + 1 < 2 ^ 64 := by
