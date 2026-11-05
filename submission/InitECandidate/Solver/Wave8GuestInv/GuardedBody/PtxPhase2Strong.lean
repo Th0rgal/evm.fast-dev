@@ -5418,4 +5418,27 @@ theorem phase2_packed_outer_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
   change locN s "k" = txAccessSlots s (locN s "tx") at hk
   exact hk.trans hp.2.1.symm
 
+/-- Completing an inner pass and advancing the record restores the outer invariant. -/
+theorem phase2_packed_outer_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedInnerInv s)
+    (hg : ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))
+    (hb : locN s "i" + 1 < 2 ^ 64) :
+    PtxPackedOuterInv (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) := by
+  have hx := (phase2_packed_inner_exit hp hg).2
+  have hi := hp.2.2.1
+  have hit : ofString "i" ≠ ofString "tx" := by decide
+  have hin : ofString "i" ≠ ofString "nkeys" := by decide
+  have hik : ofString "i" ≠ ofString "k" := by decide
+  change locN s "i" + 1 < 18446744073709551616 at hb
+  simp only [locN] at hb
+  refine ⟨phase2_packed_keys_set_other s hp.1 _ _ (by decide), ?_, ?_, ?_⟩
+  · simpa [txAccessSlots, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hit, hin] using hp.2.1
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hit, Nat.mod_eq_of_lt hb] using (Nat.succ_le_of_lt hi)
+  · simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hit, hik, Nat.mod_eq_of_lt hb] using hx
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
