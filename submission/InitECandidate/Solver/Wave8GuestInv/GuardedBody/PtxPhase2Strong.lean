@@ -1332,4 +1332,34 @@ theorem phase2_te_store_separation {F : Type} {s : PanSemStateFiniteExact 64 F}
     Disj (p, len) (x, n) :=
   disj_of_inside_right hx hd
 
+/-- Transaction validity survives a disjoint single-word heap store once the
+world frame has been established. The access-list record array is framed
+separately from the transaction header. -/
+theorem phase2_store_txReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : TxReadyStrong s) {S Nd : List Nat}
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    {x : BitVec 64} {mem : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (hW : WorldTypedWith { s with memory := mem } S Nd)
+    (how : worldOwned { s with memory := mem } S Nd = worldOwned s S Nd)
+    (hE : TxEnv { s with memory := mem })
+    (htx : Disj (locN s "tx", 384) (x.toNat, 8))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (x.toNat, 8)) :
+    TxReadyStrong { s with memory := mem } := by
+  have hA := hp.1.1.1
+  have hAp : ArenaReady { s with memory := mem } :=
+    ⟨guestInv_congr (s := s) rfl rfl rfl rfl hA.1, hA.2⟩
+  have hu : IvlUnhit s { s with memory := mem } (locN s "tx", 384) :=
+    ivlUnhit_single hm (by simp) htx
+  have hur : 0 < memW s (locN s "tx" + 216) →
+      IvlUnhit s { s with memory := mem }
+        (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) := by
+    intro hn
+    exact ivlUnhit_single hm (by dsimp; omega) (hrec hn)
+  have hT' := R16Shards.PtxP1.txAccessListAt_congr_unhit
+    (post := { s with memory := mem }) hA.2 hA.1 hAp.1 le_rfl hT
+    (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2) hu hur
+  exact R16Shards.PtxP1.txReadyStrong_of_parts hAp hE hW hT'
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
