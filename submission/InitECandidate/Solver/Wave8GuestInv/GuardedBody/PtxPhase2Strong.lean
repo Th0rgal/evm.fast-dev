@@ -14744,4 +14744,40 @@ theorem phase2_acct_empty_backing :
     Option.map_none, Option.map_some, List.map_cons, List.map_nil]
   exact phase2_decCall_backing (phase2_acct_new_resume_backing _ _) (phase2_return_backing _)
 
+/-- Resolve the empty-account constructor and retain backing across caller restoration. -/
+theorem phase2_acct_empty_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "acct_empty") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_empty") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_empty] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  cases vs with
+  | cons a rest => simp at hx
+  | nil =>
+    simp at hx
+    obtain ⟨rfl, hL, rfl⟩ := hx
+    have hi : callee.lookup (ofString "index") = none := by rw [← hL]
+    change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty) =
+        (some (.returned v), post) at hr
+    have hb := phase2_acct_empty_backing.run (callEntryStateHOLFinite s callee) hc
+      ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+        phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩
+      (by rw [hr]; simp) (by rw [hr]; exact ⟨v, rfl⟩)
+    rw [hr] at hb
+    exact hb
+
+/-- Installing a newly created empty account in a caller local preserves backing. -/
+theorem phase2_acct_empty_call_backing (name : MlS) (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (some (.local, name), none)) (ofString "acct_empty") args)
+      (fun r t => r = none → R16Shards.TxBacking t) := by
+  exact Hoare.callLocal_resume (phase2_acct_empty_resume_backing name args)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
