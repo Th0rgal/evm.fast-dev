@@ -6734,4 +6734,31 @@ theorem merge_outer_set_ret_values {F : Type}
   have hv := WkBal.htab_set_body_values_exact s tw kw iw ht hk hi hA hT halloc v hret
   exact merge_set_values_membership hv.2
 
+/-- After inserting a fresh inner table, its outer value membership supplies
+the union call's ownership precondition. -/
+theorem merge_inserted_inner_union_entry {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t value : Nat}
+    (hvalues : WkBal.HtabSetValuesPost s post t value)
+    (hc : post.code = originalRuntimeCode) (hW : WorldOK post)
+    (hbs : globN post "bs" ≠ 0)
+    (ht : t = memW post (globN post "bs" + 32)) (hnz : t ≠ 0)
+    (hi : locN post "binner" = value)
+    (src : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (ha : evalListHOLFinite post (h := fun a => Classical.propDecidable (post.memaddrs a))
+      [.var .local (ofString "binner"), src] = some vs)
+    (hl : lookupCodeHOLFinite post.code.lookup (ofString "htab_union_into") vs =
+      some (body, callee, ret)) :
+    WorldOK (callEntryStateHOLFinite post callee) ∧
+      globN (callEntryStateHOLFinite post callee) "bs" ≠ 0 ∧
+      memW (callEntryStateHOLFinite post callee)
+        (globN (callEntryStateHOLFinite post callee) "bs" + 32) ≠ 0 ∧
+      locN (callEntryStateHOLFinite post callee) "dst" ∈
+        htabValues (callEntryStateHOLFinite post callee)
+          (memW (callEntryStateHOLFinite post callee)
+            (globN (callEntryStateHOLFinite post callee) "bs" + 32)) := by
+  apply union_bs_inner_call_entry post hc hW hbs (ht ▸ hnz) ?_ src vs body callee ret ha hl
+  rw [hi, ← ht]
+  exact (merge_set_values_membership hvalues).1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
