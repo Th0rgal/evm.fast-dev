@@ -9734,4 +9734,93 @@ theorem phase2_packed_alloc_nal (h : PtxCallees) :
     simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "al_keys" ≠ ofString "nal" by decide]
 
+/-- The fresh packed buffer remains separate from the transaction and record array
+after restoring the caller's locals, including the empty-record case. -/
+theorem phase2_packed_alloc_input_separated (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s =>
+        Disj (locN s "tx", 384)
+          (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+        Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+          (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have h208 := phase2_packed_alloc_header_words h 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have h216 := phase2_packed_alloc_header_words h 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_packed_keys_alloc_fresh h s vs body callee ret v post
+    hc hp ha hl hb
+  have hs := phase2_packed_keys_input_separation s post callee w.toNat hp hf
+  rw [h208, h216]
+  simp only [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "al_keys" ≠ ofString "tx" by decide,
+    show ofString "al_keys" ≠ ofString "nkeys" by decide, if_false, if_true]
+  constructor
+  · exact hs.2.1
+  · by_cases hz : memW s (locN s "tx" + 216) = 0
+    · exact Or.inl (by change 24 * memW s (locN s "tx" + 216) = 0; rw [hz])
+    · exact hs.2.2 (Nat.pos_of_ne_zero hz)
+
+/-- Allocation frames each access-record key count, preserving the total used
+to size the packed buffer. -/
+theorem phase2_packed_alloc_total (h : PtxCallees) (value : Nat) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ txAccessSlots s (locN s "tx") = value)
+      (fun s => txAccessSlots s (locN s "tx") = value)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr : PtxAccessCountReady s := hp.1.1.1.1.1
+  have h208 := phase2_packed_alloc_header_words h 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp.1, rfl⟩ ha hl hb
+  have h216 := phase2_packed_alloc_header_words h 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp.1, rfl⟩ ha hl hb
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hr.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hr.1.2
+  obtain ⟨S', Nd', _, _, _, hframe, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hfields : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
+    intro i hi
+    exact phase2_tx_count_world_frame s post S Nd [] (locN s "tx") i
+      hr.1.1.1.1.1.1.1.1.2 hW hT hi hframe (by simp) (by simp)
+  unfold txAccessSlots
+  rw [h216, h208]
+  trans txAccessSlots s (locN s "tx")
+  · unfold txAccessSlots
+    congr 1
+    apply List.map_congr_left
+    intro i hi
+    exact hfields i (List.mem_range.mp hi)
+  · exact hp.2
+
+/-- Allocation assembles all resources consumed by the concrete counter reset. -/
+theorem phase2_packed_alloc_init_ready (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧
+        locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+        locN s "nal" = memW s (locN s "tx" + 216))
+      PtxPackedInitReady (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hw := phase2_packed_keys_alloc_world_ready h s vs body callee ret v post hc hp.1 ha hl hb
+  have hs := phase2_packed_alloc_input_separated h s vs body callee ret v post hc hp.1 ha hl hb
+  have hn := phase2_packed_alloc_nal h s vs body callee ret v post hc ⟨hp.1, hp.2.2⟩ ha hl hb
+  have ht := phase2_packed_alloc_total h (locN s "nkeys") s vs body callee ret v post
+    hc ⟨hp.1, hp.2.1.symm⟩ ha hl hb
+  refine ⟨hw.1, hw.2, ?_, hs.1, hs.2, ?_, hn⟩
+  · rw [ht]
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  · unfold globN
+    split
+    · exact Nat.le_of_lt (BitVec.isLt _)
+    · exact Nat.zero_le _
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
