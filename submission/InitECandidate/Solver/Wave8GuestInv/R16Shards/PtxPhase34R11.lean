@@ -13890,4 +13890,54 @@ theorem receipt_bloom_alloc_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Gas encoding and cursor advancement expose a bounded, non-wrapping cursor
+to the bloom allocation continuation. -/
+theorem receipt_gas_advance_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p gas old : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 9 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next : PanSemStateFiniteExact 64 F) (q w : BitVec 64),
+      HeapByteEff s next R gw → p.toNat + 1 ≤ q.toNat → q.toNat ≤ p.toNat + 9 →
+      next.locals.lookup (ofString "p") = some (.val (.word q)) →
+      next.locals.lookup (ofString "w") = some (.val (.word w)) →
+      (∀ name, name ≠ ofString "p" → name ≠ ofString "w" →
+        next.locals.lookup name = mid.locals.lookup name) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) → HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+        [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")])
+        (.seq (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) tail)) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  apply receipt_gas_continuation_frame he p gas old hp hg hw hfresh _ v ?_ hr
+  intro next w he' hlo hhi hloc hr'
+  have hp' : next.locals.lookup (ofString "p") = some (.val (.word p)) := by
+    rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "p" by decide] using hp
+  have hw' : next.locals.lookup (ofString "w") = some (.val (.word w)) := by
+    rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hn : (p + w).toNat = p.toNat + w.toNat := by
+    rw [BitVec.toNat_add]
+    apply Nat.mod_eq_of_lt
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    omega
+  apply receipt_cursor_continuation_frame he' p w hp' hw' tail v ?_ hr'
+  intro final he'' hp'' hkeep hr''
+  apply hcont final (p + w) w he'' (by rw [hn]; omega) (by rw [hn]; omega) hp''
+  · rw [hkeep _ (by decide)]; exact hw'
+  · intro name hnp hnw
+    rw [hkeep name hnp, hloc]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnw]
+  · exact hr''
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
