@@ -7786,4 +7786,47 @@ theorem merge_set_values_owned {F : Type}
     exact hold j (List.mem_range.1 hj)
   · rw [heq]; exact hvalue
 
+/-- The concrete outer insertion retains the inner binding and nested ownership facts. -/
+theorem merge_set_call_nested_owned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hAR : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S) (hne : iw.toNat ≠ tw.toNat)
+    (howned : HtabValuesIn s tw.toNat S)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    post.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+    locN post "binner" ∈ htabValues post tw.toNat ∧
+    HtabValuesIn post tw.toNat S ∧
+    HtabWF post iw.toNat ∧
+    htabFootprint post iw.toNat = htabFootprint s iw.toNat ∧
+    (∀ k, k < 11 → hdr post iw.toNat k = hdr s iw.toNat k) := by
+  have hv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hwf := (hWT.1.2.1 tw.toNat htS).1
+  have hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i :=
+    fun i hi => ((hWT.1.2.1 tw.toNat htS).2 i hi).1
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hv hAR hwf hal hfr
+  have hm := merge_set_call_bound_member s et ek tw kw iw ht hk hi hAR hwf hal hfr
+  exact ⟨hm.1, hm.2, merge_set_values_owned hp.2.1 howned hiS,
+    merge_set_other_table_frame hAR hWT htS hiS hne hp.1⟩
+
+/-- A fresh table with no world role cannot alias the block storage outer table. -/
+theorem merge_fresh_inner_ne_outer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {inner : Nat} (hbs : globN s "bs" ≠ 0)
+    (hout : memW s (globN s "bs" + 32) ≠ 0)
+    (hfresh : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner) :
+    inner ≠ memW s (globN s "bs" + 32) := by
+  have hm : (memW s (globN s "bs" + 32), "bs+32") ∈ worldRoleSlots s := by
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs hout
+    simp [recRoles, hbs]
+  exact (hfresh _ (List.mem_append_left _ hm)).symm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
