@@ -10360,4 +10360,16 @@ theorem phase2_count_cases_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b :
   · exact phase2_count_cases_alloc_init h
   · exact ht
 
+/-- Disabling access lists cannot increase the counting-loop clock budget. -/
+theorem phase2_count_cases_while_bound {body : ProgHOL 64} {b : Nat}
+    (hb : TerminatingProgBoundedOn PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) b) :
+    TerminatingProgBoundedOn PtxAddressCountCases
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) b := by
+  intro F s hc hp hn
+  rcases hp with hp | hp
+  · exact hb s hc hp hn
+  · rw [phase2_address_zero_loop s body hp.1 hp.2.1]
+    exact ⟨by dsimp; omega, le_rfl⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
