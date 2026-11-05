@@ -11799,4 +11799,28 @@ theorem phase2_msg_new_live_buffer_resume (h : PtxCallees)
       {post with locals := s.locals}) "m", 176)] (worldOwned post S' Nd')
     simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hd
 
+/-- The message allocator supplies its full initialized heap extent. -/
+theorem phase2_msg_new_geometry (h : PtxCallees) :
+    DecCallResumeOn WorldOK
+      (fun s =>
+        (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+        WordsOK s (locN s "m", 176) ∧
+        ∀ k, k < 22 → memW s (locN s "m" + 8 * k) = 0)
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_msg_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, hz⟩ := hr v rfl
+  have hm : locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  refine ⟨⟨w, ?_⟩, ?_, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · rw [hm]
+    exact ⟨hp.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · rw [hm]; exact hf.2.2
+  · rw [hm]; exact hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
