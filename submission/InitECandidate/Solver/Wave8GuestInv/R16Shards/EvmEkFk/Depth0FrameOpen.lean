@@ -2979,4 +2979,132 @@ theorem frameWF_of_dispatch_slots {F : Type}
     · exact Or.inl hz
     · exact Or.inr ⟨hin, wordsOK_transfer hAs.1 hAp.1 hw⟩
 
+/-- The three dispatch fields are outside every structural frame projection.
+This packages their transport into the complete chain invariant. -/
+theorem evmInvAt_of_dispatch_transport {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hInv : EvmInvAt s S) (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hg : ∀ name, globN post name = globN s name)
+    (hch : evmChain post = evmChain s)
+    (hworld : WorldTyped post S)
+    (hkeep : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      k ∉ ([48, 56, 80] : List Nat) → memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hc : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hh : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k))
+    (hl : ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec ∧
+      LogsListOK post (memW s (ec.1 + 88)))
+    (hm : ∀ m, MsgOwned s S m → MsgOwned post S m)
+    (hfix : fixedObjects post = fixedObjects s)
+    (hfp : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (htries : ∀ Nd, TriesTypedWith s S Nd →
+      TriesTypedWith post S Nd ∧ nodeExtents post Nd = nodeExtents s Nd)
+    (hwr : worldRoleSlots post = worldRoleSlots s)
+    (hjr : journalRoleSlots post = journalRoleSlots s)
+    (hwrefs : worldTableRefs post S = worldTableRefs s S)
+    (htag : ∀ t ∈ S, memW post t = memW s t) :
+    EvmInvAt post S := by
+  obtain ⟨hw, hn, hlen, hlast, hfw, hroom, hwin, hpw, hdisj, hat,
+    hmarks, hroles, hgas⟩ := hInv
+  have hfo : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec :=
+    fun ec hec => (frameObjects_eq_of_dispatch_slots ec (hkeep ec hec)
+      (hh ec hec) (hl ec hec).1).1
+  have hfs : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec :=
+    fun ec hec => (frameObjects_eq_of_dispatch_slots ec (hkeep ec hec)
+      (hh ec hec) (hl ec hec).1).2.1
+  have hfl : ∀ ec ∈ evmChain s, frameLogs post ec = frameLogs s ec := by
+    intro ec hec
+    unfold frameLogs
+    rw [hkeep ec hec 88 (by decide) (by decide)]
+    rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hh ec hec 0 (by decide), hh ec hec 16 (by decide)]
+  have hmap : (evmChain s).map (frameObjects post) = (evmChain s).map (frameObjects s) :=
+    List.map_congr_left hfo
+  have hslots : frameRoleSlots post (evmChain s) = frameRoleSlots s (evmChain s) := by
+    unfold frameRoleSlots
+    apply List.flatMap_congr
+    intro ec hec
+    rw [hkeep ec hec 136 (by decide) (by decide),
+      hkeep ec hec 168 (by decide) (by decide), hkeep ec hec 176 (by decide) (by decide)]
+  refine ⟨hworld, ?_⟩
+  dsimp only
+  rw [hch]
+  refine ⟨hn, hlen, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨ec, hec, hz⟩ := hlast
+    exact ⟨ec, hec, by rw [hc ec (List.mem_of_mem_getLast? hec) 16 (by decide)]; exact hz⟩
+  · intro ec hec
+    apply frameWF_of_dispatch_slots (hfw ec hec) hAs hAp hg (hkeep ec hec)
+      (hh ec hec) (hl ec hec).2
+    exact hm _ (hfw ec hec).2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2
+  · intro ec hec
+    have he := List.mem_of_mem_tail hec
+    unfold FrameRoom
+    rw [hkeep ec he 16 (by decide) (by decide), hkeep ec he 232 (by decide) (by decide)]
+    exact hroom ec hec
+  · intro i hi
+    have h0 : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have h1 : (evmChain s)[i + 1] ∈ evmChain s := List.getElem_mem _
+    rw [hc _ h0 80 (by decide), hc _ h0 72 (by decide),
+      hkeep _ h1 40 (by decide) (by decide)]
+    exact hwin i hi
+  · rw [hmap]; exact hpw
+  · intro ec hec o ho
+    rw [hfo ec hec] at ho
+    rw [hfix]
+    refine ⟨fun t ht i hi => ?_, (hdisj ec hec o ho).2⟩
+    rw [hfp t ht] at hi
+    exact (hdisj ec hec o ho).1 t ht i hi
+  · obtain ⟨Nd, ht, hd⟩ := hat
+    rw [hmap]
+    refine ⟨Nd, (htries Nd ht).1, fun o ho j hj => ?_⟩
+    rw [(htries Nd ht).2] at hj
+    exact hd o ho j hj
+  · have hdel : ∀ i t, DelExclusive post S (evmChain s) i t ↔
+        DelExclusive s S (evmChain s) i t := by
+      intro i t
+      unfold DelExclusive
+      rw [hwrefs]
+      refine and_congr Iff.rfl (forall_congr' fun j => forall_congr' fun hj =>
+        forall_congr' fun k => imp_congr_right fun hk => ?_)
+      have hk' : k + 8 ≤ 280 ∧ k ∉ ([48, 56, 80] : List Nat) := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl <;> decide
+      rw [hkeep _ (List.getElem_mem _) k hk'.1 hk'.2]
+    intro i hi
+    have hi' : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have htake : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
+        ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
+      apply List.map_congr_left
+      intro ec hec
+      exact hkeep ec (List.mem_of_mem_take hec) 136 (by decide) (by decide)
+    dsimp only
+    rw [hc _ hi' 48 (by decide), hc _ hi' 56 (by decide),
+      hkeep _ hi' 24 (by decide) (by decide), hfs _ hi', hfix, htake]
+    obtain ⟨m1, m2, m3, m4, m5, m6, m7, m8, m9⟩ := hmarks i hi
+    refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, m9⟩
+    · intro j hj hij
+      have hj' : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+      rw [hfs _ hj', hfo _ hj', hfl _ hj', hkeep _ hj' 112 (by decide) (by decide)]
+      exact m5 j hj hij
+    · intro t ht
+      rw [hfp t ht, hdel i t]
+      exact m8 t ht
+  · rw [hwr, hslots, hjr]
+    unfold RolesOK at hroles ⊢
+    refine ⟨fun a ha => ?_, hroles.2⟩
+    obtain ⟨haS, hk⟩ := hroles.1 a ha
+    change a.1 ∈ S ∧ memW post (a.1 + 0) = roleKeyLen a.2
+    simp only [Nat.add_zero]
+    rw [htag a.1 haS]
+    exact ⟨haS, hk⟩
+  · have heq : ((evmChain s).map fun ec => memW post (ec.1 + 64) +
+        memW post (ec.1 + 192)) = ((evmChain s).map fun ec =>
+        memW s (ec.1 + 64) + memW s (ec.1 + 192)) := by
+      apply List.map_congr_left
+      intro ec hec
+      rw [hkeep ec hec 64 (by decide) (by decide), hkeep ec hec 192 (by decide) (by decide)]
+    rw [heq]
+    exact hgas
+
 end HeadStore
