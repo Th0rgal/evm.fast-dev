@@ -1299,6 +1299,27 @@ theorem logsWorldOwned_heapStep_header {F : Type}
   exact ⟨memW_eq_of_ivlUnhit hh.2.2 hl'.1.1 hb ⟨by omega, by omega⟩,
     memW_eq_of_ivlUnhit hh.2.2 (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩⟩
 
+/-- Heap-only calls retain every source-array entry used by the copy loop. -/
+theorem logsWorldOwned_heapStep_array {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {keep : List (String × List Nat)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"] keep Q s r post)
+    (hA : ArenaReady s) (hl : LogsListOK s logs) (ho : LogsWorldOwned s logs)
+    (hn : logs ≠ 0) :
+    ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+  obtain ⟨S, Nd, hWT, hd⟩ := ho
+  have hgrow : AllocatorGrows s post := ⟨hs.2.1, by
+    have he : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+      R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+    omega⟩
+  obtain ⟨S', Nd', _, _, hog, hfr, _⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  exact (logsLiveOwned_array_survives hA.2 hs.1.2 hA.1 hgrow hl hd hn
+    (worldOwned_zero_aligned hWT) (by intro j hj; cases hj) hog hfr
+    (by intro j hj; cases hj)).2.2
+
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     LogsDisjFixed s (locN s "logs") ∧ LogsWorldOwned s (locN s "logs")
@@ -4110,6 +4131,21 @@ def StableCopySpatial : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     ∀ j, j < memW s (locN s "logs" + 8) →
       Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
         (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+/-- Counter and backing-pointer local initialization preserve spatial facts. -/
+theorem stableCopySpatial_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : locals.lookup (ofString "logs") = s.locals.lookup (ofString "logs"))
+    (hs : locals.lookup (ofString "stable_logs") = s.locals.lookup (ofString "stable_logs"))
+    (hc : locals.lookup (ofString "stable_log_cap") = s.locals.lookup (ofString "stable_log_cap"))
+    (hp : StableCopySpatial s) : StableCopySpatial {s with locals := locals, clock := k} := by
+  obtain ⟨S, Nd, hW, ho, hw, hh, hd, ha, he⟩ := hp
+  have el := locN_congr s locals k "logs" hl
+  have es := locN_congr s locals k "stable_logs" hs
+  have ec := locN_congr s locals k "stable_log_cap" hc
+  refine ⟨S, Nd, (R13Shards.worldTypedWith_with_locals s locals k S Nd).mpr hW, ?_⟩
+  simp only [el, es, ec]
+  exact ⟨ho, hw, hh, hd, ha, he⟩
 
 /-- All copy-entry spatial obligations survive the stable length write. -/
 theorem stableLengthPre_spatial {F : Type} (s : PanSemStateFiniteExact 64 F)
