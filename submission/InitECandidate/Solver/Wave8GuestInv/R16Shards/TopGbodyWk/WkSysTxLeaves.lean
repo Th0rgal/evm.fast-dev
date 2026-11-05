@@ -1951,6 +1951,37 @@ theorem progSysTxStep_decCall_htab_new
   rw [hr_eq, hs_eq]
   exact worldStep_sysTx_trans_prefix hW.1 hstep_mid hstep2'
 
+theorem msgReady_of_sysTx_owned {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (hin : Inside (locN s "msg", 176) sourceBase (globN s "heap_ptr"))
+    (hwords : WordsOK s (locN s "msg", 176))
+    (hdisj : ∀ o ∈ worldOwned s S Nd, Disj (locN s "msg", 176) o)
+    (haa : memW s (locN s "msg" + 152) ∈ S)
+    (hak : memW s (locN s "msg" + 160) ∈ S)
+    (hgas : memW s (locN s "msg" + 40) < 2 ^ 63)
+    (hroles : RolesOK s S (worldRoleSlots s ++
+      [(memW s (locN s "msg" + 152), "frame.addr"),
+       (memW s (locN s "msg" + 160), "frame.key")]) (journalRoleSlots s)) :
+    MsgReady s := by
+  refine ⟨hA, S, ⟨hW.1, hW.2.1, hW.2.2.1, Nd, hW.2.2.2⟩,
+    haa, hak, hin, hwords, ?_, ?_, ?_, hgas, hroles⟩
+  · intro t ht i hi
+    apply hdisj i
+    unfold worldOwned
+    exact List.mem_append_left _ (List.mem_append_left _
+      (List.mem_flatMap.2 ⟨t, ht, hi⟩))
+  · intro j hj
+    apply hdisj j
+    unfold worldOwned
+    exact List.mem_append_left _ (List.mem_append_right _ hj)
+  · refine ⟨Nd, hW.2.2.2, ?_⟩
+    intro o ho j hj
+    simp only [List.mem_singleton] at ho
+    subst o
+    apply hdisj j
+    unfold worldOwned
+    exact List.mem_append_right _ hj
+
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
       WorldKeeps WorldOK
