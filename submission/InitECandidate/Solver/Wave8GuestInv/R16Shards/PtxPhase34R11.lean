@@ -2648,6 +2648,27 @@ theorem lst_new_stable_allocated_resume (h : PtxCallees) {F : Type}
   · exact logsWorldOwned_with_locals _ _ howned
   · exact hfixed
 
+/-- Allocation preserves the source pointer and length cells, so source
+separation can be transported to the resumed memory. -/
+theorem lst_new_stable_source_cells (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    memW post (locN s "logs") = memW s (locN s "logs") ∧
+    memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) := by
+  have hp' := lst_new_stable_source_resume h s vs body callee ret v post hc hp hl hr
+  have hlp := hp'.1.2
+  have hnl := hp'.1.1.2.1
+  simp only [locN, memW, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "lp" by decide,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "nl" by decide, if_false] at hlp hnl
+  exact ⟨hlp.symm.trans hp.1.2, hnl.symm.trans hp.1.1.2.1⟩
+
 theorem lst_new_stable_capacity_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
