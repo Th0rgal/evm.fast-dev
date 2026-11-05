@@ -177,6 +177,20 @@ theorem phase1_resume_price_shape
   refine ⟨hq, a, b, c, d, ?_⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+theorem phase1_resume_check_price (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn (R16Shards.PtxP1.StageP 2)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧
+        ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+          some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]))
+      (ofString "price") (.comb [.one, .one, .one, .one]) (ofString "check_transaction")
+      [.var .local (ofString "tx"), .var .local (ofString "sender")] := by
+  apply phase1_resume_price_shape
+  exact R16Shards.PtxP1.resume_scratch_stage h.wk_check_transaction
+    (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64),
+      ("sk_buf", 64, 52), ("u256_ws", 640, 640)])
+    (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) (by decide) _
+
 /-- Local information accumulated before `mgas` and `reservoir` are declared. -/
 def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   (∀ name ∈ (["tx", "index", "sender"] : List String),
