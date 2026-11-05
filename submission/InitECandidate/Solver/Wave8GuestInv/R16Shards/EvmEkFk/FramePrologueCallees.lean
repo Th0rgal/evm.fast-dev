@@ -2975,6 +2975,30 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
   (globN_eq_of_lookup_eq allocated_mono_scr wordsOK_of_allocated_scr)
 open InitECandidate.Solver.Wave8Contracts.M23
 
+theorem alloc_body_evmStepCC {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hInv : EvmInv s)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    EvmStepCC ["heap_ptr"] s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2 := by
+  obtain ⟨hA, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+  obtain ⟨p, q, hr, hp, hq, hlim, h8, hpq, hg, hm, hb, hma, hAp, hhp, hsp⟩ :=
+    R13Shards.alloc_body_resumes_props s hA.1.code hA hres
+  apply evmStepCC_of_fresh_heap_step hA hAt hAp hb
+  · rw [hhp, ← hp]
+    exact hpq
+  · intro k hk
+    rw [hg, HolFiniteMapExact.lookup_update]
+    have hne : ofString "heap_ptr" ≠ k := by
+      intro heq
+      apply hk
+      simp [← heq]
+    simp [FUPDATE, hne]
+  · intro a ha
+    rw [hm]
+  · intro b hb64 hnot
+    unfold memB
+    rw [hm, hb]
+
 private theorem lookup_lst_push_local :
     originalRuntimeCode.lookup (ofString "lst_push") =
       some ([(ofString "l", .one), (ofString "esz", .one)],
