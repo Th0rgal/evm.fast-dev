@@ -6077,4 +6077,18 @@ theorem union_zero_set_no_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
   apply hne
   simpa only [locN, callEntryStateHOLFinite, ht] using hz
 
+/-- A flowing conditional insertion into a null table must take the skip arm. -/
+theorem union_zero_ite_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hz : locN s "dst" = 0) (cond : ExpHOL 64) (rest : List (ExpHOL 64))
+    (hf : Wave8M19.Htab.FlowR (evaluateHOLFiniteState s
+      (.ite cond (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest)) .skip)).1) :
+    evaluateHOLFiniteState s
+      (.ite cond (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest)) .skip) = (none, s) := by
+  rcases HtabUnionInto.ite_flow_split s _ _ _ hf with ⟨hy, _⟩ | ⟨_, hn⟩
+  · exact (union_zero_set_no_flow s hc hG hz rest hy).elim
+  · rw [hn, evaluateHOLFiniteState_skip]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
