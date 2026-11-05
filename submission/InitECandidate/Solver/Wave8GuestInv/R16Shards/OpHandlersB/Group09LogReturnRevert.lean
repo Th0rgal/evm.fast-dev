@@ -10746,12 +10746,12 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
       let log := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
       LogEntryOK post log ∧ logOwnedIvls post log = logOwnedIvls s log := by
   intro i hi
-  have hlog_mem := logRecord_in_frameObjects_g09 hi
-  have hbound := frameObject_disj_fresh_heap_g09 hA.2 hA.2.2.1 hFW hlog_mem
   have hlog_ok : LogEntryOK s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i)) := by
     rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | hlogs
     · have hlo := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.1
       have hss : 0 < scratchStart := by decide
+      have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+        le_trans hA.2.2.2.1 hA.2.2.2.2.1
       dsimp only at hlo
       omega
     · exact (hlogs.2.2.2.2 i hi).2
@@ -10767,7 +10767,7 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
       have hlog_inside := hlog_ok.2.1.2
       have hlimit : heapLimit ≤ 2 ^ 64 := by decide
       omega
-    exact memW_eq_of_frameDisj_g09 hA.1.2.1 heff hhi hlog_ok.1.1
+    exact memW_eq_of_frameDisj_g09 hA.1.2 heff hhi hlog_ok.1.1
       hk_bounds.2 hk_bounds.1 (fun x hx => hdisj x hx i hi)
   exact ⟨logEntryOK_of_record_agree_g09 heff.memaddrs hheap hrecord hlog_ok,
     logOwnedIvls_of_record_agree_g09 hsys hrecord⟩
