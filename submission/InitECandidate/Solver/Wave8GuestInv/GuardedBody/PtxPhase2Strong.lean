@@ -708,4 +708,38 @@ theorem phase1_set_balance_tail_strong (h : PtxCallees) (args : List (ExpHOL 64)
     · exact Hoare.skip (fun _ hp _ => phase1_stage4_strong hp.1 hp.2)
     · exact htail
 
+theorem phase1_sub_balance_tail_strong (h : PtxCallees) (args : List (ExpHOL 64))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub") args) tail)
+      ((K.u256_sub + 1) + b) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_u256_sub
+      (some (.local, ofString "bal")) args s hc hp.1.1.1.1.1.1
+  · exact phase1_sub_balance_shapes h args
+  · exact htail
+
+theorem phase1_nonce_balance_decl_strong (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (.seq (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+        (.dec (ofString "bal") (.comb [.one, .one, .one, .one])
+          (.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "acct"), .const 8])) tail))
+      ((K.increment_nonce + 1) + b) := by
+  apply seq_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+  · intro F s hc hp
+    exact TerminatingProgBoundedOn.call_guestInv h.fb_increment_nonce none _ s hc hp.1.1.1.1.1.1
+  · exact phase1_nonce_shapes h
+  · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+    · intro F s v hp he
+      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1,
+        ptxPhase2LocalShapes_set_other s hp.2 _ v (by decide)⟩
+    · exact htail
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
