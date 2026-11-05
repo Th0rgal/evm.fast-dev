@@ -3746,4 +3746,14 @@ theorem phase2_address_count_frame {F : Type} (s t : PanSemStateFiniteExact 64 F
   · rw [hn, hi, phase2_key_prefix_congr s t _ hf]
     exact hp.2.2
 
+/-- The next cumulative count is small enough that the machine addition cannot wrap. -/
+theorem phase2_address_count_next_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) < 2 ^ 32 := by
+  rw [hp.2.2, ← phase2_key_prefix_succ]
+  have hb := phase2_key_prefix_le_total s
+    (i := locN s "i" + 1) (by rw [← hp.2.1]; omega)
+  exact lt_of_le_of_lt hb (phase2_address_copy_total_keys hp.1)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
