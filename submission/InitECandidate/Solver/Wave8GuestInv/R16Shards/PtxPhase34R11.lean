@@ -11212,4 +11212,63 @@ theorem resume_lst_push_typed_logSlot_backing_of_other_header (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- The concrete length write preserves every other memory cell. -/
+theorem hoare_lst_push_length_write_frame (l n a : BitVec 64) (w : HolWordLab 64)
+    (hne : a ≠ l + 8) :
+    Hoare (fun s => s.locals.lookup (ofString "l") = some (.val (.word l)) ∧
+      s.locals.lookup (ofString "n") = some (.val (.word n)) ∧ s.memory a = w)
+      (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+      (fun r post => r = none → post.memory a = w) := by
+  apply R13Shards.Hoare.store_fall
+  intro F s x v mem' hp hx hv hm
+  obtain ⟨hl, hn, hw⟩ := hp
+  have hd : evalAt s (.op .add [.var .local (ofString "l"), .const 8]) =
+      some (.val (.word (l + 8))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp]
+  have hs : evalAt s (.op .add [.var .local (ofString "n"), .const 1]) =
+      some (.val (.word (n + 1))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord, wordOpHOL, wordOp]
+  rw [hd] at hx
+  have he : x = l + 8 := by cases hx; rfl
+  subst x
+  rw [hs] at hv
+  have he : v = .val (.word (n + 1)) := (Option.some.inj hv).symm
+  subst v
+  obtain ⟨_, _, hf⟩ := R13Shards.panMemStoresHOL_word_spec (by simpa only [flattenHOL] using hm)
+  exact (hf a hne).trans hw
+
+/-- The shared push tail changes only the active list's length cell. -/
+theorem lst_push_tail_memory_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hne : a ≠ l + 8)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+        (.op .add [.var .local (ofString "n"), .const 1]))
+        (.return (.op .add
+          [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+           .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))) =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  obtain ⟨mid, hs, _, _, ht⟩ := store_seq_returned hr
+  have hm := (hoare_lst_push_length_write_frame l n a (s.memory a) hne).run s hc
+    ⟨hl, hn, rfl⟩ (by rw [hs]; simp)
+  rw [hs] at hm
+  have hm' := hm rfl
+  rw [evaluateHOLFiniteState_return] at ht
+  split at ht
+  · cases ht
+  · split at ht
+    · have he := (Prod.mk.inj ht).2
+      subst post
+      exact hm'
+    · cases ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
