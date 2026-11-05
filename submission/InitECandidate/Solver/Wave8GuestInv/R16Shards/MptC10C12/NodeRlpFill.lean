@@ -1,10 +1,13 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C10
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.BuildMptIndexed
 
 set_option autoImplicit false
-set_option maxRecDepth 100000
-set_option maxHeartbeats 2000000
+set_option maxRecDepth 200000
+set_option maxHeartbeats 4000000
 set_option exponentiation.threshold 2000
 set_option linter.unusedSimpArgs false
+set_option linter.unusedTactic false
+set_option linter.unreachableTactic false
 
 namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
 
@@ -19,13 +22,24 @@ open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
 
+/-- `keccak_pad` (136 B) and `keccak_st` (200 B) are allocated (when nonzero) and disjoint
+from `Nd`'s node records and paths. Propagated from `MptObjReady` in `mpt_root`. -/
+def KeccakBufsSafe {F : Type} (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) : Prop :=
+  ∀ gs ∈ ([("keccak_pad", 136), ("keccak_st", 200)] : List (String × Nat)),
+    ((bufferRegion s gs).2 = 0 ∨ Allocated s (bufferRegion s gs)) ∧
+      ∀ o ∈ nodeExtents s Nd, Disj o (bufferRegion s gs)
+
+/-- Strengthened `NodeRlpReady` carrying `KeccakBufsSafe` for the witnessing `Nd`. -/
+def NodeRlpReadyK : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "node") ∧ KeccakBufsSafe s Nd
+
 /-- The non-null node guard exported by `node_rlp` and `node_hash`. -/
 def NodeRlpReadyNonNull : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => NodeRlpReady s ∧ locN s "node" ≠ 0
+  fun s => NodeRlpReadyK s ∧ locN s "node" ≠ 0
 
 /-- The guard needed by `_node_rlp_fill`: a typed, non-null node with a nonzero kind. -/
 def NodeRlpReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => NodeRlpReady s ∧ locN s "node" ≠ 0 ∧ memW s (locN s "node") ≠ 0
+  fun s => NodeRlpReadyK s ∧ locN s "node" ≠ 0 ∧ memW s (locN s "node") ≠ 0
 
 namespace NodeRlpFillProof
 
@@ -41,21 +55,26 @@ private theorem strong_to_nonNull {F : Type} {s : PanSemStateFiniteExact 64 F}
 private theorem strong_kind_bounds {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : NodeRlpReadyStrong s) :
     1 ≤ memW s (locN s "node") ∧ memW s (locN s "node") ≤ 3 := by
-  obtain ⟨Nd, hNd, hr⟩ := h.1.2
+  obtain ⟨Nd, hNd, hr, _⟩ := h.1.2
   have hn : locN s "node" ∈ Nd := hr.resolve_left h.2.1
   exact ⟨Nat.pos_of_ne_zero h.2.2, (hNd.1 _ hn).1⟩
+
+private theorem keccakBufsSafe_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) {Nd : List Nat}
+    (h : KeccakBufsSafe s Nd) :
+    KeccakBufsSafe { s with locals := locals, clock := k } Nd := h
 
 private theorem localsOnlyNonNull : LocalsOnly ["node"] NodeRlpReadyNonNull := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
-  simp only [NodeRlpReadyNonNull, NodeRlpReady, arenaReady_with_locals] at hP ⊢
+  simp only [NodeRlpReadyNonNull, NodeRlpReadyK, arenaReady_with_locals] at hP ⊢
   rw [ht]
   exact hP
 
 private theorem localsOnlyStrong : LocalsOnly ["node"] NodeRlpReadyStrong := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
-  simp only [NodeRlpReadyStrong, NodeRlpReady, arenaReady_with_locals] at hP ⊢
+  simp only [NodeRlpReadyStrong, NodeRlpReadyK, arenaReady_with_locals] at hP ⊢
   rw [ht]
   exact hP
 
@@ -412,7 +431,7 @@ private theorem dec_guard {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
 
 private def RootReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "root")
+  fun s => ArenaReady s ∧ ∃ Nd, NodeHeap s Nd ∧ RootIn Nd (locN s "root") ∧ KeccakBufsSafe s Nd
 
 private def RootCallReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => RootReady s ∧ locN s "root" ≠ 0
@@ -422,10 +441,23 @@ private theorem root_init {F : Type} (s : PanSemStateFiniteExact 64 F) (v : Valu
     (hv : evalAt s (.load .one (.op .add [.var .local (ofString "m"), .const 0])) = some v) :
     RootReady (setVarHOLFinite (ofString "root") v s) := by
   obtain ⟨w, rfl, hw⟩ := evalAt_loadL s "m" 0 v hv
-  obtain ⟨ha, S, _hS, ⟨Nd, hm⟩, _rest⟩ := hs
-  refine ⟨localsFree_arenaReady s _ _ ha, Nd, hm.2.2.2.2.1, ?_⟩
-  rw [locN_setVar_same, hw]
-  simpa using hm.2.2.2.2.2.1
+  obtain ⟨ha, S, hS, ⟨Nd, hm⟩, _rest⟩ := hs
+  refine ⟨localsFree_arenaReady s _ _ ha, Nd, hm.2.2.2.2.1, ?_, ?_⟩
+  · rw [locN_setVar_same, hw]
+    simpa using hm.2.2.2.2.2.1
+  · intro gs hgs
+    have hj_fix : bufferRegion s gs ∈ fixedObjects s := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hgs
+      have hbuf : bufferRegion s gs ∈ globalBuffers.map (bufferRegion s) := by
+        rcases hgs with rfl | rfl
+        · exact List.mem_map.mpr ⟨("keccak_pad", 136), by decide, rfl⟩
+        · exact List.mem_map.mpr ⟨("keccak_st", 200), by decide, rfl⟩
+      simp only [fixedObjects, List.mem_append, bufferRegion] at hbuf ⊢
+      exact Or.inl (Or.inl (Or.inl hbuf))
+    refine ⟨?_, fun o ho => (hm.2.2.2.2.2.2 o ho).2.2 _ hj_fix⟩
+    rcases hS.2.2.1.1 (bufferRegion s gs) hj_fix with hz | ⟨hal, _⟩
+    · exact Or.inl hz
+    · exact Or.inr hal
 
 private theorem root_call_of_false {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hs : RootReady s)
