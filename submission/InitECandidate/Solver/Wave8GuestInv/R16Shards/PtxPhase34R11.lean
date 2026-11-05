@@ -3851,6 +3851,17 @@ def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     locN s "i" ≤ locN s "nl" ∧
     (locN s "i" < locN s "nl" → StableCopyStorePre s)
 
+/-- A completed copy needs no further separation premise at the loop head. -/
+theorem stableCopyLoopInv_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s)
+    (hshape : ∃ i n : BitVec 64,
+      s.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+      s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (he : locN s "i" = locN s "nl") : StableCopyLoopInv s := by
+  refine ⟨hp, hshape, Nat.le_of_eq he, ?_⟩
+  intro hi
+  omega
+
 /-- Clock decrement preserves the separated store contract. -/
 theorem stableCopyStorePre_decClock {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyStorePre s) : StableCopyStorePre (decClockHOLFinite s) := by
