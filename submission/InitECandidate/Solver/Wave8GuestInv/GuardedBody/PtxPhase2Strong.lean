@@ -7001,7 +7001,7 @@ theorem phase2_packed_separated_of_copy_frame {F : Type}
     phase2_tx_header_world_frame s post S Nd _ _ 216 ha.2 hw ht
     (by decide) (by decide) hf htx' hz⟩
 
-/-- Concrete copy evaluation preserves the spatial invariant needed by a following copy. -/
+/-- A resuming copy preserves guarded indices and input separation for the following copy. -/
 theorem phase2_memcpy_eval_separated (h : PtxCallees) {F : Type}
     (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
