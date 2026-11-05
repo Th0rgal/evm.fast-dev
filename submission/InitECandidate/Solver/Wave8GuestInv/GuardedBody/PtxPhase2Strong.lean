@@ -219,6 +219,41 @@ theorem phase1_store_encSlot_shapes (off : Bool) :
   exact ⟨(R16Shards.PtxP1.store_encSlot off).run s hc hp.1 hnt hr,
     hs.run s hc hp.2 hnt hr⟩
 
+theorem phase1_chainGuard_keeps
+    (P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop) :
+    Hoare P R16Shards.PtxP1.chainGuard (fun r s => r = none → P s) := by
+  apply Hoare.ite
+  · apply Hoare.ite
+    · exact ⟨fun s _ _ _ hr => (R16Shards.PtxP1.raise_ne_none s _ _ hr).elim⟩
+    · exact Hoare.skip (fun _ hp _ => hp.1.1)
+    · exact fun _ _ hr => by cases hr
+  · exact Hoare.skip (fun _ hp _ => hp.1)
+  · exact fun _ _ hr => by cases hr
+
+theorem phase1_resume_chain_id_shapes (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => R16Shards.PtxP1.StageP 0 s ∧
+        (∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (fun s => R16Shards.PtxP1.StageP 0 s ∧
+        (∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (ofString "cid") (ofString "tx_chain_id") [.var .local (ofString "tx")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨R16Shards.PtxP1.resume_ro_stage h.ro_tx_chain_id (by decide) _
+    s vs body callee ret v post hc hp.1 ha hl hb, ?_, ?_⟩
+  · intro n hn
+    have hne : ofString "cid" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl <;> decide
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2.1 n hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "cid" ≠ ofString "enc" from by decide] using hp.2.2
+
 theorem phase1_resume_alloc_sender_shapes (h : PtxCallees) :
     DecCallResumeOn
       (fun s => R16Shards.PtxP1.StageP 0 s ∧
