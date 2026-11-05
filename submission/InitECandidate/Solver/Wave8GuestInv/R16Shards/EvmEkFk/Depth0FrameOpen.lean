@@ -4237,4 +4237,49 @@ theorem evmMsgReady_fresh_scratch {F : Type}
   · intro name hn
     exact (hglob name hn).symm
 
+/-- Runtime jump-destination computation preserves readiness and the chain,
+given its out-of-domain cell frame. -/
+theorem compute_jumpdests_evm_run_with_out_dom {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) (nw p f : BitVec 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p)))
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f)))
+    (hnb : nw.toNat < 2 ^ 40)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a →
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_compute_jumpdests)).2.memory a = s.memory a) :
+    InitECandidate.Solver.Wave8M19.Htab.Ret s
+      (sourceFnBody Guest.Software.guestFn_compute_jumpdests) (fun v post =>
+      ∃ q : BitVec 64, v = .val (.word q) ∧
+        EvmMsgReady post ∧ EvmStep ["scratch_ptr"] s post) := by
+  have hAs := hP.1
+  have hpn : globN s "scratch_ptr" = p.toNat := by simp [globN, hp]
+  have hfn : globN s "frame_mem_ptr" = f.toNat := by simp [globN, hf]
+  have hfp : f.toNat ≤ p.toNat := by
+    rw [← hpn, ← hfn]; exact hAs.2.2.2.2.1
+  intro v hv
+  obtain ⟨q, hval, hq, _, hlo, hhi, hg, _, hd, hm⟩ :=
+    compute_jumpdests_run s hAs.1.code hAs.1 nw p f hn hp hf hfp hnb v hv
+  let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_compute_jumpdests)).2
+  have hlow : globN s "frame_mem_ptr" ≤ q.toNat := by rw [hfn]; omega
+  have hhigh : q.toNat + (jdLen nw).toNat ≤ globN s "scratch_ptr" := by rwa [hpn]
+  have hq8 : q.toNat % 8 = 0 := by
+    rw [hq, and_neg8_toNat]
+    omega
+  have hApost : ArenaReady post := hb_arenaReady_update_scratch_ptr
+    (guestInv_evaluate s _ hAs.1) hAs.2 hg hlow
+    (by have := hAs.2.2.2.2.2.1; omega) hq8
+  have hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    have he : globN post "scratch_ptr" = q.toNat := by
+      unfold globN; rw [hg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    omega
+  have hglob : ∀ name : MlS, name ∉ (["scratch_ptr"] : List String).map ofString →
+      post.globals.lookup name = s.globals.lookup name := by
+    intro name hn
+    rw [hg]
+    simp only [List.map_cons, List.map_nil, List.mem_singleton] at hn
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hn]
+  obtain ⟨hr, hs⟩ := evmMsgReady_fresh_scratch hP hApost q.toNat (jdLen nw).toNat
+    hlow hhigh hm (InitECandidate.Solver.Wave8GuestInv.R16Shards.evaluate_be_eq s _) hd hout hglob hsp
+  exact ⟨q, hval, hr, hs⟩
+
 end HeadStore
