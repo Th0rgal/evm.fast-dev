@@ -5874,4 +5874,41 @@ theorem phase2_world_frame_heap_word {F : Type}
     dsimp at *
     omega
 
+/-- Arena-aware world framing preserves every live record count in an allocated array. -/
+theorem phase2_world_frame_heap_counts {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (old R : List Ivl) (base count : Nat)
+    (ha : ArenaOK s)
+    (hin : Inside (base, 24 * count) InitE.sourceBase (globN s "heap_ptr"))
+    (hf : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (ho : ∀ i, i < count → ∀ region ∈ old, ¬ CellHits (base + 24 * i + 16) region)
+    (hr : ∀ i, i < count → ∀ region ∈ R, ¬ CellHits (base + 24 * i + 16) region) :
+    ∀ i, i < count → memW post (base + 24 * i + 16) = memW s (base + 24 * i + 16) := by
+  intro i hi
+  apply phase2_world_frame_heap_word s post old R _ ha ?_ hf (ho i hi) (hr i hi)
+  unfold Inside at hin ⊢
+  dsimp at hin ⊢
+  constructor <;> omega
+
+/-- Reassemble packed readiness after a copy from its domain and world guarantees. -/
+theorem phase2_packed_ready_after_copy {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedKeysReady s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n))
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hd : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hw : ∃ S Nd, WorldTypedWith post S Nd ∧ TxAccessListAt post S Nd (locN post "tx") ∧
+      IvlsDisj [(locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned post S Nd)) : PtxPackedKeysReady post := by
+  have ha : locN post "al_keys" = locN s "al_keys" := by
+    simp [locN, hl "al_keys" (by simp)]
+  have hn : locN post "nkeys" = locN s "nkeys" := by
+    simp [locN, hl "nkeys" (by simp)]
+  refine ⟨?_, ?_, ?_, ?_, hw⟩
+  · simpa only [hl "al_keys" (by simp)] using hp.1
+  · rw [ha, hn]
+    exact ⟨hp.2.1.1, hp.2.1.2.trans hh⟩
+  · rw [ha]; exact hp.2.2.1
+  · rw [ha, hn]
+    exact phase2_packed_keys_words_frame s post _ _ hp.2.2.2.1 hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
