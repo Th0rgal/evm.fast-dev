@@ -4683,4 +4683,102 @@ theorem phase2_packed_key_byte_word {F : Type} {s : PanSemStateFiniteExact 64 F}
   rw [heq]
   exact hword
 
+/-- The concrete packed allocation shares a world witness with the input transaction. -/
+theorem phase2_packed_keys_alloc_world_joint (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+          (worldOwned s S Nd))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_address_count_alloc_size s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hready.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hready.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hready.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hav⟩ := hret v rfl
+  dsimp only at hav
+  rw [hcn] at hav
+  let out := setVarHOLFinite (ofString "al_keys") (.val (.word w)) { post with locals := s.locals }
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post out.locals post.clock hTp
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned post S' Nd')
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide] using hav
+
+/-- Packed-key allocation preserves a shared world/access-list witness. -/
+theorem phase2_packed_keys_alloc_world (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+          (worldOwned s S Nd))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_address_count_alloc_size s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hready.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hready.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hready.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hav⟩ := hret v rfl
+  dsimp only at hav
+  rw [hcn] at hav
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post
+      (setVarHOLFinite (ofString "al_keys") (.val (.word w)) { post with locals := s.locals }).locals
+      post.clock hTp
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN (setVarHOLFinite (ofString "al_keys") (.val (.word w))
+        { post with locals := s.locals }) "al_keys",
+        (locN (setVarHOLFinite (ofString "al_keys") (.val (.word w))
+          { post with locals := s.locals }) "nkeys" * 52 + 8 + 7) / 8 * 8)] (worldOwned post S' Nd')
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide] using hav
+
+/-- Both memcpy ranges in a packed key record have valid backing word cells. -/
+theorem phase2_packed_copy_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {base count k : Nat}
+    (hw : WordsOK s (base, (count * 52 + 8 + 7) / 8 * 8)) (hk : k < count) :
+    (∀ j, j < 20 → WordAt s ((base + 52 * k + j) / 8 * 8)) ∧
+    (∀ j, j < 32 → WordAt s ((base + 52 * k + 20 + j) / 8 * 8)) := by
+  constructor
+  · intro j hj
+    exact phase2_packed_key_byte_word hw hk (by omega)
+  · intro j hj
+    have h := phase2_packed_key_byte_word hw hk (offset := 20 + j) (by omega)
+    simpa only [Nat.add_assoc] using h
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
