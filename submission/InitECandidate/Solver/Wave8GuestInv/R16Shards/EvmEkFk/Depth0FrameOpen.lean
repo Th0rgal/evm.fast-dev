@@ -6318,4 +6318,39 @@ theorem ws_get_code_compare_return {F : Type} (s : PanSemStateFiniteExact 64 F)
     cases hw
     exact ⟨0, 0, rfl, by decide⟩
 
+/-- The concrete nonempty-hash lookup continuation of `ws_get_code`. -/
+def wsCodeLookupTail : ProgHOL 64 :=
+  .decCall (ofString "r") (.comb [.one, .one, .one]) (ofString "nodedb_lookup")
+    [.load .one (.op .add [.var .global (ofString "ws"), .const 16]),
+      .var .local (ofString "code_hash")]
+    (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+      (.raise (ofString "StateErr") (.const 2)) .skip)
+      (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+        .rfield 2 (.var .local (ofString "r"))])))
+
+theorem ws_get_code_body_eq :
+    sourceFnBody Guest.Software.guestFn_ws_get_code =
+      .decCall (ofString "eq") .one (ofString "memeq")
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32]
+        (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+          (.return (.rstruct [.const 0, .const 0])) .skip) wsCodeLookupTail) := by rfl
+
+/-- Full-body return composition, with the remaining nonempty lookup
+obligation exposed at the comparison's concrete resumed state. -/
+theorem ws_get_code_body_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcompare : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+        [.var .local (ofString "code_hash"), .var .global (ofString "empty_code_hash"), .const 32] = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "memeq") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      ∃ eqw : BitVec 64, v = .val (.word eqw) ∧
+        (eqw = 0 → Ret (setVarHOLFinite (ofString "eq") v {post with locals := s.locals}) wsCodeLookupTail
+          (fun v _ => ∃ code code_n : BitVec 64,
+            v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_ws_get_code)
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  rw [ws_get_code_body_eq]
+  exact ws_get_code_compare_return s _ wsCodeLookupTail hcompare
+
 end HeadStore
