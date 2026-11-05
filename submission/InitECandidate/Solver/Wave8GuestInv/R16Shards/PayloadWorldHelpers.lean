@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C07
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmHtabStep
 import InitECandidate.Solver.GuestTrapOutcomes
 import Mathlib.Data.Finset.Card
 import Mathlib.Order.Interval.Finset.Nat
@@ -78,9 +79,6 @@ theorem disj_of_inside_right {i j j' : Ivl} (hin : Inside j j'.1 (j'.1 + j'.2))
     (hd : Disj i j') : Disj i j :=
   (disj_of_inside_left hin hd.flip).flip
 
-def IvlUnhit {F : Type} (s post : PanSemStateFiniteExact 64 F) (i : Ivl) : Prop :=
-  ∀ a : BitVec 64, a.toNat % 8 = 0 → CellHits a.toNat i → post.memory a = s.memory a
-
 theorem not_cellHits_of_disj {a : Nat} {i j : Ivl}
     (hi1 : i.1 % 8 = 0) (hi2 : i.2 % 8 = 0) (ha8 : a % 8 = 0)
     (hj_zero : j.2 = 0 → j.1 % 8 = 0)
@@ -122,17 +120,6 @@ theorem ivlUnhit_of_single_cell_disj {F : Type} {s post : PanSemStateFiniteExact
   rintro rfl
   exact not_cellHits_of_disj (i := (a.toNat, 8)) ha8 (by omega) ha8 hi_zero
     (by unfold CellHits; omega) hd.flip hhit
-
-theorem memW_eq_of_ivlUnhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
-    {i : Ivl} (hu : IvlUnhit s post i) {a : Nat}
-    (ha8 : a % 8 = 0) (hhi : i.1 + i.2 ≤ 2 ^ 64) (hin : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) :
-    memW post a = memW s a := by
-  have ha_lt : a < 2 ^ 64 := by omega
-  have hmem := hu (BitVec.ofNat 64 a)
-    (by rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt]; exact ha8)
-    (by unfold CellHits; rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt]; omega)
-  unfold memW
-  rw [hmem]
 
 theorem memB_eq_of_ivlUnhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {i : Ivl} (hu : IvlUnhit s post i) (hbe : post.be = s.be)
