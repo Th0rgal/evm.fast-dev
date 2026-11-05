@@ -10734,4 +10734,41 @@ theorem logOwnedIvls_of_record_agree_g09 {F : Type}
   rw [h0, hrecord 8 (by simp), hrecord 16 (by simp),
     hrecord 24 (by simp), hrecord 32 (by simp), hsys]
 
+theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl} {Rl : List Ivl}
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (heff : ByteRegionEffect s post Rl)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hdisj : ∀ x ∈ Rl, ∀ i ∈ frameObjects s ec, Disj x i) :
+    ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let log := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
+      LogEntryOK post log ∧ logOwnedIvls post log = logOwnedIvls s log := by
+  intro i hi
+  have hlog_mem := logRecord_in_frameObjects_g09 hi
+  have hbound := frameObject_disj_fresh_heap_g09 hA.2 hA.2.2.1 hFW hlog_mem
+  have hlog_ok : LogEntryOK s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i)) := by
+    rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | hlogs
+    · have hlo := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.1
+      have hss : 0 < scratchStart := by decide
+      dsimp only at hlo
+      omega
+    · exact (hlogs.2.2.2.2 i hi).2
+  have hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) =
+        memW s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + k) := by
+    intro k hk
+    have hk_bounds : k + 8 ≤ 40 ∧ k % 8 = 0 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    have hhi : memW s (memW s (memW s (ec.1 + 88)) + 8 * i) + 40 ≤ 2 ^ 64 := by
+      have hheap_bound := hA.2.2.1
+      have hlog_inside := hlog_ok.2.1.2
+      have hlimit : heapLimit ≤ 2 ^ 64 := by decide
+      omega
+    exact memW_eq_of_frameDisj_g09 hA.1.2.1 heff hhi hlog_ok.1.1
+      hk_bounds.2 hk_bounds.1 (fun x hx => hdisj x hx _ hlog_mem)
+  exact ⟨logEntryOK_of_record_agree_g09 heff.memaddrs hheap hrecord hlog_ok,
+    logOwnedIvls_of_record_agree_g09 hsys hrecord⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
