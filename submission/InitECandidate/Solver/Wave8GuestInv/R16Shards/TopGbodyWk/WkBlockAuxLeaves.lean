@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkAcctWsBase
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
@@ -5653,5 +5654,112 @@ theorem wkSc_incorporate_tx_into_block_of_steps
       (by simp) (by simp) (progWStep_return [] [] _)
   intro F s hc hW _ hnt hres
   exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
+
+/-- A union into an ordinary world table preserves the world when its new
+footprint is confined to the old footprint and freshly allocated heap. -/
+theorem unionExit_worldStepSc_nonValue {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hW : WorldOK s) (hbe : post.be = s.be)
+    (ht : ∀ S, TablesTyped s S → locN s "dst" ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "dst") ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "dst") ∧
+      globN s "bal_accounts" ≠ locN s "dst" ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ locN s "dst") ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "dst"))
+    (hu : UnionExit s post)
+    (hprov : ∀ i ∈ htabFootprint post (locN s "dst"),
+      (∃ j ∈ htabFootprint s (locN s "dst"), Inside i j.1 (j.1 + j.2)) ∨
+      Inside i (globN s "heap_ptr")
+        (globN s "heap_ptr" + (globN post "heap_ptr" - globN s "heap_ptr"))) :
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post := by
+  obtain ⟨hA, hwf, hh0, _, hhp, halloc, hframe, hglobals⟩ := hu
+  have hstep := R16WkMarkAccountCreated.worldStep_of_htabExit_nonValue
+    (r := r) (gw := ["heap_ptr"]) hW hbe
+    hglobals hglobals ht hA hwf hh0 hhp
+    (fun i hi => ⟨halloc i hi, hprov i hi⟩) hframe
+  refine ⟨hstep, ?_⟩
+  have hs : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (hglobals (ofString "scratch_ptr") (by decide))
+  exact Nat.le_of_eq hs
+
+/-- Each of the five ordinary block tables used by the merge has a distinct
+world role, separate from the tables whose values carry further ownership. -/
+theorem merge_bs_table_role {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hT : TablesTyped s S) {k : Nat}
+    (hk : k ∈ [8, 16, 24, 40, 48]) (hbs : globN s "bs" ≠ 0)
+    (hnz : memW s (globN s "bs" + k) ≠ 0) :
+    memW s (globN s "bs" + k) ∈ S ∧
+    ∃ role : String, (memW s (globN s "bs" + k), role) ∈ worldRoleSlots s ∧
+      role ≠ "bs+32" ∧ role ≠ "ts+32" ∧ role ≠ "bal_accounts" ∧
+      role ≠ "bal.stor" ∧ role ≠ "ws+32" := by
+  have hslot : k ∈ bsTableSlots := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp [bsTableSlots]
+  have hmem : memW s (globN s "bs" + k) ∈ S := by
+    rcases hT.2.2.2.2.1 k hslot hbs with hz | hm
+    · exact absurd hz hnz
+    · exact hm
+  refine ⟨hmem, ?_⟩
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl | rfl | rfl | rfl
+  · refine ⟨"bs+8", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+16", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+24", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+40", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+48", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+
+/-- Ordinary merge destinations cannot alias any value-owning table. -/
+theorem merge_bs_table_nonValue {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hT : TablesTyped s S) {k : Nat}
+    (hk : k ∈ [8, 16, 24, 40, 48]) (hbs : globN s "bs" ≠ 0)
+    (hnz : memW s (globN s "bs" + k) ≠ 0) :
+    let t := memW s (globN s "bs" + k)
+    t ∈ S ∧ (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ t) ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ t) ∧
+      globN s "bal_accounts" ≠ t ∧ (∀ ad ∈ balRecords s, memW s ad ≠ t) ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ t) := by
+  obtain ⟨ht, role, hr, hb, hts, hba, hstor, hws⟩ := merge_bs_table_role hT hk hbs hnz
+  have hroles := hT.2.2.2.2.2.2.2.2.2.2.2
+  have hne : ∀ u label, (u, label) ∈ worldRoleSlots s → role ≠ label →
+      u ≠ memW s (globN s "bs" + k) := by
+    intro u label hu hlabel
+    exact (R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role hroles hr hu hlabel).symm
+  refine ⟨ht, ?_, ?_, ?_, ?_, ?_⟩
+  · intro hb0 heq
+    apply hne _ "bs+32" ?_ hb heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hb0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hb0]
+  · intro ht0 heq
+    apply hne _ "ts+32" ?_ hts heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ts" 32 _ ht0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, ht0]
+  · intro heq
+    apply hne _ "bal_accounts" ?_ hba heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    simp
+  · intro ad had heq
+    apply hne _ "bal.stor" ?_ hstor heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    apply List.mem_append.2; right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+  · intro hw0 heq
+    apply hne _ "ws+32" ?_ hws heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ws" 32 _ hw0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hw0]
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
