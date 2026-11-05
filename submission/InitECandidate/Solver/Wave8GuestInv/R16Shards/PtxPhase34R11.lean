@@ -4039,6 +4039,55 @@ theorem hoare_stableCopy_store_inv :
   rw [hinv.1.2.2.2.2.1] at harr
   exact stableCopyInv_after_store s mem' hinv hpost hi hwrite hm harr hs0 hd0
 
+/-- A separated concrete copy store preserves the full store contract at
+the old index, including its ownership witnesses. -/
+theorem hoare_stableCopy_store_pre :
+    Hoare StableCopyStorePre
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → StableCopyStorePre t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, hwrite, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  have hpost := stableCopyInv_store_post s mem' hinv hi S Nd hW ho hworld hh hd ha he hdom hm
+  have hlogs := hinv.1.2.1.resolve_left hinv.2.1
+  obtain ⟨hs0, hs8, _⟩ := stableCopyInv_header_unhit s mem' hinv hi _ hlogs.2.1 hlogs.1.1 hh hm
+  have hd0 := (stableCopyInv_header_unhit s mem' hinv hi _
+    hinv.2.2.2.1 hinv.2.2.1.1 hd hm).1
+  have ha' : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") := by
+    rw [hinv.1.2.2.2.2.1, hinv.1.2.2.2.1]; exact ha
+  have harr := stableCopyInv_source_preserved s mem' hinv hi ha' hm
+  rw [hinv.1.2.2.2.2.1] at harr
+  have hinv' := stableCopyInv_after_store s mem' hinv hpost hi hwrite hm harr hs0 hd0
+  obtain ⟨hW', howned, _⟩ := stableCopyInv_world_preserved s mem' hinv hi S Nd hW hworld hdom hm
+  have ho' := (stableCopyInv_logs_preserved s mem' hinv hi S Nd ho
+    hpost.1.1.1.1 howned hh ha he hm).2
+  refine ⟨hinv', hi, ⟨w, p, q, hw, hl, hq, hptr.trans hd0.symm⟩,
+    S, Nd, hW', ho', ?_, ?_, ?_, ?_, ?_⟩
+  · exact stable_copy_world_separation s mem' S Nd hd0 howned hworld
+  · change Disj (locN s "logs", 24)
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hd0]; exact hh
+  · change Disj (locN s "stable_logs", 24)
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hd0]; exact hd
+  · change Disj (memW {s with memory := mem'} (locN s "logs"),
+      8 * memW {s with memory := mem'} (locN s "logs" + 8))
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hs0, hs8, hd0]; exact ha
+  · apply stable_copy_record_separation s mem' hs0 hs8 hd0 _ he
+    intro j hj
+    apply harr j
+    rwa [hinv.1.2.2.2.1]
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
