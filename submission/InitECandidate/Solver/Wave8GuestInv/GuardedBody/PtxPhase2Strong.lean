@@ -9200,4 +9200,29 @@ theorem phase2_packed_nal_while {body : ProgHOL 64}
           (fun hlt => hz (hguard.mpr hlt))).2⟩
     · simp at he
 
+/-- Restore declaration scopes without losing the cached outer count. -/
+theorem phase2_packed_nal_iteration_with_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (hp : PtxPackedNalIteration s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k", "nal"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedNalIteration { s with locals := locals, clock := clock } := by
+  refine ⟨phase2_packed_outer_iteration_with_locals s locals clock hp.1 ?_, ?_, ?_⟩
+  · intro n hn
+    apply hl n
+    simp only [List.mem_cons, List.mem_singleton] at hn ⊢
+    tauto
+  · simpa only [hl "nal" (by simp)] using hp.2.1
+  · simpa only [locN, memW, hl "nal" (by simp), hl "tx" (by simp)] using hp.2.2
+
+/-- Scratch declarations preserve the cached outer count. -/
+theorem phase2_packed_nal_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedNalIteration s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k", "nal"] : List String),
+      ofString n ≠ name) :
+    PtxPackedNalIteration (setVarHOLFinite name v s) := by
+  apply phase2_packed_nal_iteration_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
