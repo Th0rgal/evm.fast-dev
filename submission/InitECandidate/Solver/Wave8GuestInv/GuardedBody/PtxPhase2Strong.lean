@@ -4487,4 +4487,24 @@ theorem phase2_storage_keys_input_separation {F : Type}
         (base, locN s "nkeys" * 32)) := by
   exact phase2_fresh_separation s post callee base _ hp.1.1.1.1 hf
 
+/-- Separation of the storage-key buffer applies to each individual copy destination. -/
+theorem phase2_storage_keys_slot_disjoint {base count k : Nat} {input : Ivl}
+    (hd : Disj input (base, count * 32)) (hk : k < count) :
+    Disj input (base + 32 * k, 32) := by
+  rcases hd with hz | hz | hleft | hright
+  · exact Or.inl hz
+  · dsimp at hz
+    omega
+  · exact Or.inr (Or.inr (Or.inl (by dsimp at hleft ⊢; omega)))
+  · exact Or.inr (Or.inr (Or.inr (by dsimp at hright ⊢; omega)))
+
+/-- A bounded packed-key destination has a nonwrapping machine address. -/
+theorem phase2_key_destination_nonwrapping (base count k : Nat) (hk : k < count)
+    (hb : base + (count * 52 + 8 + 7) / 8 * 8 ≤ 2 ^ 64) :
+    (BitVec.ofNat 64 (base + 52 * k)).toNat = base + 52 * k ∧
+    (BitVec.ofNat 64 (base + 52 * k + 20)).toNat = base + 52 * k + 20 := by
+  obtain ⟨_, hu⟩ := phase2_key_record_inside base count k hk
+  dsimp at hu
+  constructor <;> rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
