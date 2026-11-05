@@ -53,7 +53,84 @@ theorem «callees_process_message_call» : sameNames (progCallees (fnBody Guest.
 theorem «gbody_process_message_call» : GBody.«process_message_call» := by sorry
 
 
-/-- The body of `process_unchecked_system_transaction` alone (AST line 32851, guard `WorldOK`, loop-free). Its direct callees are
+/-! ### Strengthened entry guard for `process_unchecked_system_transaction` (wave8 cutover rehearsal)
+
+Hoisted from `R16Shards/TopGbodyWk/GbodySysTxExecBlock.lean` so that the ContractParts guard itself can be
+`SysTxReadyStrong` instead of `WorldOK`. -/
+
+/-- Entry parameters of `process_unchecked_system_transaction` (`target`, `data`, `data_n`, all `.one`)
+hold 1-word values. Guaranteed automatically by `lookupCodeHOLFinite` at every call site. -/
+def WordSysTxLocals {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (∃ w : BitVec 64, s.locals.lookup (ofString "target") = some (.val (.word w))) ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "data") = some (.val (.word w))) ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "data_n") = some (.val (.word w)))
+
+/-- Strengthened entry guard for `process_unchecked_system_transaction`: `WorldOK` together with
+1-word parameter locals (`vm_system_address` and `be` are already 1-word globals via `WorldOK → ArenaReady → GlobalsWord`). -/
+def SysTxReadyStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => WorldOK s ∧ WordSysTxLocals s
+
+theorem sysTxReadyStrong_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : SysTxReadyStrong s) : WorldOK s := h.1
+
+private theorem shapeEqHOL_one_iff_word {v : ValueHOL 64} :
+    shapeEqHOL .one (shapeOfHOLExact v) = true ↔ ∃ w : BitVec 64, v = .val (.word w) := by
+  rcases v with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+  · simp [shapeOfHOLExact, shapeEqHOL]
+  · simp [shapeOfHOLExact, shapeEqHOL]
+  · simp [shapeOfHOLExact, shapeEqHOL]
+
+/-- Any call to `process_unchecked_system_transaction` from a `WorldOK`-implying caller predicate `P`
+automatically satisfies `SysTxReadyStrong` at callee entry because `lookupCodeHOLFinite` checks that
+all three `.one` parameters receive 1-word values. -/
+theorem callEntryOn_sysTxReadyStrong
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hPW : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → WorldOK s)
+    (arguments : List (ExpHOL 64)) :
+    CallEntryOn P SysTxReadyStrong (ofString "process_unchecked_system_transaction") arguments := by
+  intro F state values body' callee ret' hcode hP _hargs hlook
+  refine ⟨localsFree_worldOK state callee (state.clock - 1) (hPW state hP), ?_⟩
+  have hfn : state.code.lookup (ofString "process_unchecked_system_transaction") =
+      some ([(ofString "target", .one), (ofString "data", .one), (ofString "data_n", .one)],
+        GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction, .one) := by
+    rw [hcode]; exact GuestTrapAndLookup.lookup_process_unchecked_system_transaction
+  unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hlook
+  split at hlook
+  · cases hlook
+  · rename_i exactBody exactLocals exactShape raw
+    have heq := Option.some.inj hlook
+    rcases Prod.mk.inj heq with ⟨rfl, hrest⟩
+    rcases Prod.mk.inj hrest with ⟨rfl, _⟩
+    unfold lookupCodeHOLExact at raw
+    rw [hfn] at raw
+    dsimp only at raw
+    split at raw
+    · rename_i hcond
+      have rawEq := Option.some.inj raw
+      rcases Prod.mk.inj rawEq with ⟨-, hrest2⟩
+      rcases Prod.mk.inj hrest2 with ⟨hloc, -⟩
+      subst hloc
+      obtain ⟨hnd, hlen, hsh⟩ := hcond
+      rcases values with _ | ⟨v1, _ | ⟨v2, _ | ⟨v3, _ | _⟩⟩⟩
+      · simp at hlen
+      · simp at hlen
+      · simp at hlen
+      · simp only [List.zip, List.zipWith_cons_cons, List.zipWith_nil_left,
+          List.all_cons, List.all_nil, Bool.and_true, Bool.and_eq_true] at hsh
+        obtain ⟨hsh1, hsh2, hsh3⟩ := hsh
+        obtain ⟨w1, rfl⟩ := shapeEqHOL_one_iff_word.1 hsh1
+        obtain ⟨w2, rfl⟩ := shapeEqHOL_one_iff_word.1 hsh2
+        obtain ⟨w3, rfl⟩ := shapeEqHOL_one_iff_word.1 hsh3
+        simp only [List.map_cons, List.map_nil, List.nodup_cons, List.mem_cons,
+          not_or, List.not_mem_nil, or_false] at hnd
+        refine ⟨⟨w1, ?_⟩, ⟨w2, ?_⟩, ⟨w3, ?_⟩⟩
+        · simp [callEntryStateHOLFinite, List.zip, List.foldl, hnd.1.1, hnd.1.2]
+        · simp [callEntryStateHOLFinite, List.zip, List.foldl, hnd.2.1]
+        · simp [callEntryStateHOLFinite, List.zip, List.foldl]
+      · simp at hlen
+    · cases raw
+
+/-- The body of `process_unchecked_system_transaction` alone (AST line 32851, guard `SysTxReadyStrong`, loop-free). Its direct callees are
 exactly `alloc`, `ext_code_of`, `frame_mem_release`, `htab_new`, `incorporate_tx_into_block`, `memcpy`, `msg_new`, `process_message_call`, `scratch_release`, `state_fresh_tx`, `te_new` (`«callees_process_unchecked_system_transaction»`, checked against the AST). Hypotheses: the bound
 of each of these 11 callees, then the contract of each callee at a guard-carrying
 call site (8: `wk_ext_code_of`, `htab_new_spec`, `wk_msg_new`, `rt_msg_new`, `wk_process_message_call`, `wk_state_fresh_tx`, `wk_te_new`, `rt_te_new`). Nothing else is assumed. -/
@@ -96,7 +173,7 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (Returns ArenaReady (fun s post m => FreshBlock s post m 200 ∧
       ∀ k, k < 25 → memW post (m + 8 * k) = 0)
     (ofString "te_new")) →
-  TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction»
+  TerminatingFunBoundedOn SysTxReadyStrong (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction»
 
 /-- The direct callees of `process_unchecked_system_transaction`, read off its AST body (revision 6). -/
 theorem «callees_process_unchecked_system_transaction» : sameNames (progCallees (fnBody Guest.Software.guestFn_process_unchecked_system_transaction))
@@ -112,7 +189,7 @@ call site (3: `wk_alloc`, `wk_ext_code_of`, `wk_state_fresh_tx`). Nothing else i
 def GBody.«process_checked_system_transaction» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
   (TerminatingFunBoundedOn GuestInv (ofString "ext_code_of") K.«ext_code_of») →
-  (TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
+  (TerminatingFunBoundedOn SysTxReadyStrong (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr"]
@@ -160,7 +237,7 @@ theorem «gbody_process_checked_system_transaction» : GBody.«process_checked_s
         (TerminatingProgBoundedOn.seq_hoare (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
         (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (Hoare.ite_raise_skip _ _ _)
           (TerminatingProgBoundedOn.decCall_on hal _ _ _ (callEntryOn_of_imp localsFree_guestInv worldOK_guestInv _ _) (KeepsOn.resumeOn localsFree_worldOK (WorldKeeps.keepsOn wal) _ _)
-            (TerminatingProgBoundedOn.decCall_on hpu _ _ _ (callEntryOn_of_localsFree localsFree_worldOK _ _)
+            (TerminatingProgBoundedOn.decCall_on hpu _ _ _ (callEntryOn_sysTxReadyStrong (fun _ h => h) _)
               (decCallResumeOn_guestInv worldOK_guestInv _ _ _)
               (TerminatingProgBoundedOn.seq_guestInv (TerminatingProgBoundedOn.ite_on (TerminatingProgBoundedOn.of_clock (fun s => clock_raise s _ _))
         (TerminatingProgBoundedOn.of_clock (fun s => clock_skip s))) (TerminatingProgBoundedOn.of_clock (fun s => clock_return s _)))))))) ?_

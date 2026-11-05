@@ -71,6 +71,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.EkWarmStorageKey
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockTxProcess
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodySysTxExecBlock
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.ValidVersionedHashes
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.DecodeStep
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure
@@ -415,7 +416,7 @@ theorem primitives : Primitives where
   «wk_state_fresh_tx» := R16Shards.WkBal.wk_state_fresh_tx
   «wk_te_new» := R13Wk06b.«wk_te_new»
   «rt_te_new» := Merged.rt_te_new
-  «gbody_process_unchecked_system_transaction» := «gbody_process_unchecked_system_transaction»
+  «gbody_process_unchecked_system_transaction» := R16Shards.TopGbodyWk.gbody_process_unchecked_system_transaction_strong
   «fb_extract_deposit_data» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_extract_deposit_data»
   «fb_requests_append» := Merged.fb_requests_append
   «wk_extract_deposit_data» := Merged.wk_extract_deposit_data

@@ -228,7 +228,7 @@ def GBody.«execute_block» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
   (TerminatingFunBoundedOn ReqsFresh (ofString "process_general_purpose_requests") K.«process_general_purpose_requests») →
   (TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction") K.«process_transaction») →
-  (TerminatingFunBoundedOn WorldOK (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
+  (TerminatingFunBoundedOn SysTxReadyStrong (ofString "process_unchecked_system_transaction") K.«process_unchecked_system_transaction») →
   (TerminatingFunBoundedOn WorldOK (ofString "process_withdrawals") K.«process_withdrawals») →
   (TerminatingFunBoundedOn GuestInv (ofString "state_fresh_tx") K.«state_fresh_tx») →
   (TerminatingFunBoundedOn GuestInv (ofString "track_ancestor_access") K.«track_ancestor_access») →
