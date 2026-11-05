@@ -11459,4 +11459,45 @@ theorem lst_push_growth_alloc_copy_exact_g09 {F : Type}
     (by simp [hne16]) hne8
   exact hres
 
+/-- In a well-formed growing log list, all size computations are non-wrapping,
+the doubled capacity accommodates the increment, and the insertion slot fits
+inside the allocation. -/
+theorem log_growth_word_bounds_g09 {n cap p q : BitVec 64}
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat) :
+    n = cap ∧
+    (cap * 2#64).toNat = cap.toNat * 2 ∧
+    (8#64 * cap * 2#64).toNat = 16 * cap.toNat ∧
+    (8#64 * n).toNat = 8 * n.toNat ∧
+    (n + 1#64).toNat = n.toNat + 1 ∧
+    n.toNat + 1 ≤ (cap * 2#64).toNat ∧
+    (8#64 * n).toNat % 8 = 0 ∧
+    (8#64 * n).toNat + 32 < 2 ^ 63 ∧
+    p.toNat + (8#64 * n).toNat + 8 ≤ q.toNat ∧
+    p.toNat + (8#64 * n).toNat ≤ 2 ^ 64 := by
+  have hnc : n = cap := BitVec.eq_of_toNat_eq (by omega)
+  subst n
+  have h2 : (cap * 2#64).toNat = cap.toNat * 2 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have h8 : (8#64 * cap).toNat = 8 * cap.toNat := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have h16 : (8#64 * cap * 2#64).toNat = 16 * cap.toNat := by
+    rw [BitVec.toNat_mul, h8]; simp only [BitVec.toNat_ofNat]
+    rw [Nat.mod_eq_of_lt (by omega)]
+    omega
+  have h1 : (cap + 1#64).toNat = cap.toNat + 1 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hq := q.isLt
+  rw [h16] at hfit
+  refine ⟨rfl, h2, h16, h8, h1, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [h2]; omega
+  · rw [h8]; omega
+  · rw [h8]; omega
+  · rw [h8]; omega
+  · rw [h8]; omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
