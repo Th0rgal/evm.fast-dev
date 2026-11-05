@@ -1,7 +1,8 @@
 import InitECandidate.Solver.Wave8GuestInv.ContractParts.C12
-import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Core
+import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_CsrLoops
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet_Memory
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -24,11 +25,10 @@ open InitECandidate.Solver.UniformSourceClock
 open InitECandidate.Solver.PanTerminatingBounded
 open InitECandidate.Solver.PanRunBounded
 open InitECandidate.Solver.Wave8GuestInv
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase1
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.Phase2
-open InitECandidate.Solver.Wave8GuestInv.GuardedBody.R10.FastPhase5
+open InitECandidate.Solver.Wave8GuestInv.P3Csr
 open InitECandidate.Solver.Wave8GuestInv.P3MptSet
 open InitECandidate.Solver.Wave8GuestInv.R10Shards.P26_P28
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
 open InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
 open InitECandidate.Solver.Wave8GuestInv.R16Rlp
 
@@ -724,7 +724,7 @@ theorem mptObjInWith_disj_buffer_csr {F : Type} {s : PanSemStateFiniteExact 64 F
     exact List.mem_append.mpr (Or.inl (List.mem_append.mpr
       (Or.inl (List.mem_append.mpr
         (Or.inl (List.mem_map.mpr ⟨gn, hg, rfl⟩))))))
-  apply disj_symm
+  apply Disj.flip
   rcases List.mem_cons.mp ho with rfl | ho
   · exact hm.2.2.2.1 _ hb
   · exact (hm.2.2.2.2.2.2 o ho).2.2 _ hb
@@ -834,7 +834,7 @@ theorem ivlsDisj_ownedGrows_csr {F : Type} {s post : PanSemStateFiniteExact 64 F
   · rcases hg j hj with rfl | ⟨i, hi, hin⟩ | hin
     · exact Or.inr (Or.inl rfl)
     · exact R10Shards.P26_P28.disj_of_inside_right hin (hd o ho i hi)
-    · exact disj_symm (disj_allocated_fresh_heap hs hp (ha o ho hz) hin)
+    · exact (disj_allocated_fresh_heap hs hp (ha o ho hz) hin).flip
 
 theorem nodeHeap_extents_congr_unhit_csr {F : Type}
     {s post : PanSemStateFiniteExact 64 F}
@@ -977,5 +977,111 @@ theorem worldStep_liveMpt_of_separated_csr {F : Type}
   obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hstep.1 hbe hag
     hm hd hg hfr hsep hfa hf
   exact ⟨S', Nd', hsub, hW', hm', hd', heq, hQ⟩
+
+theorem htab_frame_liveMpt_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S S' Nd Nd' Nm : List Nat} {t m : Nat}
+    (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (hp : ArenaReady post) (hW' : WorldTypedWith post S' Nd')
+    (hog : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hbe : post.be = s.be)
+    (hg : ∀ name : MlS, name ∉ (["heap_ptr"] : List String).map ofString →
+      s.globals.lookup name = post.globals.lookup name)
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd)) :
+    WorldTypedWith post S' Nd' ∧
+      MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m := by
+  have hag : AllocatorGrows s post := by
+    refine ⟨hhp, ?_⟩
+    rw [R10Shards.P26_P28.globN_eq_of_lookup (hg (ofString "scratch_ptr") (by decide))]
+  have hfa : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have hs8 := hs.2.2.2.2.2.2.1
+    have hp8 := hp.2.2.2.2.2.2.1
+    exact ⟨hs8, by omega⟩
+  have hdis : IvlsDisj (mptObjIvls s Nm m)
+      [(globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")] := by
+    intro o ho j hj
+    obtain rfl := List.mem_singleton.mp hj
+    by_cases hz : o.2 = 0
+    · exact Or.inl hz
+    · exact (disj_allocated_fresh_heap hs.2 hp.2
+        (mptObjInWith_allocated_csr hm o ho hz) ⟨le_rfl, by dsimp; omega⟩).flip
+  obtain ⟨hm', hd', heq⟩ := mptObjInWith_transfer_frame_csr hs hp hbe hag hm hd hog hfr
+    (fun o ho hnz j hj => Or.inl
+      ⟨((hW.1.2.1 t ht).1.1 j hj).2.1,
+       ((hW.1.2.1 t ht).1.1 j hj).2.2.1,
+       mptObjInWith_disj_world_csr hm hd o ho j
+         (List.mem_append.mpr (Or.inl (List.mem_append.mpr
+           (Or.inl (List.mem_flatMap.mpr ⟨t, ht, hj⟩)))))⟩)
+    hfa hdis
+  exact ⟨hW', hm', hd', heq⟩
+
+theorem htabNewExit_local_table_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    (hs : ArenaReady s) {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hbe : post.be = s.be)
+    (hexit : HtabNewExit s (some (.returned v)) post) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ArenaReady post ∧ AllocatorGrows s post ∧
+      w.toNat ∉ S ∧ w.toNat ≠ 0 ∧
+      hdr post w.toNat 0 = locN s "key_len" ∧
+      hdr post w.toNat 3 = 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ w.toNat) ∧
+      WorldTypedWith post (S ++ [w.toNat]) Nd ∧
+      worldRoleSlots post = worldRoleSlots s ∧
+      journalRoleSlots post = journalRoleSlots s ∧
+      (∀ u ∈ S, hdr post u 0 = hdr s u 0) ∧
+      GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧
+      FrameOutside s post
+        [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+  obtain ⟨w, hv, hp, hag, hwf, hc3, hc0, hfp, hfr, hg⟩ := hexit v rfl
+  obtain ⟨hnotS, hnz, hlocal, hW', hwrs, hjr, hhdr, _⟩ :=
+    worldTypedWith_htab_new hs hW hp hag hwf hfp hfr hbe hg
+  exact ⟨w, hv, hp, hag, hnotS, hnz, hc0, hc3, hlocal, hW', hwrs, hjr, hhdr, hg, hfr⟩
+
+theorem htabCopy_local_table_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    {S Nd : List Nat} {keep : List (String × List Nat)}
+    (hs : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (harg : HtabWF s (locN s "t") ∧
+      ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+    (hstep : WorldStep (fun _ => []) ["heap_ptr"] keep
+      (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+        (fun _ post w => htabFootprint post w)) s (some (.returned v)) post)
+    (hret : RetWord (fun s post n => ArenaReady post ∧ AllocatorGrows s post ∧
+      locN s "t" ≠ 0 ∧
+      (HtabWF s (locN s "t") →
+        (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
+        HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
+        ∀ i ∈ htabFootprint post n,
+          Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
+      s (some (.returned v)) post) :
+    ∃ (w : BitVec 64) (S' Nd' : List Nat), v = .val (.word w) ∧
+      (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post (S' ++ [w.toNat]) Nd' ∧
+      w.toNat ∉ S' ∧ w.toNat ≠ 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ w.toNat) ∧
+      hdr post w.toNat 3 = hdr s (locN s "t") 3 := by
+  obtain ⟨S', Nd', hsub, hW', _, _, havoid⟩ :=
+    hstep.2.2.2.2 S Nd hW (by intro i hi; simp at hi)
+  obtain ⟨w, hv, hp, _, _, hcopy⟩ := hret v rfl
+  obtain ⟨hwf, hc3, hfp⟩ := hcopy harg.1 harg.2
+  obtain ⟨wa, hva, hdis⟩ := havoid harg v rfl
+  have heq : wa = w := by simpa using hva.symm.trans hv
+  subst wa
+  have halloc : ∀ i ∈ htabFootprint post w.toNat, Allocated post i := by
+    intro i hi
+    have hin := hfp i hi
+    exact Or.inl ⟨Nat.le_trans hs.2.1 hin.1, hin.2⟩
+  obtain ⟨hnot, hnz, hlocal, hjoin⟩ := adjoin_local_table hW' hwf
+    (fun i hi => ⟨halloc i hi, hdis i hi⟩) (klen := hdr post w.toNat 0) rfl
+  exact ⟨w, S', Nd', hv, hsub, hjoin, hnot, hnz, hlocal, hc3⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
