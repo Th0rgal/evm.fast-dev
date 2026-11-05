@@ -6698,4 +6698,34 @@ theorem phase2_packed_copy_restore_indices {F : Type}
     rw [hh.1]
     exact hm i hi
 
+/-- The concrete copy metadata contracts restore the guarded caller indices. -/
+theorem phase2_memcpy_eval_guarded (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (ht : TxAccessListAt (callEntryStateHOLFinite s callee) S Nd (locN s "tx"))
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (htx : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n")
+    (hindex : PtxPackedCopyIndex s)
+    (hready : PtxPackedKeysReady { post with locals := s.locals }) :
+    PtxPackedCopyIndex { post with locals := s.locals } := by
+  apply phase2_packed_copy_metadata_frame s _ hindex hready (fun _ _ => rfl)
+  · exact phase2_memcpy_eval_headers h s post vs body callee ret r S Nd (locN s "tx")
+      hc hl he hn hr hp ha hw ht hd htx hlen
+  · exact phase2_memcpy_eval_counts h s post vs body callee ret r S Nd (locN s "tx")
+      hc hl he hn hr hp ha hw ht hd hrec hlen
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
