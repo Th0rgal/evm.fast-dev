@@ -511,7 +511,7 @@ theorem primitives : Primitives where
   «fb_validate_header» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_header»
   «fb_validate_headers» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_headers»
   «ro_check_gas_limit» := R10Ports.ro_check_gas_limit
-  «wk_header_hash» := «wk_header_hash»
+  «wk_header_hash» := R16Shards.HeaderHashRecover.«wk_header_hash_inside»
   «wk_is_valid_versioned_hashes» := R16Shards.HeaderHashRecover.«wk_is_valid_versioned_hashes»
   «wk_nodedb_build» := «wk_nodedb_build»
   «wk_payload_header» := «wk_payload_header»
