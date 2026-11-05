@@ -10850,4 +10850,56 @@ theorem hoare_logSlot_store_txBacking :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- The typed log-copy guard and backing frame ignore temporary locals. -/
+theorem localsOnly_phase4TypedLogPointers_backing :
+    LocalsOnly ["index", "out", "logs", "rc", "nl", "lp"]
+      (fun s => Phase4TypedLogPointers s ∧ TxBacking s) := by
+  intro F s locals k hl hp
+  exact ⟨localsOnly_phase4TypedLogPointers s locals k hl hp.1, hp.2⟩
+
+/-- A backing-preserving push resume lifts through the concrete log-copy body. -/
+theorem hoare_phase4LogCopyBody_backing
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare (fun s => Phase4TypedLogPointers s ∧ TxBacking s) phase4LogCopyBody
+      (fun r t => r = none → Phase4TypedLogPointers t ∧ TxBacking t) := by
+  apply Hoare.decCall_fall (R := fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+    (by decide) localsOnly_phase4TypedLogPointers_backing hresume
+  apply Hoare.seq_fall (R := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+  · exact ⟨fun s hc hp hnt hr =>
+      ⟨(hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word).run s hc hp.1 hnt hr,
+        hoare_logSlot_store_txBacking.run s hc ⟨hp.1.1, hp.2⟩ hnt hr⟩⟩
+  · apply Hoare.assign
+    · intro F s v hp _ _
+      exact LocalsOnly.setVar localsOnly_phase4TypedLogPointers_backing (by decide) v s hp
+    · intro F s _ hr
+      cases hr
+
+/-- The full log-copy loop retains backing given its push-resume contract. -/
+theorem hoare_phase4LogCopyLoop_backing
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody)
+      (fun r t => r = none → Phase4TypedLogPointers t ∧ TxBacking t) := by
+  exact hoare_while_less_localsOnly localsOnly_phase4TypedLogPointers_backing _ _
+    (hoare_phase4LogCopyBody_backing hresume)
+    (by unfold phase4LogCopyBody; ptx_incr) (by decide)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
