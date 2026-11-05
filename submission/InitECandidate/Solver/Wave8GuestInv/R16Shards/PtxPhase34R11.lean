@@ -5515,6 +5515,34 @@ theorem lst_new_stable_joint_owned (h : PtxCallees) {F : Type}
   obtain ⟨w, hv, hd⟩ := hQ hargs.2.2.2 v rfl
   exact ⟨w, hv, S, Nd, hW, hO, fun o ho => hd _ (by simp) o ho⟩
 
+/-- Allocation establishes the full precondition for the stable length write,
+given the caller's word-shaped length operand. -/
+theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    StableLengthPre (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) := by
+  obtain ⟨hstorage, halloc, hword, hnword⟩ :=
+    lst_new_stable_length_operands h s vs body callee ret v post hc hp hn ha hl hr
+  obtain ⟨hh, hb⟩ := lst_new_stable_resumed_header_separation h s vs body callee ret v post hc hp ha hl hr
+  have he := lst_new_stable_resumed_record_separation h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨w, rfl, S, Nd, hW, hO, hdisj⟩ := lst_new_stable_joint_owned h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hstorage, halloc, hword, hnword, S, Nd, ?_, ?_, ?_, hh, hb, he⟩
+  · exact (R13Shards.worldTypedWith_with_locals post _ post.clock S Nd).mpr hW
+  · change LogsLiveOwned post S Nd _
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
+  · change ∀ o ∈ worldOwned post S Nd, Disj _ o
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hdisj
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
