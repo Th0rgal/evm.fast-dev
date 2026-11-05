@@ -5921,4 +5921,21 @@ theorem htab_union_into_no_catchable_exn {F : Type} (s : PanSemStateFiniteExact 
   evaluate_noCatchableRaise unionTrapCallees unionTrapCallees_good
     (sourceFnBody Guest.Software.guestFn_htab_union_into) (by decide) s hcode e v hne
 
+/-- The ordinary block-table union frame also covers all resumable exits. -/
+theorem wkSc_htab_union_into_bs :
+    WorldKeepsSc (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
+      globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k) ∧
+      locN s "dst" ≠ 0)
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := htab_union_into_bs_world_spec
+  have hbody : body = sourceFnBody Guest.Software.guestFn_htab_union_into := by
+    rw [HtabUnionInto.lookup_htab_union_into] at hl
+    exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj hl)).2).1.symm
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  rcases hres with ⟨v, hv⟩ | ⟨e, v, he, hne⟩
+  · exact hb s hc hP hex hnt v hv
+  · exfalso
+    exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
