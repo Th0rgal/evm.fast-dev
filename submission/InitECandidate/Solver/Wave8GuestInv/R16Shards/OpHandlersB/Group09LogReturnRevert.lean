@@ -12330,8 +12330,10 @@ surviving ancestors, so unchanged suspended objects preserve every mark. -/
 theorem marksOK_of_head_log_growth_g09 {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
     (hmarks : MarksOK s S (evmChain s))
-    (hfields : ∀ ec ∈ evmChain s, ∀ k, memW post (ec.1 + k) = memW s (ec.1 + k))
-    (hcont : ∀ ec ∈ evmChain s, ∀ k, memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
     (hfixed : fixedObjects post = fixedObjects s)
     (hrefs : worldTableRefs post S = worldTableRefs s S)
     (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
@@ -12341,7 +12343,8 @@ theorem marksOK_of_head_log_growth_g09 {F : Type}
   have hscratch : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
     intro ec hec
     unfold frameScratch
-    rw [hfields ec hec 8, hfields ec hec 232, hfields ec hec 88]
+    rw [hfields ec hec 8 (by omega) (by omega),
+      hfields ec hec 232 (by omega) (by omega), hfields ec hec 88 (by omega) (by omega)]
   have hdel : ∀ i t, DelExclusive post S (evmChain s) i t ↔
       DelExclusive s S (evmChain s) i t := by
     intro i t
@@ -12349,16 +12352,20 @@ theorem marksOK_of_head_log_growth_g09 {F : Type}
     rw [hrefs]
     refine and_congr Iff.rfl (forall_congr' fun j => forall_congr' fun hj =>
       forall_congr' fun k => imp_congr_right fun _ => ?_)
-    rw [hfields _ (List.getElem_mem hj) k]
+    have hk : k + 8 ≤ 280 ∧ k % 8 = 0 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at ‹k ∈ [136, 168, 176]›
+      rcases ‹k = 136 ∨ k = 168 ∨ k = 176› with rfl | rfl | rfl <;> omega
+    rw [hfields _ (List.getElem_mem hj) k hk.1 hk.2]
   intro i hi
   have himem : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
   have htake : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
       ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
     apply List.map_congr_left
     intro ec hec
-    exact hfields ec (List.mem_of_mem_take hec) 136
+    exact hfields ec (List.mem_of_mem_take hec) 136 (by omega) (by omega)
   dsimp only
-  rw [hcont _ himem 48, hcont _ himem 56, hfields _ himem 24,
+  rw [hcont _ himem 48 (by omega) (by omega), hcont _ himem 56 (by omega) (by omega),
+    hfields _ himem 24 (by omega) (by omega),
     hscratch _ himem, hfixed, htake]
   obtain ⟨m1, m2, m3, m4, m5, m6, m7, m8, m9⟩ := hmarks i hi
   refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, m9⟩
@@ -12373,10 +12380,78 @@ theorem marksOK_of_head_log_growth_g09 {F : Type}
         congr 1
         omega
       exact he ▸ List.getElem_mem ht
-    rw [hscratch _ hjmem, hobjects _ hjtail, hlogs _ hjtail, hfields _ hjmem 112]
+    rw [hscratch _ hjmem, hobjects _ hjtail, hlogs _ hjtail,
+      hfields _ hjmem 112 (by omega) (by omega)]
     exact m5 j hj hij
   · intro t ht
     rw [hfoot t ht, hdel i t]
     exact m8 t ht
+
+/-- Reconstruct the complete exposed EVM invariant after active-frame log growth.
+Frame records and world references are unchanged; only the active log objects
+need new well-formedness and separation proofs. -/
+theorem evmInvAt_of_head_log_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hinv : EvmInvAt s S)
+    (hworld : WorldTyped post S)
+    (hchain : evmChain post = evmChain s)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hseparation : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects post ec,
+      (∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj o i) ∧
+        ∀ j ∈ fixedObjects post, Disj o j)
+    (htries : AvoidsTries post S ((evmChain post).map (frameObjects post)).flatten)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hrefs : worldTableRefs post S = worldTableRefs s S)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec)
+    (hworldRoles : worldRoleSlots post = worldRoleSlots s)
+    (hjournalRoles : journalRoleSlots post = journalRoleSlots s)
+    (hkind : ∀ t ∈ S, memW post t = memW s t) :
+    EvmInvAt post S := by
+  obtain ⟨_, hne, hlength, hlast, _, hroom, hwindows, _, _, _, hmarks, hroles, hgas⟩ := hinv
+  have hframeRoles : frameRoleSlots post (evmChain s) = frameRoleSlots s (evmChain s) := by
+    unfold frameRoleSlots
+    apply List.flatMap_congr
+    intro ec hec
+    rw [hfields ec hec 136 (by omega) (by omega), hfields ec hec 168 (by omega) (by omega),
+      hfields ec hec 176 (by omega) (by omega)]
+  refine ⟨hworld, ?_⟩
+  dsimp only
+  rw [hchain]
+  refine ⟨hne, hlength, ?_, hframes, ?_, ?_, ?_, hseparation, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨ec, hec, hk⟩ := hlast
+    exact ⟨ec, hec, by rw [hcont ec (List.mem_of_mem_getLast? hec) 16 (by omega) (by omega)]; exact hk⟩
+  · intro ec hec
+    unfold FrameRoom
+    rw [hfields ec (List.mem_of_mem_tail hec) 16 (by omega) (by omega),
+      hfields ec (List.mem_of_mem_tail hec) 232 (by omega) (by omega)]
+    exact hroom ec hec
+  · intro i hi
+    rw [hcont _ (List.getElem_mem (by omega)) 80 (by omega) (by omega),
+      hcont _ (List.getElem_mem (by omega)) 72 (by omega) (by omega),
+      hfields _ (List.getElem_mem (by omega)) 40 (by omega) (by omega)]
+    exact hwindows i hi
+  · simpa only [hchain] using hpairwise
+  · simpa only [hchain] using htries
+  · exact marksOK_of_head_log_growth_g09 hmarks hfields hcont hfixed hrefs hfoot hobjects hlogs
+  · rw [hworldRoles, hjournalRoles, hframeRoles]
+    unfold RolesOK at hroles ⊢
+    refine ⟨?_, hroles.2⟩
+    intro a ha
+    obtain ⟨haS, haKind⟩ := hroles.1 a ha
+    exact ⟨haS, by simpa only [hdr, Nat.mul_zero, Nat.add_zero, hkind a.1 haS] using haKind⟩
+  · have hsum : (evmChain s).map (fun ec => memW post (ec.1 + 64) + memW post (ec.1 + 192)) =
+        (evmChain s).map (fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)) := by
+      apply List.map_congr_left
+      intro ec hec
+      rw [hfields ec hec 64 (by omega) (by omega), hfields ec hec 192 (by omega) (by omega)]
+    rw [hsum]
+    exact hgas
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
