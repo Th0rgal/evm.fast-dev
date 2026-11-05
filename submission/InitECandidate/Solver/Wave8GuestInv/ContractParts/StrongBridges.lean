@@ -42,6 +42,22 @@ theorem finish_child_memory_strong
     R16Shards.OpHandlersB.HeadMemBridge.FinishChildMemSpec :=
   R16Shards.OpHandlersB.HeadMemBridge.finishChildMemSpec_of_leaf h
 
+/-- Frame-start preservation expressed in the finish-child chain vocabulary. -/
+theorem frame_start_aligned_strong
+    (h : R16Shards.EvmEkFkPrologue.FramePrologueCalleeSpecs) :
+    FunSpec (fun s => EvmInv s ∧ R16Shards.EvmEkFk.HeadMemChainWF s)
+      (fun s r post => InitECandidate.Solver.Wave8Contracts.M23.Resumes r →
+        InitECandidate.Solver.Wave8Contracts.M23.EvmStep
+          R16Shards.EvmEkFkPrologue.frameStartGw s post ∧
+        R16Shards.EvmEkFk.HeadMemChainWF post)
+      (ofString "frame_start") := by
+  obtain ⟨ps, body, rt, hl, hr⟩ :=
+    R16Shards.EvmEkFkPrologue.frame_start_aligned_evmInv_of_callees h
+  refine ⟨ps, body, rt, hl, fun s hc hs hex hnt hres => ?_⟩
+  obtain ⟨hstep, hchain⟩ := hr s hc
+    ⟨hs.1, (frame_chain_wf_iff s).mpr hs.2⟩ hex hnt hres
+  exact ⟨hstep, (frame_chain_wf_iff _).mp hchain⟩
+
 theorem op_mstore_aligned_spec :
     FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
       OpDispatchSpec.OpDispatchPost (ofString "op_mstore") :=
