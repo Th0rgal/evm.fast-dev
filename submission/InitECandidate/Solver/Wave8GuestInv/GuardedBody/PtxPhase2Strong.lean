@@ -10165,4 +10165,46 @@ theorem phase2_packed_ns_nal_while_bound {body : ProgHOL 64} {B : Nat}
     rw [hmod] at *
     omega
 
+/-- Each concrete memcpy is bounded from the packed-copy world invariant. -/
+theorem phase2_packed_ns_nal_memcpy_bound (h : PtxCallees) (args : List (ExpHOL 64)) :
+    TerminatingProgBoundedOn PtxPackedNsNalCopy
+      (.call (some (none, none)) (ofString "memcpy") args) (K.memcpy + 1) := by
+  apply TerminatingProgBoundedOn.call_on h.fb_memcpy
+  intro F s vs body callee ret hc hp ha hl
+  exact guestInv_callEntry s callee (worldOK_guestInv s hp.1.1.1)
+
+/-- Two copies and the two clock-neutral counter assignments give the exact
+active inner-body budget used by the source Phase 2 cost. -/
+theorem phase2_packed_ns_nal_body_bound (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    TerminatingProgBoundedOn PtxPackedNsNalCopy
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      ((K.memcpy + 1) + (K.memcpy + 1)) := by
+  have hc : TerminatingProgBoundedOn PtxPackedNsNalCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))) 0 := by
+    intro F s hcode hp hn
+    have he := phase2_clock_seq
+      (fun t => clock_assign t .local (ofString "k")
+        (.op .add [.var .local (ofString "k"), .const 1]))
+      (fun t => clock_assign t .local (ofString "j")
+        (.op .add [.var .local (ofString "j"), .const 1])) s
+    rw [he]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hcode hp
+  simpa only [Nat.add_zero] using seq_bound_trans
+    (phase2_packed_ns_nal_memcpy_bound h _) (phase2_packed_address_copy_ns_nal_hoare h addressSrc)
+    (fun t ht hpt => seq_bound_trans (phase2_packed_ns_nal_memcpy_bound h _)
+      (phase2_packed_storage_copy_ns_nal_hoare h keySrc) hc t ht hpt) s hcode hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
