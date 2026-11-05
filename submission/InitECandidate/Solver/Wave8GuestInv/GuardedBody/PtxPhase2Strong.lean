@@ -14246,4 +14246,66 @@ theorem phase2_resume_ro_world_backing {fname name : MlS}
   · apply txEnv_with_locals s _ post.clock _ hp.2.1
     simp [HolFiniteMapExact.update, FUPDATE, hi]
 
+/-- Recording a pre-state read preserves the transaction backing headers. -/
+theorem phase2_htab_set_bs72_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hbs⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1.1 "bs" 72
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "bs" + 72) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "bs" + 72) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl
+    harg (by rw [hr]; simp)
+  rw [hr] at hx
+  exact phase2_htabExit_callEntry_backing callee hp.1.1 hp.2.1 hw
+    (ht.symm ▸ hmem) hp.2.2 (hx v rfl)
+
+/-- The pre-state-read table insertion retains the complete continuation guard. -/
+theorem phase2_htab_set_bs72_world_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value])
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_htab_set_bs72_backing key value).run s hc hp hnt hr
+  have hs := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "bs" "bs+72" 72 key value (by simp) (by decide)
+    (fun s S hT hbs ht0 => R16WkAcctWs.nonValueSlot_bs72 s S hT hbs ht0)
+    s hc hp.1 hnt (Or.inl hr)
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have he := txEnv_preserved_by_worldStep hs.1 (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) (by intro k hk; simp at hk ⊢; tauto)
+    (by simp [R16WkAcctWs.bufRegions]) (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1
+    (by simp [R16WkAcctWs.bufRegions]) hp.2.1 (locals := s.locals) rfl
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]), key, value] hr
+  obtain ⟨S', Nd', _, hw', _⟩ := hs.1.2.2.2.2 S Nd hw (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  refine ⟨⟨hs.1.1, S', (worldTyped_iff_with _ S').mpr ⟨Nd', hw'⟩⟩, ?_, hb⟩
+  rw [← hl] at he
+  exact he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
