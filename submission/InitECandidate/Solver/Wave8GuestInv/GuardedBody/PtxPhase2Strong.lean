@@ -14672,4 +14672,27 @@ theorem phase2_fresh_worldEff_backing {F : Type}
     exact phase2_worldEff_allocated_unhit hf ha ⟨hi.2.1, by norm_num⟩ hi.1
       (by simp) (by simp)
 
+/-- Concrete account allocation and initialization preserve existing transaction backing. -/
+theorem phase2_acct_new_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hp : WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    {wn wc : BitVec 64} {vb : ValueHOL 64}
+    (hb : shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact vb) = true)
+    (hn : s.locals.lookup (ofString "nonce") = some (.val (.word wn)))
+    (hbal : s.locals.lookup (ofString "balance") = some vb)
+    (hcode : s.locals.lookup (ofString "code_hash") = some (.val (.word wc)))
+    (hnt : (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).2 := by
+  have hf := R16Shards.EvmEkFk.worldEff_acct_new s s (Rl := []) (B := []) (gw := ["heap_ptr"])
+    (by decide) (R16Shards.WorldEff.refl s [] [] ["heap_ptr"] hp.1.1 hc)
+    hb hn hbal hcode hnt hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  apply phase2_fresh_worldEff_backing hp.1.1 hp.2.1 hw hp.2.2 _ hf
+  have hg := hf.gw_kept (ofString "bo") (by decide)
+  unfold globN
+  rw [← hg]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
