@@ -5152,4 +5152,30 @@ theorem hoare_prepare_dispatch_recipient (gw : List String) (hp : Nat)
   · exact fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
       localsFree_stepFrom gw hp G ch s l k h.2⟩
 
+/-- Checking the three-byte delegation prefix performs no writes. -/
+theorem ro_is_valid_delegation : ReadOnlyFn (ofString "is_valid_delegation") :=
+  OpHandlersB.HeadMemBridge.RbM15.readOnlyFn_of_guestAst 446 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_is_valid_delegation rfl
+    (fun _ => false) (fun _ h => by cases h) rfl
+
+/-- Resolving a delegation address only checks the prefix and returns a
+pointer into the supplied code; it retains memory and globals. -/
+theorem ro_get_delegated_code_address : ReadOnlyFn (ofString "get_delegated_code_address") := by
+  refine OpHandlersB.HeadMemBridge.RbM15.readOnlyFn_of_guestAst 571
+    (by rw [guestAst_len]; decide) Guest.Software.guestFn_get_delegated_code_address rfl
+    (fun n => n == ofString "is_valid_delegation") ?_ rfl
+  intro n hn
+  have he : n = ofString "is_valid_delegation" := by simpa using hn
+  rw [he]
+  intro values body callee rs hl
+  have hlook : originalRuntimeCode.lookup (ofString "is_valid_delegation") =
+      some ([(ofString "code", .one), (ofString "n", .one)],
+        sourceFnBody Guest.Software.guestFn_is_valid_delegation, .one) :=
+    lookup_of_guestAst_getElem 446 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_is_valid_delegation) rfl
+  have hb := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "is_valid_delegation") _ _ body .one rs values callee hlook hl
+  subst body
+  rfl
+
 end HeadStore
