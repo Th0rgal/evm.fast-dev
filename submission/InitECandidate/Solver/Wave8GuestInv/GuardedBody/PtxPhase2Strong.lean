@@ -13760,4 +13760,19 @@ theorem phase2_get_account_message_store_ready (h : PtxCallees)
     · change IvlsDisj [(locN out "m", 176)] (worldOwned post S' Nd')
       rw [hm']; exact hsep'
 
+/-- Account lookup retains the caller scalar witnesses used by the message suffix. -/
+theorem phase2_get_account_message_scalar_ready (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageScalarReady buffers contents names)
+      (PtxMessageScalarReady buffers contents names) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  refine ⟨phase2_get_account_message_store_ready h buffers contents name args hm hi
+    s vs body callee ret v post hc hp.1 he hl hb, ?_⟩
+  intro n hmem
+  obtain ⟨w, hw⟩ := hp.2 n hmem
+  exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hmem] using hw⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
