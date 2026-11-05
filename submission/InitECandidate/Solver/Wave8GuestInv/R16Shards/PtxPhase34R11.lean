@@ -9128,6 +9128,24 @@ theorem resume_lst_push_typed_logSlot (h : PtxCallees)
     exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
 
+/-- Strong push backing also retains the typed source operands. -/
+theorem resume_lst_push_typed_logSlot_backing (h : PtxCallees) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨resume_lst_push_logSlot_backing h s vs body callee ret v post hc
+    ⟨hp.1.1, hp.2⟩ ha hl hr, ?_, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.1.2.1
+    exact ⟨n, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "nl" by decide] using hn⟩
+  · obtain ⟨p, hp⟩ := hp.1.2.2.2
+    exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
+
 /-- The owned copy prefix closes Phase 4 given nonzero push backing. -/
 theorem ptxPhase4_cut_strong_of_backing_nonzero (h : PtxCallees)
     (hnonzero : LstPushBackingNonzero)
