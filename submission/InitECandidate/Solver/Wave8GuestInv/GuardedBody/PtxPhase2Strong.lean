@@ -1453,4 +1453,26 @@ theorem phase2_store_txEnv {F : Type} {s : PanSemStateFiniteExact 64 F}
   · change locN s "index" < memW { s with memory := mem } (globN s "bo" + 80)
     rw [hk 80 (by omega) (by omega)]; exact hE.idx_lt
 
+/-- Complete single-word store frame for Phase 2: world ownership and the
+two live transaction buffers suffice to preserve the validated strong state. -/
+theorem phase2_store_validated_outside {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxValidatedStrong s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd)
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    {blk : Ivl} (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    (htx : Disj (locN s "tx", 384) blk)
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) blk)
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxValidatedStrong { s with memory := mem } ∧
+    WorldTypedWith { s with memory := mem } S Nd ∧
+    worldOwned { s with memory := mem } S Nd = worldOwned s S Nd := by
+  obtain ⟨hW', how, hE'⟩ := store_outside_worldOwned
+    hp.1.1.1.1.1 (R16Shards.PtxP1.txEnv_of_ready hp.1.1) hW hd hx hin hm
+  exact ⟨phase2_store_validatedStrong hp hT hm hW' how hE'
+    (disj_of_inside_right hin htx)
+    (fun hn => disj_of_inside_right hin (hrec hn)), hW', how⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
