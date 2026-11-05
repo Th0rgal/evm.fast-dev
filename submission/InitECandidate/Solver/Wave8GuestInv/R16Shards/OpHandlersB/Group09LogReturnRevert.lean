@@ -11248,4 +11248,31 @@ theorem log_append_no_growth_exact_g09 {F : Type}
     hlg hargs hlook hclock hpush hdslot
   simpa [entry, cal, callEntryStateHOLFinite] using hres
 
+theorem lst_push_alloc_return_effect_g09 {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (p esz cap : BitVec 64) (v : ValueHOL 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlimit : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
+    (hrun : evaluateHOLFiniteState
+      (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (esz * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), post)) :
+    let q := (p + (esz * cap * 2#64 + 7)) &&& ((0 : BitVec 64) - 8)
+    v = .val (.word p) ∧
+    post.globals = s.globals.update (ofString "heap_ptr", .val (.word q)) ∧
+    post.memory = s.memory ∧ post.memaddrs = s.memaddrs ∧
+    post.code = s.code ∧
+    p.toNat + (esz * cap * 2#64).toNat ≤ q.toNat ∧
+    q.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat ∧ q.toNat % 8 = 0 := by
+  let entry := callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+    (ofString "n", .val (.word (esz * cap * 2#64))))
+  have hg := M13.evaluate_alloc_body_general entry p (esz * cap * 2#64) hcode hlimit hp
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+  have hm := PanRunBounded.evaluateHOLFiniteState_metadata entry
+    (sourceFnBody Guest.Software.guestFn_alloc)
+  change evaluateHOLFiniteState entry _ = _ at hrun
+  rw [hrun] at hg hm
+  obtain ⟨hv, hglob, hmem, hsize, hmax, halign⟩ := hg v rfl
+  exact ⟨hv, hglob, hmem, hm.2.1, hm.1, hsize, hmax, halign⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
