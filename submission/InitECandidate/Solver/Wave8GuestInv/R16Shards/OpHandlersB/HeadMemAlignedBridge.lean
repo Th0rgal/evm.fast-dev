@@ -10570,7 +10570,10 @@ theorem logsListOK_of_append_contents {F : Type}
       memW post (memW post L + 8 * i) = memW s (memW s L + 8 * i))
     (hsuffix : ∀ i, i < nc →
       memW post (memW post L + 8 * (n + i)) = memW s (memW s child + 8 * i))
-    (hkeep : ∀ log, LogEntryOK s log → LogEntryOK post log) :
+    (hkeepP : ∀ i, i < n →
+      LogEntryOK post (memW s (memW s L + 8 * i)))
+    (hkeepC : ∀ i, i < nc →
+      LogEntryOK post (memW s (memW s child + 8 * i))) :
     LogsListOK post L := by
   rcases hp with hz | ⟨_, _, _, _, hp⟩
   · exact False.elim (hpn hz)
@@ -10582,11 +10585,11 @@ theorem logsListOK_of_append_contents {F : Type}
   refine ⟨hslots i hi, ?_⟩
   by_cases hip : i < n
   · rw [hprefix i hip]
-    exact hkeep _ (hp i (by omega)).2
+    exact hkeepP i hip
   · have his : i - n < nc := by omega
     have hieq : i = n + (i - n) := by omega
     rw [hieq, hsuffix (i - n) his]
-    exact hkeep _ (hc (i - n) (by omega)).2
+    exact hkeepC (i - n) his
 
 /-- Heap growth preserves a log entry once its five record fields and words survive. -/
 theorem logEntryOK_of_record_preserved {F : Type}
