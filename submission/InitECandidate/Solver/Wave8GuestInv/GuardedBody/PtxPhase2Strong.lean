@@ -10416,4 +10416,20 @@ theorem phase2_packed_cases_initialized_world_hoare (h : PtxCallees) :
       ((arenaReady_with_locals s locals s.clock).mpr (hp hr).1.1) hk, hk⟩
   · exact fun _ _ hr => by cases hr
 
+/-- Allocation provides the world component for both packing entry cases. -/
+theorem phase2_count_cases_alloc_world_init (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit (fun s => WorldOK s ∧ PtxPackedInitCases s)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hi := phase2_count_cases_alloc_init h s vs body callee ret v post hc hp ha hl hb
+  have hk := phase2_count_cases_packed_ready h s vs body callee ret v post hc hp ha hl hb
+  have hr := phase2_count_exit_access_ready hp
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hr.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  exact ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals post _ post.clock).mpr hs.1) hk, hi⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
