@@ -10663,4 +10663,52 @@ theorem phase2_memcpy_eval_packed_live (h : PtxCallees) {F : Type}
   exact phase2_packed_live_copy_frame s post S Nd S' Nd' _ _ buffer contents
     hindex ha step.1.1 step.2.2.1 hw hw' ht hsep hb ho hf htx hrec hbuf hlen
 
+/-- Either concrete packed destination preserves the shared caller resource. -/
+theorem phase2_memcpy_eval_packed_live_destination (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedLiveCopy s buffer contents)
+    (hb : Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hdest : (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n") ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents := by
+  have hregions := phase2_packed_copy_input_regions s hi.1.1 hi.1.2.1 hi.1.2.2 _ hdest
+  have hbuffer := phase2_packed_guarded_input_disjoint s hi.1.1 buffer hb
+  refine phase2_memcpy_eval_packed_live h s post vs body callee ret r buffer contents
+    hc hl he hn hr hp ha hi ?_ hregions.1 hregions.2 ?_ ?_
+  · intro S Nd hw hs
+    apply phase2_packed_typed_of_owned (callEntryStateHOLFinite s callee) S Nd
+    intro dest hmem region hregion
+    simp only [List.mem_singleton] at hmem
+    subst dest
+    have hdis := hs (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+      (by simp) region hregion
+    have hc' := phase2_packed_guarded_input_disjoint s hi.1.1 region (disj_symm hdis)
+    rcases List.mem_cons.mp hdest with heq | hm
+    · rw [heq]
+      exact disj_symm hc'.1
+    · have heq := List.mem_singleton.mp hm
+      rw [heq]
+      exact disj_symm hc'.2
+  · rcases List.mem_cons.mp hdest with heq | hm
+    · rw [heq]
+      exact hbuffer.1
+    · rw [List.mem_singleton.mp hm]
+      exact hbuffer.2
+  · rcases List.mem_cons.mp hdest with heq | hm
+    · have heq' := congrArg Prod.snd heq
+      change locN (callEntryStateHOLFinite s callee) "n" = 20 at heq'
+      omega
+    · have heq' := congrArg Prod.snd (List.mem_singleton.mp hm)
+      change locN (callEntryStateHOLFinite s callee) "n" = 32 at heq'
+      omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
