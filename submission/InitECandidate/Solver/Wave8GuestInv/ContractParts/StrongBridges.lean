@@ -6,6 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHas
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group08
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueException
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueCallees
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
@@ -16,6 +17,19 @@ namespace InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 
 open Flapjack.Basis.Pure.MlString
 open R11Shards
+
+/-- The closed ext-code world contract preserves the EVM and chain cells.
+The stronger opcode contract still requires gas and all head-frame words. -/
+theorem ext_code_of_chain_strong :
+    EvmKeeps (EvmAvoids (fun _ => [])) ["heap_ptr", "scratch_ptr"] (ofString "ext_code_of") ∧
+    R16Shards.OpHandlersB.HeadMemBridge.ChainCellsKept
+      (EvmAvoids (fun _ => [])) (ofString "ext_code_of") :=
+  R16Shards.EvmEkFkPrologue.worldKeepsSc_to_evmKeeps_cc
+    R16Shards.EvmEkFk.validBufList_extCodeBufs
+    R16Shards.EvmEkFk.safeStepGlobals_hp_sp
+    (fun _ h => h)
+    (fun s hav => worldOK_of_evmInv s ⟨hav.1, hav.2.elim fun S hS => ⟨S, hS.1⟩⟩)
+    R16Shards.EvmEkFk.wkSc_ext_code_of
 
 theorem frame_chain_cells_iff {F : Type}
     (s post : Flapjack.PanSemStateFiniteExact 64 F) :
