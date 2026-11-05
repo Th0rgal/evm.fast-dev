@@ -3895,4 +3895,15 @@ theorem phase2_address_count_increment_hoare :
     exact fun _ => phase2_address_count_advance s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2
   · exact fun _ _ hr => by cases hr
 
+/-- Scratch declarations preserve the strengthened counting invariant. -/
+theorem phase2_address_count_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxAddressCountInv (setVarHOLFinite name v s) := by
+  apply phase2_address_count_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
