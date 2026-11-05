@@ -2005,6 +2005,34 @@ theorem logOwnedIvls_of_transfer {F : Type}
   rw [haddr, htopics_ptr, htopics_len, hdata_ptr, hdata_len]
   simp
 
+theorem transfer_allocations_pairwise (log topics data : Nat)
+    (hlog_topics : log + 40 ≤ topics)
+    (htopics_data : topics + 96 ≤ data) :
+    ([(log, 40), (topics, 96), (data, 32)] : List Ivl).Pairwise Disj := by
+  refine List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_, by simp⟩⟩
+  · intro x hx
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+    rcases hx with rfl | rfl
+    · exact Or.inr (Or.inr (Or.inl hlog_topics))
+    · exact Or.inr (Or.inr (Or.inl (by omega)))
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    exact Or.inr (Or.inr (Or.inl htopics_data))
+
+theorem transfer_logOwnedIvls_pairwise {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log topics data : Nat}
+    (haddr : memW s log = globN s "vm_system_address")
+    (htopics_ptr : memW s (log + 8) = topics)
+    (htopics_len : memW s (log + 16) = 3)
+    (hdata_ptr : memW s (log + 24) = data)
+    (hdata_len : memW s (log + 32) = 32)
+    (hlog_topics : log + 40 ≤ topics)
+    (htopics_data : topics + 96 ≤ data) :
+    (logOwnedIvls s log).Pairwise Disj := by
+  rw [logOwnedIvls_of_transfer haddr htopics_ptr htopics_len hdata_ptr hdata_len]
+  exact transfer_allocations_pairwise log topics data hlog_topics htopics_data
+
 theorem logsListOK_of_append {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {logs log : Nat}
     (hlogs : LogsListOK s logs) (hnz : logs ≠ 0)
@@ -2951,6 +2979,70 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
   (globN_eq_of_lookup_eq allocated_mono_scr wordsOK_of_allocated_scr)
 open InitECandidate.Solver.Wave8Contracts.M23
+
+theorem alloc_body_evmStepCC {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hInv : EvmInv s)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    EvmStepCC ["heap_ptr"] s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2 := by
+  obtain ⟨hA, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+  obtain ⟨p, q, hr, hp, hq, hlim, h8, hpq, hg, hm, hb, hma, hAp, hhp, hsp⟩ :=
+    R13Shards.alloc_body_resumes_props s hA.1.code hA hres
+  apply evmStepCC_of_fresh_heap_step hA hAt hAp hb
+  · rw [hhp, ← hp]
+    exact hpq
+  · intro k hk
+    rw [hg, HolFiniteMapExact.lookup_update]
+    have hne : ofString "heap_ptr" ≠ k := by
+      intro heq
+      apply hk
+      simp [← heq]
+    simp [FUPDATE, hne]
+  · intro a ha
+    rw [hm]
+  · intro b hb64 hnot
+    unfold memB
+    rw [hm, hb]
+
+theorem transfer_alloc_body_spec {F : Type} (s : PanSemStateFiniteExact 64 F) (n : Nat)
+    (hn : n = 40 ∨ n = 96 ∨ n = 32)
+    (hInv : EvmInv s) (hsize : locN s "n" = n)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)
+    ∃ p : BitVec 64, out.1 = some (.returned (.val (.word p))) ∧
+      p.toNat = globN s "heap_ptr" ∧
+      globN out.2 "heap_ptr" = p.toNat + n ∧
+      WordsOK out.2 (p.toNat, n) ∧
+      Inside (p.toNat, n) sourceBase (globN out.2 "heap_ptr") ∧
+      EvmStepCC ["heap_ptr"] s out.2 := by
+  dsimp only
+  have hA : ArenaReady s := hInv.1
+  obtain ⟨p, q, hr, hp, hq, hlim, h8, hpq, hg, hm, hb, hma, hAp, hhp, hsp⟩ :=
+    R13Shards.alloc_body_resumes_props s hA.1.code hA hres
+  have halign : (n + 7) / 8 * 8 = n := by rcases hn with rfl | rfl | rfl <;> decide
+  rw [hsize, halign] at hq
+  have hlo : sourceBase ≤ p.toNat := by rw [hp]; exact hA.2.1
+  have hin : Inside (p.toNat, n) sourceBase (globN
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2 "heap_ptr") := by
+    exact ⟨hlo, by rw [hhp, hq]⟩
+  refine ⟨p, hr, hp, hhp.trans hq, ?_, hin, alloc_body_evmStepCC s hInv hres⟩
+  apply wordsOK_of_inside_heap _ hAp.1.memaddrs
+  · rw [hp]; exact hA.2.2.2.2.2.2.1
+  · rcases hn with rfl | rfl | rfl <;> decide
+  · exact hlo
+  · have : heapLimit ≤ heapEnd := by decide
+    omega
+
+theorem ek_cc_alloc :
+    EvmKeeps EvmInv ["heap_ptr"] (ofString "alloc") ∧
+      ChainCellsKept EvmInv (ofString "alloc") := by
+  constructor
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).1
+  · refine ⟨_, _, _, R13Shards.lookup_alloc_r13, ?_⟩
+    intro F s hcode hInv hex hnt hres
+    exact (alloc_body_evmStepCC s hInv hres).2
 
 private theorem lookup_lst_push_local :
     originalRuntimeCode.lookup (ofString "lst_push") =
@@ -5291,6 +5383,52 @@ private theorem log_append_head_returned_spec {F : Type}
                       ⟨a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1⟩⟩
         · simp at hcall
       | _ => simp at hcall
+
+theorem transfer_log_append_returned_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
+    (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
+    (hwords : WordsOK s (logw.toNat, 40))
+    (hlog : Inside (logw.toNat, 40) sourceBase (globN s "heap_ptr"))
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (htopics : Inside (topics, 96) sourceBase (globN s "heap_ptr"))
+    (hdata : Inside (data, 32) sourceBase (globN s "heap_ptr"))
+    (haddr : memW s logw.toNat = globN s "vm_system_address")
+    (htp : memW s (logw.toNat + 8) = topics)
+    (htn : memW s (logw.toNat + 16) = 3)
+    (hdp : memW s (logw.toNat + 24) = data)
+    (hdn : memW s (logw.toNat + 32) = 32)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data)
+    (hdisj : ∀ x ∈ logOwnedIvls s logw.toNat,
+      (∀ t, ∀ S0, TablesTyped s S0 → t ∈ S0 → ∀ i ∈ htabFootprint s t, Disj x i) ∧
+      (∀ j ∈ fixedObjects s, Disj x j) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
+      (∀ S0 Nd0, TriesTypedWith s S0 Nd0 → ∀ j ∈ nodeExtents s Nd0, Disj x j) ∧
+      (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
+    (hcall : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none)
+    (heval_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global (ofString "ev")) = some (.val (.word evw)))
+    (heval_log : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .local (ofString "log")) = some (.val (.word logw))) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+    EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
+  have hrecord : (logw.toNat, 40) ∈ logOwnedIvls s logw.toNat := by
+    rw [logOwnedIvls_of_transfer haddr htp htn hdp hdn]
+    simp
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := List.mem_cons_self
+  have hframe := (hdisj _ hrecord).2.2.1 _ hhead
+  have hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  have hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  exact log_append_head_returned_spec s evw logw hInv hev
+    (head_log_count_succ_lt_of_evmInv hInv)
+    (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
+    hdisj (transfer_logOwnedIvls_pairwise haddr htp htn hdp hdn hlt htd)
+    hdisj_header hdisj_array hcall heval_ev heval_log
 
 end EmitTransferLogStep
 

@@ -11254,4 +11254,119 @@ theorem lst_push_tail_memory_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+theorem store_word_memory_frame {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {dst src : ExpHOL 64} {x a : BitVec 64} {w : HolWordLab 64}
+    (hc : s.code = originalRuntimeCode)
+    (hd : evalAt s dst = some (.val (.word x)))
+    (hv : evalAt s src = some (.val w)) (hne : a ≠ x)
+    (hr : evaluateHOLFiniteState s (.store dst src) = (none, post)) :
+    post.memory a = s.memory a := by
+  have hh : Hoare (fun t => evalAt t dst = some (.val (.word x)) ∧
+      evalAt t src = some (.val w) ∧ t.memory a = s.memory a)
+      (.store dst src) (fun r t => r = none → t.memory a = s.memory a) := by
+    apply R13Shards.Hoare.store_fall
+    intro G t y v mem' hp hy hval hm
+    rw [hp.1] at hy
+    have he : y = x := by cases hy; rfl
+    subst y
+    rw [hp.2.1] at hval
+    have he : v = .val w := (Option.some.inj hval).symm
+    subst v
+    obtain ⟨_, _, hf⟩ := R13Shards.panMemStoresHOL_word_spec (by simpa only [flattenHOL] using hm)
+    exact (hf a hne).trans hp.2.2
+  have hh' := hh.run s hc ⟨hd, hv, rfl⟩ (by rw [hr]; simp)
+  rw [hr] at hh'
+  exact hh' rfl
+
+/-- Growth header updates and the shared return tail preserve all cells outside
+the active header's three words. -/
+theorem lst_push_growth_writes_memory_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (l n cap np a : BitVec 64) (v : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hcap : s.locals.lookup (ofString "cap") = some (.val (.word cap)))
+    (hnp : s.locals.lookup (ofString "np") = some (.val (.word np)))
+    (h0 : a ≠ l) (h8 : a ≠ l + 8) (h16 : a ≠ l + 16)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local (ofString "l"), .const 0])
+          (.var .local (ofString "np")))
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 16])
+            (.panop .mul [.var .local (ofString "cap"), .const 2]))
+          (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+              (.op .add [.var .local (ofString "n"), .const 1]))
+            (.return (.op .add
+              [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+               .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]]))))) =
+      (some (.returned v), post)) : post.memory a = s.memory a := by
+  obtain ⟨mid, hs, hloc, hcode, ht⟩ := store_seq_returned hr
+  have hm : mid.memory a = s.memory a := store_word_memory_frame hc
+    (by simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord, wordOpHOL, wordOp])
+    (by exact hnp) h0 hs
+  obtain ⟨last, hs2, hloc2, hcode2, ht2⟩ := store_seq_returned ht
+  have hml : mid.locals.lookup (ofString "l") = some (.val (.word l)) := by rw [hloc]; exact hl
+  have hmc : mid.locals.lookup (ofString "cap") = some (.val (.word cap)) := by rw [hloc]; exact hcap
+  have hm2 : last.memory a = mid.memory a := store_word_memory_frame (w := .word (cap * 2)) (hcode.trans hc)
+    (by simp [evalAt, evalHOLExact, evalListHOLExact, hml, valueIsWord, valueWord, wordOpHOL, wordOp])
+    (by simp [evalAt, evalHOLExact, evalListHOLExact, hmc, valueIsWord, valueWord, panOpHOL]) h16 hs2
+  exact (lst_push_tail_memory_frame last post l n a v (hcode2.trans (hcode.trans hc))
+    (by rw [hloc2, hloc]; exact hl) (by rw [hloc2, hloc]; exact hn) h8 ht2).trans (hm2.trans hm)
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+theorem txWorld_list_headers_disjoint {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) :
+    Disj (memW s (globN s "bo" + 40), 24) (memW s (globN s "bo" + 72), 24) := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  obtain ⟨_, hpw, _, _, _⟩ := fixedObjects_disj_parts hWT.2.2.1
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hW.2 hWT.1
+  have hlen : (blockOutObjects s).length = 7 := by rw [hbo]; rfl
+  have hd := List.pairwise_iff_getElem.1 hpw 3 5 (by omega) (by omega) (by omega)
+  simpa [hbo] using hd
+
+/-- Spatial separation discharges the three modular-address side conditions
+needed to frame the receipt header through the log push's header writes. -/
+theorem txWorld_other_header_ne_push_writes {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) :
+    let l := BitVec.ofNat 64 (memW s (globN s "bo" + 40))
+    let a := BitVec.ofNat 64 (memW s (globN s "bo" + 72))
+    a ≠ l ∧ a ≠ l + 8 ∧ a ≠ l + 16 := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hm : (memW s (globN s "bo" + 40), 24) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp [blockOutObjects, hE.bo_nz, hE.bo40]
+  have ha := ((hWT.2.2.1.1 _ hm).resolve_left (by simp)).1
+  have hb := (ivl_allocated_bound hW.1.1.2 ha).2
+  have ha64 : memW s (globN s "bo" + 72) < 2 ^ 64 := by
+    unfold memW
+    split
+    exact BitVec.isLt _
+  have hd := txWorld_list_headers_disjoint hW
+  dsimp only
+  have hne : ∀ k : Nat, k < 24 →
+      BitVec.ofNat 64 (memW s (globN s "bo" + 72)) ≠
+        BitVec.ofNat 64 (memW s (globN s "bo" + 40)) + BitVec.ofNat 64 k := by
+    intro k hk he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat] at he'
+    have hl : memW s (globN s "bo" + 40) < 2 ^ 64 := by dsimp at hb; omega
+    have hkl : k < 2 ^ 64 := by omega
+    rw [Nat.mod_eq_of_lt ha64, Nat.mod_eq_of_lt hl, Nat.mod_eq_of_lt hkl,
+      Nat.mod_eq_of_lt (by dsimp at hb; omega)] at he'
+    unfold Disj at hd
+    dsimp at hd
+    omega
+  exact ⟨by simpa using hne 0 (by decide), hne 8 (by decide), hne 16 (by decide)⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

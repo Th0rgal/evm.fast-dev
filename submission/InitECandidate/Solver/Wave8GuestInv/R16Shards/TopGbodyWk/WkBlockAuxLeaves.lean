@@ -7406,4 +7406,117 @@ theorem merge_new_call_owned {F : Type}
     worldTypedWith_htab_new_sysTx hAR hA hbe hh hsp hwf hkey hfp hd hframe hgl hWT
   exact ⟨tw.toNat, hnS, hn0, hkey, hcnt, hroles, hWT', hrest⟩
 
+/-- A fresh inner allocation composes with a withdrawal-framed continuation
+on all flowing and resumable outcomes. -/
+theorem progWithdrawalStep_new_then (x : MlS) (kw capw : BitVec 64)
+    (hkl : kw.toNat ∈ htabKeyLens) (hcl : capw.toNat ≤ htabCapMax)
+    {cont : ProgHOL 64} (hcont : ProgWithdrawalStep cont) :
+    ProgWithdrawalStep (.seq
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw]) cont) := by
+  have hnew : ProgWithdrawalStep
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw]) := by
+    apply progWithdrawalStep_of_progWStep (B := []) (gw := ["heap_ptr"])
+      (by simp) (by simp [withdrawalGlobals])
+    intro F s hc hW hnt hfr
+    exact merge_new_call_worldStep s x kw capw hW hkl hcl hfr
+  intro F s hc hW hnt hfr
+  exact progWithdrawalStep_seq hnew hcont s hc hW hnt hfr
+
+/-- The concrete allocation at the start of the storage merge miss branch
+fits the withdrawal mask. -/
+theorem progWithdrawalStep_merge_new :
+    ProgWithdrawalStep
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64]) := by
+  apply progWithdrawalStep_of_progWStep (B := []) (gw := ["heap_ptr"])
+    (by simp) (by simp [withdrawalGlobals])
+  intro F s hc hW hnt hfr
+  exact merge_new_call_worldStep s _ _ _ hW (by decide) (by decide) hfr
+
+/-- The fresh table is the word stored in the call destination, with all
+other caller locals preserved.  Its footprint lies entirely in fresh heap. -/
+theorem merge_new_call_binding {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (hAR : ArenaReady s) (hkl : kw.toNat ∈ htabKeyLens)
+    (hcl : capw.toNat ≤ htabCapMax)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).2
+    ∃ tw : BitVec 64,
+      post.locals.lookup x = some (.val (.word tw)) ∧
+      (∀ y, y ≠ x → post.locals.lookup y = s.locals.lookup y) ∧
+      globN s "heap_ptr" ≤ tw.toNat ∧
+      tw.toNat + 88 ≤ globN post "heap_ptr" ∧
+      HtabWF post tw.toNat ∧ hdr post tw.toNat 3 = 0 ∧
+      hdr post tw.toNat 0 = kw.toNat ∧
+      (∀ i ∈ htabFootprint post tw.toNat,
+        Allocated post i ∧ Inside i (globN s "heap_ptr") (globN post "heap_ptr")) := by
+  have hn := merge_new_call_flow_none s x kw capw hAR.1.code hfr
+  dsimp only
+  rw [evaluateHOLFiniteState_call] at hn ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const kw, .const capw] = some [.val (.word kw), .val (.word capw)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact]
+  have hl := pan_two_word_lookup s.code.lookup (ofString "htab_new")
+    (ofString "key_len") (ofString "cap") (sourceFnBody Guest.Software.guestFn_htab_new) kw capw
+    (by decide) (by rw [hAR.1.code]; exact R10Shards.SoloHtabNew.lookup_htab_new)
+  rw [ha] at hn ⊢
+  dsimp only at hn ⊢
+  rw [hl] at hn ⊢
+  dsimp only at hn ⊢
+  split at hn
+  · simp at hn
+  · rename_i hnz
+    rw [if_neg hnz]
+    let cmap := (HolFiniteMapExact.empty.update (ofString "key_len", ValueHOL.val (.word kw))).update
+      (ofString "cap", ValueHOL.val (.word capw))
+    let ent := callEntryStateHOLFinite s cmap
+    have hAe : ArenaReady ent := (arenaReady_with_locals s cmap (s.clock - 1)).2 hAR
+    have hk : ent.locals.lookup (ofString "key_len") = some (.val (.word kw)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "cap" ≠ ofString "key_len" by decide]
+    have hc : ent.locals.lookup (ofString "cap") = some (.val (.word capw)) := by
+      simp [ent, cmap, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+    rcases hr : evaluateHOLFiniteState ent (sourceFnBody Guest.Software.guestFn_htab_new) with ⟨r, sb⟩
+    rw [show evaluateHOLFiniteState (callEntryStateHOLFinite s cmap)
+      (sourceFnBody Guest.Software.guestFn_htab_new) = (r, sb) from hr] at hn
+    cases r with
+    | none => simp at hn
+    | some r =>
+      cases r with
+      | returned v =>
+        obtain ⟨tw, rfl, hlo, hhi, _, _, _, _, hwf, hcnt, hkey, hfp, _⟩ :=
+          WkBal.htab_new_heap_props ent kw capw hAe hkl hcl hk hc v (congrArg Prod.fst hr)
+        dsimp only at hn ⊢
+        split at hn
+        · rename_i hshape
+          rw [if_pos hshape]
+          split at hn
+          · rename_i hvalid
+            rw [if_pos hvalid]
+            refine ⟨tw, ?_, ?_, hlo, ?_, ?_, ?_, ?_, ?_⟩
+            · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+            · intro y hy
+              simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hy]
+            · change tw.toNat + 88 ≤ globN sb "heap_ptr"
+              simpa only [hr] using hhi
+            · apply (WkBal.htabWF_with_locals sb _ _ _).2
+              simpa [hr] using hwf
+            · change hdr sb tw.toNat 3 = 0
+              simpa only [hr] using hcnt
+            · change hdr sb tw.toNat 0 = kw.toNat
+              simpa only [hr] using hkey
+            · change ∀ i ∈ htabFootprint sb tw.toNat,
+                Allocated sb i ∧ Inside i (globN ent "heap_ptr") (globN sb "heap_ptr")
+              simpa only [hr] using hfp
+          · simp at hn
+        · simp at hn
+      | exception e v => simp at hn
+      | error | «break» | «continue» | timeOut | finalFfi _ => simp at hn
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
