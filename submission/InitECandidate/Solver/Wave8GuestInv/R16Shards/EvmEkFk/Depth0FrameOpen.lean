@@ -6240,4 +6240,39 @@ theorem ws_get_code_empty_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [evaluateHOLFiniteState_return, evalHOLExact, evalListHOLExact,
     shapeOfHOLExact, sizeOfShapeWithContextHOL]
 
+/-- Compose the actual `nodedb_lookup` invocation with both `ws_get_code`
+suffix branches. The callee bound is needed only for a present entry. -/
+theorem ws_get_code_nodedb_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64))
+    (hshape : s.eshapes.lookup (ofString "StateErr") = some .one)
+    (hcallee : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup (ofString "nodedb_lookup") values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      post.eshapes = s.eshapes ∧ ∃ found code code_n : BitVec 64,
+        v = .rStruct [.val (.word found), .val (.word code), .val (.word code_n)] ∧
+        (found ≠ 0 → code_n.toNat < 2 ^ 40)) :
+    Ret s (.decCall (ofString "r") (.comb [.one, .one, .one]) (ofString "nodedb_lookup") args
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))]))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post ha hl hb
+  obtain ⟨hs, found, code, code_n, hv, hn⟩ := hcallee values body callee ret v post ha hl hb
+  subst v
+  let st := setVarHOLFinite (ofString "r")
+    (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]) {post with locals := s.locals}
+  have hr : st.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]) := by
+    simp [st, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hsh : st.eshapes.lookup (ofString "StateErr") = some .one := by
+    change post.eshapes.lookup _ = _
+    rw [hs]; exact hshape
+  intro w hw
+  obtain ⟨_, hv, hb, _⟩ := ws_get_code_tail_return_cases st found code code_n hr hn hsh w hw
+  exact ⟨code, code_n, hv, hb⟩
+
 end HeadStore
