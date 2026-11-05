@@ -2648,6 +2648,24 @@ theorem lst_new_stable_allocated_resume (h : PtxCallees) {F : Type}
   · exact logsWorldOwned_with_locals _ _ howned
   · exact hfixed
 
+theorem lst_new_stable_capacity_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Phase4StableAllocated resumed ∧
+      memW resumed (locN resumed "stable_logs" + 16) = locN resumed "stable_log_cap" := by
+  refine ⟨lst_new_stable_allocated_resume h s vs body callee ret v post hc hp ha hl hr, ?_⟩
+  obtain ⟨w, rfl, hw⟩ := lst_new_stable_capacity h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hw
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
