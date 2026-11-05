@@ -2012,6 +2012,28 @@ theorem logPointers_store_bo40 {F : Type} {s : PanSemStateFiniteExact 64 F}
     refine ⟨arr, ?_, hin⟩
     unfold worldOwned; simp only [List.mem_append]; exact Or.inl (Or.inr hmemf)
 
+def Phase4LogSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    memW s (memW s (globN s "bo" + 40)) ≠ 0 ∧
+    Inside (locN s "slot", 8) (memW s (memW s (globN s "bo" + 40)))
+      (memW s (memW s (globN s "bo" + 40)) +
+        8 * memW s (memW s (globN s "bo" + 40) + 16))
+
+theorem hoare_logSlot_store (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare Phase4LogSlotReady (.store (.var .local (ofString "slot")) src)
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨w, rfl⟩ := hword s v hv
+  obtain ⟨hdom, _, hmem⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hslot : locN s "slot" = x.toNat := by
+    have hlu : s.locals.lookup (ofString "slot") = some (.val (.word x)) := hx
+    simp only [locN, hlu]
+  apply logPointers_store_bo40 hp.1 hp.1.1.2.2 hp.2.1 hdom _ hmem
+  simpa only [hslot] using hp.2.2
+
 theorem store_receiptSlot (off : Bool) :
     Hoare Phase4ReceiptEncoded
       (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
