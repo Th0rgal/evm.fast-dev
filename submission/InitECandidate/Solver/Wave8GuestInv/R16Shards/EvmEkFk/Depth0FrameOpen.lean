@@ -2123,13 +2123,19 @@ theorem hoare_depth0_auth_stores_fall (gw : List String) (hp : Nat)
     · exact Hoare.store_fall_of_none (hoare_store_msg_48_step gw hp G ch)
     · exact Hoare.store_fall_of_none (hoare_store_ev_192_zero_step gw hp G ch)
 
+/-- Post shape of a call inside a `D0Pre` sequence: fall-through keeps `D0Pre` (the caller's
+locals are restored), a resuming exception (locals emptied) keeps `EvmMsgReady ∧ StepFrom`. -/
+def D0CallPost (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    ∀ {F : Type}, Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop :=
+  fun r t => (r = none → D0Pre gw hp G ch t) ∧ (Resumes r → EvmMsgReady t ∧ StepFrom gw hp G ch t)
+
 /-- The `set_delegation` call followed by the auth tail, from a `D0Pre` state: the callee is
-given as a `Hoare` triple keeping `D0Pre` (what an `ek_set_delegation` contract that also keeps the
-`ev+112` message slot would provide). -/
+given as a `Hoare` triple with the `D0CallPost` shape (what an `ek_set_delegation` contract that
+also keeps the `ev+112` message slot provides, see `hoare_call_d0CallPost_of_evmKeeps`). -/
 theorem hoare_depth0_auth_branch (gw : List String) (hp : Nat)
     (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
     (hsd : Hoare (D0Pre gw hp G ch) (.call (some (none, none)) (ofString "set_delegation") [])
-      (Fall (D0Pre gw hp G ch))) :
+      (D0CallPost gw hp G ch)) :
     Hoare (D0Pre gw hp G ch)
       (.seq (.call (some (none, none)) (ofString "set_delegation") [])
         (.decCall (ofString "used") .one (ofString "frame_state_gas_used")
@@ -2142,7 +2148,12 @@ theorem hoare_depth0_auth_branch (gw : List String) (hp : Nat)
                 (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
               (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))))))
       (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
-  refine Hoare.seq_fall' (R := D0Pre gw hp G ch) hsd ?_ (fun _ h => h.1)
+  refine Hoare.seq (R := D0Pre gw hp G ch) (Hoare.weaken hsd ?_) ?_
+  · intro F r t ⟨h1, h2⟩
+    refine ⟨h1, fun hne hr => ?_⟩
+    rcases hr with hr | hr
+    · exact absurd hr hne
+    · exact h2 hr
   have hLO : LocalsOnly ["msg"] (D0Pre gw hp G ch) := by
     intro F s locals k hl h
     exact d0Pre_locals gw hp G ch s locals k (hl "msg" (by simp)) h
@@ -2155,14 +2166,14 @@ theorem hoare_depth0_auth_branch (gw : List String) (hp : Nat)
       ro_frame_state_gas_used (ofString "used") (by decide) _)
     (hoare_depth0_auth_stores_fall gw hp G ch)
 
-/-- `ek_depth0_prepare` from the callee contracts: `set_delegation` as a `D0Pre`-keeping triple
+/-- `ek_depth0_prepare` from the callee contracts: `set_delegation` as a `D0CallPost` triple
 (for every `StepFrom` frame) and `prepare_dispatch` as `EvmKeeps EvmMsgReady gw_pd` with
 `gw_pd ⊆ ["heap_ptr", "journal_n", "scratch_ptr"]`. -/
 theorem ek_depth0_prepare_of_callees {gw_pd : List String}
     (hsd : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
       Hoare (D0Pre ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch)
         (.call (some (none, none)) (ofString "set_delegation") [])
-        (Fall (D0Pre ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch)))
+        (D0CallPost ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch))
     (hpd : EvmKeeps EvmMsgReady gw_pd (ofString "prepare_dispatch"))
     (hsub : ∀ g ∈ gw_pd, g ∈ ["heap_ptr", "journal_n", "scratch_ptr"]) :
     EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare") := by
@@ -2210,5 +2221,178 @@ theorem ek_depth0_prepare_of_callees {gw_pd : List String}
   have h := (hbody (globN s "heap_ptr") s.globals.lookup (evmChain s)).run s hcode
     ⟨hP, stepFrom_refl gw s (evmInv_of_evmMsgReady s hP)⟩ hnt (Or.inr hres)
   exact (evmStep_iff_stepFrom gw s _).2 h.2
+
+/-! ## Generic handler-free call glue and the `set_delegation` bridge -/
+
+/-- Handler-free, destination-free call of a `FunSpec` callee, `Fall` form: `Q` must follow from
+the callee's postcondition on every resuming result, for every outer locals map (the call restores
+the caller's locals on return and empties them on an exception). -/
+theorem Hoare.call0_fall {P Pc Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop} {fname : MlS}
+    (hf : FunSpec Pc Qc fname)
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)), P s → Pc (callEntryStateHOLFinite s callee))
+    (hpost : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (r : Option (PanSemResultExact 64))
+      (post : PanSemStateFiniteExact 64 F), P s → Resumes r →
+      Qc (callEntryStateHOLFinite s callee) r post →
+      ∀ locals : HolFiniteMapExact MlS (ValueHOL 64), Q { post with locals := locals })
+    (arguments : List (ExpHOL 64)) :
+    Hoare P (.call (some (none, none)) fname arguments) (Fall Q) := by
+  refine ⟨fun {F} s hcode hS hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hnt hr ⊢
+  rcases hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) arguments with
+    _ | values
+  · rw [hargs] at hr
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+  · simp only [hargs] at hnt hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hr
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+    · simp only [hl] at hnt hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        have hPe : Pc (callEntryStateHOLFinite s callee) := hentry s callee hS
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with
+          ⟨res, post⟩
+        simp only [hrun] at hnt hr ⊢
+        have hQc (hsafe : res ≠ some .timeOut) :
+            Qc (callEntryStateHOLFinite s callee) res post := by
+          have := FunSpec.at_lookup hf s hcode values body' callee ret' hl hPe (by rw [hrun]; exact hsafe)
+          rw [hrun] at this
+          exact this
+        cases res with
+        | none =>
+          rcases hr with hr | hr
+          · cases hr
+          · exact absurd hr not_resumes_error
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh]
+              exact hpost s callee _ post hS (Or.inl ⟨v, rfl⟩) (hQc (by simp)) s.locals
+            · rename_i hsh
+              rw [if_neg hsh]
+              rcases hr with hr | hr
+              · cases hr
+              · exact absurd hr not_resumes_error
+          | timeOut => simp at hnt
+          | exception e v =>
+            dsimp only at hr ⊢
+            have hres : Resumes (some (.exception e v)) := by
+              rcases hr with hr | hr
+              · cases hr
+              · exact hr
+            exact hpost s callee _ post hS hres (hQc (by simp)) _
+          | error =>
+            rcases hr with hr | hr
+            · cases hr
+            · exact absurd hr not_resumes_error
+          | _ =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- A callee that keeps the owned message slot `ev+112` (word-level) on every resuming result;
+what `set_delegation` needs beyond `EvmKeeps EvmMsgReady` for `depth0_prepare`'s `msg` local. -/
+def KeepsMsgSlot (fname : MlS) : Prop :=
+  FunSpec EvmMsgReady (fun s r post => Resumes r →
+    memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112)) fname
+
+/-- A handler-free call of an `EvmKeeps EvmMsgReady gw_sd` callee that also keeps the message slot,
+from a `D0Pre gw` state (`gw_sd ⊆ gw`, `ev ∉ gw`): the `D0CallPost` shape. -/
+theorem hoare_call_d0CallPost_of_evmKeeps {gw gw_sd : List String} {fname : MlS}
+    (hk : EvmKeeps EvmMsgReady gw_sd fname) (hslot : KeepsMsgSlot fname)
+    (hsub : ∀ g ∈ gw_sd, g ∈ gw) (hev : ofString "ev" ∉ gw.map ofString)
+    (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (D0Pre gw hp G ch) (.call (some (none, none)) fname [])
+      (D0CallPost gw hp G ch) := by
+  obtain ⟨params, body, ret, hlook, h1⟩ := hk
+  obtain ⟨params2, body2, ret2, hlook2, h2⟩ := hslot
+  rw [hlook] at hlook2
+  obtain ⟨hpe, hbe, hre⟩ : params = params2 ∧ body = body2 ∧ ret = ret2 := by
+    have := Option.some.inj hlook2
+    exact ⟨(Prod.mk.inj this).1, (Prod.mk.inj (Prod.mk.inj this).2).1,
+      (Prod.mk.inj (Prod.mk.inj this).2).2⟩
+  subst hpe hbe hre
+  have hf : FunSpec (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+      (fun s r post => Resumes r → StepFrom gw hp G ch post ∧
+        memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112)) fname :=
+    ⟨params, body, ret, hlook, fun s hc hP hex hnt hres =>
+      ⟨stepFrom_of_evmStep hsub hP.2 (h1 s hc hP.1 hex hnt hres), h2 s hc hP.1 hex hnt hres⟩⟩
+  refine ⟨fun {F} s hcode hD hnt => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hnt ⊢
+  have hargs : evalListHOLFinite s
+      (h := fun address => Classical.propDecidable (s.memaddrs address)) [] = some [] := by
+    simp [evalListHOLFinite, evalListHOLExact]
+  simp only [hargs] at hnt ⊢
+  rcases hl : lookupCodeHOLFinite s.code.lookup fname [] with _ | ⟨body', callee, ret'⟩
+  · simp only [hl]
+    exact ⟨(fun h => by cases h), fun h => absurd h not_resumes_error⟩
+  · simp only [hl] at hnt ⊢
+    by_cases hz : s.clock = 0
+    · simp [hz] at hnt
+    · simp only [hz, ↓reduceIte] at hnt ⊢
+      have hSe := localsFree_stepFrom gw hp G ch s callee (s.clock - 1) hD.1.2
+      have hPe : EvmMsgReady (callEntryStateHOLFinite s callee) ∧
+          StepFrom gw hp G ch (callEntryStateHOLFinite s callee) :=
+        ⟨evmMsgReady_of_evmInv _ hSe.1, hSe⟩
+      rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨res, post⟩
+      simp only [hrun] at hnt ⊢
+      have hQc (hsafe : res ≠ some .timeOut) : Resumes res → StepFrom gw hp G ch post ∧
+          memW post (globN (callEntryStateHOLFinite s callee) "ev" + 112) =
+            memW (callEntryStateHOLFinite s callee)
+              (globN (callEntryStateHOLFinite s callee) "ev" + 112) := by
+        have := FunSpec.at_lookup hf s hcode [] body' callee ret' hl hPe (by rw [hrun]; exact hsafe)
+        rw [hrun] at this
+        exact this
+      obtain ⟨⟨hP, hS⟩, m, hm, hm_eq⟩ := hD
+      have hGs := hS.2.2.1 (ofString "ev") hev
+      have hpost (hres : Resumes res) (hsafe : res ≠ some .timeOut)
+          (locals : HolFiniteMapExact MlS (ValueHOL 64)) :
+          EvmMsgReady { post with locals := locals } ∧
+            StepFrom gw hp G ch { post with locals := locals } := by
+        have hSl := localsFree_stepFrom gw hp G ch post locals post.clock (hQc hsafe hres).1
+        exact ⟨evmMsgReady_of_evmInv _ hSl.1, hSl⟩
+      have hmsg (hres : Resumes res) (hsafe : res ≠ some .timeOut) :
+          memW post (globN s "ev" + 112) = memW s (globN s "ev" + 112) := by
+        have := (hQc hsafe hres).2
+        simpa only [callEntryStateHOLFinite, globN, memW] using this
+      cases res with
+      | none => exact ⟨(fun h => by cases h), fun h => absurd h not_resumes_error⟩
+      | some r =>
+        cases r with
+        | returned v =>
+          dsimp only
+          split
+          · rename_i hsh
+            refine ⟨fun _ => ?_, fun h => absurd h (by rintro (⟨_, h⟩ | ⟨_, _, h, _⟩) <;> cases h)⟩
+            have hres : Resumes (some (.returned v)) := Or.inl ⟨v, rfl⟩
+            have hSp := (hQc (by simp) hres).1
+            have hGp := hSp.2.2.1 (ofString "ev") hev
+            have hevN : globN post "ev" = globN s "ev" := by
+              simp only [globN]; rw [← hGp, hGs]
+            refine ⟨hpost hres (by simp) s.locals, m, hm, ?_⟩
+            have hmsg' := hmsg hres (by simp)
+            simp only [memW, globN] at hevN hm_eq hmsg' ⊢
+            rw [hevN, hmsg']
+            exact hm_eq
+          · exact ⟨(fun h => by cases h), fun h => absurd h not_resumes_error⟩
+        | timeOut => simp at hnt
+        | exception e v =>
+          dsimp only
+          exact ⟨(fun h => by cases h), fun hres => hpost hres (by simp) _⟩
+        | error => exact ⟨(fun h => by cases h), fun h => absurd h not_resumes_error⟩
+        | _ => exact ⟨(fun h => by cases h), fun h => by rcases h with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h⟩
 
 end HeadStore
