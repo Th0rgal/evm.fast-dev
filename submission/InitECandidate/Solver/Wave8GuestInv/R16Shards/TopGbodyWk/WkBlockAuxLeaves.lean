@@ -6643,4 +6643,57 @@ theorem merge_outer_get_hit_union_entry {F : Type}
   rw [hn]
   simpa [locN, HolFiniteMapExact.lookup_update, FUPDATE, htabValues, hdr, nodeF, memW, globN] using hmem hhit
 
+/-- Execute the inner union with its ownership witness in the caller state. -/
+theorem eval_call_union_bs_inner {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (src : ExpHOL 64) (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (houter : memW s (globN s "bs" + 32) ≠ 0)
+    (hinner : locN s "binner" ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (hnt : (evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "htab_union_into") [.var .local (ofString "binner"), src])).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "htab_union_into") [.var .local (ofString "binner"), src])).1) :
+    let out := evaluateHOLFiniteState s (.call (some (none, none))
+      (ofString "htab_union_into") [.var .local (ofString "binner"), src])
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s out.1 out.2 := by
+  dsimp only
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a))
+      [.var .local (ofString "binner"), src] with _ | vs
+  · simp [evalListHOLFinite, ha] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_union_into") vs with
+      _ | ⟨body, callee, ret⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        have hP := union_bs_inner_call_entry s hc hW hbs houter hinner src vs body callee ret
+          (by rwa [evalListHOLFinite_eq_toExact]) hl
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hr] at hnt hfr ⊢
+        have hnc : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠
+            some .timeOut := by rw [hr]; rintro rfl; simp at hnt
+        have hs := FunSpec.at_lookup wkSc_htab_union_into_bs_inner s hc vs body callee ret hl hP hnc
+        rw [hr] at hs
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · exact (hs (Or.inl ⟨v, rfl⟩)).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | h <;> try simp at h
+              exact h
+            exact (hs hres).from_entry
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
