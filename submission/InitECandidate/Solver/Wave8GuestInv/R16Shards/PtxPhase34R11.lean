@@ -13940,4 +13940,83 @@ theorem receipt_gas_advance_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Allocating the bloom and executing the complete receipt suffix preserves
+the entry frame, including restoration of the scoped bloom local. -/
+theorem receipt_alloc_bloom_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs old : BitVec 64) (bound : Nat) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ p.toNat + 265 + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.decCall (ofString "bloom") .one (ofString "alloc") [.const 256]
+        (.seq
+          (.call (some (none, none)) (ofString "logs_bloom")
+            [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+          (.seq
+            (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+              [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])
+            (.seq
+              (.assign .local (ofString "p")
+                (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+              (.seq
+                (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+                  [.var .local (ofString "p"), .var .local (ofString "logs")])
+                (.seq
+                  (.assign .local (ofString "p")
+                    (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+                  (.seq
+                    (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+                      [.var .local (ofString "start"), .var .local (ofString "p")])
+                    (.seq
+                      (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+                        (.seq
+                          (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+                            (.var .local (ofString "tx_type")))
+                          (.return (.rstruct
+                            [.op .sub [.var .local (ofString "start"), .const 1],
+                             .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+                      (.return (.rstruct [.var .local (ofString "start"), .var .local (ofString "w")])))))))))) =
+      (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  apply receipt_bloom_alloc_continuation_frame he _ v ?_ hr
+  intro next final bloom he' hb0 hb1 hloc hr'
+  apply receipt_bloom_logs_finish_return_frame hA hma he' start p logs bloom old bound v
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "bloom" ≠ ofString "start" by decide] using hs
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "bloom" ≠ ofString "p" by decide] using hp
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "bloom" ≠ ofString "logs" by decide] using hl
+  · rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "bloom" ≠ ofString "w" by decide] using hw
+  · exact hle
+  · exact hfresh
+  · exact ⟨hb0, hb1⟩
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact hr'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
