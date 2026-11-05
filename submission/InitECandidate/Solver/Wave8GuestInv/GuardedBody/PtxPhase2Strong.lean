@@ -3281,4 +3281,31 @@ theorem phase2_address_copy_with_locals {F : Type} (s : PanSemStateFiniteExact 6
       locN_congr s locals clock "nal" (hl "nal" (by simp))]
     exact hp.2.2.2
 
+/-- The complete address-copy body preserves the joint copy invariant. -/
+theorem phase2_address_copy_body_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.dec (names := ["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+    "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"])
+    (P' := fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") (by decide)
+  · intro F s v hp _
+    exact phase2_address_copy_set_acc s hp v
+  · exact phase2_address_copy_inner_hoare
+  · intro F r s locals hl hp hr
+    exact phase2_address_copy_with_locals s locals s.clock hl (hp hr)
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
