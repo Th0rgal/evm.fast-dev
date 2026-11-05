@@ -35,6 +35,13 @@ private partial def countSeqExpr (e : Expr) : Nat :=
   else 0
 
 open Lean Meta Elab Command in
+private def sealRemoveDeadProof (proof : Expr) : MetaM Expr := do
+  let name ← mkFreshUserName ((← getCurrNamespace) ++ `removeDeadStep)
+  let type ← inferType proof
+  addDecl (.thmDecl { name, levelParams := [], type, value := proof })
+  return mkConst name
+
+open Lean Meta Elab Command in
 private partial def solveRemoveDeadSubtree (e live nlive lt : Expr) : MetaM (Expr × Expr) := do
   if e.isAppOfArity ``WordLangProgHOL.seq 3 && countSeqExpr e > 25 then
     let args := e.getAppArgs
@@ -53,7 +60,7 @@ private partial def solveRemoveDeadSubtree (e live nlive lt : Expr) : MetaM (Exp
     let r1_nlive ← withTransparency .all (whnf (← mkAppM ``Prod.snd #[r1_2]))
     let resTuple ← mkAppM ``Prod.mk #[comb, ← mkAppM ``Prod.mk #[r1_live, r1_nlive]]
     let stepPrf ← mkAppM ``removeDead_seq_split #[s1, s2, live, nlive, lt, r2, r1, h2, h1]
-    return (resTuple, stepPrf)
+    return (resTuple, ← sealRemoveDeadProof stepPrf)
   else
     let call ← mkAppM ``WordAlloc.removeDead #[e, live, nlive, lt]
     let cbvRes ← Lean.Meta.Tactic.Cbv.cbvEntry call
@@ -61,7 +68,7 @@ private partial def solveRemoveDeadSubtree (e live nlive lt : Expr) : MetaM (Exp
     let prf ← match cbvRes with
       | .rfl .. => mkEqRefl call
       | .step _ p .. => pure p
-    return (reduced, prf)
+    return (reduced, ← sealRemoveDeadProof prf)
 
 end InitECandidate.Solver.Wave8Stage
 
