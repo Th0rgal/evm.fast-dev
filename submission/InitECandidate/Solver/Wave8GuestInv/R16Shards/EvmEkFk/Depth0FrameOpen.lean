@@ -1414,6 +1414,57 @@ theorem hoare_depth0_auth_tail :
   exact Hoare.decCall_fall_word (names := []) (by simp)
     (LocalsOnly.of_localsFree localsFree_evmMsgReady) (fun {F} => @hres F) hcont
 
+/-! ## `StepFrom`: `EvmStep` with the entry state captured by value, for `Hoare` chaining -/
+
+/-- `EvmStep gw s₀ t` with the entry data (`heap_ptr`, globals, chain) of `s₀` taken as values, so
+it is an ordinary (locals-free) state predicate usable as a `Hoare` pre/postcondition. -/
+def StepFrom (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (t : PanSemStateFiniteExact 64 F) : Prop :=
+  EvmInv t ∧ hp ≤ globN t "heap_ptr" ∧ (∀ k : MlS, k ∉ gw.map ofString → G k = t.globals.lookup k) ∧
+    evmChain t = ch
+
+theorem evmStep_iff_stepFrom {F : Type} (gw : List String) (s t : PanSemStateFiniteExact 64 F) :
+    EvmStep gw s t ↔ StepFrom gw (globN s "heap_ptr") s.globals.lookup (evmChain s) t :=
+  Iff.rfl
+
+theorem stepFrom_refl {F : Type} (gw : List String) (s : PanSemStateFiniteExact 64 F)
+    (h : EvmInv s) : StepFrom gw (globN s "heap_ptr") s.globals.lookup (evmChain s) s :=
+  ⟨h, le_rfl, fun _ _ => rfl, rfl⟩
+
+/-- Chaining: an `EvmStep gw'` from a `StepFrom gw` state lands in a `StepFrom gw` state when
+`gw' ⊆ gw`. -/
+theorem stepFrom_of_evmStep {F : Type} {gw gw' : List String} {hp : Nat}
+    {G : MlS → Option (ValueHOL 64)} {ch : List Ivl} {s t : PanSemStateFiniteExact 64 F}
+    (hsub : ∀ g ∈ gw', g ∈ gw) (h0 : StepFrom gw hp G ch s) (h : EvmStep gw' s t) :
+    StepFrom gw hp G ch t := by
+  obtain ⟨_, hhp, hG, hch⟩ := h0
+  obtain ⟨hInv, hhp', hG', hch'⟩ := h
+  refine ⟨hInv, Nat.le_trans hhp hhp', fun k hk => ?_, hch'.trans hch⟩
+  have hk' : k ∉ gw'.map ofString := by
+    intro hm
+    obtain ⟨g, hg, rfl⟩ := List.mem_map.1 hm
+    exact hk (List.mem_map.2 ⟨g, hsub g hg, rfl⟩)
+  exact (hG k hk).trans (hG' k hk')
+
+theorem localsFree_stepFrom (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64))
+    (ch : List Ivl) : LocalsFree (StepFrom gw hp G ch) := by
+  intro F s locals k h
+  obtain ⟨hInv, hhp, hG, hch⟩ := h
+  exact ⟨localsFree_evmInv s locals k hInv, hhp, hG, by rw [evmChain_with_locals]; exact hch⟩
+
+/-- `Hoare` lifting: a triple that is an `EvmStep gw'` from its own entry becomes a triple between
+`StepFrom gw` states. -/
+theorem hoare_stepFrom_of_evmStep {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {prog : ProgHOL 64} {gw gw' : List String} (hsub : ∀ g ∈ gw', g ∈ gw)
+    (h : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode → P s →
+      (evaluateHOLFiniteState s prog).1 ≠ some .timeOut →
+      (evaluateHOLFiniteState s prog).1 = none →
+      EvmStep gw' s (evaluateHOLFiniteState s prog).2)
+    (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => P s ∧ StepFrom gw hp G ch s) prog
+      (fun r t => r = none → StepFrom gw hp G ch t) :=
+  ⟨fun s hcode hP hnt hr => EvmEkFk.stepFrom_of_evmStep hsub hP.2 (h s hcode hP.1 hnt hr)⟩
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
