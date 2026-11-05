@@ -5538,4 +5538,31 @@ theorem phase2_packed_record_counts_frame {F : Type}
   rw [ht, hh 208 (by omega)]
   simpa only [Nat.add_assoc] using hr (24 * i + 16) (by omega)
 
+/-- The live outer guard itself rules out overflow of the record increment. -/
+theorem phase2_packed_outer_successor_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedInnerInv s) : locN s "i" + 1 < 2 ^ 64 := by
+  have hi := hp.2.2.1
+  have hm : memW s (locN s "tx" + 216) < 2 ^ 64 := by
+    unfold memW
+    exact BitVec.isLt _
+  omega
+
+/-- No additional arithmetic premise is needed for the concrete record increment. -/
+theorem phase2_packed_outer_increment_exit_hoare :
+    Hoare (fun s => PtxPackedInnerInv s ∧
+      ¬ locN s "j" < memW s
+        (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxPackedOuterInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hb := phase2_packed_outer_successor_bound hp.1
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "i" v hb he
+    have heq : w = BitVec.ofNat 64 (locN s "i" + 1) := by
+      apply BitVec.eq_of_toNat_eq
+      rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+    subst w
+    exact fun _ => phase2_packed_outer_advance s hp.1 hp.2 hb
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
