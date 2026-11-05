@@ -1475,4 +1475,29 @@ theorem phase2_store_validated_outside {F : Type} {s : PanSemStateFiniteExact 64
     (disj_of_inside_right hin htx)
     (fun hn => disj_of_inside_right hin (hrec hn)), hW', how⟩
 
+/-- A store in the live transaction environment preserves its allocation and
+world separation as well as the validated transaction. The access-list witness
+is supplied for the same world that separates the environment. -/
+theorem phase2_teLive_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s)
+    (hT : ∀ S Nd, WorldTypedWith s S Nd →
+      IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd) →
+      TxAccessListAt s S Nd (locN s "tx"))
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "te") (locN s "te" + 200))
+    (htx : Disj (locN s "tx", 384) (locN s "te", 200))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (locN s "te", 200))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxTeLive { s with memory := mem } := by
+  obtain ⟨S, Nd, hW, hd⟩ := hp.2.2.2.2.2
+  obtain ⟨hv, hW', how⟩ := phase2_store_validated_outside hp.1 hW (hT S Nd hW hd)
+    (blk := (locN s "te", 200)) (fun o ho => hd _ (by simp) o ho)
+    hx hin htx hrec hm
+  refine ⟨hv, hp.2.1, hp.2.2.1, hp.2.2.2.1, ?_, S, Nd, hW', ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.2.2.2.2.1
+  · rw [how]
+    exact hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
