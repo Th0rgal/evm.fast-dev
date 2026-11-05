@@ -2341,6 +2341,43 @@ theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : N
   intro F s hc hp
   exact hb s hc hp
 
+/-- The source-load contract needed after the log-push loop. -/
+def Phase4TypedLogPointers : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN s "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))
+
+theorem localsOnly_phase4TypedLogPointers :
+    LocalsOnly ["index", "out", "logs", "rc", "nl", "lp"] Phase4TypedLogPointers := by
+  intro F s locals k hl hp
+  have hr := localsOnly_phase4LogPointersReady s locals k hl hp.1
+  refine ⟨hr, ?_, hr.1.2.2, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.2.1
+    exact ⟨n, (hl "nl" (by simp)).trans hn⟩
+  · obtain ⟨p, hp⟩ := hp.2.2.2
+    exact ⟨p, (hl "lp" (by simp)).trans hp⟩
+
+/-- A slot write retains the word-shaped source operands. -/
+theorem hoare_logSlot_store_typed (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare (fun s => Phase4LogSlotReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.store (.var .local (ofString "slot")) src)
+      (fun r t => r = none → Phase4TypedLogPointers t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨w, rfl⟩ := hword s v hv
+  obtain ⟨hdom, _, hmem⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hslot : locN s "slot" = x.toNat := by
+    have hlu : s.locals.lookup (ofString "slot") = some (.val (.word x)) := hx
+    simp only [locN, hlu]
+  have hr := logPointers_store_bo40 hp.1.1 hp.1.1.1.2.2 hp.1.2.1 hdom
+    (by simpa only [hslot] using hp.1.2.2) hmem
+  exact ⟨hr, hp.2.1, hr.1.2.2, hp.2.2⟩
+
 theorem hoare_logPointers_increment :
     Hoare Phase4LogPointersReady
       (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
