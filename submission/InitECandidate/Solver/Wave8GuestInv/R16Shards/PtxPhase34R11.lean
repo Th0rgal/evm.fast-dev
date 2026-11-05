@@ -4242,6 +4242,19 @@ theorem stableCopyLoopInv_counter {F : Type} (s : PanSemStateFiniteExact 64 F)
     apply stableCopyStorePre_counter s v (w + 1) hp hv hinv
     rwa [hloc] at hactive
 
+/-- The zero-counter state is a full loop head once allocation and framing
+have supplied its active-store contract. -/
+theorem stableCopyLoopInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (n : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hstore : 0 < locN s "nl" → StableCopyStorePre s) :
+    StableCopyLoopInv s := by
+  have hz : locN s "i" = 0 := by simp [locN, hi]
+  refine ⟨hp, ⟨0, n, hi, hn⟩, ?_, ?_⟩
+  · rw [hz]; exact Nat.zero_le _
+  · simpa only [hz] using hstore
+
 /-- Hoare composition interface for the increment with full loop-head
 preservation, including the separated contract for the next active index. -/
 theorem hoare_stableCopy_increment_loop :
