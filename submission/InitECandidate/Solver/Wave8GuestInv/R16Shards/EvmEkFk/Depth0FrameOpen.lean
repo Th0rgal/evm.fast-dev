@@ -2662,6 +2662,64 @@ theorem hoare_dec_msg_step (gw : List String) (hp : Nat)
     exact ⟨localsFree_evmMsgReady s locals k hP.1,
       localsFree_stepFrom gw hp G ch s locals k hP.2⟩
 
+/-- The source authorization loop contains no escaping loop-control statements.
+The syntactic checks avoid a separate semantic side proof at every loop entry. -/
+theorem Hoare.while_fall_checked {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : Hoare (fun s => P s ∧ CondTrue cond s) body (Fall P))
+    (hbreak : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hcontinue : noTopContinue body = true) :
+    Hoare P (.while cond body) (Fall P) :=
+  Hoare.while_fall hdec hbody (fun s _ =>
+    ⟨InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hbreak s,
+      evaluate_noTopContinue body hcontinue s⟩)
+
+theorem lookup_set_delegation :
+    originalRuntimeCode.lookup (ofString "set_delegation") =
+      some ([], sourceFnBody Guest.Software.guestFn_set_delegation, .one) :=
+  lookup_of_guestAst_getElem 575 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_set_delegation) rfl
+
+theorem lookup_prepare_dispatch :
+    originalRuntimeCode.lookup (ofString "prepare_dispatch") =
+      some ([], sourceFnBody Guest.Software.guestFn_prepare_dispatch, .one) :=
+  lookup_of_guestAst_getElem 576 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_prepare_dispatch) rfl
+
+/-- Convert a body proof carrying the entry heap, globals and chain into the
+callee's exact `EvmKeeps` contract. -/
+theorem evmKeeps_of_stepFrom_body {fname : MlS} {params : List (MlS × ShapeHOL)}
+    {body : ProgHOL 64} {ret : ShapeHOL} (gw : List String)
+    (hlookup : originalRuntimeCode.lookup fname = some (params, body, ret))
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) body
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    EvmKeeps EvmMsgReady gw fname := by
+  refine ⟨params, body, ret, hlookup, fun s hc hP _ hnt hr => ?_⟩
+  have h := (hbody (globN s "heap_ptr") s.globals.lookup (evmChain s)).run s hc
+    ⟨hP, stepFrom_refl gw s (evmInv_of_evmMsgReady s hP)⟩ hnt (Or.inr hr)
+  exact (evmStep_iff_stepFrom gw s _).2 h.2
+
+theorem ek_set_delegation_of_body
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s)
+        (sourceFnBody Guest.Software.guestFn_set_delegation)
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s))) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "set_delegation") :=
+  evmKeeps_of_stepFrom_body _ lookup_set_delegation hbody
+
+theorem ek_prepare_dispatch_of_body
+    (hbody : ∀ (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl),
+      Hoare (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s)
+        (sourceFnBody Guest.Software.guestFn_prepare_dispatch)
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom ["heap_ptr", "journal_n", "scratch_ptr"] hp G ch s))) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "prepare_dispatch") :=
+  evmKeeps_of_stepFrom_body _ lookup_prepare_dispatch hbody
+
+#print axioms Hoare.while_fall_checked
+#print axioms ek_set_delegation_of_body
+#print axioms ek_prepare_dispatch_of_body
 #print axioms Hoare.while_fall
 #print axioms d0Pre_msg_init
 #print axioms hoare_dec_msg_step
