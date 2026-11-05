@@ -5897,6 +5897,16 @@ theorem hoare_stableCopy_body_loop :
     hoare_stableCopy_store_length_word.run s hc hp.2 hnt hr,
     hoare_stableCopy_store_for_increment.run s hc hp.1 hnt hr⟩
 
+/-- The indexed copy followed by its counter increment preserves ownership. -/
+theorem hoare_stableCopy_body_ownedFrame :
+    Hoare (fun s => StableCopyStorePre s ∧ StableCopyOwnedFrame s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  exact Hoare.seq_fall hoare_stableCopy_store_ownedFrame
+    (hoare_stableCopyOwnedFrame_assign _ _ (by decide) (by decide) (by decide))
+
 /-- An active loop head supplies the concrete body's full precondition. -/
 theorem hoare_stableCopy_active_body :
     Hoare (fun s => StableCopyLoopInv s ∧
