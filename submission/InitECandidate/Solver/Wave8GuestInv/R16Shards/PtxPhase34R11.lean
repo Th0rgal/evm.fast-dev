@@ -2718,6 +2718,17 @@ theorem lst_new_stable_storage_resume (h : PtxCallees) {F : Type}
   obtain ⟨hp', hcap⟩ := lst_new_stable_capacity_resume h s vs body callee ret v post hc hp ha hl hr
   exact ⟨hp', hcap, lst_new_stable_backing_resume h s vs body callee ret v post hc hp ha hl hr⟩
 
+theorem phase4StableAllocation_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4StableCapReady
+      (spinePlug 1 (spineAt 132 ptxCode) tail) (K.lst_new + b + 1) := by
+  unfold ptxCode
+  refine TerminatingProgBoundedOn.decCall_on h.fb_lst_new _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    exact lst_new_stable_storage_resume h s vs body callee ret v post hc hp ha hl hr
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
