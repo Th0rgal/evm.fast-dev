@@ -8827,6 +8827,37 @@ theorem htab_fp_pos {F : Type} {s : PanSemStateFiniteExact 64 F} {t : Nat} (h : 
   · omega
   · omega
 
+/-- The success tail's log-count store and table union preserve both gas words. -/
+theorem icsTail_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (heS : heapLimit ≤ e.toNat)
+    (hwf : HtabWF s T)
+    (hdisj : ∀ i ∈ htabFootprint s T, Disj (e.toNat, 280) i) :
+    readW post (e + 64) = readW s (e + 64) ∧
+      readW post (e + 192) = readW s (e + 192) := by
+  have hbound : globN post "heap_ptr" ≤ heapLimit := h.2.2.1.2.2.1
+  have hkeep (k : Nat) (hk : k = 64 ∨ k = 192) :
+      post.memory (e + BitVec.ofNat 64 k) = s.memory (e + BitVec.ofNat 64 k) := by
+    have hkb : k < 200 := by omega
+    have hkn : (e + BitVec.ofNat 64 k).toNat = e.toNat + k :=
+      tn_add e k (by omega) (by omega)
+    apply h.2.2.2.2.2
+    · rcases hk with rfl | rfl <;> bv_omega
+    · intro i hi
+      apply noHit_of_disj (hdisj i hi)
+      · exact htab_fp_pos hwf i hi
+      · rw [hkn]; dsimp only; omega
+    · unfold CellHits
+      rw [hkn]
+      dsimp only
+      have hhp := h.2.2.2.2.1
+      omega
+  constructor
+  · change readW post (e + BitVec.ofNat 64 64) = readW s (e + BitVec.ofNat 64 64)
+    unfold readW; rw [hkeep 64 (Or.inl rfl)]
+  · change readW post (e + BitVec.ofNat 64 192) = readW s (e + BitVec.ofNat 64 192)
+    unfold readW; rw [hkeep 192 (Or.inr rfl)]
+
 /-- Frame of a full `incorporate_child_on_success` run. -/
 def ICSFrame {F : Type} (s : PanSemStateFiniteExact 64 F) (e L arr0 cap0 tw : BitVec 64)
     (post : PanSemStateFiniteExact 64 F) : Prop :=
