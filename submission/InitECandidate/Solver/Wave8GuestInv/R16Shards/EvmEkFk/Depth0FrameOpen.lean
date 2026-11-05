@@ -3893,7 +3893,7 @@ theorem frameWF_of_fresh_scratch {F : Type}
     (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
     (hhi : q + n ≤ globN s "scratch_ptr")
     (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name)
     (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
     (hdom : post.memaddrs = s.memaddrs)
     {ec : Ivl} (hec : ec ∈ evmChain s) (hfw : FrameWF s S ec)
@@ -4009,8 +4009,8 @@ theorem fresh_scratch_world_transport {F : Type}
     (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
     (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
     (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
-    (hglob : ∀ name, name ≠ "scratch_ptr" →
+    (hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, ofString name ≠ ofString "scratch_ptr" →
       s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
     WorldTypedWith post S Nd ∧ fixedObjects post = fixedObjects s ∧
@@ -4018,16 +4018,29 @@ theorem fresh_scratch_world_transport {F : Type}
       worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s ∧
       (∀ t ∈ S, htabFootprint post t = htabFootprint s t) := by
   have hc := fresh_scratch_sameTypedCells hAs hWT q n hlo hhi hmem hbe hdom hout
-  have hfix := fixedObjects_eq_of_nonHeapGlobalsKept hAs.2 hWT.1 hWT.2.2.1 hc
-    (fun name _ hs _ => hglob name hs)
+  have hfix : fixedObjects post = fixedObjects s := by
+    have hgb : (globalBuffers.map fun gn => (globN post gn.1, if globN post gn.1 = 0 then 0 else gn.2)) =
+        (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+      apply List.map_congr_left
+      intro gn hgn
+      have hn : ofString gn.1 ≠ ofString "scratch_ptr" := by
+        have hm : ofString gn.1 ∈ (globalBuffers.map Prod.fst).map ofString :=
+          List.mem_map.2 ⟨gn.1, List.mem_map.2 ⟨gn, hgn, rfl⟩, rfl⟩
+        intro he; rw [he] at hm
+        exact (by decide : ofString "scratch_ptr" ∉ (globalBuffers.map Prod.fst).map ofString) hm
+      rw [hg gn.1 hn]
+    unfold fixedObjects
+    rw [hgb, blockOutObjects_eq hAs.2 hWT.2.2.1 hc (hg "bo" (by decide)),
+      balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hc (hg "bal_accounts" (by decide)),
+      hg "journal" (by decide), hg "journal_cap" (by decide)]
   have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := by rw [hg _ (by decide)]
   have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hhp hsp hfix
   have hcg : ∀ name ∈ coreWorldGlobals, globN post name = globN s name := by
     intro name hn
     apply hg
     intro heq
-    subst name
-    exact (by decide : "scratch_ptr" ∉ coreWorldGlobals) hn
+    have hm := List.mem_map.2 ⟨name, hn, heq⟩
+    exact (by decide : ofString "scratch_ptr" ∉ coreWorldGlobals.map ofString) hm
   have hW := (worldTypedWith_congr_w1 hAs hAp hhp hsp hcg hc hWT
     ⟨hFT, fun o ho => Or.inl (by rw [← hfix]; exact ho)⟩).1
   exact ⟨hW, hfix, nodeExtents_eq hWT.2.2.2.1 hc,
@@ -4046,8 +4059,8 @@ theorem fresh_scratch_msgOwned {F : Type}
     (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
     (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
     (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
-    (hglob : ∀ name, name ≠ "scratch_ptr" →
+    (hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, ofString name ≠ ofString "scratch_ptr" →
       s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
     ∀ m, MsgOwned s S m → MsgOwned post S m := by
@@ -4071,14 +4084,14 @@ theorem worldTableRefs_eq_of_typedCells {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
     (hAs : ArenaOK s) (hWT : WorldTypedWith s S Nd)
     (hc : EvmBase.SameTypedCells s post S Nd)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name) :
+    (hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name) :
     worldTableRefs post S = worldTableRefs s S := by
   have hrec : ∀ name sz, (name, sz) ∈ typedRecords → ∀ k, k + 8 ≤ sz →
       globN s name ≠ 0 → memW post (globN s name + k) = memW s (globN s name + k) := by
     intro name sz hr k hk hn
     exact memW_typedRec_eq hAs hWT.2.2.1 hc hr hn hk
   have hslots : ∀ name ks sz, (name, sz) ∈ typedRecords →
-      name ≠ "scratch_ptr" → (∀ k ∈ ks, k + 8 ≤ sz) →
+      ofString name ≠ ofString "scratch_ptr" → (∀ k ∈ ks, k + 8 ≤ sz) →
       recordSlots post name ks = recordSlots s name ks := by
     intro name ks sz hr hn hk
     unfold recordSlots
@@ -4087,7 +4100,7 @@ theorem worldTableRefs_eq_of_typedCells {F : Type}
     · rfl
     · rename_i hnz
       exact List.map_congr_left (fun k h => hrec name sz hr k (hk k h) hnz)
-  have hn : ∀ name sz, (name, sz) ∈ typedRecords → name ≠ "scratch_ptr" → 40 ≤ sz →
+  have hn : ∀ name sz, (name, sz) ∈ typedRecords → ofString name ≠ ofString "scratch_ptr" → 40 ≤ sz →
       (if globN post name ≠ 0 ∧ memW post (globN post name + 32) ∈ S then
         htabValues post (memW post (globN post name + 32)) else []) =
       (if globN s name ≠ 0 ∧ memW s (globN s name + 32) ∈ S then
@@ -4154,8 +4167,8 @@ theorem evmInvAt_of_fresh_scratch {F : Type}
     (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
     (hbe : post.be = s.be) (hdom : post.memaddrs = s.memaddrs)
     (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
-    (hglob : ∀ name, name ≠ "scratch_ptr" →
+    (hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name)
+    (hglob : ∀ name, ofString name ≠ ofString "scratch_ptr" →
       s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
     EvmInvAt post S := by
@@ -4198,11 +4211,15 @@ theorem evmMsgReady_fresh_scratch {F : Type}
     (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a)
     (hglob : ∀ name : MlS, name ∉ (["scratch_ptr"] : List String).map ofString →
       post.globals.lookup name = s.globals.lookup name)
-    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
-    (hgl : ∀ name, name ≠ "scratch_ptr" →
-      s.globals.lookup (ofString name) = post.globals.lookup (ofString name))
     (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
     EvmMsgReady post ∧ EvmStep ["scratch_ptr"] s post := by
+  have hgl : ∀ name, ofString name ≠ ofString "scratch_ptr" →
+      s.globals.lookup (ofString name) = post.globals.lookup (ofString name) := by
+    intro name hn
+    exact (hglob (ofString name) (by simpa using hn)).symm
+  have hg : ∀ name, ofString name ≠ ofString "scratch_ptr" → globN post name = globN s name := by
+    intro name hn
+    exact (globN_eq_of_lookup_eq (hgl name hn)).symm
   have hInv := evmInv_of_evmMsgReady s hP
   have hch := fresh_scratch_chain_eq hInv q n hhi hmem (hg _ (by decide)) (hg _ (by decide))
   obtain ⟨hAs, S, hI, hm⟩ := hP
@@ -4219,5 +4236,116 @@ theorem evmMsgReady_fresh_scratch {F : Type}
   · rw [hg "heap_ptr" (by decide)]
   · intro name hn
     exact (hglob name hn).symm
+
+/-- Word stores cannot alter cells outside their checked memory domain. -/
+theorem scratch_panMemStores_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (ws : List (HolWordLab 64)) (x : BitVec 64) (mem mem' : BitVec 64 → HolWordLab 64),
+      @panMemStoresHOL 64 _ x ws dom dec mem = some mem' →
+      ∀ a : BitVec 64, ¬ dom a → mem' a = mem a
+  | [], _, mem, mem', hst, a, _ => by
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    rw [← hst]
+  | w :: ws, x, mem, mem', hst, a, ha => by
+    unfold panMemStoresHOL panMemStoreHOL at hst
+    split_ifs at hst with hdom
+    have hax : a ≠ x := fun he => ha (he ▸ hdom)
+    exact (scratch_panMemStores_out_dom ws (x + panBytesInWord 64)
+      (fun current => if current = x then w else mem current) mem' hst a ha).trans (if_neg hax)
+
+/-- Byte stores retain even unaligned cells outside the checked domain. -/
+theorem scratch_panMemStoreByte_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom}
+    {mem mem' : BitVec 64 → HolWordLab 64} {be : Bool} {addr : BitVec 64} {b : BitVec 8}
+    (hst : @panMemStoreByteWord8HOL 64 _ mem dom dec be addr b = some mem')
+    {a : BitVec 64} (ha : ¬ dom a) : mem' a = mem a := by
+  unfold panMemStoreByteWord8HOL at hst
+  dsimp only at hst
+  cases hm : mem (panByteAlignHOL (width := 64) addr) with
+  | word cell =>
+    rw [hm] at hst
+    dsimp only at hst
+    split at hst
+    · rename_i hdom
+      simp only [Option.some.injEq] at hst
+      subst hst
+      exact if_neg (fun heq : a = panByteAlignHOL (width := 64) addr => ha (heq.symm ▸ hdom))
+    · cases hst
+
+theorem scratch_panMemStore32_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom}
+    {mem mem' : BitVec 64 → HolWordLab 64} {be : Bool} {addr : BitVec 64} {val : BitVec 32}
+    (hst : @panMemStore32HOL 64 _ mem dom dec be addr val = some mem')
+    {a : BitVec 64} (ha : ¬ dom a) : mem' a = mem a := by
+  unfold panMemStore32HOL at hst
+  split at hst
+  · dsimp only at hst
+    cases hm : mem (panByteAlignHOL (width := 64) addr) with
+    | word cell =>
+      rw [hm] at hst
+      dsimp only at hst
+      split at hst
+      · rename_i hdom
+        simp only [Option.some.injEq] at hst
+        subst hst
+        exact if_neg (fun heq : a = panByteAlignHOL (width := 64) addr => ha (heq.symm ▸ hdom))
+      · cases hst
+  · cases hst
+
+theorem scratch_panWriteBytearray_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (bs : List (BitVec 8)) (addr : BitVec 64) (mem : BitVec 64 → HolWordLab 64) (be : Bool)
+      {a : BitVec 64}, ¬ dom a →
+      @panWriteBytearrayWord8HOL 64 _ addr bs mem dom dec be a = mem a
+  | [], _, _, _, _, _ => rfl
+  | b :: bs, addr, mem, be, a, ha => by
+    unfold panWriteBytearrayWord8HOL
+    cases hst : @panMemStoreByteWord8HOL 64 _
+        (@panWriteBytearrayWord8HOL 64 _ (addr + 1) bs mem dom dec be) dom dec be addr b with
+    | none => rfl
+    | some updated =>
+      exact (scratch_panMemStoreByte_out_dom hst ha).trans
+        (scratch_panWriteBytearray_out_dom bs (addr + 1) mem be ha)
+
+/-- Runtime jump-destination computation preserves readiness and the chain,
+given its out-of-domain cell frame. -/
+theorem compute_jumpdests_evm_run_with_out_dom {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) (nw p f : BitVec 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p)))
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f)))
+    (hnb : nw.toNat < 2 ^ 40)
+    (hout : ∀ a : BitVec 64, ¬ ordinaryDomain a →
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_compute_jumpdests)).2.memory a = s.memory a) :
+    InitECandidate.Solver.Wave8M19.Htab.Ret s
+      (sourceFnBody Guest.Software.guestFn_compute_jumpdests) (fun v post =>
+      ∃ q : BitVec 64, v = .val (.word q) ∧
+        EvmMsgReady post ∧ EvmStep ["scratch_ptr"] s post) := by
+  have hAs := hP.1
+  have hpn : globN s "scratch_ptr" = p.toNat := by simp [globN, hp]
+  have hfn : globN s "frame_mem_ptr" = f.toNat := by simp [globN, hf]
+  have hfp : f.toNat ≤ p.toNat := by
+    rw [← hpn, ← hfn]; exact hAs.2.2.2.2.1
+  intro v hv
+  obtain ⟨q, hval, hq, _, hlo, hhi, hg, _, hd, hm⟩ :=
+    compute_jumpdests_run s hAs.1.code hAs.1 nw p f hn hp hf hfp hnb v hv
+  let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_compute_jumpdests)).2
+  have hlow : globN s "frame_mem_ptr" ≤ q.toNat := by rw [hfn]; omega
+  have hhigh : q.toNat + (jdLen nw).toNat ≤ globN s "scratch_ptr" := by rwa [hpn]
+  have hq8 : q.toNat % 8 = 0 := by
+    rw [hq, and_neg8_toNat]
+    omega
+  have hApost : ArenaReady post := hb_arenaReady_update_scratch_ptr
+    (guestInv_evaluate s _ hAs.1) hAs.2 hg hlow
+    (by have := hAs.2.2.2.2.2.1; omega) hq8
+  have hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    have he : globN post "scratch_ptr" = q.toNat := by
+      unfold globN; rw [hg]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    omega
+  have hglob : ∀ name : MlS, name ∉ (["scratch_ptr"] : List String).map ofString →
+      post.globals.lookup name = s.globals.lookup name := by
+    intro name hn
+    rw [hg]
+    simp only [List.map_cons, List.map_nil, List.mem_singleton] at hn
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hn]
+  obtain ⟨hr, hs⟩ := evmMsgReady_fresh_scratch hP hApost q.toNat (jdLen nw).toNat
+    hlow hhigh hm (InitECandidate.Solver.Wave8GuestInv.R16Shards.evaluate_be_eq s _) hd hout hglob hsp
+  exact ⟨q, hval, hr, hs⟩
 
 end HeadStore

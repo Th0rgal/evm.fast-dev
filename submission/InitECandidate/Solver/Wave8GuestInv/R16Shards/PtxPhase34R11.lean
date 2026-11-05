@@ -10885,4 +10885,226 @@ theorem hoare_phase4LogCopyLoop_backing
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- The backing-aware log-copy loop satisfies the original concrete clock bound. -/
+theorem phase4LogCopyLoop_backing_bound (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4TypedLogPointers_backing
+  · have hb : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        phase4LogCopyBody (K.lst_push + (0 + 0) + 1) :=
+      TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+        (ofString "slot") ShapeHOL.one
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+        (Bc := 0 + 0)
+        (continuation := .seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (P := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        (Q := fun s => (Phase4LogSlotReady s ∧
+          (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+          ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+        (by intro F s vs body callee ret hc hp ha hl
+            exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1)
+        hresume
+        (by
+          intro F s hc hp
+          exact seq_bound_trans
+            (P := fun s => (Phase4LogSlotReady s ∧
+              (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+              ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+            (Q := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+            (fun t _ _ _ => by
+              have ht := clock_store t (.var .local (ofString "slot")) phase4LogCopySrc
+              exact ⟨by omega, by omega⟩)
+            ⟨fun t ht hp hnt hr =>
+              ⟨(hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word).run t ht hp.1 hnt hr,
+                hoare_logSlot_store_txBacking.run t ht ⟨hp.1.1, hp.2⟩ hnt hr⟩⟩
+            (fun t _ _ _ => by
+              have ht := clock_assign t .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1])
+              exact ⟨by omega, by omega⟩) s hc hp)
+    intro F s hc hp
+    simpa only [Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody_backing hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
+/-- Compose the backing-aware log loop with its stable-allocation continuation. -/
+theorem phase4LogCopyLoop_backing_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_backing_bound h hresume)
+    (hoare_phase4LogCopyLoop_backing hresume) htail
+  unfold ptxCode
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Initializing the log-copy counter preserves the backing-aware typed guard. -/
+theorem phase4LogCounter_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 128 ptxCode) tail) b := by
+  have hi : Hoare (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → Phase4TypedLogPointers t ∧ TxBacking t) := by
+    apply Hoare.assign
+    · intro F s v hp _ _
+      exact LocalsOnly.setVar localsOnly_phase4TypedLogPointers_backing (by decide) v s hp
+    · intro F s _ hr
+      cases hr
+  unfold ptxCode
+  intro F s hc hp
+  rw [← Nat.zero_add b]
+  refine seq_bound_trans ?_ hi htail s hc hp
+  intro G t _ _ _
+  have ht := clock_assign t .local (ofString "i") (.const 0)
+  exact ⟨by omega, by omega⟩
+
+/-- Compose counter initialization, log pushing, capacity setup and stable copying. -/
+theorem phase4LogLoop_stable_backing_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 9 (spineAt 128 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  have hb := @phase4LogCounter_backing_cut _ _
+    (phase4LogCopyLoop_backing_cut h hresume
+      (stable_capacity_setup_copy_backing_cut (stable_allocation_decl_loop_backing_cut h htail)))
+  have he : spinePlug 9 (spineAt 128 ptxCode) tail =
+      spinePlug 1 (spineAt 128 ptxCode)
+        (spinePlug 1 (spineAt 129 ptxCode)
+          (spinePlug 2 (spineAt 130 ptxCode) (spinePlug 5 (spineAt 132 ptxCode) tail))) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Loading the source count and pointer retains both transaction backings. -/
+theorem phase4LogPointers_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 126 ptxCode) tail) b := by
+  unfold ptxCode
+  refine dec_bound_trans (P := fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+    (Q := fun s => (Phase4LogCountReady s ∧
+      ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧ TxBacking s)
+    (fun s v hp he => ⟨phase4LogCount_load_typed s v hp.1 he, hp.2⟩) ?_
+  intro F t hc ht
+  refine dec_bound_trans (P := fun s => (Phase4LogCountReady s ∧
+    ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧ TxBacking s)
+    ?_ htail t hc ht
+  intro F s v hp he
+  obtain ⟨hr, n, p, hn, hl⟩ := phase4LogPointer_load_typed s v hp.1.1 hp.1.2 he
+  exact ⟨⟨hr, ⟨n, hn⟩, hr.1.2.2, ⟨p, hl⟩⟩, hp.2⟩
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Receipt-array writes are separated from both transaction backing headers. -/
+theorem txBacking_store_receipt_array {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (memW s (globN s "bo" + 32))
+      (memW s (globN s "bo" + 32) + (16 * memW s (globN s "bo" + 80) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxBacking {s with memory := mem'} := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  obtain ⟨_, hpw, hsep, _, _⟩ := fixedObjects_disj_parts hWT.2.2.1
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hE hWT.1
+  let arr := (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+  have hlen : (blockOutObjects s).length = 7 := by rw [hbo]; rfl
+  have harr : (blockOutObjects s)[1]'(by omega) = arr := by simp [hbo, arr]
+  have hmem : arr ∈ blockOutObjects s := harr ▸ List.getElem_mem (by omega : 1 < (blockOutObjects s).length)
+  have hdbo : Disj (globN s "bo", 88) arr := by
+    apply hsep _ (List.mem_map.2 ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩)
+    exact List.mem_append_left _ (List.mem_append_right _ hmem)
+  have hdhead : ∀ k ∈ ([40, 72] : List Nat), Disj (memW s (globN s "bo" + k), 24) arr := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · have hd := List.pairwise_iff_getElem.1 hpw 1 3 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using disj_symm hd
+    · have hd := List.pairwise_iff_getElem.1 hpw 1 5 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using disj_symm hd
+  have hbound := (ivl_allocated_bound hW.1.1.2 (bo_words hWT.2.2.1 hE.bo_nz).1).2
+  apply txBacking_store hback hm
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    have hlt : globN s "bo" + k < 2 ^ 64 := by dsimp at hbound; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin hdbo
+    unfold Disj at hd
+    dsimp at hd
+    omega
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hlt : memW s (globN s "bo" + k) < 2 ^ 64 := by
+      unfold memW
+      split
+      exact BitVec.isLt _
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin (hdhead k hk)
+    unfold Disj at hd
+    dsimp at hd
+    omega
+
+/-- Either encoded-receipt word store retains the full backing-aware guard. -/
+theorem store_receiptSlot_backing (off : Bool) :
+    Hoare (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
+      (fun r t => r = none → Phase4ReceiptEncoded t ∧ TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨h, hb⟩ := hp
+  obtain ⟨a, b, he, _⟩ := h.2.2.2
+  have hvw : ∃ w : HolWordLab 64, v = .val w := by
+    cases off <;> simp [evalAt, evalHOLExact, he] at hv <;> subst v
+    · exact ⟨_, rfl⟩
+    · exact ⟨_, rfl⟩
+  obtain ⟨w, rfl⟩ := hvw
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec (by simpa only [flattenHOL] using hst)
+  exact ⟨receiptEncoded_store h hdom (receiptDst_inside h.1 off hx) hm,
+    txBacking_store_receipt_array h.1.1 hb (receiptDst_inside h.1 off hx) hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

@@ -7168,4 +7168,119 @@ theorem eval_merge_hit_branch {F : Type}
   · cases hk
   · exact ⟨_, by simp [stdKeep], hk⟩
 
+/-- A local allocation call can only fall through on a flowing or resumable
+outcome: its allocator has no catchable exception. -/
+theorem merge_new_call_flow_none {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1 = none := by
+  rw [evaluateHOLFiniteState_call] at hfr ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const kw, .const capw] = some [.val (.word kw), .val (.word capw)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact]
+  have hl := pan_two_word_lookup s.code.lookup (ofString "htab_new")
+    (ofString "key_len") (ofString "cap") (sourceFnBody Guest.Software.guestFn_htab_new) kw capw
+    (by decide) (by rw [hc]; exact R10Shards.SoloHtabNew.lookup_htab_new)
+  rw [ha] at hfr ⊢
+  dsimp only at hfr ⊢
+  rw [hl] at hfr ⊢
+  dsimp only at hfr ⊢
+  split at hfr
+  · simp [FlowingOrResumes, Resumes] at hfr
+  · rename_i hnz
+    rw [if_neg hnz]
+    rcases hr : evaluateHOLFiniteState _ _ with ⟨r, post⟩
+    rw [hr] at hfr
+    cases r with
+    | none => exact absurd hfr not_flowingOrResumes_error
+    | some r =>
+      cases r with
+      | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+      | timeOut => simp [FlowingOrResumes, Resumes] at hfr
+      | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+      | returned v =>
+        dsimp only at hfr ⊢
+        split at hfr
+        · rename_i hshape
+          rw [if_pos hshape]
+          split at hfr
+          · rename_i hvalid
+            rw [if_pos hvalid]
+          · exact absurd hfr not_flowingOrResumes_error
+        · exact absurd hfr not_flowingOrResumes_error
+      | exception e v =>
+        have he : Resumes (some (.exception e v)) := by
+          rcases hfr with h | h | h | h <;> try simp at h
+          exact h
+        obtain ⟨_, hv⟩ | ⟨e', v', hv, hne⟩ := he
+        · cases hv
+        · cases hv
+          exact False.elim (WkBal.htab_new_no_catchable_exn (callEntryStateHOLFinite s _) hc e v hne
+            (congrArg Prod.fst hr))
+
+/-- Recover the fresh table and its entire allocation frame even when the
+surrounding storage-loop iteration falls through rather than returns. -/
+theorem merge_new_call_flow_props {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (hAR : ArenaReady s) (hkl : kw.toNat ∈ htabKeyLens)
+    (hcl : capw.toNat ≤ htabCapMax)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).2
+    ∃ tw : BitVec 64,
+      globN s "heap_ptr" ≤ tw.toNat ∧
+      tw.toNat + 88 ≤ globN post "heap_ptr" ∧
+      ArenaReady post ∧ post.be = s.be ∧
+      globN post "scratch_ptr" = globN s "scratch_ptr" ∧
+      globN post "frame_mem_ptr" = globN s "frame_mem_ptr" ∧
+      HtabWF post tw.toNat ∧ hdr post tw.toNat 3 = 0 ∧
+      hdr post tw.toNat 0 = kw.toNat ∧
+      (∀ i ∈ htabFootprint post tw.toNat,
+        Allocated post i ∧ Inside i (globN s "heap_ptr") (globN post "heap_ptr")) ∧
+      FrameOutside s post [(globN s "scratch_ptr", 0)]
+        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") ∧
+      (∀ k : MlS, k ≠ ofString "heap_ptr" → s.globals.lookup k = post.globals.lookup k) := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (some (.local, x), none)) (ofString "htab_new")
+    [.const kw, .const capw]
+  have hn : (evaluateHOLFiniteState s p).1 = none :=
+    merge_new_call_flow_none s x kw capw hAR.1.code hfr
+  have he : evaluateHOLFiniteState s (.seq p (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite) := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    rcases hp : evaluateHOLFiniteState s p with ⟨r, post⟩
+    rw [hp] at hn
+    dsimp only at hn
+    subst r
+    simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+  have hnt : (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 ≠ some .timeOut := by
+    rw [he]; simp
+  have hr : Resumes (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 := by
+    rw [he]; exact Or.inl ⟨_, rfl⟩
+  obtain ⟨tw, mid, hlo, hhi, hAm, hbe, hsp, hfm, hwf, hcnt, hkey, hfp, hframe,
+      hlocal, _, _, _, hseq⟩ :=
+    WkBal.seq_call_htab_new_resumes s .local x kw capw (.return (.const 0#64))
+      hAR hkl hcl (by intro h; cases h) hnt hr
+  have hm : (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite = mid.emptyLocalsHOLFinite := by
+    have h := congrArg Prod.snd hseq
+    rw [he] at h
+    simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact] using h
+  have hm' : (evaluateHOLFiniteState s p).2 =
+      { mid with locals := (evaluateHOLFiniteState s p).2.locals } :=
+    congrArg (fun t => { t with locals := (evaluateHOLFiniteState s p).2.locals }) hm
+  change ∃ tw, _
+  rw [show (evaluateHOLFiniteState s
+    (.call (some (some (.local, x), none)) (ofString "htab_new")
+      [.const kw, .const capw])).2 = { mid with locals := (evaluateHOLFiniteState s p).2.locals } from hm']
+  exact ⟨tw, hlo, hhi, (arenaReady_with_locals mid _ _).2 hAm, hbe, hsp, hfm,
+    (WkBal.htabWF_with_locals mid _ _ _).2 hwf, hcnt, hkey, hfp, hframe, (hlocal rfl).2.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
