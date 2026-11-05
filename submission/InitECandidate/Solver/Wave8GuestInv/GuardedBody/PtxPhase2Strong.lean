@@ -10464,4 +10464,46 @@ theorem phase2_packed_world_continuation_bound (h : PtxCallees)
     (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.2)
     (phase2_packed_cases_initialized_world_hoare h) ht s hc hp
 
+/-- A live caller buffer separated from world ownership and the copy destination
+retains every aligned word through the supplied memcpy contract. -/
+theorem phase2_memcpy_eval_live_buffer (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat) (buffer : Ivl)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hin : Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+    (hsep : ∀ region ∈ worldOwned (callEntryStateHOLFinite s callee) S Nd,
+      Disj buffer region)
+    (hcopy : Disj buffer (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    ∀ p, buffer.1 ≤ p → p + 8 ≤ buffer.1 + buffer.2 → p % 8 = 0 →
+      memW post p = memW s p := by
+  obtain ⟨S', Nd', hw', hg, hf⟩ :=
+    phase2_memcpy_eval_world_frame h s post vs body callee ret r S Nd hc hl he hn hr hp hw hd
+  intro p hlo hhi hal
+  apply phase2_world_frame_heap_disjoint s {post with locals := s.locals}
+    (worldOwned (callEntryStateHOLFinite s callee) S Nd)
+    [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")] buffer p
+    hp.1.2 hin ⟨hlo, hhi⟩ hal hf hsep
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hcopy
+  · exact worldOwned_zero_aligned hw
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
