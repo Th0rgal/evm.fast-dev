@@ -2,6 +2,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkAcctWsBase
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalInitFresh
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01AllocMpt
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard06b
 
 set_option Elab.async false
 set_option autoImplicit false
@@ -436,6 +437,23 @@ theorem progPrefixStep_raise (eid : MlS) (e : ExpHOL 64) : ProgPrefixStep (.rais
       · exact sysTxPrefixStep_with_locals_clock (sysTxPrefixStep_refl s none hW.1) _ s.clock
       · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
 
+theorem progPrefixStep_dec {x : MlS} {sh : ShapeHOL} {e : ExpHOL 64}
+    {body : ProgHOL 64} (hb : ProgPrefixStep body) :
+    ProgPrefixStep (.dec x sh e body) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | val
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hnt hfr ⊢
+    by_cases hok : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hok, ↓reduceIte] at hnt hfr ⊢
+      set s1 := setVarHOLFinite x val s
+      have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hW
+      have hstep := hb s1 hc hW1 hnt hfr
+      exact sysTxPrefixStep_with_locals_clock
+        (sysTxPrefixStep_of_pre_locals_clock hstep) _ (evaluateHOLFiniteState s1 body).2.clock
+    · simp [hok] at hfr; exact absurd hfr not_flowingOrResumes_error
+
 theorem progPrefixStep_ite {cond : ExpHOL 64} {yes no : ProgHOL 64}
     (hy : ProgPrefixStep yes) (hn : ProgPrefixStep no) :
     ProgPrefixStep (.ite cond yes no) := by
@@ -450,6 +468,27 @@ theorem progPrefixStep_ite {cond : ExpHOL 64} {yes no : ProgHOL 64}
       · simp only [hw, ↓reduceIte] at hnt hfr ⊢; exact hy s hc hW hnt hfr
     · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
     · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+theorem progPrefixStep_seq {p1 p2 : ProgHOL 64}
+    (h1 : ProgPrefixStep p1) (h2 : ProgPrefixStep p2) :
+    ProgPrefixStep (.seq p1 p2) := by
+  intro F s hc hW hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s p1).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr1 : evaluateHOLFiniteState s p1 with ⟨r1, mid⟩
+  simp only [hr1] at hmeta hnt hfr ⊢
+  cases r1 with
+  | none =>
+    have hs1 := h1 s hc hW (by rw [hr1]; simp) (by rw [hr1]; exact Or.inl rfl)
+    rw [hr1] at hs1
+    dsimp only at hs1
+    have hs2 := h2 mid (hmeta.trans hc) (worldOK_of_sysTxStep hW hs1.1) hnt hfr
+    exact ⟨worldStep_sysTx_trans_prefix hW.1 hs1 hs2.1,
+      le_trans hs1.2.1 hs2.2.1, le_trans hs2.2.2.1 hs1.2.2.1,
+      hs2.2.2.2.1.trans hs1.2.2.2.1, hs2.2.2.2.2.trans hs1.2.2.2.2⟩
+  | some _ =>
+    have hs1 := h1 s hc hW (by rw [hr1]; exact hnt) (by rw [hr1]; exact hfr)
+    simpa only [hr1] using hs1
 
 theorem progSysTxStep_seq_prefix {p1 p2 : ProgHOL 64}
     (h1 : ProgPrefixStep p1) (h2 : ProgSysTxStep p2) :
@@ -528,6 +567,64 @@ theorem progSysTxStep_decCall_prefix
             have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
             simp only [ent, hrun] at hspec
             exact (sysTxPrefixStep_from_entry (hspec hres_ex)).1
+
+theorem progPrefixStep_decCall
+    {x : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hf : FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post) fname)
+    (hcont : ProgPrefixStep cont) :
+    ProgPrefixStep (.decCall x sh fname args cont) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hfr ⊢
+  rcases hargs : @evalListHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, hargs] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, hargs] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body', callee, ret'⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        let ent := callEntryStateHOLFinite s callee
+        have hWent : WorldOK ent := localsFree_worldOK s callee (s.clock - 1) hW
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata ent body').1
+        rcases hrun : evaluateHOLFiniteState ent body' with ⟨res, cpost⟩
+        simp only [ent] at hrun hmeta
+        simp only [hrun] at hmeta hnt hfr ⊢
+        have hnt_c : (evaluateHOLFiniteState ent body').1 ≠ some .timeOut := by
+          simp only [ent, hrun]; rintro rfl; simp at hnt
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hnt hfr ⊢
+            by_cases hsh : (shapeEqHOL (shapeOfHOLExact v) sh && shapeEqHOL (shapeOfHOLExact v) ret') = true
+            · simp only [hsh, ↓reduceIte] at hnt hfr ⊢
+              have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+              simp only [ent, hrun] at hspec
+              have hstep1 := hspec (Or.inl ⟨v, rfl⟩)
+              set s1 := setVarHOLFinite x v { cpost with locals := s.locals }
+              have hs1_step : SysTxPrefixStep s none s1 :=
+                sysTxPrefixStep_from_entry (post := cpost) (L := s1.locals) hstep1
+              have hWs1 : WorldOK s1 := worldOK_of_sysTxStep hW hs1_step.1
+              have hs1_code : s1.code = originalRuntimeCode := hmeta.trans hc
+              have hstep2 := hcont s1 hs1_code hWs1 hnt hfr
+              have hstep2' := sysTxPrefixStep_with_locals_clock (r' := (evaluateHOLFiniteState s1 cont).1) hstep2
+                (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s1 cont).2.locals (x, s.locals.lookup x))
+                (evaluateHOLFiniteState s1 cont).2.clock
+              exact sysTxPrefixStep_trans hW.1 hs1_step hstep2'
+            · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres_ex : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | hr <;> try simp at h
+              exact hr
+            have hspec := FunSpec.at_lookup hf s hc vs body' callee ret' hl hWent hnt_c
+            simp only [ent, hrun] at hspec
+            exact sysTxPrefixStep_from_entry (hspec hres_ex)
 
 theorem progPrefixStep_call0
     {fname : MlS} {args : List (ExpHOL 64)}
@@ -746,15 +843,15 @@ theorem sysTxPrefix_ext_code_of :
       keepSub_sysTxKeep_stdKeep hstep,
     by rw [hfmp], hsp, hbn1, hbn2⟩
 
-theorem sysTxPrefix_alloc :
-    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
-      (ofString "alloc") := by
-  obtain ⟨ps, body, ret, hl, hb⟩ := R13Shards.wk_alloc_impl
+theorem sysTxPrefix_of_heapOnly
+    {fname : MlS}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    (hf : WorldKeeps WorldOK (bufRegions []) ["heap_ptr"] stdKeep Q fname) :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post) fname := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := hf
   refine ⟨ps, body, ret, hl, fun s hc hW hex hnt hres => ?_⟩
-  have hstep : WorldStep (bufRegions []) ["heap_ptr"] stdKeep
-      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)]))
-      s (evaluateHOLFiniteState s body).1 (evaluateHOLFiniteState s body).2 :=
-    hb s hc hW hex hnt hres
+  have hstep := hb s hc hW hex hnt hres
   have hG := hstep.2.2.1
   have hfmp : globN (evaluateHOLFiniteState s body).2 "frame_mem_ptr" = globN s "frame_mem_ptr" :=
     globN_eq_of_lookup (hG (ofString "frame_mem_ptr") (by decide))
@@ -768,6 +865,273 @@ theorem sysTxPrefix_alloc :
       (by intro g hg; simp at hg; subst hg; simp [sysTxGlobals])
       keepSub_sysTxKeep_stdKeep hstep,
     by rw [hfmp], by rw [hsp], hbn1, hbn2⟩
+
+theorem sysTxPrefix_alloc :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "alloc") :=
+  sysTxPrefix_of_heapOnly R13Shards.wk_alloc_impl
+
+theorem sysTxPrefix_te_new :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "te_new") :=
+  sysTxPrefix_of_heapOnly R13Wk06b.wk_te_new
+
+theorem sysTxPrefix_msg_new :
+    FunSpec WorldOK (fun s r post => Resumes r → SysTxPrefixStep s r post)
+      (ofString "msg_new") :=
+  sysTxPrefix_of_heapOnly R13Wk06b.wk_msg_new
+
+theorem panMemStoresHOL_frame_sysTx {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (ws : List (HolWordLab 64)) (x : BitVec 64) (mem mem' : BitVec 64 → HolWordLab 64),
+      @panMemStoresHOL 64 _ x ws dom dec mem = some mem' →
+      ∀ a : BitVec 64, (∀ k, k < ws.length → a ≠ x + BitVec.ofNat 64 (8 * k)) → mem' a = mem a
+  | [], _, mem, mem', hst, a, _ => by
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    rw [← hst]
+  | w :: ws, x, mem, mem', hst, a, hne => by
+    unfold panMemStoresHOL panMemStoreHOL at hst
+    split_ifs at hst with hdom
+    have hbw : (panBytesInWord 64 : BitVec 64) = BitVec.ofNat 64 8 := by decide
+    have ih := panMemStoresHOL_frame_sysTx ws (x + panBytesInWord 64)
+      (fun current => if current = x then w else mem current) mem' hst a (fun k hk => by
+        have hk1 : k + 1 < (w :: ws).length := by simp; omega
+        have hne1 := hne (k + 1) hk1
+        rw [hbw]
+        intro heq
+        apply hne1
+        rw [heq, BitVec.add_assoc]
+        congr 1
+        apply BitVec.eq_of_toNat_eq
+        simp only [BitVec.toNat_add, BitVec.toNat_ofNat]
+        omega)
+    rw [ih]
+    exact if_neg (by simpa using hne 0 (by simp))
+
+theorem panMemStoresHOL_dom_of_ne {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (ws : List (HolWordLab 64)) (x : BitVec 64) (mem mem' : BitVec 64 → HolWordLab 64),
+      @panMemStoresHOL 64 _ x ws dom dec mem = some mem' →
+      ∀ a : BitVec 64, mem' a ≠ mem a → dom a
+  | [], _, mem, mem', hst, a, hne => by
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    subst hst
+    exact absurd rfl hne
+  | w :: ws, x, mem, mem', hst, a, hne => by
+    unfold panMemStoresHOL panMemStoreHOL at hst
+    split_ifs at hst with hdom
+    by_cases hax : a = x
+    · subst hax; exact hdom
+    · have hprev : (fun current => if current = x then w else mem current) a = mem a := if_neg hax
+      exact panMemStoresHOL_dom_of_ne ws (x + panBytesInWord 64)
+        (fun current => if current = x then w else mem current) mem' hst a (by simpa only [if_neg hax] using hne)
+
+theorem worldStep_store_in_block {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {base sz off : Nat} {w_base x : BitVec 64} {v : ValueHOL 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hW : WorldOK s)
+    (hbase_lu : w_base.toNat = base)
+    (hbase8 : base % 8 = 0) (_hsz8 : sz % 8 = 0) (_hoff8 : off % 8 = 0)
+    (hin_blk : Inside (base, sz) sourceBase (globN s "heap_ptr"))
+    (hx_eq : x = w_base + BitVec.ofNat 64 off)
+    (hoff_fit : off + 8 * (flattenHOL v).length ≤ sz)
+    (hst : @panMemStoresHOL 64 _ x (flattenHOL v) s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem') :
+    WorldStep (fun _ => [(base, sz)]) [] stdKeep NoExtra s r { s with memory := mem' } := by
+  have h264 : heapEnd < 2 ^ 64 ∧ heapLimit ≤ heapEnd := ⟨by decide, by decide⟩
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hW.1.2.2.1
+  have hx_nat : x.toNat = base + off := by
+    rw [hx_eq, BitVec.toNat_add, hbase_lu, BitVec.toNat_ofNat]
+    have hoff_lt : off < 2 ^ 64 := by unfold Inside at hin_blk; omega
+    rw [Nat.mod_eq_of_lt hoff_lt]
+    exact Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)
+  have hcell : ∀ a : BitVec 64, ¬ CellHits a.toNat (base, sz) → mem' a = s.memory a := by
+    intro a hnh
+    apply panMemStoresHOL_frame_sysTx (flattenHOL v) x s.memory mem' hst a
+    intro k hk h_eq
+    apply hnh
+    have ha_nat : a.toNat = base + off + 8 * k := by
+      rw [h_eq, BitVec.toNat_add, hx_nat, BitVec.toNat_ofNat]
+      have hk_lt : 8 * k < 2 ^ 64 := by unfold Inside at hin_blk; omega
+      rw [Nat.mod_eq_of_lt hk_lt]
+      exact Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)
+    unfold CellHits
+    rw [ha_nat]
+    exact ⟨by omega, by omega⟩
+  refine InitECandidate.Solver.Wave8Contracts.M08.worldStep_of_region_writes
+    (r := r) (R := fun _ => [(base, sz)]) hW
+    ⟨rfl, rfl, rfl, rfl, rfl, rfl⟩
+    (fun a hkeep _ => hcell a (hkeep (base, sz) (by simp)))
+    (fun b hb64 hnb => ?_)
+    (fun a hne => panMemStoresHOL_dom_of_ne (flattenHOL v) x s.memory mem' hst a hne)
+  unfold memB
+  dsimp only
+  have hal_eq : mem' (panByteAlignHOL (BitVec.ofNat 64 b)) =
+      s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+    apply hcell
+    intro ⟨hc1, hc2⟩
+    have hal_nat : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
+      rw [panByteAlign_toNat64,
+        BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+    rw [hal_nat] at hc1 hc2
+    exact hnb (base, sz) (by simp) ⟨by omega, by omega⟩
+  rw [hal_eq]
+
+theorem worldTypedIvls_sub_worldOwned_sysTx {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) : ∀ i ∈ worldTypedIvls s S Nd, i ∈ worldOwned s S Nd := by
+  intro i hi
+  unfold worldTypedIvls at hi
+  unfold worldOwned
+  simp only [List.mem_append] at hi ⊢
+  rcases hi with ((((ht | hr) | hjr) | hbo) | hbal) | hnd
+  · exact Or.inl (Or.inl ht)
+  · obtain ⟨r, hrec, rfl⟩ := List.mem_map.1 hr
+    refine Or.inl (Or.inr ?_)
+    unfold fixedObjects
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    refine List.mem_map.2 ⟨r, ?_, rfl⟩
+    simp only [typedRecords, List.mem_cons, List.not_mem_nil, or_false] at hrec
+    rcases hrec with rfl | rfl | rfl | rfl <;> decide
+  · refine Or.inl (Or.inr ?_)
+    unfold fixedObjects
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right
+    exact hjr
+  · refine Or.inl (Or.inr ?_)
+    unfold fixedObjects
+    apply List.mem_append_left; apply List.mem_append_right
+    exact hbo
+  · refine Or.inl (Or.inr ?_)
+    unfold fixedObjects
+    exact List.mem_append_right _ hbal
+  · exact Or.inr hnd
+
+theorem sysTxPrefix_store_fresh_block {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {base sz off : Nat} {w_base x : BitVec 64} {v : ValueHOL 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hW0 : WorldOK s0) (h0 : SysTxPrefixStep s0 none s)
+    (hbase_lu : w_base.toNat = base)
+    (hbase8 : base % 8 = 0) (hsz8 : sz % 8 = 0) (hoff8 : off % 8 = 0)
+    (hin_fresh : Inside (base, sz) (globN s0 "heap_ptr") (globN s "heap_ptr"))
+    (hdisj_step : ∀ S Nd, WorldTypedWith s0 S Nd →
+      IvlsDisj (bufRegions sysTxBufs s0) (worldTypedIvls s0 S Nd) →
+      ∃ S' Nd',
+        (∀ t ∈ S, t ∈ S') ∧
+        WorldTypedWith s S' Nd' ∧
+        OwnedGrows s0 s (worldOwned s0 S Nd) (worldOwned s S' Nd') ∧
+        FrameOutside s0 s (worldOwned s0 S Nd ++ bufRegions sysTxBufs s0 ++ [freeGap s0]) (heapFree s0) ∧
+        IvlsDisj [(base, sz)] (worldOwned s S' Nd'))
+    (hx_eq : x = w_base + BitVec.ofNat 64 off)
+    (hoff_fit : off + 8 * (flattenHOL v).length ≤ sz)
+    (hst : @panMemStoresHOL 64 _ x (flattenHOL v) s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem') :
+    SysTxPrefixStep s0 r { s with memory := mem' } ∧
+      WorldOK { s with memory := mem' } := by
+  have hWs : WorldOK s := worldOK_of_sysTxStep hW0 h0.1
+  have hp0_lo : sourceBase ≤ globN s0 "heap_ptr" := hW0.1.2.1
+  have hin_blk : Inside (base, sz) sourceBase (globN s "heap_ptr") :=
+    ⟨le_trans hp0_lo hin_fresh.1, hin_fresh.2⟩
+  have hst_blk : WorldStep (fun _ => [(base, sz)]) [] stdKeep NoExtra s r { s with memory := mem' } :=
+    worldStep_store_in_block hWs hbase_lu hbase8 hsz8 hoff8 hin_blk hx_eq hoff_fit hst
+  obtain ⟨⟨hAs, hhp0s, hG0s, hK0s, _⟩, hfmp0s, hsp0s, hbn1, hbn2⟩ := h0
+  obtain ⟨hAp, _, _, hK_st, hW_st⟩ := hst_blk
+  have h264 : heapEnd < 2 ^ 64 ∧ heapLimit ≤ heapEnd := ⟨by decide, by decide⟩
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hx_nat : x.toNat = base + off := by
+    rw [hx_eq, BitVec.toNat_add, hbase_lu, BitVec.toNat_ofNat]
+    have hoff_lt : off < 2 ^ 64 := by unfold Inside at hin_blk; omega
+    rw [Nat.mod_eq_of_lt hoff_lt]
+    exact Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)
+  have hcell_blk : ∀ a : BitVec 64, ¬ CellHits a.toNat (base, sz) → mem' a = s.memory a := by
+    intro a hnh
+    apply panMemStoresHOL_frame_sysTx (flattenHOL v) x s.memory mem' hst a
+    intro k hk h_eq
+    apply hnh
+    have ha_nat : a.toNat = base + off + 8 * k := by
+      rw [h_eq, BitVec.toNat_add, hx_nat, BitVec.toNat_ofNat]
+      have hk_lt : 8 * k < 2 ^ 64 := by unfold Inside at hin_blk; omega
+      rw [Nat.mod_eq_of_lt hk_lt]
+      exact Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)
+    unfold CellHits
+    rw [ha_nat]
+    exact ⟨by omega, by omega⟩
+  obtain ⟨S0_w, hS0_w⟩ := hW0.2
+  obtain ⟨Nd0_w, hWT0_w⟩ := (worldTyped_iff_with s0 S0_w).1 hS0_w
+  obtain ⟨Sw, Ndw, _, hWT_sw, _, _, hdisj_sw⟩ :=
+    hdisj_step S0_w Nd0_w hWT0_w (validBufList_disj validBufList_sysTxBufs hWT0_w)
+  have hRK0 : RecordsKept (bufRegions sysTxBufs) sysTxKeep s0 { s with memory := mem' } := by
+    intro rec hrec hnz off_r hoff_r hno
+    have h1 := hK0s rec hrec hnz off_r hoff_r hno
+    have htr_ex : ∃ rsz, (rec.1, rsz) ∈ typedRecords ∧ off_r ∈ rec.2 ∧ off_r + 8 ≤ rsz := by
+      simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · refine ⟨40, by decide, hoff_r, ?_⟩; simp at hoff_r; omega
+      · refine ⟨80, by decide, hoff_r, ?_⟩; simp at hoff_r; omega
+      · cases hoff_r
+      · refine ⟨88, by decide, hoff_r, ?_⟩; simp at hoff_r; omega
+    obtain ⟨rsz, htr_mem, _, hoff_le⟩ := htr_ex
+    have hg_rec : globN s rec.1 = globN s0 rec.1 := by
+      simp only [sysTxKeep, List.mem_cons, List.not_mem_nil, or_false] at hrec
+      rcases hrec with rfl | rfl | rfl | rfl
+      · exact globN_eq_of_lookup (hG0s (ofString "ws") (by decide))
+      · exact globN_eq_of_lookup (hG0s (ofString "bs") (by decide))
+      · cases hoff_r
+      · exact globN_eq_of_lookup (hG0s (ofString "bo") (by decide))
+    have hwo_rec : (globN s rec.1, rsz) ∈ worldOwned s Sw Ndw := by
+      have hwti : (globN s rec.1, if globN s rec.1 = 0 then 0 else rsz) ∈ worldTypedIvls s Sw Ndw := by
+        unfold worldTypedIvls
+        apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+        apply List.mem_append_left; apply List.mem_append_right
+        exact List.mem_map.2 ⟨(rec.1, rsz), htr_mem, rfl⟩
+      rw [if_neg (by rw [hg_rec]; exact hnz)] at hwti
+      exact worldTypedIvls_sub_worldOwned_sysTx s Sw Ndw _ hwti
+    have hm_eq : memW { s with memory := mem' } (globN s0 rec.1 + off_r) = memW s (globN s0 rec.1 + off_r) := by
+      unfold memW
+      dsimp only
+      have ha_lt : globN s0 rec.1 + off_r < 2 ^ 64 := by
+        rcases InitECandidate.Solver.Wave8Contracts.M08.worldOwned_allocated hWT_sw hwo_rec with h0_r | hal_r
+        · dsimp only at h0_r; omega
+        · have hb_r := InitECandidate.Solver.Wave8GuestInv.M13.allocated_le_2pow64 hAs.2 hal_r
+          dsimp only at hb_r; rw [hg_rec] at hb_r; omega
+      by_cases hsz : sz = 0
+      · have hlen : (flattenHOL v).length = 0 := by omega
+        rw [panMemStoresHOL_frame_sysTx (flattenHOL v) x s.memory mem' hst _
+          (by intro k hk; rw [hlen] at hk; omega)]
+      rw [hcell_blk]
+      intro ⟨hc1, hc2⟩
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt, ← hg_rec] at hc1 hc2
+      rcases hdisj_sw (base, sz) (by simp) (globN s rec.1, rsz) hwo_rec with h0_d | h0_d | hd | hd
+      all_goals
+        dsimp only at *
+        omega
+    exact hm_eq.trans h1
+  have hstep_out : SysTxPrefixStep s0 r { s with memory := mem' } := by
+    refine ⟨⟨hAp, hhp0s, hG0s, hRK0, fun S Nd hWT0 hD0 => ?_⟩, hfmp0s, hsp0s, hbn1, hbn2⟩
+    obtain ⟨S1, Nd1, hsub01, hWT1, hOG01, hFO01, hdisj1⟩ := hdisj_step S Nd hWT0 hD0
+    have hdisj_t1 : IvlsDisj [(base, sz)] (worldTypedIvls s S1 Nd1) :=
+      fun i hi j hj => hdisj1 i hi j (worldTypedIvls_sub_worldOwned_sysTx s S1 Nd1 j hj)
+    obtain ⟨S2, Nd2, hsub12, hWT2, hOG12, _, _⟩ := hW_st S1 Nd1 hWT1 hdisj_t1
+    refine ⟨S2, Nd2, fun t ht => hsub12 t (hsub01 t ht), hWT2, ?_, ?_, trivial⟩
+    · intro o ho
+      rcases hOG12 o ho with rfl | ⟨j, hj, hin_oj⟩ | hin_o12
+      · exact Or.inl rfl
+      · rcases hOG01 j hj with rfl | ⟨k, hk, hin_jk⟩ | hin_j01
+        · left
+          rcases o with ⟨o1, o2⟩
+          dsimp only [Inside] at hin_oj
+          exact Prod.ext (by omega) (by omega)
+        · exact Or.inr (Or.inl ⟨k, hk, le_trans hin_jk.1 hin_oj.1, le_trans hin_oj.2 hin_jk.2⟩)
+        · exact Or.inr (Or.inr ⟨le_trans hin_j01.1 hin_oj.1, le_trans hin_oj.2 hin_j01.2⟩)
+      · exact Or.inr (Or.inr ⟨le_trans hhp0s hin_o12.1, hin_o12.2⟩)
+    · intro a ha hhf
+      have hm1 : mem' a = s.memory a := by
+        apply hcell_blk
+        intro ⟨hc1, hc2⟩
+        apply hhf
+        unfold heapFree
+        dsimp only [Inside] at hin_fresh ⊢
+        exact ⟨by omega, by omega⟩
+      exact hm1.trans (hFO01 a ha hhf)
+  exact ⟨hstep_out, worldOK_of_sysTxStep hW0 hstep_out.1⟩
 
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :

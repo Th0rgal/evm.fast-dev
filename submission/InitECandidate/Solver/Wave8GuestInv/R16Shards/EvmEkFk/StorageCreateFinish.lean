@@ -78,4 +78,70 @@ theorem rootIn_tagged_word {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hlt := rootIn_lt_word_limit hh hr
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, Nat.add_sub_cancel] using hr
 
+theorem allocated_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {o : Ivl} {old new : List Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (ho : Allocated s o)
+    (hold : ∀ i ∈ old, Disj o i)
+    (hgrow : OwnedGrows s post old new) :
+    ∀ j ∈ new, Disj o j := by
+  intro j hj
+  rcases hgrow j hj with hz | hcontained
+  · subst j
+    exact Or.inr (Or.inl rfl)
+  · exact allocated_disj_old_or_fresh_extent hAs hAp hhp ho hold hcontained
+
+theorem allocated_regions_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {os old new : List Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hos : ∀ o ∈ os, Allocated s o)
+    (hold : IvlsDisj os old)
+    (hgrow : OwnedGrows s post old new) :
+    IvlsDisj os new := by
+  intro o ho
+  exact allocated_disj_ownedGrows hAs hAp hhp (hos o ho) (hold o ho) hgrow
+
+theorem worldStep_preserves_allocated_separation
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+      Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F →
+      List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)} {S Nd : List Nat} {os : List Ivl}
+    (hAs : ArenaOK s) (hstep : WorldStep R gw keep Q s r post)
+    (hW : WorldTypedWith s S Nd)
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hos : ∀ o ∈ os, Allocated s o)
+    (hdisj : IvlsDisj os (worldOwned s S Nd)) :
+    ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+      IvlsDisj os (worldOwned post S' Nd') ∧ Q s r post S' Nd' := by
+  obtain ⟨hAp, hhp, _, _, htyped⟩ := hstep
+  obtain ⟨S', Nd', hsub, hW', hgrow, _, hQ⟩ := htyped S Nd hW hR
+  exact ⟨S', Nd', hsub, hW',
+    allocated_regions_disj_ownedGrows hAs hAp.2 hhp hos hdisj hgrow, hQ⟩
+
+theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n * 1530).toNat = n.toNat * 1530 := by
+  rw [BitVec.toNat_mul]
+  change n.toNat * 1530 % 2 ^ 64 = n.toNat * 1530
+  exact Nat.mod_eq_of_lt (by omega)
+
+theorem create_finish_alloc_add_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n + 8).toNat = n.toNat + 8 := by
+  apply BitVec.toNat_add_of_lt
+  change n.toNat + 8 < 2 ^ 64
+  omega
+
+theorem create_finish_word_charge_no_wrap (w : BitVec 64)
+    (hw : w.toNat ≤ 2048) :
+    (6 * w).toNat = 6 * w.toNat := by
+  rw [BitVec.toNat_mul]
+  change 6 * w.toNat % 2 ^ 64 = 6 * w.toNat
+  exact Nat.mod_eq_of_lt (by omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
