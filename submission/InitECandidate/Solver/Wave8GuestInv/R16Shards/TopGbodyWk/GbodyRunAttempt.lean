@@ -1471,10 +1471,48 @@ def RunAttemptHasBe {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
     s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
     s.locals.lookup (ofString "hdr") = some (.val (.word w_hdr))
 
+theorem localsOnly_runAttemptPreBe : LocalsOnly ["si", "hdr"] RunAttemptPreBe := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd, hjc, hsi, hhdr⟩ := hP
+  exact ⟨w_si, w_hdr, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_hdr.toNat, 248)]).2 hBs,
+    hHdr, hd, hjc,
+    (hl "si" (by simp)).trans hsi,
+    (hl "hdr" (by simp)).trans hhdr⟩
+
+theorem localsOnly_runAttemptHasBe : LocalsOnly ["si", "hdr"] RunAttemptHasBe := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd, hjc, hbe, hsi, hhdr⟩ := hP
+  exact ⟨w_si, w_hdr, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_hdr.toNat, 248)]).2 hBs,
+    hHdr, hd, hjc, hbe,
+    (hl "si" (by simp)).trans hsi,
+    (hl "hdr" (by simp)).trans hhdr⟩
+
 theorem runAttemptPreBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : RunAttemptPreBe s) : GuestInv s := by
   obtain ⟨_, _, _, _, hIA, _⟩ := h
   exact hIA.1.1.1
+
+theorem runAttemptPreBe_inputReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : InputReadyStrong s := by
+  obtain ⟨w_si, _, S, Nd, hIA, _, _, _, _, hsi, _⟩ := h
+  have heq : locN s "si" = w_si.toNat := by simp [locN, hsi]
+  unfold InputReadyStrong
+  rw [heq]
+  exact inputAtStrongWith_strong hIA
+
+theorem runAttemptPreBe_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : WorldOK s :=
+  inputReadyStrong_worldOK s (runAttemptPreBe_inputReadyStrong h)
+
+theorem runAttemptPreBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreBe s) : BlockReadyExecStrong s := by
+  have hIR := runAttemptPreBe_inputReadyStrong h
+  obtain ⟨_, w_hdr, _, _, _, _, hHdr, _, hjc, _, hhdr⟩ := h
+  exact blockReadyExecStrong_of s hIR (by simpa [locN, hhdr] using hHdr) hjc
 
 theorem runAttemptHasBe_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : RunAttemptHasBe s) : GuestInv s := by
@@ -1491,6 +1529,45 @@ theorem runAttemptHasBe_blockReadyExecStrong {F : Type} {s : PanSemStateFiniteEx
     rw [hsi_eq]
     exact inputAtStrongWith_strong hIA
   exact blockReadyExecStrong_of s hIRS (by rwa [hhdr_eq]) hjc
+
+theorem runAttemptPreBe_worldStep
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hP : RunAttemptPreBe s) (hw : WorldStep R gw keep Q s r post)
+    (hz : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (ht : ∀ S Nd si, InputAtStrongWith s S Nd si →
+      IvlsDisj (R s) (worldTypedIvls s S Nd))
+    (hc : ∀ si, InputAtStrong s si → IvlsDisj (runAttemptCells s si) (R s))
+    (hb : ∀ h, HeaderAt s h →
+      Inside (h, 248) sourceBase (globN s "heap_ptr") →
+      IvlsDisj [(h, 248)] (R s))
+    (hj : ofString "journal_cap" ∉ gw.map ofString) :
+    RunAttemptPreBe { post with locals := s.locals } := by
+  obtain ⟨w_si, w_hdr, S, Nd, hIA, hBs, hHdr, hd, hjc, hsi, hhdr⟩ := hP
+  have hgood := hBs (w_hdr.toNat, 248) (by simp)
+  obtain ⟨S', Nd', hIA', hBs', _, hu, hub, _⟩ :=
+    worldStep_preserves_strongAndBlocks hIA hBs hw hz (ht S Nd w_si.toNat hIA)
+      (hc w_si.toNat (inputAtStrongWith_strong hIA)) (hb w_hdr.toNat hHdr hgood.2.2.1)
+  have hlim : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
+  have hHdr' : HeaderAt post w_hdr.toNat :=
+    headerAt_of_unhit hIA.1.1.1 hIA'.1.1.1
+      (by have hi := hgood.2.2.1; unfold Inside at hi; omega)
+      (hub (w_hdr.toNat, 248) (by simp)) hHdr
+  have hrc := runAttemptCells_eq_of_unhit (inputAtStrongWith_strong hIA) hu
+  have hjc' : globN post "journal_cap" = globN s "journal_cap" :=
+    globN_eq_of_lookup (hw.2.2.1 (ofString "journal_cap") hj)
+  refine ⟨w_si, w_hdr, S', Nd',
+    (inputAtStrongWith_with_locals post s.locals post.clock S' Nd' w_si.toNat).2 hIA',
+    (allBlocksGood_with_locals post s.locals post.clock S' Nd' [(w_hdr.toNat, 248)]).2 hBs',
+    hHdr', ?_, ?_, hsi, hhdr⟩
+  · change IvlsDisj (runAttemptCells post w_si.toNat) [(w_hdr.toNat, 248)]
+    rwa [hrc]
+  · change globN post "journal_cap" ≠ 0
+    rwa [hjc']
 
 theorem hoare_alloc_be_120
     (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
