@@ -7367,4 +7367,43 @@ theorem merge_new_call_worldStep {F : Type}
     obtain ⟨h1, h2⟩ := hh
     exact Or.inr (Or.inr ⟨by dsimp [heapFree]; omega, by dsimp [heapFree]; omega⟩)
 
+/-- The allocated inner table can be added to the ownership set before the
+outer insertion; existing role slots and footprints are preserved. -/
+theorem merge_new_call_owned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (S Nd : List Nat) (hAR : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hkl : kw.toNat ∈ htabKeyLens) (hcl : capw.toNat ≤ htabCapMax)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).2
+    ∃ t, t ∉ S ∧ t ≠ 0 ∧
+      hdr post t 0 = kw.toNat ∧ hdr post t 3 = 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ t) ∧
+      WorldTypedWith post (S ++ [t]) Nd ∧
+      OwnedGrows s post (worldOwned s S Nd) (worldOwned post (S ++ [t]) Nd) ∧
+      worldRoleSlots post = worldRoleSlots s ∧
+      journalRoleSlots post = journalRoleSlots s ∧
+      fixedObjects post = fixedObjects s ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      (∀ u ∈ S, hdr post u 0 = hdr s u 0) ∧
+      (∀ u ∈ S, htabFootprint post u = htabFootprint s u) := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (some (.local, x), none)) (ofString "htab_new")
+    [.const kw, .const capw]
+  let post := (evaluateHOLFiniteState s p).2
+  obtain ⟨tw, hlo, hhi, hA, hbe, hsp, _, hwf, hcnt, hkey, hfp, hframe, hgl⟩ :=
+    merge_new_call_flow_props s x kw capw hAR hkl hcl hfr
+  change tw.toNat + 88 ≤ globN post "heap_ptr" at hhi
+  have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" := by omega
+  have hd : ∀ a : BitVec 64, ¬ ordinaryDomain a → post.memory a = s.memory a := by
+    intro a ha
+    apply evaluateHOLFiniteState_mem_out_dom s p
+    rwa [hAR.1.memaddrs]
+  obtain ⟨hnS, hn0, hroles, hWT', hrest⟩ :=
+    worldTypedWith_htab_new_sysTx hAR hA hbe hh hsp hwf hkey hfp hd hframe hgl hWT
+  exact ⟨tw.toNat, hnS, hn0, hkey, hcnt, hroles, hWT', hrest⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
