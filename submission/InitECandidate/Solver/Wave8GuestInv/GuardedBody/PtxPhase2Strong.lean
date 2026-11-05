@@ -7973,4 +7973,31 @@ theorem phase2_packed_acc_counters {F : Type}
     show ofString "j" ≠ ofString "i" by decide,
     show ofString "k" ≠ ofString "i" by decide] using ha
 
+/-- A concrete framed memcpy retains the current-record relation after caller restoration. -/
+theorem phase2_memcpy_eval_acc (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (S Nd : List Nat)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaOK (callEntryStateHOLFinite s callee))
+    (hw : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (ht : TxAccessListAt (callEntryStateHOLFinite s callee) S Nd (locN s "tx"))
+    (hd : IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n")]
+      (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (hsep : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n")
+    (hacc : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") :
+    locN {post with locals := s.locals} "acc" =
+      memW {post with locals := s.locals} (locN {post with locals := s.locals} "tx" + 208) +
+        24 * locN {post with locals := s.locals} "i" := by
+  exact phase2_packed_acc_restored s post hacc
+    (phase2_memcpy_eval_headers h s post vs body callee ret r S Nd (locN s "tx")
+      hc hl he hn hr hp ha hw ht hd hsep hlen).1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
