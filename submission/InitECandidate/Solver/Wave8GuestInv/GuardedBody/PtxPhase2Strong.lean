@@ -5218,4 +5218,40 @@ theorem phase2_packed_destination_toNat {F : Type} (s : PanSemStateFiniteExact 6
   change (base.toNat + k.toNat * 52 % 2 ^ 64) % 2 ^ 64 = base.toNat + 52 * k.toNat
   rw [Nat.add_mod_mod, Nat.mul_comm k.toNat 52, Nat.mod_eq_of_lt hlt]
 
+/-- Evaluate the second memcpy destination, including the address-prefix offset. -/
+theorem phase2_packed_key_destination_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (base k : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k))) :
+    evalAt s (.op .add [.var .local (ofString "al_keys"),
+      .panop .mul [.var .local (ofString "k"), .const 52], .const 20]) =
+      some (.val (.word (base + k * 52 + 20))) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact, ha, hk, valueIsWord, valueWord,
+    wordOpHOL, wordOp, panOpHOL, BitVec.add_assoc]
+
+/-- The second memcpy pointer also denotes its exact nonwrapping natural address. -/
+theorem phase2_packed_key_destination_toNat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) (base k : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    (base + k * 52 + 20).toNat = locN s "al_keys" + 52 * locN s "k" + 20 := by
+  have hd := phase2_packed_destination_toNat s hp base k ha hk hb
+  have hin := hp.1.2.1.2
+  have hslot := (phase2_packed_copy_index_destinations hp).2.2
+  dsimp at hin hslot
+  have hlt : locN s "al_keys" + 52 * locN s "k" + 20 < 2 ^ 64 := by omega
+  rw [BitVec.toNat_add, hd]
+  change (locN s "al_keys" + 52 * locN s "k" + 20) % 2 ^ 64 = _
+  exact Nat.mod_eq_of_lt hlt
+
+/-- The storage-key half of a packed record also has a nonwrapping pointer. -/
+theorem phase2_packed_storage_destination_toNat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) (base k : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    (base + k * 52 + 20).toNat = locN s "al_keys" + 52 * locN s "k" + 20 := by
+  exact phase2_packed_key_destination_toNat s hp base k ha hk hb
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
