@@ -4010,6 +4010,35 @@ theorem hoare_stableCopy_store_prefix :
   intro j hj _
   exact stableCopyInv_store_prefix s mem' hinv hi hwrite hm harr hs0 hd0 j hj
 
+/-- The concrete store retains the invariant at the old counter, allowing
+the separation contract to be reconstructed before incrementing. -/
+theorem hoare_stableCopy_store_inv :
+    Hoare StableCopyStorePre
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → StableCopyInv t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, hwrite, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  have hpost := stableCopyInv_store_post s mem' hinv hi S Nd hW ho hworld hh hd ha he hdom hm
+  have hlogs := hinv.1.2.1.resolve_left hinv.2.1
+  have hs0 := (stableCopyInv_header_unhit s mem' hinv hi _ hlogs.2.1 hlogs.1.1 hh hm).1
+  have hd0 := (stableCopyInv_header_unhit s mem' hinv hi _
+    hinv.2.2.2.1 hinv.2.2.1.1 hd hm).1
+  have ha' : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") := by
+    rw [hinv.1.2.2.2.2.1, hinv.1.2.2.2.1]; exact ha
+  have harr := stableCopyInv_source_preserved s mem' hinv hi ha' hm
+  rw [hinv.1.2.2.2.2.1] at harr
+  exact stableCopyInv_after_store s mem' hinv hpost hi hwrite hm harr hs0 hd0
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -4113,6 +4142,34 @@ theorem stableCopyStorePre_counter {F : Type} (s : PanSemStateFiniteExact 64 F)
       if_pos rfl, if_neg hn0, if_neg hl0, if_neg hq0, if_neg hs0, if_neg hc0,
       if_neg hg0] at *
   all_goals first | assumption | rfl
+
+/-- The increment restores the full loop-head contract from a separated
+store state and the already established prefix invariant. -/
+theorem stableCopyLoopInv_counter {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w n : BitVec 64) (v : ValueHOL 64) (hp : StableCopyStorePre s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v)
+    (hinv : StableCopyInv (setVarHOLFinite (ofString "i") v s)) :
+    StableCopyLoopInv (setVarHOLFinite (ofString "i") v s) := by
+  have hv : v = .val (.word (w + 1)) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+      valueWord, wordOpHOL, wordOp] using he.symm
+  have hnl : (setVarHOLFinite (ofString "i") v s).locals.lookup (ofString "nl") =
+      some (.val (.word n)) := by
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nl" by decide] using hn
+  have hloc : locN (setVarHOLFinite (ofString "i") v s) "nl" = locN s "nl" := by
+    simp [locN, hnl, hn]
+  have hi : w.toNat < locN s "nl" := by
+    simpa [locN, hw] using hp.2.1
+  have hb := (stable_copy_increment_index_bound s w v hw hi
+    (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1 he).1
+  refine ⟨hinv, ⟨w + 1, n, stable_copy_increment_word s w v hw he, hnl⟩, ?_, ?_⟩
+  · rwa [hloc]
+  · intro hactive
+    apply stableCopyStorePre_counter s v (w + 1) hp hv hinv
+    rwa [hloc] at hactive
 
 /-- Once the store has extended the prefix, the actual counter assignment
 re-establishes the loop invariant. -/
