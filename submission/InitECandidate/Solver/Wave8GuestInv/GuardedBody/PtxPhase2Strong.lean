@@ -3123,4 +3123,17 @@ theorem phase2_address_copy_increment {F : Type} (s : PanSemStateFiniteExact 64 
     rw [hnal]
     omega
 
+/-- The AST key-count assignment preserves the address-copy invariant. -/
+theorem phase2_address_copy_nkeys_hoare :
+    Hoare PtxAddressCopyInv
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+    exact fun _ => phase2_address_copy_set_nkeys s hp w
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
