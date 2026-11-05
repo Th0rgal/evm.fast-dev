@@ -2547,4 +2547,48 @@ theorem phase2_address_alloc_separated (h : PtxCallees) :
     show ofString "al_addrs" ≠ ofString "tx" by decide,
     show ofString "al_addrs" ≠ ofString "nal" by decide] using hd
 
+/-- The allocator's returned block is outside the same world that owns the
+preserved transaction access list. -/
+theorem phase2_address_alloc_world (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)] (worldOwned s S Nd))
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _, _⟩ := phase2_address_alloc_size s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = (locN s "nal" + 1) * 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hp.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hp.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hav⟩ := hret v rfl
+  dsimp only at hav
+  rw [hcn] at hav
+  have hround : ((locN s "nal" + 1) * 8 + 7) / 8 * 8 = (locN s "nal" + 1) * 8 := by omega
+  rw [hround] at hav
+  let out := setVarHOLFinite (ofString "al_addrs") (.val (.word w)) { post with locals := s.locals }
+  have htx : locN out "tx" = locN s "tx" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "tx" by decide]
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · change TxAccessListAt out S' Nd' (locN out "tx")
+    rw [htx]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals _ _ _ hTp
+  · change IvlsDisj [(locN out "al_addrs", (locN out "nal" + 1) * 8)] (worldOwned post S' Nd')
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "nal" by decide] using hav
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
