@@ -1161,12 +1161,12 @@ theorem logsLiveOwned_empty {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [hn] at hi
     omega
 
-/-- The two fresh blocks returned by `lst_new(8,4)` establish the receipt guard. -/
+/-- The two fresh blocks returned by `lst_new(8,1)` establish the receipt guard. -/
 theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {S Nd : List Nat} {logs : Nat} (hA : ArenaOK s)
     (hh : FreshBlock s post logs 24)
-    (hb : FreshBlock s post (memW post logs) 32)
-    (hd : IvlsDisj [(logs, 24), (memW post logs, 32)] (worldOwned post S Nd))
+    (hb : FreshBlock s post (memW post logs) 8)
+    (hd : IvlsDisj [(logs, 24), (memW post logs, 8)] (worldOwned post S Nd))
     (hn : memW post (logs + 8) = 0) :
     LogsListOK post logs ∧ LogsLiveOwned post S Nd logs ∧ LogsDisjFixed post logs := by
   have hhi : Inside (logs, 24) sourceBase (globN post "heap_ptr") := by
@@ -1175,7 +1175,7 @@ theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
     exact ⟨hA.1.trans h.1, h.2⟩
   have hbi : Inside (memW post logs, 0) sourceBase (globN post "heap_ptr") := by
     have h := hb.2.1
-    change Inside (memW post logs, 32) (globN s "heap_ptr") (globN post "heap_ptr") at h
+    change Inside (memW post logs, 8) (globN s "heap_ptr") (globN post "heap_ptr") at h
     constructor
     · exact hA.1.trans h.1
     · have := h.2; dsimp at this ⊢; omega
@@ -1189,19 +1189,19 @@ def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 
 theorem lst_new_receiptReady_resume (h : PtxCallees) :
     DecCallResumeOn TxAfterCallStrong Phase4ReceiptReady (ofString "logs")
-      (ofString "lst_new") [.const 8, .const 4] := by
+      (ofString "lst_new") [.const 8, .const 1] := by
   intro F s vs body callee ret v post hc hp ha hl hr
   have hlc := R13Shards.lookup_lst_new
   rw [← hc] at hlc
   obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
     (ofString "esz") (ofString "cap") .one .one _ _ hlc
-    (.const 8) (.const 4) (.val (.word 8)) (.val (.word 4))
+    (.const 8) (.const 1) (.val (.word 8)) (.val (.word 1))
     vs body callee ret rfl rfl ha hl
   let ent := callEntryStateHOLFinite s callee
   have he8 : locN ent "esz" = 8 := by simp [ent, locN, callEntryStateHOLFinite, he]
-  have hc4 : locN ent "cap" = 4 := by simp [ent, locN, callEntryStateHOLFinite, hcap]
+  have hc4 : locN ent "cap" = 1 := by simp [ent, locN, callEntryStateHOLFinite, hcap]
   have hmul : locN ent "esz" * locN ent "cap" < 2 ^ 64 := by rw [he8, hc4]; norm_num
-  have hpos : 1 ≤ locN ent "cap" := by rw [hc4]; norm_num
+  have hpos : 1 ≤ locN ent "cap" := by omega
   have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
     (worldOK_callEntry hp.1.1 callee) (by rw [hr]; simp)
   rw [hr] at hw
@@ -1218,10 +1218,10 @@ theorem lst_new_receiptReady_resume (h : PtxCallees) :
   have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
   subst w'
   obtain ⟨hh, hb, _, hn, _⟩ := hf hmul hpos
-  have hb32 : FreshBlock ent post (memW post w.toNat) 32 := by
+  have hb32 : FreshBlock ent post (memW post w.toNat) 8 := by
     change FreshBlock ent post (memW post w.toNat) (locN ent "esz" * locN ent "cap") at hb
     simpa only [he8, hc4] using hb
-  have hd32 : IvlsDisj [(w.toNat, 24), (memW post w.toNat, 32)]
+  have hd32 : IvlsDisj [(w.toNat, 24), (memW post w.toNat, 8)]
       (worldOwned post S' Nd') := by
     change IvlsDisj [(w.toNat, 24), (memW post w.toNat, locN ent "esz" * locN ent "cap")]
       (worldOwned post S' Nd') at hd
