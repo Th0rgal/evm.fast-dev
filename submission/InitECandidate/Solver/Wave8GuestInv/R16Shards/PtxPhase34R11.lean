@@ -13274,4 +13274,124 @@ theorem heapByteEff_storeByte_return_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Frame the receipt's optional type-prefix write and its two return paths. -/
+theorem heapByteEff_optional_prefix_return {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (cond addr value typed plain : ExpHOL 64) (v : ValueHOL 64)
+    (ha : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.ite cond (.seq (.storeByte addr value) (.return typed)) .skip)
+        (.return plain)) = (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · exact heapByteEff_return he plain v (by simpa only [evaluateHOLFiniteState_skip] using hr)
+    · rcases hc : evaluateHOLFiniteState mid (.seq (.storeByte addr value) (.return typed)) with ⟨r, next⟩
+      rw [hc] at hr
+      cases r with
+      | some r =>
+        have hp := (Prod.mk.inj hr).2
+        have hv := (Option.some.inj (Prod.mk.inj hr).1)
+        subst post
+        subst r
+        exact heapByteEff_storeByte_return_fresh he addr value typed v ha hc
+      | none =>
+        rw [evaluateHOLFiniteState_seq_line780] at hc
+        rcases hb : evaluateHOLFiniteState mid (.storeByte addr value) with ⟨rb, mb⟩
+        rw [hb] at hc
+        cases rb with
+        | some rb => simp at hc
+        | none =>
+          dsimp only at hc
+          rw [evaluateHOLFiniteState_return] at hc
+          split at hc <;> try cases hc
+          split at hc <;> cases hc
+  · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- The exact final conditional of `encode_receipt` preserves the entry frame;
+the reserved byte before `start` is fresh and subtraction does not wrap. -/
+theorem receipt_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (start : BitVec 64) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ start.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+          (.seq
+            (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+              (.var .local (ofString "tx_type")))
+            (.return (.rstruct
+              [.op .sub [.var .local (ofString "start"), .const 1],
+               .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+        (.return (.rstruct [.var .local (ofString "start"), .var .local (ofString "w")]))) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  apply heapByteEff_optional_prefix_return he _ _ _ _ _ v ?_ hr
+  intro a ha
+  have hev : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a))
+      (.op .sub [.var .local (ofString "start"), .const 1]) =
+      some (.val (.word (start - 1#64))) := by
+    simp [evalHOLExact, evalListHOLExact, hs, wordOpHOL, wordOp, valueIsWord, valueWord]
+  rw [hev] at ha
+  have ha' : start - 1#64 = a := by
+    exact HolWordLab.word.inj (ValueHOL.val.inj (Option.some.inj ha))
+  subst a
+  have hn : (start - 1#64).toNat = start.toNat - 1 := by
+    rw [BitVec.toNat_sub]
+    simp only [show (1#64 : BitVec 64).toNat = 1 from rfl]
+    omega
+  rw [hn]
+  constructor <;> omega
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- List finalization retains the `start` lookup needed to frame the receipt's
+optional type-prefix write in the following return conditional. -/
+theorem receipt_finish_preserves_start {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (start pend old : BitVec 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word pend)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ pend.toNat)
+    (hfresh : globN s "heap_ptr" ≤ start.toNat ∧ pend.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+        [.var .local (ofString "start"), .var .local (ofString "p")]) = (none, post)) :
+    HeapByteEff s post R gw ∧
+    post.locals.lookup (ofString "start") = some (.val (.word start)) := by
+  have ht := eval_call_local_rlp_finish_list mid "w"
+    (.var .local (ofString "start")) (.var .local (ofString "p")) start pend
+    (R ++ [(start.toNat, pend.toNat - start.toNat)]) gw he.arena.1.code he.arena
+    ⟨old, hw⟩ hs hp hle (le_trans hfresh.2 (by decide))
+    ⟨(start.toNat, pend.toNat - start.toNat), List.mem_append_right _ (by simp),
+      le_rfl, by omega⟩ (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, _, _, _, hloc, heff⟩ := ht.1 rfl
+  refine ⟨heapByteEff_trans_fresh he heff ?_, ?_⟩
+  · intro i hi
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact ⟨hfresh.1, by dsimp; omega⟩
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "start" by decide] using hs
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

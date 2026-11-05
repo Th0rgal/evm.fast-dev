@@ -7,6 +7,7 @@ import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalStep
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalBase
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -6117,5 +6118,83 @@ theorem nodedb_lookup_code_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro v hv
   rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
   exact nodedb_code_record_return s hA found ptr hr hw hin v hv
+
+/-- The missing-table-entry branch returns three zero words without loading
+the unconstrained value pointer. -/
+theorem nodedb_lookup_missing_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word 0), .val (.word ptr)])) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) ) =
+      (some (.returned (.rStruct [.val (.word 0), .val (.word 0), .val (.word 0)])),
+        emptyLocalsHOLFinite s) := by
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_return, evalHOLExact, evalListHOLExact,
+    shapeOfHOLExact, sizeOfShapeWithContextHOL]
+
+/-- Both `nodedb_lookup` suffix branches return bounded word triples when
+present table values designate heap-contained code records. -/
+theorem nodedb_lookup_code_tail_cases {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hrecord : found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+      Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) )
+      (fun v post => ∃ flag code code_n : BitVec 64,
+        v = .rStruct [.val (.word flag), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ (flag = 0 ∨ flag = 1) ∧
+        post = {s with locals := post.locals, clock := post.clock}) := by
+  by_cases hf : found = 0
+  · subst found
+    intro v hv
+    rw [nodedb_lookup_missing_tail s ptr hr] at hv ⊢
+    cases hv
+    exact ⟨0, 0, 0, rfl, by decide, Or.inl rfl, rfl⟩
+  · intro v hv
+    obtain ⟨hw, hin⟩ := hrecord hf
+    obtain ⟨code, code_n, hv, hn, hp⟩ := nodedb_lookup_code_tail s hA found ptr hr hf hw hin v hv
+    exact ⟨1, code, code_n, hv, hn, Or.inr rfl, hp⟩
+
+/-- Concrete table lookup selects actual bounded code words once its live
+values are known to designate heap-contained code records. -/
+theorem htab_get_code_record_words {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hW : HtabWF s tw.toNat)
+    (hvalues : ∀ p ∈ htabValues s tw.toNat, WordsOK s (p, 16) ∧
+      Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr"))
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).1 =
+      some (.returned v)) :
+    ∃ found ptr : BitVec 64,
+      v = .rStruct [.val (.word found), .val (.word ptr)] ∧
+      (found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+        ∃ code code_n : BitVec 64,
+          s.memory ptr = .word code ∧
+          s.memory (BitVec.ofNat 64 (ptr.toNat + 8)) = .word code_n ∧
+          code_n.toNat < 2 ^ 40) := by
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values s tw kw hcode ht hk hW v hret
+  refine ⟨found, ptr, hv, fun hf => ?_⟩
+  obtain ⟨hw, hin⟩ := hvalues ptr.toNat (hm hf)
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
+  exact ⟨hw, code, code_n, by simpa using hc, hn, hb⟩
 
 end HeadStore
