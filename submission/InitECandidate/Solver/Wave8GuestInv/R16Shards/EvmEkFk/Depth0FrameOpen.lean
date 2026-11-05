@@ -6,6 +6,7 @@ import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Tables
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalStep
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -5893,5 +5894,31 @@ theorem hoare_prepare_dispatch_ext_delegated (gw : List String) (hp : Nat)
     obtain ⟨hD, code, code_n, daddr, hdcode, hdaddr, hnb⟩ := hP
     exact (hoare_prepare_dispatch_delegated_common gw hp G ch code code_n daddr hnb hsub).run
       s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
+
+/-! ## Concrete read-only external-code exception contract -/
+
+/-- `ws_get_code` may raise `StateErr` for a missing code hash.  Every
+catchable exception preserves the dispatch invariant, including its original
+heap/global/chain anchor. -/
+theorem ws_get_code_exception_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret
+    (hc : s.code = originalRuntimeCode) (hP : D0Pre gw hp G ch s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_code") values =
+      some (body, callee, ret)) (e : MlS) (v : ValueHOL 64)
+    (post : PanSemStateFiniteExact 64 F) (hne : e ≠ ofString "TrapErr")
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.exception e v), post)) :
+    EvmMsgReady post ∧ StepFrom gw hp G ch post := by
+  have hG := guestInv_callEntry s callee (evmInv_guestInv s (evmInv_of_evmMsgReady s hP.1.1))
+  have heq := FunSpec.at_lookup R16WkAcctWs.ro_ws_get_code s hc values body callee ret hl hG
+    (by rw [hr]; simp)
+  rw [hr] at heq
+  have hres : Resumes (some (.exception e v)) := Or.inr ⟨e, v, rfl, hne⟩
+  have heq' := heq hres
+  dsimp only [Prod.snd, callEntryStateHOLFinite] at heq'
+  rw [heq']
+  exact ⟨localsFree_evmMsgReady s post.locals post.clock hP.1.1,
+    localsFree_stepFrom gw hp G ch s post.locals post.clock hP.1.2⟩
 
 end HeadStore
