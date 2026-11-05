@@ -196,6 +196,29 @@ theorem phase1_resume_encode_shapes (h : PtxCallees) :
     rcases hn with rfl | rfl <;> decide
   simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2 n hn
 
+theorem phase1_store_encSlot_shapes (off : Bool) :
+    Hoare (fun s => R16Shards.PtxP1.EncReady s ∧
+      ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (.store (R16Shards.PtxP1.encDst off)
+        (.rfield (if off then 1 else 0) (.var .local (ofString "enc"))))
+      (fun r s => r = none → R16Shards.PtxP1.EncReady s ∧
+        ∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+  have hs : Hoare
+      (fun s => ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (.store (R16Shards.PtxP1.encDst off)
+        (.rfield (if off then 1 else 0) (.var .local (ofString "enc"))))
+      (fun r s => r = none → ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) := by
+    apply Hoare.store_fall
+    intro F s x v mem hp hx hv hst
+    exact hp
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.store_encSlot off).run s hc hp.1 hnt hr,
+    hs.run s hc hp.2 hnt hr⟩
+
 theorem phase1_resume_alloc_sender_shapes (h : PtxCallees) :
     DecCallResumeOn
       (fun s => R16Shards.PtxP1.StageP 0 s ∧
