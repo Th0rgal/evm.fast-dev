@@ -11207,4 +11207,45 @@ theorem lst_push_growth_of_branch_execution_g09 {F : Type}
   rw [lst_push_finish_exact_g09 growPost l esz n np hgl hge' hgn hgd0 hgd8 hgm0 hne]
   simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hcn, Ne.symm hcn]
 
+theorem log_append_no_growth_exact_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e log l n cap p : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm0 : s.memory l = .word p) (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hlt : n.toNat < cap.toNat) (hne : l ≠ l + 8#64)
+    (hdslot : s.memaddrs (p + n * 8#64)) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append) =
+      (some (.returned (.val (.word 0))),
+        {s with
+          clock := s.clock - 1
+          locals := HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot"))
+          memory := fun a => if a = p + n * 8#64 then .word log
+            else if a = l + 8#64 then .word (n + 1#64) else s.memory a}) := by
+  let cal : HolFiniteMapExact MlS (ValueHOL 64) :=
+    (HolFiniteMapExact.empty.update (ofString "l", .val (.word l))).update
+      (ofString "esz", .val (.word 8#64))
+  have hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8] =
+        some [.val (.word l), .val (.word 8#64)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, he, hde, hme,
+      valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact]
+  have hlook := pan_two_word_lookup s.code.lookup (ofString "lst_push")
+    (ofString "l") (ofString "esz") (sourceFnBody Guest.Software.guestFn_lst_push)
+    l 8#64 (by decide) (by rw [hcode]; exact lookup_lst_push_g09)
+  let entry := callEntryStateHOLFinite s cal
+  have hel : entry.locals.lookup (ofString "l") = some (.val (.word l)) := by
+    have hne' : ofString "esz" ≠ ofString "l" := by decide
+    simp [entry, cal, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne']
+  have hez : entry.locals.lookup (ofString "esz") = some (.val (.word 8#64)) := by
+    simp [entry, cal, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hpush := lst_push_no_growth_exact_g09 entry l 8#64 n cap p hel hez
+    hd0 hd8 hd16 hm0 hm8 hm16 hlt hne
+  have hres := log_append_of_lst_push_execution_g09 s _ _ cal (p + n * 8#64) log
+    hlg hargs hlook hclock hpush hdslot
+  simpa [entry, cal, callEntryStateHOLFinite] using hres
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
