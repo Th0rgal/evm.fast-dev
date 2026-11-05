@@ -11442,4 +11442,48 @@ theorem laContents_iteration {F : Type} (s u : PanSemStateFiniteExact 64 F)
   rw [hin]
   exact laContents_locals hcontents _
 
+/-- Strengthen the executable allocation/frame step with exact log contents.
+The contents premise is the append-callee obligation; the original `la_step`
+continues to discharge all allocation and memory-footprint obligations. -/
+theorem la_step_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hd88 : s.memaddrs (e + 88)) (hm88 : s.memory (e + 88) = .word L)
+    (h88 : ¬ CellHits (e + 88).toNat (arr0.toNat, 8 * cap0.toNat) ∧
+      ((e + 88).toNat + 8 ≤ globN s "heap_ptr" ∨ heapLimit ≤ (e + 88).toNat) ∧
+      e + 88 ≠ L ∧ e + 88 ≠ L + 8 ∧ e + 88 ≠ L + 16)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hLd : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap0.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58)
+    (ha2 : ∀ (t : PanSemStateFiniteExact 64 F) v, ev t a2 = some v → ∃ w, v = .val (.word w))
+    (u : PanSemStateFiniteExact 64 F) (hu : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hact : InitECandidate.Solver.Wave8M19.LoopActive
+      (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) u)
+    (hcall : ∀ (i lg : BitVec 64),
+      u.locals.lookup (ofString "i") = some (.val (.word i)) →
+      ev (decClockHOLFinite u) a2 = some (.val (.word lg)) →
+      Ret (callEntryStateHOLFinite (decClockHOLFinite u)
+        ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+          (ofString "log", .val (.word lg))))
+        (sourceFnBody Guest.Software.guestFn_log_append)
+        (fun _ post => LAContents s L arr0 n0 child (i.toNat + 1) post)) :
+    Flw (decClockHOLFinite u)
+      (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun _ post => LAInvContents s L arr0 cap0 n0 nc child post) := by
+  have hframe := la_step s e L arr0 cap0 n0 nc a2 he hd88 hm88 h88
+    hd0 hd8 hd16 hLw hLd hLh hsum ha2 u hu.1 hact
+  obtain ⟨uc, ud, uA, ug, uh, un, i, arr, cap, ui, hile, rest⟩ := hu.1
+  have hilt := la_active u i nc ui un hile (by omega) hact
+  have hue : (decClockHOLFinite u).globals.lookup (ofString "ev") = some (.val (.word e)) := by
+    change u.globals.lookup _ = _
+    rw [ug _ (by decide)]
+    exact he
+  have hcontents := laContents_iteration s (decClockHOLFinite u) e L arr0 n0 i child a2
+    uA.1.code hue ui (by omega) (ha2 (decClockHOLFinite u))
+    (fun lg hlg => hcall i lg ui hlg)
+  exact Flw.and hframe hcontents
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
