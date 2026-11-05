@@ -2377,4 +2377,25 @@ theorem phase2_alloc_header_words (h : PtxCallees) (args : List (ExpHOL 64))
   rw [htx]
   exact he.trans hp.2
 
+/-- The count's word witness and its zero-or-header relation survive allocation. -/
+theorem phase2_alloc_count_relation (h : PtxCallees) (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxAccessCountReady
+      (fun s => (∃ w : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word w))) ∧
+        (locN s "nal" = 0 ∨ locN s "nal" = memW s (locN s "tx" + 216)))
+      (ofString "al_addrs") (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hm := phase2_alloc_header_words h args 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have hn : (setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }).locals.lookup
+      (ofString "nal") = s.locals.lookup (ofString "nal") := by
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "nal" by decide]
+  refine ⟨?_, ?_⟩
+  · rw [hn]
+    exact hp.2.1
+  · have hloc : locN (setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }) "nal" =
+        locN s "nal" := by simp only [locN, hn]
+    rw [hloc, hm]
+    exact hp.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
