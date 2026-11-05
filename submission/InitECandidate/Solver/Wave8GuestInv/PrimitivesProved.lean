@@ -80,6 +80,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.LogsBloom
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -420,7 +421,9 @@ theorem primitives : Primitives where
   «fb_extract_deposit_data» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_extract_deposit_data»
   «fb_requests_append» := Merged.fb_requests_append
   «wk_extract_deposit_data» := Merged.wk_extract_deposit_data
-  «wk_process_checked_system_transaction» := «wk_process_checked_system_transaction»
+  «wk_process_checked_system_transaction» :=
+    R16Shards.TopGbodyWk.«wk_process_checked_system_transaction_of_unchecked»
+      «wk_process_unchecked_system_transaction»
   «wk_requests_append» := R16Shards.PrimC08Closure.«wk_requests_append»
   «gbody_process_general_purpose_requests» := R10Shards.Fast_GbodyC17ToC21.«gbody_process_general_purpose_requests»
   «fb_calculate_blob_gas_price» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_calculate_blob_gas_price»
