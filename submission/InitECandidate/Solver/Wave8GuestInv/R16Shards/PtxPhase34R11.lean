@@ -1343,6 +1343,20 @@ theorem logsWorldOwned_heapStep_joint {F : Type}
     (by intro j hj; cases hj) (by intro j hj; cases hj)
     (by intro i hi j hj; cases hj)
 
+/-- Restore caller locals without discarding the allocator's return predicate. -/
+theorem heapStep_restore_locals {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {keep : List (String × List Nat)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"] keep Q s r post)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    ∀ S Nd, WorldTypedWith {s with locals := locals, clock := k} S Nd →
+      ∃ S' Nd', WorldTypedWith post S' Nd' ∧ Q s r post S' Nd' := by
+  intro S Nd hW
+  have hWs := (R13Shards.worldTypedWith_with_locals s locals k S Nd).mp hW
+  obtain ⟨S', Nd', _, hW', _, _, hQ⟩ := hs.2.2.2.2 S Nd hWs (by intro i hi; cases hi)
+  exact ⟨S', Nd', hW', hQ⟩
+
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     LogsDisjFixed s (locN s "logs") ∧ LogsWorldOwned s (locN s "logs")
@@ -4223,6 +4237,31 @@ theorem hoare_stableCopySpatial_assign (name : MlS) (e : ExpHOL 64)
   apply Hoare.assign
   · intro F s v hp hv _
     exact stableCopySpatial_setVar s name v hl hs hc hp
+  · intro F s hp hr
+    cases hr
+
+/-- The concrete backing load retains spatial facts and installs the exact
+word-valued destination pointer used by the copy loop. -/
+theorem hoare_stable_backing_load :
+    Hoare (fun s => StableCopySpatial s ∧ WordAt s (locN s "stable_logs") ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+      (fun r t => r = none → StableCopySpatial t ∧
+        ∃ q : BitVec 64, t.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+          q.toNat = memW t (locN t "stable_logs")) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    obtain ⟨hs, hw, w, hl⟩ := hp
+    have he := stable_backing_load_eval s w hl hw
+    change evalAt s (.load .one (.var .local (ofString "stable_logs"))) = some v at hv
+    rw [hv] at he
+    have hv' := Option.some.inj he
+    subst v
+    refine ⟨stableCopySpatial_setVar s _ _ (by decide) (by decide) (by decide) hs,
+      BitVec.ofNat 64 (memW s (locN s "stable_logs")), ?_, ?_⟩
+    · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    · simp [setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString]
   · intro F s hp hr
     cases hr
 
