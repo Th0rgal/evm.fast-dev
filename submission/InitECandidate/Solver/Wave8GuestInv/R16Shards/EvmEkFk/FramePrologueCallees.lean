@@ -7335,6 +7335,34 @@ theorem transfer_sameTypedCells_of_accumulated_frame {F : Type}
     apply hbyte b hb
     rcases sep i hi with hz | hh | hh <;> omega
 
+theorem transfer_world_footprints_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hWT : WorldTypedWith s S Nd) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    fixedObjects post = fixedObjects s ∧
+    (∀ t ∈ S, htabFootprint post t = htabFootprint s t) ∧
+    nodeExtents post Nd = nodeExtents s Nd := by
+  have cell := transfer_sameTypedCells_of_accumulated_frame hInv hstep hWT hbe hout hbyte
+  refine ⟨?_, ?_, nodeExtents_eq hWT.2.2.2.1 cell⟩
+  · have hg : ∀ name, ofString name ≠ ofString "heap_ptr" → globN post name = globN s name := by
+      intro name hn
+      unfold globN
+      rw [hstep.1.2.2.1 _ (by simpa using hn)]
+    unfold fixedObjects
+    rw [blockOutObjects_eq hInv.1.2 hWT.2.2.1 cell (hg "bo" (by decide)),
+      balObjects_eq hInv.1.2 hWT.1 hWT.2.2.1 cell (hg "bal_accounts" (by decide)),
+      hg "journal" (by decide), hg "journal_cap" (by decide)]
+    congr 3
+    apply List.map_congr_left
+    intro gn hgn
+    have hn : ofString gn.1 ≠ ofString "heap_ptr" := by revert gn hgn; decide
+    rw [hg gn.1 hn]
+  · intro t ht
+    exact htabFootprint_eq cell ht (hWT.1.2.1 t ht).1
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
