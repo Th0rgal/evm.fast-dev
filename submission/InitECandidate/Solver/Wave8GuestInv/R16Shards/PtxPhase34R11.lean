@@ -4701,6 +4701,27 @@ theorem stableCopyLoopInv_init_spatial {F : Type} (s : PanSemStateFiniteExact 64
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hq
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString] using hd
 
+/-- Concrete counter initialization from the post-length spatial contract. -/
+theorem hoare_stableCopy_init_spatial :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      ∃ n p q : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+        q.toNat = memW s (locN s "stable_logs"))
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+    subst v
+    obtain ⟨hpost, hz, hh, ha, hc, hs, n, p, q, hn, hl, hq, hd⟩ := hp
+    exact stableCopyLoopInv_init_spatial s hpost hz hh ha hc hs n p q hn hl hq hd
+  · intro F s hp hr
+    cases hr
+
 /-- Assigning zero to the counter establishes the full loop contract when its
 post-assignment allocation and separation obligations have been supplied. -/
 theorem hoare_stableCopy_init_loop :
