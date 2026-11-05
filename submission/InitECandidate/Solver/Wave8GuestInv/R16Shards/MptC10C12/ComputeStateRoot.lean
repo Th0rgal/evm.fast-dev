@@ -1973,4 +1973,69 @@ theorem mptObjStep_preserves_two_local_tables_csr {F : Type}
   exact ⟨S0', Nd0', Nm0', hW_both, by simp, by simp, ht1_unass, ht2_unass,
     hfp_t1, hfp_t2, hhdr_t1, hhdr_t2, hm_both, hd0', hog_both, hfr_both⟩
 
+theorem pBounded_return_csr {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (e : ExpHOL 64) : PBounded P (.return e) 0 :=
+  ⟨TerminatingProgBoundedOn.of_clock (fun s => by
+      rw [evaluateHOLFiniteState_return]
+      split
+      · rfl
+      · split <;> rfl),
+   ⟨fun s _ _ _ hr => absurd hr (return_ne_none s e)⟩⟩
+
+theorem pBounded_call0_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {Qc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hspec : FunSpec Pc Qc fname)
+    (hentry : CallEntryOn P Pc fname args)
+    (hret : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F)
+      (callee : HolFiniteMapExact MlS (ValueHOL 64)) (post : PanSemStateFiniteExact 64 F)
+      (v : ValueHOL 64), s.code = originalRuntimeCode → P s →
+      Qc (callEntryStateHOLFinite s callee) (some (.returned v)) post →
+      P { post with locals := s.locals }) :
+    PBounded P (.call (some (none, none)) fname args) (B + 1) :=
+  ⟨TerminatingProgBoundedOn.call_on hfb none args hentry,
+   Hoare.call0 hspec hentry (fun s callee post v hc hP hQc _ => hret s callee post v hc hP hQc)
+     (fun _ _ hr _ h => absurd h hr)⟩
+
+theorem pBounded_callLocal_csr
+    {P Pc : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {args : List (ExpHOL 64)} {B : Nat}
+    (hfb : TerminatingFunBoundedOn Pc fname B)
+    (hentry : CallEntryOn P Pc fname args)
+    (hres : DecCallResumeOn P P name fname args) :
+    PBounded P (.call (some (some (.local, name), none)) fname args) (B + 1) := by
+  refine ⟨TerminatingProgBoundedOn.call_on hfb (some (.local, name)) args hentry, ?_⟩
+  refine ⟨fun {F} s hc hP _ hr => ?_⟩
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · rw [ha] at hr; simp at hr
+  · simp only [ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hb] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh]
+              split at hr
+              · rename_i hv
+                rw [if_pos hv]
+                exact hres s vs body callee ret v post hc hP ha hl hb
+              · simp at hr
+            · simp at hr
+          | _ => simp at hr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
