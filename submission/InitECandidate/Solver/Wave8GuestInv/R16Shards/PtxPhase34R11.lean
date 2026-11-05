@@ -5921,6 +5921,20 @@ theorem hoare_stableCopy_active_body :
   exact hoare_stableCopy_body_loop.run s hc
     ⟨stableCopyLoopInv_active s hp.1 hp.2, n, hn⟩ hnt hr
 
+/-- An active copy step preserves both the loop invariant and its ownership frame. -/
+theorem hoare_stableCopy_active_body_owned :
+    Hoare (fun s => (StableCopyLoopInv s ∧ StableCopyOwnedFrame s) ∧
+      LoopActive (.cmp .less (.var .local (ofString "i"))
+        (.var .local (ofString "nl"))) s)
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyLoopInv t ∧ StableCopyOwnedFrame t) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hoare_stableCopy_active_body.run s hc ⟨hp.1.1, hp.2⟩ hnt hr,
+    hoare_stableCopy_body_ownedFrame.run s hc
+      ⟨stableCopyLoopInv_active s hp.1.1 hp.2, hp.1.2⟩ hnt hr⟩
+
 /-- At an active loop head the concrete body restores the full loop invariant. -/
 theorem hoare_stableCopy_body_active :
     Hoare (fun s => StableCopyLoopInv s ∧
