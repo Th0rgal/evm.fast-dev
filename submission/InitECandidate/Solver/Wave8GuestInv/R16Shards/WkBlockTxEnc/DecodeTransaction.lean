@@ -10772,6 +10772,212 @@ private theorem memW_tx_off_store_word_vvh {F : Type}
   have hex := memW_store_word_exact hG hdst hval hflow
   rwa [hadd] at hex
 
+private theorem eval_seq_noRet_returned_inv_vvh {F : Type}
+    {u post : PanSemStateFiniteExact 64 F} {a b : ProgHOL 64} {rv : ValueHOL 64}
+    (ha : noBcRet_vvh a = true)
+    (hret : evaluateHOLFiniteState u (.seq a b) = (some (.returned rv), post)) :
+    ∃ u1, evaluateHOLFiniteState u a = (none, u1) ∧
+      evaluateHOLFiniteState u1 b = (some (.returned rv), post) := by
+  have hnr := (eval_noBcRet_vvh a ha u).2.2 rv
+  rw [evaluateHOLFiniteState_seq_line780] at hret
+  rcases hrun : evaluateHOLFiniteState u a with ⟨r1, u1⟩
+  rw [hrun] at hret hnr
+  cases r1 with
+  | none => exact ⟨u1, rfl, hret⟩
+  | some r1' =>
+    dsimp only at hret
+    injection hret with hr _
+    exact absurd hr hnr
+
+private theorem eval_dec_returned_inv_vvh {F : Type}
+    {t post : PanSemStateFiniteExact 64 F}
+    {nm : MlS} {sh : ShapeHOL} {init : ExpHOL 64} {cont : ProgHOL 64} {rv : ValueHOL 64}
+    (hret : evaluateHOLFiniteState t (.dec nm sh init cont) = (some (.returned rv), post)) :
+    ∃ (v : ValueHOL 64) (p0 : PanSemStateFiniteExact 64 F),
+      @evalHOLExact 64 F _ t.toExact (fun a => Classical.propDecidable (t.memaddrs a)) init = some v ∧
+      shapeEqHOL sh (shapeOfHOLExact v) = true ∧
+      evaluateHOLFiniteState (setVarHOLFinite nm v t) cont = (some (.returned rv), p0) ∧
+      post = { p0 with locals := HolFiniteMapExact.resVarEq p0.locals (nm, t.locals.lookup nm) } := by
+  rw [evaluateHOLFiniteState_dec_total] at hret; dsimp only at hret
+  split at hret
+  · simp at hret
+  · rename_i v hv
+    split at hret
+    · rename_i hsh
+      rcases hc_run : evaluateHOLFiniteState (setVarHOLFinite nm v t) cont with ⟨rc2, p0⟩
+      simp only [hc_run] at hret
+      injection hret with hrc2 hpost
+      subst hrc2
+      exact ⟨v, p0, hv, hsh, hc_run, hpost.symm⟩
+    · simp at hret
+
+private theorem eval_decCall_returned_inv_vvh {F : Type}
+    {t post : PanSemStateFiniteExact 64 F}
+    {nm : MlS} {sh : ShapeHOL} {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64} {rv : ValueHOL 64}
+    (hret : evaluateHOLFiniteState t (.decCall nm sh fname args cont) = (some (.returned rv), post)) :
+    ∃ (vs : List (ValueHOL 64)) (b' : ProgHOL 64) (c' : HolFiniteMapExact MlS (ValueHOL 64))
+      (r' : ShapeHOL) (w : ValueHOL 64) (st p0 : PanSemStateFiniteExact 64 F),
+      evalListHOLFinite t (h := fun a => Classical.propDecidable (t.memaddrs a)) args = some vs ∧
+      lookupCodeHOLFinite t.code.lookup fname vs = some (b', c', r') ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite t c') b' = (some (.returned w), st) ∧
+      shapeEqHOL (shapeOfHOLExact w) sh = true ∧
+      evaluateHOLFiniteState (setVarHOLFinite nm w { st with locals := t.locals }) cont = (some (.returned rv), p0) ∧
+      post = { p0 with locals := HolFiniteMapExact.resVarEq p0.locals (nm, t.locals.lookup nm) } := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hret
+  split at hret
+  · simp at hret
+  · rename_i vs hargs
+    split at hret
+    · simp at hret
+    · rename_i b' c' r' hlk
+      split at hret
+      · simp at hret
+      · dsimp only at hret
+        rcases hcal : evaluateHOLFiniteState (callEntryStateHOLFinite t c') b' with ⟨rc, st⟩
+        simp only [hcal] at hret
+        cases rc with
+        | none => simp at hret
+        | some rc =>
+          cases rc with
+          | returned w =>
+            dsimp only at hret
+            split at hret
+            · rename_i hsh
+              rcases hc_run : evaluateHOLFiniteState (setVarHOLFinite nm w { st with locals := t.locals }) cont with ⟨rc2, p0⟩
+              simp only [hc_run] at hret
+              injection hret with hrc2 hpost
+              subst hrc2
+              exact ⟨vs, b', c', r', w, st, p0, hargs, hlk, hcal, (Bool.and_eq_true _ _).mp hsh |>.1, hc_run, hpost.symm⟩
+            · simp at hret
+          | _ => simp at hret
+
+private theorem eval_decCall_alloc_returned_inv_vvh {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    (h : WorldEff s cur Rl B gw)
+    (hgw_hp : ofString "heap_ptr" ∈ gw.map ofString)
+    {name : MlS} {szExp : ExpHOL 64} {cont : ProgHOL 64} {rv : ValueHOL 64}
+    (hret : evaluateHOLFiniteState cur (.decCall name .one (ofString "alloc") [szExp] cont) = (some (.returned rv), post)) :
+    ∃ (pw nw : BitVec 64) (mid p0 : PanSemStateFiniteExact 64 F),
+      @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) szExp =
+        some (.val (.word nw)) ∧
+      mid.memory = cur.memory ∧
+      (∀ k, k ≠ name → mid.locals.lookup k = cur.locals.lookup k) ∧
+      mid.locals.lookup name = some (.val (.word pw)) ∧
+      WorldEff s mid Rl B gw ∧
+      pw.toNat % 8 = 0 ∧
+      sourceBase ≤ pw.toNat ∧
+      globN s "heap_ptr" ≤ pw.toNat ∧
+      pw.toNat + (nw.toNat + 7) / 8 * 8 = globN mid "heap_ptr" ∧
+      globN mid "heap_ptr" ≤ heapLimit ∧
+      WordsOK mid (pw.toNat, (nw.toNat + 7) / 8 * 8) ∧
+      evaluateHOLFiniteState mid cont = (some (.returned rv), p0) ∧
+      post = { p0 with locals := HolFiniteMapExact.resVarEq p0.locals (name, cur.locals.lookup name) } := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hret
+  split at hret
+  · simp at hret
+  · rename_i values hargs
+    split at hret
+    · simp at hret
+    · rename_i body' callee ret' hl
+      by_cases hz : cur.clock = 0
+      · simp [hz] at hret
+      · rw [if_neg hz] at hret
+        have hsame := lookupCodeHOLFinite_installed_body cur.code.lookup (ofString "alloc") _ _ body'
+          _ ret' values callee (by rw [h.code]; exact lookup_alloc) hl
+        subst hsame
+        have hret_eq := lookupCodeHOLFinite_installed_return cur (ofString "alloc") _ _ _
+          _ ret' values callee (by rw [h.code]; exact lookup_alloc) hl
+        subst hret_eq
+        obtain ⟨nw, rfl, hnw_callee⟩ := lookupCode_one_word lookup_alloc (by rwa [← h.code])
+        have hsz_ev : @evalHOLExact 64 F _ cur.toExact (fun a => Classical.propDecidable (cur.memaddrs a)) szExp =
+            some (.val (.word nw)) := by
+          simp only [evalListHOLFinite_eq_toExact, evalListHOLExact] at hargs
+          split at hargs <;> simp at hargs
+          rename_i v hv _; rw [hargs.1] at hv; exact hv
+        obtain ⟨pw, hpw_lk⟩ : ∃ pw : BitVec 64, cur.globals.lookup (ofString "heap_ptr") = some (.val (.word pw)) :=
+          globalWord_of_globN_pos cur "heap_ptr" (by have := h.arena.2.1; rw [sourceBase_val] at this; omega)
+        let entry := callEntryStateHOLFinite cur callee
+        rcases hrun : evaluateHOLFiniteState entry (sourceFnBody Guest.Software.guestFn_alloc) with ⟨res, pa⟩
+        dsimp only [entry] at hrun
+        simp only [hrun] at hret
+        cases res with
+        | none => simp at hret
+        | some res =>
+          cases res with
+          | returned w_ret =>
+            have hal := InitECandidate.Solver.Wave8GuestInv.R13.alloc_body_resumes entry pw h.code hpw_lk
+              (by dsimp only [entry]; rw [hrun]; exact Or.inl ⟨w_ret, rfl⟩)
+            dsimp only [entry] at hal
+            rw [hrun] at hal
+            obtain ⟨nw', hnw'_lk, hrv_eq, hcmp1, hcmp2, hpa_eq⟩ := hal
+            have hnw_eq : nw = nw' := by
+              have : entry.locals.lookup (ofString "n") = some (.val (.word nw)) := hnw_callee
+              rw [this] at hnw'_lk; injection hnw'_lk with h'; injection h' with h'; injection h'
+            subst hnw_eq
+            dsimp only at hrv_eq hpa_eq
+            have hw_ret_eq : w_ret = .val (.word pw) := by
+              injection hrv_eq with h'; injection h'
+            subst hw_ret_eq
+            have hsh : shapeEqHOL (shapeOfHOLExact (.val (.word pw))) .one = true := by
+              simp [shapeOfHOLExact, shapeEqHOL]
+            simp only [hsh, Bool.and_self, ↓reduceIte] at hret
+            let mid := setVarHOLFinite name (.val (.word pw)) { pa with locals := cur.locals }
+            have hmid_next : mid = { cur with
+                globals := cur.globals.update (ofString "heap_ptr", .val (.word ((pw + (nw + 7)) &&& ((0 : BitVec 64) - 8)))),
+                locals := mid.locals, clock := mid.clock } := by
+              dsimp only [mid, setVarHOLFinite]; rw [hpa_eq]; rfl
+            obtain ⟨heff_m, _, hp_al, hp_lo_sb, hp_lo_s, hp_add, hp_hi, hwok⟩ :=
+              worldEff_alloc_step h hgw_hp hpw_lk hcmp1 hcmp2 hmid_next
+            rcases hc_run : evaluateHOLFiniteState mid cont with ⟨rc2, p0⟩
+            dsimp only [mid] at hc_run
+            simp only [hc_run] at hret
+            injection hret with hrc2 hpost
+            subst hrc2
+            exact ⟨pw, nw, mid, p0, hsz_ev, by rw [hmid_next],
+              fun k hk => by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hk],
+              by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE],
+              heff_m, hp_al, hp_lo_sb, hp_lo_s, hp_add, hp_hi, hwok, hc_run, hpost.symm⟩
+          | _ => simp at hret
+
+private theorem eval_guard_raise_returned_inv_vvh {F : Type}
+    {u post : PanSemStateFiniteExact 64 F}
+    {c : ExpHOL 64} {eid : MlS} {rexp : ExpHOL 64} {rest : ProgHOL 64} {rv : ValueHOL 64}
+    (hret : evaluateHOLFiniteState u (.seq (.ite c (.raise eid rexp) .skip) rest) = (some (.returned rv), post)) :
+    ∃ cw : BitVec 64,
+      @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) c = some (.val (.word cw)) ∧
+      cw = 0#64 ∧
+      evaluateHOLFiniteState u rest = (some (.returned rv), post) := by
+  obtain ⟨u1, hs, hrest⟩ := eval_seq_noRet_returned_inv_vvh rfl hret
+  rw [evaluateHOLFiniteState_ite] at hs
+  split at hs
+  · rename_i cw hcw
+    split at hs
+    · rename_i hcw0
+      rw [evaluateHOLFiniteState_skip] at hs
+      injection hs with _ hu1
+      subst hu1
+      exact ⟨cw, hcw, hcw0, hrest⟩
+    · rw [evaluateHOLFiniteState_raise] at hs
+      split at hs <;> [ (dsimp only at hs; split at hs <;> simp at hs); simp at hs ]
+  · simp at hs
+
+private theorem eval_return_inv_vvh {F : Type}
+    {u post : PanSemStateFiniteExact 64 F} {e : ExpHOL 64} {rv : ValueHOL 64}
+    (hret : evaluateHOLFiniteState u (.return e) = (some (.returned rv), post)) :
+    @evalHOLExact 64 F _ u.toExact (fun a => Classical.propDecidable (u.memaddrs a)) e = some rv ∧
+    post = u.emptyLocalsHOLFinite := by
+  rw [evaluateHOLFiniteState_return] at hret
+  split at hret
+  · simp at hret
+  · rename_i val hv
+    split at hret
+    · injection hret with hrv hpost
+      injection hrv with hrv'
+      injection hrv' with hrv''
+      subst hrv'' hpost
+      exact ⟨hv, rfl⟩
+    · simp at hret
+
 private theorem txAccessListAt_of_fresh_vvh {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {tx : Nat}
     (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
