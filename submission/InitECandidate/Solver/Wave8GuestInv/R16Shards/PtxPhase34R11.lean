@@ -13702,4 +13702,89 @@ theorem receipt_advance_logs_finish_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  WkBlockTxEnc.call_noexc_ne_returned
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The complete bloom-to-return receipt suffix preserves the entry frame. -/
+theorem receipt_bloom_logs_finish_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs bloom old : BitVec 64) (bound : Nat) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hb : mid.locals.lookup (ofString "bloom") = some (.val (.word bloom)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ p.toNat + 265 + bound ≤ heapLimit)
+    (hbf : globN s "heap_ptr" ≤ bloom.toNat ∧ bloom.toNat + 256 ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (none, none)) (ofString "logs_bloom")
+          [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+        (.seq
+          (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+            [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256])
+          (.seq
+            (.assign .local (ofString "p")
+              (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+            (.seq
+              (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+                [.var .local (ofString "p"), .var .local (ofString "logs")])
+              (.seq
+                (.assign .local (ofString "p")
+                  (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+                (.seq
+                  (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+                    [.var .local (ofString "start"), .var .local (ofString "p")])
+                  (.seq
+                    (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+                      (.seq
+                        (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+                          (.var .local (ofString "tx_type")))
+                        (.return (.rstruct
+                          [.op .sub [.var .local (ofString "start"), .const 1],
+                           .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+                    (.return (.rstruct [.var .local (ofString "start"), .var .local (ofString "w")]))))))))) =
+      (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  rw [← evaluate_seq_assoc] at hr
+  have hn := seq_not_returned mid
+    (.call (some (none, none)) (ofString "logs_bloom")
+      [.var .local (ofString "logs"), .var .local (ofString "bloom")])
+    (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_bytes")
+      [.var .local (ofString "p"), .var .local (ofString "bloom"), .const 256]) v
+    (ignored_call_not_returned mid _ _ v)
+    (fun next => WkBlockTxEnc.call_noexc_ne_returned next _ _ _ v)
+  obtain ⟨next, hc, ht⟩ := seq_returned_of_not_returned hn hr
+  obtain ⟨he', w, hwb, hloc⟩ := receipt_bloom_encode_frame he logs bloom p old hl hb hp hw
+    hbf ⟨by omega, by omega⟩ hc
+  apply receipt_advance_logs_finish_return_frame hA hma he' start p logs w bound v
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "start" by decide] using hs
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "p" by decide] using hp
+  · rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "logs" by decide] using hl
+  · rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  · exact hle
+  · exact ⟨hfresh.1, by omega⟩
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
