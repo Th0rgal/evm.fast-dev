@@ -10495,4 +10495,248 @@ theorem ics_tail_tables {F : Type} (X : PanSemStateFiniteExact 64 F) (e tw : Bit
     change updW X.memory (e + 96) w a = _
     rw [updW_ne _ _ _ _ ha]
 
+/-- Prefix and child-suffix contents reconstruct the appended log-list invariant. -/
+theorem logsListOK_of_append_contents {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {L child n nc : Nat}
+    (hp : LogsListOK s L) (hc : LogsListOK s child)
+    (hn : memW s (L + 8) = n) (hnc : memW s (child + 8) = nc)
+    (hpn : L ≠ 0) (hcn : child ≠ 0)
+    (hwords : WordsOK post (L, 24)) (halloc : Allocated post (L, 24))
+    (hcount : memW post (L + 8) = n + nc)
+    (hbound : n + nc < 2 ^ 28)
+    (hcap : n + nc ≤ memW post (L + 16))
+    (hslots : ∀ i, i < n + nc → WordAt post (memW post L + 8 * i))
+    (hprefix : ∀ i, i < n →
+      memW post (memW post L + 8 * i) = memW s (memW s L + 8 * i))
+    (hsuffix : ∀ i, i < nc →
+      memW post (memW post L + 8 * (n + i)) = memW s (memW s child + 8 * i))
+    (hkeep : ∀ log, LogEntryOK s log → LogEntryOK post log) :
+    LogsListOK post L := by
+  rcases hp with hz | ⟨_, _, _, _, hp⟩
+  · exact False.elim (hpn hz)
+  rcases hc with hz | ⟨_, _, _, _, hc⟩
+  · exact False.elim (hcn hz)
+  refine Or.inr ⟨hwords, halloc, by omega, by omega, ?_⟩
+  intro i hi
+  rw [hcount] at hi
+  refine ⟨hslots i hi, ?_⟩
+  by_cases hip : i < n
+  · rw [hprefix i hip]
+    exact hkeep _ (hp i (by omega)).2
+  · have his : i - n < nc := by omega
+    have hieq : i = n + (i - n) := by omega
+    rw [hieq, hsuffix (i - n) his]
+    exact hkeep _ (hc (i - n) (by omega)).2
+
+/-- Heap growth preserves a log entry once its five record fields and words survive. -/
+theorem logEntryOK_of_record_preserved {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (h : LogEntryOK s log) (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hwords : WordsOK post (log, 40))
+    (hfields : ∀ k ∈ [0, 8, 16, 24, 32], memW post (log + k) = memW s (log + k)) :
+    LogEntryOK post log := by
+  have h0 := hfields 0 (by simp)
+  have h8 := hfields 8 (by simp)
+  have h16 := hfields 16 (by simp)
+  have h24 := hfields 24 (by simp)
+  have h32 := hfields 32 (by simp)
+  simp only [Nat.add_zero] at h0
+  unfold LogEntryOK at h ⊢
+  rw [h0, h8, h16, h24, h32]
+  obtain ⟨_, hr, ht, hn, ha, hb, hc⟩ := h
+  exact ⟨hwords, ⟨hr.1, hr.2.trans hheap⟩, ht, hn,
+    ⟨ha.1, ha.2.trans hheap⟩, ⟨hb.1, hb.2.trans hheap⟩,
+    ⟨hc.1, hc.2.trans hheap⟩⟩
+
+/-- A separated allocated cell survives the success tail's store and union. -/
+theorem icsTail_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i) {a : Nat}
+    (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat i)
+    (hT : ∀ j ∈ htabFootprint s T, Disj i j) (hwf : HtabWF s T) :
+    memW post a = memW s a := by
+  apply memW_of
+  apply h.2.2.2.2.2
+  · apply Ne.symm
+    apply ne_of_not_hits hE
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using ha
+  · intro j hj
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) ha
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
+
+/-- The table-union tail preserves separated log records and their payload bounds. -/
+theorem icsTail_logEntryOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T log : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hlog : LogEntryOK s log)
+    (hE : ¬ CellHits (e + 96).toNat (log, 40))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (log, 40) j) (hwf : HtabWF s T) :
+    LogEntryOK post log := by
+  have hal : Allocated s (log, 40) := Or.inl hlog.2.1
+  have hbound : log + 40 ≤ 2 ^ 64 := by
+    have hh := hA.2.2.1
+    have hb : heapLimit < 2 ^ 64 := by decide
+    have hl := hlog.2.1.2
+    dsimp only at hl
+    omega
+  have hkeep (a : Nat) (ha : log ≤ a ∧ a + 8 ≤ log + 40) :
+      memW post a = memW s a :=
+    icsTail_memW h hA hal ha (by omega) hE hT hwf
+  apply logEntryOK_of_record_preserved hlog h.2.2.2.2.1
+  · obtain ⟨ha, hn, hw⟩ := hlog.1
+    refine ⟨ha, hn, fun k hk => ?_⟩
+    obtain ⟨w, hd, hm⟩ := hw k hk
+    refine ⟨w, ?_, ?_⟩
+    · rw [h.2.1]; exact hd
+    · have heq := h.2.2.2.2.2 (BitVec.ofNat 64 (log + 8 * k))
+        (Ne.symm (ne_of_not_hits hE (by
+          simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+          omega)))
+        (fun j hj => by
+          simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)] using
+            noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj)
+              (show log ≤ log + 8 * k ∧ log + 8 * k + 8 ≤ log + 40 by omega))
+        (by
+          have hp := h.2.2.1.2.2.1
+          have hs := hA.2.2.2.1
+          have hs' := hA.2.2.2.2.1
+          have heq : heapLimit = scratchStart := rfl
+          rw [heq] at hp
+          simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)] using
+            noFresh_of_alloc hA.2 hal
+              (show log ≤ log + 8 * k ∧ log + 8 * k + 8 ≤ log + 40 by omega)
+              (by omega) h.2.2.2.2.1)
+      exact heq.trans hm
+  · intro k hk
+    have hk' : k ≤ 32 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+    exact hkeep _ (by omega)
+
+/-- Preserve all words of an allocated interval separated from the success tail. -/
+theorem icsTail_wordsOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} {i : Ivl} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hi : Allocated s i) (hw : WordsOK s i)
+    (hib : i.1 + i.2 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat i)
+    (hT : ∀ j ∈ htabFootprint s T, Disj i j) (hwf : HtabWF s T) :
+    WordsOK post i := by
+  obtain ⟨ha, hn, hw⟩ := hw
+  refine ⟨ha, hn, fun k hk => ?_⟩
+  obtain ⟨w, hd, hm⟩ := hw k hk
+  have hak : i.1 ≤ i.1 + 8 * k ∧ i.1 + 8 * k + 8 ≤ i.1 + i.2 := by omega
+  have hab : i.1 + 8 * k < 2 ^ 64 := by omega
+  refine ⟨w, by rw [h.2.1]; exact hd, ?_⟩
+  apply Eq.trans _ hm
+  apply h.2.2.2.2.2
+  · apply Ne.symm
+    exact ne_of_not_hits hE (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hak)
+  · intro j hj
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hak
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi hak (by omega) h.2.2.2.2.1
+
+/-- Once the append loop establishes its contents, table union preserves the
+whole parent log-list invariant, including every referenced log record. -/
+theorem icsTail_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hlogs : LogsListOK s L.toNat)
+    (hL : Allocated s (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF s T)
+    (harr : Allocated s (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrW : WordsOK s (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrB : memW s L.toNat + 8 * memW s (L.toNat + 16) ≤ 2 ^ 64)
+    (harrE : ¬ CellHits (e + 96).toNat (memW s L.toNat, 8 * memW s (L.toNat + 16)))
+    (harrT : ∀ j ∈ htabFootprint s T,
+      Disj (memW s L.toNat, 8 * memW s (L.toNat + 16)) j)
+    (hlogE : ∀ i, i < memW s (L.toNat + 8) →
+      ¬ CellHits (e + 96).toNat (memW s (memW s L.toNat + 8 * i), 40))
+    (hlogT : ∀ i, i < memW s (L.toNat + 8) → ∀ j ∈ htabFootprint s T,
+      Disj (memW s (memW s L.toNat + 8 * i), 40) j) :
+    LogsListOK post L.toNat := by
+  rcases hlogs with hz | ⟨hwords, _, hcount, hcap, hentries⟩
+  · exact Or.inl hz
+  have hdrKeep (k : Nat) (hk : k ≤ 16) :
+      memW post (L.toNat + k) = memW s (L.toNat + k) :=
+    icsTail_memW h hA hL (by dsimp only; omega) (by omega) hE hT hwf
+  have h0 := hdrKeep 0 (by omega)
+  simp only [Nat.add_zero] at h0
+  have h8 := hdrKeep 8 (by omega)
+  have h16 := hdrKeep 16 (by omega)
+  have harrWp := icsTail_wordsOK h hA harr harrW harrB harrE harrT hwf
+  have halloc : Allocated post (L.toNat, 24) := by
+    apply Wave8Contracts.M23.allocated_mono h.2.2.2.2.1 _ hL
+    unfold globN
+    rw [h.2.2.2.1 _ (by decide)]
+  refine Or.inr ⟨icsTail_wordsOK h hA hL hwords hLB hE hT hwf,
+    halloc, by rwa [h8], by rwa [h8, h16], ?_⟩
+  intro i hi
+  rw [h8] at hi
+  have hiCap : i < memW s (L.toNat + 16) := by omega
+  obtain ⟨hslot, hlog⟩ := hentries i hi
+  have hs := icsTail_memW h hA harr
+    (show memW s L.toNat ≤ memW s L.toNat + 8 * i ∧
+      memW s L.toNat + 8 * i + 8 ≤ memW s L.toNat + 8 * memW s (L.toNat + 16) by omega)
+    (by omega) harrE harrT hwf
+  rw [h0, hs]
+  refine ⟨?_, icsTail_logEntryOK h hA hlog (hlogE i hi) (hlogT i hi) hwf⟩
+  obtain ⟨_, _, hw⟩ := harrWp
+  exact hw i (by dsimp only; omega)
+
+/-- Content-preserving copy rule for the list-growth branch. -/
+theorem Flw.seq_memcpy_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {ed es en : ExpHOL 64} {cont : ProgHOL 64}
+    {Ψ : Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode)
+    (dst src n : BitVec 64)
+    (hd_nw : dst.toNat + n.toNat < 2 ^ 64)
+    (hs_nw : src.toNat + n.toNat < 2 ^ 64)
+    (hn_small : n.toNat + 32 < 2 ^ 63)
+    (hdisj : Disj (dst.toNat, n.toNat) (src.toNat, n.toNat))
+    (hed : ev s ed = some (.val (.word dst)))
+    (hes : ev s es = some (.val (.word src)))
+    (hen : ev s en = some (.val (.word n)))
+    (hk : ∀ s' : PanSemStateFiniteExact 64 F,
+      SoloHtabSet.MemCopyRel s s' dst src n.toNat n.toNat →
+      s'.locals = s.locals → Flw s' cont Ψ) :
+    Flw s (.seq (.call (some (none, none)) (ofString "memcpy") [ed, es, en]) cont) Ψ := by
+  refine Flw.seq_call00 fun values body callee ret v post h1 h2 h3 => ?_
+  have hv : values = [.val (.word dst), .val (.word src), .val (.word n)] := by
+    simp only [evalListHOLFinite, evalListHOLExact] at h1
+    unfold ev at hed hes hen
+    rw [hed, hes, hen] at h1; simp at h1; exact h1.symm
+  subst hv
+  have hl := pan_three_word_lookup s.code.lookup (ofString "memcpy") (ofString "dst") (ofString "src")
+    (ofString "n") _ dst src n (by decide) (by decide) (by decide)
+    (by rw [hcode]; exact SoloHtabSet.lookup_memcpy_fn)
+  rw [hl] at h2
+  simp only [Option.some.injEq, Prod.mk.injEq] at h2
+  obtain ⟨rfl, rfl, rfl⟩ := h2
+  let entry := callEntryStateHOLFinite s
+    (((HolFiniteMapExact.empty.update (ofString "dst", .val (.word dst))).update
+      (ofString "src", .val (.word src))).update (ofString "n", .val (.word n)))
+  have hspec := SoloHtabSet.memcpy_body_spec entry dst src n hd_nw hs_nw hn_small hdisj
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "dst" by decide, show ofString "src" ≠ ofString "dst" by decide])
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "src" by decide])
+    (by simp [entry, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    v (by rw [h3])
+  rw [h3] at hspec
+  obtain ⟨_, c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ := hspec
+  exact hk _ ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge

@@ -12594,4 +12594,259 @@ theorem heapByteEff_rlp_finish_list_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc PtxP1
+
+theorem txBacking_of_scratch_heapByteEff {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {gs : List (String × Nat × Nat)}
+    (hgs : ScratchSpec gs) (hW : TxWorld s) (hb : TxBacking s)
+    (he : HeapByteEff s post (gs.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post := by
+  apply txBacking_of_scratch_frame hgs hW hb he.arena.2
+    ⟨he.hp_le, he.sp_le⟩
+    (R16Shards.globN_eq_of_lookup (he.globals _ (by decide)))
+  intro a hk hf
+  by_contra hn
+  rcases he.cell_frame a hn with ⟨i, hi, hhit⟩ | hgap | hheap
+  · exact hk i (List.mem_append_left _ hi) hhit.2
+  · exact hk _ (List.mem_append_right _ (by simp)) hgap.2
+  · exact hf hheap.2
+
+theorem receipt_backing_of_body_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (he : HeapByteEff s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post :=
+  txBacking_of_scratch_heapByteEff receiptScratchSpec_ok hp.1.1 hb he
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Snapshot current log memory with the entry allocation frontier. -/
+theorem heapByteEff_snapshot {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} {R fresh : List Ivl}
+    (hA : ArenaOK s) (he : HeapByteEff s mid R ["heap_ptr"]) :
+    HeapByteEff s {mid with globals := s.globals} R ["heap_ptr"] ∧
+    HeapByteEff {mid with globals := s.globals} mid fresh ["heap_ptr"] := by
+  have hAs : ArenaOK {mid with globals := s.globals} := arenaOK_congr rfl hA
+  have hAR : ArenaReady {mid with globals := s.globals} :=
+    ⟨guestInv_congr (s := mid) rfl rfl rfl rfl he.arena.1, hAs⟩
+  constructor
+  · exact ⟨hAR, he.memaddrs, le_rfl, rfl, le_rfl, he.be,
+      fun _ _ => rfl, he.out_dom, he.cell_frame, he.byte_frame⟩
+  · exact ⟨he.arena, rfl, he.hp_le, he.fp_eq, he.sp_le, rfl, he.globals,
+      fun _ hn => False.elim (hn rfl), fun _ hn => False.elim (hn rfl),
+      fun _ _ hn => False.elim (hn rfl)⟩
+
+open private WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem heapByteEff_encode_logs_snapshot {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hA : ArenaOK s) (hpre : HeapByteEff s mid R ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0)
+    (hlogs : LogsListOK {mid with globals := s.globals} logs.toNat)
+    (harr : Allocated {mid with globals := s.globals}
+      (memW mid logs.toNat, 8 * memW mid (logs.toNat + 8)))
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum mid (memW mid logs.toNat)
+      (memW mid (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) : HeapByteEff s post R ["heap_ptr"] := by
+  obtain ⟨hsnap, hf⟩ := heapByteEff_snapshot (fresh := [(dst.toNat, bound)]) hA hpre
+  have hsnapmid : HeapByteEff {mid with globals := s.globals} mid R ["heap_ptr"] :=
+    (heapByteEff_snapshot (fresh := R) hA hpre).2
+  have hfit' : 9 + WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+      (memW mid logs.toNat) (memW mid (logs.toNat + 8)) ≤ bound := by
+    have heq : ∀ n, WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+        (memW mid logs.toNat) n = WkBlockTxEnc.logsEncodedSum mid (memW mid logs.toNat) n := by
+      intro n
+      induction n with
+      | zero => rfl
+      | succ n ih => simp only [WkBlockTxEnc.logsEncodedSum, ih]; rfl
+    rw [heq]
+    exact hfit
+  exact hsnap.trans (heapByteEff_encode_logs_fresh hsnapmid lname dstExp logsExp dst logs bound
+    hsnap.arena.2 hsnap.arena.1.memaddrs hf hfresh hnz hlogs harr hfit' hold hd hl hr)
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsListOK_preserved
+  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_snapshot_logs {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (hnz : logs ≠ 0) (hL : LogsListOK s logs) (hD : LogsDisjFixed s logs) :
+    LogsListOK {mid with globals := s.globals} logs ∧
+    Allocated {mid with globals := s.globals} (memW mid logs, 8 * memW mid (logs + 8)) ∧
+    memW mid logs = memW s logs ∧ memW mid (logs + 8) = memW s (logs + 8) := by
+  have hs := (heapByteEff_snapshot (fresh := []) hA he).1
+  have hLs := WkBlockTxEnc.logsListOK_preserved hA hma hs hnz hL hD
+  rcases hL with hz | ⟨hw, ha, _⟩
+  · exact False.elim (hnz hz)
+  rcases hD with hz | ⟨harr, hdisj⟩
+  · exact False.elim (hnz hz)
+  have hd : ∀ f ∈ fixedObjects s, Disj (logs, 24) f :=
+    fun f hf => hdisj _ (List.mem_append_left _ List.mem_cons_self) f hf
+  have hm0 : memW mid logs = memW s logs :=
+    WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma ha hd hw.1
+      (by simp) (by simp)
+  have hm8 : memW mid (logs + 8) = memW s (logs + 8) :=
+    WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma ha hd
+      (by have := hw.1; omega) (by simp) (by simp)
+  refine ⟨hLs.2, ?_, hm0, hm8⟩
+  rw [hm0, hm8]
+  exact harr
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_logs_sum_preserved {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (hnz : logs ≠ 0) (hL : LogsListOK s logs) (hD : LogsDisjFixed s logs) :
+    WkBlockTxEnc.logsEncodedSum mid (memW mid logs) (memW mid (logs + 8)) =
+      WkBlockTxEnc.logsEncodedSum s (memW s logs) (memW s (logs + 8)) := by
+  obtain ⟨_, _, hm0, hm8⟩ := receipt_snapshot_logs hA hma he hnz hL hD
+  rw [hm0, hm8]
+  rcases hL with hz | ⟨_, _, _, _, hentries⟩
+  · exact False.elim (hnz hz)
+  rcases hD with hz | ⟨hal_arr, hdisj⟩
+  · exact False.elim (hnz hz)
+  have hdj_arr : ∀ f ∈ fixedObjects s,
+      Disj (memW s logs, 8 * memW s (logs + 8)) f :=
+    fun f hf => hdisj _ (List.mem_append_left _ (List.mem_cons_of_mem _ List.mem_cons_self)) f hf
+  have hsum : ∀ k, k ≤ memW s (logs + 8) →
+      WkBlockTxEnc.logsEncodedSum mid (memW s logs) k =
+        WkBlockTxEnc.logsEncodedSum s (memW s logs) k := by
+    intro k hk
+    induction k with
+    | zero => rfl
+    | succ k ih =>
+      have hkl : k < memW s (logs + 8) := by omega
+      obtain ⟨hwa, hle⟩ := hentries k hkl
+      have ha64 : memW s logs + 8 * k < 2 ^ 64 := by
+        have := M13.allocated_le_2pow64 hA hal_arr
+        dsimp only at this
+        omega
+      have ha8 : (memW s logs + 8 * k) % 8 = 0 := by
+        obtain ⟨_, hdom, _⟩ := hwa
+        rw [hma, ordinaryDomain_iff] at hdom
+        have hbv : (BitVec.ofNat 64 (memW s logs + 8 * k)).toNat = memW s logs + 8 * k :=
+          Nat.mod_eq_of_lt ha64
+        rw [hbv] at hdom
+        exact hdom.1
+      have hm_elem : memW mid (memW s logs + 8 * k) = memW s (memW s logs + 8 * k) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_arr hdj_arr ha8
+          (by dsimp; omega) (by dsimp; omega)
+      let log := memW s (memW s logs + 8 * k)
+      obtain ⟨hw_log, hin_log, _⟩ := hle
+      have hal_log : Allocated s (log, 40) := Or.inl hin_log
+      have howned : (log, 40) ∈ logOwnedIvls s log := by
+        unfold logOwnedIvls
+        refine List.mem_filter.2 ⟨by simp [logRecordIvls], ?_⟩
+        simp only [bne_iff_ne, ne_eq, Prod.mk.injEq, not_and]
+        intro _ h40
+        omega
+      have hflat : (log, 40) ∈ (List.range (memW s (logs + 8))).flatMap
+          (fun i => logOwnedIvls s (memW s (memW s logs + 8 * i))) :=
+        List.mem_flatMap.2 ⟨k, List.mem_range.2 hkl, howned⟩
+      have hdj : ∀ f ∈ fixedObjects s, Disj (log, 40) f :=
+        fun f hf => hdisj _ (List.mem_append_right _ hflat) f hf
+      have hm16 : memW mid (log + 16) = memW s (log + 16) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_log hdj
+          (by have := hw_log.1; omega) (by dsimp [log]; omega) (by dsimp [log]; omega)
+      have hm32 : memW mid (log + 32) = memW s (log + 32) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_log hdj
+          (by have := hw_log.1; omega) (by dsimp [log]; omega) (by dsimp [log]; omega)
+      dsimp [log] at hm16 hm32
+      simp only [WkBlockTxEnc.logsEncodedSum, ih (by omega), hm_elem, hm16, hm32]
+  exact hsum _ le_rfl
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_encode_logs_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  obtain ⟨hLs, harr, _, _⟩ := receipt_snapshot_logs hA hma hpre hnz hL hD
+  apply heapByteEff_encode_logs_snapshot hA hpre lname dstExp logsExp dst logs bound
+    hfresh hnz hLs harr ?_ hold hd hl hr
+  rw [receipt_logs_sum_preserved hA hma hpre hnz hL hD]
+  exact hfit
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_logs_bloom_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (logsExp outExp : ExpHOL 64) (logs out : BitVec 64)
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (ho : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) outExp = some (.val (.word out)))
+    (hfresh : globN s "heap_ptr" ≤ out.toNat ∧ out.toNat + 256 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "logs_bloom") [logsExp, outExp]) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  have hp : globN mid "keccak_pad" = globN s "keccak_pad" :=
+    R16Shards.globN_eq_of_lookup (hpre.globals _ (by decide))
+  have hs : globN mid "keccak_st" = globN s "keccak_st" :=
+    R16Shards.globN_eq_of_lookup (hpre.globals _ (by decide))
+  apply heapByteEff_logs_bloom_fresh hpre logsExp outExp logs out hl ho hfresh ?_ ?_ hr
+  · intro hn
+    rw [hp] at hn ⊢
+    refine ⟨(globN s "keccak_pad", 136), ?_, le_rfl, le_rfl⟩
+    simp [WkBlockTxEnc.receiptKeccakIvls, hn]
+  · intro hn
+    rw [hs] at hn ⊢
+    refine ⟨(globN s "keccak_st", 200), ?_, le_rfl, le_rfl⟩
+    simp [WkBlockTxEnc.receiptKeccakIvls, hn]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

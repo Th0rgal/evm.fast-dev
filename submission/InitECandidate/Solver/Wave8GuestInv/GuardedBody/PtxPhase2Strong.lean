@@ -14115,4 +14115,111 @@ theorem phase2_ws_get_account_optional_backing {F : Type}
       (globN s "bo", 88) (R16Shards.PtxP1.bo_mem_typed he.bo_nz))
   · exact phase2_ws_get_account_optional_nested_unhit s hc ha he hw hnt hr
 
+/-- Account callees omit the transaction index; its default zero still satisfies the bound. -/
+theorem phase2_txEnv_callEntry_without_index {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (he : TxEnv s) (hi : callee.lookup (ofString "index") = none) :
+    TxEnv (callEntryStateHOLFinite s callee) := by
+  refine ⟨he.bo_nz, he.bo24, he.bo32, he.bo40, he.bo72, ?_, he.jcap_nz⟩
+  have hb := he.idx_lt
+  change locN (callEntryStateHOLFinite s callee) "index" < memW s (globN s "bo" + 80)
+  simp only [locN, callEntryStateHOLFinite, hi]
+  omega
+
+/-- Lift concrete world-state backing preservation to its account-call entry. -/
+theorem phase2_ws_get_account_optional_callEntry_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : s.code = originalRuntimeCode) (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hi : callee.lookup (ofString "index") = none)
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 := by
+  exact phase2_ws_get_account_optional_backing (callEntryStateHOLFinite s callee) hc
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr ha)
+    (phase2_txEnv_callEntry_without_index s callee he hi)
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hb hnt hr
+
+/-- Resolve the concrete world-state callee and restore its caller with backing intact. -/
+theorem phase2_ws_get_account_optional_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "ws_get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "ws_get_account_optional")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.lookup_ws_get_account_optional_top] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have hb := phase2_ws_get_account_optional_callEntry_backing s callee hc hp.1.1 hp.2.1 hw hp.2.2 hi
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hb
+  exact hb
+
+/-- A successful call without a destination restores the caller locals. -/
+theorem phase2_call0_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fname : MlS) (args : List (ExpHOL 64))
+    (hnone : (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).1 = none) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fname args)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_call] at hnone ⊢
+  rcases hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · rfl
+  · simp only [hargs] at hnone ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vals with _ | ⟨b, c, r⟩
+    · rfl
+    · simp only [hl] at hnone ⊢
+      by_cases hclk : s.clock = 0
+      · simp [hclk] at hnone
+      · rw [if_neg hclk] at hnone ⊢
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s c) b with ⟨rb, pb⟩
+        simp only [hb] at hnone ⊢
+        cases rb with
+        | none => simp at hnone
+        | some rb' =>
+          cases rb' with
+          | returned rv =>
+            dsimp only at hnone ⊢
+            split at hnone
+            · rename_i hok; rw [if_pos hok]
+            · simp at hnone
+          | _ => simp at hnone
+
+/-- The account table insertion preserves the whole guard needed by subsequent calls. -/
+theorem phase2_htab_set_ts8_world_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_htab_set_ts8_backing key value).run s hc hp hnt hr
+  have hs := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "ts" "ts+8" 8 key value (by simp) (by decide)
+    (fun s S hT hts ht0 => R16WkAcctWs.nonValueSlot_ts8 s S hT hts ht0)
+    s hc hp.1 hnt (Or.inl hr)
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have he := txEnv_preserved_by_worldStep hs.1 (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) (by intro k hk; simp at hk ⊢; tauto)
+    (by simp [R16WkAcctWs.bufRegions]) (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1
+    (by simp [R16WkAcctWs.bufRegions]) hp.2.1 (locals := s.locals) rfl
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  obtain ⟨S', Nd', _, hw', _⟩ := hs.1.2.2.2.2 S Nd hw (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  refine ⟨⟨hs.1.1, S', (worldTyped_iff_with _ S').mpr ⟨Nd', hw'⟩⟩, ?_, hb⟩
+  rw [← hl] at he
+  exact he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

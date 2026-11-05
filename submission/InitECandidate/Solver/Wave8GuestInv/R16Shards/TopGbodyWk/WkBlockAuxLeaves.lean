@@ -8241,4 +8241,342 @@ theorem merge_set_bal_roles_kept {F : Type}
   simp only [Nat.add_zero] at h0
   rw [h0, h8]
 
+/-- Insertion preserves the key-length header of every owned table. -/
+theorem merge_set_key_lengths_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ u ∈ S, hdr post u 0 = hdr s u 0 := by
+  intro u hu
+  by_cases hn : u = t
+  · subst u
+    exact he.2.2.1
+  · exact (merge_set_other_table_frame hA hW ht hu hn he).2.2 0 (by decide)
+
+/-- All world roles remain compatible when a fresh block-inner role is installed. -/
+theorem merge_set_world_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t inner : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    RolesOK post S (worldRoleSlots post) (journalRoleSlots post) := by
+  have hj := (merge_set_journal_kept hA hW ht he).1
+  have hws := merge_set_recRoles_kept hA hW ht he "ws" 40
+    [(16, "ws+16"), (32, "ws+32")] (by simp [typedRecords]) (by decide)
+    (by decide) (by decide)
+  have hbr := merge_set_recRoles_kept hA hW ht he "bs" 80
+    [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"),
+      (40, "bs+40"), (48, "bs+48"), (72, "bs+72")]
+    (by simp [typedRecords]) (by decide) (by decide) (by decide)
+  have htr := merge_set_recRoles_kept hA hW ht he "ts" 72
+    [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"),
+      (40, "ts+40"), (48, "ts+48"), (56, "ts+56"), (64, "ts+64")]
+    (by simp [typedRecords]) (by decide) (by decide) (by decide)
+  have hba : globN post "bal_accounts" = globN s "bal_accounts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide))
+  have hbi : globN post "bal_idx_accts" = globN s "bal_idx_accts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_idx_accts") (by decide))
+  have hbj : globN post "bal_idx_stor" = globN s "bal_idx_stor" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_idx_stor") (by decide))
+  have htn := merge_set_ts_nestRoles_kept hA hW ht he hbs ht0 htbs
+  have hbal := merge_set_bal_roles_kept hA hW ht he hbs ht0 htbs
+  have hp := merge_set_bs_outer_kept hA hW ht he hbs
+  let pre := (recRoles s "ws" [(16, "ws+16"), (32, "ws+32")] ++
+    recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"),
+      (40, "bs+40"), (48, "bs+48"), (72, "bs+72")] ++
+    recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"),
+      (40, "ts+40"), (48, "ts+48"), (56, "ts+56"), (64, "ts+64")] ++
+    [(globN s "bal_accounts", "bal_accounts"), (globN s "bal_idx_accts", "bal_idx_accts"),
+      (globN s "bal_idx_stor", "bal_idx_stor")]).filter (fun a => a.1 != 0)
+  let suf := (nestRoles s "ts" "ts.inner" ++ (balRecords s).flatMap
+    (fun ad => [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")])).filter
+    (fun a => a.1 != 0)
+  have hpre : worldRoleSlots s = pre ++
+      (nestRoles s "bs" "bs.inner").filter (fun a => a.1 != 0) ++ suf := by
+    simp only [worldRoleSlots, pre, suf, List.filter_append, List.append_assoc]
+  have hpost : worldRoleSlots post = pre ++
+      (nestRoles post "bs" "bs.inner").filter (fun a => a.1 != 0) ++ suf := by
+    simp only [worldRoleSlots, hws, hbr, htr, hba, hbi, hbj, htn, hbal,
+      pre, suf, List.filter_append, List.append_assoc]
+  rw [hpost, hj]
+  apply merge_roles_transport_inner (s := s) (t := t) (inner := inner)
+  · rw [← hpre]; exact hW.1.2.2.2.2.2.2.2.2.2.2.2
+  · exact hi
+  · exact hk
+  · rwa [← hpre]
+  · exact merge_set_key_lengths_kept hA hW ht he
+  · exact hbs
+  · exact htbs
+  · exact ht0
+  · exact hp.1
+  · exact hp.2.trans htbs.symm
+  · exact hv
+
+/-- Insertion frames every other table in the word-addressed memory view. -/
+theorem merge_set_other_table_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ u ∈ S, u ≠ t → ∀ i ∈ htabFootprint s u,
+      R16WkMarkAccountCreated.M08IvlUnhit s post i := by
+  intro u hu hn i hi
+  apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+  · intro j hj
+    exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+  · exact hA.2.2.2.2.2.2.1
+  · intro j hj
+    exact hW.1.2.2.1 u hu t ht hn i hi j hj
+  · exact R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+      he.2.2.2.2.1 (Or.inr ((hW.1.2.1 u hu).2 i hi).1)
+
+/-- Insertion leaves low sentinel words unchanged. -/
+theorem merge_set_low_words_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    memW post 0 = memW s 0 ∧ memW post 8 = memW s 8 ∧
+      memW post 16 = memW s 16 := by
+  have hlow : ∀ a : Nat, a + 8 ≤ sourceBase → memW post a = memW s a := by
+    intro a ha
+    have hsb : sourceBase < 2 ^ 64 := by decide
+    have ha' : a < 2 ^ 64 := by omega
+    have hm := he.2.2.2.2.2.2.1 (BitVec.ofNat 64 a)
+      (fun j hj hc => by
+        obtain ⟨h1, _⟩ := hc
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha'] at h1
+        have hlo := ((hW.1.2.1 t ht).1.1 j hj).1.1
+        omega)
+      (fun hc => by
+        obtain ⟨h1, _⟩ := hc
+        dsimp at h1
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha'] at h1
+        have hlo := hA.2.1
+        omega)
+    unfold memW
+    rw [hm]
+  exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
+
+/-- Block outer insertion preserves BAL objects and the typing of their lists. -/
+theorem merge_set_bal_objects_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    balObjects post = balObjects s ∧
+    (∀ ad ∈ balRecords post, memW post ad = memW s ad ∧
+      memW post (ad + 8) = memW s (ad + 8) ∧
+      htabValues post (memW post ad) = htabValues s (memW s ad) ∧
+      (∀ k ∈ ([16, 24, 32] : List Nat), LstOK post (memW post (ad + k))) ∧
+      (∀ l ∈ htabValues post (memW post ad), LstOK post l)) := by
+  have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+    rw [htbs]
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+      (by rwa [← htbs])
+    simp [recRoles, hbs]
+  apply R16WkMarkAccountCreated.balObjects_eq_of_unhit_except hA.2 hW.1 hW.2.2.1
+    (globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide)))
+    (merge_set_other_table_unhit hA hW ht he)
+  · constructor
+    · by_cases hz : globN s "bal_accounts" = 0
+      · rw [hz]; exact Ne.symm ht0
+      have hx : (globN s "bal_accounts", "bal_accounts") ∈ worldRoleSlots s := by
+        simp [worldRoleSlots, hz]
+      exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+        hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+    · intro ad had
+      by_cases hz : memW s ad = 0
+      · rw [hz]; exact Ne.symm ht0
+      have hx : (memW s ad, "bal.stor") ∈ worldRoleSlots s := by
+        unfold worldRoleSlots
+        apply List.mem_filter.2
+        refine ⟨List.mem_append_right _ ?_, by simpa using hz⟩
+        exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+      exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+        hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+  · intro i hi hn
+    have hm : i ∈ fixedObjects s := List.mem_append_right _ hi
+    apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+    · intro j hj; exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+    · exact hA.2.2.2.2.2.2.1
+    · intro j hj; exact (((hW.1.2.1 t ht).2 j hj).2 i hm).flip
+    · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+        he.2.2.2.2.1
+      rcases hW.2.2.1.1 i hm with hz | ⟨hal, _⟩
+      · exact Or.inl hz
+      · exact Or.inr hal
+  · exact merge_set_low_words_kept hA hW ht he
+
+/-- Fixed objects are framed in the word-addressed view, including empty objects. -/
+theorem merge_set_fixed_word_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ fixedObjects s, R16WkMarkAccountCreated.M08IvlUnhit s post i := by
+  intro i hi
+  apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+  · intro j hj; exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+  · exact hA.2.2.2.2.2.2.1
+  · intro j hj; exact (((hW.1.2.1 t ht).2 j hj).2 i hi).flip
+  · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+      he.2.2.2.2.1
+    rcases hW.2.2.1.1 i hi with hz | ⟨hal, _⟩
+    · exact Or.inl hz
+    · exact Or.inr hal
+
+/-- Block output objects retain their extents across an owned table insertion. -/
+theorem merge_set_blockOutObjects_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    blockOutObjects post = blockOutObjects s ∧
+      (globN post "bo" ≠ 0 → ∀ k ∈ ([40, 72] : List Nat),
+        memW post (globN post "bo" + k) ≠ 0 →
+        LstOK post (memW post (globN post "bo" + k))) := by
+  have hg : globN post "bo" = globN s "bo" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bo") (by decide))
+  have hu : globN s "bo" ≠ 0 → R16WkMarkAccountCreated.M08IvlUnhit s post
+      (globN s "bo", 88) := by
+    intro hn
+    have hm := typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by simp [typedRecords])
+    simp only [hn, ↓reduceIte] at hm
+    exact merge_set_fixed_word_unhit hA hW ht he _ hm
+  have hw : globN s "bo" ≠ 0 → ∀ k, k % 8 = 0 → k + 8 ≤ 88 →
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro hn k hk hkb
+    simpa [hg] using InitECandidate.Solver.Wave8Contracts.M08.rec_word_eq_of_unhit
+      hA.2 hW.2.2.1 "bo" 88 (by decide) hg hn (hu hn) hk hkb
+  have hz := merge_set_low_words_kept hA hW ht he
+  have hh := InitECandidate.Solver.Wave8Contracts.M08.blockOutObjects_eq_of_bo_unhit
+    hA.2 hW.2.2.1 hg hW.1.2.2.2.2.2.2.2.2.2.2.1
+    (fun h => hw h 24 (by decide) (by decide))
+    (fun h => hw h 32 (by decide) (by decide))
+    (fun h => hw h 40 (by decide) (by decide))
+    (fun h => hw h 56 (by decide) (by decide))
+    (fun h => hw h 72 (by decide) (by decide))
+    (fun h => hw h 80 (by decide) (by decide))
+    (fun _ _ => by simp [hz.1, hz.2.2])
+    (fun _ _ => by simp [hz.1, hz.2.2])
+    (fun h h40 => merge_set_fixed_word_unhit hA hW ht he _ (by
+      unfold fixedObjects
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp [blockOutObjects, h, h40]))
+    (fun h h72 => merge_set_fixed_word_unhit hA hW ht he _ (by
+      unfold fixedObjects
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp [blockOutObjects, h, h72]))
+  exact hh
+
+/-- Inserting a block inner pointer preserves fixed-object extents and typing. -/
+theorem merge_set_fixed_typed {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    fixedObjects post = fixedObjects s ∧ FixedTyped post := by
+  have hgs := InitECandidate.Solver.Wave8Contracts.M08.worldGlobalsSame_of_kept
+    (gw := ["heap_ptr"]) he.2.2.2.2.2.2.2 (fun _ h => Or.inl (by simpa using h))
+  have hb := (merge_set_blockOutObjects_kept hA hW ht he).1
+  have hbal := (merge_set_bal_objects_kept hA hW ht he hbs ht0 htbs).1
+  have hf := InitECandidate.Solver.Wave8Contracts.M08.fixedObjects_eq_of_parts hgs hb hbal
+  have hag : AllocatorGrows s post := by
+    refine ⟨he.2.2.2.2.1, ?_⟩
+    rw [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))]
+  exact ⟨hf, InitECandidate.Solver.Wave8Contracts.M08.fixedTyped_transfer
+    hA.1 he.1.1 hag hW.2.2.1 hf⟩
+
+/-- The updated table's footprint remains separate from other owned objects. -/
+theorem merge_set_footprint_disjoint {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ htabFootprint post t,
+      (∀ u ∈ S, u ≠ t → ∀ j ∈ htabFootprint s u, Disj i j) ∧
+      (∀ j ∈ fixedObjects s, Disj i j) ∧
+      (∀ o ∈ nodeExtents s Nd, Disj i o) := by
+  intro i hi
+  rcases (he.2.2.2.2.2.1 i hi).2 with ⟨k, hk, hin⟩ | hfresh
+  · refine ⟨?_, ?_, ?_⟩
+    · intro u hu hn j hj
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        (hW.1.2.2.1 t ht u hu hn.symm k hk j hj)
+    · intro j hj
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        (((hW.1.2.1 t ht).2 k hk).2 j hj)
+    · intro o ho
+      exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_left hin
+        ((hW.2.2.2.2.1 o ho).1 t ht k hk).flip
+  · have hf : ∀ j, (j.2 = 0 ∨ Allocated s j) → Disj i j := by
+      intro j hj
+      exact (InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right hfresh
+        (R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+          he.2.2.2.2.1 hj)).flip
+    refine ⟨?_, ?_, ?_⟩
+    · intro u hu _ j hj
+      exact hf j (Or.inr ((hW.1.2.1 u hu).2 j hj).1)
+    · intro j hj
+      apply hf
+      rcases hW.2.2.1.1 j hj with hz | ⟨hal, _⟩
+      · exact Or.inl hz
+      · exact Or.inr hal
+    · intro o ho
+      apply hf
+      unfold nodeExtents at ho
+      obtain ⟨n, hn, hno⟩ := List.mem_flatMap.1 ho
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hno
+      rcases hno with rfl | rfl
+      · exact Or.inr (hW.2.2.2.1.1 n hn).2.1
+      · unfold nodePath
+        split_ifs with hc
+        · rcases (hW.2.2.2.1.1 n hn).2.2.2.2.2.2.1 hc.1 with hz | ⟨_, hal, _⟩
+          · exact False.elim (hc.2 hz)
+          · exact Or.inr hal
+        · exact Or.inl rfl
+
+/-- Table well-formedness, allocation, and separation survive outer insertion. -/
+theorem merge_set_tables_geometry {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hfix : fixedObjects post = fixedObjects s) :
+    (∀ u ∈ S, HtabWF post u ∧ ∀ i ∈ htabFootprint post u,
+      Allocated post i ∧ ∀ j ∈ fixedObjects post, Disj i j) ∧
+    (∀ u ∈ S, ∀ v ∈ S, u ≠ v → ∀ i ∈ htabFootprint post u,
+      ∀ j ∈ htabFootprint post v, Disj i j) := by
+  have hag : AllocatorGrows s post := by
+    refine ⟨he.2.2.2.2.1, ?_⟩
+    rw [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))]
+  have hd := merge_set_footprint_disjoint hA hW ht he
+  have ho := fun {u : Nat} (hu : u ∈ S) (hn : u ≠ t) =>
+    merge_set_other_table_frame (post := post) hA hW ht hu hn
+  constructor
+  · intro u hu
+    by_cases hn : u = t
+    · subst u
+      rw [hfix]
+      exact ⟨he.2.1, fun i hi => ⟨(he.2.2.2.2.2.1 i hi).1, (hd i hi).2.1⟩⟩
+    · obtain ⟨hwf, hfp, _⟩ := ho hu hn he
+      rw [hfp, hfix]
+      exact ⟨hwf, fun i hi => ⟨hag.allocated ((hW.1.2.1 u hu).2 i hi).1,
+        ((hW.1.2.1 u hu).2 i hi).2⟩⟩
+  · intro u hu v hv hn i hi j hj
+    by_cases hut : u = t
+    · subst u
+      rw [(ho hv hn.symm he).2.1] at hj
+      exact (hd i hi).1 v hv hn.symm j hj
+    · by_cases hvt : v = t
+      · subst v
+        rw [(ho hu hut he).2.1] at hi
+        exact ((hd j hj).1 u hu hut i hi).flip
+      · rw [(ho hu hut he).2.1] at hi
+        rw [(ho hv hvt he).2.1] at hj
+        exact hW.1.2.2.1 u hu v hv hn i hi j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

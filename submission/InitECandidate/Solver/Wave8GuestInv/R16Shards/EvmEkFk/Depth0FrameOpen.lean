@@ -5762,4 +5762,136 @@ theorem dispatch_code_record_words {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hb := dispatch_code_length_lt hA hin
   simpa [memW, hn.2] using hb
 
+/-- Loading a heap-owned code record returns a pair of actual words with the
+length bound required by dispatch. -/
+theorem dispatch_code_record_eval {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {v : Nat} (hwords : WordsOK s (v, 16))
+    (hin : Inside (memW s v, memW s (v + 8)) sourceBase (globN s "heap_ptr"))
+    (e0 e8 : ExpHOL 64)
+    (h0 : ev s e0 = some (.val (.word (BitVec.ofNat 64 v))))
+    (h8 : ev s e8 = some (.val (.word (BitVec.ofNat 64 (v + 8))))) :
+    ∃ code code_n : BitVec 64,
+      ev s (.rstruct [.load .one e0, .load .one e8]) =
+        some (.rStruct [.val (.word code), .val (.word code_n)]) ∧ code_n.toNat < 2 ^ 40 := by
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hwords hin
+  have hd0 := (hwords.2.2 0 (by omega)).choose_spec.1
+  have hd8 := (hwords.2.2 1 (by omega)).choose_spec.1
+  simp only [Nat.mul_zero, Nat.add_zero] at hd0
+  simp only [Nat.mul_one] at hd8
+  unfold ev at h0 h8
+  refine ⟨code, code_n, ?_, hb⟩
+  simp [ev, evalHOLExact, evalListHOLExact, h0, h8, memLoadHOLExact,
+    isWfShapeExactHOL, hd0, hd8, hc, hn]
+
+/-- A returning call may resume by a catchable exception when the callee
+establishes the final invariant on that path. -/
+theorem Hoare.decCall_returning_exception_fall
+    {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {shape : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hQ : LocalsFree Q) (hres : DecCallResumeOn P R name fname args)
+    (hexc : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → P s →
+      PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      ∀ e v post, e ≠ ofString "TrapErr" →
+        evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.exception e v), post) → Q post)
+    (hcont : Hoare R cont (Fall Q)) :
+    Hoare P (.decCall name shape fname args cont) (Fall Q) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | values
+  · rw [ha] at hr
+    rcases hr with hr | hr
+    · cases hr
+    · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  · simp only [ha] at hnt hr ⊢
+    rcases hl : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body, callee, ret⟩
+    · rw [hl] at hr
+      rcases hr with hr | hr
+      · cases hr
+      · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+    · simp only [hl] at hnt hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body).1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hb] at hm
+        simp only [hb] at hnt hr ⊢
+        cases r with
+        | none =>
+          rcases hr with hr | hr
+          · cases hr
+          · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hnt hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh] at hnt ⊢
+              have hR := hres s values body callee ret v post hc hP ha hl hb
+              have hc' : (setVarHOLFinite name v {post with locals := s.locals}).code = originalRuntimeCode := hm.trans hc
+              exact hQ _ _ _ (hcont.run _ hc' hR hnt hr)
+            · rw [if_neg ‹_›] at hnt ⊢
+              rcases hr with hr | hr
+              · cases hr
+              · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | timeOut => simp at hnt
+          | exception e v =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨e', v', he, hne⟩
+              · cases h
+              cases he
+              exact hQ _ _ _ (hexc s values body callee ret hc hP hl e v post hne hb)
+          | error =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | _ =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- Compose the external-code call with the delegated stores and common
+dispatch suffix, including the callee's catchable-exception path. -/
+theorem hoare_prepare_dispatch_ext_delegated (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw)
+    (hres : DecCallResumeOn
+      (fun s => D0Pre gw hp G ch s ∧ ∃ dst : BitVec 64,
+        s.locals.lookup (ofString "daddr") = some (.val (.word dst)))
+      (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n daddr : BitVec 64,
+        s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) ∧ code_n.toNat < 2 ^ 40)
+      (ofString "dcode") (ofString "ext_code_of") [.var .local (ofString "daddr")])
+    (hexc : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → D0Pre gw hp G ch s →
+      PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup (ofString "ext_code_of") values =
+        some (body, callee, ret) → ∀ e v post, e ≠ ofString "TrapErr" →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.exception e v), post) →
+      EvmMsgReady post ∧ StepFrom gw hp G ch post) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ dst : BitVec 64,
+      s.locals.lookup (ofString "daddr") = some (.val (.word dst)))
+      (.decCall (ofString "dcode") (.comb [.one, .one]) (ofString "ext_code_of")
+        [.var .local (ofString "daddr")]
+        (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+          (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+              (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+                (.var .local (ofString "daddr"))) prepareDispatchCommon)))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.decCall_returning_exception_fall
+    (R := fun s => D0Pre gw hp G ch s ∧ ∃ code code_n daddr : BitVec 64,
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) ∧ code_n.toNat < 2 ^ 40)
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩) (fun {F} => @hres F) ?_ ?_
+  · intro F s values body callee ret hc hP hl
+    exact hexc s values body callee ret hc hP.1 hl
+  · refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+    obtain ⟨hD, code, code_n, daddr, hdcode, hdaddr, hnb⟩ := hP
+    exact (hoare_prepare_dispatch_delegated_common gw hp G ch code code_n daddr hnb hsub).run
+      s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
+
 end HeadStore
