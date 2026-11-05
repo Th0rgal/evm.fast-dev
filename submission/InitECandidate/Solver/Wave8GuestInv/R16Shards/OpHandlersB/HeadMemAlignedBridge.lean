@@ -6360,7 +6360,7 @@ theorem lst_push_run {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz n cap :
     (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
     (hmn : s.memory (l + 8) = .word n) (hmc : s.memory (l + 16) = .word cap)
     (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8)) (hd16 : s.memaddrs (l + 16))
-    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59) (hesz8 : esz.toNat ≤ 8) :
+    (hle : n.toNat ≤ cap.toNat) (hcap : n.toNat < 2 ^ 59) (hesz8 : esz.toNat ≤ 8) :
     Ret s (sourceFnBody Guest.Software.guestFn_lst_push)
       (fun v post => LstPushPost s l esz n cap v post) := by
   have hb : sourceFnBody Guest.Software.guestFn_lst_push =
@@ -6408,6 +6408,7 @@ theorem lst_push_run {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz n cap :
       simp only [Flapjack.Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def]
       simp; omega
     have hnc : n = cap := BitVec.eq_of_toNat_eq (by omega)
+    replace hcap : cap.toNat < 2 ^ 59 := by rw [← hnc]; exact hcap
     have hS2A : ArenaReady S2 := arenaReady_locals s _ hA
     have hmulT : (esz * cap).toNat = esz.toNat * cap.toNat := by
       rw [BitVec.toNat_mul]; apply Nat.mod_eq_of_lt
@@ -6551,7 +6552,7 @@ theorem log_append_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e L lg n ca
     (hd88 : s.memaddrs (e + 88)) (hmL : s.memory (e + 88) = .word L)
     (hmn : s.memory (L + 8) = .word n) (hmc : s.memory (L + 16) = .word cap)
     (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
-    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59) :
+    (hle : n.toNat ≤ cap.toNat) (hcap : n.toNat < 2 ^ 59) :
     Ret s (sourceFnBody Guest.Software.guestFn_log_append)
       (fun _ post => LogAppendPost s L post) := by
   have hb : sourceFnBody Guest.Software.guestFn_log_append =
