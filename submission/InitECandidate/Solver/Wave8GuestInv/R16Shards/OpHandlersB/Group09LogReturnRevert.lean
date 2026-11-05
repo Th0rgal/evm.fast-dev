@@ -12325,4 +12325,58 @@ theorem log_growth_chain_objects_pairwise_g09 {F : Type}
     obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hobjects
     exact hfresh ec hec other hother
 
+/-- Log growth changes only the active frame's objects; release marks refer to
+surviving ancestors, so unchanged suspended objects preserve every mark. -/
+theorem marksOK_of_head_log_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hmarks : MarksOK s S (evmChain s))
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hrefs : worldTableRefs post S = worldTableRefs s S)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) :
+    MarksOK post S (evmChain s) := by
+  have hscratch : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
+    intro ec hec
+    unfold frameScratch
+    rw [hfields ec hec 8, hfields ec hec 232, hfields ec hec 88]
+  have hdel : ∀ i t, DelExclusive post S (evmChain s) i t ↔
+      DelExclusive s S (evmChain s) i t := by
+    intro i t
+    unfold DelExclusive
+    rw [hrefs]
+    refine and_congr Iff.rfl (forall_congr' fun j => forall_congr' fun hj =>
+      forall_congr' fun k => imp_congr_right fun _ => ?_)
+    rw [hfields _ (List.getElem_mem hj) k]
+  intro i hi
+  have himem : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+  have htake : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
+      ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
+    apply List.map_congr_left
+    intro ec hec
+    exact hfields ec (List.mem_of_mem_take hec) 136
+  dsimp only
+  rw [hcont _ himem 48, hcont _ himem 56, hfields _ himem 24,
+    hscratch _ himem, hfixed, htake]
+  obtain ⟨m1, m2, m3, m4, m5, m6, m7, m8, m9⟩ := hmarks i hi
+  refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, m9⟩
+  · intro j hj hij
+    have hjmem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+    have hjtail : (evmChain s)[j] ∈ (evmChain s).tail := by
+      have ht : j - 1 < (evmChain s).tail.length := by
+        simp only [List.length_tail]
+        omega
+      have he : (evmChain s).tail[j - 1] = (evmChain s)[j] := by
+        rw [List.getElem_tail]
+        congr 1
+        omega
+      exact he ▸ List.getElem_mem ht
+    rw [hscratch _ hjmem, hobjects _ hjtail, hlogs _ hjtail, hfields _ hjmem 112]
+    exact m5 j hj hij
+  · intro t ht
+    rw [hfoot t ht, hdel i t]
+    exact m8 t ht
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
