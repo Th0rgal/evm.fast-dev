@@ -85,3 +85,43 @@ theorem budget_of_bodies (oracles : List (Option (Spt Nat))) (table : List (Nat 
     exact bodies x hx
 
 end InitECandidate.Solver.Wave8Stage.ConcreteM7313.StackPasses
+
+namespace InitECandidate.Solver.Wave8Stage.ConcreteM7313.StackPasses
+open InitE Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
+open Flapjack.Compiler.Encoders.RiscV.Target
+open InitECandidate.Solver InitECandidate.Solver.Wave8GuestInv
+open InitECandidate.Solver.Wave8Stage
+open InitECandidate.Solver.Wave8Stage.StackToLabClock (stepCost)
+open InitECandidate.Solver.Wave8Stage.ConcreteM7313.BackendDecomposition
+
+/-- The two word-to-stack stubs prepended by `compileNative`. -/
+def nativeStubs : List (Nat × HolProg 64) :=
+  [(raiseStubLocation, WordToStack.Native.raiseStubNative false registers),
+   (storeConstsStubLocation, WordToStack.Native.storeConstsStubNative registers)]
+
+/-- `BackendBound` from closed per-function facts: the word-to-stack table of
+the executable pipeline (with bitmap state threaded from `(.list [4], 1)`) and a
+`stepCost ≤ 7313` bound for every stub and every lowered body of that table. -/
+theorem backendBound_of_per_function (w : LeanBridge.ConcreteOracleCompilationWitness)
+    (hlen : w.oracles.length = ConcreteCompilerWord.source.length)
+    (bodies : List (Nat × HolProg 64)) (frames : List Nat) (bitmaps : AppList (BitVec 64) × Nat)
+    (compiled : WordToStack.Native.compileWordToStackNative riscvConfig false registers
+      ((ConcreteCompilerWord.source.zip w.oracles).map (fun p => wordFunction p.2 p.1))
+      (.list [4], 1) = (bodies, frames, bitmaps))
+    (stubs : ∀ e ∈ (StackRemove.initStubs (width := 64)
+        (StackToLab.isGenGc (oracleCompilerConfig w.oracles).dataConf.gcKind)
+        (2 * DataToWord.maxHeapLimit 64 (oracleCompilerConfig w.oracles).dataConf - 1) pointer
+        BvlToBvi.initGlobalsLocation ++
+      (StackAlloc.stubs (oracleCompilerConfig w.oracles).dataConf).map
+        (StackRemove.progComp (oracleCompilerConfig w.oracles).stackConf.jump
+          riscvConfig.addrOffset pointer)), stepCost e.2 ≤ 7313)
+    (lowered : ∀ e ∈ nativeStubs ++ bodies,
+      stepCost (StackRemove.progComp (oracleCompilerConfig w.oracles).stackConf.jump
+        riscvConfig.addrOffset pointer
+        (StackAlloc.progComp (e.1, StackRawCall.compTop
+          (StackRawCall.collectInfo (nativeStubs ++ bodies) .ln) e.2))).2 ≤ 7313) :
+    ConcreteStageTransferBridge.BackendBound w :=
+  backendBound_of_table w hlen bodies frames bitmaps compiled
+    (budget_of_bodies w.oracles (nativeStubs ++ bodies) 7313 stubs lowered)
+
+end InitECandidate.Solver.Wave8Stage.ConcreteM7313.StackPasses
