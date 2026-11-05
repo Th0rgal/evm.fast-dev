@@ -2488,4 +2488,38 @@ theorem phase2_address_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat
   · exact phase2_alloc_accessCountReady h _
   · exact ht
 
+/-- The first address allocation returns a word pointer to its entire live
+array, alongside the preserved count-ready invariant. -/
+theorem phase2_address_alloc_live (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady
+      (fun s => PtxAccessCountReady s ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "al_addrs") = some (.val (.word w))) ∧
+        Inside (locN s "al_addrs", (locN s "nal" + 1) * 8) InitE.sourceBase (globN s "heap_ptr") ∧
+        locN s "al_addrs" % 8 = 0 ∧
+        WordsOK s (locN s "al_addrs", (locN s "nal" + 1) * 8))
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := phase2_alloc_accessCountReady h _ s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_address_alloc_fresh h s vs body callee ret v post hc hp ha hl hb
+  have hround : ((locN s "nal" + 1) * 8 + 7) / 8 * 8 = (locN s "nal" + 1) * 8 := by omega
+  simp only [FreshBlock, hround] at hf
+  let out := setVarHOLFinite (ofString "al_addrs") (.val (.word w)) { post with locals := s.locals }
+  have hpointer : locN out "al_addrs" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nal" = locN s "nal" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "nal" by decide]
+  refine ⟨hr, ⟨w, ?_⟩, ?_, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · change Inside (locN out "al_addrs", (locN out "nal" + 1) * 8) InitE.sourceBase (globN post "heap_ptr")
+    rw [hpointer, hcount]
+    exact ⟨hp.1.1.1.1.1.1.1.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · change locN out "al_addrs" % 8 = 0
+    rw [hpointer]
+    exact hf.1
+  · change WordsOK post (locN out "al_addrs", (locN out "nal" + 1) * 8)
+    rw [hpointer, hcount]
+    exact hf.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
