@@ -605,6 +605,80 @@ theorem logsLiveOwned_scratchStep {F : Type}
     logsLiveOwned_survives hAs hAp hgS hgrow hl hd hsys
       (R13Shards.worldOwned_zero_aligned hW) hR0 hog hfr hh ha he⟩
 
+def etherScratchSpec : List (String × Nat × Nat) :=
+  [("keccak_pad", 136, 136), ("keccak_st", 200, 200),
+   ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52)]
+
+theorem etherScratchSpec_ok : ScratchSpec etherScratchSpec := by
+  unfold ScratchSpec etherScratchSpec
+  decide
+
+/-- Specialize the concrete ether-creation step to an entry typing that owns
+the temporary logs. Its exit typing retains both validity and ownership. -/
+theorem create_ether_logs {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode)
+    (hlk : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hW : WorldOK (callEntryStateHOLFinite s callee))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1)
+    (S Nd : List Nat) (logs : Nat)
+    (hWT : WorldTypedWith (callEntryStateHOLFinite s callee) S Nd)
+    (hlogs : LogsListOK (callEntryStateHOLFinite s callee) logs)
+    (hown : LogsLiveOwned (callEntryStateHOLFinite s callee) S Nd logs) :
+    let post := (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).2
+    ∃ S' Nd', WorldTypedWith post S' Nd' ∧
+      LogsListOK post logs ∧ LogsLiveOwned post S' Nd' logs := by
+  let ent := callEntryStateHOLFinite s callee
+  let post := (evaluateHOLFiniteState ent body).2
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hlk hW hnt hr
+  have hR : IvlsDisj (R16WkAcctWs.bufRegions EvmEkFk.acctMutBufs ent)
+      (worldTypedIvls ent S Nd) := by
+    change IvlsDisj (etherScratchSpec.map (fun e => bufferRegion ent (e.1, e.2.2))) _
+    intro i hi j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    obtain ⟨hgb, hnu, _, hle⟩ := etherScratchSpec_ok e he
+    exact bufferRegion_disj_le hWT (e.1, e.2.1) hgb hnu e.2.2 hle j hj
+  obtain ⟨S', Nd', _, hWT', hog, hfr, _⟩ := hw.1.2.2.2.2 S Nd hWT hR
+  have hsys : globN post "vm_system_address" = globN ent "vm_system_address" :=
+    R16Shards.globN_eq_of_lookup (hw.1.2.2.1 (ofString "vm_system_address") (by decide))
+  have hp := logsLiveOwned_scratchStep etherScratchSpec_ok hW.1.2 hw.1.1.2
+    hW.1.1 hw.1.1.1 hWT ⟨hw.1.2.1, hw.2⟩ hlogs hown hsys hog hfr
+  exact ⟨S', Nd', hWT', hp⟩
+
+/-- Caller-facing form, usable at either Phase-4 ether call: restore caller
+locals while retaining the same live-log pointer and its receipt guard. -/
+theorem create_ether_logs_resume {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hlk : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hW : WorldOK s) (S Nd : List Nat) (logs : Nat)
+    (hWT : WorldTypedWith s S Nd) (hlogs : LogsListOK s logs)
+    (hown : LogsLiveOwned s S Nd logs) :
+    ∃ S' Nd', WorldTypedWith { post with locals := s.locals } S' Nd' ∧
+      LogsListOK { post with locals := s.locals } logs ∧
+      LogsLiveOwned { post with locals := s.locals } S' Nd' logs ∧
+      LogsDisjFixed { post with locals := s.locals } logs := by
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  have hLc := (R13Shards.logsListOK_with_locals s callee (s.clock - 1) logs).mpr hlogs
+  have hp := create_ether_logs s vs body callee ret hc hlk
+    (worldOK_callEntry hW callee) (by rw [hb]; simp)
+    (by rw [hb]; exact Or.inl ⟨v, rfl⟩) S Nd logs hWTc hLc hown
+  rw [hb] at hp
+  obtain ⟨S', Nd', hWT', hL', hO'⟩ := hp
+  have hOr : LogsLiveOwned { post with locals := s.locals } S' Nd' logs := hO'
+  exact ⟨S', Nd',
+    (R13Shards.worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hWT',
+    (R13Shards.logsListOK_with_locals post s.locals post.clock logs).mpr hL',
+    hOr, logsLiveOwned_disjFixed hOr⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
