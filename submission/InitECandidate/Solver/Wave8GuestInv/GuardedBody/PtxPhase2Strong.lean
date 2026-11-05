@@ -3209,4 +3209,17 @@ theorem phase2_address_copy_set_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rw [hi, hn]; exact hp.1.2.2.2
   · rw [hi, hn]; exact hp.2
 
+/-- Word arithmetic for the copy destination agrees with its natural slot. -/
+theorem phase2_address_copy_word_addr {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (a i : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_addrs") = some (.val (.word a)))
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i))) :
+    a + (i + 1) * 8 = BitVec.ofNat 64 (locN s "al_addrs" + 8 * (locN s "i" + 1)) := by
+  have han : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  have hin : locN s "i" = i.toNat := by simp [locN, hi]
+  rw [han, hin]
+  apply BitVec.eq_of_toNat_eq
+  simp [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat,
+    Nat.add_mod, Nat.mul_mod, Nat.mul_comm]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
