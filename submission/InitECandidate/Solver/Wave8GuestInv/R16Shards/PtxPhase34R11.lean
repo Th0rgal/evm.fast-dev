@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -78,6 +79,23 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 
 namespace PtxP34
 open PtxP1
+
+/-- The concrete account proof supplies the scratch frontier bound omitted by
+the weaker `PtxCallees.wk_create_ether` interface. -/
+theorem create_ether_allocatorGrows {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hW : WorldOK (callEntryStateHOLFinite s callee))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠
+      some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1) :
+    AllocatorGrows (callEntryStateHOLFinite s callee)
+      (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).2 := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl hW hnt hr
+  exact ⟨hw.1.2.1, hw.2⟩
 
 /-- Receipt encoding's frozen guard asks for placement even for an empty array.
 The allocator-created backing buffer supplies it independently of live cells. -/
@@ -544,6 +562,48 @@ theorem logsLiveOwned_survives {F : Type}
       he.1.1 (by norm_num) he.2.1
       (fun j hj => (hd hn).2.2 i hi _ hmem j hj) (hRe i hi)).2.2
     exact logOwnedIvls_disj_survives hAs hAp he hu hsys hog ((hd hn).2.2 i hi)
+
+/-- Discharge all explicit scratch-buffer obligations for live logs at once.
+This applies to the account mutation footprint, including the 52-byte sk buffer. -/
+theorem logsLiveOwned_scratchStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd S' Nd' : List Nat} {logs : Nat}
+    {gs : List (String × Nat × Nat)} (hgs : ScratchSpec gs)
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hW : WorldTypedWith s S Nd) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hog : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hfr : FrameOutside s post
+      (worldOwned s S Nd ++ gs.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s)) :
+    LogsListOK post logs ∧ LogsLiveOwned post S' Nd' logs := by
+  by_cases hn : logs = 0
+  · exact ⟨Or.inl hn, fun h => False.elim (h hn)⟩
+  have hR0 : ∀ j ∈ gs.map (fun e => bufferRegion s (e.1, e.2.2)),
+      j.2 = 0 → j.1 % 8 = 0 := by
+    intro j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hj
+    exact bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hgs e he).2.2.1; omega)
+  have hdisj : ∀ b : Ivl, (∀ j ∈ worldOwned s S Nd, Disj b j) →
+      ∀ j ∈ gs.map (fun e => bufferRegion s (e.1, e.2.2)), Disj b j := by
+    intro b hb j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hj
+    exact heap_ivl_disj_bufferRegion_le hb (e.1, e.2.1) (hgs e he).1
+      e.2.2 (hgs e he).2.2.2
+  have hh := hdisj (logs, 24) (fun j hj => (hd hn).2.1 _ (by simp) j hj)
+  have ha := hdisj (memW s logs, 8 * memW s (logs + 8))
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj)
+  have he : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ gs.map (fun e => bufferRegion s (e.1, e.2.2)),
+        Disj (memW s (memW s logs + 8 * i), 40) j := by
+    intro i hi
+    apply hdisj
+    intro j hj
+    exact (hd hn).2.2 i hi _ (by simp [logOwnedIvls, logRecordIvls]) j hj
+  exact ⟨logsLiveOwned_list_survives hAs hAp hgS hgP hgrow hl hd
+      (R13Shards.worldOwned_zero_aligned hW) hR0 hog hfr hh ha he,
+    logsLiveOwned_survives hAs hAp hgS hgrow hl hd hsys
+      (R13Shards.worldOwned_zero_aligned hW) hR0 hog hfr hh ha he⟩
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
