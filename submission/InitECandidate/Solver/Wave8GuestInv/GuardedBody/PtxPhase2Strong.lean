@@ -12909,4 +12909,87 @@ theorem phase2_message_ready_backing_shapes {ι F : Type}
     (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s :=
   ⟨⟨phase2_message_ready_of_access_tables hp ht ha hk hg, hb⟩, hs⟩
 
+/-- Concrete allocation changes neither memory nor the block-output root,
+so it preserves both nested backing pointers. -/
+theorem phase2_alloc_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxBacking s) TxBacking
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hl' := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "alloc")
+    vs body callee ret hl
+  unfold lookupCodeHOLExact at hl'
+  rw [hc, InitECandidate.Solver.Wave8Contracts.M27.lookup_alloc_te] at hl'
+  dsimp only at hl'
+  split at hl'
+  · rename_i hcond
+    obtain ⟨rfl, hrest⟩ := Prod.mk.inj (Option.some.inj hl')
+    obtain ⟨hlocal, _⟩ := Prod.mk.inj hrest
+    rcases vs with _ | ⟨nv, _ | _⟩
+    · simp at hcond
+    · rcases nv with ⟨⟨n⟩⟩ | _ | _
+      · have hn : (callEntryStateHOLFinite s callee).locals.lookup (ofString "n") =
+            some (.val (.word n)) := by
+          change callee.lookup (ofString "n") = _
+          rw [← hlocal]; simp [List.zip, List.foldl]
+        obtain ⟨p, hpl⟩ := hp.1.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+        have hr := InitECandidate.Solver.Wave8Contracts.M27.alloc_body_run
+          (callEntryStateHOLFinite s callee) p n hc hpl hn v
+        rw [hb] at hr
+        have hpost := (hr rfl).2.2.2
+        dsimp only at hpost
+        have hm : post.memory = s.memory := congrArg (fun t => t.memory) hpost
+        have hg : globN post "bo" = globN s "bo" := by
+          rw [hpost]
+          simp [globN, HolFiniteMapExact.update, FUPDATE, callEntryStateHOLFinite,
+            show ofString "heap_ptr" ≠ ofString "bo" by decide]
+        change memW post (memW post (globN post "bo" + 40)) ≠ 0 ∧
+          memW post (memW post (globN post "bo" + 72)) ≠ 0
+        simpa only [TxBacking, hg, memW, hm] using hp.2
+      · simp [List.zip, shapeOfHOLExact, shapeEqHOL] at hcond
+      · simp [List.zip, shapeOfHOLExact, shapeEqHOL] at hcond
+    · simp at hcond
+  · cases hl'
+
+/-- Suffix allocation retains the table-aware cut and nested backing together. -/
+theorem phase2_alloc_message_tables_backing_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => (PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) ∧ TxBacking s)
+      (fun s => (PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) ∧ TxBacking s)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  exact ⟨phase2_alloc_message_tables_ready h buffers contents aa ak name args hm hi
+    s vs body callee ret v post hc hp.1 he hl hb,
+    phase2_alloc_backing name args s vs body callee ret v post hc ⟨hp.1.1.1, hp.2⟩ he hl hb⟩
+
+/-- A suffix allocation composes with the complete table, backing, and
+Phase-4-shape continuation at its exact clock cost. -/
+theorem phase2_alloc_message_tables_backing_shapes_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"] : List String),
+      name ≠ ofString n)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s =>
+      ((PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) ∧ TxBacking s) ∧
+        PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (fun s =>
+      ((PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) ∧ TxBacking s) ∧
+        PtxPhase4LocalShapes s)
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := fun s =>
+    ((PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) ∧ TxBacking s) ∧
+      PtxPhase4LocalShapes s) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp he hl hb
+    refine ⟨phase2_alloc_message_tables_backing_ready h buffers contents aa ak name args hm hi
+      s vs body callee ret v post hc hp.1 he hl hb, ?_⟩
+    apply phase2_phase4_shapes_localsOnly s _ post.clock
+      (fun n hmem => ?_) hp.2
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hmem]
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

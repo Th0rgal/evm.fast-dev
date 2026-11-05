@@ -4237,6 +4237,72 @@ theorem evmMsgReady_fresh_scratch {F : Type}
   · intro name hn
     exact (hglob name hn).symm
 
+/-- Word stores cannot alter cells outside their checked memory domain. -/
+theorem scratch_panMemStores_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (ws : List (HolWordLab 64)) (x : BitVec 64) (mem mem' : BitVec 64 → HolWordLab 64),
+      @panMemStoresHOL 64 _ x ws dom dec mem = some mem' →
+      ∀ a : BitVec 64, ¬ dom a → mem' a = mem a
+  | [], _, mem, mem', hst, a, _ => by
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    rw [← hst]
+  | w :: ws, x, mem, mem', hst, a, ha => by
+    unfold panMemStoresHOL panMemStoreHOL at hst
+    split_ifs at hst with hdom
+    have hax : a ≠ x := fun he => ha (he ▸ hdom)
+    exact (scratch_panMemStores_out_dom ws (x + panBytesInWord 64)
+      (fun current => if current = x then w else mem current) mem' hst a ha).trans (if_neg hax)
+
+/-- Byte stores retain even unaligned cells outside the checked domain. -/
+theorem scratch_panMemStoreByte_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom}
+    {mem mem' : BitVec 64 → HolWordLab 64} {be : Bool} {addr : BitVec 64} {b : BitVec 8}
+    (hst : @panMemStoreByteWord8HOL 64 _ mem dom dec be addr b = some mem')
+    {a : BitVec 64} (ha : ¬ dom a) : mem' a = mem a := by
+  unfold panMemStoreByteWord8HOL at hst
+  dsimp only at hst
+  cases hm : mem (panByteAlignHOL (width := 64) addr) with
+  | word cell =>
+    rw [hm] at hst
+    dsimp only at hst
+    split at hst
+    · rename_i hdom
+      simp only [Option.some.injEq] at hst
+      subst hst
+      exact if_neg (fun heq : a = panByteAlignHOL (width := 64) addr => ha (heq.symm ▸ hdom))
+    · cases hst
+
+theorem scratch_panMemStore32_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom}
+    {mem mem' : BitVec 64 → HolWordLab 64} {be : Bool} {addr : BitVec 64} {val : BitVec 32}
+    (hst : @panMemStore32HOL 64 _ mem dom dec be addr val = some mem')
+    {a : BitVec 64} (ha : ¬ dom a) : mem' a = mem a := by
+  unfold panMemStore32HOL at hst
+  split at hst
+  · dsimp only at hst
+    cases hm : mem (panByteAlignHOL (width := 64) addr) with
+    | word cell =>
+      rw [hm] at hst
+      dsimp only at hst
+      split at hst
+      · rename_i hdom
+        simp only [Option.some.injEq] at hst
+        subst hst
+        exact if_neg (fun heq : a = panByteAlignHOL (width := 64) addr => ha (heq.symm ▸ hdom))
+      · cases hst
+  · cases hst
+
+theorem scratch_panWriteBytearray_out_dom {dom : BitVec 64 → Prop} {dec : DecidablePred dom} :
+    ∀ (bs : List (BitVec 8)) (addr : BitVec 64) (mem : BitVec 64 → HolWordLab 64) (be : Bool)
+      {a : BitVec 64}, ¬ dom a →
+      @panWriteBytearrayWord8HOL 64 _ addr bs mem dom dec be a = mem a
+  | [], _, _, _, _, _ => rfl
+  | b :: bs, addr, mem, be, a, ha => by
+    unfold panWriteBytearrayWord8HOL
+    cases hst : @panMemStoreByteWord8HOL 64 _
+        (@panWriteBytearrayWord8HOL 64 _ (addr + 1) bs mem dom dec be) dom dec be addr b with
+    | none => rfl
+    | some updated =>
+      exact (scratch_panMemStoreByte_out_dom hst ha).trans
+        (scratch_panWriteBytearray_out_dom bs (addr + 1) mem be ha)
+
 /-- Runtime jump-destination computation preserves readiness and the chain,
 given its out-of-domain cell frame. -/
 theorem compute_jumpdests_evm_run_with_out_dom {F : Type} (s : PanSemStateFiniteExact 64 F)
