@@ -2889,6 +2889,19 @@ theorem stable_length_store_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hptr]
   exact ⟨hp.2.2.2.1, stable_length_store_words s mem' w he hm hp.2.2.2.2⟩
 
+theorem stable_length_store_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) =
+      .word (BitVec.ofNat 64 (locN s "nl")))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    memW {s with memory := mem'} (locN s "stable_logs" + 8) ≤
+      memW {s with memory := mem'} (locN s "stable_logs" + 16) := by
+  rw [stable_length_store_value s hp mem' he,
+    (stable_length_store_header_unchanged s hA hh mem' hm).2]
+  exact (stable_storage_length_fits s hp).1
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
