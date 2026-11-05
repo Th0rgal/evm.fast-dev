@@ -12051,4 +12051,45 @@ theorem phase4Encoded_stable_txBacking_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Framing the nonempty fixed objects suffices to retain both backing pointers. -/
+theorem txBacking_of_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hb : TxBacking s)
+    (hbo : globN post "bo" = globN s "bo")
+    (hu : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → IvlUnhit s post i) :
+    TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hbw := bo_words hWT.2.2.1 hE.bo_nz
+  have hbf : (globN s "bo", 88) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.mpr
+    exact ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩
+  have hlf : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have hlt : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+      WordsOK s (memW s (globN s "bo" + k), 24) := by
+    intro k hk
+    exact (hWT.2.2.1.1 _ (hlf k hk)).resolve_left (by simp)
+  exact txBacking_of_unhit_headers hb hbo hbw.2.1
+    (ivl_allocated_bound hW.1.1.2 hbw.1).2 (hu _ hbf (by simp))
+    (fun k hk => (hlt k hk).2.1)
+    (fun k hk => (ivl_allocated_bound hW.1.1.2 (hlt k hk).1).2)
+    (fun k hk => hu _ (hlf k hk) (by simp))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
