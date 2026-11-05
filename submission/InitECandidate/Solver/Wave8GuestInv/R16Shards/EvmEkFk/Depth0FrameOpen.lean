@@ -1792,7 +1792,7 @@ theorem Hoare.call_evmKeeps_fall {P' : ∀ {F : Type}, PanSemStateFiniteExact 64
     {gw gw' : List String} {hp : Nat} {G : MlS → Option (ValueHOL 64)} {ch : List Ivl}
     {fname : MlS} (hk : EvmKeeps P' gw' fname) (hsub : ∀ g ∈ gw', g ∈ gw)
     (hP' : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), StepFrom gw hp G ch s → P' s)
-    (hLF : LocalsFree P') (arguments : List (ExpHOL 64)) :
+    (arguments : List (ExpHOL 64)) :
     Hoare (StepFrom gw hp G ch) (.call (some (none, none)) fname arguments)
       (Fall (StepFrom gw hp G ch)) := by
   refine ⟨fun {F} s hcode hS hnt hr => ?_⟩
@@ -1863,6 +1863,177 @@ theorem Hoare.call_evmKeeps_fall {P' : ∀ {F : Type}, PanSemStateFiniteExact 64
             rcases hr with hr | hr
             · cases hr
             · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- `decCall` of a read-only callee with a word result, with the `Fall` post shape: a resuming
+exception from the callee leaves the state unchanged up to locals/clock (`ReadOnlyFn`), and the
+continuation's resuming results carry `Q` through the `resVarEq` locals restore (`Q` locals-free). -/
+theorem Hoare.decCall_ro_fall {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {arguments : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hro : ReadOnlyFn fname)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (hQ : LocalsFree Q)
+    (hPQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → Q s)
+    (hres : DecCallResumeOn P R name fname arguments)
+    (hcont : Hoare (fun s => R s ∧ ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
+      cont (Fall Q)) :
+    Hoare P (.decCall name .one fname arguments cont) (Fall Q) := by
+  refine ⟨fun {F} s hcode hP hnt hr => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s (.decCall name .one fname arguments cont) with ⟨r, post⟩
+  rw [hrun] at hr hnt
+  dsimp only at hr hnt ⊢
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) arguments with _ | values
+  · rw [hargs] at hrun
+    obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+    rcases hr with hr | hr
+    · cases hr
+    · exact absurd hr not_resumes_error
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun
+      obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun
+        obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+        exact absurd rfl hnt
+      · rw [if_neg hz] at hrun
+        have hmeta := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body').1
+        have hGe : GuestInv (callEntryStateHOLFinite s callee) := guestInv_callEntry s callee (hPG s hP)
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        have hro_run (hsafe : bres ≠ some .timeOut) : Resumes bres →
+            bpost = { callEntryStateHOLFinite s callee with locals := bpost.locals, clock := bpost.clock } := by
+          have := FunSpec.at_lookup hro s hcode values body' callee ret' hl hGe (by rw [hb]; exact hsafe)
+          rw [hb] at this
+          exact this
+        cases bres with
+        | none =>
+          obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+          rcases hr with hr | hr
+          · cases hr
+          · exact absurd hr not_resumes_error
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · rename_i hsh
+              obtain ⟨w, rfl⟩ := R10Shards.GbodyProcessMsg.value_shape_one_word
+                (Bool.and_eq_true_iff.1 hsh).1
+              set resumed := setVarHOLFinite name (.val (.word w)) { bpost with locals := s.locals }
+              have hresR : R resumed := hres s values body' callee ret' _ bpost hcode hP hargs hl hb
+              have hresW : resumed.locals.lookup name = some (.val (.word w)) := by
+                simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc0 := hcont.run resumed hresCode ⟨hresR, w, hresW⟩ (by rw [hc]; exact hnt)
+              rw [hc] at hQc0
+              have hQc : Q cpost := hQc0 hr
+              rw [← hpost_eq]
+              exact hQ cpost _ cpost.clock hQc
+            · obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+              rcases hr with hr | hr
+              · cases hr
+              · exact absurd hr not_resumes_error
+          | exception e v =>
+            dsimp only at hrun
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            have hres' : Resumes (some (.exception e v)) := by
+              rcases hr with hr | hr
+              · cases hr
+              · exact hr
+            have heq := hro_run (by simp) hres'
+            rw [heq]
+            simp only [emptyLocalsHOLFinite, callEntryStateHOLFinite]
+            exact hQ s _ _ (hPQ s hP)
+          | timeOut =>
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            exact absurd rfl hnt
+          | _ =>
+            obtain ⟨rfl, rfl⟩ := Prod.mk.inj hrun
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- `dec name .one init body` with the `Fall` post shape, `Q` locals-free: the initializer's
+failure is an error (not a resuming result), and resuming results restore the outer local. -/
+theorem Hoare.dec_fall {P P' Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name : MlS} {shape : ShapeHOL} {init : ExpHOL 64} {body : ProgHOL 64}
+    (hinit : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64), P s →
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init =
+        some v → P' (setVarHOLFinite name v s))
+    (hbody : Hoare P' body (Fall Q)) (hQ : LocalsFree Q) :
+    Hoare P (.dec name shape init body) (Fall Q) :=
+  Hoare.dec (names := []) (by simp) hinit hbody
+    (fun r t locals _ h hr => hQ t locals t.clock (h hr))
+    (fun _ _ h => by
+      rcases h with h | h
+      · cases h
+      · exact absurd h not_resumes_error)
+
+/-- The initializer `lds 1 (ev + 112)` of `depth0_prepare`'s `msg` local evaluates to the owned
+message pointer. -/
+theorem dec_msg_init {F : Type} (s : PanSemStateFiniteExact 64 F) (hP : EvmMsgReady s)
+    (v : ValueHOL 64)
+    (hv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) = some v) :
+    ∃ m : BitVec 64, v = .val (.word m) ∧ m.toNat = memW s (globN s "ev" + 112) := by
+  have hInv := evmInv_of_evmMsgReady s hP
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain; exact List.mem_cons_self
+  obtain ⟨hAs, S, _, _, _, _, hFW_all, _⟩ := hInv
+  have hb_e := (R10Shards.GbodyProcessMsg.frameWF_bounds (hFW_all _ hhead_mem)).1
+  dsimp only at hb_e
+  generalize haddrE : (.op .add [.var .global (ofString "ev"), .const 112] : ExpHOL 64) = addrE at hv
+  simp only [evalHOLExact] at hv
+  rcases ha : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      addrE with _ | va
+  · rw [ha] at hv; simp at hv
+  · rw [ha] at hv
+    subst haddrE
+    rcases va with ⟨⟨a⟩⟩ | _ | _
+    · simp only [memLoadHOLExact] at hv
+      by_cases hdom : s.memaddrs a
+      · simp only [hdom, ↓reduceIte, Option.some.injEq] at hv
+        cases hmem : s.memory a with
+        | word w =>
+          rw [hmem] at hv
+          have hv' : v = .val (.word w) := by
+            split at hv
+            · exact (Option.some.inj hv).symm
+            · cases hv
+          have haddr : a.toNat = globN s "ev" + 112 := by
+            simp [evalHOLExact, evalListHOLExact] at ha
+            rcases hg : s.globals.lookup (ofString "ev") with _ | gv
+            · simp [hg] at ha
+            · rcases gv with ⟨⟨gw⟩⟩ | _ | _
+              · simp [hg, valueIsWord, valueWord, wordOpHOL, wordOp] at ha
+                subst ha
+                have hglob : globN s "ev" = gw.toNat := by simp [globN, hg]
+                rw [hglob] at hb_e ⊢
+                have h112 : (112#64).toNat = 112 := by decide
+                rw [BitVec.toNat_add, h112, Nat.mod_eq_of_lt (by omega)]
+              · simp [hg, valueIsWord] at ha
+              · simp [hg, valueIsWord] at ha
+          refine ⟨w, hv', ?_⟩
+          unfold memW
+          have heq : BitVec.ofNat 64 (globN s "ev" + 112) = a := by
+            apply BitVec.eq_of_toNat_eq
+            rw [haddr]
+            exact Nat.mod_eq_of_lt (by omega)
+          rw [heq, hmem]
+      · simp [hdom] at hv
+    · simp at hv
+    · simp at hv
 
 end HeadStore
 
