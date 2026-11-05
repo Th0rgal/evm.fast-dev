@@ -25,7 +25,12 @@ set_option linter.unusedTactic false
 set_option linter.unreachableTactic false
 set_option linter.unusedVariables false
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFkPrologue
+
+open InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+  (lookup_memcpy_r16 lookup_alloc_r16 lookup_acct_copy wsAcctBufs acctMutBufs validBufList_acctMutBufs
+   safeStepGlobals_hp_jn_sp wkSc_get_account worldEff_store_multi
+   wkSc_modify_state_commit lookup_u256_add ro_u256_add)
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -5289,4 +5294,4 @@ private theorem log_append_head_returned_spec {F : Type}
 
 end EmitTransferLogStep
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFkPrologue

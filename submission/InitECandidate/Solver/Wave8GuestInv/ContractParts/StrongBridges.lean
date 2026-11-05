@@ -5,6 +5,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyRunAttempt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.Group08
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.FramePrologueException
 
 /-! Closed strengthened contracts for the cutover rehearsal. Callers must establish
 the stated entry guards before these bridges can replace weaker primitive fields. -/
@@ -15,6 +16,31 @@ namespace InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 
 open Flapjack.Basis.Pure.MlString
 open R11Shards
+
+theorem frame_chain_cells_iff {F : Type}
+    (s post : Flapjack.PanSemStateFiniteExact 64 F) :
+    R16Shards.EvmEkFkPrologue.ChainCellsAgree s post ↔
+      R16Shards.EvmEkFk.ChainCellsAgree s post := Iff.rfl
+
+theorem frame_chain_wf_iff {F : Type} (s : Flapjack.PanSemStateFiniteExact 64 F) :
+    R16Shards.OpHandlersB.HeadMemBridge.HeadMemChainWF s ↔
+      R16Shards.EvmEkFk.HeadMemChainWF s :=
+  R16Shards.OpHandlersB.HeadMemBridge.headMemChainWF_iff_finishChild s
+
+theorem frame_exception_aligned_strong :
+    R16Shards.OpHandlersB.HeadMemBridge.FrameExceptionSpecA :=
+  R16Shards.EvmEkFkPrologue.frame_exception_headMemChainWF
+
+/-- The remaining prologue callee obligations stay explicit at the integration boundary. -/
+theorem frame_start_strong
+    (h : R16Shards.EvmEkFkPrologue.FramePrologueCalleeSpecs) :
+    EvmKeeps EvmInv R16Shards.EvmEkFkPrologue.frameStartGw (ofString "frame_start") :=
+  R16Shards.EvmEkFkPrologue.ek_frame_start_evmInv_of_callees h
+
+theorem finish_child_memory_strong
+    (h : R16Shards.EvmEkFk.FinishChildMemSpec) :
+    R16Shards.OpHandlersB.HeadMemBridge.FinishChildMemSpec :=
+  R16Shards.OpHandlersB.HeadMemBridge.finishChildMemSpec_of_leaf h
 
 theorem op_mstore_aligned_spec :
     FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)

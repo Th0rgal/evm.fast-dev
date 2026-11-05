@@ -6,7 +6,9 @@ set_option autoImplicit false
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
 
-namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+/-! The prologue interface is separate from the finish-child interface. In
+particular, its aligned contracts use `HeadMemBridge.HeadMemChainWF`. -/
+namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFkPrologue
 
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
@@ -1734,4 +1736,4 @@ theorem frame_prologue_aligned
           HeadMemChainWF post) (ofString "frame_prologue") :=
   evmKeeps_aligned hk hc ev_not_mem_frameStart_gw fmp_not_mem_frameStart_gw
 
-end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFkPrologue
