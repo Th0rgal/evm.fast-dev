@@ -42,6 +42,18 @@ theorem phase1_txReadyStrong_tx_word {F : Type} {s : PanSemStateFiniteExact 64 F
   have hs : 0 < InitE.sourceBase := by decide
   omega
 
+theorem phase1_index_word_of_add {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {v : ValueHOL 64}
+    (he : evalAt s (.op .add [.var .local (ofString "index"), .const 1#64]) = some v) :
+    ∃ w : BitVec 64, s.locals.lookup (ofString "index") = some (.val (.word w)) := by
+  cases hl : s.locals.lookup (ofString "index") with
+  | none => simp [evalAt, evalHOLExact, evalListHOLExact, hl] at he
+  | some value =>
+    rcases value with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+    · exact ⟨w, rfl⟩
+    · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
+    · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
+
 /-- R11 entry interface for the strengthened Phase 2 proof. -/
 def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => PtxValidated s ∧ PtxPhase2LocalShapes s
