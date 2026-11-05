@@ -2163,6 +2163,27 @@ theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : N
   intro F s hc hp
   exact hb s hc hp
 
+theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 128 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 128 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine seq_bound_trans (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+      (Hoare.assign ?_ (fun _ _ hr => absurd hr (by simp))) htail
+    intro F s v hp he _
+    have hv : v = .val (.word (0 : BitVec 64)) := by
+      change some (.val (.word (0 : BitVec 64))) = some v at he
+      exact (Option.some.inj he).symm
+    subst v
+    refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) _ s hp, ?_⟩
+    change locN (setVarHOLFinite (ofString "i") (.val (.word (0 : BitVec 64))) s) "i" = 0
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
