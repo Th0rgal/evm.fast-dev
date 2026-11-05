@@ -8688,6 +8688,30 @@ theorem finish_child_cleanup_aligned {F : Type}
   · exact (show globN post "ev" = globN mid "ev" by simp [globN, hgp]).trans hev
   · exact (show globN post "frame_mem_ptr" = globN mid "frame_mem_ptr" by simp [globN, hgp]).trans hfmp
 
+/-- Expose the concrete two-global pop before the finish-child branches. -/
+theorem finish_child_pop_assignments {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (parent next : BitVec 64)
+    (hp : s.locals.lookup (ofString "parent") = some (.val (.word parent)))
+    (he : s.isValidValueHOLFinite .global (ofString "ev") (.val (.word parent)) = true)
+    (hn : @evalHOLExact 64 F _
+      (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s).toExact
+      (fun a => Classical.propDecidable
+        ((setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s).memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "rec"), .const 8#64])) =
+        some (.val (.word next)))
+    (hc : (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s).isValidValueHOLFinite
+      .global (ofString "cur_cont") (.val (.word next)) = true) :
+    evaluateHOLFiniteState s EvmEkFk.fcAfterPrelude =
+      evaluateHOLFiniteState
+        (setGlobalHOLFinite (ofString "cur_cont") (.val (.word next))
+          (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s))
+        (.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) := by
+  rw [EvmEkFk.fcAfterPrelude_eq, evaluateHOLFiniteState_seq_line780,
+    evaluateHOLFiniteState_assign]
+  simp only [evalHOLExact, hp, he, ↓reduceIte, setKvarHOLFinite]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_assign]
+  simp only [hn, hc, ↓reduceIte, setKvarHOLFinite]
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
