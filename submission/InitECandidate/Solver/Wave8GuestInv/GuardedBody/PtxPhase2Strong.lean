@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -58,5 +59,23 @@ theorem ptxPhase2LocalShapes_with_locals {F : Type} (s : PanSemStateFiniteExact 
   · simpa only [hl "price" (by simp)] using h.price
   · simpa only [hl "enc" (by simp)] using h.enc
   · simpa only [hl "intrinsic" (by simp)] using h.intrinsic
+
+/-- Preserve the scalar witness produced by `min`, which the original
+Phase 1 stage predicate retained only through its numeric projection. -/
+theorem phase1_resume_min_word (h : PtxCallees) :
+    DecCallResumeOn (R16Shards.PtxP1.StageP 3)
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+      (ofString "mgas") (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")] := by
+  intro F s vs body callee ret v post hc hP ha hl hb
+  have hstage := R16Shards.PtxP1.resume_min h s vs body callee ret v post hc hP ha hl hb
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.rv_min s hc vs body callee ret hl
+    (guestInv_callEntry s callee hP.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  obtain ⟨w, hv, _⟩ := hs v rfl
+  subst v
+  refine ⟨hstage, w, ?_⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
