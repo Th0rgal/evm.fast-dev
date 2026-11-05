@@ -5682,4 +5682,40 @@ theorem unionExit_worldStepSc_nonValue {F : Type}
     globN_eq_of_lookup (hglobals (ofString "scratch_ptr") (by decide))
   exact Nat.le_of_eq hs
 
+/-- Each of the five ordinary block tables used by the merge has a distinct
+world role, separate from the tables whose values carry further ownership. -/
+theorem merge_bs_table_role {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hT : TablesTyped s S) {k : Nat}
+    (hk : k ∈ [8, 16, 24, 40, 48]) (hbs : globN s "bs" ≠ 0)
+    (hnz : memW s (globN s "bs" + k) ≠ 0) :
+    memW s (globN s "bs" + k) ∈ S ∧
+    ∃ role : String, (memW s (globN s "bs" + k), role) ∈ worldRoleSlots s ∧
+      role ≠ "bs+32" ∧ role ≠ "ts+32" ∧ role ≠ "bal_accounts" ∧
+      role ≠ "bal.stor" ∧ role ≠ "ws+32" := by
+  have hslot : k ∈ bsTableSlots := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp [bsTableSlots]
+  have hmem : memW s (globN s "bs" + k) ∈ S := by
+    rcases hT.2.2.2.2.1 k hslot hbs with hz | hm
+    · exact absurd hz hnz
+    · exact hm
+  refine ⟨hmem, ?_⟩
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  rcases hk with rfl | rfl | rfl | rfl | rfl
+  · refine ⟨"bs+8", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+16", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+24", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+40", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+  · refine ⟨"bs+48", ?_, by decide, by decide, by decide, by decide, by decide⟩
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
+    simp [recRoles, hbs]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
