@@ -7084,4 +7084,72 @@ theorem phase2_packed_copy_joint_witness {F : Type}
   · exact disj_symm hs.1
   · exact disj_symm hs.2
 
+/-- Either packed copy destination has all spatial premises under one world witness. -/
+theorem phase2_packed_copy_spatial_premises {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedSeparatedCopy s)
+    (dest : Ivl)
+    (hdest : dest ∈ [(locN s "al_keys" + 52 * locN s "k", 20),
+      (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned s S Nd) ∧
+      IvlsDisj [dest] (worldTypedIvls s S Nd) ∧
+      Disj (locN s "tx", 384) dest ∧
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) dest ∧
+      0 < dest.2 := by
+  obtain ⟨S, Nd, hw, ht, hs, hd⟩ := phase2_packed_copy_joint_witness s hp.1
+  refine ⟨S, Nd, hw, ht, hs, ?_, ?_⟩
+  · intro region hm other ho
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hd dest hdest other ho
+  · have htx := phase2_packed_guarded_input_disjoint s hp.1 _ hp.2.1
+    have hrec := phase2_packed_guarded_input_disjoint s hp.1 _ hp.2.2
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hdest
+    rcases hdest with rfl | rfl
+    · exact ⟨htx.1, hrec.1, by dsimp; omega⟩
+    · exact ⟨htx.2, hrec.2, by dsimp; omega⟩
+
+/-- Either concrete packed destination preserves the separated caller invariant. -/
+theorem phase2_memcpy_packed_eval (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hdest : (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n") ∈
+        [(locN s "al_keys" + 52 * locN s "k", 20),
+         (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  obtain ⟨S, Nd, hw, ht, hs, hd, htx, hrec, hlen⟩ :=
+    phase2_packed_copy_spatial_premises s hi _ hdest
+  exact phase2_memcpy_eval_separated h s post vs body callee ret r S Nd
+    hc hl he hn hr hp ha hi hw ht hs hd htx hrec hlen
+
+/-- Either concrete packed copy preserves the invariant without external spatial premises. -/
+theorem phase2_memcpy_eval_packed_destination (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hdest : (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n") ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  obtain ⟨S, Nd, hw, ht, hs, hd, htx, hrec, hlen⟩ :=
+    phase2_packed_copy_spatial_premises s hi _ hdest
+  exact phase2_memcpy_eval_separated h s post vs body callee ret r S Nd hc hl he hn hr
+    hp ha hi hw ht hs hd htx hrec hlen
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
