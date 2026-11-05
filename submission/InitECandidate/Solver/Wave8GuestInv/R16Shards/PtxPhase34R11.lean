@@ -6264,6 +6264,41 @@ theorem stableCopy_init_spatial_cut {tail : ProgHOL 64} {b : Nat}
   have ht := clock_assign t .local (ofString "i") (.const 0)
   exact ⟨by omega, by omega⟩
 
+/-- Counter initialization retains the ownership frame for an owned loop. -/
+theorem stableCopy_init_owned_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s) tail b) :
+    TerminatingProgBoundedOn (fun s =>
+      (StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+        WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+        locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+        ∃ n p q : BitVec 64,
+          s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+          s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+          s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+          q.toNat = memW s (locN s "stable_logs")) ∧ StableCopyOwnedFrame s)
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) b := by
+  have hf := hoare_stableCopyOwnedFrame_assign (ofString "i") (.const 0)
+    (by decide) (by decide) (by decide)
+  intro F s hc hp
+  have hi := hoare_stableCopy_init_spatial
+  have hj : Hoare (fun s =>
+      (StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+        WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+        locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+        ∃ n p q : BitVec 64,
+          s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+          s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+          s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+          q.toNat = memW s (locN s "stable_logs")) ∧ StableCopyOwnedFrame s)
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t ∧ StableCopyOwnedFrame t) :=
+    ⟨fun t ht h hnt hr => ⟨hi.run t ht h.1 hnt hr, hf.run t ht h.2 hnt hr⟩⟩
+  simpa only [Nat.zero_add] using seq_bound_trans (a := 0)
+    (fun t _ _ _ => by
+      have ht := clock_assign t .local (ofString "i") (.const 0)
+      exact ⟨by omega, by omega⟩) hj htail s hc hp
+
 /-- The concrete right-associated setup adds no clock cost before a bounded
 copy-loop continuation. -/
 theorem stableCopy_backing_init_cut {tail : ProgHOL 64} {b : Nat}
