@@ -8122,4 +8122,66 @@ theorem phase2_packed_storage_copy_acc_hoare (h : PtxCallees) (src : ExpHOL 64) 
   rw [phase2_packed_key_destination_toNat s hp.1.2.1.1 base k hbase hk hp.1.2.2.2]
   simp
 
+/-- Inclusive inner-loop state with the concrete record-pointer relation. -/
+def PtxPackedAccIteration {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedIteration s ∧
+    locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i"
+
+/-- Both counter assignments retain the concrete record-pointer relation. -/
+theorem phase2_packed_counters_acc_hoare :
+    Hoare PtxPackedAccCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedAccIteration s) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, PtxPackedAccCopy before ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hp, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1.2.1.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨phase2_packed_counters_iteration_state before hp.1.1 hp.1.2.1
+        hp.1.2.2.2, phase2_packed_acc_counters before hp.2 _ _⟩
+    · exact fun _ _ hr => by cases hr
+
+/-- The source-order inner body preserves the strengthened concrete iteration state. -/
+theorem phase2_packed_body_acc_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare PtxPackedAccCopy
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedAccIteration s) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_acc_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_acc_hoare h keySrc)
+      phase2_packed_counters_acc_hoare)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
