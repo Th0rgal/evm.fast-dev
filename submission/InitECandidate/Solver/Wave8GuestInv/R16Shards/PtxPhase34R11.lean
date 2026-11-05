@@ -3165,6 +3165,15 @@ theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hp.1.2.2.2.2.1]
   exact hl.2.2.2.2 (locN s "i") (by rw [← hp.1.2.2.2.1]; exact hj)
 
+theorem stableCopyInv_destination_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hi : locN s "i" < locN s "nl") :
+    WordAt s (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+  have hw := hp.1.2.2.2.2.2.2.2.2
+  have hcap := hp.2.2.2.2.1
+  apply hw.2.2 (locN s "i")
+  have hic : locN s "i" < locN s "stable_log_cap" := lt_of_lt_of_le hi hcap
+  simpa using hic
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
     PtxReceiptsDone s := by
@@ -3233,6 +3242,42 @@ theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     BitVec.toNat_add]
   exact hb
+
+/-- Once the store has extended the prefix, the actual counter assignment
+re-establishes the loop invariant. -/
+theorem stableCopyInv_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hcap : locN s "nl" ≤ locN s "stable_log_cap")
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : w.toNat < locN s "nl")
+    (hprefix : ∀ j, j < w.toNat + 1 → j < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    StableCopyInv (setVarHOLFinite (ofString "i") v s) := by
+  have hpost := LocalsOnly.setVar localsOnly_stableLengthPost (by decide) v s hp
+  have hinc := stable_copy_increment_nat s w v hw hi
+    (stableLengthPost_length_bound s hp hn).1 he
+  have hloc : ∀ name ∈ (["logs", "stable_logs", "nl", "stable_log_cap"] : List String),
+      locN (setVarHOLFinite (ofString "i") v s) name = locN s name := by
+    intro name hname
+    have hne : ofString "i" ≠ ofString name := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hname
+      rcases hname with rfl | rfl | rfl | rfl <;> decide
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  refine ⟨hpost, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hloc "logs" (by simp)]; exact hn
+  · rw [hloc "stable_logs" (by simp)]; exact hh
+  · rw [hloc "stable_logs" (by simp)]; exact ha
+  · rw [hloc "nl" (by simp), hloc "stable_log_cap" (by simp)]; exact hcap
+  · intro j hj hjn
+    rw [hinc] at hj
+    rw [hloc "nl" (by simp)] at hjn
+    rw [hloc "stable_logs" (by simp), hloc "logs" (by simp)]
+    exact hprefix j hj hjn
 
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
