@@ -10366,4 +10366,96 @@ theorem lst_new_stable_txBacking_resume :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- A word write in a region separated from the fixed objects retains backing.
+This exposes the spatial premise used by the stable length and copy writes. -/
+theorem txBacking_store_disjoint_fixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) {i : Ivl} {x : BitVec 64}
+    (hx : i.1 ≤ x.toNat ∧ x.toNat + 8 ≤ i.1 + i.2)
+    (hd : ∀ j ∈ fixedObjects s, Disj i j)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxBacking {s with memory := mem'} := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hb := bo_words hWT.2.2.1 hW.2.bo_nz
+  have hbnd := (ivl_allocated_bound hW.1.1.2 hb.1).2
+  have hbo : (globN s "bo", 88) ∈ fixedObjects s := by
+    have hh := typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    simpa only [hW.2.bo_nz, ↓reduceIte] using hh
+  have hh : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40]
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo72]
+  apply txBacking_store hback hm
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    have hlt : globN s "bo" + k < 2 ^ 64 := by dsimp at hbnd; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hdis := hd _ hbo
+    unfold Disj at hdis
+    dsimp at hdis
+    omega
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hal := (hWT.2.2.1.1 _ (hh k hk)).resolve_left (by simp)
+    have hbound := (ivl_allocated_bound hW.1.1.2 hal.1).2
+    have hlt : memW s (globN s "bo" + k) < 2 ^ 64 := by dsimp at hbound; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hdis := hd _ (hh k hk)
+    unfold Disj at hdis
+    dsimp at hdis
+    omega
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- The concrete stable-list length write preserves both block-output backings. -/
+theorem hoare_stable_length_txBacking :
+    Hoare (fun s => StableLengthPre s ∧ TxBacking s)
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hback⟩ := hp
+  have hlocal := hp.2.2.1
+  have hnl := hp.2.2.2.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    have hb := stable_length_address_bound s hp.1.1.1.1.1.1.1.1.1.1.2 hp.2.1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb.1] using hb.2
+  subst x
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hW : TxWorld s := hp.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hW.1.1.2 hp.2.1).2
+  have hlt : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  apply txBacking_store_disjoint_fixed hW hback (i := (locN s "stable_logs", 24)) _ _ hm
+  · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+    constructor <;> omega
+  · obtain ⟨S, Nd, _, _, hd, _⟩ := hp.2.2.2.2
+    intro j hj
+    apply hd j
+    unfold worldOwned
+    exact List.mem_append_left _ (List.mem_append_right _ hj)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
