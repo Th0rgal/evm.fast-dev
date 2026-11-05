@@ -5921,4 +5921,61 @@ theorem ws_get_code_exception_step (gw : List String) (hp : Nat)
   exact ⟨localsFree_evmMsgReady s post.locals post.clock hP.1.1,
     localsFree_stepFrom gw hp G ch s post.locals post.clock hP.1.2⟩
 
+/-- A normal return from `ws_get_code` restores the caller's message local
+and preserves the anchored dispatch precondition for any distinct binder. -/
+theorem ws_get_code_resume_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (D0Pre gw hp G ch) (D0Pre gw hp G ch)
+      name (ofString "ws_get_code") args := by
+  intro F s values body callee ret v post hc hP _ha hl hr
+  have hG := guestInv_callEntry s callee (evmInv_guestInv s (evmInv_of_evmMsgReady s hP.1.1))
+  have heq := FunSpec.at_lookup R16WkAcctWs.ro_ws_get_code s hc values body callee ret hl hG
+    (by rw [hr]; simp)
+  rw [hr] at heq
+  have heq' := heq (Or.inl ⟨v, rfl⟩)
+  dsimp only [Prod.snd, callEntryStateHOLFinite] at heq'
+  have hpost : D0Pre gw hp G ch {post with locals := s.locals} := by
+    rw [heq']
+    exact d0Pre_locals gw hp G ch s s.locals post.clock rfl hP
+  apply d0Pre_locals gw hp G ch _ _ _ ?_ hpost
+  simp [HolFiniteMapExact.lookup_update, FUPDATE, hne]
+
+/-- Compose a concrete `ws_get_code` invocation with a dispatch continuation;
+both ordinary return and catchable `StateErr` paths preserve its invariant. -/
+theorem hoare_ws_get_code_dispatch (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (name : MlS) (hne : name ≠ ofString "msg") (args : List (ExpHOL 64))
+    (cont : ProgHOL 64)
+    (hcont : Hoare (D0Pre gw hp G ch) cont
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall name (.comb [.one, .one]) (ofString "ws_get_code") args cont)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.decCall_returning_exception_fall
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (ws_get_code_resume_step gw hp G ch name hne args) ?_ hcont
+  intro F s values body callee ret hc hP hl e v post hne hr
+  exact ws_get_code_exception_step gw hp G ch s values body callee ret hc hP hl e v post hne hr
+
+/-- The successful code-record return is a concrete bounded word pair, with
+no effect beyond the return epilogue's local reset. -/
+theorem dispatch_code_record_return {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {p : Nat} (hw : WordsOK s (p, 16))
+    (hin : Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr"))
+    (e0 e8 : ExpHOL 64)
+    (h0 : ev s e0 = some (.val (.word (BitVec.ofNat 64 p))))
+    (h8 : ev s e8 = some (.val (.word (BitVec.ofNat 64 (p + 8))))) :
+    Ret s (.return (.rstruct [.load .one e0, .load .one e8]))
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  obtain ⟨code, code_n, he, hb⟩ := dispatch_code_record_eval hA hw hin e0 e8 h0 h8
+  apply Ret.ret
+  intro v hv
+  rw [he] at hv
+  cases hv
+  exact ⟨code, code_n, rfl, hb, rfl⟩
+
 end HeadStore
