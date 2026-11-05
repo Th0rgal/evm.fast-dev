@@ -9156,6 +9156,32 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
   rw [pm a (ne_of_not_hits hE (by rw [hE96]; omega)) (by rw [hfpeq]; exact hfp) hF2]
   exact hTs a hE hL hAr hF1
 
+/-- Every allocated object separated from the success-incorporation write
+footprint is untouched, including across fresh heap allocation. -/
+theorem icsFrame_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i)
+    (hE : Disj i (e.toNat + 64, 136))
+    (hL : Disj i (L.toNat, 24))
+    (hAr : Disj i (arr.toNat, 8 * cap.toNat)) (hcap : 0 < cap.toNat)
+    (hwf : HtabWF s tw.toNat)
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, Disj i j) :
+    Wave8Contracts.M08.IvlUnhit s post i := by
+  intro a _ h1 h2
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := ⟨h1, h2⟩
+  apply h.2.2.2.2.2
+  · exact noHit_of_disj hE (by simp) hin
+  · exact noHit_of_disj hL (by simp) hin
+  · exact noHit_of_disj hAr (by dsimp only; omega) hin
+  · intro j hj; exact noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hin
+  · apply noFresh_of_alloc hA.2 hi hin _ h.2.2.2.2.1
+    have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    omega
+
 end IcsRun
 
 theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
