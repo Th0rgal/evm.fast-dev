@@ -2872,6 +2872,23 @@ theorem stable_length_store_words {F : Type} (s : PanSemStateFiniteExact 64 F)
   · exact ⟨w, hd, by change mem' _ = _; rw [ha, he]⟩
   · exact ⟨v, hd, (hm _ ha).trans hv⟩
 
+theorem stable_length_store_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    let post := {s with memory := mem'}
+    Allocated post (memW post (locN post "stable_logs"), 8 * locN post "stable_log_cap") ∧
+      WordsOK post (memW post (locN post "stable_logs"), 8 * locN post "stable_log_cap") := by
+  have hptr := (stable_length_store_header_unchanged s hA hh mem' hm).1
+  change Allocated {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    WordsOK {s with memory := mem'}
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+  rw [hptr]
+  exact ⟨hp.2.2.2.1, stable_length_store_words s mem' w he hm hp.2.2.2.2⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
