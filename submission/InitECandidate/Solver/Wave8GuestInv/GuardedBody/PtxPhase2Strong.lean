@@ -3600,4 +3600,15 @@ theorem phase2_address_copy_reset_hoare :
     exact fun _ => phase2_address_copy_reset s hp
   · exact fun _ _ hr => by cases hr
 
+/-- Key-copy scratch declarations preserve the address pass's shared witness. -/
+theorem phase2_address_copy_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxAddressCopyInv (setVarHOLFinite name v s) := by
+  apply phase2_address_copy_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
