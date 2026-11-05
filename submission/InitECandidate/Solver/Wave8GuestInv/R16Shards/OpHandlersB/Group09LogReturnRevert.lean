@@ -11708,4 +11708,44 @@ theorem log_growth_write_disjoint_g09 {l p n : BitVec 64}
     hne _ _ (by rw [hiNat, hl8]; omega),
     hne _ _ (by rw [hiNat, hl16]; omega), hne _ _ (by rw [hiNat]; omega)⟩
 
+/-- Fresh-allocation separation supplies final growth readback directly,
+including natural-number length/capacity values and preservation of the copy. -/
+theorem log_growth_readback_of_fresh_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap q log : BitVec 64)
+    (objects : List Ivl)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l + 8#64).toNat = n.toNat + 1 ∧
+    memW post (l + 16#64).toNat = cap.toNat * 2 ∧
+    n.toNat + 1 ≤ cap.toNat * 2 ∧
+    memW post (p + n * 8#64).toNat = log.toNat ∧
+    (∀ i : Nat, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i)) := by
+  obtain ⟨hnc, hcap2, hsz, hn8, hn1, hcapacity, _, _, hslot, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  have hslot' : p.toNat + 8 * n.toNat + 8 ≤ q.toNat := by
+    rwa [hn8] at hslot
+  have hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24) := by
+    have hd := hfresh (p.toNat, q.toNat - p.toNat) (by simp) _ hheader
+    rcases hd with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr hright))
+  have hq := q.isLt
+  obtain ⟨h08, h016, h816, hs0, hs8, hs16, hold⟩ :=
+    log_growth_write_disjoint_g09 hl (by omega) hdisj
+  obtain ⟨h0, h8, h16, hstore, hprefix⟩ :=
+    log_growth_final_cells_g09 s l p n cap log h08 h016 h816 hs0 hs8 hs16 hold
+  exact ⟨h0, h8.trans hn1, h16.trans hcap2, hcap2 ▸ hcapacity, hstore, hprefix⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
