@@ -123,6 +123,33 @@ theorem phase1_resume_alloc_sender_word (h : PtxCallees) :
   refine ⟨hallocated, w, ?_⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+theorem phase1_resume_alloc_sender_shapes (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => R16Shards.PtxP1.StageP 0 s ∧
+        (∀ n ∈ (["tx", "index"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (ofString "sender") (ofString "alloc") [.const 24] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hs := phase1_resume_alloc_sender_word h s vs body callee ret v post hc hp.1 ha hl hb
+  refine ⟨hs.1, ?_, ?_⟩
+  · intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl
+    · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "sender" ≠ ofString "tx" from by decide] using hp.2.1 "tx" (by simp)
+    · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "sender" ≠ ofString "index" from by decide] using hp.2.1 "index" (by simp)
+    · exact hs.2
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "sender" ≠ ofString "enc" from by decide] using hp.2.2
+
 /-- Calls with discarded return values restore every caller-local witness. -/
 theorem phase1_call0_word (name fn : MlS) (args : List (ExpHOL 64)) :
     Hoare (fun s => ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
