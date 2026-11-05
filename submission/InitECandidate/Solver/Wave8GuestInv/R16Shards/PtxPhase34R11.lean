@@ -13411,4 +13411,49 @@ theorem receipt_finish_preserves_start {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.call_noexc_ne_returned
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Compose list finalization with both concrete receipt return paths. -/
+theorem receipt_finish_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (start pend old : BitVec 64) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word pend)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hle : start.toNat + 9 ≤ pend.toNat)
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ pend.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+          [.var .local (ofString "start"), .var .local (ofString "p")])
+        (.seq
+          (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+            (.seq
+              (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+                (.var .local (ofString "tx_type")))
+              (.return (.rstruct
+                [.op .sub [.var .local (ofString "start"), .const 1],
+                 .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+          (.return (.rstruct [.var .local (ofString "start"), .var .local (ofString "w")])))) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+        [.var .local (ofString "start"), .var .local (ofString "p")]) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | none =>
+    obtain ⟨he', hs'⟩ := receipt_finish_preserves_start he start pend old hs hp hw hle
+      ⟨by omega, hfresh.2⟩ hc
+    exact receipt_return_frame he' start v hs' ⟨hfresh.1, by omega⟩ hr
+  | some r =>
+    have hn := WkBlockTxEnc.call_noexc_ne_returned mid (some (.local, ofString "w"))
+      (ofString "rlp_finish_list") [.var .local (ofString "start"), .var .local (ofString "p")] v
+    exact False.elim (hn (by simpa [hc] using congrArg Prod.fst hr))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
