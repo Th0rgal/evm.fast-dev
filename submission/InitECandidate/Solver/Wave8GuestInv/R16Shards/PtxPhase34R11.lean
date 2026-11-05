@@ -2287,6 +2287,26 @@ theorem phase4LogCopyLoop_bound (h : PtxCallees)
   · unfold phase4LogCopyBody
     ptx_incr
 
+theorem phase4LogCopyLoop_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hp : Hoare Phase4LogPointersReady
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) (fun r t => r = none → Phase4LogPointersReady t) :=
+    hoare_while_less_localsOnly localsOnly_phase4LogPointersReady _ _
+      (hoare_phase4LogCopyBody hresume)
+      (by unfold phase4LogCopyBody; ptx_incr) (by decide)
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_bound h hresume) hp htail
+  unfold ptxCode
+  intro F s hc hs
+  exact hb s hc hs
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
