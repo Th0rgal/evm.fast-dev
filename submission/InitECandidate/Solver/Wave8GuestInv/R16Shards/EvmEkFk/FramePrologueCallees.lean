@@ -5335,8 +5335,6 @@ theorem transfer_log_append_returned_step {F : Type}
       (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
       (∀ S0 Nd0, TriesTypedWith s S0 Nd0 → ∀ j ∈ nodeExtents s Nd0, Disj x j) ∧
       (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
-    (hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40))
-    (hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40))
     (hcall : (evaluateHOLFiniteState s
       (.call (some (none, none)) (ofString "log_append")
         [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none)
@@ -5348,6 +5346,15 @@ theorem transfer_log_append_returned_step {F : Type}
       (.call (some (none, none)) (ofString "log_append")
         [.var .global (ofString "ev"), .var .local (ofString "log")])
     EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
+  have hrecord : (logw.toNat, 40) ∈ logOwnedIvls s logw.toNat := by
+    rw [logOwnedIvls_of_transfer haddr htp htn hdp hdn]
+    simp
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := List.mem_cons_self
+  have hframe := (hdisj _ hrecord).2.2.1 _ hhead
+  have hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  have hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
   exact log_append_head_returned_spec s evw logw hInv hev
     (head_log_count_succ_lt_of_evmInv hInv)
     (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
