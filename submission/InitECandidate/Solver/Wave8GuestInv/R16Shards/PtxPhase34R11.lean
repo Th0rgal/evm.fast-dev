@@ -2582,6 +2582,26 @@ theorem phase4LogCopyLoop_cut (h : PtxCallees)
   intro F s hc hs
   exact hb s hc hs
 
+theorem phase4LogCounter_typed_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4TypedLogPointers tail b) :
+    TerminatingProgBoundedOn Phase4TypedLogPointers
+      (spinePlug 1 (spineAt 128 ptxCode) tail) b := by
+  have hi : Hoare Phase4TypedLogPointers
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → Phase4TypedLogPointers t) := by
+    apply Hoare.assign
+    · intro F s v hp _ _
+      exact LocalsOnly.setVar localsOnly_phase4TypedLogPointers (by decide) v s hp
+    · intro F s _ hr
+      cases hr
+  unfold ptxCode
+  intro F s hc hp
+  rw [← Nat.zero_add b]
+  refine seq_bound_trans ?_ hi htail s hc hp
+  intro G t _ _ _
+  have ht := clock_assign t .local (ofString "i") (.const 0)
+  exact ⟨by omega, by omega⟩
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
