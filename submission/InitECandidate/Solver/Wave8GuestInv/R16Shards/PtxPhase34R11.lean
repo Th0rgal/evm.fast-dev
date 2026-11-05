@@ -783,6 +783,111 @@ theorem txAfterCallStrong_scratchStep {F : Type}
   · change LogsLiveOwned post S' Nd' (memW post (locN s "out" + 16))
     rw [hout16]; exact hlogs.2
 
+/-- Both ether credits retain the output record and its live logs. -/
+theorem create_ether_txAfterCallStrong_resume {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (h : TxAfterCallStrong s) :
+    TxAfterCallStrong { post with locals := s.locals } := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl
+    (worldOK_callEntry h.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs.1 s.locals s.clock
+  exact txAfterCallStrong_scratchStep
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    hs' h ⟨hs.1.2.1, hs.2⟩ etherScratchSpec_ok
+    rfl (by decide) (by decide) (by decide) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+
+theorem hoare_create_ether_txAfterCallStrong (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallStrong (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallStrong t) := by
+  apply R13Shards.Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp _ hl hb
+  exact create_ether_txAfterCallStrong_resume s vs body callee ret v post hc hl hb hp
+
+theorem resume_ro_txAfterCallStrong {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ k ∈ (["index", "out"] : List String), ofString k ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn TxAfterCallStrong TxAfterCallStrong name fname args := by
+  intro F s vs body callee ret v post hc hp _ hl hb
+  have hs := funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have he' : ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) =
+      { s with clock := post.clock } := by rw [he]; rfl
+  apply LocalsOnly.setVar localsOnly_txAfterCallStrong hne v
+  rw [he']
+  exact txAfterCallStrong_with_locals s s.locals post.clock rfl rfl hp
+
+theorem txAfterCallStrong_guest_entry (fn : MlS) (args : List (ExpHOL 64)) :
+    CallEntryOn TxAfterCallStrong GuestInv fn args := by
+  intro F s vs body callee ret hc hp ha hl
+  exact guestInv_callEntry s callee hp.1.1.1.1
+
+/-- The refund arithmetic and both ether credits, before updating block totals. -/
+def phase4CreditPrefix (tail : ProgHOL 64) : ProgHOL 64 :=
+  spinePlug 11 (spineAt 99 ptxCode) tail
+
+def phase4CreditCost : Nat :=
+  (K.udiv_small5 + 1) + (K.min + 1) + (K.max + 1) +
+  (K.fee_mul + 1) + (K.u256_sub + 1) + (K.fee_mul + 1) +
+  (K.create_ether + 1) + (K.create_ether + 1)
+
+theorem phase4CreditPrefix_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (phase4CreditPrefix tail)
+      (phase4CreditCost + b) := by
+  have hb : TerminatingProgBoundedOn TxAfterCallStrong (phase4CreditPrefix tail)
+      (K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1) := by
+    unfold phase4CreditPrefix ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_udiv_small5 _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_udiv_small5 (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_min _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_min (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_max (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_fee_mul (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_u256_sub _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_u256_sub (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _
+      (txAfterCallStrong_guest_entry _ _)
+      (resume_ro_txAfterCallStrong h.ro_fee_mul (by decide) _) ?_
+    refine seq_bound_trans ?_ (hoare_create_ether_txAfterCallStrong _) ?_
+    · exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+        (fun s hp => hp.1.1.1.1)
+    refine seq_bound_trans ?_ (hoare_create_ether_txAfterCallStrong _) htail
+    exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+      (fun s hp => hp.1.1.1.1)
+  have he : K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1 =
+      phase4CreditCost + b := by unfold phase4CreditCost; omega
+  rw [he] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
