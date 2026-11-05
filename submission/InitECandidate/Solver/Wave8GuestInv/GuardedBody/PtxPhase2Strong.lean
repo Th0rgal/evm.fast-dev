@@ -3652,4 +3652,15 @@ theorem phase2_key_alloc_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F
   have ht := phase2_address_copy_total_keys hp
   omega
 
+/-- Natural cumulative key count for the first `count` access-list records. -/
+def phase2_key_prefix {F : Type} (s : PanSemStateFiniteExact 64 F) (count : Nat) : Nat :=
+  ((List.range count).map
+    (fun i => memW s (memW s (locN s "tx" + 208) + 24 * i + 16))).sum
+
+/-- Advancing the prefix adds exactly the current record's key count. -/
+theorem phase2_key_prefix_succ {F : Type} (s : PanSemStateFiniteExact 64 F) (i : Nat) :
+    phase2_key_prefix s (i + 1) = phase2_key_prefix s i +
+      memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
+  simp [phase2_key_prefix, List.range_succ, List.map_append, List.sum_append]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
