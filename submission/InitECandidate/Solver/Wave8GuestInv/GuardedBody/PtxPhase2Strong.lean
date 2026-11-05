@@ -2432,4 +2432,47 @@ theorem phase2_alloc_validated (h : PtxCallees) (args : List (ExpHOL 64)) :
   · rw [hlu "mgas" (by simp)]
     exact hp.1.2.2.2
 
+/-- Assemble the complete count-ready invariant after address allocation. -/
+theorem phase2_alloc_accessCountReady (h : PtxCallees) (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxAccessCountReady PtxAccessCountReady
+      (ofString "al_addrs") (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hv := phase2_alloc_validated h args s vs body callee ret v post hc hp.1.1.1 ha hl hb
+  obtain ⟨S, Nd, hW, hT, hd⟩ := phase2_alloc_joint_world h args s vs body callee ret v post hc hp ha hl hb
+  have hn := phase2_alloc_count_relation h args s vs body callee ret v post hc hp ha hl hb
+  have h208 := phase2_alloc_header_words h args 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have h216 := phase2_alloc_header_words h args 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hh := (hw (Or.inl ⟨v, rfl⟩)).2.1
+  let out := setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }
+  have hlocal (name : String) (hne : ofString "al_addrs" ≠ ofString name) :
+      out.locals.lookup (ofString name) = s.locals.lookup (ofString name) := by
+    simp [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  have hte : locN out "te" = locN s "te" := by simp only [locN, hlocal "te" (by decide)]
+  have htx : locN out "tx" = locN s "tx" := by simp only [locN, hlocal "tx" (by decide)]
+  have hshape : ∃ w : BitVec 64, out.locals.lookup (ofString "te") = some (.val (.word w)) := by
+    rw [hlocal "te" (by decide)]
+    exact hp.1.1.2.1
+  have hinside : Inside (locN out "te", 200) InitE.sourceBase (globN out "heap_ptr") := by
+    rw [hte]
+    exact ⟨hp.1.1.2.2.1.1, hp.1.1.2.2.1.2.trans hh⟩
+  have halign : locN out "te" % 8 = 0 := by rw [hte]; exact hp.1.1.2.2.2.1
+  have hwords : WordsOK out (locN out "te", 200) := by
+    rw [hte]
+    exact wordsOK_transfer hp.1.1.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.1.1.2.2.2.2.1
+  refine ⟨⟨⟨hv, hshape, hinside, halign, hwords, S, Nd, hW, hd⟩,
+    S, Nd, hW, hT, hd, ?_, ?_⟩, hn⟩
+  · change Disj (locN out "tx", 384) (locN out "te", 200)
+    rw [htx, hte]
+    exact hp.1.2.choose_spec.choose_spec.2.2.2.1
+  · rw [h216, h208]
+    change 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (locN out "te", 200)
+    rw [hte]
+    exact hp.1.2.choose_spec.choose_spec.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
