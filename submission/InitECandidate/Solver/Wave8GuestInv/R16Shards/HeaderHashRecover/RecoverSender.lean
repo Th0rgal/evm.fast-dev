@@ -3114,6 +3114,7 @@ private theorem ec_mul2_tail_heapByteEff {F : Type}
       rcases hi with rfl | rfl | rfl <;> dsimp only <;> omega
   have hm := ec_mul2_loop_heapByteEff heff hi hbase hR (by rw [hl]; exact hor)
   rw [hl] at hm
+  rw [hl] at hnt hres
   cases rl with
   | some r => exact hm
   | none =>
@@ -3135,9 +3136,9 @@ private theorem ec_mul2_tail_heapByteEff {F : Type}
       (by rw [hmark_nat]; exact hAR0.2.2.2.2.2.2.1)
       (by rw [hc]; exact hntc)
     dsimp only at hrel
-    rw [hc] at hrel ⊢
+    rw [hc] at hrel
     obtain ⟨rfl, _, _, _, hp⟩ := hrel
-    dsimp only
+    dsimp only at hp ⊢
     exact hp.trans (HeapByteEff.of_byteEff hp.arena
       (R13Shards.Keccak256.byteEff_return post (.const 0) Rl))
 
