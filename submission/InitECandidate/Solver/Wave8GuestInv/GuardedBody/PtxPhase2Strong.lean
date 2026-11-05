@@ -2475,4 +2475,17 @@ theorem phase2_alloc_accessCountReady (h : PtxCallees) (args : List (ExpHOL 64))
     rw [hte]
     exact hp.1.2.choose_spec.choose_spec.2.2.2.2
 
+/-- The concrete address allocation is bounded and preserves count readiness. -/
+theorem phase2_address_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAccessCountReady tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxAccessCountReady) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1
+  · exact phase2_alloc_accessCountReady h _
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
