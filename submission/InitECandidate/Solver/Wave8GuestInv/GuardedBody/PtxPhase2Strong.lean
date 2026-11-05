@@ -3420,4 +3420,24 @@ theorem phase2_address_copy_while_hoare {body : ProgHOL 64}
         exact ⟨hp, phase2_address_copy_exit hp (by simpa [evalAt, hwz] using hw)⟩
     · simp at he
 
+/-- The actual address-copy loop retains the joint world through completion. -/
+theorem phase2_address_copy_loop_hoare :
+    Hoare PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" = locN s "nal") := by
+  exact phase2_address_copy_while_hoare phase2_address_copy_body_hoare (by decide) (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
