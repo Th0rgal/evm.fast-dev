@@ -9734,4 +9734,33 @@ theorem phase2_packed_alloc_nal (h : PtxCallees) :
     simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "al_keys" ≠ ofString "nal" by decide]
 
+/-- The fresh packed buffer remains separate from the transaction and record array
+after restoring the caller's locals, including the empty-record case. -/
+theorem phase2_packed_alloc_input_separated (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s =>
+        Disj (locN s "tx", 384)
+          (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+        Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+          (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have h208 := phase2_packed_alloc_header_words h 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have h216 := phase2_packed_alloc_header_words h 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_packed_keys_alloc_fresh h s vs body callee ret v post
+    hc hp ha hl hb
+  have hs := phase2_packed_keys_input_separation s post callee w.toNat hp hf
+  rw [h208, h216]
+  simp only [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "al_keys" ≠ ofString "tx" by decide,
+    show ofString "al_keys" ≠ ofString "nkeys" by decide, if_false, if_true]
+  constructor
+  · exact hs.2.1
+  · by_cases hz : memW s (locN s "tx" + 216) = 0
+    · exact Or.inl (by change 24 * memW s (locN s "tx" + 216) = 0; rw [hz])
+    · exact hs.2.2 (Nat.pos_of_ne_zero hz)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
