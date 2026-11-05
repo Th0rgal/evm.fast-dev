@@ -5872,4 +5872,53 @@ theorem htab_union_into_bs_world_spec :
   exact unionExit_worldStepSc_nonValue hW hbe hnon he.toUnionExit
     (fun i hi => (he.2.2.2.2.2.1 i hi).2)
 
+private theorem union_noCatchableRaise_mono {g1 g2 : MlS → Bool}
+    (himp : ∀ f, g1 f = true → g2 f = true) :
+    ∀ p : ProgHOL 64, noCatchableRaise g1 p = true → noCatchableRaise g2 p = true
+  | .skip, _ | .«break», _ | .«continue», _ | .annot _ _, _ | .«return» _, _
+  | .assign _ _ _, _ | .store _ _, _ | .storeByte _ _, _ | .store32 _ _, _
+  | .shMemStore _ _ _, _ | .extCall _ _ _ _ _, _ | .primitive _ _ _, _ => rfl
+  | .raise _ _, hp => hp
+  | .dec _ _ _ b, hp => union_noCatchableRaise_mono himp b hp
+  | .seq a b, hp | .ite _ a b, hp => by
+      simp only [noCatchableRaise, Bool.and_eq_true] at hp ⊢
+      exact ⟨union_noCatchableRaise_mono himp a hp.1,
+        union_noCatchableRaise_mono himp b hp.2⟩
+  | .while _ b, hp => union_noCatchableRaise_mono himp b hp
+  | .decCall _ _ fn _ cont, hp => by
+      simp only [noCatchableRaise, Bool.and_eq_true] at hp ⊢
+      exact ⟨himp fn hp.1, union_noCatchableRaise_mono himp cont hp.2⟩
+  | .call tail fn _, hp => by
+      rcases tail with _ | ⟨_, hdl⟩
+      · simp [noCatchableRaise] at hp
+      · rcases hdl with _ | _
+        · exact himp fn hp
+        · simp [noCatchableRaise] at hp
+  | .shMemLoad _ _ _ _, hp => by simp [noCatchableRaise] at hp
+
+private def unionTrapCallees (f : MlS) : Bool :=
+  trapOnlyCallees f || f == ofString "htab_item"
+
+private theorem unionTrapCallees_good :
+    ∀ f, unionTrapCallees f = true → ∀ values body callee rs,
+      lookupCodeHOLFinite originalRuntimeCode.lookup f values = some (body, callee, rs) →
+      noCatchableRaise unionTrapCallees body = true := by
+  intro f hf values body callee rs hfound
+  simp only [unionTrapCallees, Bool.or_eq_true, beq_iff_eq] at hf
+  rcases hf with hf | rfl
+  · exact union_noCatchableRaise_mono (fun g hg => by simp [unionTrapCallees, hg])
+      body (trapOnlyCallees_good f hf values body callee rs hfound)
+  · obtain ⟨_, _, hinst⟩ := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed hfound
+    rw [lookup_htab_item_bal] at hinst
+    rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]
+    decide
+
+theorem htab_union_into_no_catchable_exn {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (e : MlS) (v : ValueHOL 64)
+    (hne : e ≠ ofString "TrapErr") :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_union_into)).1 ≠
+      some (.exception e v) :=
+  evaluate_noCatchableRaise unionTrapCallees unionTrapCallees_good
+    (sourceFnBody Guest.Software.guestFn_htab_union_into) (by decide) s hcode e v hne
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
