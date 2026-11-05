@@ -1236,6 +1236,39 @@ theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (fun j hj => hd _ (by simp) j hj) hn
   exact ⟨logsListOK_empty hh.2.2 (Or.inl hhi) hn, ho, logsLiveOwned_disjFixed ho⟩
 
+/-- An explicit world typing witnesses ownership of the selected local log list. -/
+def LogsWorldOwned {F : Type} (s : PanSemStateFiniteExact 64 F) (logs : Nat) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd logs
+
+theorem logsWorldOwned_scratchStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep R gw keep Q s r post) (hA : ArenaReady s)
+    (hgrow : AllocatorGrows s post) (hl : LogsListOK s logs)
+    (ho : LogsWorldOwned s logs)
+    {gs : List (String × Nat × Nat)} (hgs : ScratchSpec gs)
+    (hR : R s = gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+    (hsys : ofString "vm_system_address" ∉ gw.map ofString) :
+    LogsListOK post logs ∧ LogsWorldOwned post logs := by
+  obtain ⟨S, Nd, hWT, hd⟩ := ho
+  have hRd : IvlsDisj (R s) (worldTypedIvls s S Nd) := by
+    rw [hR]
+    intro i hi j hj
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_disj_le hWT (e.1, e.2.1) (hgs e he).1
+      (hgs e he).2.1 e.2.2 (hgs e he).2.2.2 j hj
+  obtain ⟨S', Nd', _, hWT', hog, hfr, _⟩ := hs.2.2.2.2 S Nd hWT hRd
+  have hfr' : FrameOutside s post
+      (worldOwned s S Nd ++ gs.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s) := by simpa only [hR] using hfr
+  have hp := logsLiveOwned_scratchStep hgs hA.2 hs.1.2 hA.1 hs.1.1
+    hWT hgrow hl hd (R16Shards.globN_eq_of_lookup (hs.2.2.1 _ hsys)) hog hfr'
+  exact ⟨hp.1, S', Nd', hWT', hp.2⟩
+
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     LogsDisjFixed s (locN s "logs")
