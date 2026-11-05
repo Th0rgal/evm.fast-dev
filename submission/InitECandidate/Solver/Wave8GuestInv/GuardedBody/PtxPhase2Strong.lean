@@ -7364,4 +7364,60 @@ theorem phase2_packed_address_copy_hoare (h : PtxCallees) (src : ExpHOL 64) :
     (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
     (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) hp.1.1 hp.2.1 hbase hk hp.2.2.2
 
+/-- The resuming copy retains arena readiness and the heap bound for the next call. -/
+theorem phase2_memcpy_eval_next_arena (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    ArenaReady { post with locals := s.locals } ∧
+      globN { post with locals := s.locals } "heap_ptr" ≤ 2 ^ 64 := by
+  have ha := phase2_memcpy_eval_arena h s post vs body callee ret r hc hl he hn hr hp
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret r hc hl he hn hr hp
+  refine ⟨(arenaReady_with_locals post s.locals post.clock).mpr ha, ?_⟩
+  rw [phase2_copy_globals_heap_eq s _ hg]
+  exact hb
+
+/-- The concrete counter statements retain the strengthened inner invariant. -/
+theorem phase2_packed_separated_counters_hoare :
+    Hoare PtxPackedSeparatedCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedSeparatedInner s) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, PtxPackedSeparatedCopy before ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hp, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => phase2_packed_separated_counters before hp
+    · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
