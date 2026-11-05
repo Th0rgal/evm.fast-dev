@@ -1303,4 +1303,33 @@ theorem phase2_te_slots {F : Type} {s : PanSemStateFiniteExact 64 F}
     obtain ⟨hlo, hhi⟩ := hi
     constructor <;> dsimp at * <;> omega
 
+/-- Fresh allocation also separates the transaction environment from arbitrary
+caller heap buffers. World ownership alone does not include every live buffer. -/
+theorem phase2_te_new_separates (h : PtxCallees)
+    (p len : Nat) :
+    R16Shards.PtxP1.DecCallResumeShapeOn
+      (fun s => PtxValidatedStrong s ∧ Inside (p, len) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxTeAllocated s ∧ Disj (p, len) (locN s "te", 200))
+      (ofString "te") .one (ofString "te_new") [] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have hte := phase2_resume_te_new h s vs body callee ret v post hc hp.1 ha hl hb hsh
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_te_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, _⟩ := hr v rfl
+  refine ⟨hte, Or.inr (Or.inr (Or.inl ?_))⟩
+  have hloc : locN (setVarHOLFinite (ofString "te") (.val (.word w)) { post with locals := s.locals }) "te" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  change p + len ≤ _
+  rw [hloc]
+  exact hp.2.2.trans hf.2.1.1
+
+/-- Restrict the constructor's separation to a store contained in `te`.
+This supplies the frame premise for preserving any live caller buffer. -/
+theorem phase2_te_store_separation {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {p len x n : Nat} (hd : Disj (p, len) (locN s "te", 200))
+    (hx : Inside (x, n) (locN s "te") (locN s "te" + 200)) :
+    Disj (p, len) (x, n) :=
+  disj_of_inside_right hx hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
