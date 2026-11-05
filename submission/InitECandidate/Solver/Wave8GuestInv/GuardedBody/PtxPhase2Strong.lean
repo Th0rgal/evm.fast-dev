@@ -123,6 +123,25 @@ theorem phase1_resume_alloc_sender_word (h : PtxCallees) :
   refine ⟨hallocated, w, ?_⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Calls with discarded return values restore every caller-local witness. -/
+theorem phase1_call0_word (name fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare (fun s => ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
+      (.call (some (none, none)) fn args)
+      (fun r s => r = none → ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w))) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact hp
+
+theorem phase1_recover_sender_word (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w)))
+      (.call (some (none, none)) (ofString "recover_sender_with_chain_id") R16Shards.PtxP1.recoverArgs)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 1 s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w))) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.hoare_recover_sender h).run s hc hp.1 hnt hr,
+    (phase1_call0_word (ofString "sender") _ _).run s hc hp.2 hnt hr⟩
+
 /-- Local information accumulated before `mgas` and `reservoir` are declared. -/
 def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   (∀ name ∈ (["tx", "index", "sender"] : List String),
