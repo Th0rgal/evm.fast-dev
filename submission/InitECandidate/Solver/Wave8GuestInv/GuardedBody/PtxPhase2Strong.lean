@@ -14380,4 +14380,56 @@ theorem phase2_record_pre_state_read_backing {F : Type}
     rw [he] at hn
     exact (hn (congrArg Prod.fst hr)).elim
 
+/-- Resolve the pre-state-read call and restore its caller's transaction backing. -/
+theorem phase2_record_pre_state_read_call_backing (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "record_pre_state_read")
+    vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16WkAcctWs.lookup_record_pre_state_read] at hx
+  change (if _ then some (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read,
+    _, .one) else none) = some (body, callee.lookup, ret) at hx
+  dsimp [sourceFunctionEntry, Guest.Software.guestFn_record_pre_state_read,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural] at hx
+  rcases vs with _ | ⟨a, _ | ⟨b, rest⟩⟩ <;> try simp at hx
+  rcases a with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    simp [shapeOfHOLExact, shapeEqHOL,
+      InitECandidate.Solver.FrontendCodecComputation.paramToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural] at hx
+  obtain ⟨rfl, hcallee, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hcallee]
+    simp [show ofString "index" ≠ ofString "addr" by decide]
+  exact phase2_record_pre_state_read_backing (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩ v post hr
+
+/-- The miss-path pre-state-read call preserves the full backing-aware guard. -/
+theorem phase2_record_pre_state_read_world_backing (args : List (ExpHOL 64)) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "record_pre_state_read") args)
+      (fun r s => r = none → WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hb := (phase2_record_pre_state_read_call_backing args).run s hc hp hnt hr
+  have hs := R16WkAcctWs.progWStep_call0 (B := []) (gw := ["heap_ptr"])
+    (fun _ h => h) (fun _ h => h) R16WkAcctWs.wkSc_record_pre_state_read
+    (args := args) s hc hp.1 hnt (Or.inl hr)
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have he := txEnv_preserved_by_worldStep hs.1 (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) (by intro k hk; simp at hk ⊢; tauto)
+    (by simp [R16WkAcctWs.bufRegions]) (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1
+    (by simp [R16WkAcctWs.bufRegions]) hp.2.1 (locals := s.locals) rfl
+  have hl := phase2_call0_locals s (ofString "record_pre_state_read") args hr
+  obtain ⟨S', Nd', _, hw', _⟩ := hs.1.2.2.2.2 S Nd hw (by simp [R16WkAcctWs.bufRegions, IvlsDisj])
+  refine ⟨⟨hs.1.1, S', (worldTyped_iff_with _ S').mpr ⟨Nd', hw'⟩⟩, ?_, hb⟩
+  rw [← hl] at he
+  exact he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
