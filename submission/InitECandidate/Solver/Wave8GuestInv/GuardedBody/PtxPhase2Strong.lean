@@ -4452,4 +4452,39 @@ theorem phase2_storage_keys_alloc_live (h : PtxCallees) :
     rw [hptr, hcount]
     exact hf.2.2
 
+/-- A live storage-key buffer supplies the four words required by each key copy. -/
+theorem phase2_storage_keys_slot_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {base count k : Nat} (hw : WordsOK s (base, count * 32)) (hk : k < count) :
+    WordsOK s (base + 32 * k, 32) := by
+  rcases hw with ⟨hal, _, hw⟩
+  refine ⟨by dsimp; omega, by simp, ?_⟩
+  intro j hj
+  have h := hw (4 * k + j) (by dsimp at hj ⊢; omega)
+  convert h using 1 <;> dsimp <;> omega
+
+/-- Fresh storage-key memory is disjoint from the existing address array. -/
+theorem phase2_storage_keys_address_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (base : Nat)
+    (hp : PtxAddressCountInv s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post base (locN s "nkeys" * 32)) :
+    Disj (locN s "al_addrs", (locN s "nal" + 1) * 8)
+      (base, locN s "nkeys" * 32) := by
+  have hready : PtxAddressReady s := hp.1.1.1
+  have hstart : globN s "heap_ptr" ≤ base := hf.2.1.1
+  exact Or.inr (Or.inr (Or.inl (hready.2.2.1.2.trans hstart)))
+
+/-- Fresh storage-key memory cannot overlap the live transaction inputs. -/
+theorem phase2_storage_keys_input_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (base : Nat)
+    (hp : PtxAddressCountInv s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post base (locN s "nkeys" * 32)) :
+    Disj (locN s "te", 200) (base, locN s "nkeys" * 32) ∧
+    Disj (locN s "tx", 384) (base, locN s "nkeys" * 32) ∧
+    (0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (base, locN s "nkeys" * 32)) := by
+  exact phase2_fresh_separation s post callee base _ hp.1.1.1.1 hf
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
