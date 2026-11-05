@@ -11486,4 +11486,27 @@ theorem la_step_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (fun lg hlg => hcall i lg ui hlg)
   exact Flw.and hframe hcontents
 
+/-- The strengthened invariant is retained by the complete executable loop,
+so the success-tail continuation receives both contents and the write frame. -/
+theorem la_loop_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (L arr0 cap0 n0 nc : BitVec 64) (child : Nat → Nat) (a2 : ExpHOL 64)
+    (cont : ProgHOL 64)
+    (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hstep : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t →
+      InitECandidate.Solver.Wave8M19.LoopActive
+        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n"))) t →
+      t.clock ≠ 0 →
+      Flw (decClockHOLFinite t)
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (fun _ post => LAInvContents s L arr0 cap0 n0 nc child post))
+    (hk : ∀ t, LAInvContents s L arr0 cap0 n0 nc child t → Ret t cont Φ) :
+    Ret u
+      (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) cont) Φ := by
+  exact Ret.seq_while_inv (LAInvContents s L arr0 cap0 n0 nc child) hinit
+    (NoRet.seq NoRet.call0 NoRet.assign) hstep hk
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
