@@ -5634,4 +5634,16 @@ theorem phase2_packed_inner_counters_hoare :
       exact fun _ => phase2_packed_inner_update_indices before hp
     · exact fun _ _ hr => by cases hr
 
+/-- A copy frame preserves every word in a protected interval. -/
+theorem phase2_copy_frame_interval {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len base size : Nat) (fresh : Ivl)
+    (hf : FrameOutside s post [(dst, len)] fresh)
+    (hb : base + size ≤ 2 ^ 64)
+    (hd : ∀ off, off < size → ¬ CellHits (base + off) (dst, len))
+    (hn : ∀ off, off < size → ¬ CellHits (base + off) fresh) :
+    ∀ off, off < size → memW post (base + off) = memW s (base + off) := by
+  intro off ho
+  exact phase2_copy_frame_word s post dst len (base + off) fresh hf
+    (by omega) (hd off ho) (hn off ho)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
