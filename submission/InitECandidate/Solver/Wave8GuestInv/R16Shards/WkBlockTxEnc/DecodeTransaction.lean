@@ -10655,6 +10655,26 @@ private theorem decode_access_list_ret_spec_vvh {F : Type}
       · simp at hret
     | _ => simp at hret
 
+private theorem txAccessListAt_of_fresh_vvh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {tx : Nat}
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (heff : WorldEff s post [] [] wsGw)
+    (hnode : nodeExtents post Nd = nodeExtents s Nd)
+    (hhtab : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hvalid : TxValidAt post tx)
+    (htx : globN s "heap_ptr" ≤ tx)
+    (hrecs : 0 < memW post (tx + 216) →
+      Inside (memW post (tx + 208), 24 * memW post (tx + 216))
+        (globN s "heap_ptr") (globN post "heap_ptr")) :
+    TxAccessListAt post S Nd tx := by
+  refine ⟨hvalid, ?_, ?_⟩
+  · exact ivlsDisj_fresh_heap_worldOwned hAs hWT heff hnode hhtab
+      ⟨htx, hvalid.2.1.2⟩
+  · intro hpos
+    have hin := hrecs hpos
+    refine ⟨?_, ivlsDisj_fresh_heap_worldOwned hAs hWT heff hnode hhtab hin⟩
+    exact ⟨le_trans hAs.2.1 hin.1, hin.2⟩
+
 theorem «wk_decode_transaction_noExtra» :
     WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "scratch_ptr"]
