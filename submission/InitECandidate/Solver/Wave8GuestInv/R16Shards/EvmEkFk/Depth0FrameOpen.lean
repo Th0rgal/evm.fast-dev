@@ -3107,4 +3107,117 @@ theorem evmInvAt_of_dispatch_transport {F : Type}
     rw [heq]
     exact hgas
 
+/-- A dispatch-field write preserves the structural words of every frame,
+every continuation and every logs header, including suspended ancestors. -/
+theorem dispatch_store_chain_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    {x : BitVec 64} {k : Nat} (hk : k ∈ ([48, 56, 80] : List Nat))
+    (hx : x.toNat = globN s "ev" + k)
+    (hmem : ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 280 →
+      j ∉ ([48, 56, 80] : List Nat) → memW post (ec.1 + j) = memW s (ec.1 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 104 →
+      memW post (ec.2 + j) = memW s (ec.2 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + j) = memW s (memW s (ec.1 + 88) + j)) := by
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  have hklt : k + 8 ≤ 280 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl <;> decide
+  have hpoint : ∀ a, a < 2 ^ 64 → a ≠ globN s "ev" + k → memW post a = memW s a := by
+    intro a ha hne
+    unfold memW
+    rw [hmem (BitVec.ofNat 64 a) ?_]
+    intro heq
+    have he := congrArg BitVec.toNat heq
+    rw [hx, show (BitVec.ofNat 64 a).toNat = a from Nat.mod_eq_of_lt ha] at he
+    exact hne he
+  have hpw := hI.2.2.2.2.2.2.2.1
+  have hfw := hI.2.2.2.2.1
+  have hcons : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl := ⟨_, rfl⟩
+  obtain ⟨tl, htl⟩ := hcons
+  rw [htl, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+  have hhead_disj : ∀ o ∈ [(globN s "cur_cont", 104),
+      (memW s (globN s "ev" + 8), 32 * memW s (globN s "ev" + 232)),
+      (memW s (globN s "ev" + 24), memW s (globN s "ev" + 40)),
+      (memW s (globN s "ev" + 88), 24), frameLogs s (globN s "ev", globN s "cur_cont"),
+      frameRet s (globN s "ev", globN s "cur_cont")], Disj (globN s "ev", 280) o := by
+    have h := hpw.1
+    unfold frameObjects at h
+    simp only [List.cons_append, List.pairwise_cons] at h
+    intro o ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl | rfl | rfl | rfl | rfl <;> exact h.1 _ (by simp)
+  have htail : ∀ ec ∈ tl, ∀ o ∈ frameObjects s ec, Disj (globN s "ev", 280) o := by
+    intro ec hec o ho
+    apply hpw.2.2 (globN s "ev", 280) (by simp [frameObjects]) o
+    exact List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map.2 ⟨ec, hec, rfl⟩, ho⟩
+  have hdisj : ∀ {base n : Nat}, Disj (globN s "ev", 280) (base, n) →
+      ∀ j, j + 8 ≤ n → base + j ≠ globN s "ev" + k := by
+    intro base n hd j hj
+    rcases hd with hd | hd | hd | hd <;> dsimp only at hd <;> omega
+  refine ⟨?_, ?_, ?_⟩
+  · intro ec hec j hj hnot
+    have hb := (frameWF_bounds (hfw ec hec)).1
+    apply hpoint _ (by omega)
+    rw [htl, List.mem_cons] at hec
+    rcases hec with rfl | hec
+    · dsimp only
+      intro heq
+      have hjk : j = k := by omega
+      exact hnot (hjk ▸ hk)
+    · exact hdisj (htail ec hec (ec.1, 280) (by simp [frameObjects])) j hj
+  · intro ec hec j hj
+    have hb := (frameWF_bounds (hfw ec hec)).2.1
+    apply hpoint _ (by omega)
+    apply hdisj (n := 104) (j := j) ?_ hj
+    rw [htl, List.mem_cons] at hec
+    rcases hec with rfl | hec
+    · exact hhead_disj _ (by simp)
+    · exact htail ec hec _ (by simp [frameObjects])
+  · intro ec hec j hj
+    have hb := (frameWF_bounds (hfw ec hec)).2.2
+    apply hpoint _ (by omega)
+    apply hdisj (n := 24) (j := j) ?_ hj
+    rw [htl, List.mem_cons] at hec
+    rcases hec with rfl | hec
+    · exact hhead_disj _ (by simp)
+    · exact htail ec hec _ (by simp [frameObjects])
+
+/-- Continuation-word preservation suffices to transport the bounded frame
+chain, independently of changes to dispatch's code fields. -/
+theorem evmChain_eq_of_cont_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hg : ∀ name, globN post name = globN s name)
+    (hc : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW post (ec.2 + k) = memW s (ec.2 + k)) :
+    evmChain post = evmChain s := by
+  have haux : ∀ fuel e c,
+      (∀ ec ∈ evmChainFrom s fuel e c, ec ∈ evmChain s) →
+      evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+    intro fuel
+    induction fuel with
+    | zero => intros; rfl
+    | succ fuel ih =>
+      intro e c hsub
+      have hec : (e, c) ∈ evmChain s := hsub (e, c) (by simp [evmChainFrom])
+      have h0 : memW post c = memW s c := by
+        simpa only [Nat.add_zero] using hc (e, c) hec 0 (by decide)
+      simp only [evmChainFrom, hc (e, c) hec 16 (by decide), h0,
+        hc (e, c) hec 8 (by decide)]
+      split
+      · rfl
+      · rename_i hn
+        rw [ih (memW s c) (memW s (c + 8))]
+        intro ec he
+        apply hsub ec
+        simp only [evmChainFrom, hn, ↓reduceIte, List.mem_cons]
+        exact Or.inr he
+  unfold evmChain
+  rw [hg "ev", hg "cur_cont"]
+  exact haux _ _ _ (fun _ h => h)
+
 end HeadStore
