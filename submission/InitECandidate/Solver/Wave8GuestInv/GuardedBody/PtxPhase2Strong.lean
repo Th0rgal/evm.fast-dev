@@ -6477,4 +6477,48 @@ theorem phase2_memcpy_word_arguments {F : Type} (s : PanSemStateFiniteExact 64 F
   cases hn'
   simp [locN, callEntryStateHOLFinite, hpd, hpv, hpn]
 
+/-- Copy framing restores packed readiness and the transaction witness together. -/
+theorem phase2_packed_ready_memcpy_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat)
+    (hready : PtxPackedKeysReady s) (ha : ArenaReady s) (hp : GuestInv post)
+    (hg : GlobalsKept [] s post) (hm : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hw : WorldTypedWith s S Nd) (hw' : WorldTypedWith post S' Nd')
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hs : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post
+      (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s]) (heapFree s))
+    (hd : Disj (locN s "tx", 384) (locN s "dst", locN s "n"))
+    (hr : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (locN s "dst", locN s "n"))
+    (hn : 0 < locN s "n")
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedKeysReady post := by
+  have ht' := phase2_memcpy_tx_survives s post S Nd S' Nd' ha hp hg hw ht ho hf
+    hd hr hn (hl "tx" (by simp))
+  apply phase2_packed_ready_owned_growth s post S Nd S' Nd' hready _ hg hm hw' ht' hs ho
+  intro n hn
+  exact hl n (by simp only [List.mem_cons] at hn ⊢; tauto)
+
+/-- A callee's memory frame transfers unchanged to the restored caller state. -/
+theorem phase2_memcpy_restore_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (keep : List Ivl) (fresh : Ivl)
+    (hf : FrameOutside (callEntryStateHOLFinite s callee) post keep fresh) :
+    FrameOutside s { post with locals := s.locals } keep fresh := by
+  intro a hk hn
+  exact hf a hk hn
+
+/-- Domain preservation at memcpy entry transfers to the restored caller state. -/
+theorem phase2_memcpy_restore_domain {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hd : ∀ a, (callEntryStateHOLFinite s callee).memaddrs a → post.memaddrs a) :
+    ∀ a, s.memaddrs a → ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F).memaddrs a := by
+  intro a ha
+  exact hd a ha
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
