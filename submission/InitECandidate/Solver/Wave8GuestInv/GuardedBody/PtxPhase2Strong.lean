@@ -3756,4 +3756,21 @@ theorem phase2_address_count_next_bound {F : Type} {s : PanSemStateFiniteExact 6
     (i := locN s "i" + 1) (by rw [← hp.2.1]; omega)
   exact lt_of_le_of_lt hb (phase2_address_copy_total_keys hp.1)
 
+/-- Scope and clock changes preserve the cumulative count when protected locals agree. -/
+theorem phase2_address_count_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ls : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxAddressCountInv s)
+    (hl : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ls.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxAddressCountInv { s with locals := ls, clock := clock } := by
+  apply phase2_address_count_frame s _ hp
+    (phase2_address_copy_with_locals s ls clock hl hp.1)
+  · simp [locN, hl "i" (by simp)]
+  · simp [locN, hl "nkeys" (by simp)]
+  · simp [locN, hl "nal" (by simp)]
+  · simp [memW, locN, hl "tx" (by simp)]
+  · intro j hj
+    simp [memW, locN, hl "tx" (by simp)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
