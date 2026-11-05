@@ -7310,4 +7310,41 @@ theorem phase2_packed_separated_counters {F : Type} (s : PanSemStateFiniteExact 
     show ofString "j" ≠ ofString "nkeys" from by decide,
     show ofString "k" ≠ ofString "nkeys" from by decide] using hp.2
 
+/-- Call-level preservation for the concrete packed storage-key copy. -/
+theorem phase2_packed_storage_copy_hoare (h : PtxCallees) (src : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32])
+      (fun r t => r = none → PtxPackedSeparatedCopy t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  exact phase2_packed_storage_copy_eval h s post src vs body callee ret
+    (some (.returned v)) base k hc hargs hl he (by simp) (by simp [Resumes])
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) hp.1.1 hp.2.1 hbase hk hp.2.2.2
+
+/-- A true inner guard recovers all premises for the next pair of copies. -/
+theorem phase2_packed_separated_inner_guarded {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxPackedSeparatedInner s)
+    (hg : locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    PtxPackedSeparatedCopy s :=
+  ⟨phase2_packed_inner_guarded hp.1 hg, hp.2⟩
+
+/-- A false inner guard fixes the flattened index while retaining both input separations. -/
+theorem phase2_packed_separated_inner_exit {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxPackedSeparatedInner s)
+    (hg : ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN s "k" = phase2_key_prefix s (locN s "i" + 1) ∧
+    Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+    Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) :=
+  ⟨(phase2_packed_inner_exit hp.1 hg).2, hp.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
