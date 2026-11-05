@@ -1259,4 +1259,48 @@ theorem phase2_te_new_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   · exact phase2_resume_te_new h
   · exact ht
 
+/-- Scalar message-building stores write exactly one word, including when the
+stored value is zero. Numeric projections alone cannot establish this fact. -/
+theorem phase2_scalar_store_length {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : PtxPhase2LocalShapes s) (name : String)
+    (hn : name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String))
+    {v : ValueHOL 64} (he : evalAt s (.var .local (ofString name)) = some v) :
+    (flattenHOL v).length = 1 := by
+  obtain ⟨w, hw⟩ := hs.scalar name hn
+  have hv : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  simp [flattenHOL]
+
+theorem phase2_price_store_length {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : PtxPhase2LocalShapes s) {v : ValueHOL 64}
+    (he : evalAt s (.var .local (ofString "price")) = some v) :
+    (flattenHOL v).length = 4 := by
+  obtain ⟨a, b, c, d, hw⟩ := hs.price
+  have hv : v = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] := by
+    simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  simp [flattenHOL]
+
+theorem phase2_store_preserves_shapes (addr value : ExpHOL 64) :
+    Hoare PtxPhase2LocalShapes (.store addr value)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hm
+  exact ⟨hp.scalar, hp.price, hp.enc, hp.intrinsic⟩
+
+/-- The fresh transaction environment is non-null, and each of its 25 word
+slots fits entirely in the allocated heap extent. -/
+theorem phase2_te_slots {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeAllocated s) :
+    locN s "te" ≠ 0 ∧ ∀ k, k < 25 →
+      Inside (locN s "te" + 8 * k, 8) InitE.sourceBase (globN s "heap_ptr") := by
+  have hi := hp.2.2.1
+  have hb : 0 < InitE.sourceBase := by decide
+  constructor
+  · have := hi.1; omega
+  · intro k hk
+    obtain ⟨hlo, hhi⟩ := hi
+    constructor <;> dsimp at * <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
