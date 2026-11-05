@@ -13291,4 +13291,46 @@ theorem heapByteEff_storeByte_return_fresh {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Frame the receipt's optional type-prefix write and its two return paths. -/
+theorem heapByteEff_optional_prefix_return {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (cond addr value typed plain : ExpHOL 64) (v : ValueHOL 64)
+    (ha : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.ite cond (.seq (.storeByte addr value) (.return typed)) .skip)
+        (.return plain)) = (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite] at hr
+  split at hr
+  · split at hr
+    · exact heapByteEff_return he plain v (by simpa only [evaluateHOLFiniteState_skip] using hr)
+    · rcases hc : evaluateHOLFiniteState mid (.seq (.storeByte addr value) (.return typed)) with ⟨r, next⟩
+      rw [hc] at hr
+      cases r with
+      | some r =>
+        have hp := (Prod.mk.inj hr).2
+        have hv := (Option.some.inj (Prod.mk.inj hr).1)
+        subst post
+        subst r
+        exact heapByteEff_storeByte_return_fresh he addr value typed v ha hc
+      | none =>
+        rw [evaluateHOLFiniteState_seq_line780] at hc
+        rcases hb : evaluateHOLFiniteState mid (.storeByte addr value) with ⟨rb, mb⟩
+        rw [hb] at hc
+        cases rb with
+        | some rb => simp at hc
+        | none =>
+          dsimp only at hc
+          rw [evaluateHOLFiniteState_return] at hc
+          split at hc <;> try cases hc
+          split at hc <;> cases hc
+  · cases hr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
