@@ -3073,4 +3073,14 @@ theorem phase2_address_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Copying an address preserves the scalar loop counters and their bound. -/
+theorem phase2_address_copy_inv_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal")
+    (w : HolWordLab 64) {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _
+      (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (locN s "i" + 1)))
+      [w] s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxAddressCopyInv { s with memory := mem } := by
+  exact ⟨phase2_address_copy_store hp.1 (locN s "i") hi w hst, hp.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
