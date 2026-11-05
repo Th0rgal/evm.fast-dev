@@ -5762,4 +5762,25 @@ theorem dispatch_code_record_words {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hb := dispatch_code_length_lt hA hin
   simpa [memW, hn.2] using hb
 
+/-- Loading a heap-owned code record returns a pair of actual words with the
+length bound required by dispatch. -/
+theorem dispatch_code_record_eval {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) {v : Nat} (hwords : WordsOK s (v, 16))
+    (hin : Inside (memW s v, memW s (v + 8)) sourceBase (globN s "heap_ptr"))
+    (e0 e8 : ExpHOL 64)
+    (h0 : ev s e0 = some (.val (.word (BitVec.ofNat 64 v))))
+    (h8 : ev s e8 = some (.val (.word (BitVec.ofNat 64 (v + 8))))) :
+    ∃ code code_n : BitVec 64,
+      ev s (.rstruct [.load .one e0, .load .one e8]) =
+        some (.rStruct [.val (.word code), .val (.word code_n)]) ∧ code_n.toNat < 2 ^ 40 := by
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hwords hin
+  have hd0 := (hwords.2.2 0 (by omega)).choose_spec.1
+  have hd8 := (hwords.2.2 1 (by omega)).choose_spec.1
+  simp only [Nat.mul_zero, Nat.add_zero] at hd0
+  simp only [Nat.mul_one] at hd8
+  unfold ev at h0 h8
+  refine ⟨code, code_n, ?_, hb⟩
+  simp [ev, evalHOLExact, evalListHOLExact, h0, h8, memLoadHOLExact,
+    isWfShapeExactHOL, hd0, hd8, hc, hn]
+
 end HeadStore
