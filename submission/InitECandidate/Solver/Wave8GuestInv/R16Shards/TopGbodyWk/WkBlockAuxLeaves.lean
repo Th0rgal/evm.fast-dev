@@ -8411,4 +8411,85 @@ theorem merge_set_bal_objects_kept {F : Type}
       · exact Or.inr hal
   · exact merge_set_low_words_kept hA hW ht he
 
+/-- Fixed objects are framed in the word-addressed view, including empty objects. -/
+theorem merge_set_fixed_word_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ fixedObjects s, R16WkMarkAccountCreated.M08IvlUnhit s post i := by
+  intro i hi
+  apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+  · intro j hj; exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+  · exact hA.2.2.2.2.2.2.1
+  · intro j hj; exact (((hW.1.2.1 t ht).2 j hj).2 i hi).flip
+  · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+      he.2.2.2.2.1
+    rcases hW.2.2.1.1 i hi with hz | ⟨hal, _⟩
+    · exact Or.inl hz
+    · exact Or.inr hal
+
+/-- Block output objects retain their extents across an owned table insertion. -/
+theorem merge_set_blockOutObjects_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    blockOutObjects post = blockOutObjects s ∧
+      (globN post "bo" ≠ 0 → ∀ k ∈ ([40, 72] : List Nat),
+        memW post (globN post "bo" + k) ≠ 0 →
+        LstOK post (memW post (globN post "bo" + k))) := by
+  have hg : globN post "bo" = globN s "bo" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bo") (by decide))
+  have hu : globN s "bo" ≠ 0 → R16WkMarkAccountCreated.M08IvlUnhit s post
+      (globN s "bo", 88) := by
+    intro hn
+    have hm := typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by simp [typedRecords])
+    simp only [hn, ↓reduceIte] at hm
+    exact merge_set_fixed_word_unhit hA hW ht he _ hm
+  have hw : globN s "bo" ≠ 0 → ∀ k, k % 8 = 0 → k + 8 ≤ 88 →
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro hn k hk hkb
+    simpa [hg] using InitECandidate.Solver.Wave8Contracts.M08.rec_word_eq_of_unhit
+      hA.2 hW.2.2.1 "bo" 88 (by decide) hg hn (hu hn) hk hkb
+  have hz := merge_set_low_words_kept hA hW ht he
+  have hh := InitECandidate.Solver.Wave8Contracts.M08.blockOutObjects_eq_of_bo_unhit
+    hA.2 hW.2.2.1 hg hW.1.2.2.2.2.2.2.2.2.2.2.1
+    (fun h => hw h 24 (by decide) (by decide))
+    (fun h => hw h 32 (by decide) (by decide))
+    (fun h => hw h 40 (by decide) (by decide))
+    (fun h => hw h 56 (by decide) (by decide))
+    (fun h => hw h 72 (by decide) (by decide))
+    (fun h => hw h 80 (by decide) (by decide))
+    (fun _ _ => by simp [hz.1, hz.2.2])
+    (fun _ _ => by simp [hz.1, hz.2.2])
+    (fun h h40 => merge_set_fixed_word_unhit hA hW ht he _ (by
+      unfold fixedObjects
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp [blockOutObjects, h, h40]))
+    (fun h h72 => merge_set_fixed_word_unhit hA hW ht he _ (by
+      unfold fixedObjects
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp [blockOutObjects, h, h72]))
+  exact hh
+
+/-- Inserting a block inner pointer preserves fixed-object extents and typing. -/
+theorem merge_set_fixed_typed {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    fixedObjects post = fixedObjects s ∧ FixedTyped post := by
+  have hgs := InitECandidate.Solver.Wave8Contracts.M08.worldGlobalsSame_of_kept
+    (gw := ["heap_ptr"]) he.2.2.2.2.2.2.2 (fun _ h => Or.inl (by simpa using h))
+  have hb := (merge_set_blockOutObjects_kept hA hW ht he).1
+  have hbal := (merge_set_bal_objects_kept hA hW ht he hbs ht0 htbs).1
+  have hf := InitECandidate.Solver.Wave8Contracts.M08.fixedObjects_eq_of_parts hgs hb hbal
+  have hag : AllocatorGrows s post := by
+    refine ⟨he.2.2.2.2.1, ?_⟩
+    rw [globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "scratch_ptr") (by decide))]
+  exact ⟨hf, InitECandidate.Solver.Wave8Contracts.M08.fixedTyped_transfer
+    hA.1 he.1.1 hag hW.2.2.1 hf⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
