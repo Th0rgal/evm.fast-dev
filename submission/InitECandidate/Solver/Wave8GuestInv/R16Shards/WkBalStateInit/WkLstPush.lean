@@ -31,14 +31,16 @@ abbrev RetListSlot := @M13.RetListSlot
 abbrev BoListArg := @M13.BoListArg
 
 def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
-  fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
+  fun s => BoListArg s ∧ memW s (locN s "l") ≠ 0
 
-theorem lookup_lst_push :
+theorem lookup_lst_push_wkbal :
     originalRuntimeCode.lookup (ofString "lst_push") =
       some ([(ofString "l", .one), (ofString "esz", .one)],
         sourceFnBody Guest.Software.guestFn_lst_push, .one) :=
   lookup_of_guestAst_getElem 410 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_lst_push) rfl
+
+abbrev lookup_lst_push := lookup_lst_push_wkbal
 
 private def lstPushCallees (f : MlS) : Bool :=
   f == ofString "trap_with" ||
@@ -1114,11 +1116,15 @@ theorem bo_list_grow_worldStep {F : Type}
   exact ⟨S, Nd, fun _ hx => hx, ⟨hT_post, hjr_part.2, hF_post, hTr_post⟩, hOG, hfr, hQ_post⟩
 
 theorem wk_lst_push_strong :
-    WorldKeeps BoListArgStrong (fun _ => []) ["heap_ptr"] stdKeep
-      RetListSlot (ofString "lst_push") := by
-  refine ⟨_, _, _, lookup_lst_push, ?_⟩
+    WorldKeeps BoListArgStrong (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+     ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetListSlot (ofString "lst_push") := by
+  refine ⟨_, _, _, lookup_lst_push_wkbal, ?_⟩
   intro F s hcode hArg hvalid hnt hres
-  obtain ⟨hW, ⟨_, hbo_nz, hbo_slot_loc, hesz_loc_eq⟩, hp_nz_loc⟩ := hArg
+  obtain ⟨⟨hW, hbo_nz, hbo_slot_loc, hesz_loc_eq⟩, hp_nz_loc⟩ := hArg
   have hAs : ArenaReady s := hW.1
   have hG : GuestInv s := hAs.1
   obtain ⟨values, hlook_fn⟩ := hvalid
