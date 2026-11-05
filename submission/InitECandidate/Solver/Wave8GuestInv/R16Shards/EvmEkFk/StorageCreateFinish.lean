@@ -130,6 +130,36 @@ theorem ownedGrows_nodeExtents_of_fresh {F : Type}
       · exact Or.inl hz
       · exact Or.inr (Or.inr hin)
 
+theorem keyIn_of_fresh_nibbles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat} {p len : Nat}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hNd : NodeHeap s Nd)
+    (hkinds : ∀ n ∈ Nd, memW post n = memW s n)
+    (hnib : NibblesOK post p len)
+    (hfresh : Inside (p, len) (globN s "heap_ptr") (globN post "heap_ptr")) :
+    KeyIn post Nd p len := by
+  by_cases hz : len = 0
+  · exact Or.inl hz
+  · right
+    have hlo : sourceBase ≤ globN s "heap_ptr" := hAs.1
+    have hhi : globN post "heap_ptr" ≤ heapLimit := hAp.2.1
+    refine ⟨hnib, Or.inl ⟨?_, hfresh.2⟩, ⟨?_, ?_⟩, ?_⟩
+    · exact Nat.le_trans hlo hfresh.1
+    · exact Nat.le_trans hlo hfresh.1
+    · exact Nat.le_trans hfresh.2 hhi
+    · intro n hn
+      have hd := allocated_disj_fresh_extent hAs hAp hhp (hNd.1 n hn).2.1 hfresh
+      have hivl : nodeIvl post n = nodeIvl s n := by
+        simp only [nodeIvl, hkinds n hn]
+      rw [hivl]
+      unfold Disj at hd ⊢
+      rcases hd with h | h | h | h
+      · exact Or.inr (Or.inl h)
+      · exact Or.inl h
+      · exact Or.inr (Or.inr (Or.inr h))
+      · exact Or.inr (Or.inr (Or.inl h))
+
 theorem rootIn_lt_word_limit {F : Type} {s : PanSemStateFiniteExact 64 F}
     {Nd : List Nat} {node : Nat} (hh : NodeHeap s Nd) (hr : RootIn Nd node) :
     node + 1 < 2 ^ 64 := by
