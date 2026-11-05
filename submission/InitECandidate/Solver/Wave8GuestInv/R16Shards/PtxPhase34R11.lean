@@ -1855,6 +1855,30 @@ theorem logPointers_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
   · change locN s "lp" = memW post (locN s "logs")
     rw [h0]; exact hlp
 
+theorem logPointers_store_bo40 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : Phase4LogPointersReady s) (hn : locN s "logs" ≠ 0)
+    (hback : memW s (memW s (globN s "bo" + 40)) ≠ 0)
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (memW s (memW s (globN s "bo" + 40)))
+      (memW s (memW s (globN s "bo" + 40)) +
+        8 * memW s (memW s (globN s "bo" + 40) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    Phase4LogPointersReady {s with memory := mem'} := by
+  apply logPointers_worldStore h hn hm
+  · intro S Nd hWT
+    exact store_bo_array_world h.1.1.1.1.1.1 h.1.1.1.1.2 hWT
+      (Or.inr (Or.inl ⟨rfl, hback, rfl⟩)) hx hin hm
+  · intro S Nd hWT
+    obtain ⟨hc40, _, hbo⟩ := blockOutObjects_eq_list h.1.1.1.1.2 hWT.1
+    let arr := (memW s (memW s (globN s "bo" + 40)),
+      8 * memW s (memW s (globN s "bo" + 40) + 16))
+    have hmemb : arr ∈ blockOutObjects s := by
+      rw [hbo]
+      simp [arr, hback, h.1.1.1.1.2.bo_nz, show memW s (memW s (globN s "bo" + 40) + 16) ≠ 0 from by omega]
+    have hmemf : arr ∈ fixedObjects s := List.mem_append_left _ (List.mem_append_right _ hmemb)
+    refine ⟨arr, ?_, hin⟩
+    unfold worldOwned; simp only [List.mem_append]; exact Or.inl (Or.inr hmemf)
+
 theorem store_receiptSlot (off : Bool) :
     Hoare Phase4ReceiptEncoded
       (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
