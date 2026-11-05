@@ -5115,4 +5115,67 @@ theorem phase2_packed_copy_next_inner_bound {F : Type} {s : PanSemStateFiniteExa
   have hk := phase2_packed_copy_index_bound hp
   omega
 
+/-- A concrete bounded counter assignment preserves readiness and exposes its exact value. -/
+theorem phase2_packed_counter_assign (name : String) (old : Nat)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String), ofString n ≠ ofString name)
+    (hb : old + 1 < 2 ^ 64) :
+    Hoare (fun s => PtxPackedKeysReady s ∧ locN s name = old)
+      (.assign .local (ofString name) (.op .add [.var .local (ofString name), .const 1]))
+      (fun r s => r = none → PtxPackedKeysReady s ∧ locN s name = old + 1) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s name v (by rw [hp.2]; exact hb) he
+    intro _
+    refine ⟨phase2_packed_keys_set_other s hp.1 _ _ hne, ?_⟩
+    simpa [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+      using hw.trans (by rw [hp.2])
+  · exact fun _ _ hr => by cases hr
+
+/-- The concrete paired counter sequence preserves packed-buffer readiness. -/
+theorem phase2_packed_counter_sequence :
+    Hoare PtxPackedKeysReady
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.seq_fall
+  · apply Hoare.assign
+    · intro F s v hp he
+      exact fun _ => phase2_packed_keys_set_other s hp _ _ (by decide)
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      exact fun _ => phase2_packed_keys_set_other s hp _ _ (by decide)
+    · exact fun _ _ hr => by cases hr
+
+/-- Restoring unchanged copy locals preserves the guarded copy predicate. -/
+theorem phase2_packed_copy_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxPackedCopyIndex s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedCopyIndex { s with locals := locals, clock := clock } := by
+  have ht : locN { s with locals := locals, clock := clock } "tx" = locN s "tx" := by
+    simp [locN, hl "tx" (by simp)]
+  apply phase2_packed_copy_index_preserved s _ hp
+  · apply phase2_packed_keys_with_locals s locals clock hp.1
+    intro n hn
+    exact hl n (by simp at hn ⊢; tauto)
+  · intro n hn
+    have he := hl n (by simp only [List.mem_cons, List.mem_singleton] at hn ⊢; tauto)
+    simp [locN, he]
+  · rw [ht]; rfl
+  · rw [ht]; rfl
+  · intro i; rw [ht]; rfl
+
+/-- Scratch declarations around copy calls preserve the guarded index predicate. -/
+theorem phase2_packed_copy_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      ofString n ≠ name) :
+    PtxPackedCopyIndex (setVarHOLFinite name v s) := by
+  apply phase2_packed_copy_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
