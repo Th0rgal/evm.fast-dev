@@ -2843,4 +2843,15 @@ theorem hoare_prepare_dispatch_delegated_msg_tail (gw : List String) (hp : Nat)
   exact Hoare.seq_fall' hfinish'
     (hoare_prepare_dispatch_msg_stores gw hp G ch code code_n) (fun _ h => h)
 
+/-- Reassociate a verified sequence to the right-associated source AST. -/
+theorem Hoare.seq_assoc_fall
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {a b c : ProgHOL 64}
+    (h : Hoare P (.seq (.seq a b) c) (Fall Q)) :
+    Hoare P (.seq a (.seq b c)) (Fall Q) := by
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have heq := srd_eval_seq_assoc s a b c
+  rw [← heq] at hnt ⊢
+  exact h.run s hc hp hnt
+
 end HeadStore
