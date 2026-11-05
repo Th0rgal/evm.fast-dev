@@ -3709,6 +3709,45 @@ theorem stable_copy_store_semantics {F : Type} (s : PanSemStateFiniteExact 64 F)
     (by simpa only [flattenHOL] using hst)
   exact ⟨hd, stable_copy_written_value s mem' hp hi he, hm⟩
 
+/-- Operand shapes and allocation separation required by the copy store. -/
+def StableCopyStorePre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => StableCopyInv s ∧ locN s "i" < locN s "nl" ∧
+    (∃ w p q : BitVec 64,
+      s.locals.lookup (ofString "i") = some (.val (.word w)) ∧
+      s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+      s.locals.lookup (ofString "stable_lp") = some (.val (.word q)) ∧
+      q.toNat = memW s (locN s "stable_logs")) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+      (∀ o ∈ worldOwned s S Nd,
+        Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+/-- The actual indexed copy store preserves the length postcondition. -/
+theorem hoare_stableCopy_store_post :
+    Hoare StableCopyStorePre
+      (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+      (fun r t => r = none → StableLengthPost t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hworld, hh, hd, ha, he⟩ := hp
+  have hx' := stable_copy_destination_address_eval s w q hinv hw hq hptr hi
+  rw [hx] at hx'
+  have hxe : x = BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") := by
+    simpa using Option.some.inj hx'
+  subst x
+  obtain ⟨hdom, _, hm⟩ := stable_copy_store_semantics s mem' w p hinv hw hl hi v hv hst
+  exact stableCopyInv_store_post s mem' hinv hi S Nd hW ho hworld hh hd ha he hdom hm
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -3833,6 +3872,36 @@ theorem stableCopyInv_store_increment {F : Type} (s : PanSemStateFiniteExact 64 
   intro j hj _
   exact stableCopyInv_store_prefix s mem' hp hi hwrite hm hsource hsrc hdst j
     (by simpa only [hiw] using hj)
+
+/-- Assemble the source and header frame obligations for a separated store
+before invoking the counter-increment invariant proof. -/
+theorem stableCopyInv_separated_store_increment {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (mem' : BitVec 64 → HolWordLab 64)
+    (w : BitVec 64) (v : ValueHOL 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl")
+    (hpost : StableLengthPost {s with memory := mem'})
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hwrite : memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i"))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a)
+    (hs : Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hd : Disj (locN s "stable_logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (ha : Disj (locN s "lp", 8 * locN s "nl")
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (he : evalAt {s with memory := mem'}
+      (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    StableCopyInv (setVarHOLFinite (ofString "i") v {s with memory := mem'}) := by
+  have hl := hp.1.2.1.resolve_left hp.2.1
+  have hsrc := (stableCopyInv_header_unhit s mem' hp hi _ hl.2.1 hl.1.1 hs hm).1
+  have hdst := (stableCopyInv_header_unhit s mem' hp hi _
+    hp.2.2.2.1 hp.2.2.1.1 hd hm).1
+  have harr := stableCopyInv_source_preserved s mem' hp hi ha hm
+  rw [hp.1.2.2.2.2.1] at harr
+  exact stableCopyInv_store_increment s mem' w v hp hi hpost hw hwrite hm harr hsrc hdst he
 
 /-- The termination measure decreases across both the memory write and the
 counter assignment; the write cannot alter either counter local. -/
