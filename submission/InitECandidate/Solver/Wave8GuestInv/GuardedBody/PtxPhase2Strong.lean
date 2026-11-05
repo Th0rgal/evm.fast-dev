@@ -5105,4 +5105,14 @@ theorem phase2_packed_copy_update_indices {F : Type} (s : PanSemStateFiniteExact
     Nat.mod_eq_of_lt hk, Nat.mod_eq_of_lt hj, Nat.add_assoc]
     using (show locN s "k" + 1 = phase2_key_prefix s (locN s "i") + (locN s "j" + 1) by omega)
 
+/-- The next inner index stays within the current record's key count. -/
+theorem phase2_packed_copy_next_inner_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) :
+    locN s "j" + 1 ≤ memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) ∧
+    locN s "k" + 1 ≤ locN s "nkeys" := by
+  have hj := hp.2.2.2.1
+  have hk := phase2_packed_copy_index_bound hp
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
