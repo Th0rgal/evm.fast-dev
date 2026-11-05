@@ -5267,4 +5267,38 @@ theorem phase2_packed_copy_total_frame {F : Type}
   rw [hc]
   exact phase2_key_prefix_congr s post _ hm
 
+/-- Inclusive inner-loop invariant, valid both before an iteration and at loop exit. -/
+def PtxPackedInnerInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedKeysReady s ∧
+  locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+  locN s "i" < memW s (locN s "tx" + 216) ∧
+  locN s "j" ≤ memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) ∧
+  locN s "k" = phase2_key_prefix s (locN s "i") + locN s "j"
+
+theorem phase2_packed_inner_of_guarded {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedCopyIndex s) : PtxPackedInnerInv s :=
+  ⟨hp.1, hp.2.1, hp.2.2.1, Nat.le_of_lt hp.2.2.2.1, hp.2.2.2.2⟩
+
+theorem phase2_packed_inner_guarded {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedInnerInv s)
+    (hg : locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    PtxPackedCopyIndex s :=
+  ⟨hp.1, hp.2.1, hp.2.2.1, hg, hp.2.2.2.2⟩
+
+/-- On inner-loop exit the flattened index is exactly the next record prefix. -/
+theorem phase2_packed_inner_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedInnerInv s)
+    (hg : ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN s "j" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) ∧
+    locN s "k" = phase2_key_prefix s (locN s "i" + 1) := by
+  have hj := hp.2.2.2.1
+  have he : locN s "j" = memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by omega
+  refine ⟨he, ?_⟩
+  rw [phase2_key_prefix_succ, ← he]
+  exact hp.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
