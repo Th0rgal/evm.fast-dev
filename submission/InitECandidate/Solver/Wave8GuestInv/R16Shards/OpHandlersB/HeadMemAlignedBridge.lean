@@ -6360,7 +6360,7 @@ theorem lst_push_run {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz n cap :
     (hesz : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
     (hmn : s.memory (l + 8) = .word n) (hmc : s.memory (l + 16) = .word cap)
     (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8)) (hd16 : s.memaddrs (l + 16))
-    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 28) (hesz8 : esz.toNat ≤ 8) :
+    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59) (hesz8 : esz.toNat ≤ 8) :
     Ret s (sourceFnBody Guest.Software.guestFn_lst_push)
       (fun v post => LstPushPost s l esz n cap v post) := by
   have hb : sourceFnBody Guest.Software.guestFn_lst_push =
@@ -6411,11 +6411,11 @@ theorem lst_push_run {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz n cap :
     have hS2A : ArenaReady S2 := arenaReady_locals s _ hA
     have hmulT : (esz * cap).toNat = esz.toNat * cap.toNat := by
       rw [BitVec.toNat_mul]; apply Nat.mod_eq_of_lt
-      have : esz.toNat * cap.toNat ≤ 8 * 2 ^ 28 := Nat.mul_le_mul hesz8 (by omega)
+      have : esz.toNat * cap.toNat ≤ 8 * 2 ^ 59 := Nat.mul_le_mul hesz8 (by omega)
       omega
     have hnvT : (esz * cap * 2).toNat = 2 * (esz.toNat * cap.toNat) := by
       rw [BitVec.toNat_mul, hmulT]; apply (Nat.mod_eq_of_lt _).trans (by simp; ring)
-      have : esz.toNat * cap.toNat ≤ 8 * 2 ^ 28 := Nat.mul_le_mul hesz8 (by omega)
+      have : esz.toNat * cap.toNat ≤ 8 * 2 ^ 59 := Nat.mul_le_mul hesz8 (by omega)
       simp; omega
     refine Ret.seq_flw (NoRet.decCall (NoRet.seq NoRet.call0 (NoRet.seq NoRet.store' NoRet.store'))) ?_
     refine Flw.decCall_alloc hS2A (esz * cap * 2)
@@ -6437,7 +6437,7 @@ theorem lst_push_run {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz n cap :
       simp [X, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
     have hcmax : InitECandidate.Solver.HeapPotential.cMax.toNat = 2952790016 := rfl
     have hmulN : (esz * n).toNat = esz.toNat * n.toNat := by rw [hnc]; exact hmulT
-    have hsmall : esz.toNat * n.toNat ≤ 8 * 2 ^ 28 := Nat.mul_le_mul hesz8 (by omega)
+    have hsmall : esz.toNat * n.toNat ≤ 8 * 2 ^ 59 := Nat.mul_le_mul hesz8 (by omega)
     show Flw X _ _
     have hcmx : q.toNat ≤ 2952790016 := hcmax ▸ hq2
     have hnN : n.toNat = cap.toNat := by rw [hnc]
@@ -6551,7 +6551,7 @@ theorem log_append_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e L lg n ca
     (hd88 : s.memaddrs (e + 88)) (hmL : s.memory (e + 88) = .word L)
     (hmn : s.memory (L + 8) = .word n) (hmc : s.memory (L + 16) = .word cap)
     (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
-    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 28) :
+    (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59) :
     Ret s (sourceFnBody Guest.Software.guestFn_log_append)
       (fun _ post => LogAppendPost s L post) := by
   have hb : sourceFnBody Guest.Software.guestFn_log_append =
