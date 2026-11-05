@@ -755,4 +755,72 @@ theorem mptObjStep_parts_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
     · exact hRN i hi j hj
     · exact hd i (List.mem_cons_of_mem _ hi) j hj
 
+theorem mptObjInWith_allocated_csr {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nm : List Nat} {m : Nat} (hm : MptObjInWith s S Nm m) :
+    ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → Allocated s o := by
+  intro o ho hnz
+  rcases List.mem_cons.mp ho with rfl | ho
+  · exact hm.1
+  · obtain ⟨n, hn, ho⟩ := List.mem_flatMap.mp ho
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl
+    · exact (hm.2.2.2.2.1.1 n hn).2.1
+    · by_cases hp : (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0
+      · rw [show nodePath s n = (memW s (n + 32), memW s (n + 40)) from if_pos hp]
+        rcases (hm.2.2.2.2.1.1 n hn).2.2.2.2.2.2.1 hp.1 with hz | hk
+        · exact False.elim (hp.2 hz)
+        · exact hk.2.1
+      · rw [show nodePath s n = (0, 0) from if_neg hp] at hnz
+        exact False.elim (hnz rfl)
+
+theorem worldTypedWith_with_locals_csr {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) (S Nd : List Nat) :
+    WorldTypedWith {s with locals := locals, clock := k} S Nd ↔
+      WorldTypedWith s S Nd := by
+  simp only [WorldTypedWith, tablesTyped_with_locals]
+  exact Iff.rfl
+
+theorem retMptObj_ready_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)} {S Nd : List Nat}
+    (hA : ArenaReady post) (hW : WorldTypedWith post S Nd)
+    (hret : RetMptObj s r post S Nd) {v : ValueHOL 64}
+    (hr : r = some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ∀ (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat),
+        locN {post with locals := locals, clock := k} "m" = w.toNat →
+        MptObjReady {post with locals := locals, clock := k} := by
+  obtain ⟨w, hv, _, Nm, hm, hd, _⟩ := hret v hr
+  refine ⟨w, hv, fun locals k hl => ?_⟩
+  apply mptObjReady_of_parts_csr
+    ((arenaReady_with_locals post locals k).2 hA)
+    (S := S) (Nd := Nd) (Nm := Nm)
+  · exact (worldTypedWith_with_locals_csr post locals k S Nd).2 hW
+  · rw [hl]
+    exact hm
+  · rw [hl]
+    exact hd
+
+theorem mptObjStep_ready_csr {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    (hstep : MptObjStep R gw keep s post) {S Nd Nm : List Nat}
+    (hW : WorldTypedWith s S Nd)
+    (hm : MptObjInWith s S Nm (locN s "m"))
+    (hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd))
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hRN : IvlsDisj (R s) (nodeExtents s Nd))
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hl : locN {post with locals := locals, clock := k} "m" = locN s "m") :
+    MptObjReady {post with locals := locals, clock := k} := by
+  obtain ⟨S', Nd', Nm', _, hW', hm', hd', _, _⟩ :=
+    mptObjStep_parts_csr hstep hW hm hd hR hRN
+  apply mptObjReady_of_parts_csr
+    ((arenaReady_with_locals post locals k).2 hstep.1)
+    (S := S') (Nd := Nd') (Nm := Nm')
+  · exact (worldTypedWith_with_locals_csr post locals k S' Nd').2 hW'
+  · rw [hl]
+    exact hm'
+  · rw [hl]
+    exact hd'
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
