@@ -8085,4 +8085,29 @@ theorem merge_set_recRoles_kept {F : Type}
     rw [hglob] at hw
     exact congrArg (fun v => (v, k.2)) hw
 
+/-- Insertion preserves the complete value lists of other owned tables. -/
+theorem merge_set_other_values_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t u : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hu : u ∈ S) (hne : u ≠ t)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    htabValues post u = htabValues s u := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  apply htabValues_eq_of_unhit (hW.1.2.1 u hu).1
+  intro i hi
+  exact ivlUnhit_of_frameOutside_aligned
+    (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
+    (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
+    (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
+      (Or.inr ((hW.1.2.1 u hu).2 i hi).1))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
