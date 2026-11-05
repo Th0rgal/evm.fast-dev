@@ -3871,4 +3871,28 @@ theorem phase2_address_count_exit_total {F : Type} {s : PanSemStateFiniteExact 6
   rw [hp.2.2, hi, hp.2.1]
   rfl
 
+/-- The actual index assignment closes the next-prefix counting step. -/
+theorem phase2_address_count_increment_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "nal" = memW s (locN s "tx" + 216) ∧
+      locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, hw⟩ := hp.1.2.1
+    have hv : v = .val (.word (w + 1)) := by
+      simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+        valueWord, wordOpHOL, wordOp] using he.symm
+    subst v
+    have hwN : locN s "i" = w.toNat := by simp [locN, hw]
+    have hadd : w + 1 = BitVec.ofNat 64 (locN s "i" + 1) := by
+      rw [hwN]
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, BitVec.toNat_ofNat]
+    rw [hadd]
+    exact fun _ => phase2_address_count_advance s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
