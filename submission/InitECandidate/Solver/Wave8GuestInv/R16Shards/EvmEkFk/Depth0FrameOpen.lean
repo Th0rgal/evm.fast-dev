@@ -3220,4 +3220,306 @@ theorem evmChain_eq_of_cont_words {F : Type}
   rw [hg "ev", hg "cur_cont"]
   exact haux _ _ _ (fun _ h => h)
 
+/-- The head record is separated from every typed world cell and trie node.
+This is the world-side premise for dispatch's three frame-local stores. -/
+theorem head_store_world_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hInv : EvmInvAt s S) (_hTr : TriesTypedWith s S Nd)
+    {x : BitVec 64} {k : Nat} (hk : k + 8 ≤ 280)
+    (hx : x.toNat = globN s "ev" + k)
+    (hNodes : ∀ j ∈ nodeExtents s Nd, Disj (globN s "ev", 280) j) :
+    ∀ j ∈ worldTypedIvls s S Nd, Disj j (x.toNat, 8) := by
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  have hfo : (globN s "ev", 280) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+    simp [frameObjects]
+  have hdisj := hInv.2.2.2.2.2.2.2.2.1 _ hhead _ hfo
+  have hin : Inside (x.toNat, 8) (globN s "ev") (globN s "ev" + 280) := by
+    unfold Inside
+    rw [hx]
+    dsimp only
+    omega
+  intro j hj
+  apply disj_of_inside_right (j' := (globN s "ev", 280)) hin
+  unfold worldTypedIvls at hj
+  simp only [List.mem_append] at hj
+  rcases hj with ((((h1 | h2) | h3) | h4) | h5) | h6
+  · obtain ⟨t, ht, hi⟩ := List.mem_flatMap.1 h1
+    exact (hdisj.1 t ht j hi).flip
+  · obtain ⟨r, hr, rfl⟩ := List.mem_map.1 h2
+    exact (hdisj.2 _ (typedRecord_mem_fixedObjects s hr)).flip
+  · simp only [List.mem_singleton] at h3
+    subst h3
+    have hj : (if globN s "journal_cap" = 0 then 0 else globN s "journal",
+        32 * globN s "journal_cap") ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append.2; left; apply List.mem_append.2; left
+      apply List.mem_append.2; right; simp
+    exact (hdisj.2 _ hj).flip
+  · have hj : j ∈ fixedObjects s := by
+      unfold fixedObjects
+      exact List.mem_append.2 (Or.inl (List.mem_append.2 (Or.inr h4)))
+    exact (hdisj.2 _ hj).flip
+  · have hj : j ∈ fixedObjects s := by
+      unfold fixedObjects
+      exact List.mem_append.2 (Or.inr h5)
+    exact (hdisj.2 _ hj).flip
+  · exact (hNodes j h6).flip
+
+/-- World typing and all world-side projections survive a word write to the
+head record. Trie witnesses are retained rather than chosen afresh. -/
+theorem dispatch_store_world_transport {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hInv : EvmInvAt s S) (hTr : TriesTypedWith s S Nd)
+    {x : BitVec 64} {k : Nat} (hk : k + 8 ≤ 280)
+    (hx : x.toNat = globN s "ev" + k) (hdom : s.memaddrs x)
+    (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a)
+    (hNodes : ∀ j ∈ nodeExtents s Nd, Disj (globN s "ev", 280) j) :
+    ArenaReady post ∧ WorldTypedWith post S Nd ∧
+      fixedObjects post = fixedObjects s ∧ nodeExtents post Nd = nodeExtents s Nd ∧
+      worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s ∧
+      (∀ t ∈ S, (∀ j, j < 11 → hdr post t j = hdr s t j) ∧
+        htabFootprint post t = htabFootprint s t) ∧
+      worldTableRefs post S = worldTableRefs s S := by
+  have hW := hInv.1
+  have hWT : WorldTypedWith s S Nd := ⟨hW.1, hW.2.1, hW.2.2.1, hTr⟩
+  exact worldTypedWith_store_word_disj hAs hdom hpost hWT
+    (head_store_world_disj hInv hTr hk hx hNodes)
+
+/-- Head-frame scratch stores are above every heap-resident trie node, so
+all existing trie witnesses can be transported through the same store. -/
+theorem dispatch_store_all_tries {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hInv : EvmInvAt s S)
+    {x : BitVec 64} {k : Nat} (hk : k + 8 ≤ 280)
+    (hx : x.toNat = globN s "ev" + k) (hdom : s.memaddrs x)
+    (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    ∀ Nd, TriesTypedWith s S Nd →
+      TriesTypedWith post S Nd ∧ nodeExtents post Nd = nodeExtents s Nd := by
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  have hin := ((hInv.2.2.2.2.1 _ hhead).1 (globN s "ev", 280) (by simp)).1
+  have helo : heapLimit ≤ globN s "ev" := by
+    have hsep : heapLimit ≤ scratchStart := by decide
+    have h1 := hAs.2.2.2.1
+    have h2 := hAs.2.2.2.2.1
+    dsimp [Inside] at hin
+    omega
+  intro Nd ht
+  have hnodes : ∀ j ∈ nodeExtents s Nd, Disj (globN s "ev", 280) j := by
+    intro j hj
+    unfold nodeExtents at hj
+    obtain ⟨n, hn, hj⟩ := List.mem_flatMap.1 hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+    rcases hj with rfl | rfl
+    · have h := (ht.1.1 n hn).2.2.1
+      exact Or.inr (Or.inr (Or.inr (le_trans h.2 helo)))
+    · unfold nodePath
+      split_ifs with hcond
+      · rcases (ht.1.1 n hn).2.2.2.2.2.2.1 hcond.1 with hz | ⟨_, _, h, _⟩
+        · exact absurd hz hcond.2
+        · exact Or.inr (Or.inr (Or.inr (le_trans h.2 helo)))
+      · exact disj_zero_right _
+  have h := dispatch_store_world_transport hAs hInv ht hk hx hdom hpost hnodes
+  exact ⟨h.2.1.2.2.2, h.2.2.2.1⟩
+
+/-- A head-record store leaves the entire heap unchanged. -/
+theorem head_store_heap_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    {x : BitVec 64} {k : Nat} (hx : x.toNat = globN s "ev" + k)
+    (hmem : ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    ∀ a, a < heapLimit → memW post a = memW s a := by
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have hin := ((hI.2.2.2.2.1 _ hhead).1 (globN s "ev", 280) (by simp)).1
+  have hxlo : heapLimit ≤ x.toNat := by
+    have hsep : heapLimit ≤ scratchStart := by decide
+    have h1 := hAs.2.2.2.1
+    have h2 := hAs.2.2.2.2.1
+    dsimp [Inside] at hin
+    omega
+  intro a ha
+  unfold memW
+  rw [hmem (BitVec.ofNat 64 a) ?_]
+  intro heq
+  have hlim : heapLimit ≤ 2 ^ 64 := by decide
+  have he := congrArg BitVec.toNat heq
+  rw [show (BitVec.ofNat 64 a).toNat = a from Nat.mod_eq_of_lt (by omega)] at he
+  omega
+
+/-- The head record is disjoint from every chain frame's logs header and
+backing array, so a store to it cannot invalidate live log entries. -/
+theorem head_store_logs_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) :
+    ∀ ec ∈ evmChain s,
+      Disj (globN s "ev", 280) (memW s (ec.1 + 88), 24) ∧
+      Disj (globN s "ev", 280) (frameLogs s ec) := by
+  obtain ⟨_, S, hI⟩ := hInv
+  have hpw := hI.2.2.2.2.2.2.2.1
+  have hcons : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl := ⟨_, rfl⟩
+  obtain ⟨tl, htl⟩ := hcons
+  rw [htl, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+  intro ec hec
+  rw [htl, List.mem_cons] at hec
+  rcases hec with rfl | hec
+  · have h := hpw.1
+    unfold frameObjects at h
+    simp only [List.cons_append, List.pairwise_cons] at h
+    exact ⟨h.1 _ (by simp), h.1 _ (by simp)⟩
+  · have h : ∀ o ∈ frameObjects s ec, Disj (globN s "ev", 280) o := by
+      intro o ho
+      apply hpw.2.2 _ (by simp [frameObjects]) o
+      exact List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map.2 ⟨ec, hec, rfl⟩, ho⟩
+    exact ⟨h _ (by simp [frameObjects]), h _ (by simp [frameObjects])⟩
+
+/-- Live log lists remain valid under a dispatch-field store. -/
+theorem dispatch_store_logs_ok {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s) (hAp : ArenaReady post)
+    (hg : ∀ name, globN post name = globN s name)
+    {x : BitVec 64} {k : Nat} (hk : k + 8 ≤ 280)
+    (hx : x.toNat = globN s "ev" + k)
+    (hmem : ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    ∀ ec ∈ evmChain s, LogsListOK post (memW s (ec.1 + 88)) := by
+  have hdisj := head_store_logs_disj hInv
+  have hheap := head_store_heap_words hInv hx hmem
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have hin : Inside (x.toNat, 8) (globN s "ev") (globN s "ev" + 280) := by
+    unfold Inside
+    rw [hx]
+    dsimp only
+    omega
+  intro ec hec
+  have hfw := hI.2.2.2.2.1 ec hec
+  have hd := hdisj ec hec
+  apply logsListOK_transfer hAs.1 hAp.1 (hg "heap_ptr") (hg "scratch_ptr")
+    hAs.2 hmem hheap
+  · intro _
+    exact disj_of_inside_right hin hd.1.flip
+  · intro _
+    exact disj_of_inside_right hin hd.2.flip
+  · intro _
+    have hal : Allocated s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.1
+    have hw : WordsOK s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+    exact ⟨hw.1, (ivl_allocated_bound hAs.2 hal).2⟩
+  · exact hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+
+/-- Dispatch stores preserve the intervals occupied by every live log. -/
+theorem dispatch_store_log_objects {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (hg : ∀ name, globN post name = globN s name)
+    {x : BitVec 64} {k : Nat} (hk : k ∈ ([48, 56, 80] : List Nat))
+    (hx : x.toNat = globN s "ev" + k)
+    (hmem : ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec := by
+  have hwords := dispatch_store_chain_words hInv hk hx hmem
+  have hheap := head_store_heap_words hInv hx hmem
+  have hdisj := head_store_logs_disj hInv
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have hklt : k + 8 ≤ 280 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl <;> decide
+  have hin : Inside (x.toNat, 8) (globN s "ev") (globN s "ev" + 280) := by
+    unfold Inside
+    rw [hx]
+    dsimp only
+    omega
+  intro ec hec
+  have hfw := hI.2.2.2.2.1 ec hec
+  have hh := hwords.2.2 ec hec
+  unfold frameLogObjects
+  dsimp only
+  rw [hwords.1 ec hec 88 (by decide) (by decide), hh 8 (by decide),
+    show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hh 0 (by decide)]
+  apply List.flatMap_congr
+  intro i hi
+  have hi' := List.mem_range.1 hi
+  have hle := hfw.2.2.2.2.2.2.2.2.2.2.2.1
+  have hal : Allocated s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hb := (ivl_allocated_bound hAs.2 hal).2
+  have hbase8 : memW s (memW s (ec.1 + 88)) % 8 = 0 :=
+    hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.1.1
+  have hslot : memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+      memW s (memW s (memW s (ec.1 + 88)) + 8 * i) := by
+    apply R10Shards.GbodyProcessMsg.memW_eq_of_ivlUnhit
+      (ivlUnhit_of_single_cell_disj hmem (disj_of_inside_right hin (hdisj ec hec).2.flip))
+      (by omega) hb
+    unfold frameLogs
+    dsimp only
+    exact ⟨by omega, by omega⟩
+  rw [hslot]
+  have hll := hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  rcases hll with hz | ⟨_, _, _, _, hentries⟩
+  · have hs := (hfw.1 (memW s (ec.1 + 88), 24) (by simp)).1
+    have h1 := hAs.2.2.2.1
+    have h2 := hAs.2.2.2.2.1
+    have hpos : 0 < scratchStart := by decide
+    unfold Inside at hs
+    dsimp only at hs
+    omega
+  · have hlog := (hentries i hi').2.2.1
+    have hhp := hAs.2.2.1
+    unfold Inside at hlog
+    dsimp only at hlog
+    unfold logOwnedIvls logRecordIvls
+    rw [hg "vm_system_address", hheap _ (by omega), hheap _ (by omega),
+      hheap _ (by omega), hheap _ (by omega), hheap _ (by omega)]
+
+/-- The head-store invariant bridge for dispatch's code, size and jumpdest
+fields. No assumption about the stored word is needed. -/
+theorem evmMsgReady_store_dispatch {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hP : EvmMsgReady s)
+    {x : BitVec 64} {k : Nat} (hk : k ∈ ([48, 56, 80] : List Nat))
+    (hx : x.toNat = globN s "ev" + k) (hdom : s.memaddrs x)
+    (hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a) :
+    EvmMsgReady post ∧ EvmStep [] s post := by
+  have hInv := evmInv_of_evmMsgReady s hP
+  have hwords := dispatch_store_chain_words hInv hk hx hpost.2.2.2.2.2.2
+  have hg : ∀ name, globN post name = globN s name := fun name => by
+    simp [globN, hpost.2.2.2.2.2.1]
+  have hch := evmChain_eq_of_cont_words hg hwords.2.1
+  have hlogs := dispatch_store_log_objects hInv hg hk hx hpost.2.2.2.2.2.2
+  obtain ⟨hAs, S, hI, hmsg⟩ := hP
+  obtain ⟨Nd, ht, hd⟩ := hI.2.2.2.2.2.2.2.2.2.1
+  have hklt : k + 8 ≤ 280 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl <;> decide
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  have hheadflat : (globN s "ev", 280) ∈ ((evmChain s).map (frameObjects s)).flatten := by
+    exact List.mem_flatten.2 ⟨frameObjects s (globN s "ev", globN s "cur_cont"),
+      List.mem_map.2 ⟨_, hhead, rfl⟩, by simp [frameObjects]⟩
+  obtain ⟨hAp, hWT, hfix, hnd, hwr, hjr, hfp, hrefs⟩ :=
+    dispatch_store_world_transport hAs hI ht hklt hx hdom hpost
+      (fun j hj => hd _ hheadflat j hj)
+  have htries := dispatch_store_all_tries hAs hI hklt hx hdom hpost
+  have hfo : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec :=
+    fun ec hec => (frameObjects_eq_of_dispatch_slots ec (hwords.1 ec hec)
+      (hwords.2.2 ec hec) (hlogs ec hec)).1
+  have hm : ∀ m, MsgOwned s S m → MsgOwned post S m := fun m hm =>
+    msgOwned_transfer hAs.1 hAp.1 (hg "heap_ptr") (hg "scratch_ptr")
+      (fun t ht => (hfp t ht).2) hfix hch hfo htries hm
+  have hIpost : EvmInvAt post S := evmInvAt_of_dispatch_transport hI hAs hAp hg hch
+    ⟨hWT.1, hWT.2.1, hWT.2.2.1, Nd, hWT.2.2.2⟩ hwords.1 hwords.2.1 hwords.2.2
+    (fun ec hec => ⟨hlogs ec hec,
+      dispatch_store_logs_ok hInv hAp hg hklt hx hpost.2.2.2.2.2.2 ec hec⟩)
+    hm hfix (fun t ht => (hfp t ht).2) htries hwr hjr hrefs
+    (fun t ht => by simpa [hdr] using (hfp t ht).1 0 (by decide))
+  refine ⟨⟨hAp, S, hIpost, ?_⟩, ⟨hAp, S, hIpost⟩, ?_, ?_, hch⟩
+  · rw [hg "ev", hwords.1 _ hhead 112 (by decide) (by decide)]
+    exact hm _ hmsg
+  · rw [hg "heap_ptr"]
+  · intro name _
+    rw [hpost.2.2.2.2.2.1]
+
 end HeadStore
