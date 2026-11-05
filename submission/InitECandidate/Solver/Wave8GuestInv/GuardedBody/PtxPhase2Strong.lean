@@ -8886,4 +8886,49 @@ theorem phase2_packed_inner_ns_hoare (h : PtxCallees) (addressSrc keySrc : ExpHO
         locN s "k" = phase2_key_prefix s (locN s "i" + 1)) := by
   exact phase2_packed_ns_while (phase2_packed_body_ns_hoare h addressSrc keySrc) rfl rfl
 
+/-- The source inner-loop exit supplies the complete next-record state. -/
+theorem phase2_packed_ns_outer_advance {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedNsIteration s)
+    (hk : locN s "k" = phase2_key_prefix s (locN s "i" + 1)) :
+    PtxPackedOuterIteration (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) := by
+  have hi := hp.1.2.1.1
+  have hex : ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) := by
+    have he := hi.2.2.2.2
+    rw [phase2_key_prefix_succ] at hk
+    omega
+  have hout := phase2_packed_outer_advance s hi hex (phase2_packed_outer_successor_bound hi)
+  refine ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s _ s.clock).mpr hp.1.1.1) hout.1, hout, ?_, ?_, ?_, ?_, hp.1.2.2.2.2⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "tx" by decide,
+      show ofString "i" ≠ ofString "al_keys" by decide,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.1.2.1.2.1
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "tx" by decide,
+      show ofString "i" ≠ ofString "al_keys" by decide,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.1.2.1.2.2
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "k" by decide] using hp.1.2.2.1
+  · exact ⟨BitVec.ofNat 64 (locN s "i" + 1),
+      by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+
+/-- The source outer increment consumes the cached-count inner-loop exit. -/
+theorem phase2_packed_ns_outer_increment_hoare :
+    Hoare (fun s => PtxPackedNsIteration s ∧
+      locN s "k" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxPackedOuterIteration s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hb := phase2_packed_outer_successor_bound hp.1.1.2.1.1
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "i" v hb he
+    have heq : w = BitVec.ofNat 64 (locN s "i" + 1) := by
+      apply BitVec.eq_of_toNat_eq
+      rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+    subst w
+    exact fun _ => phase2_packed_ns_outer_advance s hp.1 hp.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
