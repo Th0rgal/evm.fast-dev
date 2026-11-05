@@ -6248,4 +6248,60 @@ theorem phase2_packed_typed_of_owned {F : Type}
   intro dest hdest region hregion
   exact hd dest hdest region (worldTypedIvls_sub_worldOwned hregion)
 
+/-- Reconstruct packed readiness using ownership growth instead of post-state separation. -/
+theorem phase2_packed_ready_owned_growth {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat)
+    (hp : PtxPackedKeysReady s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n))
+    (hg : GlobalsKept [] s post) (hm : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hw : WorldTypedWith post S' Nd') (ht : TxAccessListAt post S' Nd' (locN post "tx"))
+    (hsep : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (hgrow : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxPackedKeysReady post := by
+  apply phase2_packed_ready_globals_kept s post hp hl hg hm
+  refine ⟨S', Nd', hw, ht, ?_⟩
+  have ha : locN post "al_keys" = locN s "al_keys" := by
+    simp [locN, hl "al_keys" (by simp)]
+  have hn : locN post "nkeys" = locN s "nkeys" := by
+    simp [locN, hl "nkeys" (by simp)]
+  rw [ha, hn]
+  exact phase2_packed_owned_growth s post _ _ _ hp.2.1 hgrow hsep
+
+/-- The supplied memcpy function contract preserves live transaction count words. -/
+theorem phase2_memcpy_count_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r →
+        ∀ S Nd tx i, ArenaOK s → WorldTypedWith s S Nd →
+          TxAccessListAt s S Nd tx → i < memW s (tx + 216) →
+          IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd) →
+          Disj (memW s (tx + 208), 24 * memW s (tx + 216))
+            (locN s "dst", locN s "n") → 0 < locN s "n" →
+          memW post (memW s (tx + 208) + 24 * i + 16) =
+            memW s (memW s (tx + 208) + 24 * i + 16))
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := h.wk_memcpy
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr S Nd tx i ha hw ht hi hd hrec hlen
+  exact phase2_memcpy_step_count s _ _ S Nd tx i ha hw ht hi
+    (hs s hc hp he hn hr) hd hrec hlen
+
+/-- Fresh packed allocation separates its entire rounded extent from transaction inputs. -/
+theorem phase2_packed_alloc_input_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (base : Nat)
+    (hp : PtxAddressCountInv s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post base (locN s "nkeys" * 52 + 8)) :
+    Disj (locN s "tx", 384) (base, (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+    (0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (base, (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) := by
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  obtain ⟨S, Nd, _, ht, _⟩ := hready.1.2
+  have hstart : globN s "heap_ptr" ≤ base := hf.2.1.1
+  refine ⟨Or.inr (Or.inr (Or.inl (ht.1.2.1.2.trans hstart))), ?_⟩
+  intro hn
+  exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
