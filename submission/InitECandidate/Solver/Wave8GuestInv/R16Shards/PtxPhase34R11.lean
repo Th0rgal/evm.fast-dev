@@ -4759,6 +4759,23 @@ def StableCopySpatial : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
         (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
 
+/-- A coherent world witness retains both header and backing separation. -/
+def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+    LogsLiveOwned s S Nd (locN s "logs") ∧
+    (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+    ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
+
+/-- The coherent ownership frame strengthens the copy exit postcondition. -/
+theorem stableCopyOwnedFrame_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hf : StableCopyOwnedFrame s)
+    (hexit : locN s "nl" ≤ locN s "i") :
+    PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") := by
+  obtain ⟨S, Nd, hW, ho, hh, hb⟩ := hf
+  exact ⟨stableCopyInv_exit s hp hexit,
+    S, Nd, hW, stableCopyInv_exit_owned_of_capacity s hp hexit ho hh hb⟩
+
 /-- Counter and backing-pointer local initialization preserve spatial facts. -/
 theorem stableCopySpatial_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
