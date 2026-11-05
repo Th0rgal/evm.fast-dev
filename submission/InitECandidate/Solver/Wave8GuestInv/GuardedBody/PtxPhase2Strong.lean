@@ -3773,4 +3773,27 @@ theorem phase2_address_count_with_locals {F : Type} (s : PanSemStateFiniteExact 
   · intro j hj
     simp [memW, locN, hl "tx" (by simp)]
 
+/-- Address-buffer writes leave every access-record key-count field unchanged. -/
+theorem phase2_address_store_key_field {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (j : Nat) (hj : j < memW s (locN s "tx" + 216)) :
+    memW { s with memory := mem } (memW s (locN s "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16) := by
+  have hn : 0 < memW s (locN s "tx" + 216) := by omega
+  obtain ⟨S, Nd, hW, hT, hd⟩ := hp.2.2.2.2.2.2.2.2
+  have hwords := hT.1.2.2.2.2.2.2.2.2.1 hn
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  have hu : IvlUnhit s { s with memory := mem }
+      (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) :=
+    ivlUnhit_single hm (by dsimp; omega)
+      (disj_of_inside_right hin (hp.2.2.2.2.2.2.2.1 hn))
+  apply memW_eq_of_ivlUnhit hu
+  · have ha := hwords.1
+    omega
+  · exact (ivl_allocated_bound hA.2 (Or.inl (hT.2.2 hn).1)).2
+  · constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
