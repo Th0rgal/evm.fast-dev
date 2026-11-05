@@ -10096,4 +10096,29 @@ theorem allocated_unhit_fresh_heap {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Fresh heap allocation preserves backing when the old record and headers
+are allocated and aligned. -/
+theorem txBacking_fresh_heap {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hAp : ArenaOK post) (h : TxBacking s)
+    (hbo : globN post "bo" = globN s "bo")
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hb : Allocated s (globN s "bo", 88)) (hb8 : globN s "bo" % 8 = 0)
+    (hl : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+      memW s (globN s "bo" + k) % 8 = 0)
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    TxBacking post := by
+  apply txBacking_of_unhit_headers h hbo hb8 (ivl_allocated_bound hA hb).2
+    (allocated_unhit_fresh_heap hA hAp hgrow hb (by simp) hfr)
+    (fun k hk => (hl k hk).2)
+    (fun k hk => (ivl_allocated_bound hA (hl k hk).1).2)
+  intro k hk
+  exact allocated_unhit_fresh_heap hA hAp hgrow (hl k hk).1 (by simp) hfr
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
