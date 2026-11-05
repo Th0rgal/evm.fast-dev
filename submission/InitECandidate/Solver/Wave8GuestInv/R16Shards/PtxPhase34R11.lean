@@ -3841,6 +3841,44 @@ theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F
   rw [hd]
   exact hp o ho
 
+/-- Reassemble the separated store contract from framed source cells and
+preserved ownership after a memory update. -/
+theorem stableCopyStorePre_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyStorePre s)
+    (hinv : StableCopyInv {s with memory := mem'})
+    (hs : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hn : memW {s with memory := mem'} (locN s "logs" + 8) =
+      memW s (locN s "logs" + 8))
+    (hd : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs"))
+    (ha : ∀ j, j < memW s (locN s "logs" + 8) →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (hworld : ∀ S Nd, WorldTypedWith s S Nd →
+      LogsLiveOwned s S Nd (locN s "logs") →
+      WorldTypedWith {s with memory := mem'} S Nd ∧
+      LogsLiveOwned {s with memory := mem'} S Nd (locN s "logs") ∧
+      worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    StableCopyStorePre {s with memory := mem'} := by
+  obtain ⟨_, hi, ⟨w, p, q, hw, hl, hq, hptr⟩,
+    S, Nd, hW, ho, hsep, hh, hdh, harr, he⟩ := hp
+  obtain ⟨hW', ho', howned⟩ := hworld S Nd hW ho
+  refine ⟨hinv, hi, ⟨w, p, q, hw, hl, hq, ?_⟩,
+    S, Nd, hW', ho', ?_, ?_, ?_, ?_, ?_⟩
+  · exact hptr.trans hd.symm
+  · exact stable_copy_world_separation s mem' S Nd hd howned hsep
+  · change Disj (locN s "logs", 24)
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hd]; exact hh
+  · change Disj (locN s "stable_logs", 24)
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hd]; exact hdh
+  · change Disj (memW {s with memory := mem'} (locN s "logs"),
+      8 * memW {s with memory := mem'} (locN s "logs" + 8))
+      (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+    rw [hs, hn, hd]; exact harr
+  · exact stable_copy_record_separation s mem' hs hn hd ha he
+
 /-- Loop-head contract: operand shapes, bounded counter, and the separated
 store precondition whenever the current index is active. -/
 def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -4204,6 +4242,36 @@ theorem stableCopy_body_bound :
         (P := fun _ => True)
         (fun u => clock_assign u .local (ofString "i")
           (.op .add [.var .local (ofString "i"), .const 1]))) t hc trivial) s hc hp
+
+/-- Bounded-loop assembly for the concrete store/increment body. The remaining
+iteration obligation includes preservation of allocation separation. -/
+theorem stableCopy_loop_bound_of_step
+    (hstep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → StableCopyLoopInv s →
+      LoopActive (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl"))) s →
+      let body : ProgHOL 64 := .seq
+        (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      ((evaluateHOLFiniteState (decClockHOLFinite s) body).1 = none ∨
+        (evaluateHOLFiniteState (decClockHOLFinite s) body).1 = some .continue) →
+      StableCopyLoopInv (evaluateHOLFiniteState (decClockHOLFinite s) body).2 ∧
+        locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "nl" -
+          locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "i" <
+        locN s "nl" - locN s "i") :
+    TerminatingProgBoundedOn StableCopyLoopInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      ((2 ^ 28 + 1) * (0 + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => locN s "nl" - locN s "i")
+  · exact stableCopyLoopInv_decClock
+  · intro F s hc hp
+    exact stableCopy_body_bound s hc (stableCopyLoopInv_active s hp.1 hp.2)
+  · intro F s hc hp ha
+    exact stableCopyLoopInv_rank s hp
+  · exact hstep
 
 /-- Continue from the actual copy body without adding to the tail budget. -/
 theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
