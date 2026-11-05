@@ -9939,4 +9939,230 @@ theorem phase2_count_cases_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 
   · rw [hp.2.2]
     decide
 
+/-- The concrete packed-allocation expression is nonwrapping in both cases. -/
+theorem phase2_count_cases_alloc_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 52 + 8 ∧
+      locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
+  apply phase2_key_alloc_size_nonwrapping s
+  · rcases hp with hp | hp
+    · exact hp.1.1
+    · exact hp.1
+  · exact phase2_count_cases_alloc_size s hp
+
+/-- Fresh allocation is valid for both the counted and disabled access-list cases. -/
+theorem phase2_count_cases_alloc_fresh (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : PtxAddressCountExit s)
+    (ha : @evalListHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a))
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (hb : (callEntryStateHOLFinite s callee).evaluateHOLFiniteState body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post w.toNat (locN s "nkeys" * 52 + 8) := by
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_count_cases_alloc_eval s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hready : PtxAccessCountReady s := by
+    rcases hp with hp | hp
+    · exact hp.1.1.1.1.1
+    · exact hp.1.1.1.1
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hready.1.1.1.1.1.1.1.1)
+    (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, hv, _, _, hf⟩ := hr v rfl
+  exact ⟨w, hv, by simpa only [hcn] using hf⟩
+
+theorem phase2_count_exit_access_ready {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountExit s) : PtxAccessCountReady s := by
+  rcases hp with hp | hp
+  · exact hp.1.1.1.1.1
+  · exact hp.1.1.1.1
+
+/-- The disabled case also obtains a live, world-separated packed buffer. -/
+theorem phase2_count_cases_packed_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit PtxPackedKeysReady
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready := phase2_count_exit_access_ready hp
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_count_cases_alloc_eval s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hready.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hready.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hready.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hf⟩ := phase2_count_cases_alloc_fresh h s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨w', hv, hav⟩ := hret (.val (.word w)) rfl
+  cases hv
+  dsimp only at hav
+  rw [hcn] at hav
+  let out := setVarHOLFinite (ofString "al_keys") (.val (.word w)) { post with locals := s.locals }
+  have hptr : locN out "al_keys" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nkeys" = locN s "nkeys" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  refine ⟨⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_, ?_,
+    S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · change Inside (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+      InitE.sourceBase (globN post "heap_ptr")
+    rw [hptr, hcount]
+    exact ⟨hready.1.1.1.1.1.1.1.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · change locN out "al_keys" % 8 = 0
+    rw [hptr]
+    exact hf.1
+  · change WordsOK post (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+    rw [hptr, hcount]
+    exact hf.2.2
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post out.locals post.clock hTp
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned post S' Nd')
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide] using hav
+
+/-- Packing entry separates the enabled input-count invariant from a disabled
+loop whose freshly allocated buffer is already ready. -/
+def PtxPackedInitCases {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedInitReady s ∨ (PtxPackedKeysReady s ∧
+    s.locals.lookup (ofString "nal") = some (.val (.word 0)))
+
+theorem phase2_count_cases_alloc_init (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit PtxPackedInitCases
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  rcases hp with hp | hp
+  · exact Or.inl (phase2_count_exit_alloc_ready h s vs body callee ret v post hc hp ha hl hb)
+  · refine Or.inr ⟨phase2_count_cases_packed_ready h s vs body callee ret v post
+      hc (Or.inr hp) ha hl hb, ?_⟩
+    have hn := phase2_local_zero_word s "nal" hp.1.1.1.1.2.1 hp.2.1
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nal" by decide] using hn
+
+/-- Resetting counters in the disabled case preserves the packed allocation and
+provides literal zero words for the source loop test. -/
+theorem phase2_packed_zero_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s)
+    (hn : s.locals.lookup (ofString "nal") = some (.val (.word 0))) :
+    let t := setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "k") (.val (.word 0)) s)
+    PtxPackedKeysReady t ∧
+      t.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+      t.locals.lookup (ofString "nal") = some (.val (.word 0)) := by
+  dsimp only
+  refine ⟨?_, ?_, ?_⟩
+  · apply phase2_packed_keys_with_locals s _ s.clock hp
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl <;>
+      simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
+
+/-- The source packing loop is correct for enabled and disabled access lists. -/
+theorem phase2_packed_cases_initialized_loop_hoare (h : PtxCallees) :
+    Hoare PtxPackedInitCases
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before, PtxPackedInitCases before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := fun s => PtxPackedNalIteration s ∨
+      (PtxPackedKeysReady s ∧
+        s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+        s.locals.lookup (ofString "nal") = some (.val (.word 0))))
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        rcases hp with hp | hp
+        · exact Or.inl (phase2_packed_init_state before hp)
+        · exact Or.inr (phase2_packed_zero_init before hp.1 hp.2)
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      rcases hp with hp | hp
+      · exact ((phase2_packed_source_outer_loop_hoare h).run s hc hp hnt hr).1.1.2.1.1
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hp.2.1 hp.2.2]
+        exact hp.1
+  · intro F r s locals hl hp hr
+    exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
+/-- The cached-count inner loop has a uniform rank bound once its active body
+bound is supplied; the rank is the remaining signed counter range. -/
+theorem phase2_packed_ns_nal_while_bound {body : ProgHOL 64} {B : Nat}
+    (hb : Hoare PtxPackedNsNalCopy body (fun r s => r = none → PtxPackedNsNalIteration s))
+    (hbody : TerminatingProgBoundedOn PtxPackedNsNalCopy body B)
+    (hinc : IncrBody (ofString "j") body) :
+    TerminatingProgBoundedOn PtxPackedNsNalIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))) body)
+      ((2 ^ 63 + 1) * (B + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "j")
+  · intro F s hp
+    exact ⟨phase2_packed_ns_iteration_decClock s hp.1, hp.2⟩
+  · intro F s hc hp
+    obtain ⟨w, hw, hnz⟩ := hp.2
+    have hg := (phase2_packed_ns_guard_eval s w hp.1.1 hw).mp hnz
+    exact hbody s hc ⟨⟨phase2_packed_iteration_guard_pre s hp.1.1.1 hg, hp.1.1.2⟩, hp.1.2⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := (phase2_packed_ns_guard_eval s w hp.1 hw).mp hnz
+    have hd : PtxPackedNsNalIteration (decClockHOLFinite s) :=
+      ⟨phase2_packed_ns_iteration_decClock s hp.1, hp.2⟩
+    obtain ⟨j, hj⟩ := hp.1.1.2.2.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) j hj
+    have hnone := hf.resolve_right hnc
+    have hpost := hb.run (decClockHOLFinite s) hc
+      ⟨⟨phase2_packed_iteration_guard_pre _ hd.1.1 hg, hd.1.2⟩, hd.2⟩
+      (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hjn : locN s "j" = j.toNat := by simp [locN, hj]
+    have hlt := (phase2_packed_inner_signed_bounds hp.1.1.2.1.1).1
+    have hpl := (phase2_packed_inner_signed_bounds hpost.1.1.2.1.1).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "j" =
+        (j.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hjn] at hlt ⊢
+    rw [hpn]
+    have hmod : (j.toNat + 1) % 2 ^ 64 = j.toNat + 1 := Nat.mod_eq_of_lt (by omega)
+    rw [hmod] at *
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
