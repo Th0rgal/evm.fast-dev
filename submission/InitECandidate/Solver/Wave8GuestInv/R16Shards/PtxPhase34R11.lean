@@ -3134,6 +3134,20 @@ def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       ∀ i, i < memW s (locN s "logs" + 8) →
         Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
 
+/-- A memory-only length write retains the three typed setup operands. -/
+theorem stableLengthPre_memory_operands {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (p : BitVec 64) (hl : s.locals.lookup (ofString "lp") = some (.val (.word p))) :
+    ∃ n p w : BitVec 64,
+      ({s with memory := mem'} : PanSemStateFiniteExact 64 F).locals.lookup
+        (ofString "nl") = some (.val (.word n)) ∧
+      ({s with memory := mem'} : PanSemStateFiniteExact 64 F).locals.lookup
+        (ofString "lp") = some (.val (.word p)) ∧
+      ({s with memory := mem'} : PanSemStateFiniteExact 64 F).locals.lookup
+        (ofString "stable_logs") = some (.val (.word w)) := by
+  exact ⟨BitVec.ofNat 64 (locN s "nl"), p, BitVec.ofNat 64 (locN s "stable_logs"),
+    hp.2.2.2.1, hl, hp.2.2.1⟩
+
 /-- A positive natural local necessarily came from a word-shaped operand. -/
 theorem stable_positive_local_word {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : String) (hp : 0 < locN s name) :
