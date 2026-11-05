@@ -233,6 +233,27 @@ theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F
   obtain ⟨a, b, c, hi, _⟩ := hstage.2.2.1 (by omega)
   exact ⟨hscalar, hprice, henc, a, b, c, hi⟩
 
+theorem phase1_resume_check_prefix (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "price") (.comb [.one, .one, .one, .one]) (ofString "check_transaction")
+      [.var .local (ofString "tx"), .var .local (ofString "sender")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have hprice := phase1_resume_check_price h s vs body callee ret v post hc hp.1 ha hl hb hsh
+  refine ⟨hprice.1, phase1_shapePrefix_of_stage2 hprice.1 ?_ hprice.2 ?_⟩
+  · intro n hn
+    have hne : ofString "price" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl <;> decide
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2.1 n hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "price" ≠ ofString "enc" from by decide] using hp.2.2
+
 theorem phase1_declare_regular_budget_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
     (v : ValueHOL 64) (hp : R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
     (he : evalAt s R16Shards.PtxP1.regularBudgetExp = some v) :
