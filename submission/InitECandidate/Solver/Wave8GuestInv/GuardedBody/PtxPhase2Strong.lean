@@ -9653,4 +9653,34 @@ theorem phase2_packed_init_state {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simpa only [hl "nal" (by simp)] using hp.2.2.2.2.2.2.1
   · simpa only [hn "nal" (by simp), hn "tx" (by simp), memW, hm] using hp.2.2.2.2.2.2.2
 
+/-- The source's counter initialization feeds the proved packing loop directly. -/
+theorem phase2_packed_initialized_loop_hoare (h : PtxCallees) :
+    Hoare PtxPackedInitReady
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before, PtxPackedInitReady before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := PtxPackedNalIteration)
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        exact fun _ => phase2_packed_init_state before hp
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      exact ((phase2_packed_source_outer_loop_hoare h).run s hc hp hnt hr).1.1.2.1.1
+  · intro F r s locals hl hp hr
+    exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
