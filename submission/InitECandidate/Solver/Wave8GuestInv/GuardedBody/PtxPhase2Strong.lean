@@ -11734,4 +11734,93 @@ theorem phase2_alloc_live_family_bound (h : PtxCallees) {ι : Type}
   · exact phase2_alloc_live_family_resume h buffers contents name args
   · exact ht
 
+/-- Stores to a separate caller allocation preserve a saved buffer's contents.
+The same world witness is retained, allowing subsequent stores to reuse it. -/
+theorem phase2_live_buffer_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (hE : TxEnv s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd) {buffer blk : Ivl} {contents : Nat → BitVec 64}
+    (hb : PtxLiveBufferAt s S Nd buffer contents)
+    (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    (hsep : Disj buffer blk) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    WorldTypedWith {s with memory := mem} S Nd ∧ TxEnv {s with memory := mem} ∧
+      PtxLiveBufferAt {s with memory := mem} S Nd buffer contents := by
+  obtain ⟨hw, how, he⟩ := store_outside_worldOwned hA hE hW hd hx hin hm
+  refine ⟨hw, he, hb.1, ?_, ?_⟩
+  · rw [how]; exact hb.2.1
+  · intro p hlo hhi hal
+    have hbound := (ivl_allocated_bound hA.2 (Or.inl hb.1)).2
+    have hp : p < 2 ^ 64 := by omega
+    have hne : BitVec.ofNat 64 p ≠ x := by
+      intro heq
+      have hp' : p = x.toNat := by
+        have hh := congrArg BitVec.toNat heq
+        simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp] using hh
+      have hs := disj_of_inside_right hin hsep
+      rcases hs with hs | hs | hs | hs <;> omega
+    change memW {s with memory := mem} p = (contents p).toNat
+    change (match mem (BitVec.ofNat 64 p) with | .word w => w.toNat) = (contents p).toNat
+    rw [hm _ hne]
+    exact hb.2.2 p hlo hhi hal
+
+/-- Message allocation retains a saved buffer and separates the new message from
+the same world witness. This is the ownership cut for the message-field stores. -/
+theorem phase2_msg_new_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents ∧
+        IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_msg_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, hr⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  obtain ⟨w, rfl, hd⟩ := hr v rfl
+  refine ⟨?_, S', Nd', ?_, hbuf', ?_⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+  · change IvlsDisj [(locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m", 176)] (worldOwned post S' Nd')
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hd
+
+/-- The message allocator supplies its full initialized heap extent. -/
+theorem phase2_msg_new_geometry (h : PtxCallees) :
+    DecCallResumeOn WorldOK
+      (fun s =>
+        (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+        WordsOK s (locN s "m", 176) ∧
+        ∀ k, k < 22 → memW s (locN s "m" + 8 * k) = 0)
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_msg_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, hz⟩ := hr v rfl
+  have hm : locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  refine ⟨⟨w, ?_⟩, ?_, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · rw [hm]
+    exact ⟨hp.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · rw [hm]; exact hf.2.2
+  · rw [hm]; exact hz
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
