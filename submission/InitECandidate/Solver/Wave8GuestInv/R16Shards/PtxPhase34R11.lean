@@ -10902,4 +10902,78 @@ theorem hoare_phase4LogCopyLoop_backing
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- The backing-aware log-copy loop satisfies the original concrete clock bound. -/
+theorem phase4LogCopyLoop_backing_bound (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4TypedLogPointers_backing
+  · have hb : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        phase4LogCopyBody (K.lst_push + (0 + 0) + 1) :=
+      TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+        (ofString "slot") ShapeHOL.one
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+        (Bc := 0 + 0)
+        (continuation := .seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+        (P := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+        (Q := fun s => (Phase4LogSlotReady s ∧
+          (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+          ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+        (by intro F s vs body callee ret hc hp ha hl
+            exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1)
+        hresume
+        (by
+          intro F s hc hp
+          exact seq_bound_trans
+            (P := fun s => (Phase4LogSlotReady s ∧
+              (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+              ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+            (Q := fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+            (fun t _ _ _ => by
+              have ht := clock_store t (.var .local (ofString "slot")) phase4LogCopySrc
+              exact ⟨by omega, by omega⟩)
+            ⟨fun t ht hp hnt hr =>
+              ⟨(hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word).run t ht hp.1 hnt hr,
+                hoare_logSlot_store_txBacking.run t ht ⟨hp.1.1, hp.2⟩ hnt hr⟩⟩
+            (fun t _ _ _ => by
+              have ht := clock_assign t .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1])
+              exact ⟨by omega, by omega⟩) s hc hp)
+    intro F s hc hp
+    simpa only [Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody_backing hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
+/-- Compose the backing-aware log loop with its stable-allocation continuation. -/
+theorem phase4LogCopyLoop_backing_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_backing_bound h hresume)
+    (hoare_phase4LogCopyLoop_backing hresume) htail
+  unfold ptxCode
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

@@ -12859,4 +12859,54 @@ theorem phase2_message_tables_backing_store_hoare {ι : Type} [Nonempty ι]
   exact phase2_message_tables_backing_store buffers contents hp.1 hp.2.1 hp.2.2 hdom
     (phase2_message_offset_inside hp.1 off hoff hx) hmem
 
+/-- Exactly the caller locals required by the Phase-4 shape guard. -/
+theorem phase2_phase4_shapes_localsOnly :
+    LocalsOnly ["tx", "index", "sender", "gas", "tx_blob_gas_used", "price", "intrinsic"]
+      PtxPhase4LocalShapes := by
+  intro F s locals clock hl hp
+  refine ⟨?_, ?_, ?_⟩
+  · intro name hn
+    change ∃ w, locals.lookup (ofString name) = some (.val (.word w))
+    rw [hl name (by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+      tauto)]
+    exact hp.1 name hn
+  · change ∃ v, locals.lookup (ofString "price") = some v ∧ _
+    rw [hl "price" (by simp)]; exact hp.2.1
+  · change ∃ v, locals.lookup (ofString "intrinsic") = some v ∧ _
+    rw [hl "intrinsic" (by simp)]; exact hp.2.2
+
+/-- The full suffix store invariant also retains the Phase-4 caller shapes. -/
+theorem phase2_message_tables_backing_shapes_store_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hv : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxMessageStoreReady buffers contents s → evalAt s value = some v →
+      ∃ w, v = .val (.word w)) :
+    Hoare (fun s => (PtxMessageStoreReady buffers contents s ∧
+      PtxMessageTables s aa ak ∧ TxBacking s) ∧ PtxPhase4LocalShapes s)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) value)
+      (fun r s => r = none → (PtxMessageStoreReady buffers contents s ∧
+        PtxMessageTables s aa ak ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, rfl⟩ := hv s v hp.1.1 he
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact ⟨phase2_message_tables_backing_store buffers contents hp.1.1 hp.1.2.1 hp.1.2.2 hdom
+    (phase2_message_offset_inside hp.1.1 off hoff hx) hmem, hp.2⟩
+
+/-- Discharge the exact postcondition of the backing-aware Phase-1/2 cut once
+the message fields, nested backing guard, and caller shapes are established. -/
+theorem phase2_message_ready_backing_shapes {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hb : TxBacking s) (hs : PtxPhase4LocalShapes s)
+    (ha : memW s (locN s "m" + 152) = aa)
+    (hk : memW s (locN s "m" + 160) = ak)
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63) :
+    (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s :=
+  ⟨⟨phase2_message_ready_of_access_tables hp ht ha hk hg, hb⟩, hs⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
