@@ -3340,4 +3340,25 @@ theorem phase2_address_copy_guard {F : Type} {s : PanSemStateFiniteExact 64 F}
   simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
     hib, hnb] using hc
 
+/-- A false copy-loop comparison identifies the completed address count. -/
+theorem phase2_address_copy_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word 0))) :
+    locN s "i" = locN s "nal" := by
+  obtain ⟨i, hi⟩ := hp.2.1
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  obtain ⟨hib, hnb⟩ := phase2_address_copy_signed_bounds hp
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nal" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib
+  rw [hnl] at hnb
+  norm_num at hib hnb
+  have hnot : ¬ i.toNat < n.toNat := by
+    simpa [evalAt, evalHOLExact, hi, hn, Compiler.Encoders.Asm.wordCmpHOL,
+      Compiler.Encoders.Asm.holAsmSignedLess, hib, hnb] using he
+  have hle := hp.2.2.2
+  rw [hil, hnl] at hle ⊢
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
