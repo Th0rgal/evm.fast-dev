@@ -2328,6 +2328,31 @@ theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   simpa only [Nat.zero_add] using hb s hc hp
 
+theorem phase4ThroughLogCopy_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 31 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) + 1))) := by
+  have hloop := @phase4LogCopyLoop_cut h hresume _ _ htail
+  have hcounter := @phase4LogCounter_cut _ _
+    (bound_mono (Q := fun s => Phase4LogPointersReady s ∧ locN s "i" = 0)
+      hloop (fun s hp => hp.1))
+  have hb := @phase4ThroughLogPointers_cut h _ _ hcounter
+  have he : spinePlug 31 (spineAt 99 ptxCode) tail =
+      spinePlug 29 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 128 ptxCode)
+          (spinePlug 1 (spineAt 129 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
