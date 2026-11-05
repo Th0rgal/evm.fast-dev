@@ -2454,4 +2454,51 @@ theorem mptObjStep_csrLiveAt {F : Type}
   exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm', hWp,
     hc', hr', hcl', hrl', hmp, hdp⟩
 
+theorem csrTablesAt_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (h : CsrTablesAt s cache roots) : WorldOK s := by
+  obtain ⟨hA, _, S, Nd, hW, _⟩ := h
+  exact ⟨hA, S, (worldTyped_iff_with s S).2 ⟨Nd, hW⟩⟩
+
+theorem csrLiveAt_mptObjReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} (h : CsrLiveAt s cache roots (locN s "m")) :
+    MptObjReady s := by
+  obtain ⟨hA, _, S, Nd, Nm, hW, _, _, _, _, hm, hd⟩ := h
+  exact mptObjReady_of_parts_csr hA hW hm hd
+
+theorem htabExit_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots : Nat}
+    (hs : CsrTablesAt s cache roots)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrTablesAt post cache roots := by
+  obtain ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hwrs, hjrs, _⟩ :=
+    worldTypedWith_htab_set_local_csr hA hW htS htl hexit hbe
+  exact ⟨hexit.1, hne, S, Nd, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl⟩
+
+theorem htabExit_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots)
+    (hexit : HtabExit s post) (hbe : post.be = s.be) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have htS : locN s "t" ∈ S := ht.elim (fun h => h ▸ hc) (fun h => h ▸ hr)
+  have htl : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t" := by
+    rcases ht with ht | ht
+    · simpa only [ht] using hcl
+    · simpa only [ht] using hrl
+  obtain ⟨hWp, hmp, hdp, _, hwrs, hjrs, _⟩ :=
+    htabExit_local_liveMpt_csr hA hW htS htl hexit hbe hm hd
+  exact ⟨hexit.1, hne, S, Nd, Nm, hWp, hc, hr,
+    by simpa only [hwrs, hjrs] using hcl,
+    by simpa only [hwrs, hjrs] using hrl, hmp, hdp⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
