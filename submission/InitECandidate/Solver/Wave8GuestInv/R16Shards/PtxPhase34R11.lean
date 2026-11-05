@@ -1144,6 +1144,27 @@ theorem phase4LogsReady_load {F : Type} (s : PanSemStateFiniteExact 64 F)
     rw [hlogs, hwe]
     exact logsLiveOwned_disjFixed (s := post) ho
 
+/-- The credit/totals prefix ends with the live-log receipt guard established. -/
+theorem phase4ThroughLogs_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogsReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 21 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hl : TerminatingProgBoundedOn TxAfterCallStrong
+      (.dec (ofString "logs") .one
+        (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) b :=
+    dec_bound_trans (fun s v hp he => phase4LogsReady_load s v hp he) htail
+  have hb := @phase4CreditTotals_cut h _ _ hl
+  have he : spinePlug 21 (spineAt 99 ptxCode) tail =
+      spinePlug 20 (spineAt 99 ptxCode)
+        (.dec (ofString "logs") .one
+          (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
