@@ -11051,4 +11051,77 @@ theorem phase4LogPointers_backing_cut {tail : ProgHOL 64} {b : Nat}
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Receipt-array writes are separated from both transaction backing headers. -/
+theorem txBacking_store_receipt_array {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (memW s (globN s "bo" + 32))
+      (memW s (globN s "bo" + 32) + (16 * memW s (globN s "bo" + 80) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxBacking {s with memory := mem'} := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  obtain ⟨_, hpw, hsep, _, _⟩ := fixedObjects_disj_parts hWT.2.2.1
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hE hWT.1
+  let arr := (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+  have hlen : (blockOutObjects s).length = 7 := by rw [hbo]; rfl
+  have harr : (blockOutObjects s)[1]'(by omega) = arr := by simp [hbo, arr]
+  have hmem : arr ∈ blockOutObjects s := harr ▸ List.getElem_mem (by omega : 1 < (blockOutObjects s).length)
+  have hdbo : Disj (globN s "bo", 88) arr := by
+    apply hsep _ (List.mem_map.2 ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩)
+    exact List.mem_append_left _ (List.mem_append_right _ hmem)
+  have hdhead : ∀ k ∈ ([40, 72] : List Nat), Disj (memW s (globN s "bo" + k), 24) arr := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · have hd := List.pairwise_iff_getElem.1 hpw 1 3 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using disj_symm hd
+    · have hd := List.pairwise_iff_getElem.1 hpw 1 5 (by omega) (by omega) (by omega)
+      rw [harr] at hd
+      simpa [hbo] using disj_symm hd
+  have hbound := (ivl_allocated_bound hW.1.1.2 (bo_words hWT.2.2.1 hE.bo_nz).1).2
+  apply txBacking_store hback hm
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    have hlt : globN s "bo" + k < 2 ^ 64 := by dsimp at hbound; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin hdbo
+    unfold Disj at hd
+    dsimp at hd
+    omega
+  · intro k hk he
+    have ht := congrArg BitVec.toNat he
+    have hlt : memW s (globN s "bo" + k) < 2 ^ 64 := by
+      unfold memW
+      split
+      exact BitVec.isLt _
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hd := disj_of_inside_right hin (hdhead k hk)
+    unfold Disj at hd
+    dsimp at hd
+    omega
+
+/-- Either encoded-receipt word store retains the full backing-aware guard. -/
+theorem store_receiptSlot_backing (off : Bool) :
+    Hoare (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (.store (receiptDst off) (.rfield (if off then 1 else 0) (.var .local (ofString "rc"))))
+      (fun r t => r = none → Phase4ReceiptEncoded t ∧ TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨h, hb⟩ := hp
+  obtain ⟨a, b, he, _⟩ := h.2.2.2
+  have hvw : ∃ w : HolWordLab 64, v = .val w := by
+    cases off <;> simp [evalAt, evalHOLExact, he] at hv <;> subst v
+    · exact ⟨_, rfl⟩
+    · exact ⟨_, rfl⟩
+  obtain ⟨w, rfl⟩ := hvw
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec (by simpa only [flattenHOL] using hst)
+  exact ⟨receiptEncoded_store h hdom (receiptDst_inside h.1 off hx) hm,
+    txBacking_store_receipt_array h.1.1 hb (receiptDst_inside h.1 off hx) hm⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
