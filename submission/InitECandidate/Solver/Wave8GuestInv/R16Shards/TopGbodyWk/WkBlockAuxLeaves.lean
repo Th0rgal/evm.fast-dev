@@ -6158,4 +6158,33 @@ theorem union_zero_iter {F : Type} (x : PanSemStateFiniteExact 64 F)
   · have he := hip hi
     simp [he] at hne
 
+/-- A normally completed null-destination union loop preserves all nonlocal state. -/
+theorem union_zero_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s) (hz : locN s "dst" = 0)
+    (guard cond inc : ExpHOL 64) (itemArgs rest : List (ExpHOL 64))
+    (hf : (evaluateHOLFiniteState s (.while guard
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq (.ite cond (.call (some (none, none)) (ofString "htab_set")
+          (.var .local (ofString "dst") :: rest)) .skip)
+          (.assign .local (ofString "i") inc))))).1 = none) :
+    let post := (evaluateHOLFiniteState s (.while guard
+      (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item") itemArgs
+        (.seq (.ite cond (.call (some (none, none)) (ofString "htab_set")
+          (.var .local (ofString "dst") :: rest)) .skip)
+          (.assign .local (ofString "i") inc))))).2
+    post = { s with locals := post.locals, clock := post.clock } ∧
+      post.locals.lookup (ofString "dst") = s.locals.lookup (ofString "dst") := by
+  let I := fun x : PanSemStateFiniteExact 64 F =>
+    x = { s with locals := x.locals, clock := x.clock } ∧
+      x.locals.lookup (ofString "dst") = s.locals.lookup (ofString "dst")
+  apply Wave8M19.Htab.while_inv I guard _ ?_ s.clock s le_rfl ⟨rfl, rfl⟩ hf
+  intro x hx _ hflow
+  have hcx : x.code = originalRuntimeCode := by rw [hx.1]; exact hc
+  have hGx : GuestInv x := by rw [hx.1]; exact guestInv_with_locals_clock s _ _ hG
+  have hzx : locN x "dst" = 0 := by simpa only [locN, hx.2] using hz
+  obtain ⟨he, hd⟩ := union_zero_iter x hcx hGx hzx itemArgs cond rest inc hflow
+  refine ⟨?_, hd.trans hx.2⟩
+  rw [he]
+  rw [hx.1]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
