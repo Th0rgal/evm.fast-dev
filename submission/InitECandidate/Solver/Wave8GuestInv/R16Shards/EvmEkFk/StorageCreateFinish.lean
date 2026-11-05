@@ -221,6 +221,42 @@ theorem allocated_survives_world_frame {F : Type}
       subst j
       exact hgap
 
+theorem arena_survives_world_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new R : List Ivl} {o : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (ho : Allocated s o ∨ Inside o scratchStart (globN s "frame_mem_ptr"))
+    (hd : ∀ j ∈ old, Disj o j) (hR : ∀ j ∈ R, Disj o j)
+    (hshape : ∀ j ∈ old ++ R ++ [freeGap s],
+      j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0)
+    (hfr : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (hgrow : OwnedGrows s post old new) :
+    InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o ∧
+      ∀ j ∈ new, Disj o j := by
+  rcases ho with hal | hfm
+  · exact allocated_survives_world_frame hAs hAp hhp hal hd hR hshape hfr hgrow
+  · have hsep : heapLimit ≤ scratchStart := by decide
+    have hgap : Disj o (freeGap s) := Or.inr (Or.inr (Or.inl hfm.2))
+    have hheap : Disj o (heapFree s) := by
+      right; right; right
+      have := hAs.2.1; have := hfm.1
+      unfold heapFree; dsimp only; omega
+    refine ⟨aligned_cell_unhit_of_frameOutside hfr hshape ?_ ?_ hheap, ?_⟩
+    · right; left; exact hAs.2.2.2.2.2.1
+    · intro j hj
+      rcases List.mem_append.1 hj with hj | hj
+      · rcases List.mem_append.1 hj with hj | hj
+        · exact hd j hj
+        · exact hR j hj
+      · exact List.mem_singleton.1 hj ▸ hgap
+    · intro j hj
+      rcases hgrow j hj with rfl | ⟨i, hi, hin⟩ | hfresh
+      · exact Or.inr (Or.inl rfl)
+      · exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right hin (hd i hi)
+      · right; right; right
+        have := hAp.2.1
+        exact le_trans hfresh.2 (le_trans this (le_trans hsep hfm.1))
+
 private theorem globalBuffers_sz_pos : ∀ gn ∈ globalBuffers, gn.2 ≠ 0 := by decide
 
 private theorem lstObjects_well_shaped {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz : Nat) :
@@ -776,6 +812,671 @@ theorem avoidsTries_list_combine {F : Type} {s : PanSemStateFiniteExact 64 F} {S
     have hcomb := avoidsTries_combine (hx x (List.mem_cons_self ..))
       (avoidsTries_list_combine h0 xs (fun y hy => hx y (List.mem_cons_of_mem _ hy)))
     simpa using hcomb
+
+theorem not_frame_role_of_world_or_journal {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {a : Nat × String} (ha : a ∈ worldRoleSlots s ++ journalRoleSlots s) :
+    a.2 ∉ ["frame.del", "frame.addr", "frame.key"] := by
+  intro hm
+  rcases List.mem_append.1 ha with hw | hjr
+  · unfold worldRoleSlots at hw
+    obtain ⟨hw, _⟩ := List.mem_filter.1 hw
+    simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+    rcases hw with (((((hws | hbs) | hts) | hg) | hnbs) | hnts) | hbal
+    · unfold recRoles at hws; split at hws
+      · simp at hws
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hws
+        rw [← heq_k] at hm; simp at hk hm; rcases hk with rfl | rfl <;> simp at hm
+    · unfold recRoles at hbs; split at hbs
+      · simp at hbs
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hbs
+        rw [← heq_k] at hm; simp at hk hm
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp at hm
+    · unfold recRoles at hts; split at hts
+      · simp at hts
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hts
+        rw [← heq_k] at hm; simp at hk hm
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp at hm
+    · rcases hg with rfl | rfl | rfl <;> simp at hm
+    · unfold nestRoles at hnbs; split at hnbs
+      · simp at hnbs
+      · split at hnbs
+        · simp at hnbs
+        · obtain ⟨_, _, heq_v⟩ := List.mem_map.1 hnbs; rw [← heq_v] at hm; simp at hm
+    · unfold nestRoles at hnts; split at hnts
+      · simp at hnts
+      · split at hnts
+        · simp at hnts
+        · obtain ⟨_, _, heq_v⟩ := List.mem_map.1 hnts; rw [← heq_v] at hm; simp at hm
+    · obtain ⟨_, _, had_m⟩ := List.mem_flatMap.1 hbal
+      simp at had_m; rcases had_m with rfl | rfl <;> simp at hm
+  · unfold journalRoleSlots at hjr
+    obtain ⟨_, _, hitem⟩ := List.mem_flatMap.1 hjr
+    simp only [List.mem_cons] at hitem
+    rcases hitem with rfl | hrest
+    · dsimp only at hm; unfold journalRole at hm; split_ifs at hm <;> simp at hm
+    · split_ifs at hrest
+      · simp only [List.mem_singleton] at hrest; rw [hrest] at hm; simp at hm
+      · simp at hrest
+
+theorem frameRoleSlots_role_mem {F : Type} {s : PanSemStateFiniteExact 64 F} {ch : List Ivl}
+    {b : Nat × String} (hb : b ∈ frameRoleSlots s ch) :
+    b.2 ∈ ["frame.del", "frame.addr", "frame.key"] := by
+  unfold frameRoleSlots at hb
+  obtain ⟨_, _, hb3⟩ := List.mem_flatMap.1 hb
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hb3
+  rcases hb3 with rfl | rfl | rfl <;> simp
+
+theorem frame_table_not_world_or_journal {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ch : List Ivl} {b : Nat × String}
+    (hRoles : RolesOK s S (worldRoleSlots s ++ frameRoleSlots s ch) (journalRoleSlots s))
+    (hb : b ∈ frameRoleSlots s ch) :
+    ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ b.1 := by
+  intro a ha heq
+  have hr : a.2 = b.2 := by
+    rcases List.mem_append.1 ha with hw | hj
+    · exact ((List.pairwise_append.1 hRoles.2.1).2.2 a hw b hb heq).1
+    · exact hRoles.2.2 a hj b (List.mem_append_left _ (List.mem_append_right _ hb)) heq
+  exact not_frame_role_of_world_or_journal ha (hr ▸ frameRoleSlots_role_mem hb)
+
+theorem evmStep_of_worldStepSc {F : Type}
+    {B : R16WkAcctWs.BufList} {gw : List String} {keep : List (String × List Nat)}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hB : R16WkAcctWs.ValidBufList B)
+    (hgw : R16WkAcctWs.SafeStepGlobals gw)
+    (hAs : ArenaReady s)
+    (hInv : ∃ S, InitECandidate.Solver.Wave8GuestInv.EvmInvAt s S)
+    (hstep : R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions B) gw keep NoExtra s r post) :
+    InitECandidate.Solver.Wave8GuestInv.EvmStep gw s post := by
+  obtain ⟨S, hW_s, hch_ne, hch_len, hch_last, hFW_all, hFR_all, hRW, hFO_pw, hFO_disj,
+    hAT_fo, hMarks, hRoles, hGas⟩ := hInv
+  have hAT_msgs : AvoidsTries s S ((evmChain s).map (fun ec => (memW s (ec.1 + 112), 176))) := by
+    obtain ⟨Nd0, hTr0, _⟩ := hAT_fo
+    refine avoidsTries_list_combine ⟨Nd0, hTr0, fun _ h => False.elim (List.not_mem_nil h)⟩ _ ?_
+    intro x hx
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hx
+    obtain ⟨_, _, _, _, _, _, _, _, _, _, _, _, _, _, _, _, c17⟩ := hFW_all ec hec
+    exact c17.2.2.2.2.2
+  obtain ⟨Nd_at, hTr_at, hAT_both⟩ := avoidsTries_combine hAT_fo hAT_msgs
+  have hAT_at : ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten,
+      ∀ j ∈ nodeExtents s Nd_at, Disj o j :=
+    fun o ho => hAT_both o (List.mem_append_left _ ho)
+  have hAT_msg : ∀ ec ∈ evmChain s, ∀ j ∈ nodeExtents s Nd_at,
+      Disj (memW s (ec.1 + 112), 176) j :=
+    fun ec hec => hAT_both _ (List.mem_append_right _ (List.mem_map.2 ⟨ec, hec, rfl⟩))
+  obtain ⟨⟨hAp, hhp, hG, _, hWS⟩, hsc⟩ := hstep
+  have hag : AllocatorGrows s post := ⟨hhp, hsc⟩
+  have hdom_eq : post.memaddrs = s.memaddrs := by rw [hAp.1.memaddrs, hAs.1.memaddrs]
+  have hnot_gw : ∀ g : String,
+      ofString g ∉ (["heap_ptr", "scratch_ptr", "journal_n"] : List String).map ofString →
+      globN post g = globN s g := fun g hg =>
+    InitECandidate.Solver.Wave8Contracts.M08.globN_eq_of_lookup (hG (ofString g) (hgw.not_mem_map hg))
+  have hev_eq : globN post "ev" = globN s "ev" := hnot_gw "ev" (by decide)
+  have hcc_eq : globN post "cur_cont" = globN s "cur_cont" := hnot_gw "cur_cont" (by decide)
+  have hfm_eq : globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := hnot_gw "frame_mem_ptr" (by decide)
+  have hevm_empty_eq : globN post "evm_empty" = globN s "evm_empty" := hnot_gw "evm_empty" (by decide)
+  have hvmsa_eq : globN post "vm_system_address" = globN s "vm_system_address" :=
+    hnot_gw "vm_system_address" (by decide)
+  set L : List Nat := S.filter (fun t => decide (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t))
+  have hL_nd : L.Nodup := hW_s.1.1.filter _
+  have hL_sub_S : ∀ t ∈ L, t ∈ S := fun _ ht => (List.mem_filter.1 ht).1
+  have hL_local : ∀ t ∈ L, ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ t := by
+    intro t ht; exact of_decide_eq_true (List.mem_filter.1 ht).2
+  have hWT_at_s : WorldTypedWith s S Nd_at := ⟨hW_s.1, hW_s.2.1, hW_s.2.2.1, hTr_at⟩
+  obtain ⟨S0, hS0_sub, hS0_in, hL_not_S0, hWT0⟩ := worldTypedWith_erase_many hWT_at_s L hL_local
+  have hS_split : ∀ u ∈ S, u ∈ S0 ∨ u ∈ L := by
+    intro u hu
+    by_cases hloc : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ u
+    · exact Or.inr (List.mem_filter.2 ⟨hu, decide_eq_true hloc⟩)
+    · exact Or.inl (hS0_in u hu (fun hm => hloc (hL_local u hm)))
+  obtain ⟨S0', Nd', hS0_sub', hWT0', hog0, hfr0, _⟩ :=
+    hWS S0 Nd_at hWT0 (R16WkAcctWs.validBufList_disj hB hWT0)
+  obtain ⟨S_full', _, hS_sub_full', hWT_full', _, _, _⟩ :=
+    hWS S Nd_at hWT_at_s (R16WkAcctWs.validBufList_disj hB hWT_at_s)
+  have hkeep_shape : ∀ j ∈ worldOwned s S0 Nd_at ++ R16WkAcctWs.bufRegions B s ++ [freeGap s],
+      j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0 := by
+    intro j hj
+    rcases List.mem_append.1 hj with hj12 | hfg
+    · rcases List.mem_append.1 hj12 with hj_ow | hj_R
+      · exact worldOwned_well_shaped hWT0 j hj_ow
+      · obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hj_R
+        unfold bufferRegion
+        by_cases hz : globN s p.1 = 0
+        · exact Or.inl (by simp [hz])
+        · by_cases hp2 : p.2 = 0
+          · right; left
+            obtain ⟨sz, hgb, _⟩ := hB p hp
+            have hfix : (globN s p.1, if globN s p.1 = 0 then 0 else sz) ∈ fixedObjects s := by
+              unfold fixedObjects
+              apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+              exact List.mem_map.2 ⟨(p.1, sz), hgb, rfl⟩
+            rcases hWT0.2.2.1.1 _ hfix with h0 | ⟨_, hw⟩
+            · simp [hz] at h0; exact absurd h0 (globalBuffers_sz_pos (p.1, sz) hgb)
+            · exact hw.1
+          · exact Or.inr (Or.inr (by simp [hz, hp2]))
+    · rw [List.mem_singleton] at hfg; subst hfg
+      exact Or.inr (Or.inl hAs.2.2.2.2.2.2.2.1)
+  have hdisj_bufs_of_fixed : ∀ b : Ivl, (∀ j ∈ fixedObjects s, Disj b j) →
+      ∀ j ∈ R16WkAcctWs.bufRegions B s, Disj b j := by
+    intro b hbfix j hj
+    obtain ⟨p, hp, rfl⟩ := List.mem_map.1 hj
+    obtain ⟨sz, hgb, _, hle⟩ := hB p hp
+    have hfix : bufferRegion s (p.1, sz) ∈ fixedObjects s := by
+      unfold fixedObjects
+      apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+      exact List.mem_map.2 ⟨(p.1, sz), hgb, rfl⟩
+    have hd := hbfix _ hfix
+    by_cases hz : globN s p.1 = 0
+    · exact Or.inr (Or.inl (by simp [bufferRegion, hz]))
+    · simp only [bufferRegion, hz, ↓reduceIte] at hd ⊢
+      rcases hd with h | h | h | h
+      · exact Or.inl h
+      · exact Or.inr (Or.inl (by dsimp only at h ⊢; omega))
+      · exact Or.inr (Or.inr (Or.inl h))
+      · exact Or.inr (Or.inr (Or.inr (by dsimp only at h ⊢; omega)))
+  have hL_surv : ∀ t ∈ L,
+      HtabWF post t ∧ htabFootprint post t = htabFootprint s t ∧
+      (∀ k, k < 11 → hdr post t k = hdr s t k) ∧
+      (∀ i ∈ htabFootprint post t, Allocated post i ∧ ∀ o ∈ worldOwned post S0' Nd', Disj i o) := by
+    intro t htL
+    have htS := hL_sub_S t htL
+    have hTt_t := hW_s.1.2.1 t htS
+    have hwf_t := hTt_t.1
+    have ht_ne_S0 : ∀ u ∈ S0, t ≠ u := fun u hu heq => hL_not_S0 t htL (heq ▸ hu)
+    have hfp_surv : ∀ i ∈ htabFootprint s t,
+        InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post i ∧
+        ∀ o ∈ worldOwned post S0' Nd', Disj i o := by
+      intro i hi
+      have hi_al := (hTt_t.2 i hi).1
+      have hi_fix := (hTt_t.2 i hi).2
+      have hi_ow0 : ∀ j ∈ worldOwned s S0 Nd_at, Disj i j := by
+        intro j hj
+        unfold worldOwned at hj
+        rcases List.mem_append.1 hj with h1 | hnd
+        · rcases List.mem_append.1 h1 with htab | hfix
+          · obtain ⟨u, hu0, hj_fp⟩ := List.mem_flatMap.1 htab
+            exact hW_s.1.2.2.1 t htS u (hS0_sub u hu0) (ht_ne_S0 u hu0) i hi j hj_fp
+          · exact hi_fix j hfix
+        · exact R11Shards.Disj.symm ((hTr_at.2.1 j hnd).1 t htS i hi)
+      exact allocated_survives_world_frame hAs.2 hAp.2 hhp hi_al hi_ow0
+        (hdisj_bufs_of_fixed i hi_fix) hkeep_shape hfr0 hog0
+    have hhdr_fp : (t, 88) ∈ htabFootprint s t := by simp [htabFootprint]
+    have ht8 : t % 8 = 0 := (hwf_t.1 _ hhdr_fp).2.1
+    have ht_hi : t + 88 ≤ 2 ^ 64 := by
+      have h264 : heapEnd ≤ 2 ^ 64 := by decide
+      have := (hwf_t.1 _ hhdr_fp).1.2; omega
+    obtain ⟨hhdr_eq, hfp_eq⟩ :=
+      InitECandidate.Solver.Wave8Contracts.M08.htabFootprint_eq_of_hdr_unhit ht8 ht_hi (hfp_surv _ hhdr_fp).1
+    have hwf_post :=
+      InitECandidate.Solver.Wave8Contracts.M08.htabWF_congr_unhit hAs.1 hAp.1 hwf_t (fun i hi => (hfp_surv i hi).1)
+    refine ⟨hwf_post, hfp_eq, hhdr_eq, fun i hi => ?_⟩
+    have hi_s : i ∈ htabFootprint s t := hfp_eq ▸ hi
+    exact ⟨((hWT_full'.1.2.1 t (hS_sub_full' t htS)).2 i hi).1, (hfp_surv i hi_s).2⟩
+  have hL_pw : ∀ t ∈ L, ∀ u ∈ L, t ≠ u →
+      ∀ i ∈ htabFootprint post t, ∀ j ∈ htabFootprint post u, Disj i j := by
+    intro t ht u hu hne i hi j hj
+    rw [(hL_surv t ht).2.1] at hi
+    rw [(hL_surv u hu).2.1] at hj
+    exact hW_s.1.2.2.1 t (hL_sub_S t ht) u (hL_sub_S u hu) hne i hi j hj
+  obtain ⟨hL_adj_props, hWT_post⟩ := adjoin_local_tables L hL_nd hWT0'
+    (fun t ht => ⟨(hL_surv t ht).1, (hL_surv t ht).2.2.2⟩) hL_pw
+  set S' := S0' ++ L
+  have hS_sub_S' : ∀ u ∈ S, u ∈ S' := by
+    intro u hu
+    rcases hS_split u hu with hu0 | huL
+    · exact List.mem_append_left _ (hS0_sub' u hu0)
+    · exact List.mem_append_right _ huL
+  have hsurv_full : ∀ o : Ivl,
+      (o.2 = 0 ∨ Allocated s o ∨ Inside o scratchStart (globN s "frame_mem_ptr")) →
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) →
+      (∀ j ∈ fixedObjects s, Disj o j) →
+      (∀ j ∈ nodeExtents s Nd_at, Disj o j) →
+      (o.2 = 0 ∨ InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o) ∧
+      (∀ u ∈ S', ∀ i ∈ htabFootprint post u, Disj o i) ∧
+      (∀ j ∈ fixedObjects post, Disj o j) ∧
+      (∀ j ∈ nodeExtents post Nd', Disj o j) := by
+    intro o ho_al ho_tab ho_fix ho_nd
+    rcases ho_al with hz | harena
+    · exact ⟨Or.inl hz, fun _ _ _ _ => Or.inl hz, fun _ _ => Or.inl hz, fun _ _ => Or.inl hz⟩
+    · have ho_ow0 : ∀ j ∈ worldOwned s S0 Nd_at, Disj o j := by
+        intro j hj
+        unfold worldOwned at hj
+        rcases List.mem_append.1 hj with h1 | hnd
+        · rcases List.mem_append.1 h1 with htab | hfix
+          · obtain ⟨u, hu0, hj_fp⟩ := List.mem_flatMap.1 htab
+            exact ho_tab u (hS0_sub u hu0) j hj_fp
+          · exact ho_fix j hfix
+        · exact ho_nd j hnd
+      obtain ⟨hu_o, ho_ow0'⟩ := arena_survives_world_frame hAs.2 hAp.2 hhp harena ho_ow0
+        (hdisj_bufs_of_fixed o ho_fix) hkeep_shape hfr0 hog0
+      refine ⟨Or.inr hu_o, ?_, ?_, ?_⟩
+      · intro u hu i hi
+        rcases List.mem_append.1 hu with hu0' | huL
+        · apply ho_ow0' i
+          unfold worldOwned
+          exact List.mem_append_left _ (List.mem_append_left _ (List.mem_flatMap.2 ⟨u, hu0', hi⟩))
+        · rw [(hL_surv u huL).2.1] at hi
+          exact ho_tab u (hL_sub_S u huL) i hi
+      · intro j hj
+        apply ho_ow0' j
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_right _ hj)
+      · intro j hj
+        apply ho_ow0' j
+        unfold worldOwned
+        exact List.mem_append_right _ hj
+  have hfo_surv : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec,
+      (o.2 = 0 ∨ InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o) ∧
+      (∀ u ∈ S', ∀ i ∈ htabFootprint post u, Disj o i) ∧
+      (∀ j ∈ fixedObjects post, Disj o j) ∧
+      (∀ j ∈ nodeExtents post Nd', Disj o j) := by
+    intro ec hec o ho
+    have ho_fl : o ∈ ((evmChain s).map (frameObjects s)).flatten :=
+      List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map.2 ⟨ec, hec, rfl⟩, ho⟩
+    exact hsurv_full o (frameObject_zero_or_allocated hAs.2 (hFW_all ec hec) ho)
+      (hFO_disj ec hec o ho).1 (hFO_disj ec hec o ho).2 (hAT_at o ho_fl)
+  have hu_fo_m08 : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, o.2 ≠ 0 →
+      InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o := by
+    intro ec hec o ho hnz
+    exact ((hfo_surv ec hec o ho).1).resolve_left hnz
+  have hrec_eq : ∀ ec ∈ evmChain s,
+      (∀ k, k + 8 ≤ 280 → k % 8 = 0 → memW post (ec.1 + k) = memW s (ec.1 + k)) ∧
+      (∀ k, k + 8 ≤ 104 → k % 8 = 0 → memW post (ec.2 + k) = memW s (ec.2 + k)) ∧
+      (∀ k, k + 8 ≤ 24 → k % 8 = 0 → memW post (memW s (ec.1 + 88) + k) = memW s (memW s (ec.1 + 88) + k)) := by
+    intro ec hec
+    have hFW := hFW_all ec hec
+    obtain ⟨hb1, hb2, hb88, _⟩ := InitECandidate.Solver.Wave8Contracts.M23.frameWF_bounds hAs.2 hFW
+    have he1_8 : ec.1 % 8 = 0 := (hFW.1 (ec.1, 280) (by simp)).2.1
+    have he2_8 : ec.2 % 8 = 0 := (hFW.1 (ec.2, 104) (by simp)).2.1
+    have he88_8 : (memW s (ec.1 + 88)) % 8 = 0 := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).2.1
+    refine ⟨fun k hk hk8 => InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+              (hu_fo_m08 ec hec (ec.1, 280) (by simp [frameObjects]) (by simp)) (by omega) hb1 ⟨by omega, by omega⟩,
+            fun k hk hk8 => InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+              (hu_fo_m08 ec hec (ec.2, 104) (by simp [frameObjects]) (by simp)) (by omega) hb2 ⟨by omega, by omega⟩,
+            fun k hk hk8 => InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+              (hu_fo_m08 ec hec (memW s (ec.1 + 88), 24) (by simp [frameObjects]) (by simp)) (by omega) hb88 ⟨by omega, by omega⟩⟩
+  have hchain_aux : ∀ (fuel e c : Nat),
+      (∀ ec ∈ evmChainFrom s fuel e c, ec ∈ evmChain s) →
+      evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+    intro fuel; induction fuel with
+    | zero => intros; rfl
+    | succ fuel ih =>
+      intro e c hsub
+      have hec : (e, c) ∈ evmChain s := hsub (e, c) (by simp [evmChainFrom])
+      obtain ⟨_, hc_eq, _⟩ := hrec_eq (e, c) hec
+      have hc16 := hc_eq 16 (by omega) (by omega)
+      have hc0 : memW post c = memW s c := by simpa using hc_eq 0 (by omega) (by omega)
+      have hc8 := hc_eq 8 (by omega) (by omega)
+      simp only [evmChainFrom, hc16, hc0, hc8]
+      split
+      · rfl
+      · rename_i hne16
+        rw [ih]; intro ec' hec'; exact hsub ec' (by simp [evmChainFrom, hne16, hec'])
+  have hchain_eq : evmChain post = evmChain s := by
+    unfold evmChain; rw [hev_eq, hcc_eq]
+    exact hchain_aux _ _ _ (fun _ h => h)
+  have hframeLogs_eq : ∀ ec ∈ evmChain s, frameLogs post ec = frameLogs s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    unfold frameLogs
+    rw [he_eq 88 (by omega) (by omega),
+        show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by simpa using h88_eq 0 (by omega) (by omega),
+        h88_eq 16 (by omega) (by omega)]
+  have hframeRet_eq : ∀ ec ∈ evmChain s, frameRet post ec = frameRet s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameRet
+    rw [he_eq 216 (by omega) (by omega), he_eq 144 (by omega) (by omega)]
+  have hlogs_congr : ∀ ec ∈ evmChain s,
+      frameLogObjects post ec = frameLogObjects s ec ∧ LogsListOK post (memW post (ec.1 + 88)) := by
+    intro ec hec
+    have hFW := hFW_all ec hec
+    obtain ⟨_, _, _, hfob⟩ := InitECandidate.Solver.Wave8Contracts.M23.frameWF_bounds hAs.2 hFW
+    obtain ⟨hscr_ec, _, _, _, _, _, _, _, _, _, hll_cap1, hlen_le, _, hfl_w, _, hll_ok_ec, _⟩ := hFW
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    set logs := memW s (ec.1 + 88)
+    have hl0 : memW post logs = memW s logs := by simpa [logs] using h88_eq 0 (by omega) (by omega)
+    have hl8 : memW post (logs + 8) = memW s (logs + 8) := h88_eq 8 (by omega) (by omega)
+    have hl16 : memW post (logs + 16) = memW s (logs + 16) := h88_eq 16 (by omega) (by omega)
+    have harr_eq : ∀ i, i < memW s (logs + 8) →
+        memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+      intro i hi
+      have hfl_in : frameLogs s ec ∈ frameObjects s ec := by simp [frameObjects]
+      have hfl_nz : (frameLogs s ec).2 ≠ 0 := by
+        unfold frameLogs; dsimp only [logs] at hi hlen_le ⊢; omega
+      have hfl_b : memW s logs + 8 * memW s (logs + 16) ≤ 2 ^ 64 := by
+        rcases hfob _ hfl_in with h0 | hb
+        · exact absurd h0 hfl_nz
+        · simpa [frameLogs, logs] using hb
+      have hfl_8 : (memW s logs) % 8 = 0 := hfl_w.1
+      have hfl_u : InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post (memW s logs, 8 * memW s (logs + 16)) :=
+        hu_fo_m08 ec hec (frameLogs s ec) hfl_in hfl_nz
+      exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+        hfl_u (by omega) hfl_b ⟨by dsimp only; omega, by dsimp only; omega⟩
+    have hlr_eq : ∀ i (hi : i < memW s (logs + 8)) off, off + 8 ≤ 40 → off % 8 = 0 →
+        memW post (memW s (memW s logs + 8 * i) + off) = memW s (memW s (memW s logs + 8 * i) + off) := by
+      intro i hi off hoff hoff8
+      have hlr_in : (memW s (memW s logs + 8 * i), 40) ∈ frameObjects s ec := by
+        unfold frameObjects; apply List.mem_append_right
+        unfold frameLogObjects; dsimp only [logs]
+        refine List.mem_flatMap.2 ⟨i, List.mem_range.2 hi, ?_⟩
+        unfold logOwnedIvls logRecordIvls
+        exact List.mem_filter.2 ⟨by simp, by simp⟩
+      have hlr_b : memW s (memW s logs + 8 * i) + 40 ≤ 2 ^ 64 := by
+        rcases hfob _ hlr_in with h0 | hb
+        · dsimp only at h0; omega
+        · exact hb
+      have hlr_8 : (memW s (memW s logs + 8 * i)) % 8 = 0 := by
+        rcases hll_ok_ec with hz | ⟨_, _, _, _, hent⟩
+        · exfalso
+          have he88_in := (hscr_ec (logs, 24) (by simp [logs])).1.1
+          change globN s "scratch_ptr" ≤ logs at he88_in
+          rw [hz] at he88_in
+          have h1 := hAs.2.2.2.1; have h2 := hAs.2.2.2.2.1
+          have hss0 : 0 < scratchStart := by decide
+          omega
+        · exact (hent i hi).2.1.1
+      exact InitECandidate.Solver.Wave8Contracts.M08.memW_eq_of_ivlUnhit
+        (hu_fo_m08 ec hec _ hlr_in (by simp)) (by omega) hlr_b ⟨by omega, by omega⟩
+    refine ⟨?_, ?_⟩
+    · unfold frameLogObjects; dsimp only
+      rw [he_eq 88 (by omega) (by omega), hl8]
+      apply List.flatMap_congr; intro i hi; rw [List.mem_range] at hi
+      rw [hl0, harr_eq i hi]
+      have r0 := hlr_eq i hi 0 (by omega) (by omega)
+      have r8 := hlr_eq i hi 8 (by omega) (by omega)
+      have r16 := hlr_eq i hi 16 (by omega) (by omega)
+      have r24 := hlr_eq i hi 24 (by omega) (by omega)
+      have r32 := hlr_eq i hi 32 (by omega) (by omega)
+      simp only [Nat.add_zero] at r0
+      unfold logOwnedIvls logRecordIvls
+      rw [r0, r8, r16, r24, r32, hvmsa_eq]
+    · rw [he_eq 88 (by omega) (by omega)]
+      rcases hll_ok_ec with hz | ⟨hw_l, hal_l, hlt28, hle_cap, hent⟩
+      · exact Or.inl hz
+      · right
+        refine ⟨InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hw_l,
+          hag.allocated hal_l, by rw [hl8]; exact hlt28, by rw [hl8, hl16]; exact hle_cap, fun i hi => ?_⟩
+        rw [hl8] at hi; rw [hl0]
+        obtain ⟨hwa, hle⟩ := hent i hi
+        have hwa_post : WordAt post (memW s logs + 8 * i) := by
+          obtain ⟨_, hdom, _⟩ := hwa
+          rcases hm : post.memory (BitVec.ofNat 64 (memW s logs + 8 * i)) with ⟨w⟩
+          exact ⟨w, hdom_eq ▸ hdom, hm⟩
+        refine ⟨hwa_post, ?_⟩
+        rw [harr_eq i hi]
+        have r0 := hlr_eq i hi 0 (by omega) (by omega)
+        have r8 := hlr_eq i hi 8 (by omega) (by omega)
+        have r16 := hlr_eq i hi 16 (by omega) (by omega)
+        have r24 := hlr_eq i hi 24 (by omega) (by omega)
+        have r32 := hlr_eq i hi 32 (by omega) (by omega)
+        simp only [Nat.add_zero] at r0
+        unfold LogEntryOK at hle ⊢
+        rw [r0, r8, r16, r24, r32]
+        exact ⟨InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hle.1,
+          ⟨hle.2.1.1, le_trans hle.2.1.2 hhp⟩,
+          hle.2.2.1, hle.2.2.2.1,
+          ⟨hle.2.2.2.2.1.1, le_trans hle.2.2.2.2.1.2 hhp⟩,
+          ⟨hle.2.2.2.2.2.1.1, le_trans hle.2.2.2.2.2.1.2 hhp⟩,
+          ⟨hle.2.2.2.2.2.2.1, le_trans hle.2.2.2.2.2.2.2 hhp⟩⟩
+  have hframeObjects_eq : ∀ ec ∈ evmChain s, frameObjects post ec = frameObjects s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameObjects
+    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega),
+        he_eq 24 (by omega) (by omega), he_eq 40 (by omega) (by omega),
+        he_eq 88 (by omega) (by omega), hframeLogs_eq ec hec, hframeRet_eq ec hec,
+        (hlogs_congr ec hec).1]
+  have hframeScratch_eq : ∀ ec ∈ evmChain s, frameScratch post ec = frameScratch s ec := by
+    intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    unfold frameScratch
+    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega), he_eq 88 (by omega) (by omega)]
+  have hmap_fo_eq : (evmChain s).map (frameObjects post) = (evmChain s).map (frameObjects s) :=
+    List.map_congr_left hframeObjects_eq
+  have hfrs_eq : frameRoleSlots post (evmChain s) = frameRoleSlots s (evmChain s) := by
+    unfold frameRoleSlots; apply List.flatMap_congr; intro ec hec
+    obtain ⟨he_eq, _, _⟩ := hrec_eq ec hec
+    rw [he_eq 136 (by omega) (by omega), he_eq 168 (by omega) (by omega), he_eq 176 (by omega) (by omega)]
+  have hfrs_in_L : ∀ b ∈ frameRoleSlots s (evmChain s), b.1 ∈ L := by
+    intro b hb
+    have hb_old : b ∈ (worldRoleSlots s ++ frameRoleSlots s (evmChain s)) ++ journalRoleSlots s :=
+      List.mem_append_left _ (List.mem_append_right _ hb)
+    exact List.mem_filter.2 ⟨(hRoles.1 b hb_old).1, decide_eq_true (frame_table_not_world_or_journal hRoles hb)⟩
+  have hRoles_post : RolesOK post S'
+      (worldRoleSlots post ++ frameRoleSlots post (evmChain s))
+      (journalRoleSlots post) := by
+    obtain ⟨hr1_0', hr2_0', hr3_0'⟩ := hWT0'.1.2.2.2.2.2.2.2.2.2.2.2
+    rw [hfrs_eq]
+    refine ⟨?_, ?_, ?_⟩
+    · intro a ha
+      rw [List.append_assoc] at ha
+      rcases List.mem_append.1 ha with hw | hrest
+      · have h := hr1_0' a (List.mem_append_left _ hw)
+        exact ⟨List.mem_append_left _ h.1, h.2⟩
+      · rcases List.mem_append.1 hrest with hfr_a | hjr
+        · have haL := hfrs_in_L a hfr_a
+          have h_old := hRoles.1 a (List.mem_append_left _ (List.mem_append_right _ hfr_a))
+          exact ⟨List.mem_append_right _ haL, ((hL_surv a.1 haL).2.2.1 0 (by omega)).trans h_old.2⟩
+        · have h := hr1_0' a (List.mem_append_right _ hjr)
+          exact ⟨List.mem_append_left _ h.1, h.2⟩
+    · rw [List.pairwise_append]
+      refine ⟨hr2_0', (List.pairwise_append.1 hRoles.2.1).2.1, ?_⟩
+      intro a haw b hfr_b heq
+      have hbL := hfrs_in_L b hfr_b
+      exact absurd heq ((hL_adj_props b.1 hbL).2.2 a (List.mem_append_left _ haw))
+    · intro a hjr b hb heq
+      rw [List.append_assoc] at hb
+      rcases List.mem_append.1 hb with hw | hrest
+      · exact hr3_0' a hjr b (List.mem_append_left _ hw) heq
+      · rcases List.mem_append.1 hrest with hfr_b | hjr_b
+        · have hbL := hfrs_in_L b hfr_b
+          exact absurd heq ((hL_adj_props b.1 hbL).2.2 a (List.mem_append_right _ hjr))
+        · exact hr3_0' a hjr b (List.mem_append_right _ hjr_b) heq
+  have hMarks_post : MarksOK post S' (evmChain s) := by
+    intro i hi
+    have hi_mem : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have hm_eq := (hrec_eq _ hi_mem).2.1 48 (by omega) (by omega)
+    have hmm_eq := (hrec_eq _ hi_mem).2.1 56 (by omega) (by omega)
+    have he24_eq := (hrec_eq _ hi_mem).1 24 (by omega) (by omega)
+    have htake_eq : ((evmChain s).take (i + 1)).map (fun ec => memW post (ec.1 + 136)) =
+        ((evmChain s).take (i + 1)).map (fun ec => memW s (ec.1 + 136)) := by
+      apply List.map_congr_left; intro ec hec
+      exact (hrec_eq ec (List.mem_of_mem_take hec)).1 136 (by omega) (by omega)
+    have hM := hMarks i hi
+    dsimp only at hM ⊢
+    rw [hm_eq, hmm_eq, he24_eq, hframeScratch_eq _ hi_mem, htake_eq]
+    obtain ⟨m1, m2, m3, m4, m5, m6, m7, m8, m9⟩ := hM
+    set m := memW s (((evmChain s)[i]'(by omega)).2 + 48)
+    have hgrow_in_mark : ∀ o : Ivl,
+        (o = (0, 0) ∨ (∃ j ∈ worldOwned s S0 Nd_at, Inside o j.1 (j.1 + j.2)) ∨
+          Inside o (globN s "heap_ptr") (globN post "heap_ptr")) →
+        o.2 = 0 ∨ Inside o sourceBase heapLimit ∨ Inside o m scratchEnd := by
+      intro o hog_o
+      rcases hog_o with rfl | ⟨j, hj, hin⟩ | hfresh
+      · exact Or.inl rfl
+      · unfold worldOwned at hj
+        rcases List.mem_append.1 hj with h1 | hnd
+        · rcases List.mem_append.1 h1 with htab | hfix
+          · obtain ⟨u, hu0, hj_fp⟩ := List.mem_flatMap.1 htab
+            have huS := hS0_sub u hu0
+            rcases m8 u huS with ⟨htake, _⟩ | hloc
+            · exfalso
+              obtain ⟨ec_u, hec_take, hu_eq136⟩ := List.mem_map.1 htake
+              have hu_frs : (u, "frame.del") ∈ frameRoleSlots s (evmChain s) := by
+                unfold frameRoleSlots; rw [← hu_eq136]
+                exact List.mem_flatMap.2 ⟨ec_u, List.mem_of_mem_take hec_take, by simp⟩
+              exact hL_not_S0 u (hfrs_in_L (u, "frame.del") hu_frs) hu0
+            · rcases hloc j hj_fp with hh | hm
+              · exact Or.inr (Or.inl ⟨le_trans hh.1 hin.1, le_trans hin.2 hh.2⟩)
+              · exact Or.inr (Or.inr ⟨le_trans hm.1 hin.1, le_trans hin.2 hm.2⟩)
+          · rcases m9 j hfix with hj0 | hh | hm
+            · left; unfold Inside at hin; omega
+            · exact Or.inr (Or.inl ⟨le_trans hh.1 hin.1, le_trans hin.2 hh.2⟩)
+            · exact Or.inr (Or.inr ⟨le_trans hm.1 hin.1, le_trans hin.2 hm.2⟩)
+        · unfold nodeExtents at hnd
+          obtain ⟨n, hn, hj_n⟩ := List.mem_flatMap.1 hnd
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at hj_n
+          rcases hj_n with rfl | rfl
+          · have hni := (hTr_at.1.1 n hn).2.2.1
+            exact Or.inr (Or.inl ⟨le_trans hni.1 hin.1, le_trans hin.2 hni.2⟩)
+          · unfold nodePath at hin
+            split_ifs at hin with hc
+            · rcases (hTr_at.1.1 n hn).2.2.2.2.2.2.1 hc.1 with h0 | ⟨_, _, hk_in, _⟩
+              · exact absurd h0 hc.2
+              · exact Or.inr (Or.inl ⟨le_trans hk_in.1 hin.1, le_trans hin.2 hk_in.2⟩)
+            · left; dsimp only [Inside] at hin; omega
+      · exact Or.inr (Or.inl ⟨le_trans hAs.2.1 hfresh.1, le_trans hfresh.2 hAp.2.2.1⟩)
+    refine ⟨m1, m2, m3, m4, ?_, m6, m7, ?_, ?_⟩
+    · intro j hj hij
+      have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+      rw [hframeScratch_eq _ hj_mem, hframeObjects_eq _ hj_mem, hframeLogs_eq _ hj_mem,
+          (hrec_eq _ hj_mem).1 112 (by omega) (by omega)]
+      exact m5 j hj hij
+    · intro t ht
+      rcases List.mem_append.1 ht with ht0' | htL
+      · right
+        intro o ho
+        have ho_ow : o ∈ worldOwned post S0' Nd' := by
+          unfold worldOwned
+          exact List.mem_append_left _ (List.mem_append_left _ (List.mem_flatMap.2 ⟨t, ht0', ho⟩))
+        rcases hgrow_in_mark o (hog0 o ho_ow) with ho0 | hmark
+        · exfalso
+          have hwf_t := (hWT0'.1.2.1 t ht0').1
+          have hkl1 := hwf_t.2.2.1
+          have hstr := hwf_t.2.2.2.2.1
+          have hncap := hwf_t.2.2.2.2.2.1
+          simp only [htabFootprint, List.mem_cons, List.not_mem_nil, or_false] at ho
+          rcases ho with rfl | rfl | rfl | rfl
+          · dsimp only at ho0; omega
+          · dsimp only at ho0
+            rcases Nat.eq_zero_or_pos (hdr post t 10 + 1) with hz1 | hp1
+            · omega
+            · have : hdr post t 1 = 0 := by
+                rcases Nat.mul_eq_zero.1 ho0 with h1 | h2
+                · omega
+                · exact h2
+              omega
+          · dsimp only at ho0; omega
+          · dsimp only at ho0; omega
+        · exact hmark
+      · rw [(hL_surv t htL).2.1]
+        rcases m8 t (hL_sub_S t htL) with ⟨htake, hu_not_wref, hu_frames⟩ | hloc
+        · left
+          refine ⟨htake, ?_, ?_⟩
+          · intro hw_post
+            have ht_nz : t ≠ 0 := (hL_adj_props t htL).2.1
+            have hw_S0' : t ∈ worldTableRefs post S0' := by
+              unfold worldTableRefs at hw_post ⊢
+              dsimp only at hw_post ⊢
+              have hnest_eq : ∀ g : String,
+                  (g = "bs" ∨ g = "ts") →
+                  (if globN post g ≠ 0 ∧ memW post (globN post g + 32) ∈ S' then htabValues post (memW post (globN post g + 32)) else []) =
+                  (if globN post g ≠ 0 ∧ memW post (globN post g + 32) ∈ S0' then htabValues post (memW post (globN post g + 32)) else []) := by
+                intro g hg_or
+                by_cases hgnz : globN post g = 0
+                · simp [hgnz]
+                · have h32_root : RootIn S0' (memW post (globN post g + 32)) := by
+                    rcases hg_or with rfl | rfl
+                    · exact hWT0'.1.2.2.2.2.1 32 (by simp [bsTableSlots]) hgnz
+                    · exact hWT0'.1.2.2.2.2.2.1 32 (by simp [tsTableSlots]) hgnz
+                  have hiff : memW post (globN post g + 32) ∈ S' ↔ memW post (globN post g + 32) ∈ S0' := by
+                    constructor
+                    · intro hm'
+                      rcases h32_root with h0 | hm0'
+                      · exact absurd (h0 ▸ hm') (zero_not_mem_S hWT_post.1)
+                      · exact hm0'
+                    · exact List.mem_append_left _
+                  simp only [hiff]
+              rw [hnest_eq "bs" (Or.inl rfl), hnest_eq "ts" (Or.inr rfl)] at hw_post
+              exact hw_post
+            exact (hL_adj_props t htL).1 (worldTableRefs_mem_S hWT0'.1 hWT0'.2.1 hw_S0' ht_nz)
+          · intro j hj k hk hmem_eq
+            have hj_mem : (evmChain s)[j] ∈ evmChain s := List.getElem_mem _
+            have hk_le : k + 8 ≤ 280 ∧ k % 8 = 0 := by
+              simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+              rcases hk with rfl | rfl | rfl <;> exact ⟨by omega, by omega⟩
+            rw [(hrec_eq _ hj_mem).1 k hk_le.1 hk_le.2] at hmem_eq
+            exact hu_frames j hj k hk hmem_eq
+        · exact Or.inr hloc
+    · intro o ho
+      have ho_ow : o ∈ worldOwned post S0' Nd' := by
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_right _ ho)
+      exact hgrow_in_mark o (hog0 o ho_ow)
+  have hmap_gas : ((evmChain s).map fun ec => memW post (ec.1 + 64) + memW post (ec.1 + 192)) =
+      ((evmChain s).map fun ec => memW s (ec.1 + 64) + memW s (ec.1 + 192)) := by
+    apply List.map_congr_left; intro ec hec
+    rw [(hrec_eq ec hec).1 64 (by decide) (by decide), (hrec_eq ec hec).1 192 (by decide) (by decide)]
+  have hW_post : WorldTyped post S' := ⟨hWT_post.1, hWT_post.2.1, hWT_post.2.2.1, Nd', hWT_post.2.2.2⟩
+  refine ⟨⟨hAp, S', hW_post, ?_⟩, hhp, hG, hchain_eq⟩
+  dsimp only; rw [hchain_eq]
+  refine ⟨hch_ne, hch_len, ?_, ?_, ?_, ?_, hmap_fo_eq ▸ hFO_pw, ?_, ?_, hMarks_post, hRoles_post, hmap_gas ▸ hGas⟩
+  · obtain ⟨ec, hec, hk0⟩ := hch_last
+    have hec_mem := List.mem_of_mem_getLast? hec
+    exact ⟨ec, hec, by rw [(hrec_eq ec hec_mem).2.1 16 (by omega) (by omega)]; exact hk0⟩
+  · intro ec hec
+    obtain ⟨he_eq, _, h88_eq⟩ := hrec_eq ec hec
+    obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15, _, c17⟩ := hFW_all ec hec
+    have hlo_ok := (hlogs_congr ec hec).2
+    have hmsg_ok : MsgOwned post S' (memW post (ec.1 + 112)) := by
+      rw [he_eq 112 (by omega) (by omega)]
+      obtain ⟨hal_m, hw_m, hdt, hdf, hdfo, _⟩ := c17
+      have hmsg_surv := hsurv_full (memW s (ec.1 + 112), 176)
+        (Or.inr (Or.inl hal_m)) hdt hdf (hAT_msg ec hec)
+      refine ⟨hag.allocated hal_m,
+        InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hw_m,
+        hmsg_surv.2.1, hmsg_surv.2.2.1, ?_, Nd', hWT_post.2.2.2, ?_⟩
+      · rw [hchain_eq]
+        intro ec' hec' o ho
+        rw [hframeObjects_eq ec' hec'] at ho
+        exact hdfo ec' hec' o ho
+      · intro o ho j hj
+        rw [List.mem_singleton] at ho; subst ho
+        exact hmsg_surv.2.2.2 j hj
+    unfold FrameWF; dsimp only
+    rw [he_eq 8 (by omega) (by omega), he_eq 232 (by omega) (by omega),
+        he_eq 88 (by omega) (by omega), he_eq 24 (by omega) (by omega),
+        he_eq 40 (by omega) (by omega), he_eq 16 (by omega) (by omega),
+        he_eq 32 (by omega) (by omega), he_eq 136 (by omega) (by omega),
+        he_eq 168 (by omega) (by omega), he_eq 176 (by omega) (by omega),
+        h88_eq 16 (by omega) (by omega), h88_eq 8 (by omega) (by omega),
+        hframeLogs_eq ec hec, he_eq 216 (by omega) (by omega), he_eq 144 (by omega) (by omega),
+        hframeRet_eq ec hec, hfm_eq, hevm_empty_eq]
+    rw [he_eq 88 (by omega) (by omega)] at hlo_ok
+    refine ⟨?_, c2, InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 c3,
+      c4, c5, c6, c7, hS_sub_S' _ c8, hS_sub_S' _ c9, hS_sub_S' _ c10, c11, c12,
+      ?_, InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 c14, ?_, hlo_ok, hmsg_ok⟩
+    · intro i hi
+      obtain ⟨hin, hw⟩ := c1 i hi
+      exact ⟨⟨le_trans hsc hin.1, hin.2⟩,
+        InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hw⟩
+    · rcases c13 with h | h
+      · exact Or.inl ⟨h.1, le_trans h.2 hhp⟩
+      · exact Or.inr ⟨le_trans hsc h.1, h.2⟩
+    · rcases c15 with h0 | ⟨hin, hw⟩
+      · exact Or.inl h0
+      · exact Or.inr ⟨⟨hin.1, le_trans hin.2 hhp⟩,
+          InitECandidate.Solver.Wave8Contracts.M08.wordsOK_transfer hAs.1 hAp.1 hw⟩
+  · intro ec hec
+    have hec_mem := List.mem_of_mem_tail hec
+    unfold FrameRoom
+    rw [(hrec_eq ec hec_mem).1 16 (by omega) (by omega), (hrec_eq ec hec_mem).1 232 (by omega) (by omega)]
+    exact hFR_all ec hec
+  · intro i hi
+    have hi0 : (evmChain s)[i]'(by omega) ∈ evmChain s := List.getElem_mem _
+    have hi1 : (evmChain s)[i + 1] ∈ evmChain s := List.getElem_mem _
+    rw [(hrec_eq _ hi0).2.1 80 (by decide) (by decide),
+        (hrec_eq _ hi0).2.1 72 (by decide) (by decide),
+        (hrec_eq _ hi1).1 40 (by decide) (by decide)]
+    exact hRW i hi
+  · intro ec hec o ho
+    rw [hframeObjects_eq ec hec] at ho
+    exact ⟨(hfo_surv ec hec o ho).2.1, (hfo_surv ec hec o ho).2.2.1⟩
+  · rw [hmap_fo_eq]
+    refine ⟨Nd', hWT_post.2.2.2, fun o ho j hj => ?_⟩
+    obtain ⟨_, hfo_m, ho_fo⟩ := List.mem_flatten.1 ho
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hfo_m
+    exact (hfo_surv ec hec o ho_fo).2.2.2 j hj
 
 theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
     (hn : n.toNat ≤ 65536) :
