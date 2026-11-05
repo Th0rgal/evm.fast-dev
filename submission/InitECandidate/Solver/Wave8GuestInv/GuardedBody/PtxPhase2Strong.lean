@@ -11278,4 +11278,57 @@ theorem phase2_packed_live_family_continuation_bound (h : PtxCallees)
     (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
     (phase2_packed_cases_initialized_live_family_hoare h buffers contents) ht s hc hp
 
+/-- Packed allocation establishes the shared live frame used by the loops. -/
+theorem phase2_count_cases_alloc_live (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn (fun s => PtxAddressCountExit s ∧
+      ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧ PtxPackedLiveFrame buffer contents s)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hi := phase2_count_cases_alloc_world_init h s vs body callee ret v post hc hp.1 ha hl hb
+  have hr := phase2_count_exit_access_ready hp.1
+  obtain ⟨S, Nd, hW, hT, hbuf⟩ := hp.2
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_count_cases_alloc_eval s hp.1
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hr.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hr.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  have hbp := phase2_live_buffer_step s post S Nd S' Nd' buffer contents [] hbuf
+    hr.1.1.1.1.1.1.1.1.2 hW step.2.1 hgrow hframe (by simp) (by simp)
+  obtain ⟨w, rfl, hf⟩ := phase2_count_cases_alloc_fresh h s vs body callee ret v post hc hp.1 ha hl hb
+  obtain ⟨w', hv, hav⟩ := hret (.val (.word w)) rfl
+  cases hv
+  dsimp only at hav
+  rw [hcn] at hav
+  let out := setVarHOLFinite (ofString "al_keys") (.val (.word w)) {post with locals := s.locals}
+  have hptr : locN out "al_keys" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nkeys" = locN s "nkeys" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  refine ⟨hi, ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_, hbp⟩, ?_⟩
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post out.locals post.clock hTp
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)] _
+    rw [hptr, hcount]
+    exact hav
+  · change Disj buffer (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+    rw [hptr, hcount]
+    exact Or.inr (Or.inr (Or.inl (hbuf.1.2.trans hf.2.1.1)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
