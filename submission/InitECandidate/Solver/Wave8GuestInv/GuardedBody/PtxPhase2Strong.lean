@@ -7420,4 +7420,25 @@ theorem phase2_packed_separated_counters_hoare :
       exact fun _ => phase2_packed_separated_counters before hp
     · exact fun _ _ hr => by cases hr
 
+/-- Restored copy calls preserve scalar witnesses and the heap bound needed by sequencing. -/
+theorem phase2_memcpy_next_scalar_facts {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (names : List String)
+    (hw : ∀ n ∈ names, ∃ w : BitVec 64,
+      s.locals.lookup (ofString n) = some (.val (.word w)))
+    (hg : GlobalsKept [] s { post with locals := s.locals })
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    (∀ n ∈ names, ∃ w : BitVec 64,
+      ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F).locals.lookup
+        (ofString n) = some (.val (.word w))) ∧
+      globN { post with locals := s.locals } "heap_ptr" ≤ 2 ^ 64 := by
+  refine ⟨hw, ?_⟩
+  rw [phase2_copy_globals_heap_eq s _ hg]
+  exact hb
+
+/-- Packed readiness supplies world typing once arena readiness has been restored. -/
+theorem phase2_packed_ready_worldOK {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (ha : ArenaReady s) (hp : PtxPackedKeysReady s) : WorldOK s := by
+  obtain ⟨S, Nd, hw, _, _⟩ := hp.2.2.2.2
+  exact ⟨ha, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
