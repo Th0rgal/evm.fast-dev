@@ -5251,6 +5251,18 @@ theorem stableCopyLoopInv_done {F : Type} (s : PanSemStateFiniteExact 64 F)
   apply stableCopyInv_exit s hp.1
   exact stableCopyInv_guard_false s hp.1 i n hi hn (by have := hp.2.2.1; omega) he
 
+/-- A false copy guard yields receipts together with stable-list ownership. -/
+theorem stableCopyLoopInv_done_owned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyLoopInv s) (hf : StableCopyOwnedFrame s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nl"))) = some (.val (.word 0))) :
+    PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") := by
+  obtain ⟨i, n, hi, hn⟩ := hp.2.1
+  have hb := (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1
+  apply stableCopyOwnedFrame_exit s hp.1 hf
+  exact stableCopyInv_guard_false s hp.1 i n hi hn
+    (by have := hp.2.2.1; omega) he
+
 /-- The actual indexed copy store preserves the length postcondition. -/
 theorem hoare_stableCopy_store_post :
     Hoare StableCopyStorePre
