@@ -3833,4 +3833,447 @@ theorem phase2_address_count_advance {F : Type} (s : PanSemStateFiniteExact 64 F
       show ofString "i" ≠ ofString "nkeys" by decide,
       show ofString "i" ≠ ofString "tx" by decide] using hk
 
+/-- Installing the nonwrapping sum establishes the next-prefix equality used
+by the subsequent index increment. -/
+theorem phase2_address_count_add {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    let post := setVarHOLFinite (ofString "nkeys")
+      (.val (.word (BitVec.ofNat 64 (locN s "nkeys" +
+        memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))))) s
+    PtxAddressCopyInv post ∧ locN post "i" < locN post "nal" ∧
+      locN post "nal" = memW post (locN post "tx" + 216) ∧
+      locN post "nkeys" = phase2_key_prefix post (locN post "i" + 1) := by
+  have hb := phase2_address_count_next_bound hp hi
+  have hlt : locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) < 2 ^ 64 := by omega
+  refine ⟨phase2_address_copy_set_nkeys s hp.1 _, ?_, ?_, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "nal" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide] using hp.2.1
+  · have he := phase2_key_prefix_succ s (locN s "i")
+    rw [← hp.2.2] at he
+    simp [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide,
+      BitVec.toNat_ofNat]
+    change (locN s "nkeys" + memW s (memW s (locN s "tx" + 208) +
+      24 * locN s "i" + 16)) % 2 ^ 64 = phase2_key_prefix s (locN s "i" + 1)
+    rw [Nat.mod_eq_of_lt hlt]
+    exact he.symm
+
+/-- On normal counting-loop exit the accumulator is the full input key count. -/
+theorem phase2_address_count_exit_total {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    locN s "nkeys" = txAccessSlots s (locN s "tx") := by
+  rw [hp.2.2, hi, hp.2.1]
+  rfl
+
+/-- The actual index assignment closes the next-prefix counting step. -/
+theorem phase2_address_count_increment_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "nal" = memW s (locN s "tx" + 216) ∧
+      locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, hw⟩ := hp.1.2.1
+    have hv : v = .val (.word (w + 1)) := by
+      simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+        valueWord, wordOpHOL, wordOp] using he.symm
+    subst v
+    have hwN : locN s "i" = w.toNat := by simp [locN, hw]
+    have hadd : w + 1 = BitVec.ofNat 64 (locN s "i" + 1) := by
+      rw [hwN]
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, BitVec.toNat_ofNat]
+    rw [hadd]
+    exact fun _ => phase2_address_count_advance s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2
+  · exact fun _ _ hr => by cases hr
+
+/-- Scratch declarations preserve the strengthened counting invariant. -/
+theorem phase2_address_count_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxAddressCountInv (setVarHOLFinite name v s) := by
+  apply phase2_address_count_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- The concrete address store retains the strengthened invariant and guard. -/
+theorem phase2_address_count_store_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal")
+      (.store (.op .add [.var .local (ofString "al_addrs"),
+        .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+        (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" < locN s "nal") := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨a, ha⟩ := hp.1.1.1.1.2.1
+  obtain ⟨i, hi⟩ := hp.1.1.2.1
+  have he : x = a + (i + 1) * 8 := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, ha, hi,
+      valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using hx.symm
+  have hslot := (phase2_address_copy_slot hp.1.1.1 (locN s "i") hp.2).2
+  rw [← phase2_address_copy_word_addr hp.1.1 a i ha hi, ← he] at hslot
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  exact ⟨phase2_address_count_store hp.1 hdom hslot hmem, hp.2⟩
+
+/-- A false machine loop guard identifies the completed natural key count. -/
+theorem phase2_address_count_guard_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s)
+    (hg : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word 0))) :
+    locN s "i" = locN s "nal" ∧
+      locN s "nkeys" = txAccessSlots s (locN s "tx") := by
+  have hi := phase2_address_copy_exit hp.1 hg
+  exact ⟨hi, phase2_address_count_exit_total hp hi⟩
+
+/-- Successful scalar record loads expose the natural memory projection. -/
+theorem phase2_count_load_local {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String) (k : BitVec 64) (v : ValueHOL 64)
+    (h : evalAt s (.load .one (.op .add [.var .local (ofString name), .const k])) = some v) :
+    ∃ a : BitVec 64, v = .val (.word a) ∧ a.toNat = memW s (locN s name + k.toNat) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact] at h
+  rcases hl : s.locals.lookup (ofString name) with _ | u
+  · simp [hl] at h
+  rcases u with ⟨x⟩ | _ | _
+  · cases x with
+    | word x =>
+      simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+      rcases hm : s.memory (x + k) with ⟨y⟩
+      refine ⟨y, by rw [← h.2, hm], ?_⟩
+      have hadd : BitVec.ofNat 64 (x.toNat + k.toNat) = x + k := by rw [BitVec.add_def]
+      simp only [locN, memW, hl, hadd, hm]
+  · simp [hl, valueIsWord] at h
+  · simp [hl, valueIsWord] at h
+
+/-- Identify the word computed by the concrete key-count addition. -/
+theorem phase2_count_add_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (v : ValueHOL 64)
+    (ha : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+    (he : evalAt s (.op .add [.var .local (ofString "nkeys"),
+      .load .one (.op .add [.var .local (ofString "acc"), .const 16])]) = some v) :
+    v = .val (.word (BitVec.ofNat 64 (locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)))) := by
+  obtain ⟨n, hn⟩ := hp.1.2.2.1
+  cases hl : evalAt s (.load .one (.op .add [.var .local (ofString "acc"), .const 16])) with
+  | none =>
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    simp at he
+  | some u =>
+    obtain ⟨w, rfl, hw⟩ := phase2_count_load_local s "acc" 16 u hl
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    have hv : v = .val (.word (n + w)) := by
+      simpa [hn,
+        valueIsWord, valueWord, wordOpHOL, wordOp] using he.symm
+    rw [hv]
+    congr 2
+    rw [BitVec.add_def]
+    congr 1
+    have hnn : locN s "nkeys" = n.toNat := by simp [locN, hn]
+    simpa [ha, hnn] using congrArg (fun k => n.toNat + k) hw
+
+/-- The key-count assignment establishes the next-prefix intermediate state. -/
+theorem phase2_address_count_nkeys_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" < locN s "nal" ∧
+        locN s "nal" = memW s (locN s "tx" + 216) ∧
+        locN s "nkeys" = phase2_key_prefix s (locN s "i" + 1)) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    rw [phase2_count_add_eval s hp.1 v hp.2.2 he]
+    exact fun _ => phase2_address_count_add s hp.1 hp.2.1
+  · exact fun _ _ hr => by cases hr
+
+/-- The two concrete counter assignments restore the strengthened invariant. -/
+theorem phase2_address_count_updates_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.seq
+        (.assign .local (ofString "nkeys")
+          (.op .add [.var .local (ofString "nkeys"),
+            .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  exact Hoare.seq_fall phase2_address_count_nkeys_hoare
+    phase2_address_count_increment_hoare
+
+/-- The current record pointer is a nonwrapping natural address. -/
+theorem phase2_address_count_record_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal") :
+    memW s (locN s "tx" + 208) + 24 * locN s "i" + 24 ≤ 2 ^ 64 := by
+  have hn : 0 < memW s (locN s "tx" + 216) := by rw [← hp.2.1]; omega
+  obtain ⟨S, Nd, hW, hT, hd, hte⟩ := hp.1.1.2
+  have hA := hp.1.1.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl (hT.2.2 hn).1)).2
+  rw [hp.2.1] at hi
+  dsimp at hb
+  omega
+
+/-- The record initializer evaluates to the exact natural record address. -/
+theorem phase2_count_acc_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal")
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      w.toNat = memW s (locN s "tx" + 208) + 24 * locN s "i" := by
+  obtain ⟨i, hiw⟩ := hp.1.2.1
+  cases hl : evalAt s (.load .one (.op .add [.var .local (ofString "tx"), .const 208])) with
+  | none =>
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    simp at he
+  | some u =>
+    obtain ⟨a, rfl, ha⟩ := phase2_count_load_local s "tx" 208 u hl
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    have hv : v = .val (.word (a + i * 24)) := by
+      simpa [hiw, valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using he.symm
+    refine ⟨a + i * 24, hv, ?_⟩
+    have hin : locN s "i" = i.toNat := by simp [locN, hiw]
+    have han : a.toNat = memW s (locN s "tx" + 208) := by simpa using ha
+    have hb := phase2_address_count_record_bound hp hi
+    have hlt : memW s (locN s "tx" + 208) + 24 * locN s "i" < 2 ^ 64 := by omega
+    rw [BitVec.toNat_add, BitVec.toNat_mul]
+    rw [show (24 : BitVec 64).toNat = 24 from rfl]
+    rw [Nat.add_mod_mod, han, ← hin, Nat.mul_comm (locN s "i") 24]
+    exact Nat.mod_eq_of_lt hlt
+
+/-- Address-buffer writes preserve the exact current-record pointer relation. -/
+theorem phase2_address_count_store_acc {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (ha : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") :
+    locN { s with memory := mem } "acc" =
+      memW { s with memory := mem } (locN { s with memory := mem } "tx" + 208) +
+        24 * locN { s with memory := mem } "i" := by
+  change locN s "acc" = memW { s with memory := mem } (locN s "tx" + 208) +
+    24 * locN s "i"
+  rw [phase2_address_store_header hp.1.1.1 hin hm 208 (by decide) (by decide)]
+  exact ha
+
+/-- Declaring the current record establishes the exact pointer relation. -/
+theorem phase2_address_count_declare_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal")
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    let post := setVarHOLFinite (ofString "acc") v s
+    PtxAddressCountInv post ∧ locN post "i" < locN post "nal" ∧
+      locN post "acc" = memW post (locN post "tx" + 208) + 24 * locN post "i" := by
+  obtain ⟨w, rfl, hw⟩ := phase2_count_acc_eval s hp hi v he
+  refine ⟨phase2_address_count_set_other s hp _ _ (by decide), ?_, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "nal" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hw
+
+/-- Strengthening the counting invariant retains the established loop clock bound. -/
+theorem phase2_address_count_loop_bound :
+    TerminatingProgBoundedOn PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (2 ^ 63 + 1) := by
+  intro F s hc hp
+  exact phase2_address_copy_loop_bound s hc hp.1
+
+/-- The concrete copy store also retains the current-record relation. -/
+theorem phase2_address_count_store_record_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.store (.op .add [.var .local (ofString "al_addrs"),
+        .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+        (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+        locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨a, ha⟩ := hp.1.1.1.1.2.1
+  obtain ⟨i, hi⟩ := hp.1.1.2.1
+  have he : x = a + (i + 1) * 8 := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, ha, hi,
+      valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using hx.symm
+  have hslot := (phase2_address_copy_slot hp.1.1.1 (locN s "i") hp.2.1).2
+  rw [← phase2_address_copy_word_addr hp.1.1 a i ha hi, ← he] at hslot
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  exact ⟨phase2_address_count_store hp.1 hdom hslot hmem, hp.2.1,
+    phase2_address_count_store_acc hp.1 hslot hmem hp.2.2⟩
+
+/-- The address store and both counter updates preserve the cumulative count. -/
+theorem phase2_address_count_inner_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.seq
+        (.store (.op .add [.var .local (ofString "al_addrs"),
+          .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+          (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+        (.seq
+          (.assign .local (ofString "nkeys")
+            (.op .add [.var .local (ofString "nkeys"),
+              .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  exact Hoare.seq_fall phase2_address_count_store_record_hoare
+    phase2_address_count_updates_hoare
+
+/-- The complete counting/address-copy body preserves the strengthened invariant. -/
+theorem phase2_address_count_body_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal")
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  apply Hoare.dec (names := ["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+    "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"])
+    (P' := fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") (by decide)
+  · intro F s v hp he
+    exact phase2_address_count_declare_acc s hp.1 hp.2 v he
+  · exact phase2_address_count_inner_hoare
+  · intro F r s locals hl hp hr
+    exact phase2_address_count_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
+/-- Counting-body preservation lifts to the complete guarded loop. -/
+theorem phase2_address_count_while_hoare {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal") body
+      (fun r s => r = none → PtxAddressCountInv s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" = locN s "nal") := by
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s
+    (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxAddressCountInv st →
+      evaluateHOLFiniteState st
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+          (none, post) → PtxAddressCountInv post ∧ locN post "i" = locN post "nal" from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd : PtxAddressCountInv (decClockHOLFinite st) :=
+            phase2_address_count_with_locals st st.locals (st.clock - 1) hp (by intros; rfl)
+          have hg := phase2_address_copy_guard hp.1 w hw hnz
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc ⟨hd, hg⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        have hwz : w = 0 := by simpa using hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, phase2_address_copy_exit hp.1 (by simpa [evalAt, hwz] using hw)⟩
+    · simp at he
+
+/-- The key-copy pass retains the completed total while restarting its outer index. -/
+theorem phase2_key_pass_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" = locN s "nal") :
+    let post := setVarHOLFinite (ofString "i") (.val (.word 0)) s
+    PtxAddressCopyInv post ∧
+      locN post "nkeys" = txAccessSlots post (locN post "tx") := by
+  refine ⟨phase2_address_copy_reset s hp.1, ?_⟩
+  have ht := phase2_address_count_exit_total hp hi
+  simpa [txAccessSlots, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "i" ≠ ofString "nkeys" by decide,
+    show ofString "i" ≠ ofString "tx" by decide] using ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
