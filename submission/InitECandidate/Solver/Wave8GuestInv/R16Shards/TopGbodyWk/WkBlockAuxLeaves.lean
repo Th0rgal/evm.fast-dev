@@ -6541,4 +6541,27 @@ theorem wkSc_htab_union_into_bs_inner :
   · exact hb s hc
       (unionNonValueEntry_bs_inner hP.1 hP.2.1 hP.2.2.1 hP.2.2.2 hz) hex hnt hres
 
+/-- A successful outer-table lookup in the merge identifies an owned inner
+storage table; the caller need not separately supply hash-table well-formedness. -/
+theorem merge_outer_get_ret_in_values {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (hnz : tw.toNat ≠ 0)
+    (houter : tw.toNat = memW s (globN s "bs" + 32))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).1 =
+      some (.returned v)) :
+    ∃ f0 f1 : BitVec 64, v = .rStruct [.val (.word f0), .val (.word f1)] ∧
+      (f0 ≠ 0 → f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32))) := by
+  obtain ⟨S, hT, _⟩ := hW.2
+  have hmem : tw.toNat ∈ S := by
+    have hr := hT.2.2.2.2.1 32 (by simp [bsTableSlots]) hbs
+    rw [← houter] at hr
+    exact hr.resolve_left hnz
+  have htab := (hT.2.1 _ hmem).1
+  obtain ⟨f0, f1, hv, hf⟩ := WkBal.htab_get_ret_in_values s tw kw hc ht hk htab v hret
+  exact ⟨f0, f1, hv, by simpa only [houter] using hf⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
