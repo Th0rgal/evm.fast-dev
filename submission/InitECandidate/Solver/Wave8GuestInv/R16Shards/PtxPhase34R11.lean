@@ -13243,4 +13243,52 @@ theorem receipt_bloom_logs_finish_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Returning a value only clears locals, preserving the accumulated frame. -/
+theorem heapByteEff_return {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (e : ExpHOL 64) (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState mid (.return e) = (some (.returned v), post)) :
+    HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_return] at hr
+  split at hr
+  · cases hr
+  · split at hr
+    · have hp := (Prod.mk.inj hr).2
+      subst post
+      exact he.locals_clock _ _
+    · cases hr
+
+/-- A fresh transaction-type byte followed by the receipt return preserves
+the same entry frame as the untyped receipt return. -/
+theorem heapByteEff_storeByte_return_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (addr value result : ExpHOL 64) (v : ValueHOL 64)
+    (ha : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid (.seq (.storeByte addr value) (.return result)) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hc : evaluateHOLFiniteState mid (.storeByte addr value) with ⟨r, next⟩
+  rw [hc] at hr
+  cases r with
+  | none =>
+    dsimp only at hr
+    exact heapByteEff_return (heapByteEff_storeByte_fresh he addr value hc ha) result v hr
+  | some r =>
+    have hn : ∀ v, (evaluateHOLFiniteState mid (.storeByte addr value)).1 ≠ some (.returned v) := by
+      intro v
+      rw [evaluateHOLFiniteState_storeByte]
+      split <;> try simp
+      split <;> try simp
+      split <;> simp
+    have hv := congrArg Prod.fst hr
+    exact False.elim (hn v (by simpa [hc] using hv))
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
