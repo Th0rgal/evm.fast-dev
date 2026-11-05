@@ -156,6 +156,70 @@ theorem worldStep_preserves_allocated_separation
   exact ⟨S', Nd', hsub, hW',
     allocated_regions_disj_ownedGrows hAs hAp.2 hhp hos hdisj hgrow, hQ⟩
 
+theorem allocated_disj_free_regions {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {o : Ivl}
+    (hA : ArenaOK s) (ho : Allocated s o) :
+    Disj o (freeGap s) ∧ Disj o (heapFree s) := by
+  have hsep : heapLimit ≤ scratchStart := by decide
+  have hhp : globN s "heap_ptr" ≤ heapLimit := hA.2.1
+  have hfm : scratchStart ≤ globN s "frame_mem_ptr" := hA.2.2.1
+  have hsc : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hA.2.2.2.1
+  rcases ho with ⟨_, hhi⟩ | ⟨hlo, _⟩
+  · constructor
+    · right; right; left; unfold freeGap; dsimp only; omega
+    · right; right; left; unfold heapFree; exact hhi
+  · constructor
+    · right; right; right; unfold freeGap; dsimp only; omega
+    · right; right; right; unfold heapFree; dsimp only; omega
+
+theorem aligned_cell_unhit_of_frameOutside {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {keep : List Ivl} {fresh o : Ivl}
+    (hfr : FrameOutside s post keep fresh)
+    (hk : ∀ j ∈ keep, j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0)
+    (hf : fresh = (0, 0) ∨ fresh.1 % 8 = 0 ∨ fresh.2 ≠ 0)
+    (hd : ∀ j ∈ keep, Disj o j) (hdf : Disj o fresh) :
+    InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o := by
+  intro a ha hlo hhi
+  have havoid : ∀ j : Ivl,
+      (j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0) →
+      Disj o j → ¬ CellHits a.toNat j := by
+    intro j hj hdj hhit
+    obtain ⟨hc1, hc2⟩ := hhit
+    rcases hdj with hz | hz | hb | hb
+    · omega
+    · rcases hj with he | hal | hn
+      · subst j; dsimp only at hc1 hc2; omega
+      · omega
+      · exact hn hz
+    · omega
+    · omega
+  exact hfr a (fun j hj => havoid j (hk j hj) (hd j hj)) (havoid fresh hf hdf)
+
+theorem allocated_survives_world_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new R : List Ivl} {o : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (ho : Allocated s o)
+    (hd : ∀ j ∈ old, Disj o j) (hR : ∀ j ∈ R, Disj o j)
+    (hshape : ∀ j ∈ old ++ R ++ [freeGap s],
+      j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0)
+    (hfr : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (hgrow : OwnedGrows s post old new) :
+    InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o ∧
+      ∀ j ∈ new, Disj o j := by
+  obtain ⟨hgap, hheap⟩ := allocated_disj_free_regions hAs ho
+  refine ⟨aligned_cell_unhit_of_frameOutside hfr hshape ?_ ?_ hheap,
+    allocated_disj_ownedGrows hAs hAp hhp ho hd hgrow⟩
+  · right; left; exact hAs.2.2.2.2.2.1
+  · intro j hj
+    rcases List.mem_append.1 hj with hj | hj
+    · rcases List.mem_append.1 hj with hj | hj
+      · exact hd j hj
+      · exact hR j hj
+    · have he := List.mem_singleton.1 hj
+      subst j
+      exact hgap
+
 theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
     (hn : n.toNat ≤ 65536) :
     (n * 1530).toNat = n.toNat * 1530 := by
