@@ -7906,4 +7906,17 @@ theorem phase2_packed_guard_word_compare {F : Type}
     subst w
     simp [hlt]
 
+/-- Both operands of the inner comparison stay in the nonnegative signed range. -/
+theorem phase2_packed_inner_signed_bounds {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxPackedInnerInv s) :
+    locN s "j" < 2 ^ 63 ∧
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) < 2 ^ 63 := by
+  obtain ⟨S, Nd, _, ht, _⟩ := hp.1.2.2.2.2
+  have hn : txAccessSlots s (locN s "tx") < 2 ^ 32 := ht.1.2.2.2.2.2.1
+  have hprefix := phase2_key_prefix_le_total s
+    (i := locN s "i" + 1) (by have hi := hp.2.2.1; omega)
+  rw [phase2_key_prefix_succ] at hprefix
+  have hj := hp.2.2.2.1
+  constructor <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
