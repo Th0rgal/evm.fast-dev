@@ -10548,4 +10548,74 @@ theorem logEntryOK_of_record_preserved {F : Type}
     ⟨ha.1, ha.2.trans hheap⟩, ⟨hb.1, hb.2.trans hheap⟩,
     ⟨hc.1, hc.2.trans hheap⟩⟩
 
+/-- A separated allocated cell survives the success tail's store and union. -/
+theorem icsTail_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i) {a : Nat}
+    (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat i)
+    (hT : ∀ j ∈ htabFootprint s T, Disj i j) (hwf : HtabWF s T) :
+    memW post a = memW s a := by
+  apply memW_of
+  apply h.2.2.2.2.2
+  · apply Ne.symm
+    apply ne_of_not_hits hE
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using ha
+  · intro j hj
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) ha
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
+
+/-- The table-union tail preserves separated log records and their payload bounds. -/
+theorem icsTail_logEntryOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T log : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hlog : LogEntryOK s log)
+    (hE : ¬ CellHits (e + 96).toNat (log, 40))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (log, 40) j) (hwf : HtabWF s T) :
+    LogEntryOK post log := by
+  have hal : Allocated s (log, 40) := Or.inl hlog.2.1
+  have hbound : log + 40 ≤ 2 ^ 64 := by
+    have hh := hA.2.2.1
+    have hb : heapLimit < 2 ^ 64 := by decide
+    have hl := hlog.2.1.2
+    dsimp only at hl
+    omega
+  have hkeep (a : Nat) (ha : log ≤ a ∧ a + 8 ≤ log + 40) :
+      memW post a = memW s a :=
+    icsTail_memW h hA hal ha (by omega) hE hT hwf
+  apply logEntryOK_of_record_preserved hlog h.2.2.2.2.1
+  · obtain ⟨ha, hn, hw⟩ := hlog.1
+    refine ⟨ha, hn, fun k hk => ?_⟩
+    obtain ⟨w, hd, hm⟩ := hw k hk
+    refine ⟨w, ?_, ?_⟩
+    · rw [h.2.1]; exact hd
+    · have heq := h.2.2.2.2.2 (BitVec.ofNat 64 (log + 8 * k))
+        (Ne.symm (ne_of_not_hits hE (by
+          simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)]
+          omega)))
+        (fun j hj => by
+          simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)] using
+            noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj)
+              (show log ≤ log + 8 * k ∧ log + 8 * k + 8 ≤ log + 40 by omega))
+        (by
+          have hp := h.2.2.1.2.2.1
+          have hs := hA.2.2.2.1
+          have hs' := hA.2.2.2.2.1
+          have heq : heapLimit = scratchStart := rfl
+          rw [heq] at hp
+          simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show log + 8 * k < 2 ^ 64 by omega)] using
+            noFresh_of_alloc hA.2 hal
+              (show log ≤ log + 8 * k ∧ log + 8 * k + 8 ≤ log + 40 by omega)
+              (by omega) h.2.2.2.2.1)
+      exact heq.trans hm
+  · intro k hk
+    have hk' : k ≤ 32 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
+    exact hkeep _ (by omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
