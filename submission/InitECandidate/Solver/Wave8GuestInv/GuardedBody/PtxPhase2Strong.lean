@@ -3935,4 +3935,33 @@ theorem phase2_address_count_store_hoare :
   obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
   exact ⟨phase2_address_count_store hp.1 hdom hslot hmem, hp.2⟩
 
+/-- A false machine loop guard identifies the completed natural key count. -/
+theorem phase2_address_count_guard_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s)
+    (hg : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nal"))) = some (.val (.word 0))) :
+    locN s "i" = locN s "nal" ∧
+      locN s "nkeys" = txAccessSlots s (locN s "tx") := by
+  have hi := phase2_address_copy_exit hp.1 hg
+  exact ⟨hi, phase2_address_count_exit_total hp hi⟩
+
+/-- Successful scalar record loads expose the natural memory projection. -/
+theorem phase2_count_load_local {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String) (k : BitVec 64) (v : ValueHOL 64)
+    (h : evalAt s (.load .one (.op .add [.var .local (ofString name), .const k])) = some v) :
+    ∃ a : BitVec 64, v = .val (.word a) ∧ a.toNat = memW s (locN s name + k.toNat) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact] at h
+  rcases hl : s.locals.lookup (ofString name) with _ | u
+  · simp [hl] at h
+  rcases u with ⟨x⟩ | _ | _
+  · cases x with
+    | word x =>
+      simp [hl, valueIsWord, valueWord, wordOpHOL, wordOp, memLoadHOLExact] at h
+      rcases hm : s.memory (x + k) with ⟨y⟩
+      refine ⟨y, by rw [← h.2, hm], ?_⟩
+      have hadd : BitVec.ofNat 64 (x.toNat + k.toNat) = x + k := by rw [BitVec.add_def]
+      simp only [locN, memW, hl, hadd, hm]
+  · simp [hl, valueIsWord] at h
+  · simp [hl, valueIsWord] at h
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
