@@ -6592,4 +6592,20 @@ theorem phase2_memcpy_eval_world_frame (h : PtxCallees) {F : Type}
   obtain ⟨S', Nd', hw', ho, hf⟩ := hs hr S Nd hw hd
   exact ⟨S', Nd', hw', ho, phase2_memcpy_restore_frame s post callee _ _ hf⟩
 
+/-- Apply the concrete memcpy global guarantee after restoring caller locals. -/
+theorem phase2_memcpy_eval_globals (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee)) :
+    GlobalsKept [] s { post with locals := s.locals } := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup (phase2_memcpy_globals_contract h)
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  exact phase2_memcpy_restore_globals s post callee (hs hr)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
