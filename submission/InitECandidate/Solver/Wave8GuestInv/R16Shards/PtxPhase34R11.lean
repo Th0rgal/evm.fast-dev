@@ -3821,6 +3821,34 @@ theorem stable_copy_record_separation {F : Type} (s : PanSemStateFiniteExact 64 
   rw [hs, hd, ha j hj]
   exact he j hj
 
+/-- Loop-head contract: operand shapes, bounded counter, and the separated
+store precondition whenever the current index is active. -/
+def StableCopyLoopInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => StableCopyInv s ∧
+    (∃ i n : BitVec 64,
+      s.locals.lookup (ofString "i") = some (.val (.word i)) ∧
+      s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN s "i" ≤ locN s "nl" ∧
+    (locN s "i" < locN s "nl" → StableCopyStorePre s)
+
+theorem stableCopyLoopInv_active {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyLoopInv s)
+    (ha : LoopActive (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nl"))) s) : StableCopyStorePre s := by
+  obtain ⟨w, hw, hnz⟩ := ha
+  obtain ⟨i, n, hi, hn⟩ := hp.2.1
+  have hb := (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1
+  exact hp.2.2.2 (stableCopyInv_guard s hp.1 i n w hi hn (by have := hp.2.2.1; omega) hw hnz)
+
+theorem stableCopyLoopInv_done {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyLoopInv s)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nl"))) = some (.val (.word 0))) : PtxReceiptsDone s := by
+  obtain ⟨i, n, hi, hn⟩ := hp.2.1
+  have hb := (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1
+  apply stableCopyInv_exit s hp.1
+  exact stableCopyInv_guard_false s hp.1 i n hi hn (by have := hp.2.2.1; omega) he
+
 /-- The actual indexed copy store preserves the length postcondition. -/
 theorem hoare_stableCopy_store_post :
     Hoare StableCopyStorePre
