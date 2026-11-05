@@ -2867,4 +2867,25 @@ theorem phase2_address_joint_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     (fun hn => ivlUnhit_single hm (by dsimp; omega)
       (disj_of_inside_right hin (hp.2.2.2.2.2.2.2.1 hn)))
 
+/-- Initialization of the address array with the sender preserves its world. -/
+theorem phase2_address_init_hoare :
+    Hoare PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender")))
+      (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.1.1.1.1.1.2.scalar "sender" (by simp)
+  have he : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  subst v
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  apply phase2_address_joint_store hp hdom _ hmem
+  obtain ⟨a, ha⟩ := hp.1.2.1
+  have he : x = a := by simpa [evalAt, evalHOLExact, ha] using hx.symm
+  subst x
+  have hl : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  rw [hl]
+  constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
