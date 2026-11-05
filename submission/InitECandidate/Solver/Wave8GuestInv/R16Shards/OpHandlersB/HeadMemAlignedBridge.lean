@@ -11385,8 +11385,8 @@ theorem laContents_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
     LogsListOK post L.toNat := by
   obtain ⟨next, hm, hprefix, hsuffix⟩ := h
   have hnext : memW post L.toNat = next.toNat := by
-    unfold memW
-    rw [BitVec.ofNat_toNat, hm]
+    simpa only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq] using
+      congrArg (fun w => match w with | .word v => v.toNat) hm
   apply logsListOK_of_append_contents hp hc hn hnc hpn hcn hwords halloc
     hcount hbound hcap hslots _ _ hkeepP hkeepC
   · simpa only [hnext, hma] using hprefix
