@@ -6905,6 +6905,38 @@ theorem stable_allocation_decl_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b 
         (stable_length_canonical_operand t hp.2.1) ha hl hr,
       lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
+/-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
+theorem phase4ReceiptPush_cut (h : PtxCallees)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hresume : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn PtxReceiptsDone
+      (spinePlug 2 (spineAt 137 ptxCode) tail) (K.lst_push + b + 1) := by
+  have hs : TerminatingProgBoundedOn R
+      (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_store u (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))
+      exact ⟨by omega, by omega⟩) hstore htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  have he : spinePlug 2 (spineAt 137 ptxCode) tail =
+      .decCall (ofString "rl") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8]
+        (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.decCall_on (P := PtxReceiptsDone)
+    h.fb_lst_push _ _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1)
+    hresume hs s hc hp
+
 /-- The receipt prefix, log pushing, allocation, and stable copying compose. -/
 theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
     (hresume : DecCallResumeOn Phase4TypedLogPointers
