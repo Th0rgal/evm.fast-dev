@@ -5681,6 +5681,27 @@ theorem lst_new_stable_post_source_array (h : PtxCallees) {F : Type}
   rw [hptr, hlen]
   exact (hs _ (by simp)).2.1
 
+/-- The resumed source array is disjoint from the fresh stable backing. -/
+theorem lst_new_stable_resumed_source_array (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨w, rfl, hd⟩ :=
+    lst_new_stable_post_source_array h s vs body callee ret v post hc hp ha hl hr
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "logs" by decide,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" by decide] using
+    R13Shards.disj_symm hd
+
 /-- Fresh stable headers remain separate from the source header and backing
 when source addresses are read in the returned memory. -/
 theorem lst_new_stable_post_header_separation (h : PtxCallees) {F : Type}
