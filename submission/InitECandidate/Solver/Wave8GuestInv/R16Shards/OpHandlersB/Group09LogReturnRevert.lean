@@ -10746,12 +10746,12 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
       let log := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
       LogEntryOK post log ∧ logOwnedIvls post log = logOwnedIvls s log := by
   intro i hi
-  have hlog_mem := logRecord_in_frameObjects_g09 hi
-  have hbound := frameObject_disj_fresh_heap_g09 hA.2 hA.2.2.1 hFW hlog_mem
   have hlog_ok : LogEntryOK s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i)) := by
     rcases hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | hlogs
     · have hlo := (hFW.1 (memW s (ec.1 + 88), 24) (by simp)).1.1
       have hss : 0 < scratchStart := by decide
+      have hsp : scratchStart ≤ globN s "scratch_ptr" :=
+        le_trans hA.2.2.2.1 hA.2.2.2.2.1
       dsimp only at hlo
       omega
     · exact (hlogs.2.2.2.2 i hi).2
@@ -10767,7 +10767,7 @@ theorem log_entries_preserved_of_frame_effect_g09 {F : Type}
       have hlog_inside := hlog_ok.2.1.2
       have hlimit : heapLimit ≤ 2 ^ 64 := by decide
       omega
-    exact memW_eq_of_frameDisj_g09 hA.1.2.1 heff hhi hlog_ok.1.1
+    exact memW_eq_of_frameDisj_g09 hA.1.2 heff hhi hlog_ok.1.1
       hk_bounds.2 hk_bounds.1 (fun x hx => hdisj x hx i hi)
   exact ⟨logEntryOK_of_record_agree_g09 heff.memaddrs hheap hrecord hlog_ok,
     logOwnedIvls_of_record_agree_g09 hsys hrecord⟩
@@ -10812,5 +10812,41 @@ theorem log_append_post_of_frame_effect_g09 {F : Type}
     intro i hi
     rw [(hold i hi).2]
     exact (hpres i hi).2
+
+/-- The final store in `log_append` writes exactly the returned list slot;
+all other word cells retain their values. -/
+theorem log_append_slot_store_exact_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {slot log : BitVec 64}
+    (hslot : s.locals.lookup (ofString "slot") = some (.val (.word slot)))
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hstore : evaluateHOLFiniteState s
+      (.store (.var .local (ofString "slot")) (.var .local (ofString "log"))) =
+      (none, post)) :
+    post.locals = s.locals ∧ post.globals = s.globals ∧
+    post.memaddrs = s.memaddrs ∧ post.code = s.code ∧
+    memW post slot.toNat = log.toNat ∧
+    (∀ a, BitVec.ofNat 64 a ≠ slot → memW post a = memW s a) := by
+  have hraw := hstore
+  rw [evaluateHOLFiniteState_store] at hraw
+  simp only [evalHOLExact, hslot, hlog] at hraw
+  by_cases hdom : s.memaddrs slot
+  · simp only [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom, ↓reduceIte] at hraw
+    injection hraw with _ hpost
+    have hmem : post.memory = fun a => if a = slot then .word log else s.memory a := by
+      have hm := congrArg PanSemStateFiniteExact.memory hpost
+      dsimp only at hm
+      exact hm.symm.trans (by
+        funext a
+        by_cases ha : a = slot
+        · subst a; simp [FUPDATE]
+        · simp [FUPDATE, ha])
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_⟩
+    · exact (congrArg PanSemStateFiniteExact.locals hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.globals hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.memaddrs hpost).symm
+    · exact (congrArg PanSemStateFiniteExact.code hpost).symm
+    · simp [memW, hmem]
+    · intro a ha; simp [memW, hmem, ha]
+  · simp [flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom] at hraw
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
