@@ -21,7 +21,7 @@ backing array to the heap when it grows. -/
 def LogsLiveOwned {F : Type} (s : PanSemStateFiniteExact 64 F)
     (S Nd : List Nat) (logs : Nat) : Prop :=
   logs ≠ 0 →
-    (0 < memW s (logs + 8) → Allocated s (memW s logs, 8 * memW s (logs + 8))) ∧
+    Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
     IvlsDisj [(logs, 24), (memW s logs, 8 * memW s (logs + 8))] (worldOwned s S Nd) ∧
     ∀ i, i < memW s (logs + 8) →
       IvlsDisj (logOwnedIvls s (memW s (memW s logs + 8 * i))) (worldOwned s S Nd)
@@ -78,6 +78,25 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 
 namespace PtxP34
 open PtxP1
+
+/-- Receipt encoding's frozen guard asks for placement even for an empty array.
+The allocator-created backing buffer supplies it independently of live cells. -/
+theorem logsLiveOwned_disjFixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} (hd : LogsLiveOwned s S Nd logs) :
+    LogsDisjFixed s logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  refine Or.inr ⟨?_, ?_⟩
+  · exact (hd hn).1
+  · intro o ho j hj
+    have hjw : j ∈ worldOwned s S Nd := by
+      unfold worldOwned
+      simp only [List.mem_append]
+      exact Or.inl (Or.inr hj)
+    rcases List.mem_append.mp ho with hh | he
+    · exact (hd hn).2.1 o hh j hjw
+    · obtain ⟨i, hi, ho⟩ := List.mem_flatMap.mp he
+      exact (hd hn).2.2 i (List.mem_range.mp hi) o ho j hjw
 
 /-- Allocated scratch survives a framed step just like allocated heap. The
 scratch frontier must be retained (or move down), not equal `scratchEnd`. -/
@@ -368,10 +387,10 @@ theorem logsLiveOwned_list_survives {F : Type}
     have hp : 0 < memW s (logs + 8) := by omega
     have ha := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
       (logsListOK_array_aligned hgS hl hn hp) (by simp)
-      ((hd hn).1 hp) (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRa
+      (hd hn).1 (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRa
     apply R13Shards.memW_eq_of_ivlUnhit ha.2.2
     · have := logsListOK_array_aligned hgS hl hn hp; omega
-    · exact (R13Shards.ivl_allocated_bound hAs ((hd hn).1 hp)).2
+    · exact (R13Shards.ivl_allocated_bound hAs (hd hn).1).2
     · constructor <;> dsimp <;> omega
   · intro i hi
     have he := (hl'.2.2.2.2 i hi).2
