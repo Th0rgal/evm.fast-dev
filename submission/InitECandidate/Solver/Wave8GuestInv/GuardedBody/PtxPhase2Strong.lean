@@ -9600,4 +9600,57 @@ theorem phase2_packed_nal_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
     PtxPackedNalIteration s :=
   ⟨⟨hw, phase2_packed_outer_zero s hp hn hi hk, ht, hr, hkw, hiw, hh⟩, hnw, he⟩
 
+/-- Resources required before the source resets the two packing counters. -/
+def PtxPackedInitReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ PtxPackedKeysReady s ∧
+  locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+  Disj (locN s "tx", 384)
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+    (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) ∧
+  globN s "heap_ptr" ≤ 2 ^ 64 ∧
+  (∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+  locN s "nal" = memW s (locN s "tx" + 216)
+
+/-- The actual declaration and assignment establish the packing-loop entry. -/
+theorem phase2_packed_init_state {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedInitReady s) :
+    PtxPackedNalIteration
+      (setVarHOLFinite (ofString "i") (.val (.word 0))
+        (setVarHOLFinite (ofString "k") (.val (.word 0)) s)) := by
+  let t := setVarHOLFinite (ofString "i") (.val (.word 0))
+    (setVarHOLFinite (ofString "k") (.val (.word 0)) s)
+  have hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "nal"] : List String),
+      t.locals.lookup (ofString n) = s.locals.lookup (ofString n) := by
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl <;>
+      simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  have hn (n : String) (hm : n ∈ (["al_keys", "nkeys", "tx", "nal"] : List String)) :
+      locN t n = locN s n := by simp only [locN, hl n hm]
+  have hready : PtxPackedKeysReady t := by
+    apply phase2_packed_keys_with_locals s t.locals s.clock hp.2.1
+    intro n hm
+    apply hl n
+    simp only [List.mem_cons, List.mem_singleton] at hm ⊢
+    tauto
+  change PtxPackedNalIteration t
+  have hm : t.memory = s.memory := rfl
+  apply phase2_packed_nal_zero t
+  · exact phase2_packed_ready_worldOK t
+      ((arenaReady_with_locals s t.locals s.clock).mpr hp.1.1) hready
+  · exact hready
+  · simpa only [hn "nkeys" (by simp), hn "tx" (by simp), txAccessSlots, memW, hm] using hp.2.2.1
+  · simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]
+  · simpa only [hn "tx" (by simp), hn "al_keys" (by simp), hn "nkeys" (by simp)]
+      using hp.2.2.2.1
+  · simpa only [hn "tx" (by simp), hn "al_keys" (by simp), hn "nkeys" (by simp), memW, hm]
+      using hp.2.2.2.2.1
+  · exact ⟨0, by simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString]⟩
+  · exact ⟨0, by simp [t, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · exact hp.2.2.2.2.2.1
+  · simpa only [hl "nal" (by simp)] using hp.2.2.2.2.2.2.1
+  · simpa only [hn "nal" (by simp), hn "tx" (by simp), memW, hm] using hp.2.2.2.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
