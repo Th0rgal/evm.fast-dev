@@ -9763,4 +9763,41 @@ theorem phase2_packed_alloc_input_separated (h : PtxCallees) :
     · exact Or.inl (by change 24 * memW s (locN s "tx" + 216) = 0; rw [hz])
     · exact hs.2.2 (Nat.pos_of_ne_zero hz)
 
+/-- Allocation frames each access-record key count, preserving the total used
+to size the packed buffer. -/
+theorem phase2_packed_alloc_total (h : PtxCallees) (value : Nat) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ txAccessSlots s (locN s "tx") = value)
+      (fun s => txAccessSlots s (locN s "tx") = value)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr : PtxAccessCountReady s := hp.1.1.1.1.1
+  have h208 := phase2_packed_alloc_header_words h 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp.1, rfl⟩ ha hl hb
+  have h216 := phase2_packed_alloc_header_words h 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp.1, rfl⟩ ha hl hb
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hr.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hr.1.2
+  obtain ⟨S', Nd', _, _, _, hframe, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hfields : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
+    intro i hi
+    exact phase2_tx_count_world_frame s post S Nd [] (locN s "tx") i
+      hr.1.1.1.1.1.1.1.1.2 hW hT hi hframe (by simp) (by simp)
+  unfold txAccessSlots
+  rw [h216, h208]
+  trans txAccessSlots s (locN s "tx")
+  · unfold txAccessSlots
+    congr 1
+    apply List.map_congr_left
+    intro i hi
+    exact hfields i (List.mem_range.mp hi)
+  · exact hp.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
