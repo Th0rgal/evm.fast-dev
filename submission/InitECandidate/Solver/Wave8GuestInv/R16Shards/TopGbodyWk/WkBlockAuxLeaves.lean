@@ -6243,4 +6243,21 @@ theorem htab_union_into_zero_spec :
     rw [he]
     rfl
 
+/-- Null block-table destinations need no allocation frame: every resumable exit is read-only. -/
+theorem wkSc_htab_union_into_zero :
+    WorldKeepsSc (fun s => WorldOK s ∧ locN s "dst" = 0)
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := htab_union_into_zero_spec
+  have hbody : body = sourceFnBody Guest.Software.guestFn_htab_union_into := by
+    rw [HtabUnionInto.lookup_htab_union_into] at hl
+    exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj hl)).2).1.symm
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  rcases hres with ⟨v, hv⟩ | ⟨e, v, he, hne⟩
+  · have hp := hb s hc ⟨hP.1.1.1, hP.2⟩ hex hnt v hv
+    rw [hp]
+    exact (WorldStepSc.refl s (some (.returned v)) hP.1.1).with_locals_clock _ _
+  · exfalso
+    exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
