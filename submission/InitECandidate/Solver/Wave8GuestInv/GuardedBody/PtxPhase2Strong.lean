@@ -9573,4 +9573,31 @@ theorem phase2_packed_source_outer_loop_hoare (h : PtxCallees) :
       (fun r s => r = none → PtxPackedNalIteration s ∧ locN s "k" = locN s "nkeys") := by
   exact phase2_packed_nal_while (phase2_packed_source_outer_body_nal_hoare h) rfl rfl
 
+/-- Zeroed counters establish the record-boundary invariant from allocated keys. -/
+theorem phase2_packed_outer_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hi : locN s "i" = 0) (hk : locN s "k" = 0) :
+    PtxPackedOuterInv s := by
+  refine ⟨hp, hn, ?_, ?_⟩
+  · rw [hi]; exact Nat.zero_le _
+  · simp [phase2_key_prefix, hi, hk]
+
+/-- Initialization bridge from allocated, separated keys to the source loop. -/
+theorem phase2_packed_nal_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hw : WorldOK s) (hp : PtxPackedKeysReady s)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hi : locN s "i" = 0) (hk : locN s "k" = 0)
+    (ht : Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hr : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hkw : ∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hiw : ∃ i : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hh : globN s "heap_ptr" ≤ 2 ^ 64)
+    (hnw : ∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n)))
+    (he : locN s "nal" = memW s (locN s "tx" + 216)) :
+    PtxPackedNalIteration s :=
+  ⟨⟨hw, phase2_packed_outer_zero s hp hn hi hk, ht, hr, hkw, hiw, hh⟩, hnw, he⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
