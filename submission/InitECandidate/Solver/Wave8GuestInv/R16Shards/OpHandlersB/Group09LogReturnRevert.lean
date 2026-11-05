@@ -12280,4 +12280,49 @@ theorem log_growth_objects_pairwise_g09 {F : Type}
       · exact hnew_buffer n hn
       · exact hnew_old n hn o (hmem_after o ho)
 
+/-- Concrete frame-layout specialization of growth object disjointness. -/
+theorem log_growth_frame_objects_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {log : Nat}
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hret : frameRet post ec = frameRet s ec)
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hbuffer : ∀ o ∈ frameObjects s ec, Disj (frameLogs post ec) o)
+    (hnew_pw : (logOwnedIvls post log).Pairwise Disj)
+    (hnew_old : ∀ n ∈ logOwnedIvls post log, ∀ o ∈ frameObjects s ec, Disj n o)
+    (hnew_buffer : ∀ n ∈ logOwnedIvls post log, Disj n (frameLogs post ec)) :
+    (frameObjects post ec).Pairwise Disj := by
+  apply log_growth_objects_pairwise_g09
+    [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
+      (memW s (ec.1 + 24), memW s (ec.1 + 40)), (memW s (ec.1 + 88), 24)]
+    (frameRet s ec :: frameLogObjects s ec)
+    (by simp [frameObjects]) ?_ hpw hbuffer hnew_pw hnew_old hnew_buffer
+  simpa only [List.cons_append, List.nil_append, List.append_assoc] using
+    frameObjects_of_log_append_g09 hfields hret hlogs
+
+/-- Lift head-frame growth disjointness across an unchanged suspended chain. -/
+theorem log_growth_chain_objects_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {head : Ivl} {tail : List Ivl}
+    (hchain : evmChain s = head :: tail)
+    (hchain_post : evmChain post = evmChain s)
+    (hpw : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hhead_pw : (frameObjects post head).Pairwise Disj)
+    (htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec)
+    (hhead_cases : ∀ o ∈ frameObjects post head,
+      o ∈ frameObjects s head ∨ ∀ ec ∈ tail, ∀ other ∈ frameObjects s ec, Disj o other) :
+    ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj := by
+  have htail_eq : tail.map (frameObjects post) = tail.map (frameObjects s) :=
+    List.map_congr_left htail
+  rw [hchain, List.map_cons, List.flatten_cons, List.pairwise_append] at hpw
+  rw [hchain_post, hchain, List.map_cons, List.flatten_cons, htail_eq,
+    List.pairwise_append]
+  refine ⟨hhead_pw, hpw.2.1, ?_⟩
+  intro o ho other hother
+  rcases hhead_cases o ho with hold | hfresh
+  · exact hpw.2.2 o hold other hother
+  · obtain ⟨objects, hobjects, hother⟩ := List.mem_flatten.1 hother
+    obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hobjects
+    exact hfresh ec hec other hother
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
