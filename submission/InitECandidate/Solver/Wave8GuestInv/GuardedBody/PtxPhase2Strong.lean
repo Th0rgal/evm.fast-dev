@@ -6072,8 +6072,9 @@ theorem phase2_memcpy_step_count {F : Type}
     (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd tx)
     (hi : i < memW s (tx + 216))
     (step : WorldStep (fun s => [(locN s "dst", locN s "n")]) []
-      [("ws", [0, 8, 16, 24]); ("bs", [0, 8, 16, 24]); ("ts", [0, 8, 16, 24]);
-       ("bo", [24, 32, 40, 72, 80])] NoExtra s r post)
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] NoExtra s r post)
     (hworld : IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd))
     (hrec : Disj (memW s (tx + 208), 24 * memW s (tx + 216))
       (locN s "dst", locN s "n")) (hn : 0 < locN s "n") :
@@ -6090,5 +6091,29 @@ theorem phase2_memcpy_step_count {F : Type}
     subst region
     dsimp at hz
     omega
+
+/-- Specialize a memcpy world frame to the two access-list header fields. -/
+theorem phase2_memcpy_frame_metadata {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (tx : Nat)
+    (ha : ArenaOK s) (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd tx)
+    (hf : FrameOutside s post
+      (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s]) (heapFree s))
+    (hd : Disj (tx, 384) (locN s "dst", locN s "n")) (hn : 0 < locN s "n") :
+    memW post (tx + 208) = memW s (tx + 208) ∧
+    memW post (tx + 216) = memW s (tx + 216) := by
+  have hr : ∀ region ∈ [(locN s "dst", locN s "n")], Disj (tx, 384) region := by
+    intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hd
+  have hz : ∀ region ∈ [(locN s "dst", locN s "n")], region.2 = 0 → region.1 % 8 = 0 := by
+    intro region hm he
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at he
+    omega
+  constructor
+  · exact phase2_tx_header_world_frame s post S Nd _ tx 208 ha hw ht (by decide) (by decide) hf hr hz
+  · exact phase2_tx_header_world_frame s post S Nd _ tx 216 ha hw ht (by decide) (by decide) hf hr hz
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
