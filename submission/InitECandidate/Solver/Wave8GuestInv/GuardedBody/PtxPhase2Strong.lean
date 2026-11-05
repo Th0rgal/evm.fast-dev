@@ -6362,4 +6362,75 @@ theorem phase2_packed_input_separation_frame {F : Type}
   rw [hl "tx" (by simp), hl "al_keys" (by simp), hl "nkeys" (by simp), hh.1, hh.2]
   exact ⟨ht, hr⟩
 
+/-- A positive-length copy preserves the transaction witness under its world-frame guarantees. -/
+theorem phase2_memcpy_tx_survives {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat)
+    (ha : ArenaReady s) (hp : GuestInv post) (hg : GlobalsKept [] s post)
+    (hw : WorldTypedWith s S Nd) (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post
+      (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s]) (heapFree s))
+    (hd : Disj (locN s "tx", 384) (locN s "dst", locN s "n"))
+    (hr : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+        (locN s "dst", locN s "n"))
+    (hn : 0 < locN s "n")
+    (hl : post.locals.lookup (ofString "tx") = s.locals.lookup (ofString "tx")) :
+    TxAccessListAt post S' Nd' (locN post "tx") := by
+  have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" :=
+    (phase2_copy_globals_heap_eq s post hg).symm.le
+  apply R16Shards.PtxP1.txAccessListOK_survives_step ha hp hh hw _ ho hf ht _ _ hl
+  · intro region hm hz
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at hz
+    omega
+  · intro region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hd
+  · intro hpos region hm
+    simp only [List.mem_singleton] at hm
+    subst region
+    exact hr hpos
+
+/-- Bind the three evaluated arguments at the concrete memcpy entry. -/
+theorem phase2_memcpy_arguments {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst src len : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret)) :
+    ∃ d v n, evalAt s dst = some d ∧ evalAt s src = some v ∧ evalAt s len = some n ∧
+      callee.lookup (ofString "dst") = some d ∧
+      callee.lookup (ofString "src") = some v ∧ callee.lookup (ofString "n") = some n := by
+  apply R16Shards.PtxP1.params_three_values s (ofString "memcpy")
+    (ofString "dst") (ofString "src") (ofString "n") .one .one .one
+    (sourceFunctionEntry Guest.Software.guestFn_memcpy).2.2.1
+    (sourceFunctionEntry Guest.Software.guestFn_memcpy).2.2.2 _
+    dst src len vs body callee ret ha hl
+  rw [hc]
+  change originalRuntimeCode.lookup (ofString "memcpy") =
+    some (sourceFunctionEntry Guest.Software.guestFn_memcpy).2
+  exact originalRuntimeCode_lookup_of_guestAst_getElem 16 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_memcpy) rfl
+
+/-- One memcpy frame preserves both fields used to locate the access-list records. -/
+theorem phase2_memcpy_access_metadata_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r →
+        ∀ S Nd tx, ArenaOK s → WorldTypedWith s S Nd →
+          TxAccessListAt s S Nd tx →
+          IvlsDisj [(locN s "dst", locN s "n")] (worldTypedIvls s S Nd) →
+          Disj (tx, 384) (locN s "dst", locN s "n") → 0 < locN s "n" →
+          memW post (tx + 208) = memW s (tx + 208) ∧
+          memW post (tx + 216) = memW s (tx + 216))
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := phase2_memcpy_header_contract h
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr S Nd tx ha hw ht hd htx hlen
+  exact ⟨hs s hc hp he hn hr S Nd tx 208 ha hw ht (by decide) (by decide) hd htx hlen,
+    hs s hc hp he hn hr S Nd tx 216 ha hw ht (by decide) (by decide) hd htx hlen⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
