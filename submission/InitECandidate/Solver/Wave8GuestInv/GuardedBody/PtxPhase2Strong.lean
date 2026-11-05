@@ -9984,4 +9984,65 @@ theorem phase2_count_cases_alloc_fresh (h : PtxCallees) {F : Type}
   obtain ⟨w, hv, _, _, hf⟩ := hr v rfl
   exact ⟨w, hv, by simpa only [hcn] using hf⟩
 
+theorem phase2_count_exit_access_ready {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountExit s) : PtxAccessCountReady s := by
+  rcases hp with hp | hp
+  · exact hp.1.1.1.1.1
+  · exact hp.1.1.1.1
+
+/-- The disabled case also obtains a live, world-separated packed buffer. -/
+theorem phase2_count_cases_packed_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit PtxPackedKeysReady
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready := phase2_count_exit_access_ready hp
+  obtain ⟨nv, he, hn⟩ := R16Shards.PtxP1.params_one_value s (ofString "alloc") (ofString "n")
+    .one _ .one (by rw [hc]; exact R16Shards.PtxP1.lookup_alloc) _ vs body callee ret ha hl
+  obtain ⟨n, hen, hsize, _⟩ := phase2_count_cases_alloc_eval s hp
+  rw [hen] at he
+  cases he
+  have hcn : locN (callEntryStateHOLFinite s callee) "n" = locN s "nkeys" * 52 + 8 := by
+    simpa [locN, callEntryStateHOLFinite, hn] using hsize
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hready.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hready.1.2
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, hret⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW) (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hready.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  obtain ⟨w, rfl, hf⟩ := phase2_count_cases_alloc_fresh h s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨w', hv, hav⟩ := hret (.val (.word w)) rfl
+  cases hv
+  dsimp only at hav
+  rw [hcn] at hav
+  let out := setVarHOLFinite (ofString "al_keys") (.val (.word w)) { post with locals := s.locals }
+  have hptr : locN out "al_keys" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nkeys" = locN s "nkeys" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  refine ⟨⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_, ?_,
+    S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · change Inside (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+      InitE.sourceBase (globN post "heap_ptr")
+    rw [hptr, hcount]
+    exact ⟨hready.1.1.1.1.1.1.1.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · change locN out "al_keys" % 8 = 0
+    rw [hptr]
+    exact hf.1
+  · change WordsOK post (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+    rw [hptr, hcount]
+    exact hf.2.2
+  · have ht := R16Shards.PtxP1.txAccessListAt_with_locals post out.locals post.clock hTp
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "tx" by decide] using ht
+  · change IvlsDisj [(locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned post S' Nd')
+    simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide] using hav
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
