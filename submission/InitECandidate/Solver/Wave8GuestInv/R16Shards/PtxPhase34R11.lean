@@ -2543,6 +2543,27 @@ theorem lst_new_stable_fresh (h : PtxCallees) {F : Type}
   · simpa only [hargs.1, hargs.2.1] using hb
   · simpa only [hargs.1, hargs.2.1] using hd
 
+theorem lst_new_stable_source_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableCapReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  have hp' := logPointers_heapStep hs' hp.1 hp.1.1.2.2
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v _ hp', ?_⟩
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide,
+    show ofString "stable_logs" ≠ ofString "nl" from by decide] using hp.2
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
