@@ -9800,4 +9800,27 @@ theorem phase2_packed_alloc_total (h : PtxCallees) (value : Nat) :
     exact hfields i (List.mem_range.mp hi)
   · exact hp.2
 
+/-- Allocation assembles all resources consumed by the concrete counter reset. -/
+theorem phase2_packed_alloc_init_ready (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧
+        locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+        locN s "nal" = memW s (locN s "tx" + 216))
+      PtxPackedInitReady (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hw := phase2_packed_keys_alloc_world_ready h s vs body callee ret v post hc hp.1 ha hl hb
+  have hs := phase2_packed_alloc_input_separated h s vs body callee ret v post hc hp.1 ha hl hb
+  have hn := phase2_packed_alloc_nal h s vs body callee ret v post hc ⟨hp.1, hp.2.2⟩ ha hl hb
+  have ht := phase2_packed_alloc_total h (locN s "nkeys") s vs body callee ret v post
+    hc ⟨hp.1, hp.2.1.symm⟩ ha hl hb
+  refine ⟨hw.1, hw.2, ?_, hs.1, hs.2, ?_, hn⟩
+  · rw [ht]
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  · unfold globN
+    split
+    · exact Nat.le_of_lt (BitVec.isLt _)
+    · exact Nat.zero_le _
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
