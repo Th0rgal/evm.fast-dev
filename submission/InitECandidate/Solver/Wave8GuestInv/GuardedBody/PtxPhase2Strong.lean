@@ -169,6 +169,37 @@ theorem phase1_recover_sender_word (h : PtxCallees) :
   exact ⟨(R16Shards.PtxP1.hoare_recover_sender h).run s hc hp.1 hnt hr,
     (phase1_call0_word (ofString "sender") _ _).run s hc hp.2 hnt hr⟩
 
+/-- Frame all pre-price witnesses through sender recovery at once. -/
+theorem phase1_recover_sender_shapes (h : PtxCallees) :
+    Hoare (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (.call (some (none, none)) (ofString "recover_sender_with_chain_id") R16Shards.PtxP1.recoverArgs)
+      (fun r s => r = none → R16Shards.PtxP1.StageP 1 s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)])) := by
+  have hkeep : Hoare
+      (fun s => (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (.call (some (none, none)) (ofString "recover_sender_with_chain_id") R16Shards.PtxP1.recoverArgs)
+      (fun r s => r = none →
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)])) := by
+    apply Hoare.call0_resume
+    intro F s vs body callee ret v post hc hp ha hl hb
+    exact hp
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(R16Shards.PtxP1.hoare_recover_sender h).run s hc hp.1 hnt hr,
+    hkeep.run s hc hp.2 hnt hr⟩
+
 theorem phase1_shape_four_words {v : ValueHOL 64}
     (h : shapeEqHOL (shapeOfHOLExact v) (.comb [.one, .one, .one, .one]) = true) :
     ∃ a b c d : BitVec 64, v = .rStruct
