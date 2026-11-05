@@ -10213,4 +10213,62 @@ theorem phase4NullLogs_backing_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+theorem localsOnly_phase4ReceiptBackingReady :
+    LocalsOnly ["index", "out", "logs"] (fun s => Phase4ReceiptReady s ∧ TxBacking s) := by
+  intro F s locals k hl hp
+  exact ⟨localsOnly_phase4ReceiptReady s locals k hl hp.1, hp.2⟩
+
+/-- The success flag uses only locals and therefore retains backing. -/
+theorem phase4Succeeded_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 121 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 121 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_phase4ReceiptBackingReady _ (by decide) _ _ ?_
+    refine seq_bound_trans (P := fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (Q := fun s => Phase4ReceiptReady s ∧ TxBacking s) ?_ ?_ htail
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (P := fun s => Phase4ReceiptReady s ∧ TxBacking s)
+          (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock (P := fun s => Phase4ReceiptReady s ∧ TxBacking s) clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := fun s => Phase4ReceiptReady s ∧ TxBacking s) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_phase4ReceiptBackingReady
+            (name := ofString "succeeded") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
+/-- Compose the backing-aware prefix through the receipt-encoding entry. -/
+theorem phase4BeforeReceipt_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 24 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + b)) := by
+  have hb := @phase4ThroughLogs_backing_cut h hcredit _ _
+    (phase4NullLogs_backing_cut h (phase4Succeeded_backing_cut htail))
+  have he : spinePlug 24 (spineAt 99 ptxCode) tail =
+      spinePlug 21 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 120 ptxCode)
+          (spinePlug 2 (spineAt 121 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
