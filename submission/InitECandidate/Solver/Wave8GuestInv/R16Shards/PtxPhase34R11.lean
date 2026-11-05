@@ -7719,6 +7719,36 @@ theorem phase4ReceiptPush_cut (h : PtxCallees)
     (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1)
     hresume hs s hc hp
 
+/-- Owned stable receipts discharge the final push and store continuation. -/
+theorem phase4ReceiptPush_owned_cut (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (spinePlug 2 (spineAt 137 ptxCode) tail) (K.lst_push + b + 1) := by
+  have hs : TerminatingProgBoundedOn Phase4ReceiptSlotReady
+      (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_store u (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))
+      exact ⟨by omega, by omega⟩) hoare_receiptSlot_store htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  have he : spinePlug 2 (spineAt 137 ptxCode) tail =
+      .decCall (ofString "rl") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8]
+        (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.decCall_on
+    h.fb_lst_push _ _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1.1)
+    (resume_lst_push_owned_receiptSlot h hnonzero) hs s hc hp
+
 /-- The receipt prefix, log pushing, allocation, and stable copying compose. -/
 theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
     (hresume : DecCallResumeOn Phase4TypedLogPointers
