@@ -2591,4 +2591,32 @@ theorem phase2_address_alloc_world (h : PtxCallees) :
     simpa [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "al_addrs" ≠ ofString "nal" by decide] using hav
 
+/-- Address-array storage and input separation available before initialization. -/
+def PtxAddressReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAccessCountReady s ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "al_addrs") = some (.val (.word w))) ∧
+  Inside (locN s "al_addrs", (locN s "nal" + 1) * 8) InitE.sourceBase (globN s "heap_ptr") ∧
+  locN s "al_addrs" % 8 = 0 ∧
+  WordsOK s (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+  Disj (locN s "te", 200) (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+  Disj (locN s "tx", 384) (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+  (0 < memW s (locN s "tx" + 216) →
+    Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_addrs", (locN s "nal" + 1) * 8)) ∧
+  ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+    IvlsDisj [(locN s "al_addrs", (locN s "nal" + 1) * 8)] (worldOwned s S Nd)
+
+/-- Assemble the allocation facts into the address initialization invariant. -/
+theorem phase2_address_alloc_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady PtxAddressReady
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨hc', hw, hin, halign, hwords⟩ :=
+    phase2_address_alloc_live h s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨hte, htx, hrec⟩ :=
+    phase2_address_alloc_separated h s vs body callee ret v post hc hp ha hl hb
+  exact ⟨hc', hw, hin, halign, hwords, hte, htx, hrec,
+    phase2_address_alloc_world h s vs body callee ret v post hc hp ha hl hb⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
