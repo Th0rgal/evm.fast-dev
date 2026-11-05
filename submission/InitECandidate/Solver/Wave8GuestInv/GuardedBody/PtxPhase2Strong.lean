@@ -8370,4 +8370,73 @@ theorem phase2_packed_outer_iteration_reset_hoare :
     exact fun _ => phase2_packed_outer_iteration_reset s hp.1 hp.2.1 hp.2.2
   · exact fun _ _ hr => by cases hr
 
+/-- Clock decrement preserves all resources of the outer packing iteration. -/
+theorem phase2_packed_outer_iteration_decClock {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedOuterIteration s) :
+    PtxPackedOuterIteration (decClockHOLFinite s) := by
+  have hr := phase2_packed_keys_with_locals s s.locals (s.clock - 1)
+    hp.2.1.1 (by intros; rfl)
+  exact ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s s.locals (s.clock - 1)).mpr hp.1.1) hr,
+    ⟨hr, hp.2.1.2⟩, hp.2.2⟩
+
+/-- Outer packing-loop induction retains separation and identifies the total packed count. -/
+theorem phase2_packed_outer_iteration_while {guard : ExpHOL 64} {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) body
+      (fun r s => r = none → PtxPackedOuterIteration s))
+    (hg : ∀ {F} (s : PanSemStateFiniteExact 64 F) (w : BitVec 64),
+      PtxPackedOuterIteration s → evalAt s guard = some (.val (.word w)) →
+      (w ≠ 0 ↔ locN s "i" < memW s (locN s "tx" + 216)))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare PtxPackedOuterIteration (.while guard body)
+      (fun r s => r = none → PtxPackedOuterIteration s ∧ locN s "k" = locN s "nkeys") := by
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s (.while guard body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → PtxPackedOuterIteration st →
+      evaluateHOLFiniteState st (.while guard body) = (none, post) →
+      PtxPackedOuterIteration post ∧ locN post "k" = locN post "nkeys" from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      have hguard := hg st w hp (by simpa [evalAt] using hw)
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd := phase2_packed_outer_iteration_decClock st hp
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc ⟨hd, hguard.mp hnz⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            apply ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨hp, (phase2_packed_outer_exit hp.2.1
+          (fun hlt => hz (hguard.mpr hlt))).2⟩
+    · simp at he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
