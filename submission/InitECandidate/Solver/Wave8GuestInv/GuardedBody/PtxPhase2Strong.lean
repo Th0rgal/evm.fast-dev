@@ -6036,4 +6036,14 @@ theorem phase2_tx_count_world_frame {F : Type}
     (by constructor <;> dsimp <;> omega) (by omega) hf
     (hsep _ (by simp)) hr (worldOwned_zero_aligned hw) hz
 
+/-- The supplied copy contract preserves every global, not just the heap boundary. -/
+theorem phase2_memcpy_globals_contract (h : PtxCallees) :
+    FunSpec WorldOK
+      (fun s r post => Resumes r → GlobalsKept [] s post)
+      (ofString "memcpy") := by
+  obtain ⟨params, body, ret, hl, hs⟩ := h.wk_memcpy
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hp he hn hr
+  exact (hs s hc hp he hn hr).2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
