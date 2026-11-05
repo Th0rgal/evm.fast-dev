@@ -2394,6 +2394,19 @@ theorem phase4StableCap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hlu,
     show ofString "stable_log_cap" ≠ ofString "nl" from by decide]
 
+def Phase4StableCapReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    locN s "stable_log_cap" = max 1 (locN s "nl")
+
+theorem phase4StableCap_bounds {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableCapReady s) :
+    1 ≤ locN s "stable_log_cap" ∧ locN s "nl" ≤ locN s "stable_log_cap" ∧
+      8 * locN s "stable_log_cap" < 2 ^ 64 := by
+  have hn := hp.1.1.2.1
+  have hb := hp.1.1.1.2.2.1
+  rw [hp.2]
+  omega
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
