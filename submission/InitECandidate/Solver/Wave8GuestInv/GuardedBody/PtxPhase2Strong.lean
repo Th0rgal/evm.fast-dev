@@ -2733,4 +2733,19 @@ theorem phase2_address_store_spatial {F : Type} {s : PanSemStateFiniteExact 64 F
     simpa only [phase2_address_store_header hp hin hm 216 (by decide) (by decide),
       phase2_address_store_header hp hin hm 208 (by decide) (by decide)] using hp.2.2.2.2.2.2.2.1
 
+/-- Assemble address-buffer store preservation once the environment's
+store-ready invariant has been transported. -/
+theorem phase2_address_store_ready_of_teReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (hte : PtxTeStoreReady { s with memory := mem }) :
+    PtxAddressReady { s with memory := mem } := by
+  obtain ⟨hnw, hn⟩ := phase2_address_store_count hp hin hm
+  obtain ⟨hw, hr⟩ := phase2_address_store_spatial hp hx hin hm
+  obtain ⟨S, Nd, hW, hT, hd⟩ := phase2_address_store_txAccess hp hx hin hm
+  exact ⟨⟨hte, hnw, hn⟩, hp.2.1, hp.2.2.1, hp.2.2.2.1, hw,
+    hp.2.2.2.2.2.1, hp.2.2.2.2.2.2.1, hr, S, Nd, hW, hT, hd⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
