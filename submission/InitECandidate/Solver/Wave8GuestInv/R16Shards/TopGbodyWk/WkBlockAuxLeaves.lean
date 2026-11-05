@@ -6460,4 +6460,85 @@ theorem wkSc_htab_union_into_nonValue :
       (fun i hi => (he.2.2.2.2.2.1 i hi).2)
   · exact False.elim (htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody]))
 
+/-- Role separation also applies to shared inner-storage tables: sharing an
+inner role never permits aliasing a value-owning outer table. -/
+theorem unionNonValueEntry_of_role {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : WorldOK s) {role : String}
+    (hr : (locN s "dst", role) ∈ worldRoleSlots s)
+    (hb : role ≠ "bs+32") (hts : role ≠ "ts+32")
+    (hba : role ≠ "bal_accounts") (hstor : role ≠ "bal.stor")
+    (hws : role ≠ "ws+32") : UnionNonValueEntry s := by
+  refine ⟨hW, ?_⟩
+  intro S hT
+  have hroles := hT.2.2.2.2.2.2.2.2.2.2.2
+  have ht := (hroles.1 _ (List.mem_append_left _ hr)).1
+  have hnz : locN s "dst" ≠ 0 := by
+    have hf := (List.mem_filter.1 hr).2
+    simpa using hf
+  have hne : ∀ u label, (u, label) ∈ worldRoleSlots s → role ≠ label →
+      u ≠ locN s "dst" := by
+    intro u label hu hlabel
+    exact (R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role hroles hr hu hlabel).symm
+  refine ⟨ht, ?_, ?_, ?_, ?_, ?_⟩
+  · intro hb0 heq
+    apply hne _ "bs+32" ?_ hb heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hb0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hb0]
+  · intro ht0 heq
+    apply hne _ "ts+32" ?_ hts heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ts" 32 _ ht0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, ht0]
+  · intro heq
+    apply hne _ "bal_accounts" ?_ hba heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    simp
+  · intro ad had heq
+    apply hne _ "bal.stor" ?_ hstor heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    apply List.mem_append.2; right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+  · intro hw0 heq
+    apply hne _ "ws+32" ?_ hws heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ws" 32 _ hw0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hw0]
+
+/-- An existing nonnull block inner table has the reusable union entry frame. -/
+theorem unionNonValueEntry_bs_inner {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0)
+    (houter : memW s (globN s "bs" + 32) ≠ 0)
+    (hinner : locN s "dst" ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (hnz : locN s "dst" ≠ 0) : UnionNonValueEntry s := by
+  apply unionNonValueEntry_of_role hW (role := "bs.inner")
+    ?_ (by decide) (by decide) (by decide) (by decide) (by decide)
+  unfold worldRoleSlots
+  apply List.mem_filter.2
+  refine ⟨?_, by simpa using hnz⟩
+  have hm : (locN s "dst", "bs.inner") ∈ nestRoles s "bs" "bs.inner" := by
+    simp only [nestRoles, hbs, houter, ↓reduceIte]
+    exact List.mem_map.2 ⟨locN s "dst", hinner, rfl⟩
+  simp only [List.mem_append]
+  exact Or.inl (Or.inl (Or.inr hm))
+
+/-- Inner-storage unions cover both allocated and null values of the outer table. -/
+theorem wkSc_htab_union_into_bs_inner :
+    WorldKeepsSc (fun s => WorldOK s ∧ globN s "bs" ≠ 0 ∧
+      memW s (globN s "bs" + 32) ≠ 0 ∧
+      locN s "dst" ∈ htabValues s (memW s (globN s "bs" + 32)))
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := wkSc_htab_union_into_nonValue
+  obtain ⟨params0, body0, ret0, hl0, hb0⟩ := wkSc_htab_union_into_zero
+  have heq := Option.some.inj (hl.symm.trans hl0)
+  cases heq
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  by_cases hz : locN s "dst" = 0
+  · exact hb0 s hc ⟨hP.1, hz⟩ hex hnt hres
+  · exact hb s hc
+      (unionNonValueEntry_bs_inner hP.1 hP.2.1 hP.2.2.1 hP.2.2.2 hz) hex hnt hres
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
