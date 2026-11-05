@@ -2793,7 +2793,7 @@ private theorem worldEff_rlp_list_to_slices_vvh {F : Type}
     exact ⟨hkeep_arr, hkeep_cnt,
       wordLocals_flowing hws_lts ht_wloc (by rcases hf with h | h; exact Or.inl h; exact Or.inr (Or.inr h))⟩
 
-private theorem rlp_list_to_slices_ret_bound_vvh {F : Type}
+private theorem rlp_list_to_slices_ret_le_len_vvh {F : Type}
     (s cpost : PanSemStateFiniteExact 64 F) (vals : List (ValueHOL 64)) (rv : ValueHOL 64)
     (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
     (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_to_slices") vals =
@@ -2801,8 +2801,10 @@ private theorem rlp_list_to_slices_ret_bound_vvh {F : Type}
     (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_to_slices) =
       (some (.returned rv), cpost)) :
     ∃ warr wcnt : BitVec 64,
-      rv = .rStruct [.val (.word warr), .val (.word wcnt)] ∧ wcnt.toNat ≤ domainBytes := by
-  have _ := hl
+      rv = .rStruct [.val (.word warr), .val (.word wcnt)] ∧
+      wcnt.toNat ≤ domainBytes ∧ wcnt.toNat ≤ locN s "len" := by
+  obtain ⟨wp, wlen, rfl, hp_lk, hlen_lk⟩ := lookupCode_two_words_any_vvh (by decide) lookup_rlp_list_to_slices_vvh hl
+  have hloc_len : locN s "len" = wlen.toNat := by simp [locN, hlen_lk]
   have hbody : sourceFnBody Guest.Software.guestFn_rlp_list_to_slices =
       .decCall (ofString "count") .one (ofString "rlp_list_count")
         [.var .local (ofString "p"), .var .local (ofString "len")]
@@ -2820,25 +2822,36 @@ private theorem rlp_list_to_slices_ret_bound_vvh {F : Type}
   rw [hbody] at hret1
   revert rv hret1
   change RetOK_vvh (fun rv => ∃ warr wcnt : BitVec 64,
-    rv = .rStruct [.val (.word warr), .val (.word wcnt)] ∧ wcnt.toNat ≤ domainBytes) s _
+    rv = .rStruct [.val (.word warr), .val (.word wcnt)] ∧
+    wcnt.toNat ≤ domainBytes ∧ wcnt.toNat ≤ locN s "len") s _
   intro rv hret1
   revert rv hret1
-  refine R_decCall'_vvh (fun cvals cbody callee crs vcnt _ hlk hrun_c1 _ u1 _ _ hu1_cnt => ?_)
-  have hsame := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ cbody _ crs cvals callee
+  refine R_decCall'_vvh (fun cvals cbody callee crs vcnt hargs hlk hrun_c1 _ u1 _ _ hu1_cnt => ?_)
+  simp only [evalListHOLFinite_eq_toExact, evalListHOLExact, evalHOLExact, hp_lk, hlen_lk, Option.some.injEq] at hargs
+  subst hargs
+  have hsame := lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ cbody _ crs [.val (.word wp), .val (.word wlen)] callee
     (by rw [hc]; exact lookup_rlp_list_count_vvh) hlk
   subst hsame
-  have hret_eq := lookupCodeHOLFinite_installed_return s _ _ _ _ _ crs cvals callee
+  have hret_eq := lookupCodeHOLFinite_installed_return s _ _ _ _ _ crs [.val (.word wp), .val (.word wlen)] callee
     (by rw [hc]; exact lookup_rlp_list_count_vvh) hlk
   subst hret_eq
+  have hlk_c : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_count")
+      [.val (.word wp), .val (.word wlen)] =
+      some (sourceFnBody Guest.Software.guestFn_rlp_list_count, callee, .one) := by
+    simpa [hc] using hlk
+  obtain ⟨_, _, hcallee_len⟩ := callee_p_len_vvh lookup_rlp_list_count_vvh _ _ _ callee _ hlk_c
+  have hloc_callee : locN (callEntryStateHOLFinite s callee) "len" = wlen.toNat := by
+    simp [locN, callEntryStateHOLFinite, hcallee_len]
   rcases hrun_c : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
       (sourceFnBody Guest.Software.guestFn_rlp_list_count) with ⟨rc, st_c⟩
   rw [hrun_c] at hrun_c1
   dsimp only at hrun_c1
   subst hrun_c1
-  obtain ⟨wcnt, rfl, hcnt_dom⟩ :=
-    rlp_list_count_ret_bound_vvh (callEntryStateHOLFinite s callee) st_c cvals vcnt
+  obtain ⟨wcnt, rfl, hcnt_dom, hcnt_le⟩ :=
+    rlp_list_count_ret_le_len_vvh (callEntryStateHOLFinite s callee) st_c [.val (.word wp), .val (.word wlen)] vcnt
       hc (guestInv_callEntry s callee hG)
-      (by simpa [hc, callEntryStateHOLFinite] using hlk) hrun_c
+      (by simpa [callEntryStateHOLFinite] using hlk_c) hrun_c
+  rw [hloc_callee, ← hloc_len] at hcnt_le
   refine R_decCall_vvh (fun u2 varr hsh_arr _ hloc2 hu2_arr => ?_)
   rcases varr with ⟨⟨warr⟩⟩ | _ | _ <;> simp [shapeOfHOLExact, shapeEqHOL] at hsh_arr
   have hu2_cnt : u2.locals.lookup (ofString "count") = some (.val (.word wcnt)) := by
@@ -2867,7 +2880,19 @@ private theorem rlp_list_to_slices_ret_bound_vvh {F : Type}
     rw [hmid] at hk; exact hk.trans hu4_cnt
   refine R_ret_vvh (fun v hv => ?_)
   simp [evalHOLExact, evalListHOLExact, hkeep_arr, hkeep_cnt] at hv
-  exact ⟨warr, wcnt, hv.symm, hcnt_dom⟩
+  exact ⟨warr, wcnt, hv.symm, hcnt_dom, hcnt_le⟩
+
+private theorem rlp_list_to_slices_ret_bound_vvh {F : Type}
+    (s cpost : PanSemStateFiniteExact 64 F) (vals : List (ValueHOL 64)) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_list_to_slices") vals =
+      some (sourceFnBody Guest.Software.guestFn_rlp_list_to_slices, s.locals, .comb [.one, .one]))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_to_slices) =
+      (some (.returned rv), cpost)) :
+    ∃ warr wcnt : BitVec 64,
+      rv = .rStruct [.val (.word warr), .val (.word wcnt)] ∧ wcnt.toNat ≤ domainBytes := by
+  obtain ⟨warr, wcnt, hrv, hdom, _⟩ := rlp_list_to_slices_ret_le_len_vvh s cpost vals rv hc hG hl hret
+  exact ⟨warr, wcnt, hrv, hdom⟩
 
 /-! ## Section 4: Transaction Decoding Helpers (`tx_*`, `decode_*`) and `wk_is_valid_versioned_hashes` -/
 
