@@ -2,6 +2,7 @@ import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase34R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -13802,5 +13803,109 @@ theorem phase2_backing_of_fixed_unhit {F : Type}
   · intro k hk; exact (hf _ (hl k hk) (by simp)).2.1
   · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl k hk) (by simp)).1).2
   · intro k hk; exact hu _ (hl k hk)
+
+/-- A narrow concrete effect frames any aligned interval disjoint from its writes. -/
+theorem phase2_worldEff_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {R : List Ivl} {B : List (String × Nat)} {gw : List String} {i : Ivl}
+    (h : R16Shards.WorldEff s post R B gw)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hR : ∀ j ∈ R, Disj i j)
+    (hB : ∀ b ∈ B, Disj i (bufferRegion s b))
+    (hgap : Disj i (freeGap s)) (hheap : Disj i (heapFree s)) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  by_contra he
+  have hh' : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  have hne : post.memory a ≠ s.memory a := he
+  have exclude : ∀ j, Disj i j → ¬ Fast_C08WkShard03.CellHitsPos a.toNat j := by
+    intro j hd hc
+    unfold Disj at hd
+    simp only [Fast_C08WkShard03.CellHitsPos, CellHits] at hc
+    rcases hd with hz | hz | hl | hr <;> dsimp at * <;> omega
+  rcases h.cell_frame _ hne with ⟨j, hj, hc⟩ | ⟨b, hb, hc⟩ | hc | hc
+  · exact exclude j (hR j hj) hc
+  · exact exclude _ (hB b hb) hc
+  · exact exclude _ hgap hc
+  · exact exclude _ hheap hc
+
+/-- Existing allocated intervals avoid both allocation gaps in a concrete effect. -/
+theorem phase2_worldEff_allocated_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : List Ivl} {B : List (String × Nat)} {gw : List String} {i : Ivl}
+    (h : R16Shards.WorldEff s post R B gw) (hs : ArenaReady s)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (ha : Allocated s i)
+    (hR : ∀ j ∈ R, Disj i j)
+    (hB : ∀ b ∈ B, Disj i (bufferRegion s b)) : IvlUnhit s post i := by
+  apply phase2_worldEff_unhit h hi hR hB
+  · unfold Allocated Inside at ha
+    unfold Disj freeGap
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        omega)))
+  · unfold Allocated Inside at ha
+    unfold Disj heapFree
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl hhi))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+
+/-- Backing needs only three headers framed, allowing writes to fixed scratch buffers. -/
+theorem phase2_backing_of_header_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hbo : IvlUnhit s post (globN s "bo", 88))
+    (hl : ∀ k ∈ ([40, 72] : List Nat),
+      IvlUnhit s post (memW s (globN s "bo" + k), 24)) : R16Shards.TxBacking post := by
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → Allocated s i ∧ WordsOK s i := by
+    intro i hi hn
+    exact (hw.2.2.1.1 i hi).resolve_left hn
+  have hbo_mem : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl_mem : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  apply PtxP34.txBacking_of_unhit_headers hb hg
+  · exact (hf _ hbo_mem (by simp)).2.1
+  · exact (ivl_allocated_bound ha.2 (hf _ hbo_mem (by simp)).1).2
+  · exact hbo
+  · intro k hk; exact (hf _ (hl_mem k hk) (by simp)).2.1
+  · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl_mem k hk) (by simp)).1).2
+  · exact hl
+
+/-- Concrete world-state account decoding frames existing objects outside its scratch buffers. -/
+theorem phase2_ws_get_account_optional_unhit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) {i : Ivl} (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hal : Allocated s i)
+    (hd : ∀ b ∈ R16Shards.wsBufs, Disj i (bufferRegion s b))
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    IvlUnhit s (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 i := by
+  have he := R16Shards.worldEff_ws_get_account_optional s s ha.2
+    (R16Shards.WorldEff.refl s [] R16Shards.wsBufs R16Shards.wsGw ha hc) hnt hr
+  exact phase2_worldEff_allocated_unhit he ha hi hal (by simp) hd
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

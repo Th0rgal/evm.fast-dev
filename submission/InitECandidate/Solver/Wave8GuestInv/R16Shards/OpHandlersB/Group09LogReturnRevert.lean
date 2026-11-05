@@ -12211,4 +12211,37 @@ theorem log_growth_frame_post_g09 {F : Type}
   · exact hbufferWords
   · exact hmsg
 
+/-- Existing log records are valid, bounded, and separated from the list header
+by the frame's object-disjointness invariant. -/
+theorem log_records_of_frame_pairwise_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {ec : Ivl} {S : List Nat}
+    (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hheap : globN s "heap_ptr" ≤ 2 ^ 64)
+    (hnonnull : memW s (ec.1 + 88) ≠ 0) :
+    ∀ i, i < memW s (memW s (ec.1 + 88) + 8) →
+      let oldLog := memW s (memW s (memW s (ec.1 + 88)) + 8 * i)
+      LogEntryOK s oldLog ∧ oldLog + 40 ≤ 2 ^ 64 ∧
+        Disj (oldLog, 40) (memW s (ec.1 + 88), 24) := by
+  intro i hi oldLog
+  have hlogs := hFW.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  rcases hlogs with hz | ⟨_, _, _, _, hentries⟩
+  · exact False.elim (hnonnull hz)
+  have hentry := (hentries i hi).2
+  refine ⟨hentry, le_trans hentry.2.1.2 hheap, ?_⟩
+  unfold frameObjects at hpw
+  have hp0 := (List.pairwise_cons.1 hpw).2
+  have hp1 := (List.pairwise_cons.1 hp0).2
+  have hp2 := (List.pairwise_cons.1 hp1).2
+  have hp3 := (List.pairwise_cons.1 hp2).2
+  have hh := (List.pairwise_cons.1 hp3).1
+  apply R11Shards.Disj.symm
+  apply hh (oldLog, 40)
+  apply List.mem_cons_of_mem
+  apply List.mem_cons_of_mem
+  unfold frameLogObjects
+  apply List.mem_flatMap.2
+  refine ⟨i, List.mem_range.2 hi, ?_⟩
+  exact List.mem_filter.2 ⟨by simp [logRecordIvls, oldLog], by simp⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

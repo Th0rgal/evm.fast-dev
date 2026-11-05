@@ -9207,6 +9207,106 @@ theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
     simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
       noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
 
+/-- The success write frame preserves all four protected cells of every live
+frame.  Separation follows from the input invariant, including for the parent
+record that also contains the gas writes. -/
+theorem icsFrame_chainCells {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hI : EvmInv s)
+    (he : e.toNat = globN s "ev")
+    (hL : L.toNat = memW s (e.toNat + 88))
+    (harr : arr.toNat = memW s L.toNat)
+    (hcap : cap.toNat = memW s (L.toNat + 16))
+    {S : List Nat} (hInv : Wave8Contracts.M23.EvmInvAt s S)
+    (ht : tw.toNat ∈ S) : EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, _, _, hFW, _, _, hPair, hSep, _⟩ := hInv.2
+  let E := globN s "ev"
+  let C := globN s "cur_cont"
+  have hhead := head_mem_evmChain s
+  have hcs : evmChain s = (E, C) :: (evmChain s).tail := evmChain_cons s
+  have hL' : L.toNat = memW s (E + 88) := by simpa [E, he] using hL
+  have hLogs : frameLogs s (E, C) = (arr.toNat, 8 * cap.toNat) := by
+    simp only [frameLogs]
+    rw [← hL', ← harr, ← hcap]
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hP : ((E, 280) :: (C, 104) ::
+      [(memW s (E + 8), 32 * memW s (E + 232)),
+       (memW s (E + 24), memW s (E + 40)), (L.toNat, 24),
+       (arr.toNat, 8 * cap.toNat), frameRet s (E, C)]).Pairwise Disj := by
+    have := (List.pairwise_append.mp hP0).1
+    simpa only [frameObjects, List.pairwise_append, hLogs, ← hL'] using this
+  obtain ⟨hEsep, hP⟩ := List.pairwise_cons.mp hP
+  obtain ⟨hCsep, _⟩ := List.pairwise_cons.mp hP
+  have hcap0 : 0 < cap.toNat := by
+    have hf := hFW (E, C) hhead
+    have hh := hf.2.2.2.2.2.2.2.2.2.2.1
+    have hh' : 1 ≤ cap.toNat := by simpa only [← hL', ← hcap] using hh
+    omega
+  have hmemTail (ec : Ivl) (hc : ec ∈ (evmChain s).tail) (i : Ivl)
+      (hi : i ∈ frameObjects s ec) :
+      i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+    List.mem_flatten.mpr ⟨_, List.mem_map_of_mem hc, hi⟩
+  intro ec hec
+  have hf := hFW ec hec
+  have hbounds := Wave8Contracts.M23.frameWF_bounds hI.1.2 hf
+  have halloc (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)]) : Allocated s i := by
+    apply Or.inr
+    exact (hf.1 i (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hi ⊢; tauto)).1
+  have hds (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)]) :
+      Disj i (L.toNat, 24) ∧ Disj i (arr.toNat, 8 * cap.toNat) := by
+    rw [hcs] at hec
+    rcases List.mem_cons.mp hec with rfl | hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+      rcases hi with rfl | rfl
+      · exact ⟨hEsep _ (by simp), hEsep _ (by simp)⟩
+      · exact ⟨hCsep _ (by simp), hCsep _ (by simp)⟩
+    · have hit := hmemTail ec hc i (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+        rcases hi with rfl | rfl <;> simp [frameObjects])
+      constructor
+      · exact Wave8Contracts.M08.disj_symm (hcross _ (by simp [frameObjects, ← hL']) i hit)
+      · exact Wave8Contracts.M08.disj_symm (hcross _ (by simp [frameObjects, hLogs]) i hit)
+  have hkeep (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)])
+      (a : Nat) (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+      (hEa : ¬ CellHits a (e.toNat + 64, 136)) : memW post a = memW s a := by
+    obtain ⟨hdiL, hdiA⟩ := hds i hi
+    apply icsFrame_memW h hI.1 (halloc i hi) ha hab hEa
+    · exact noHit_of_disj hdiL (by simp) ha
+    · exact noHit_of_disj hdiA (by dsimp only; omega) ha
+    · intro j hj
+      apply noHit_of_disj ((hSep ec hec i (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+        rcases hi with rfl | rfl <;> simp [frameObjects])).1 tw.toNat ht j hj)
+      · exact htab_fp_pos (hInv.1.1.2.1 tw.toNat ht).1 j hj
+      · exact ha
+  have hEa (a : Nat) (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)])
+      (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2)
+      (hheadsafe : ec = (E, C) → ¬ CellHits a (E + 64, 136)) :
+      ¬ CellHits a (e.toNat + 64, 136) := by
+    rw [he]
+    rw [hcs] at hec
+    rcases List.mem_cons.mp hec with rfl | hc
+    · exact hheadsafe rfl
+    · have hd := Wave8Contracts.M08.disj_symm
+        (hcross (E, 280) (by simp [frameObjects]) i (hmemTail ec hc i (by
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+          rcases hi with rfl | rfl <;> simp [frameObjects])))
+      have hn := noHit_of_disj hd (by simp) ha
+      unfold CellHits at hn ⊢; dsimp only at hn ⊢; omega
+  have hrec (k : Nat) (hk : k = 24 ∨ k = 32 ∨ k = 40) :
+      memW post (ec.1 + k) = memW s (ec.1 + k) := by
+    apply hkeep (ec.1, 280) (by simp) _ (by dsimp only; omega) (by omega)
+    apply hEa _ (ec.1, 280) (by simp) (by dsimp only; omega)
+    intro hh; subst ec; unfold CellHits; dsimp only; omega
+  refine ⟨hrec 24 (by simp), hrec 32 (by simp), hrec 40 (by simp), ?_⟩
+  apply hkeep (ec.2, 104) (by simp) _ (by dsimp only; omega) (by omega)
+  apply hEa _ (ec.2, 104) (by simp) (by dsimp only; omega)
+  intro hh; subst ec
+  have hd := Wave8Contracts.M08.disj_symm (hEsep (C, 104) (by simp))
+  have hn := noHit_of_disj hd (by simp) (show C ≤ C + 56 ∧ C + 56 + 8 ≤ C + 104 by omega)
+  unfold CellHits at hn ⊢; dsimp only at hn ⊢; omega
+
 end IcsRun
 
 theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
