@@ -9207,6 +9207,37 @@ theorem finish_child_cleanup_aligned {F : Type}
   · exact (show globN post "ev" = globN mid "ev" by simp [globN, hgp]).trans hev
   · exact (show globN post "frame_mem_ptr" = globN mid "frame_mem_ptr" by simp [globN, hgp]).trans hfmp
 
+/-- The invariant supplies the parent's global word and allocated pc cell. -/
+theorem finish_child_cleanup_from_invariants {F : Type}
+    (st post : PanSemStateFiniteExact 64 F) (cmw cmmw : BitVec 64) {S : List Nat}
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (halign : ∀ ec ∈ evmChain st,
+      memW st (ec.1 + 32) % 32 = 0 ∧ memW st (ec.1 + 40) % 8 = 0)
+    (hlinks : ChainLinks (memW st) (evmChain st))
+    (hend : memW st (globN st "ev" + 24) + memW st (globN st "ev" + 40) = cmmw.toNat)
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState st EvmEkFk.fcCleanup = (some (.returned v), post)) :
+    EvmInvA post ∧ evmChain post = evmChain st ∧
+    EvmEkFk.ChainCellsAgree st post ∧
+    globN post "ev" = globN st "ev" ∧
+    globN post "frame_mem_ptr" = cmmw.toNat ∧
+    R11Shards.OpDispatchSpec.evmR post ≤ R11Shards.OpDispatchSpec.evmR st := by
+  have hFW := hInv.2.2.2.2.1 _ (head_mem_evmChain st)
+  have hw := hFW.1 (globN st "ev", 280) (by simp)
+  obtain ⟨pc, hd, hm⟩ := hw.2.2.2 0 (by norm_num)
+  obtain ⟨e, he⟩ := hAs.2.2.2.2.2.2.2.2.2 "ev" (by decide)
+  have heq : BitVec.ofNat 64 (globN st "ev") = e := by
+    simp [globN, GlobalWord] at he ⊢
+    rw [he]
+    simp
+  exact finish_child_cleanup_aligned st post cmw cmmw
+    (BitVec.ofNat 64 (globN st "ev")) pc hAs hInv hRel hcm hcmm halign hlinks hend
+    (by rw [heq]; exact he) (by simpa using hm) (by simpa using hd) v hr
+
 /-- Expose the concrete two-global pop before the finish-child branches. -/
 theorem finish_child_pop_assignments {F : Type} (s : PanSemStateFiniteExact 64 F)
     (parent next : BitVec 64)
