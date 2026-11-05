@@ -4,6 +4,7 @@ import InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg
 import InitECandidate.Solver.Wave8GuestInv.HtabC00Ports.NewScratchSpec
 import InitECandidate.Solver.Wave8GuestInv.GuardedBody.PtxPhase2Tables
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalStep
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -5264,5 +5265,173 @@ theorem hoare_prepare_dispatch_delegated_finish_ready (gw : List String) (hp : N
   have h := (hoare_prepare_dispatch_delegated_finish gw hp G ch code code_n daddr).run
     s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
   exact ⟨h.1, code, code_n, h.2.1, h.2.2.1, hnb⟩
+
+/-- A pure heap allocation preserves the owned message and the complete EVM frame. -/
+theorem evmMsgReady_of_heap_alloc_pure {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (h : EvmMsgReady s)
+    (p q : BitVec 64)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hpq : p.toNat ≤ q.toNat) (hq : q.toNat ≤ heapLimit) (hq8 : q.toNat % 8 = 0)
+    (hc : post.code = s.code) (hd : post.memaddrs = s.memaddrs)
+    (hs : post.shMemaddrs = s.shMemaddrs) (hb : post.baseAddr = s.baseAddr)
+    (hbe : post.be = s.be)
+    (hg : post.globals = s.globals.update (ofString "heap_ptr", .val (.word q)))
+    (hm : post.memory = s.memory) :
+    EvmMsgReady post ∧ EvmStep ["heap_ptr"] s post := by
+  have hA := h.1
+  have hpn : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hqn : globN post "heap_ptr" = q.toNat := by
+    simp [globN, hg, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hG : GlobalsKept ["heap_ptr"] s post := by
+    intro g hn
+    have hne : g ≠ ofString "heap_ptr" := by simpa using hn
+    simp [hg, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+  have hgn : ∀ g : String, ofString g ≠ ofString "heap_ptr" →
+      globN post g = globN s g := by
+    intro g hn
+    unfold globN
+    rw [hG (ofString g) (by simpa using hn)]
+  have hAp : ArenaReady post := by
+    refine ⟨⟨hc.trans hA.1.code, hd.trans hA.1.memaddrs,
+      hs.trans hA.1.shMemaddrs, hb.trans hA.1.baseAddr⟩, ?_⟩
+    refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+    · rw [hqn]; have := hA.2.1; rw [hpn] at this; omega
+    · rw [hqn]; exact hq
+    · rw [hgn "frame_mem_ptr" (by decide)]; exact hA.2.2.2.1
+    · rw [hgn "frame_mem_ptr" (by decide), hgn "scratch_ptr" (by decide)]
+      exact hA.2.2.2.2.1
+    · rw [hgn "scratch_ptr" (by decide)]; exact hA.2.2.2.2.2.1
+    · rw [hqn]; exact hq8
+    · rw [hgn "frame_mem_ptr" (by decide)]; exact hA.2.2.2.2.2.2.2.1
+    · rw [hgn "scratch_ptr" (by decide)]; exact hA.2.2.2.2.2.2.2.2.1
+    · exact globalsWord_update _ _ hg hA.2.2.2.2.2.2.2.2.2
+  obtain ⟨_, S, hI⟩ := evmInv_of_evmMsgReady s h
+  obtain ⟨hIp, hch, _⟩ := OpHandlersB.evmInvAt_of_fresh_heap_step hA hI hAp hbe
+    (by rw [hpn, hqn]; exact hpq) hG (fun _ _ => by rw [hm])
+    (fun _ _ _ => by simp [memB, hm, hbe])
+  have hInv : EvmInv post := ⟨hAp, S, hIp⟩
+  exact ⟨evmMsgReady_of_evmInv post hInv, hInv, by rw [hpn, hqn]; exact hpq,
+    hG, hch⟩
+
+/-- The actual allocator returns the old heap pointer, reserves the requested
+bytes and changes no memory, retaining the dispatch frame. -/
+theorem dispatch_alloc_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (h : EvmMsgReady s)
+    (p n : BitVec 64)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_alloc) (fun v post =>
+      v = .val (.word p) ∧ EvmMsgReady post ∧ EvmStep ["heap_ptr"] s post ∧
+      p.toNat + n.toNat ≤ globN post "heap_ptr" ∧ post.memory = s.memory ∧
+      post.globals = s.globals.update (ofString "heap_ptr",
+        .val (.word ((p + (n + 7)) &&& ((0 : BitVec 64) - 8))))) := by
+  intro v hv
+  have hpn : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hp_le : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat := by
+    change p.toNat ≤ heapLimit
+    rw [← hpn]
+    exact h.1.2.2.1
+  obtain ⟨rfl, hg, hm, hfit, hlim, h8⟩ :=
+    M13.evaluate_alloc_body_general s p n hc hp_le hp hn v hv
+  have hmeta := InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata s
+    (sourceFnBody Guest.Software.guestFn_alloc)
+  have hguest := M13.evaluateHOLFiniteState_guestInv_be s
+    (sourceFnBody Guest.Software.guestFn_alloc) h.1.1
+  have hr := evmMsgReady_of_heap_alloc_pure h p _ hp (by omega) hlim h8
+    hmeta.1 hmeta.2.1 (hguest.1.shMemaddrs.trans h.1.1.shMemaddrs.symm)
+    (hguest.1.baseAddr.trans h.1.1.baseAddr.symm) hguest.2 hg hm
+  refine ⟨rfl, hr.1, hr.2, ?_, hm, hg⟩
+  simpa [globN, hg, HolFiniteMapExact.lookup_update, FUPDATE] using hfit
+
+/-- Allocate the aligned 24-byte delegation-address buffer while retaining
+the caller's message local and original step frame. -/
+theorem dispatch_alloc_resume (gw : List String) (hp0 : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hh : "heap_ptr" ∈ gw) :
+    DecCallResumeOn (D0Pre gw hp0 G ch)
+      (fun s => D0Pre gw hp0 G ch s ∧ ∃ p : BitVec 64,
+        s.locals.lookup (ofString "daddr") = some (.val (.word p)) ∧
+        sourceBase ≤ p.toNat ∧ p.toNat % 8 = 0 ∧ p.toNat + 24 ≤ globN s "heap_ptr")
+      (ofString "daddr") (ofString "alloc") [.const 24] := by
+  intro F s values body callee ret v post hc hD ha hl hb
+  have hv : values = [.val (.word (24 : BitVec 64))] := by
+    simpa [evalListHOLFinite, evalListHOLExact, evalHOLExact] using ha.symm
+  subst values
+  rw [hc] at hl
+  have hlookup : originalRuntimeCode.lookup (ofString "alloc") =
+      some ([(ofString "n", .one)], sourceFnBody Guest.Software.guestFn_alloc, .one) :=
+    lookup_of_guestAst_getElem 7 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_alloc) rfl
+  have hparams : body = sourceFnBody Guest.Software.guestFn_alloc ∧
+      callee.lookup (ofString "n") = some (.val (.word (24 : BitVec 64))) := by
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hl
+    split at hl
+    · cases hl
+    · rename_i b l rs raw
+      cases hl
+      unfold lookupCodeHOLExact at raw
+      rw [hlookup] at raw
+      simp [shapeOfHOLExact, shapeEqHOL] at raw
+      exact ⟨raw.1.symm, by dsimp only; rw [← raw.2.1]; simp⟩
+  rcases hparams with ⟨rfl, hn⟩
+  have hE := localsFree_evmMsgReady s callee (s.clock - 1) hD.1.1
+  obtain ⟨p, hp⟩ := hE.1.2.2.2.2.2.2.2.2.2 "heap_ptr" (by decide)
+  have hrun := dispatch_alloc_run (callEntryStateHOLFinite s callee) hc hE p 24 hp hn v
+    (by rw [hb])
+  rw [hb] at hrun
+  obtain ⟨rfl, hready, hstep, hfit, hm, hg⟩ := hrun
+  dsimp only at hready hstep hfit hm hg
+  have hS := stepFrom_of_evmStep
+    (fun g hg => by simpa using (List.mem_singleton.1 hg ▸ hh))
+    (localsFree_stepFrom gw hp0 G ch s callee (s.clock - 1) hD.1.2) hstep
+  have hev : globN post "ev" = globN s "ev" := by
+    simp (config := {decide := true}) [globN, hg, HolFiniteMapExact.lookup_update,
+      FUPDATE, callEntryStateHOLFinite]
+  obtain ⟨_, m, hml, hmw⟩ := hD
+  refine ⟨⟨⟨localsFree_evmMsgReady post _ _ hready,
+    localsFree_stepFrom gw hp0 G ch post _ _ hS⟩, m, ?_, ?_⟩, p, ?_, ?_, ?_, hfit⟩
+  · simpa (config := {decide := true}) [setVarHOLFinite,
+      HolFiniteMapExact.lookup_update, FUPDATE] using hml
+  · change m.toNat = memW post (globN post "ev" + 112)
+    rw [hev]
+    simpa [memW, hm, callEntryStateHOLFinite] using hmw
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · have hpn : globN s "heap_ptr" = p.toNat := by
+      change s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) at hp
+      simp [globN, hp]
+    rw [← hpn]
+    exact hE.1.2.1
+  · have hpn : globN s "heap_ptr" = p.toNat := by
+      change s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) at hp
+      simp [globN, hp]
+    rw [← hpn]
+    exact hE.1.2.2.2.2.2.2.1
+
+/-- Resolve direct or delegated code and enter the verified common suffix. -/
+theorem hoare_prepare_dispatch_resolve_branch (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw)
+    (delegated : ProgHOL 64)
+    (hdelegated : Hoare (fun s => DispatchCodeReady gw hp G ch s ∧
+      CondTrue (.cmp .notEqual (.var .local (ofString "da")) (.const 0)) s)
+      delegated (Fall (DispatchCodeReady gw hp G ch))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n : BitVec 64,
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      code_n.toNat < 2 ^ 40)
+      (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+        (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode")))
+          (.decCall (ofString "da") .one (ofString "get_delegated_code_address")
+            [.rfield 0 (.var .local (ofString "rcode")),
+              .rfield 1 (.var .local (ofString "rcode"))]
+            (.seq (.ite (.cmp .notEqual (.var .local (ofString "da")) (.const 0)) delegated .skip)
+              prepareDispatchCommon))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  obtain ⟨hD, code, code_n, hrcode, hnb⟩ := hP
+  have hbranch := hoare_prepare_dispatch_branch_common gw hp G ch hsub delegated hdelegated
+  have hda := hoare_prepare_dispatch_delegation_address gw hp G ch code code_n _
+    (Hoare.mono hbranch (fun _ h =>
+      ⟨h.1.1, code, code_n, h.1.2.1, h.1.2.2, hnb⟩))
+  have hbind := hoare_prepare_dispatch_code_binders gw hp G ch code code_n _
+    (Hoare.mono hda (fun _ h => ⟨h.1, h.2.2⟩))
+  exact hbind.run s hc ⟨hD, hrcode⟩ hnt hr
 
 end HeadStore
