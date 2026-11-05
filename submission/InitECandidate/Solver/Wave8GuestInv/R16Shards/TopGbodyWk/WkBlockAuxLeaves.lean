@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkAcctWsBase
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkMarkAccountCreated
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.HtabUnionIntoSpec
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.ProcessWithdrawals
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalRemove
@@ -5761,5 +5762,83 @@ theorem merge_bs_table_nonValue {F : Type} {s : PanSemStateFiniteExact 64 F}
     apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ws" 32 _ hw0
       (by rw [heq]; exact hnz)
     simp [recRoles, hw0]
+
+/-- Retain the footprint provenance established by the union loop invariant. -/
+theorem htab_union_into_provenance_spec :
+    FunSpec UnionArgWF
+      (OnReturn (fun s post => HtabUnionInto.ExitR (locN s "dst") s post))
+      (ofString "htab_union_into") := by
+  refine ⟨_, _, _, HtabUnionInto.lookup_htab_union_into, ?_⟩
+  intro F s0 hcode hP _ _ v hv
+  suffices key : Wave8M19.Htab.Ret s0
+      (sourceFnBody Guest.Software.guestFn_htab_union_into)
+      (fun _ post => HtabUnionInto.ExitR (locN s0 "dst") s0 post) from key v hv
+  change Wave8M19.Htab.Ret s0
+    (InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+      (extractFn Guest.Software.guestFn_htab_union_into).body) _
+  dsimp only [extractFn, Guest.Software.guestFn_htab_union_into,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  apply Wave8M19.Htab.Ret.dec
+  intro capv _
+  set s1 := setVarHOLFinite (ofString "cap") capv s0 with hs1
+  apply Wave8M19.Htab.Ret.dec
+  intro iv _
+  set s2 := setVarHOLFinite (ofString "i") iv s1 with hs2
+  have hI2 : HtabUnionInto.UInv s0 s2 := by
+    refine ⟨hcode, ?_, ?_, ?_⟩
+    · simp [hs2, hs1, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "i" ≠ ofString "dst" by decide,
+        show ofString "cap" ≠ ofString "dst" by decide]
+    · exact LocalsOnly.setVar HtabUnionInto.localsOnly_unionArgWF
+        (by simp only [List.mem_singleton]; rintro _ rfl; decide) iv s1
+        (LocalsOnly.setVar HtabUnionInto.localsOnly_unionArgWF
+          (by simp only [List.mem_singleton]; rintro _ rfl; decide) capv s0 hP)
+    · have h0 := HtabUnionInto.ExitR.refl (locN s0 "dst") s0 hP.1 hP.2.1 hP.2.2
+      have h2 : HtabUnionInto.ExitR (locN s0 "dst")
+          { s0 with locals := s0.locals, clock := s0.clock }
+          { s0 with locals := s2.locals, clock := s0.clock } := by
+        rw [HtabUnionInto.exitR_locals]; exact h0
+      exact h2
+  apply Wave8M19.Htab.Ret.seq
+  · intro w hw
+    exfalso
+    have hnr : Wave8M19.Htab.NoRet
+        (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "src"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const 0))
+              (.call (some (none, none)) (ofString "htab_set")
+                [.var .local (ofString "dst"), .rfield 1 (.var .local (ofString "s")),
+                 .rfield 2 (.var .local (ofString "s"))]) .skip)
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))) :=
+      Wave8M19.Htab.NoRet.decCall (Wave8M19.Htab.NoRet.seq
+        (Wave8M19.Htab.NoRet.ite Wave8M19.Htab.NoRet.call0 Wave8M19.Htab.NoRet.skip)
+        Wave8M19.Htab.NoRet.assign)
+    exact Wave8M19.Htab.while_noRet _ _ (fun st v => hnr st v) _ s2 le_rfl w hw
+  · intro u hu
+    apply Wave8M19.Htab.Ret.ret
+    intro val _
+    have hIu : HtabUnionInto.UInv s0 u := by
+      have := Wave8M19.Htab.while_inv (HtabUnionInto.UInv s0) _ _
+        (fun x hx _ hfl => HtabUnionInto.union_iter
+          R13SoloHtabSet.htab_set_spec_proof _ _ _ _ s0 x hx hfl)
+        s2.clock s2 le_rfl hI2 (by rw [hu])
+      rw [hu] at this
+      exact this
+    obtain ⟨_, _, _, hR⟩ := hIu
+    have h2 : HtabUnionInto.ExitR (locN s0 "dst")
+        { s0 with locals := s0.locals, clock := s0.clock }
+        { u with locals := u.locals, clock := u.clock } := hR
+    rw [← HtabUnionInto.exitR_locals (L1 := s0.locals) (k1 := s0.clock)
+      (L2 := HolFiniteMapExact.resVarEq
+        (HolFiniteMapExact.resVarEq (emptyLocalsHOLFinite u).locals
+          (ofString "i", s1.locals.lookup (ofString "i")))
+        (ofString "cap", s0.locals.lookup (ofString "cap"))) (k2 := u.clock)] at h2
+    exact h2
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
