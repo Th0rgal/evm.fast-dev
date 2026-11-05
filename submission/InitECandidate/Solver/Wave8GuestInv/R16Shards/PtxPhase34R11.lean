@@ -6282,6 +6282,14 @@ theorem lst_new_stable_copy_operands (h : PtxCallees) {F : Type}
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "stable_logs" ≠ ofString "lp" by decide] using hptr
 
+/-- A typed length operand has its canonical representation even at zero. -/
+theorem stable_length_canonical_operand {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hn : ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) :
+    s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))) := by
+  obtain ⟨n, hn⟩ := hn
+  simpa [locN, hn] using hn
+
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
