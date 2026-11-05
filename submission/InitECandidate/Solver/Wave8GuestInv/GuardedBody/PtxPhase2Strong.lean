@@ -3706,4 +3706,27 @@ theorem phase2_address_count_init {F : Type} (s : PanSemStateFiniteExact 64 F)
       show ofString "nkeys" ≠ ofString "tx" by decide] using he
   · simp [locN, phase2_key_prefix, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Only the key-count fields of the processed records determine the prefix. -/
+theorem phase2_key_prefix_congr {F : Type} (s t : PanSemStateFiniteExact 64 F)
+    (i : Nat)
+    (hfields : ∀ j, j < i →
+      memW t (memW t (locN t "tx" + 208) + 24 * j + 16) =
+      memW s (memW s (locN s "tx" + 208) + 24 * j + 16)) :
+    phase2_key_prefix t i = phase2_key_prefix s i := by
+  unfold phase2_key_prefix
+  congr 1
+  apply List.map_congr_left
+  intro j hj
+  exact hfields j (List.mem_range.mp hj)
+
+/-- The strengthened counting invariant discharges the actual allocation expression. -/
+theorem phase2_address_count_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 52 + 8 ∧
+      locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
+  exact phase2_key_alloc_size_nonwrapping s hp.1 (phase2_address_count_alloc_bound hp)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
