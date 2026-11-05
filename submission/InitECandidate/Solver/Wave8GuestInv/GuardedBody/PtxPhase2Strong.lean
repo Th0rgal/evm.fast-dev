@@ -4160,4 +4160,22 @@ theorem phase2_address_count_store_record_hoare :
   exact ⟨phase2_address_count_store hp.1 hdom hslot hmem, hp.2.1,
     phase2_address_count_store_acc hp.1 hslot hmem hp.2.2⟩
 
+/-- The address store and both counter updates preserve the cumulative count. -/
+theorem phase2_address_count_inner_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.seq
+        (.store (.op .add [.var .local (ofString "al_addrs"),
+          .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+          (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+        (.seq
+          (.assign .local (ofString "nkeys")
+            (.op .add [.var .local (ofString "nkeys"),
+              .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  exact Hoare.seq_fall phase2_address_count_store_record_hoare
+    phase2_address_count_updates_hoare
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
