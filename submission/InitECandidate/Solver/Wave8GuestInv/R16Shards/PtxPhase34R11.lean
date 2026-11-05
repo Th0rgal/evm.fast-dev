@@ -3280,6 +3280,50 @@ def LstPushBackingNonzero : Prop :=
   FunSpec BoListArg (fun s r post => ∀ v, r = some (.returned v) →
     memW post (locN s "l") ≠ 0) (ofString "lst_push")
 
+/-- The concrete push discharges the backing contract under the authorized
+nonzero-entry guard. -/
+theorem lst_push_backing_nonzero_strong (h : PtxCallees) :
+    FunSpec BoListArgStrong (fun s r post => ∀ v, r = some (.returned v) →
+      memW post (locN s "l") ≠ 0) (ofString "lst_push") := by
+  have hlookup : originalRuntimeCode.lookup (ofString "lst_push") =
+      some ([(ofString "l", .one), (ofString "esz", .one)],
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1, .one) := by
+    exact lookup_lst_push
+  refine ⟨_, _, _, hlookup, ?_⟩
+  intro F s hc hp hvalid hnt v hv
+  obtain ⟨values, hvalid⟩ := hvalid
+  have hx := lookupCodeHOLFinite_eq_some originalRuntimeCode.lookup (ofString "lst_push")
+    values _ s.locals _ hvalid
+  simp only [lookupCodeHOLExact, hlookup] at hx
+  rcases values with _ | ⟨vl, _ | ⟨ve, _ | ⟨_, _⟩⟩⟩
+  · simp at hx
+  · simp at hx
+  swap
+  · simp at hx
+  · rcases vl with ⟨⟨lw⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    rcases ve with ⟨⟨ew⟩⟩ | _ | _
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    swap
+    · simp [shapeOfHOLExact, shapeEqHOL] at hx
+    simp [shapeOfHOLExact, shapeEqHOL] at hx
+    obtain ⟨_, hlocals⟩ := hx
+    have hl : s.locals.lookup (ofString "l") = some (.val (.word lw)) := by
+      have he := congrFun hlocals (ofString "l")
+      simpa [FUPDATE, show ofString "esz" ≠ ofString "l" by decide,
+        show ofString "l" ≠ ofString "esz" by decide] using he.symm
+    have hrun : evaluateHOLFiniteState s
+        (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1 =
+        (some (.returned v), (evaluateHOLFiniteState s
+          (sourceFunctionEntry Guest.Software.guestFn_lst_push).2.2.1).2) :=
+      Prod.ext hv rfl
+    simpa only [locN, hl] using lst_push_body_backing_nonzero h s _ lw v hc hp.1.1 hl
+      (by simpa only [locN, hl] using hp.2.2) hrun
+
 theorem resume_lst_push_logSlot (h : PtxCallees) (hnonzero : LstPushBackingNonzero) :
     DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
