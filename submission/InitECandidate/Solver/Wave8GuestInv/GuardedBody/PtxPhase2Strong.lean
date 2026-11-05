@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -12451,5 +12452,231 @@ theorem phase2_message_ready_of_tables {ι F : Type}
   · refine ⟨Nd, hw.2.2.2, ?_⟩
     intro o ho j hj
     exact hd o ho j (by simp only [worldOwned, List.mem_append]; exact Or.inr hj)
+
+/-- Two fresh access tables can be assigned the message roles. -/
+theorem phase2_roles_access_tables {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (ht : TablesTyped s S) {aa ak : Nat}
+    (ha : aa ∈ S) (hk : ak ∈ S)
+    (hal : hdr s aa 0 = 20) (hkl : hdr s ak 0 = 52)
+    (haf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ aa)
+    (hkf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ ak) :
+    RolesOK s S (worldRoleSlots s ++ [(aa, "frame.addr"), (ak, "frame.key")])
+      (journalRoleSlots s) := by
+  have hne : aa ≠ ak := by intro he; rw [he, hkl] at hal; contradiction
+  obtain ⟨hr1, hr2, hr3⟩ := ht.2.2.2.2.2.2.2.2.2.2.2
+  refine ⟨?_, ?_, ?_⟩
+  · intro a hmem
+    rw [List.append_assoc] at hmem
+    rcases List.mem_append.1 hmem with hw | hrest
+    · exact hr1 a (List.mem_append.2 (Or.inl hw))
+    · rcases List.mem_append.1 hrest with hfk | hj
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at hfk
+        rcases hfk with rfl | rfl
+        · exact ⟨ha, hal⟩
+        · exact ⟨hk, hkl⟩
+      · exact hr1 a (List.mem_append.2 (Or.inr hj))
+  · rw [List.pairwise_append]
+    refine ⟨hr2, ?_, ?_⟩
+    · rw [List.pairwise_cons]
+      refine ⟨fun b hb he => ?_, List.pairwise_singleton _ _⟩
+      simp only [List.mem_singleton] at hb
+      subst b
+      exact (hne he).elim
+    · intro a ha b hb he
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hb
+      rcases hb with rfl | rfl
+      · exact (haf a (List.mem_append.2 (Or.inl ha)) he).elim
+      · exact (hkf a (List.mem_append.2 (Or.inl ha)) he).elim
+  · intro a ha b hb he
+    rw [List.append_assoc] at hb
+    rcases List.mem_append.1 hb with hw | hrest
+    · exact hr3 a ha b (List.mem_append.2 (Or.inl hw)) he
+    · rcases List.mem_append.1 hrest with hfk | hj
+      · simp only [List.mem_cons, List.not_mem_nil, or_false] at hfk
+        rcases hfk with rfl | rfl
+        · exact (haf a (List.mem_append.2 (Or.inr ha)) he).elim
+        · exact (hkf a (List.mem_append.2 (Or.inr ha)) he).elim
+      · exact hr3 a ha b (List.mem_append.2 (Or.inr hj)) he
+
+/-- A joint world witness retains the access tables and message separation. -/
+def PtxMessageTables {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (aa ak : Nat) : Prop :=
+  ∃ S Nd, WorldTypedWith s S Nd ∧ aa ∈ S ∧ ak ∈ S ∧
+    hdr s aa 0 = 20 ∧ hdr s ak 0 = 52 ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ aa) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ ak) ∧
+    IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd)
+
+theorem phase2_message_ready_of_access_tables {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (ha : memW s (locN s "m" + 152) = aa)
+    (hk : memW s (locN s "m" + 160) = ak)
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63) : PtxMessageReady s := by
+  obtain ⟨S, Nd, hw, ham, hkm, hal, hkl, haf, hkf, hd⟩ := ht
+  apply phase2_message_ready_of_tables hp hw
+  · rw [ha]; exact ham
+  · rw [hk]; exact hkm
+  · exact hd
+  · exact hg
+  · rw [ha, hk]
+    exact phase2_roles_access_tables hw.1 ham hkm hal hkl haf hkf
+
+/-- Table membership and message separation survive world growth. Header and
+role preservation are explicit because arbitrary world steps may mutate tables. -/
+theorem phase2_message_tables_world_step {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) {aa ak : Nat}
+    (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m")
+    (hwr : worldRoleSlots post = worldRoleSlots s)
+    (hjr : journalRoleSlots post = journalRoleSlots s)
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxMessageTables post aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  obtain ⟨S', Nd', hsub, hw', hg⟩ := hs S Nd hw
+  refine ⟨S', Nd', hw', hsub aa ha, hsub ak hk, haa.trans hal, hak.trans hkl,
+    ?_, ?_, ?_⟩
+  · rw [hwr, hjr]; exact haf
+  · rw [hwr, hjr]; exact hkf
+  · rw [hm]
+    exact phase2_packed_owned_growth s post _ _ _ hin hg hd
+
+/-- Restoring caller locals only needs to preserve the message pointer. -/
+theorem phase2_message_tables_with_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hm : locals.lookup (ofString "m") = s.locals.lookup (ofString "m")) :
+    PtxMessageTables {s with locals := locals, clock := clock} aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := ht
+  refine ⟨S, Nd, (worldTypedWith_with_locals s locals clock S Nd).mpr hw,
+    ha, hk, hal, hkl, haf, hkf, ?_⟩
+  rw [locN_congr s locals clock "m" hm]
+  exact hd
+
+/-- Concrete allocation preserves the joint access-table witness. -/
+theorem phase2_alloc_message_tables (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") :
+    DecCallResumeOn (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (fun s => PtxMessageTables s aa ak) name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  have hn : ∃ n : BitVec 64, callee.lookup (ofString "n") = some (.val (.word n)) := by
+    have hx := hl
+    rw [hc] at hx
+    unfold PanSemStateFiniteExact.lookupCodeHOLFinite at hx
+    split at hx
+    · cases hx
+    rename_i b ls rs hraw
+    have heq := Option.some.inj hx
+    have hcal := congrArg (fun z => z.2.1.lookup) heq
+    simp only at hcal
+    rw [← hcal]
+    simp only [lookupCodeHOLExact, InitECandidate.Solver.Wave8Contracts.M27.lookup_alloc_te] at hraw
+    cases vs with
+    | nil => simp at hraw
+    | cons nv rest =>
+      cases rest with
+      | cons nv2 rest => simp at hraw
+      | nil =>
+        cases nv with
+        | val w =>
+          cases w with
+          | word n =>
+            simp [shapeEqHOL, shapeOfHOLExact] at hraw
+            obtain ⟨_, hcal, _⟩ := hraw
+            subst ls
+            exact ⟨n, by rw [← hcal]; rfl⟩
+        | rStruct fs => simp [shapeEqHOL, shapeOfHOLExact] at hraw
+        | nStruct nm fs => simp [shapeEqHOL, shapeOfHOLExact] at hraw
+  obtain ⟨n, hn⟩ := hn
+  have hheap : ∃ p : BitVec 64, s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)) := by
+    have hpos : globN s "heap_ptr" ≠ 0 := by
+      have hh := hp.1.1.1.2.1
+      have : 0 < InitE.sourceBase := by decide
+      omega
+    cases hg : s.globals.lookup (ofString "heap_ptr") with
+    | none => simp [globN, hg] at hpos
+    | some val =>
+      rcases val with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+      · exact ⟨w, rfl⟩
+      · simp [globN, hg] at hpos
+      · simp [globN, hg] at hpos
+  obtain ⟨p, hpw⟩ := hheap
+  have hbody : body = InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_alloc := by
+    have hx := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed hl
+    rw [hc, R16Shards.PtxP1.lookup_alloc] at hx
+    obtain ⟨params, rs, hx⟩ := hx
+    exact congrArg (fun z => z.2.1) (Option.some.inj hx).symm
+  have hrun := InitECandidate.Solver.Wave8Contracts.M27.alloc_body_run
+    (callEntryStateHOLFinite s callee) p n hc hpw hn v
+  rw [← hbody, hb] at hrun
+  have hpost := (hrun rfl).2.2.2
+  dsimp only at hpost
+  have hmem : post.memory = s.memory := congrArg (fun t => t.memory) hpost
+  have hgn : ∀ g, ofString "heap_ptr" ≠ ofString g → globN post g = globN s g := by
+    intro g hne
+    rw [hpost]
+    simp [globN, HolFiniteMapExact.update, FUPDATE, hne, callEntryStateHOLFinite]
+  have hwr : worldRoleSlots post = worldRoleSlots s := by
+    simp only [worldRoleSlots, recRoles, nestRoles, balRecords, htabValues, nodeF, hdr, memW, hmem,
+      hgn "ws" (by decide), hgn "bs" (by decide), hgn "ts" (by decide),
+      hgn "bal_accounts" (by decide), hgn "bal_idx_accts" (by decide), hgn "bal_idx_stor" (by decide)]
+    rfl
+  have hjr : journalRoleSlots post = journalRoleSlots s := by
+    simp only [journalRoleSlots, journalRole, memW, hmem, hgn "journal_n" (by decide),
+      hgn "journal" (by decide), hgn "ts" (by decide)]
+    rfl
+  apply phase2_message_tables_world_step s _ hp.2 hp.1.2.2.2.1
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  · exact hwr
+  · exact hjr
+  · simp only [hdr, memW, hmem]; rfl
+  · simp only [hdr, memW, hmem]; rfl
+  · intro S Nd hw
+    obtain ⟨S', Nd', hsub, hw', hg, hf, _⟩ := hs.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+    exact ⟨S', Nd', hsub, (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw', hg⟩
+
+/-- Allocation preserves both the saved-buffer cut and the joint table witness. -/
+theorem phase2_alloc_message_tables_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  exact ⟨phase2_alloc_message_store_ready h buffers contents name args hm hi
+    s vs body callee ret v post hc hp.1 he hl hb,
+    phase2_alloc_message_tables h buffers contents aa ak name args hm
+      s vs body callee ret v post hc hp he hl hb⟩
+
+/-- The suffix allocation can be composed with a table-aware continuation. -/
+theorem phase2_alloc_message_tables_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak)
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => PtxMessageStoreReady buffers contents s ∧ PtxMessageTables s aa ak) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1.1
+  · exact phase2_alloc_message_tables_ready h buffers contents aa ak name args hm hi
+  · exact ht
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
