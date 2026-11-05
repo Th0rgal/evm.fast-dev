@@ -3158,4 +3158,22 @@ theorem phase2_address_copy_increment_hoare :
     exact fun _ => (phase2_address_copy_increment s hp.1 hp.2).1
   · exact fun _ _ hr => by cases hr
 
+/-- The key-count assignment also retains the strict guard needed by the
+following index increment. -/
+theorem phase2_address_copy_nkeys_guard_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+    intro _
+    refine ⟨phase2_address_copy_set_nkeys s hp.1 w, ?_⟩
+    simpa [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
