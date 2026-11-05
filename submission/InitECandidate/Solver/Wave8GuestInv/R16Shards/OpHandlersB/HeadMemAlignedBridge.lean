@@ -8604,6 +8604,50 @@ theorem ics_prefix {F : Type} (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64
   change cpost.memory a = _
   rw [pm, updW_ne _ _ _ _ a3, updW_ne _ _ _ _ a2, updW_ne _ _ _ _ a1]; rfl
 
+/-- Preserve the child's gas credit when entering the success-incorporation prefix. -/
+theorem modular_repay_gas_le (g spill repay : BitVec 64)
+    (hr : repay.toNat ≤ spill.toNat) :
+    (g + repay).toNat + (spill - repay).toNat ≤ g.toNat + spill.toNat := by
+  have hsub : (spill - repay).toNat = spill.toNat - repay.toNat :=
+    BitVec.toNat_sub_of_le hr
+  rw [BitVec.toNat_add, hsub]
+  have hm := Nat.mod_le (g.toNat + repay.toNat) (2 ^ 64)
+  omega
+
+attribute [local irreducible] Ret in
+/-- The error-incorporation call supplies both its write frame and gas credit. -/
+theorem ics_prefix_gas {F : Type} (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (rest : ProgHOL 64) (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hcode : s.code = originalRuntimeCode)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hG : GuestInv s)
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (hk : ∀ X, ICSW s X e c →
+      (readW X (e + 64)).toNat + (readW X (e + 192)).toNat ≤
+        (readW s (e + 64)).toNat + (readW s (c + 64)).toNat +
+          (readW s (e + 192)).toNat → Ret X rest Φ) :
+    Ret s (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+      [.var .local (ofString "child")]) rest) Φ := by
+  refine Ret.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, rfl, he1⟩ := evalList1_inv _ _ h1
+  rw [ev_loc, hc] at he1
+  obtain ⟨rfl, rfl⟩ := lk1 hcode lookup_incorporate_child_on_error c
+    (by rw [← Option.some.inj he1]) h2
+  have hchild : (callEntryStateHOLFinite s
+      (HolFiniteMapExact.empty.update (ofString "child", .val (.word c)))).locals.lookup
+      (ofString "child") = some (.val (.word c)) := by
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  obtain ⟨pg, pc, pd, _, pm⟩ := Ret.apply
+    (incorporate_child_on_error_exact (callEntryStateHOLFinite s _) e c he hchild hsep) h3
+  apply hk
+  · refine ⟨pc, pd, pg, guestInv_congr (s := cpost) rfl rfl rfl rfl
+      (guestInv_post (guestInv_callEntry _ _ hG) h3), hc, fun a a1 a2 a3 _ => ?_⟩
+    change cpost.memory a = _
+    rw [pm, updW_ne _ _ _ _ a3, updW_ne _ _ _ _ a2, updW_ne _ _ _ _ a1]; rfl
+  · exact incorporate_child_on_error_head_gas (callEntryStateHOLFinite s _) cpost e c
+      he hchild hsep v h3
+
 /-- Write frame of the `incorporate_child_on_success` tail (from the `ev+96` store on). -/
 def ICSTail {F : Type} (X : PanSemStateFiniteExact 64 F) (e : BitVec 64) (T : Nat)
     (post : PanSemStateFiniteExact 64 F) : Prop :=
@@ -8727,6 +8771,36 @@ theorem noHit_of_disj {a : Nat} {i j : Ivl} (hd : Disj i j) (hj : 0 < j.2)
 
 theorem tn_add (e : BitVec 64) (k : Nat) (hk : k < 2 ^ 64) (h : e.toNat + k < 2 ^ 64) :
     (e + BitVec.ofNat 64 k).toNat = e.toNat + k := toNat_add_ofNat e k h
+
+theorem child_error_separated (e c : BitVec 64)
+    (he : e.toNat + 280 ≤ 2 ^ 64) (hc : c.toNat + 280 ≤ 2 ^ 64)
+    (hd : Disj (e.toNat, 280) (c.toNat, 280)) :
+    c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72 := by
+  have hne (i j : Nat) (hi : i < 280) (hj : j < 280) :
+      c + BitVec.ofNat 64 i ≠ e + BitVec.ofNat 64 j := by
+    intro h
+    have hn := congrArg BitVec.toNat h
+    rw [tn_add c i (by omega) (by omega), tn_add e j (by omega) (by omega)] at hn
+    unfold Disj at hd
+    dsimp only at hd
+    omega
+  exact ⟨hne 72 64 (by omega) (by omega), hne 184 64 (by omega) (by omega),
+    hne 184 72 (by omega) (by omega)⟩
+
+/-- Disjoint child/parent records discharge all cross-store separation obligations. -/
+theorem incorporate_child_on_error_gas_of_disj {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (heB : e.toNat + 280 ≤ 2 ^ 64) (hcB : c.toNat + 280 ≤ 2 ^ 64)
+    (hd : Disj (e.toNat, 280) (c.toNat, 280))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    memW post (e.toNat + 64) + memW post (e.toNat + 192) ≤
+      memW s (e.toNat + 64) + memW s (c.toNat + 64) + memW s (e.toNat + 192) :=
+  incorporate_child_on_error_gas s post e c he hc (child_error_separated e c heB hcB hd)
+    (by omega) (by omega) v hr
 
 
 theorem noHit_mono {a x y w z : Nat} (h : ¬ CellHits a (x, z - x)) (h1 : x ≤ y) (h2 : y ≤ w)
