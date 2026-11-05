@@ -13519,4 +13519,45 @@ theorem phase2_message_unhit_fields {ι F : Type}
     omega
   · constructor <;> dsimp <;> omega
 
+/-- Reassemble the complete suffix after a call that frames the message interval.
+The structural, backing, and caller-local obligations are kept separate from
+the three initialized message-field obligations. -/
+theorem phase2_message_suffix_of_unhit {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageSuffixReady buffers contents names aa ak s)
+    (hm : locN post "m" = locN s "m")
+    (hu : R13Shards.IvlUnhit s post (locN s "m", 176))
+    (hs : PtxMessageScalarReady buffers contents names' post)
+    (ht : PtxMessageTables post aa ak)
+    (hb : TxBacking post) (hl : PtxPhase4LocalShapes post) :
+    PtxMessageSuffixReady buffers contents names' aa ak post := by
+  have hf := phase2_message_unhit_fields hp.1.1 hu
+  refine ⟨hs, ht, hb, hl, ?_, ?_, ?_⟩
+  · rw [hm, show 152 = 8 * 19 from rfl, hf 19 (by decide)]
+    exact hp.2.2.2.2.1
+  · rw [hm, show 160 = 8 * 20 from rfl, hf 20 (by decide)]
+    exact hp.2.2.2.2.2.1
+  · rw [hm, show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2.2.2
+
+/-- Before pointer initialization, only the gas field needs memory transport;
+the access-table pointers are retained as caller-local equalities. -/
+theorem phase2_message_table_store_ready_of_unhit {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names names' : List String} {aa ak : Nat}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageTableStoreReady buffers contents names aa ak s)
+    (hm : locN post "m" = locN s "m")
+    (ha : locN post "aa" = locN s "aa") (hk : locN post "ak" = locN s "ak")
+    (hu : R13Shards.IvlUnhit s post (locN s "m", 176))
+    (hs : PtxMessageScalarReady buffers contents names' post)
+    (ht : PtxMessageTables post aa ak)
+    (hb : TxBacking post) (hl : PtxPhase4LocalShapes post) :
+    PtxMessageTableStoreReady buffers contents names' aa ak post := by
+  refine ⟨hs, ht, hb, hl, ?_, ha.trans hp.2.2.2.2.2.1, hk.trans hp.2.2.2.2.2.2⟩
+  rw [hm, show 40 = 8 * 5 from rfl, phase2_message_unhit_fields hp.1.1 hu 5 (by decide)]
+  exact hp.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
