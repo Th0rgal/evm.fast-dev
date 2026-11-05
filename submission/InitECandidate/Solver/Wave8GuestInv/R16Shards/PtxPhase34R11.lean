@@ -1161,6 +1161,28 @@ theorem logsLiveOwned_empty {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [hn] at hi
     omega
 
+/-- The two fresh blocks returned by `lst_new(8,4)` establish the receipt guard. -/
+theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} (hA : ArenaOK s)
+    (hh : FreshBlock s post logs 24)
+    (hb : FreshBlock s post (memW post logs) 32)
+    (hd : IvlsDisj [(logs, 24), (memW post logs, 32)] (worldOwned post S Nd))
+    (hn : memW post (logs + 8) = 0) :
+    LogsListOK post logs ∧ LogsLiveOwned post S Nd logs ∧ LogsDisjFixed post logs := by
+  have hhi : Inside (logs, 24) sourceBase (globN post "heap_ptr") := by
+    have h := hh.2.1
+    change Inside (logs, 24) (globN s "heap_ptr") (globN post "heap_ptr") at h
+    exact ⟨hA.1.trans h.1, h.2⟩
+  have hbi : Inside (memW post logs, 0) sourceBase (globN post "heap_ptr") := by
+    have h := hb.2.1
+    change Inside (memW post logs, 32) (globN s "heap_ptr") (globN post "heap_ptr") at h
+    constructor
+    · exact hA.1.trans h.1
+    · have := h.2; dsimp at this ⊢; omega
+  have ho := logsLiveOwned_empty (S := S) (Nd := Nd) (Or.inl hbi)
+    (fun j hj => hd _ (by simp) j hj) hn
+  exact ⟨logsListOK_empty hh.2.2 (Or.inl hhi) hn, ho, logsLiveOwned_disjFixed ho⟩
+
 def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧
     locN s "logs" = memW s (locN s "out" + 16) ∧
