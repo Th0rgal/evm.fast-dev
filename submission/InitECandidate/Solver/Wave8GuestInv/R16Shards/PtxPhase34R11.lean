@@ -1626,6 +1626,33 @@ theorem localsOnly_phase4ReceiptEncoded :
   · exact (hl "rc" (by simp)).trans he
   · rw [hg]; exact logsWorldOwned_with_locals locals k hw
 
+theorem receiptEncoded_heapStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] Q s r post)
+    (h : Phase4ReceiptEncoded s) (hn : locN s "logs" ≠ 0) :
+    Phase4ReceiptEncoded {post with locals := s.locals} := by
+  obtain ⟨ho, hl, hlen, a, b, he, hi, ha, hb, hw⟩ := h
+  have hgrow : AllocatorGrows s post := ⟨hs.2.1, by
+    have he : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+      R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+    omega⟩
+  have hhead := logsWorldOwned_heapStep_header hs ho.1.1.1 hl hw hn
+  have hlogs := logsWorldOwned_scratchStep hs ho.1.1.1 hgrow hl hw
+    (gs := []) (by intro e he; cases he) rfl (by decide)
+  refine ⟨txAfterCallStrong_heapStep hs ho, ?_, ?_, a, b, he, ?_, ha, hb, ?_⟩
+  · exact (R13Shards.logsListOK_with_locals post s.locals post.clock _).mpr hlogs.1
+  · change memW post (locN s "logs" + 8) < 2 ^ 28
+    rw [hhead.2]; exact hlen
+  · change Inside (a.toNat, b.toNat) sourceBase (globN post "heap_ptr")
+    unfold Inside at hi ⊢; have := hs.2.1; omega
+  · exact logsWorldOwned_with_locals s.locals post.clock hlogs.2
+
 def Phase4LogCountReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => Phase4ReceiptEncoded s ∧ locN s "nl" = memW s (locN s "logs" + 8)
 
