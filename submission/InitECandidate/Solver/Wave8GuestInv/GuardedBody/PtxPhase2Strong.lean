@@ -6116,4 +6116,31 @@ theorem phase2_memcpy_frame_metadata {F : Type}
   · exact phase2_tx_header_world_frame s post S Nd _ tx 208 ha hw ht (by decide) (by decide) hf hr hz
   · exact phase2_tx_header_world_frame s post S Nd _ tx 216 ha hw ht (by decide) (by decide) hf hr hz
 
+/-- A memcpy world frame preserves the guarded indices once readiness is restored. -/
+theorem phase2_memcpy_frame_guarded {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (hp : PtxPackedCopyIndex s) (hr : PtxPackedKeysReady post)
+    (ha : ArenaOK s) (hw : WorldTypedWith s S Nd)
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hl : ∀ n ∈ (["tx", "nkeys", "i", "j", "k"] : List String), locN post n = locN s n)
+    (hf : FrameOutside s post
+      (worldOwned s S Nd ++ [(locN s "dst", locN s "n")] ++ [freeGap s]) (heapFree s))
+    (hd : Disj (locN s "tx", 384) (locN s "dst", locN s "n"))
+    (hc : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "dst", locN s "n")) (hn : 0 < locN s "n") :
+    PtxPackedCopyIndex post := by
+  apply phase2_packed_copy_metadata_frame s post hp hr hl
+  · exact phase2_memcpy_frame_metadata s post S Nd _ ha hw ht hf hd hn
+  · intro i hi
+    apply phase2_tx_count_world_frame s post S Nd _ _ i ha hw ht hi hf
+    · intro region hm
+      simp only [List.mem_singleton] at hm
+      subst region
+      exact hc
+    · intro region hm hz
+      simp only [List.mem_singleton] at hm
+      subst region
+      dsimp at hz
+      omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
