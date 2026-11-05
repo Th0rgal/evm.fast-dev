@@ -8931,4 +8931,35 @@ theorem phase2_packed_ns_outer_increment_hoare :
     exact fun _ => phase2_packed_ns_outer_advance s hp.1 hp.2
   · exact fun _ _ hr => by cases hr
 
+/-- Resetting `j` establishes the actual cached-count inner invariant. -/
+theorem phase2_packed_ns_reset {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedOuterIteration s)
+    (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (hn : ∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n)))
+    (he : locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    PtxPackedNsIteration (setVarHOLFinite (ofString "j") (.val (.word 0)) s) := by
+  have hin := phase2_packed_inner_reset s hp.2.1 hi
+  have hsep : PtxPackedSeparatedInner (setVarHOLFinite (ofString "j") (.val (.word 0)) s) := by
+    refine ⟨hin, ?_, ?_⟩
+    · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "j" ≠ ofString "tx" by decide,
+        show ofString "j" ≠ ofString "al_keys" by decide,
+        show ofString "j" ≠ ofString "nkeys" by decide] using hp.2.2.1
+    · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "j" ≠ ofString "tx" by decide,
+        show ofString "j" ≠ ofString "al_keys" by decide,
+        show ofString "j" ≠ ofString "nkeys" by decide] using hp.2.2.2.1
+  refine ⟨⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s _ s.clock).mpr hp.1.1) hin.1,
+    hsep, ?_, ?_, hp.2.2.2.2.2.2⟩, ?_, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" by decide] using hp.2.2.2.2.1
+  · exact ⟨0, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "ns" by decide] using hn
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "ns" by decide,
+      show ofString "j" ≠ ofString "tx" by decide,
+      show ofString "j" ≠ ofString "i" by decide] using he
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
