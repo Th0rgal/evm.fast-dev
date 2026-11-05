@@ -3668,4 +3668,74 @@ theorem hoare_prepare_dispatch_jumpdest_finish (gw : List String) (hp : Nat)
   intro F s locals k h
   exact ⟨localsFree_evmMsgReady s locals k h.1, localsFree_stepFrom gw hp G ch s locals k h.2⟩
 
+/-- Fresh scratch allocation is below every existing frame record,
+continuation and log header. Its writes preserve all of their words. -/
+theorem fresh_scratch_chain_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hq : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a) :
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 280 →
+      memW post (ec.1 + j) = memW s (ec.1 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 104 →
+      memW post (ec.2 + j) = memW s (ec.2 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + j) = memW s (memW s (ec.1 + 88) + j)) := by
+  obtain ⟨_, S, hI⟩ := hInv
+  have hpoint : ∀ a, a < 2 ^ 64 → globN s "scratch_ptr" ≤ a →
+      memW post a = memW s a := by
+    intro a ha hlo
+    unfold memW
+    rw [hmem (BitVec.ofNat 64 a) ?_]
+    rw [show (BitVec.ofNat 64 a).toNat = a from Nat.mod_eq_of_lt ha]
+    unfold CellHits
+    dsimp only
+    omega
+  have hblock : ∀ ec ∈ evmChain s, ∀ i ∈
+      [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
+        (memW s (ec.1 + 88), 24)], ∀ j, j + 8 ≤ i.2 →
+      memW post (i.1 + j) = memW s (i.1 + j) := by
+    intro ec hec i hi j hj
+    have hin := ((hI.2.2.2.2.1 ec hec).1 i hi).1
+    have hend : scratchEnd ≤ 2 ^ 64 := by decide
+    unfold Inside at hin
+    apply hpoint <;> omega
+  exact ⟨fun ec hec j hj => hblock ec hec (ec.1, 280) (by simp) j hj,
+    fun ec hec j hj => hblock ec hec (ec.2, 104) (by simp) j hj,
+    fun ec hec j hj => hblock ec hec (memW s (ec.1 + 88), 24) (by simp) j hj⟩
+
+/-- A fresh scratch write cannot alter the linked frame chain when its two
+root globals are retained. -/
+theorem fresh_scratch_chain_eq {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hq : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (he : globN post "ev" = globN s "ev")
+    (hc : globN post "cur_cont" = globN s "cur_cont") :
+    evmChain post = evmChain s := by
+  have hw := (fresh_scratch_chain_words hInv q n hq hmem).2.1
+  have haux : ∀ fuel e c,
+      (∀ ec ∈ evmChainFrom s fuel e c, ec ∈ evmChain s) →
+      evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+    intro fuel
+    induction fuel with
+    | zero => intros; rfl
+    | succ fuel ih =>
+      intro e c hsub
+      have hec : (e, c) ∈ evmChain s := hsub (e, c) (by simp [evmChainFrom])
+      have h0 : memW post c = memW s c := by
+        simpa only [Nat.add_zero] using hw (e, c) hec 0 (by decide)
+      simp only [evmChainFrom, hw (e, c) hec 16 (by decide), h0,
+        hw (e, c) hec 8 (by decide)]
+      split
+      · rfl
+      · rename_i hn
+        rw [ih (memW s c) (memW s (c + 8))]
+        intro ec hm
+        apply hsub ec
+        simp only [evmChainFrom, hn, ↓reduceIte, List.mem_cons]
+        exact Or.inr hm
+  unfold evmChain
+  rw [he, hc]
+  exact haux _ _ _ (fun _ h => h)
+
 end HeadStore
