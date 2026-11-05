@@ -4075,6 +4075,26 @@ theorem stableCopyInv_exit_owned {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hp.2.2.2.2.2 j (lt_of_lt_of_le hjn hexit) hjn]
   exact (hown hp.2.1).2.2 j (by simpa only [← hsource] using hjn)
 
+/-- Header separation and capacity separation suffice for live-list ownership
+at exit; all copied records inherit the source's world separation. -/
+theorem stableCopyInv_exit_owned_of_capacity {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : StableCopyInv s)
+    (hexit : locN s "nl" ≤ locN s "i") {S Nd : List Nat}
+    (hown : LogsLiveOwned s S Nd (locN s "logs"))
+    (hhead : ∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o)
+    (hback : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) :
+    LogsLiveOwned s S Nd (locN s "stable_logs") := by
+  apply stableCopyInv_exit_owned s hp hexit hown
+  intro a ha o ho
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ha
+  rcases ha with rfl | rfl
+  · exact hhead o ho
+  · apply disj_of_inside_left ?_ (hback o ho)
+    have hn := hp.1.2.2.2.2.2.1
+    have hc := hp.2.2.2.2.1
+    constructor <;> dsimp <;> omega
+
 /-- Exhaustion of the natural copy rank yields the receipt postcondition. -/
 theorem stableCopyInv_rank_zero_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hz : locN s "nl" - locN s "i" = 0) :
