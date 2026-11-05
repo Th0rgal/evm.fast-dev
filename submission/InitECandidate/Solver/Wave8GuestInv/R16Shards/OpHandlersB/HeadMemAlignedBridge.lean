@@ -11521,4 +11521,29 @@ theorem la_loop_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
   exact Ret.seq_while_inv (LAInvContents s L arr0 cap0 n0 nc child) hinit
     (NoRet.seq NoRet.call0 NoRet.assign) hstep hk
 
+/-- The original-or-fresh array alternative supplies the copy-separation
+premise needed by the contents theorem at every iteration. -/
+theorem laInv_array_copy_region {F : Type} {s u : PanSemStateFiniteExact 64 F}
+    {L arr0 cap0 n0 nc arr n cap : BitVec 64}
+    (h : LAInv s L arr0 cap0 n0 nc u)
+    (hma : u.memory L = .word arr)
+    (hmn : u.memory (L + 8) = .word n)
+    (hmc : u.memory (L + 16) = .word cap)
+    (hold : arr0.toNat + 8 * cap0.toNat ≤ globN s "heap_ptr" ∨
+      (heapLimit ≤ arr0.toNat ∧ arr0.toNat + 8 * cap0.toNat < 2 ^ 64)) :
+    arr.toNat + 8 * n.toNat ≤ globN u "heap_ptr" ∨
+      (heapLimit ≤ arr.toNat ∧ arr.toNat + 8 * n.toNat < 2 ^ 64) := by
+  obtain ⟨_, _, _, _, hh, _, i, ar, cp, _, _, hmar, hmnr, hmcr,
+    hle, _, _, _, hregion, _⟩ := h
+  have har : ar = arr := by have he := hmar.symm.trans hma; cases he; rfl
+  have hcp : cp = cap := by have he := hmcr.symm.trans hmc; cases he; rfl
+  have hn : n0 + i = n := by have he := hmnr.symm.trans hmn; cases he; rfl
+  subst ar cp
+  rw [hn] at hle
+  rcases hregion with ⟨rfl, rfl⟩ | ⟨_, hbound⟩
+  · rcases hold with hold | ⟨hold, hb⟩
+    · left; omega
+    · right; exact ⟨hold, by omega⟩
+  · left; omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
