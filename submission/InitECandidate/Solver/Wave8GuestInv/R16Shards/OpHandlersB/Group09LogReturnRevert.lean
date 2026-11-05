@@ -12853,4 +12853,155 @@ theorem log_growth_concrete_frame_post_g09 {F : Type}
     (congrFun hglob "evm_empty") hwords hlo hq hrecords
     hfields hheaderWords hallocated hmsg hlog
 
+/-- Header allocation/domain and validity of the newly constructed record survive
+the concrete growth tail. Only separation of that record from the two write
+regions is required; its pointer fields need no post-state assumptions. -/
+theorem log_growth_header_and_new_record_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hscratch : globN copy "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (hheap_bound : globN copy "heap_ptr" ≤ 2 ^ 64)
+    (hlog : LogEntryOK copy log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, q.toNat - p.toNat)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    WordsOK post (l.toNat, 24) ∧ Allocated post (l.toNat, 24) ∧
+      LogEntryOK post log.toNat ∧ logOwnedIvls post log.toNat = logOwnedIvls copy log.toNat := by
+  dsimp only
+  have hh := hFW.1 (memW s (ec.1 + 88), 24) (by simp)
+  rw [hl] at hh
+  have hwords := (wordsOK_congr_of_dom_g09 hdom).2 hh.2
+  have hallocated : Allocated copy (l.toNat, 24) :=
+    AllocatorGrows.allocated ⟨hheap, hscratch⟩ (Or.inr hh.1)
+  have hq := q.isLt
+  have hdB : Disj (log.toNat, 40) (p.toNat, 8 * n.toNat + 8) := by
+    rcases hdbuffer with hz | hz | hleft | hright
+    · exact Or.inl hz
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inr (Or.inl hleft))
+    · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+  have hrecord := log_growth_record_preserved_g09 copy copy l p n cap log log.toNat
+    hl_bound (by omega) (le_trans hlog.2.1.2 hheap_bound) hdheader hdB rfl
+    (le_refl _) rfl (by intros; rfl) hlog
+  refine ⟨?_, hallocated, hrecord⟩
+  exact (wordsOK_congr_of_dom_g09 (s := copy)
+    (post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}) rfl).2 hwords
+
+/-- The concrete growth-frame contract with header validity and the new record
+derived from pre-tail invariants, rather than assumed in the final state. -/
+theorem log_growth_frame_post_from_new_record_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl) (S Nd : List Nat)
+    (l p n cap q log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat) (hnonnull : l.toNat ≠ 0)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] (frameObjects s ec))
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8 * i) = memW s (memW s l.toNat + 8 * i))
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)])
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hheap_bound : globN copy "heap_ptr" ≤ 2 ^ 64)
+    (hwords : WordsOK copy (p.toNat, q.toNat - p.toNat))
+    (hlo : sourceBase ≤ p.toNat) (hq : q.toNat ≤ globN copy "heap_ptr")
+    (hWT : WorldTypedWith copy S Nd)
+    (hd0 : copy.memaddrs l) (hd8 : copy.memaddrs (l + 8#64))
+    (hd16 : copy.memaddrs (l + 16#64)) (hdslot : copy.memaddrs (p + n * 8#64))
+    (hheaderWorld : ∀ i ∈ worldTypedIvls copy S Nd, Disj (l.toNat, 24) i)
+    (hfreshWorld : IvlsDisj [(p.toNat, q.toNat - p.toNat)]
+      (worldTypedIvls copy S Nd))
+    (hlog : LogEntryOK copy log.toNat)
+    (hdheader : Disj (log.toNat, 40) (l.toNat, 24))
+    (hdbuffer : Disj (log.toNat, 40) (p.toNat, q.toNat - p.toNat)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    (∀ k ∈ ([8, 16, 24, 32, 40, 88, 112, 136, 144, 168, 176, 216, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k)) →
+    MsgOwned post S (memW s (ec.1 + 112)) →
+    SameTypedCells copy post S Nd ∧ FrameWF post S ec ∧
+      LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls copy log.toNat := by
+  dsimp only
+  intro hfields hmsg
+  obtain ⟨_, _, _, hmul, _, _, _, _, hslot, _⟩ :=
+    log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+  rw [hmul] at hslot
+  have hscratch : globN copy "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    rw [congrFun (globN_congr heff.globals) "scratch_ptr"]
+  obtain ⟨hheaderWords, hallocated, hlogPost, howned⟩ :=
+    log_growth_header_and_new_record_g09 s copy ec S l p n cap q log hA hFW hl
+      heff.memaddrs hheap hscratch hl_bound hslot hheap_bound hlog hdheader hdbuffer
+  obtain ⟨htyped, hframe, hlist, hlogs⟩ :=
+    log_growth_concrete_frame_post_g09 s copy ec S Nd l p n cap q log hA hFW hpw
+      hl hn hnonnull hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit hcopy heff
+      hheap hwords hlo hq hWT hd0 hd8 hd16 hdslot hheaderWorld hfreshWorld
+      hfields hheaderWords hallocated hmsg hlogPost
+  exact ⟨htyped, hframe, hlist, by rw [hlogs, howned]⟩
+
+/-- Message ownership is stable under log growth: typed world cells retain all
+world exclusions, and only newly introduced frame objects need fresh separation. -/
+theorem msgOwned_of_log_growth_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {m : Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (hglobals : ∀ g ∈ coreWorldGlobals, globN post g = globN s g)
+    (hdom : post.memaddrs = s.memaddrs)
+    (hgrows : AllocatorGrows s post)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hchain : evmChain post = evmChain s)
+    (hobjects : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects post ec,
+      o ∈ frameObjects s ec ∨ Disj (m, 176) o)
+    (hmsg : MsgOwned s S m) : MsgOwned post S m := by
+  obtain ⟨hal, hw, hdt, hdf, hdfo, Nd_m, hTr_m, hdj_m⟩ := hmsg
+  obtain ⟨hTr_int, hsub_int⟩ := Wave8Contracts.M23.triesTypedWith_inter hWT.2.2.2 hTr_m
+  let Ndi := Nd.filter (fun n => decide (n ∈ Nd_m))
+  have hsub : ∀ n ∈ Ndi, n ∈ Nd := fun n hn => (List.mem_filter.1 hn).1
+  have hcell_i : SameTypedCells s post S Ndi := sameTypedCells_sub_nd_g09 hsub hcell
+  have hnodes := nodeExtents_eq hTr_int.1 hcell_i
+  have hWT_i : WorldTypedWith s S Ndi := ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr_int⟩
+  have hFT := fixedTyped_of_eq hAp hWT.2.2.1 hgrows.1 hgrows.2 hfixed
+  have htries_i : TriesTypedWith post S Ndi := by
+    obtain ⟨hpost, _⟩ := worldTypedWith_congr_w1 hAs hAp hgrows.1 hgrows.2
+      hglobals hcell_i hWT_i ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩
+    exact hpost.2.2.2
+  refine ⟨hgrows.allocated hal, (wordsOK_congr_of_dom_g09 hdom).2 hw,
+    ?_, ?_, ?_, Ndi, htries_i, ?_⟩
+  · intro t ht i hi
+    rw [hfoot t ht] at hi
+    exact hdt t ht i hi
+  · intro j hj
+    rw [hfixed] at hj
+    exact hdf j hj
+  · rw [hchain]
+    intro ec hec o ho
+    rcases hobjects ec hec o ho with hold | hnew
+    · exact hdfo ec hec o hold
+    · exact hnew
+  · intro o ho j hj
+    rw [hnodes] at hj
+    exact hdj_m o ho j (hsub_int j hj).2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

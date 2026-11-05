@@ -13852,4 +13852,92 @@ theorem receipt_gas_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Bloom allocation supplies fresh bounded storage to a returning continuation;
+restoring its scoped local does not change the receipt frame. -/
+theorem receipt_bloom_alloc_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (he : HeapByteEff s mid R ["heap_ptr"])
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next final : PanSemStateFiniteExact 64 F) (bloom : BitVec 64),
+      HeapByteEff s next R ["heap_ptr"] →
+      globN s "heap_ptr" ≤ bloom.toNat → bloom.toNat + 256 ≤ heapLimit →
+      next.locals = mid.locals.update (ofString "bloom", .val (.word bloom)) →
+      evaluateHOLFiniteState next tail = (some (.returned v), final) →
+      HeapByteEff s final R ["heap_ptr"])
+    (hr : evaluateHOLFiniteState mid
+      (.decCall (ofString "bloom") .one (ofString "alloc") [.const 256] tail) =
+      (some (.returned v), post)) : HeapByteEff s post R ["heap_ptr"] := by
+  obtain ⟨bloom, n, q, next, hn, hb, _, _, hfit, hlim, _, _, _, _, hloc,
+      he', _, _, hrun⟩ := eval_decCall_alloc_resumes mid "bloom" (.const 256) tail
+        R ["heap_ptr"] he.arena.1.code he.arena (by simp)
+        (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  have hn' : n = 256#64 := by simpa [evalHOLExact] using hn.symm
+  subst n
+  have hret : (evaluateHOLFiniteState next tail).1 = some (.returned v) := by
+    rw [hr] at hrun
+    exact (congrArg Prod.fst hrun).symm
+  have hf := hcont next (evaluateHOLFiniteState next tail).2 bloom (he.trans he')
+    (by rw [hb]; exact he.hp_le) (by change bloom.toNat + 256 ≤ q.toNat at hfit; omega)
+    hloc (Prod.ext hret rfl)
+  rw [hr] at hrun
+  have hp := congrArg Prod.snd hrun
+  dsimp only at hp
+  rw [hp]
+  exact hf.locals_clock _ _
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Gas encoding and cursor advancement expose a bounded, non-wrapping cursor
+to the bloom allocation continuation. -/
+theorem receipt_gas_advance_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p gas old : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 9 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next : PanSemStateFiniteExact 64 F) (q w : BitVec 64),
+      HeapByteEff s next R gw → p.toNat + 1 ≤ q.toNat → q.toNat ≤ p.toNat + 9 →
+      next.locals.lookup (ofString "p") = some (.val (.word q)) →
+      next.locals.lookup (ofString "w") = some (.val (.word w)) →
+      (∀ name, name ≠ ofString "p" → name ≠ ofString "w" →
+        next.locals.lookup name = mid.locals.lookup name) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) → HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+        [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")])
+        (.seq (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) tail)) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  apply receipt_gas_continuation_frame he p gas old hp hg hw hfresh _ v ?_ hr
+  intro next w he' hlo hhi hloc hr'
+  have hp' : next.locals.lookup (ofString "p") = some (.val (.word p)) := by
+    rw [hloc]
+    simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "w" ≠ ofString "p" by decide] using hp
+  have hw' : next.locals.lookup (ofString "w") = some (.val (.word w)) := by
+    rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+  have hn : (p + w).toNat = p.toNat + w.toNat := by
+    rw [BitVec.toNat_add]
+    apply Nat.mod_eq_of_lt
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    omega
+  apply receipt_cursor_continuation_frame he' p w hp' hw' tail v ?_ hr'
+  intro final he'' hp'' hkeep hr''
+  apply hcont final (p + w) w he'' (by rw [hn]; omega) (by rw [hn]; omega) hp''
+  · rw [hkeep _ (by decide)]; exact hw'
+  · intro name hnp hnw
+    rw [hkeep name hnp, hloc]
+    simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hnw]
+  · exact hr''
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
