@@ -5289,4 +5289,108 @@ private theorem log_append_head_returned_spec {F : Type}
 
 end EmitTransferLogStep
 
+/-! ## Precompile dispatch composition -/
+
+open InitECandidate.Solver.Wave8GuestInv.R13
+
+def PrecompileDispatchSpecs : Prop :=
+  ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
+    "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
+    "pre_modexp", "pre_blake2f", "pre_kzg_point_evaluation", "pre_bls_g1_add",
+    "pre_bls_g1_msm", "pre_bls_g2_add", "pre_bls_g2_msm", "pre_bls_pairing",
+    "pre_bls_map_fp_to_g1", "pre_bls_map_fp2_to_g2", "pre_p256verify"] : List String),
+    EvmProgStep frameStartGw (.call (some (none, none)) (ofString f) [])
+
+private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
+    (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
+    EvmStepCC frameStartGw s post := by
+  refine ⟨⟨h2.1.1, le_trans h1.1.2.1 h2.1.2.1,
+    fun k hk => (h1.1.2.2.1 k hk).trans (h2.1.2.2.1 k hk),
+    h2.1.2.2.2.trans h1.1.2.2.2⟩, ?_⟩
+  intro ec hec
+  obtain ⟨a, b, c, d⟩ := h1.2 ec hec
+  obtain ⟨a', b', c', d'⟩ := h2.2 ec (h1.1.2.2.2.symm ▸ hec)
+  exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+
+private theorem dispatch_step_ro {p : ProgHOL 64} (h : ReadOnlyProg p) :
+    EvmProgStep frameStartGw p := by
+  intro F s hcode hInv hnt hfr
+  have heq := h s hcode hInv.1.1 hnt hfr
+  have hs := (EvmFrameSpecs.evmStep_refl_locals_clock hInv heq).1
+  refine ⟨⟨hs.1, hs.2.1, fun k _ => hs.2.2.1 k (by simp), hs.2.2.2⟩, ?_⟩
+  intro ec hec
+  rw [heq]
+  exact ⟨rfl, rfl, rfl, rfl⟩
+
+private theorem dispatch_step_seq {a b : ProgHOL 64}
+    (ha : EvmProgStep frameStartGw a) (hb : EvmProgStep frameStartGw b) :
+    EvmProgStep frameStartGw (.seq a b) := by
+  intro F s hcode hInv hnt hfr
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s a).1
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  simp only [hr] at hmeta hnt hfr ⊢
+  change mid.code = s.code at hmeta
+  cases r with
+  | none =>
+    have hs := ha s hcode hInv (by rw [hr]; simp) (by rw [hr]; exact Or.inl rfl)
+    rw [hr] at hs
+    exact dispatch_step_trans hs (hb mid (hmeta.trans hcode) hs.1.1 hnt hfr)
+  | some r =>
+    have hs := ha s hcode hInv (by rw [hr]; exact hnt) (by rw [hr]; exact hfr)
+    rw [hr] at hs
+    exact hs
+
+private theorem dispatch_step_ite (cond : ExpHOL 64) {a b : ProgHOL 64}
+    (ha : EvmProgStep frameStartGw a) (hb : EvmProgStep frameStartGw b) :
+    EvmProgStep frameStartGw (.ite cond a b) := by
+  intro F s hcode hInv hnt hfr
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  revert hnt hfr
+  split <;> intro hnt hfr
+  · split at hnt
+    · rename_i hz
+      simp only [hz, ↓reduceIte] at hfr ⊢
+      exact hb s hcode hInv hnt hfr
+    · rename_i hz
+      simp only [hz, ↓reduceIte] at hfr ⊢
+      exact ha s hcode hInv hnt hfr
+  · rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> cases h
+
+theorem run_precompile_body_step_of_dispatch (h : PrecompileDispatchSpecs) :
+    EvmProgStep frameStartGw (sourceFnBody Guest.Software.guestFn_run_precompile) := by
+  dsimp only [sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_run_precompile,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  repeat first
+    | apply dispatch_step_seq
+    | apply dispatch_step_ite
+    | exact dispatch_step_ro (ReadOnlyProg.ret _)
+    | exact dispatch_step_ro ReadOnlyProg.skip
+    | exact dispatch_step_ro (ReadOnlyProg.raise _ _)
+    | exact h _ (by simp)
+
+theorem lookup_run_precompile :
+    originalRuntimeCode.lookup (ofString "run_precompile") =
+      some ([(ofString "idx", .one)],
+        sourceFnBody Guest.Software.guestFn_run_precompile, .one) :=
+  lookup_of_guestAst_getElem 830 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_run_precompile) rfl
+
+theorem ek_cc_run_precompile_of_dispatch (h : PrecompileDispatchSpecs) :
+    EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "run_precompile") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "run_precompile") := by
+  have hInv {F : Type} {s : PanSemStateFiniteExact 64 F}
+      (hP : EvmAvoids FrameStartAvoids s) : EvmInv s := by
+    obtain ⟨hA, S, hI, _⟩ := hP
+    exact (evmInv_iff_at s).2 ⟨hA, S, hI⟩
+  constructor
+  · refine ⟨_, _, _, lookup_run_precompile, ?_⟩
+    intro F s hcode hP hex hnt hres
+    exact (run_precompile_body_step_of_dispatch h s hcode (hInv hP) hnt
+      (Or.inr (Or.inr (Or.inr hres)))).1
+  · refine ⟨_, _, _, lookup_run_precompile, ?_⟩
+    intro F s hcode hP hex hnt hres
+    exact (run_precompile_body_step_of_dispatch h s hcode (hInv hP) hnt
+      (Or.inr (Or.inr (Or.inr hres)))).2
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
