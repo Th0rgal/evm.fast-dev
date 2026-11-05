@@ -2056,4 +2056,112 @@ theorem phase2_nal_cond_hoare (cond e : ExpHOL 64) :
   · intro F s hp hr
     simp at hr
 
+/-- Decoder bounds retained by the store-ready invariant control both copy loops. -/
+theorem phase2_access_counts_lt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeStoreReady s) :
+    memW s (locN s "tx" + 216) < 2 ^ 32 ∧ txAccessSlots s (locN s "tx") < 2 ^ 32 := by
+  obtain ⟨S, Nd, _, ht, _⟩ := hp.2
+  exact ⟨ht.1.2.2.2.2.1, ht.1.2.2.2.2.2.1⟩
+
+/-- The address-array size cannot wrap, including its extra first entry. -/
+theorem phase2_address_array_size {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeStoreReady s)
+    (hn : locN s "nal" = 0 ∨ locN s "nal" = memW s (locN s "tx" + 216)) :
+    locN s "nal" < 2 ^ 32 ∧ (locN s "nal" + 1) * 8 < 2 ^ 64 := by
+  have hc := (phase2_access_counts_lt hp).1
+  rcases hn with hn | hn <;> rw [hn] <;> constructor <;> omega
+
+/-- Count information required at the address-array allocation cut. -/
+def PtxAccessCountReady {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxTeStoreReady s ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word w))) ∧
+  (locN s "nal" = 0 ∨ locN s "nal" = memW s (locN s "tx" + 216))
+
+theorem phase2_accessCountReady_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeStoreReady s) :
+    PtxAccessCountReady (setVarHOLFinite (ofString "nal") (.val (.word 0)) s) := by
+  obtain ⟨hr, hn, hw⟩ := phase2_nal_zero s hp
+  exact ⟨hr, ⟨0, hw⟩, Or.inl hn⟩
+
+theorem phase2_accessCountReady_loaded {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeStoreReady s) (w : BitVec 64)
+    (hw : w.toNat = memW s (locN s "tx" + 216)) :
+    PtxAccessCountReady (setVarHOLFinite (ofString "nal") (.val (.word w)) s) := by
+  obtain ⟨hr, hn, hl⟩ := phase2_nal_set_word s hp w
+  refine ⟨hr, ⟨w, hl⟩, Or.inr ?_⟩
+  rw [hn, hw]
+  simp [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "nal" ≠ ofString "tx" by decide]
+
+theorem phase2_accessCountReady_size {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAccessCountReady s) :
+    locN s "nal" < 2 ^ 32 ∧ (locN s "nal" + 1) * 8 < 2 ^ 64 :=
+  phase2_address_array_size hp.1 hp.2.2
+
+/-- Count readiness is stable under fresh bookkeeping locals and clock changes. -/
+theorem phase2_accessCountReady_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["nal", "te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxAccessCountReady s) :
+    PtxAccessCountReady { s with locals := locals, clock := clock } := by
+  refine ⟨phase2_teStoreReady_with_locals s locals clock
+    (fun name hn => hl name (List.mem_cons_of_mem _ hn)) hp.1, ?_, ?_⟩
+  · exact (hl "nal" (by simp)) ▸ hp.2.1
+  · have hn := locN_congr s locals clock "nal" (hl "nal" (by simp))
+    have ht := locN_congr s locals clock "tx" (hl "tx" (by simp))
+    rw [hn, ht]
+    exact hp.2.2
+
+theorem phase2_resume_has_access_list_count (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady PtxAccessCountReady (ofString "hal")
+      (ofString "tx_has_access_list") [.var .local (ofString "tx")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.ro_tx_has_access_list
+    s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) =
+      { s with locals := s.locals, clock := post.clock } := by rw [he]; rfl
+  have hp' : PtxAccessCountReady { post with locals := s.locals } := by
+    rw [hrestore]
+    exact phase2_accessCountReady_with_locals s s.locals post.clock (fun _ _ => rfl) hp
+  apply phase2_accessCountReady_with_locals _ _ _ _ hp'
+  intro name hn
+  have hne : ofString name ≠ ofString "hal" := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with h | h | h | h | h | h | h | h | h | h | h | h <;>
+      subst name <;> decide
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm hne]
+
+/-- A count expression with the header's value establishes count readiness. -/
+theorem phase2_count_assign_hoare (e : ExpHOL 64)
+    (he : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxAccessCountReady s → evalAt s e = some v →
+      ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = memW s (locN s "tx" + 216)) :
+    Hoare PtxAccessCountReady (.assign .local (ofString "nal") e)
+      (fun r t => r = none → PtxAccessCountReady t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    obtain ⟨w, rfl, hw⟩ := he s v hp hv
+    exact phase2_accessCountReady_loaded s hp.1 w hw
+  · intro F s hp hr
+    simp at hr
+
+theorem phase2_count_cond_hoare (cond e : ExpHOL 64)
+    (he : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxAccessCountReady s → evalAt s e = some v →
+      ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = memW s (locN s "tx" + 216)) :
+    Hoare PtxAccessCountReady (.ite cond (.assign .local (ofString "nal") e) .skip)
+      (fun r t => r = none → PtxAccessCountReady t) := by
+  apply Hoare.ite
+  · refine ⟨fun s hc hp hn => ?_⟩
+    exact (phase2_count_assign_hoare e he).run s hc hp.1 hn
+  · exact Hoare.skip (fun s hp _ => hp.1)
+  · intro F s hp hr
+    simp at hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
