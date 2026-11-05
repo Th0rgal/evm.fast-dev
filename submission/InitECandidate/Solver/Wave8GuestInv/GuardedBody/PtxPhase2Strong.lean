@@ -2522,4 +2522,29 @@ theorem phase2_address_alloc_live (h : PtxCallees) :
     rw [hpointer, hcount]
     exact hf.2.2
 
+/-- The allocated address array remains separate from all live input buffers
+when expressed in the resumed caller's locals and memory. -/
+theorem phase2_address_alloc_separated (h : PtxCallees) :
+    DecCallResumeOn PtxAccessCountReady
+      (fun s =>
+        Disj (locN s "te", 200) (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+        Disj (locN s "tx", 384) (locN s "al_addrs", (locN s "nal" + 1) * 8) ∧
+        (0 < memW s (locN s "tx" + 216) →
+          Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+            (locN s "al_addrs", (locN s "nal" + 1) * 8)))
+      (ofString "al_addrs") (ofString "alloc")
+      [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have h208 := phase2_alloc_header_words h _ 208 (memW s (locN s "tx" + 208))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  have h216 := phase2_alloc_header_words h _ 216 (memW s (locN s "tx" + 216))
+    (by decide) (by decide) s vs body callee ret v post hc ⟨hp, rfl⟩ ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_address_alloc_fresh h s vs body callee ret v post hc hp ha hl hb
+  have hd := phase2_fresh_separation s post callee w.toNat ((locN s "nal" + 1) * 8) hp hf
+  rw [h208, h216]
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "al_addrs" ≠ ofString "te" by decide,
+    show ofString "al_addrs" ≠ ofString "tx" by decide,
+    show ofString "al_addrs" ≠ ofString "nal" by decide] using hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
