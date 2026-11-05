@@ -430,6 +430,26 @@ theorem phase1_resume_blob_gas_prefix (h : PtxCallees) :
   · exact R16Shards.PtxP1.resume_ro_stage h.ro_calculate_total_blob_gas (by decide) _
   · decide
 
+theorem phase1_resume_account_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "acct") (ofString "get_account") [.var .local (ofString "sender")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_scratch_stage h.wk_get_account
+      (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)])
+      (by unfold R16Shards.PtxP1.ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+      (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) (by decide) _
+  · decide
+
+theorem phase1_resume_fee_prefix (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (ofString "egf") (ofString "fee_mul")
+      [.var .local (ofString "gas"), .var .local (ofString "price")] := by
+  apply phase1_resume_frame_prefix
+  · exact R16Shards.PtxP1.resume_ro_stage h.ro_fee_mul (by decide) _
+  · decide
+
 /-- The validation stage already retains the complete intrinsic triple. -/
 theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hstage : R16Shards.PtxP1.StageP 2 s)
