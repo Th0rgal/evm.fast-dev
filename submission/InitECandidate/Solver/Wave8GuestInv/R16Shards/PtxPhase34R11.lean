@@ -46,6 +46,85 @@ def TxAfterCallStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
 def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
 
+/-- The two block-output lists have non-null backing pointers.
+This concerns the word in each list header, rather than just the header
+pointer stored in the block-output record. -/
+def TxBacking : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => memW s (memW s (globN s "bo" + 40)) ≠ 0 ∧
+    memW s (memW s (globN s "bo" + 72)) ≠ 0
+
+/-- Local cutover guard; the frozen transaction contract remains a projection. -/
+def TxReadyBackingStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxReadyStrong s ∧ TxBacking s
+
+/-- Intermediate environment carrying both backing-pointer facts. -/
+def TxEnvBackingStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxEnv s ∧ TxBacking s
+
+def TxAfterCallBackingStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxAfterCallStrong s ∧ TxBacking s
+
+theorem txBacking_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat) :
+    TxBacking {s with locals := locals, clock := k} ↔ TxBacking s := Iff.rfl
+
+theorem txBacking_set_local {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (name : MlS) (v : ValueHOL 64) (h : TxBacking s) :
+    TxBacking (setVarHOLFinite name v s) := h
+
+theorem txReadyBackingStrong_env {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxReadyBackingStrong s) : TxEnvBackingStrong s :=
+  ⟨PtxP1.txEnv_of_ready h.1, h.2⟩
+
+theorem txReadyBackingStrong_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (ht : locals.lookup (ofString "tx") = s.locals.lookup (ofString "tx"))
+    (hi : locals.lookup (ofString "index") = s.locals.lookup (ofString "index"))
+    (h : TxReadyBackingStrong s) :
+    TxReadyBackingStrong {s with locals := locals, clock := k} :=
+  ⟨PtxP1.txReadyStrong_with_locals s locals k ht hi h.1, h.2⟩
+
+theorem txEnvBackingStrong_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
+    (hi : locals.lookup (ofString "index") = s.locals.lookup (ofString "index"))
+    (h : TxEnvBackingStrong s) :
+    TxEnvBackingStrong {s with locals := locals, clock := k} :=
+  ⟨R13Shards.txEnv_with_locals s locals k hi h.1, h.2⟩
+
+/-- Transport needs the nested header words as well as the outer record words.
+Keeping only `bo+40` and `bo+72` does not supply the second premise. -/
+theorem txBacking_of_header_words {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : TxBacking s) (hbo : globN post "bo" = globN s "bo")
+    (hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k))
+    (hbacking : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k))) :
+    TxBacking post := by
+  constructor
+  · rw [hbo, hheaders 40 (by simp), hbacking 40 (by simp)]
+    exact h.1
+  · rw [hbo, hheaders 72 (by simp), hbacking 72 (by simp)]
+    exact h.2
+
+/-- A single store outside both block-output slots and both list-header data
+words preserves backing, regardless of the stored value. -/
+theorem txBacking_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxBacking s) {x : BitVec 64} {mem' : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hslots : ∀ k ∈ ([40, 72] : List Nat), BitVec.ofNat 64 (globN s "bo" + k) ≠ x)
+    (hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      BitVec.ofNat 64 (memW s (globN s "bo" + k)) ≠ x) :
+    TxBacking {s with memory := mem'} := by
+  apply txBacking_of_header_words (post := {s with memory := mem'}) h rfl
+  · intro k hk
+    unfold memW
+    dsimp only
+    rw [hm _ (hslots k hk)]
+  · intro k hk
+    unfold memW at hheaders ⊢
+    dsimp only
+    rw [hm _ (hheaders k hk)]
+
 /-- Caller locals read by Phase 4 before they are assigned there. `out` is
 introduced by Phase 3 itself. The message-building locals `mgas`, `reservoir`
 and `m` are not read by Phase 4. -/
@@ -79,6 +158,35 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 
 namespace PtxP34
 open PtxP1
+
+/-- `lst_new(8,16)` supplies a nonzero data pointer because its backing block
+starts at or above the positive heap frontier. -/
+theorem fresh_backing_nonzero {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} (hA : ArenaOK s) (hf : FreshBlock s post p n) : p ≠ 0 := by
+  have hlo := hA.1.trans hf.2.1.1
+  have hbase : 0 < sourceBase := by decide
+  omega
+
+/-- Initialization bridge for the two `execute_block` list allocations. The
+freshness witnesses may have different allocation-entry states. -/
+theorem txBacking_of_fresh_lists {F : Type}
+    {s40 s72 post : PanSemStateFiniteExact 64 F}
+    (h40 : ArenaOK s40) (h72 : ArenaOK s72)
+    (hf40 : FreshBlock s40 post (memW post (memW post (globN post "bo" + 40))) 128)
+    (hf72 : FreshBlock s72 post (memW post (memW post (globN post "bo" + 72))) 128) :
+    TxBacking post :=
+  ⟨fresh_backing_nonzero h40 hf40, fresh_backing_nonzero h72 hf72⟩
+
+/-- Growth replaces a backing pointer by a fresh allocation; the no-growth
+branch retains the previous pointer. Both branches preserve nonzeroness. -/
+theorem backing_nonzero_of_kept_or_fresh {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {l n : Nat}
+    (hA : ArenaOK s) (hn : memW s l ≠ 0)
+    (hstep : memW post l = memW s l ∨ FreshBlock s post (memW post l) n) :
+    memW post l ≠ 0 := by
+  rcases hstep with he | hf
+  · rwa [he]
+  · exact fresh_backing_nonzero hA hf
 
 /-- The concrete account proof supplies the scratch frontier bound omitted by
 the weaker `PtxCallees.wk_create_ether` interface. -/
@@ -1890,6 +1998,21 @@ theorem lst_push_bo40_arg {F : Type} (s : PanSemStateFiniteExact 64 F)
   refine ⟨⟨worldOK_callEntry hp.1 callee, hp.2.bo_nz, Or.inl hle, ?_⟩, hle⟩
   simp only [locN, callEntryStateHOLFinite, hparams.2.2]
   rfl
+
+/-- The strengthened transaction environment discharges the concrete push
+entry guard for the block log list. -/
+theorem lst_push_bo40_arg_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s) (hb : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret)) :
+    BoListArgStrong (callEntryStateHOLFinite s callee) := by
+  obtain ⟨harg, he⟩ := lst_push_bo40_arg s vs body callee ret hc hp ha hl
+  refine ⟨harg.1, harg, ?_⟩
+  rw [he]
+  exact hb.1
 
 theorem lst_push_slot_result (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
@@ -7571,6 +7694,20 @@ theorem lst_push_bo72_arg {F : Type} (s : PanSemStateFiniteExact 64 F)
   refine ⟨⟨worldOK_callEntry hp.1 callee, hp.2.bo_nz, Or.inr hle, ?_⟩, hle⟩
   simp only [locN, callEntryStateHOLFinite, hparams.2.2]
   rfl
+
+/-- The receipt-list push uses the second component of the backing invariant. -/
+theorem lst_push_bo72_arg_backing {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode) (hp : TxWorld s) (hb : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret)) :
+    BoListArgStrong (callEntryStateHOLFinite s callee) := by
+  obtain ⟨harg, he⟩ := lst_push_bo72_arg s vs body callee ret hc hp ha hl
+  refine ⟨harg.1, harg, ?_⟩
+  rw [he]
+  exact hb.2
 
 /-- The final push returns a slot in the current receipt-log backing array. -/
 theorem lst_push_bo72_slot_result (h : PtxCallees) {F : Type}
