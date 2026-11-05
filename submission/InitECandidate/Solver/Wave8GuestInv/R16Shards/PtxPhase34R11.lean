@@ -3110,6 +3110,54 @@ theorem stable_copy_complete {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rw [hcopy i hi]
     exact (hl.2.2.2.2 i (by rw [← hp.2.2.2.1]; exact hi)).2
 
+/-- The stable-copy loop records equality only for the already copied prefix. -/
+def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+    WordsOK s (locN s "stable_logs", 24) ∧
+    Allocated s (locN s "stable_logs", 24) ∧
+    locN s "nl" ≤ locN s "stable_log_cap" ∧
+    ∀ i, i < locN s "j" → i < locN s "nl" →
+      memW s (memW s (locN s "stable_logs") + 8 * i) =
+        memW s (memW s (locN s "logs") + 8 * i)
+
+theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "j") :
+    PtxReceiptsDone s := by
+  obtain ⟨hp, hn, hh, ha, hcap, hcopy⟩ := hp
+  exact stable_copy_complete s hp hn hh ha hcap
+    (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
+
+/-- The semantic memory step of the stable-copy loop extends the copied
+prefix by one cell. The source is framed, and destination addresses do not wrap. -/
+theorem stable_copy_prefix_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (dst src i n : Nat)
+    (hi : i < n) (hbound : dst + 8 * n ≤ 2 ^ 64)
+    (hprefix : ∀ j, j < i → memW s (dst + 8 * j) = memW s (src + 8 * j))
+    (hwrite : memW {s with memory := mem'} (dst + 8 * i) = memW s (src + 8 * i))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (dst + 8 * i) → mem' a = s.memory a)
+    (hsource : ∀ j, j < n →
+      memW {s with memory := mem'} (src + 8 * j) = memW s (src + 8 * j)) :
+    ∀ j, j < i + 1 →
+      memW {s with memory := mem'} (dst + 8 * j) =
+        memW {s with memory := mem'} (src + 8 * j) := by
+  intro j hj
+  rw [hsource j (by omega)]
+  by_cases he : j = i
+  · subst j; exact hwrite
+  have hji : j < i := by omega
+  have hdi : dst + 8 * i < 2 ^ 64 := by omega
+  have hdj : dst + 8 * j < 2 ^ 64 := by omega
+  have hne : BitVec.ofNat 64 (dst + 8 * j) ≠ BitVec.ofNat 64 (dst + 8 * i) := by
+    intro heq
+    have heq' := congrArg BitVec.toNat heq
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hdi, Nat.mod_eq_of_lt hdj] at heq'
+    omega
+  calc
+    memW {s with memory := mem'} (dst + 8 * j) = memW s (dst + 8 * j) := by
+      simp only [memW]
+      rw [hm _ hne]
+    _ = memW s (src + 8 * j) := hprefix j hji
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
