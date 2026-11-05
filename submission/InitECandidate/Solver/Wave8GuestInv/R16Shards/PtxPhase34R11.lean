@@ -3966,6 +3966,26 @@ theorem stable_length_record_separation {F : Type} (s : PanSemStateFiniteExact 6
   exact stable_copy_record_separation s mem' hs hn hd
     (stable_length_source_cells s mem' _ _ hA hh ha hal hdisj hm) he
 
+/-- The length-store contract preserves record/backing separation with no
+additional source-cell framing obligations. -/
+theorem stableLengthPre_record_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    let t := {s with memory := mem'}
+    ∀ j, j < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * j), 40)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨S, Nd, hW, ho, hs, hh, ha, hr⟩ := hp.2.2.2.2
+  have hf := stable_length_store_source s hp.1 hp.2.1 S Nd hW ho hs hh ha hr hx mem' hm
+  have hd := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  exact stable_copy_record_separation s mem' hf.2.2.2.2.2.1 hf.2.2.2.2.2.2 hd
+    (stableLengthPre_source_cells s hp mem' hm) he
+
 /-- Framing the destination header and world footprint retains separation
 from every world-owned interval after the copy store. -/
 theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
