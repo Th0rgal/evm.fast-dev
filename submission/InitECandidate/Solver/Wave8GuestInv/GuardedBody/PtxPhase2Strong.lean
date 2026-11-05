@@ -4359,4 +4359,23 @@ theorem phase2_storage_keys_exit_size {F : Type} (s : PanSemStateFiniteExact 64 
   rw [hr]
   constructor <;> dsimp <;> omega
 
+/-- An inner-loop key index, offset by its record prefix, is below the total. -/
+theorem phase2_key_copy_index_lt_total {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {i j : Nat} (hi : i < memW s (locN s "tx" + 216))
+    (hj : j < memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    phase2_key_prefix s i + j < txAccessSlots s (locN s "tx") := by
+  have hp := phase2_key_prefix_le_total s (i := i + 1) (by omega)
+  rw [phase2_key_prefix_succ] at hp
+  omega
+
+/-- Both concrete memcpy destinations fit in the packed key allocation. -/
+theorem phase2_key_copy_destinations (base count k : Nat) (hk : k < count) :
+    Inside (base + 52 * k, 20) base
+      (base + (count * 52 + 8 + 7) / 8 * 8) ∧
+    Inside (base + 52 * k + 20, 32) base
+      (base + (count * 52 + 8 + 7) / 8 * 8) := by
+  obtain ⟨hl, hu⟩ := phase2_key_record_inside base count k hk
+  dsimp at hl hu
+  constructor <;> constructor <;> dsimp <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
