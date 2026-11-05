@@ -9497,4 +9497,33 @@ theorem phase2_packed_ns_nal_while {body : ProgHOL 64}
           (fun hlt => hz (hguard.mpr hlt))).1⟩
     · simp at he
 
+/-- The outer increment retains the cached record bound after inner completion. -/
+theorem phase2_packed_ns_nal_outer_increment_hoare :
+    Hoare (fun s => PtxPackedNsNalIteration s ∧
+      locN s "k" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxPackedNalIteration s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hb := phase2_packed_outer_successor_bound hp.1.1.1.2.1.1
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "i" v hb he
+    have heq : w = BitVec.ofNat 64 (locN s "i" + 1) := by
+      apply BitVec.eq_of_toNat_eq
+      rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+    subst w
+    intro _
+    refine ⟨phase2_packed_ns_outer_advance s hp.1.1 hp.2, ?_⟩
+    simpa [locN, memW, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nal" by decide,
+      show ofString "i" ≠ ofString "tx" by decide] using hp.1.2
+  · exact fun _ _ hr => by cases hr
+
+/-- The concrete inner loop and record increment retain the outer cached bound. -/
+theorem phase2_packed_source_inner_tail_nal_hoare (h : PtxCallees) :
+    Hoare PtxPackedNsNalIteration phase2_packed_source_inner_tail
+      (fun r s => r = none → PtxPackedNalIteration s) := by
+  exact Hoare.seq_fall
+    (phase2_packed_ns_nal_while (phase2_packed_body_ns_nal_hoare h _ _) rfl rfl)
+    phase2_packed_ns_nal_outer_increment_hoare
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
