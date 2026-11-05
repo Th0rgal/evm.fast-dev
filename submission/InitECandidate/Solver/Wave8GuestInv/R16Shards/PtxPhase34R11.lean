@@ -7371,4 +7371,30 @@ theorem gbody_process_transaction_strong_of_cuts
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
     (hb (F := F) s hc hp)
 
+open PtxP34 in
+/-- Transaction composition now needs only the prefix and local push contracts. -/
+theorem gbody_process_transaction_strong_of_h12_slots
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (hlogs : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hreceipt : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t)) :
+    TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  apply gbody_process_transaction_strong_of_cuts h hwk h12
+  intro tail b ht F s hc hp
+  exact ptxPhase4_cut_strong_of_slots h hlogs R hreceipt hstore ht s hc hp.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
