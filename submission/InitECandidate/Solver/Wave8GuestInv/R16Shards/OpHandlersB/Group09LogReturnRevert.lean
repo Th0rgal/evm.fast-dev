@@ -12514,4 +12514,124 @@ theorem log_growth_world_preserved_g09 {F : Type}
   have hb := ((hWT.1.2.1 t ht).1.1 (t, 88) (by simp [htabFootprint])).1
   simpa only [hdr, Nat.mul_zero, Nat.add_zero] using htab_hdr_eq hcell ht hb 0 (by omega)
 
+/-- The concrete finishing writes leave every word of a separated object intact.
+This applies uniformly to active/suspended frame records and world objects. -/
+theorem log_growth_protected_words_g09 {F : Type}
+    (copy : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64) (o : Ivl)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (ho : o.1 + o.2 ≤ 2 ^ 64)
+    (hdheader : Disj o (l.toNat, 24))
+    (hdbuffer : Disj o (p.toNat, 8 * n.toNat + 8)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    ∀ k, k + 8 ≤ o.2 → memW post (o.1 + k) = memW copy (o.1 + k) := by
+  dsimp only
+  intro k hk
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hsepH : o.1 + o.2 ≤ l.toNat ∨ l.toNat + 24 ≤ o.1 := by
+    rcases hdheader with hz | hz | h | h
+    · omega
+    · cases hz
+    · exact Or.inl h
+    · exact Or.inr h
+  have hsepB : o.1 + o.2 ≤ p.toNat ∨ p.toNat + 8 * n.toNat + 8 ≤ o.1 := by
+    rcases hdbuffer with hz | hz | h | h
+    · omega
+    · dsimp only at hz; omega
+    · exact Or.inl h
+    · exact Or.inr h
+  have ha : (BitVec.ofNat 64 (o.1 + k)).toNat = o.1 + k := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+  have hne : ∀ b : BitVec 64, o.1 + k ≠ b.toNat → BitVec.ofNat 64 (o.1 + k) ≠ b := by
+    intro b hb heq; exact hb (ha.symm.trans (congrArg BitVec.toNat heq))
+  have hns := hne (p + n * 8#64) (by rw [hs]; omega)
+  have hn8' := hne (l + 8#64) (by rw [hl8]; omega)
+  have hn16 := hne (l + 16#64) (by rw [hl16]; omega)
+  have hn0 := hne l (by omega)
+  simp [memW, hns, hn8', hn16, hn0]
+
+/-- A single old-world separation fact supplies both reconstructed frame/world
+separation and trie avoidance after the typed cells have been preserved. -/
+theorem log_growth_world_separation_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {objects : List Ivl}
+    (hWT : WorldTypedWith s S Nd)
+    (hcell : SameTypedCells s post S Nd)
+    (htries : TriesTypedWith post S Nd)
+    (hfixed : fixedObjects post = fixedObjects s)
+    (hfoot : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hdisj : IvlsDisj objects (worldOwned s S Nd)) :
+    (∀ o ∈ objects, (∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj o i) ∧
+      ∀ j ∈ fixedObjects post, Disj o j) ∧ AvoidsTries post S objects := by
+  have hnodes := nodeExtents_eq hWT.2.2.2.1 hcell
+  constructor
+  · intro o ho
+    constructor
+    · intro t ht i hi
+      rw [hfoot t ht] at hi
+      exact hdisj o ho i (by
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_left _
+          (List.mem_flatMap.2 ⟨t, ht, hi⟩)))
+    · intro j hj
+      rw [hfixed] at hj
+      exact hdisj o ho j (by
+        unfold worldOwned
+        exact List.mem_append_left _ (List.mem_append_right _ hj))
+  · refine ⟨Nd, htries, ?_⟩
+    intro o ho j hj
+    rw [hnodes] at hj
+    exact hdisj o ho j (by
+      unfold worldOwned
+      exact List.mem_append_right _ hj)
+
+/-- Assemble log-growth invariant reconstruction from typed-cell preservation
+and separation against the pre-growth world. All world readbacks are derived. -/
+theorem evmInvAt_of_log_growth_cells_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hscratch : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hglobals : ∀ g, ofString g ≠ ofString "heap_ptr" →
+      ofString g ≠ ofString "scratch_ptr" → ofString g ≠ ofString "frame_mem_ptr" →
+      globN post g = globN s g)
+    (hcell : SameTypedCells s post S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hpairwise : ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj)
+    (hdisj : IvlsDisj ((evmChain post).map (frameObjects post)).flatten (worldOwned s S Nd))
+    (hobjects : ∀ ec ∈ (evmChain s).tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ (evmChain s).tail, frameLogs post ec = frameLogs s ec) :
+    EvmInvAt post S := by
+  obtain ⟨hworld, htries, _, hfixed, hrefs, hfoot, hroles, hjroles, hkind⟩ :=
+    log_growth_world_preserved_g09 hAs hAp hWT hheap hscratch hglobals hcell
+  obtain ⟨hseparation, havoids⟩ :=
+    log_growth_world_separation_g09 hWT hcell htries hfixed hfoot hdisj
+  apply evmInvAt_of_head_log_growth_g09 hinv hworld hchain hfields hcont hframes
+    hpairwise ?_ havoids hfixed hrefs hfoot hobjects hlogs hroles hjroles hkind
+  intro ec hec o ho
+  apply hseparation o
+  apply List.mem_flatten.2
+  refine ⟨frameObjects post ec, ?_, ho⟩
+  apply List.mem_map.2
+  exact ⟨ec, hchain.symm ▸ hec, rfl⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
