@@ -4416,4 +4416,40 @@ theorem phase2_storage_keys_fresh_slot {F : Type}
   dsimp at hl hu
   constructor <;> dsimp <;> omega
 
+/-- Caller restoration retains the complete live storage-key buffer. -/
+theorem phase2_storage_keys_alloc_live (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s =>
+        (∃ w : BitVec 64, s.locals.lookup (ofString "storage_keys") = some (.val (.word w))) ∧
+        Inside (locN s "storage_keys", locN s "nkeys" * 32)
+          InitE.sourceBase (globN s "heap_ptr") ∧
+        locN s "storage_keys" % 8 = 0 ∧
+        WordsOK s (locN s "storage_keys", locN s "nkeys" * 32))
+      (ofString "storage_keys") (ofString "alloc")
+      [.panop .mul [.var .local (ofString "nkeys"), .const 32]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_storage_keys_alloc_fresh h s vs body callee ret v post
+    hc hp ha hl hb
+  have hround : (locN s "nkeys" * 32 + 7) / 8 * 8 = locN s "nkeys" * 32 := by omega
+  simp only [FreshBlock, hround] at hf
+  let out := setVarHOLFinite (ofString "storage_keys") (.val (.word w))
+    { post with locals := s.locals }
+  have hptr : locN out "storage_keys" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nkeys" = locN s "nkeys" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "storage_keys" ≠ ofString "nkeys" by decide]
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  refine ⟨⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_, ?_⟩
+  · change Inside (locN out "storage_keys", locN out "nkeys" * 32)
+      InitE.sourceBase (globN post "heap_ptr")
+    rw [hptr, hcount]
+    exact ⟨hready.1.1.1.1.1.1.1.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · change locN out "storage_keys" % 8 = 0
+    rw [hptr]
+    exact hf.1
+  · change WordsOK post (locN out "storage_keys", locN out "nkeys" * 32)
+    rw [hptr, hcount]
+    exact hf.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
