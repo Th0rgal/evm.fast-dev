@@ -10703,4 +10703,35 @@ theorem log_append_owned_disj_g09 {F : Type}
   · exact hold i hi
   · exact hnew i hi
 
+theorem logEntryOK_of_record_agree_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hdom : post.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (log + k) = memW s (log + k))
+    (h : LogEntryOK s log) : LogEntryOK post log := by
+  have h0 : memW post log = memW s log := by
+    simpa only [Nat.add_zero] using hrecord 0 (by simp)
+  unfold LogEntryOK at h ⊢
+  rw [h0, hrecord 8 (by simp), hrecord 16 (by simp),
+    hrecord 24 (by simp), hrecord 32 (by simp)]
+  obtain ⟨hw, hl, hn, hsize, ha, ht, hd⟩ := h
+  exact ⟨(wordsOK_congr_of_dom_g09 hdom).2 hw,
+    ⟨hl.1, le_trans hl.2 hheap⟩, hn, hsize,
+    ⟨ha.1, le_trans ha.2 hheap⟩,
+    ⟨ht.1, le_trans ht.2 hheap⟩,
+    ⟨hd.1, le_trans hd.2 hheap⟩⟩
+
+theorem logOwnedIvls_of_record_agree_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (log + k) = memW s (log + k)) :
+    logOwnedIvls post log = logOwnedIvls s log := by
+  have h0 : memW post log = memW s log := by
+    simpa only [Nat.add_zero] using hrecord 0 (by simp)
+  unfold logOwnedIvls logRecordIvls
+  rw [h0, hrecord 8 (by simp), hrecord 16 (by simp),
+    hrecord 24 (by simp), hrecord 32 (by simp), hsys]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
