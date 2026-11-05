@@ -3513,4 +3513,45 @@ theorem phase2_address_copy_body_clock {F : Type} (s : PanSemStateFiniteExact 64
   · intro F u
     exact phase2_clock_seq (fun v => clock_assign v _ _ _) (fun v => clock_assign v _ _ _) u
 
+/-- A clock-neutral guarded copy body terminates by its increasing index. -/
+theorem phase2_address_copy_while_bound {body : ProgHOL 64}
+    (hb : Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") body
+      (fun r s => r = none → PtxAddressCopyInv s))
+    (hclock : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s body).2.clock = s.clock)
+    (hinc : IncrBody (ofString "i") body) :
+    TerminatingProgBoundedOn PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      ((2 ^ 63 + 1) * (0 + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "i")
+  · intro F s hp
+    exact phase2_address_copy_with_locals s s.locals (s.clock - 1) (by intros; rfl) hp
+  · intro F s hc hp hn
+    rw [hclock]
+    exact ⟨by omega, le_rfl⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := phase2_address_copy_guard hp w hw hnz
+    have hd : PtxAddressCopyInv (decClockHOLFinite s) :=
+      phase2_address_copy_with_locals s s.locals (s.clock - 1) (by intros; rfl) hp
+    obtain ⟨i, hi⟩ := hp.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) i hi
+    have hnone := hf.resolve_right hnc
+    have hpost := hb.run (decClockHOLFinite s) hc ⟨hd, hg⟩
+      (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hil : locN s "i" = i.toNat := by simp [locN, hi]
+    have hilt := (phase2_address_copy_signed_bounds hp).1
+    have hpl := (phase2_address_copy_signed_bounds hpost).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "i" =
+        (i.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hil] at hilt ⊢
+    rw [hpn]
+    have hmod : (i.toNat + 1) % 2 ^ 64 = i.toNat + 1 := Nat.mod_eq_of_lt (by omega)
+    rw [hmod] at *
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
