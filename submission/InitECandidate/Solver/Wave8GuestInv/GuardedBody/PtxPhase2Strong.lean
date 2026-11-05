@@ -3691,4 +3691,19 @@ theorem phase2_address_count_alloc_bound {F : Type} {s : PanSemStateFiniteExact 
   rw [← hp.2.1]
   exact hp.1.2.2.2
 
+/-- Zeroing the counters establishes the strengthened positive-branch invariant. -/
+theorem phase2_address_count_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) (hn : locN s "nal" ≠ 0) :
+    PtxAddressCountInv (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  have he : locN s "nal" = memW s (locN s "tx" + 216) :=
+    hp.1.1.2.2.resolve_left hn
+  refine ⟨phase2_address_copy_init s hp, ?_, ?_⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nal" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide,
+      show ofString "i" ≠ ofString "tx" by decide,
+      show ofString "nkeys" ≠ ofString "tx" by decide] using he
+  · simp [locN, phase2_key_prefix, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
