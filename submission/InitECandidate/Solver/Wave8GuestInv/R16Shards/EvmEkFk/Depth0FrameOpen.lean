@@ -2562,4 +2562,76 @@ theorem hoare_prepare_dispatch_delegated_stores (gw : List String) (hp : Nat)
   intro F s v _ _ hv
   exact ⟨1, (Option.some.inj hv).symm⟩
 
+/-! ## Resuming loop rule for authorization processing -/
+
+/-- A loop whose body preserves `P` on normal and resuming exits preserves `P`
+on those exits too. `break` and `continue` are excluded explicitly, as they are
+not covered by `Fall`. -/
+theorem Hoare.while_fall {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hdec : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → P (decClockHOLFinite s))
+    (hbody : Hoare (fun s => P s ∧ CondTrue cond s) body (Fall P))
+    (hcontrol : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s →
+      (evaluateHOLFiniteState s body).1 ≠ some .break ∧
+      (evaluateHOLFiniteState s body).1 ≠ some .continue) :
+    Hoare P (.while cond body) (Fall P) := by
+  refine ⟨fun {F} s hcode hP hnt hr => ?_⟩
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode → P st →
+      (evaluateHOLFiniteState st (.while cond body)).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState st (.while cond body)).1 = none ∨
+        Resumes (evaluateHOLFiniteState st (.while cond body)).1) →
+      P (evaluateHOLFiniteState st (.while cond body)).2 from
+    this s.clock s rfl hcode hP hnt hr
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hPs hnt hr
+    rw [evaluateHOLFiniteState_while_total] at hnt hr ⊢
+    split at hnt
+    · rename_i w hw
+      simp only [hw] at hr ⊢
+      split at hnt
+      · rename_i hwnz
+        simp only [if_pos hwnz] at hr ⊢
+        split at hnt
+        · simp at hnt
+        · rename_i hnz
+          simp only [if_neg hnz] at hr ⊢
+          dsimp only at hnt
+          rw [fixClockHOLFinite_evaluateState] at hnt hr ⊢
+          have hPd := hdec st hPs
+          have hct : CondTrue cond (decClockHOLFinite st) := by
+            obtain ⟨_, hw', hwnz'⟩ := loopActive_decClock (s := st) ⟨w, hw, hwnz⟩
+            exact ⟨_, hw', hwnz'⟩
+          have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hctrl := hcontrol (decClockHOLFinite st) hPd
+          rcases hb : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hb] at hnt hr hmeta hclk hctrl
+          have hmid (hntb : r ≠ some .timeOut) (hrb : r = none ∨ Resumes r) : P mid := by
+            have hp := hbody.run (decClockHOLFinite st) hc ⟨hPd, hct⟩
+              (by rw [hb]; exact hntb)
+            rw [hb] at hp
+            exact hp hrb
+          cases r with
+          | none =>
+            exact ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hmeta.trans hc) (hmid (by simp) (Or.inl rfl)) hnt hr
+          | some r =>
+            cases r with
+            | «break» => exact (hctrl.1 rfl).elim
+            | «continue» => exact (hctrl.2 rfl).elim
+            | timeOut => simp at hnt
+            | _ => exact hmid (by simp) hr
+      · rename_i hz
+        simpa only [if_neg hz] using hPs
+    · rename_i hbad
+      simp only [hbad] at hr ⊢
+      rcases hr with hr | hr
+      · cases hr
+      · exact absurd hr not_resumes_error
+
+#print axioms Hoare.while_fall
+
 end HeadStore
