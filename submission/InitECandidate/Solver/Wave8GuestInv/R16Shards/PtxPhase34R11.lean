@@ -2502,6 +2502,47 @@ theorem lst_new_stable_args {F : Type} (s : PanSemStateFiniteExact 64 F)
     have hb := phase4StableCap_bounds s hp
     exact ⟨he8, hce, hce.symm ▸ hb.1, by rw [he8, hce]; exact hb.2.2⟩
 
+theorem lst_new_stable_fresh (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post w.toNat 24 ∧
+      FreshBlock (callEntryStateHOLFinite s callee) post (memW post w.toNat)
+        (8 * locN s "stable_log_cap") ∧ memW post (w.toNat + 8) = 0 ∧
+      ∃ S Nd, WorldTypedWith post S Nd ∧
+        IvlsDisj [(w.toNat, 24), (memW post w.toNat, 8 * locN s "stable_log_cap")]
+          (worldOwned post S Nd) := by
+  have hargs := lst_new_stable_args s vs body callee ret hc hp ha hl
+  have hW := hp.1.1.1.1.1.1
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, hWT⟩ := hW.2
+  obtain ⟨Nd, hTr⟩ := hWT.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr
+    ⟨hWT.1, hWT.2.1, hWT.2.2.1, hTr⟩
+  obtain ⟨S', Nd', _, hWT', _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+    (by intro i hi; cases hi)
+  obtain ⟨w, hv, hd⟩ := hret hargs.2.2.2 v rfl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hW callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w', hv', _, _, hf⟩ := ht v rfl
+  have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
+  subst w'
+  obtain ⟨hh, hb, _, hn, _⟩ := hf hargs.2.2.2 hargs.2.2.1
+  refine ⟨w, hv, hh, ?_, hn, S', Nd', hWT', ?_⟩
+  · simpa only [hargs.1, hargs.2.1] using hb
+  · simpa only [hargs.1, hargs.2.1] using hd
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
