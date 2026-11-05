@@ -4552,4 +4552,16 @@ theorem phase2_storage_keys_alloc_world (h : PtxCallees) :
     simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "storage_keys" ≠ ofString "nkeys" by decide] using hav
 
+/-- Copy calls preserving the memory domain retain validity of every key destination. -/
+theorem phase2_storage_keys_words_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {base count : Nat}
+    (hw : WordsOK s (base, count * 32))
+    (hd : ∀ a, s.memaddrs a → post.memaddrs a) :
+    WordsOK post (base, count * 32) := by
+  refine ⟨hw.1, hw.2.1, ?_⟩
+  intro k hk
+  obtain ⟨w, ha, _⟩ := hw.2.2 k hk
+  cases hm : post.memory (BitVec.ofNat 64 (base + 8 * k)) with
+  | word v => exact ⟨v, hd _ ha, hm⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
