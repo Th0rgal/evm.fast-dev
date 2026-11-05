@@ -10891,4 +10891,60 @@ theorem phase2_packed_body_live_resource_hoare (h : PtxCallees)
   exact Hoare.mono (phase2_packed_live_resource_counters buffer contents)
     (fun _ hp => hp.2.1.2)
 
+def PtxPackedLiveFrame {F : Type} (buffer : Ivl) (contents : Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedLiveResource buffer contents s ∧
+    Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+
+theorem phase2_packed_live_frame_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hp : PtxPackedLiveFrame buffer contents s)
+    (ht : locN {s with locals := locals, clock := clock} "tx" = locN s "tx")
+    (ha : locN {s with locals := locals, clock := clock} "al_keys" = locN s "al_keys")
+    (hn : locN {s with locals := locals, clock := clock} "nkeys" = locN s "nkeys") :
+    PtxPackedLiveFrame buffer contents {s with locals := locals, clock := clock} := by
+  exact ⟨phase2_packed_live_resource_locals s locals clock buffer contents hp.1 ht ha hn,
+    by rw [ha, hn]; exact hp.2⟩
+
+theorem phase2_packed_live_frame_assign (buffer : Ivl) (contents : Nat → BitVec 64)
+    (name : MlS) (e : ExpHOL 64)
+    (ht : name ≠ ofString "tx") (ha : name ≠ ofString "al_keys")
+    (hn : name ≠ ofString "nkeys") :
+    Hoare (PtxPackedLiveFrame buffer contents) (.assign .local name e)
+      (fun r s => r = none → PtxPackedLiveFrame buffer contents s) := by
+  apply Hoare.assign
+  · intro F s v hp he hr
+    apply phase2_packed_live_frame_locals s _ s.clock buffer contents hp
+    all_goals simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ht, ha, hn]
+  · exact fun _ _ hr => by cases hr
+
+theorem phase2_packed_body_live_iteration_hoare (h : PtxCallees)
+    (addressSrc keySrc : ExpHOL 64) (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (fun s => PtxPackedNsNalCopy s ∧ PtxPackedLiveFrame buffer contents s)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → PtxPackedNsNalIteration s ∧ PtxPackedLiveFrame buffer contents s) := by
+  have hf := Hoare.seq_fall (phase2_packed_address_copy_live_hoare h addressSrc buffer contents)
+    (Hoare.seq_fall (phase2_packed_storage_copy_live_hoare h keySrc buffer contents)
+      (Hoare.mono (Hoare.seq_fall
+        (phase2_packed_live_frame_assign buffer contents (ofString "k")
+          (.op .add [.var .local (ofString "k"), .const 1]) (by decide) (by decide) (by decide))
+        (phase2_packed_live_frame_assign buffer contents (ofString "j")
+          (.op .add [.var .local (ofString "j"), .const 1]) (by decide) (by decide) (by decide)))
+        (fun _ hp => ⟨hp.2.1.2, hp.2.2.2.2⟩)))
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨(phase2_packed_body_ns_nal_hoare h addressSrc keySrc).run s hc hp.1 hnt hr,
+    hf.run s hc ⟨hp.1.1.1.1, ⟨hp.1.1.1.2.1, hp.2.1⟩,
+      hp.1.1.1.2.2.1, hp.1.1.1.2.2.2, hp.2.2⟩ hnt hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
