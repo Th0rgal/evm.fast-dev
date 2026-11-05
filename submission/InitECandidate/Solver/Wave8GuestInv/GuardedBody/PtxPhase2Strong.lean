@@ -6890,4 +6890,20 @@ theorem phase2_packed_guarded_of_copy_frame {F : Type}
   · intro i hi
     exact phase2_tx_count_world_frame s post S Nd _ _ i ha.2 hw ht hi hf hrec' hz
 
+/-- Scratch declarations retain the strengthened spatial copy invariant. -/
+theorem phase2_packed_separated_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxPackedSeparatedCopy s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedSeparatedCopy { s with locals := locals, clock := clock } := by
+  refine ⟨phase2_packed_copy_with_locals s locals clock hp.1 hl, ?_⟩
+  have ht : locN { s with locals := locals, clock := clock } "tx" = locN s "tx" := by
+    simp [locN, hl "tx" (by simp)]
+  have ha : locN { s with locals := locals, clock := clock } "al_keys" = locN s "al_keys" := by
+    simp [locN, hl "al_keys" (by simp)]
+  have hn : locN { s with locals := locals, clock := clock } "nkeys" = locN s "nkeys" := by
+    simp [locN, hl "nkeys" (by simp)]
+  simpa only [ht, ha, hn, memW] using hp.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
