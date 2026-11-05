@@ -768,4 +768,70 @@ theorem wk_process_transaction_of
   unfold PtxRelRun R13Shards.ptxCode ptxRegions ptxGlobals ptxKeep at hb
   exact hb
 
+def pmcTables {F : Type} (s : PanSemStateFiniteExact 64 F) : List Nat :=
+  [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]
+
+def pmcRegions {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  (locN s "msg", 176) :: (ptxRegions s).take 1 ++ (ptxRegions s).drop 2
+
+def pmcGlobals : List String :=
+  ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
+
+def pmcKeep : List (String × List Nat) :=
+  [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]),
+   ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+
+def pmcCode : ProgHOL 64 :=
+  (sourceFunctionEntry Guest.Software.guestFn_process_message_call).2.2.1
+
+def pmcInit (tail : ProgHOL 64) : ProgHOL 64 := R13Shards.spinePlug 4 pmcCode tail
+
+def pmcDispatch (tail : ProgHOL 64) : ProgHOL 64 :=
+  R13Shards.spinePlug 1 (R13Shards.spineAt 4 pmcCode) tail
+
+def pmcPack : ProgHOL 64 := R13Shards.spineAt 5 pmcCode
+
+theorem pmc_phases_eq : pmcCode = pmcInit (pmcDispatch pmcPack) := by
+  unfold pmcInit pmcDispatch pmcPack
+  rw [R13Shards.spinePlug_restore_at 4 1, R13Shards.spinePlug_restore]
+
+theorem pmc_lookup : originalRuntimeCode.lookup (ofString "process_message_call") =
+    some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
+  originalRuntimeCode_lookup_of_guestAst_getElem 607 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_process_message_call) rfl
+
+def PmcRelRun {F : Type} (entry : PanSemStateFiniteExact 64 F)
+    (p : ProgHOL 64) (s : PanSemStateFiniteExact 64 F) : Prop :=
+  Resumes (evaluateHOLFiniteState s p).1 →
+    WorldStepIn pmcTables pmcRegions pmcGlobals pmcKeep RetMessageOutput entry
+      (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2
+
+def PmcRelCut (phase : ProgHOL 64 → ProgHOL 64)
+    (A B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) : Prop :=
+  ∀ {F : Type} (entry : PanSemStateFiniteExact 64 F) (tail : ProgHOL 64),
+    (∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      B entry s → PmcRelRun entry tail s) →
+    ∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      A entry s → PmcRelRun entry (phase tail) s
+
+theorem wk_process_message_call_of
+    (A0 A1 A2 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), MsgReady s → A0 s s)
+    (hallocZero : PmcRelCut pmcInit A0 A1)
+    (hdispatch : PmcRelCut pmcDispatch A1 A2)
+    (hpack : ∀ {F : Type} (entry s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → A2 entry s → PmcRelRun entry pmcPack s) :
+    WorldKeepsIn MsgReady
+      (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)])
+      (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetMessageOutput (ofString "process_message_call") := by
+  refine ⟨_, _, _, pmc_lookup, ?_⟩
+  intro F s hcode hready _hparams _hnt
+  have hb := hallocZero s _ (hdispatch s _ (hpack s)) s hcode (hinit s hready)
+  rw [← pmc_phases_eq] at hb
+  unfold PmcRelRun pmcCode pmcTables pmcRegions ptxRegions pmcGlobals pmcKeep at hb
+  exact hb
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
