@@ -1093,6 +1093,35 @@ theorem phase4CreditTotals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   have hr := hb s hc hp
   convert hr using 1 <;> omega
 
+/-- Empty constructor results need no backing-array cell or log-entry reads. -/
+theorem logsListOK_empty {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {logs : Nat} (hw : WordsOK s (logs, 24)) (ha : Allocated s (logs, 24))
+    (hn : memW s (logs + 8) = 0) : LogsListOK s logs := by
+  refine Or.inr ⟨hw, ha, ?_, ?_, ?_⟩
+  · rw [hn]; norm_num
+  · rw [hn]; exact Nat.zero_le _
+  · intro i hi
+    rw [hn] at hi
+    omega
+
+/-- Separation of an empty list only needs its header; the live array is empty. -/
+theorem logsLiveOwned_empty {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat}
+    (ha : Allocated s (memW s logs, 0))
+    (hd : ∀ j ∈ worldOwned s S Nd, Disj (logs, 24) j)
+    (hn : memW s (logs + 8) = 0) : LogsLiveOwned s S Nd logs := by
+  intro _
+  refine ⟨?_, ?_, ?_⟩
+  · simpa only [hn, Nat.mul_zero] using ha
+  · intro i hi j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl
+    · exact hd j hj
+    · exact Or.inl (by simp [hn])
+  · intro i hi
+    rw [hn] at hi
+    omega
+
 def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧
     locN s "logs" = memW s (locN s "out" + 16) ∧
