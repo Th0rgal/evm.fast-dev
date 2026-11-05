@@ -8712,6 +8712,40 @@ theorem finish_child_pop_assignments {F : Type} (s : PanSemStateFiniteExact 64 F
   rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_assign]
   simp only [hn, hc, ↓reduceIte, setKvarHOLFinite]
 
+/-- Word-valued head globals make both pop assignments shape-valid. -/
+theorem finish_child_pop_global_valid {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hi : EvmInv s) (parent next : BitVec 64) :
+    s.isValidValueHOLFinite .global (ofString "ev") (.val (.word parent)) = true ∧
+    (setGlobalHOLFinite (ofString "ev") (.val (.word parent)) s).isValidValueHOLFinite
+      .global (ofString "cur_cont") (.val (.word next)) = true := by
+  obtain ⟨_, _, ⟨ew, he, _⟩, ⟨cw, hc, _⟩, _⟩ := R11Shards.evm_head_globals hi
+  constructor
+  · simp [isValidValueHOLFinite, lookupKvarHOLExact, he, shapeOfHOLExact, shapeEqHOL]
+  · simp [isValidValueHOLFinite, lookupKvarHOLExact,
+      setGlobalHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hc,
+      shapeOfHOLExact, shapeEqHOL, show ofString "ev" ≠ ofString "cur_cont" by decide]
+
+/-- The prelude supplies the parent local and both assignment-validity facts. -/
+theorem finish_child_pop_of_prelude {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    (hpre : EvmEkFk.PreludeRel s0 s) (next : BitVec 64)
+    (hn : @evalHOLExact 64 F _
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s).toExact
+      (fun a => Classical.propDecidable
+        ((setGlobalHOLFinite (ofString "ev")
+          (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s).memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "rec"), .const 8#64])) =
+        some (.val (.word next))) :
+    evaluateHOLFiniteState s EvmEkFk.fcAfterPrelude =
+      evaluateHOLFiniteState
+        (setGlobalHOLFinite (ofString "cur_cont") (.val (.word next))
+          (setGlobalHOLFinite (ofString "ev")
+            (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s))
+        (.seq EvmEkFk.fcBranches EvmEkFk.fcCleanup) := by
+  obtain ⟨he, hc⟩ := finish_child_pop_global_valid hpre.inv
+    (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))) next
+  exact finish_child_pop_assignments s _ next hpre.locals_ok.parent_lk he hn hc
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
