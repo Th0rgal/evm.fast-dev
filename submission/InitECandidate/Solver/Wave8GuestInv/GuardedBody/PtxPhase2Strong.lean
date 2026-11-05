@@ -5911,4 +5911,18 @@ theorem phase2_packed_ready_after_copy {F : Type}
   · rw [ha, hn]
     exact phase2_packed_keys_words_frame s post _ _ hp.2.2.2.1 hd
 
+/-- A complete header word inherits the arena exclusions of its allocated header. -/
+theorem phase2_world_frame_heap_header {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (old R : List Ivl) (tx off : Nat)
+    (ha : ArenaOK s) (hin : Inside (tx, 384) InitE.sourceBase (globN s "heap_ptr"))
+    (hoff : off + 8 ≤ 384)
+    (hf : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (ho : ∀ region ∈ old, ¬ CellHits (tx + off) region)
+    (hr : ∀ region ∈ R, ¬ CellHits (tx + off) region) :
+    memW post (tx + off) = memW s (tx + off) := by
+  apply phase2_world_frame_heap_word s post old R _ ha ?_ hf ho hr
+  unfold Inside at hin ⊢
+  dsimp at hin ⊢
+  constructor <;> omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
