@@ -14115,4 +14115,34 @@ theorem phase2_ws_get_account_optional_backing {F : Type}
       (globN s "bo", 88) (R16Shards.PtxP1.bo_mem_typed he.bo_nz))
   · exact phase2_ws_get_account_optional_nested_unhit s hc ha he hw hnt hr
 
+/-- Account callees omit the transaction index; its default zero still satisfies the bound. -/
+theorem phase2_txEnv_callEntry_without_index {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (he : TxEnv s) (hi : callee.lookup (ofString "index") = none) :
+    TxEnv (callEntryStateHOLFinite s callee) := by
+  refine ⟨he.bo_nz, he.bo24, he.bo32, he.bo40, he.bo72, ?_, he.jcap_nz⟩
+  have hb := he.idx_lt
+  change locN (callEntryStateHOLFinite s callee) "index" < memW s (globN s "bo" + 80)
+  simp only [locN, callEntryStateHOLFinite, hi]
+  omega
+
+/-- Lift concrete world-state backing preservation to its account-call entry. -/
+theorem phase2_ws_get_account_optional_callEntry_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : s.code = originalRuntimeCode) (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hi : callee.lookup (ofString "index") = none)
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 := by
+  exact phase2_ws_get_account_optional_backing (callEntryStateHOLFinite s callee) hc
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr ha)
+    (phase2_txEnv_callEntry_without_index s callee he hi)
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hb hnt hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
