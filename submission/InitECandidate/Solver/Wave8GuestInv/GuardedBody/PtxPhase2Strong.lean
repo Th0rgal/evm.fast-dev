@@ -123,6 +123,22 @@ theorem phase1_resume_alloc_sender_word (h : PtxCallees) :
   refine ⟨hallocated, w, ?_⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+theorem phase1_resume_encode_shapes (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn
+      (fun s => TxReadyStrong s ∧ ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (fun s => R16Shards.PtxP1.EncReady s ∧ ∀ n ∈ (["tx", "index"] : List String),
+        ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
+      (ofString "enc") (.comb [.one, .one]) (ofString "encode_transaction")
+      [.var .local (ofString "tx")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  refine ⟨R16Shards.PtxP1.resume_encode h s vs body callee ret v post hc hp.1 ha hl hb hsh, ?_⟩
+  intro n hn
+  have hne : ofString "enc" ≠ ofString n := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl <;> decide
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2 n hn
+
 theorem phase1_resume_alloc_sender_shapes (h : PtxCallees) :
     DecCallResumeOn
       (fun s => R16Shards.PtxP1.StageP 0 s ∧
