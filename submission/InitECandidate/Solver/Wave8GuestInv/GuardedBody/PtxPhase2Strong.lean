@@ -9526,4 +9526,51 @@ theorem phase2_packed_source_inner_tail_nal_hoare (h : PtxCallees) :
     (phase2_packed_ns_nal_while (phase2_packed_body_ns_nal_hoare h _ _) rfl rfl)
     phase2_packed_ns_nal_outer_increment_hoare
 
+/-- The source record body preserves the cached outer-loop invariant. -/
+theorem phase2_packed_source_outer_body_nal_hoare (h : PtxCallees) :
+    Hoare (fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) phase2_packed_source_outer_body
+      (fun r s => r = none → PtxPackedNalIteration s) := by
+  unfold phase2_packed_source_outer_body
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+    (P' := fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i") (by decide)
+  · intro F s v hp he
+    have hd := phase2_packed_outer_declare_acc2 s hp.1.1 hp.2 v he
+    exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+  · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+      (P' := fun s => PtxPackedNalIteration s ∧
+        locN s "i" < memW s (locN s "tx" + 216) ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+        locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) (by decide)
+    · intro F s v hp he
+      have hd := phase2_packed_outer_declare_ns s hp.1.1 hp.2.1 hp.2.2 v he
+      exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+    · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k", "nal"])
+        (P' := PtxPackedNsNalIteration) (by decide)
+      · intro F s v hp he
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        refine ⟨phase2_packed_ns_reset s hp.1.1 hp.2.1 hp.2.2.1 hp.2.2.2, ?_⟩
+        exact (phase2_packed_nal_set_other s hp.1 (ofString "j") (.val (.word 0)) (by decide)).2
+      · exact phase2_packed_source_inner_tail_nal_hoare h
+      · intro F r s locals hl hp hr
+        exact phase2_packed_nal_iteration_with_locals s locals s.clock (hp hr) hl
+      · exact fun _ _ hr => by cases hr
+    · intro F r s locals hl hp hr
+      exact phase2_packed_nal_iteration_with_locals s locals s.clock (hp hr) hl
+    · exact fun _ _ hr => by cases hr
+  · intro F r s locals hl hp hr
+    exact phase2_packed_nal_iteration_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
+/-- The actual packing loop completes all records while retaining its resources. -/
+theorem phase2_packed_source_outer_loop_hoare (h : PtxCallees) :
+    Hoare PtxPackedNalIteration
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        phase2_packed_source_outer_body)
+      (fun r s => r = none → PtxPackedNalIteration s ∧ locN s "k" = locN s "nkeys") := by
+  exact phase2_packed_nal_while (phase2_packed_source_outer_body_nal_hoare h) rfl rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
