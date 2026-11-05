@@ -10346,4 +10346,18 @@ theorem phase2_packed_cases_initialized_loop_bound (h : PtxCallees) :
     intro F s hc hp
     simpa only [Nat.zero_add] using seq_bound_trans hb ha hl s hc hp
 
+/-- Both counting exits support the fresh packed allocation and its continuation. -/
+theorem phase2_count_cases_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxPackedInitCases tail b) :
+    TerminatingProgBoundedOn PtxAddressCountExit
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxPackedInitCases) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr := phase2_count_exit_access_ready hp
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_cases_alloc_init h
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
