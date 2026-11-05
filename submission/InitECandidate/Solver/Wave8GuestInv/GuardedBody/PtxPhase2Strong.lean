@@ -5990,4 +5990,17 @@ theorem phase2_tx_header_world_frame {F : Type}
     (tx + off) ha ht.1.2.1 (by constructor <;> dsimp <;> omega)
     (by omega) hf (ht.2.1 _ (by simp)) hr (worldOwned_zero_aligned hw) hz
 
+/-- Empty global-write contracts discharge the heap premise when rebuilding readiness. -/
+theorem phase2_packed_ready_globals_kept {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedKeysReady s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n))
+    (hg : GlobalsKept [] s post)
+    (hd : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hw : ∃ S Nd, WorldTypedWith post S Nd ∧ TxAccessListAt post S Nd (locN post "tx") ∧
+      IvlsDisj [(locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned post S Nd)) : PtxPackedKeysReady post := by
+  apply phase2_packed_ready_after_copy s post hp hl _ hd hw
+  rw [phase2_copy_globals_heap_eq s post hg]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
