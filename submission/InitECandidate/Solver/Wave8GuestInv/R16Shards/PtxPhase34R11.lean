@@ -3355,6 +3355,27 @@ theorem stableCopyInv_guard {F : Type} (s : PanSemStateFiniteExact 64 F)
   simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
     hib, hnb'] using hc
 
+/-- A false signed guard certifies completion of the bounded copy prefix. -/
+theorem stableCopyInv_guard_false {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (i n : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hib : locN s "i" < 2 ^ 63)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nl"))) = some (.val (.word 0))) :
+    locN s "nl" ≤ locN s "i" := by
+  have hnb := (stableLengthPost_length_bound s hp.1 hp.2.1).1
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nl" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib ⊢
+  rw [hnl] at hnb ⊢
+  have hnb' : n.toNat < 2 ^ 63 := by omega
+  norm_num at hib hnb'
+  have hnot : ¬ i.toNat < n.toNat := by
+    simpa [evalAt, evalHOLExact, hi, hn, Compiler.Encoders.Asm.wordCmpHOL,
+      Compiler.Encoders.Asm.holAsmSignedLess, hib, hnb'] using he
+  omega
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
     PtxReceiptsDone s := by
@@ -3830,6 +3851,18 @@ theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
   simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     BitVec.toNat_add]
   exact hb
+
+/-- An active copy iteration keeps the incremented index in the unsigned
+range where the signed loop guard agrees with natural comparison. -/
+theorem stable_copy_increment_index_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : w.toNat < locN s "nl") (hn : locN s "nl" < 2 ^ 28)
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    locN (setVarHOLFinite (ofString "i") v s) "i" ≤ locN s "nl" ∧
+    locN (setVarHOLFinite (ofString "i") v s) "i" < 2 ^ 63 := by
+  rw [stable_copy_increment_nat s w v hw hi hn he]
+  constructor <;> omega
 
 /-- The remaining-copy count strictly decreases under the actual increment,
 providing a natural-number termination measure for the copy loop. -/
