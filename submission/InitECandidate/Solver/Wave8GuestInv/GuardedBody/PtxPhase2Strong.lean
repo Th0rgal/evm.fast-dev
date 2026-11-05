@@ -5336,4 +5336,33 @@ theorem phase2_packed_copy_live_frame {F : Type}
       (fun i h => hm i (Nat.lt_trans h hp.2.2.1))]
     exact hp.2.2.2.2
 
+/-- Both counter updates re-establish the inclusive inner invariant. -/
+theorem phase2_packed_inner_update_indices {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) :
+    let post := setVarHOLFinite (ofString "j")
+      (.val (.word (BitVec.ofNat 64 (locN s "j" + 1))))
+      (setVarHOLFinite (ofString "k") (.val (.word (BitVec.ofNat 64 (locN s "k" + 1)))) s)
+    PtxPackedInnerInv post := by
+  have hr := phase2_packed_copy_update_indices s hp
+  have hb := phase2_packed_copy_next_inner_bound hp
+  have hj := (phase2_packed_copy_counter_bounds hp).2
+  change locN s "j" + 1 < 18446744073709551616 at hj
+  simp only [locN] at hj
+  have hji : ofString "j" ≠ ofString "i" := by decide
+  have hki : ofString "k" ≠ ofString "i" := by decide
+  have hjt : ofString "j" ≠ ofString "tx" := by decide
+  have hkt : ofString "k" ≠ ofString "tx" := by decide
+  have hjn : ofString "j" ≠ ofString "nkeys" := by decide
+  have hkn : ofString "k" ≠ ofString "nkeys" := by decide
+  dsimp only
+  refine ⟨hr.1, ?_, ?_, ?_, hr.2⟩
+  · simpa [txAccessSlots, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      hjn, hkn, hjt, hkt]
+      using hp.2.1
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      hji, hki, hjt, hkt]
+      using hp.2.2.1
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      hji, hki, hjt, hkt, Nat.mod_eq_of_lt hj] using hb.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
