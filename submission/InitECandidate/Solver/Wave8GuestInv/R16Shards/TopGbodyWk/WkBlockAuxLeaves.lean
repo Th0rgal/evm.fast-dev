@@ -6040,4 +6040,41 @@ theorem union_bs_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
       exact ⟨localsFree_worldOK s callee (s.clock - 1) hW,
         off.toNat, hoff, hbs, hd, by rw [hd]; exact hnz⟩
 
+/-- A union iteration cannot finish its insertion when the destination is null. -/
+theorem union_zero_set_no_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hG : GuestInv s)
+    (hz : locN s "dst" = 0) (rest : List (ExpHOL 64)) :
+    ¬ Wave8M19.Htab.FlowR (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        (.var .local (ofString "dst") :: rest))).1 := by
+  intro hflow
+  have hnr := Wave8M19.Htab.call0_noRetBrk s (ofString "htab_set")
+    (.var .local (ofString "dst") :: rest)
+  have hflow2 : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") (.var .local (ofString "dst") :: rest))).1 = none ∨
+    (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") (.var .local (ofString "dst") :: rest))).1 = some .continue := by
+    rcases hflow with h | h | h
+    · exact Or.inl h
+    · exact Or.inr h
+    · exact absurd h hnr.1.2
+  obtain ⟨values, body, callee, ret, v, post, ha, hl, hr, _⟩ :=
+    Wave8M19.Htab.call0_flow s _ _ hflow2
+  obtain ⟨tv, vs, rfl, htv⟩ := Wave8M19.Htab.evalList_cons_inv s _ _ ha
+  obtain ⟨_, hct⟩ := Wave8M19.Htab.lookupCodeHOLFinite_param_at s.code.lookup
+    (ofString "htab_set") [] (ofString "t") .one
+    [(ofString "key", .one), (ofString "value", .one)] _ _
+    (by simp only [List.mem_cons, List.not_mem_nil, or_false]; rintro _ (rfl | rfl) <;> decide)
+    (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set) (vpre := []) (by simp) hl
+  have ht : callee.lookup (ofString "t") = s.locals.lookup (ofString "dst") := by
+    rw [hct]
+    simp only [evalHOLExact] at htv
+    exact htv.symm
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc _ body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hne := hn (Or.inl ⟨v, rfl⟩)
+  apply hne
+  simpa only [locN, callEntryStateHOLFinite, ht] using hz
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
