@@ -53,6 +53,58 @@ theorem «callees_process_message_call» : sameNames (progCallees (fnBody Guest.
 theorem «gbody_process_message_call» : GBody.«process_message_call» := by sorry
 
 
+/-! ### Strengthened `process_message_call` return contract (wave8 cutover rehearsal)
+
+Hoisted from `R16Shards/PtxPhase34R11.lean` so that the ContractParts hypotheses on
+`wk_process_message_call` can carry `RetMessageOutputStrong`. -/
+
+/-- Before the Phase-4 stable copy, the header and live pointer array may be
+scratch-resident. `frame_new` uses `lst_new_scratch`; `lst_push` moves only the
+backing array to the heap when it grows. -/
+def LogsLiveOwned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (logs : Nat) : Prop :=
+  logs ≠ 0 →
+    Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
+    IvlsDisj [(logs, 24), (memW s logs, 8 * memW s (logs + 8))] (worldOwned s S Nd) ∧
+    ∀ i, i < memW s (logs + 8) →
+      IvlsDisj (logOwnedIvls s (memW s (memW s logs + 8 * i))) (worldOwned s S Nd)
+
+/-- The message result owns its live log storage outside the world, without
+requiring the temporary header or its initial array to be heap-resident. -/
+def RetMessageOutputStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S Nd => RetMessageOutput s r post S Nd ∧
+    ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+      v = .val (.word w) ∧ LogsLiveOwned post S Nd (memW post (w.toNat + 16))
+
+theorem retMessageOutput_of_strong {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {r : Option (PanSemResultExact 64)} {S Nd : List Nat}
+    (h : RetMessageOutputStrong s r post S Nd) : RetMessageOutput s r post S Nd := h.1
+
+/-- Weaken the relational return contract of a `WorldKeepsIn` spec. -/
+theorem WorldKeepsIn.mono_ret {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl} {gw : List String}
+    {keep : List (String × List Nat)}
+    {Q Q' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop} {fname : MlS}
+    (h : WorldKeepsIn P T R gw keep Q' fname)
+    (hQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (r : Option (PanSemResultExact 64))
+      (post : PanSemStateFiniteExact 64 F) (S Nd : List Nat), Q' s r post S Nd → Q s r post S Nd) :
+    WorldKeepsIn P T R gw keep Q fname := by
+  obtain ⟨params, body, ret, hlook, hspec⟩ := h
+  refine ⟨params, body, ret, hlook, fun s hcode hP hv hnt hres => ?_⟩
+  obtain ⟨h1, h2, h3, h4, h5⟩ := hspec s hcode hP hv hnt hres
+  refine ⟨h1, h2, h3, h4, fun S Nd hT hS hD => ?_⟩
+  obtain ⟨S', Nd', hsub, hty, hgrow, hfr, hq⟩ := h5 S Nd hT hS hD
+  exact ⟨S', Nd', hsub, hty, hgrow, hfr, hQ _ _ _ _ _ hq⟩
+
+/-- `process_message_call` (AST line 19661): relational world step with output region and the
+strengthened `RetMessageOutputStrong` contract (rehearsal placeholder; proof target is
+`R16Shards.PtxP34.PmcStrong`). -/
+theorem «wk_process_message_call_strong» :
+    WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]     RetMessageOutputStrong (ofString "process_message_call") := by sorry
+
 /-! ### Strengthened entry guard for `process_unchecked_system_transaction` (wave8 cutover rehearsal)
 
 Hoisted from `R16Shards/TopGbodyWk/GbodySysTxExecBlock.lean` so that the ContractParts guard itself can be
@@ -161,7 +213,7 @@ def GBody.«process_unchecked_system_transaction» : Prop :=
   (WorldKeepsIn MsgReady (fun s => [memW s (locN s "msg" + 152), memW s (locN s "msg" + 160)]) (fun s => [(locN s "msg", 176), (globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
     ["bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
-    RetMessageOutput (ofString "process_message_call")) →
+    RetMessageOutputStrong (ofString "process_message_call")) →
   (WorldKeeps WorldOK (fun _ => [])
     ["heap_ptr", "journal_n", "ts"]
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", []), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]

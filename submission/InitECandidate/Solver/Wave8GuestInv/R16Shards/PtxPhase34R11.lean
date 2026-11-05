@@ -16,24 +16,8 @@ open InitECandidate.Solver.PanTerminatingBounded InitECandidate.Solver.PanRunBou
 open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.R13Shards
 
-/-- Before the Phase-4 stable copy, the header and live pointer array may be
-scratch-resident. `frame_new` uses `lst_new_scratch`; `lst_push` moves only the
-backing array to the heap when it grows. -/
-def LogsLiveOwned {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (S Nd : List Nat) (logs : Nat) : Prop :=
-  logs ≠ 0 →
-    Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
-    IvlsDisj [(logs, 24), (memW s logs, 8 * memW s (logs + 8))] (worldOwned s S Nd) ∧
-    ∀ i, i < memW s (logs + 8) →
-      IvlsDisj (logOwnedIvls s (memW s (memW s logs + 8 * i))) (worldOwned s S Nd)
-
-/-- The message result owns its live log storage outside the world, without
-requiring the temporary header or its initial array to be heap-resident. -/
-def RetMessageOutputStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
-    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
-  fun s r post S Nd => RetMessageOutput s r post S Nd ∧
-    ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
-      v = .val (.word w) ∧ LogsLiveOwned post S Nd (memW post (w.toNat + 16))
+/-- `LogsLiveOwned` and `RetMessageOutputStrong` now live in `ContractParts/C17.lean`
+(wave8 cutover rehearsal). -/
 
 def TxAfterCallStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxWorld s ∧ WordsOK s (locN s "out", 96) ∧

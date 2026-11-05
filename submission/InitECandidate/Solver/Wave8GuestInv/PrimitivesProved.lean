@@ -412,7 +412,7 @@ theorem primitives : Primitives where
   «wk_ext_code_of» := R16Shards.EvmEkFk.«wk_ext_code_of»
   «wk_msg_new» := R13Wk06b.«wk_msg_new»
   «rt_msg_new» := Merged.rt_msg_new
-  «wk_process_message_call» := «wk_process_message_call»
+  «wk_process_message_call» := «wk_process_message_call_strong»
   «wk_state_fresh_tx» := R16Shards.WkBal.wk_state_fresh_tx
   «wk_te_new» := R13Wk06b.«wk_te_new»
   «rt_te_new» := Merged.rt_te_new

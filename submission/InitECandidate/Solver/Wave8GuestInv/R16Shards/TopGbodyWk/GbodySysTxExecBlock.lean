@@ -55,7 +55,7 @@ theorem gbody_process_unchecked_system_transaction_strong :
   intro F state hcode hP
   exact bounded_process_unchecked_system_transaction_wordArgs
     hal hext hfmr hhn hitb hmc hmn hpmc hsr hsf hte
-    wext hnspec wmn rtmn wpmc wsf wte rtte
+    wext hnspec wmn rtmn (WorldKeepsIn.mono_ret wpmc (fun _ _ _ _ _ h => h.1)) wsf wte rtte
     state hcode (sysTxReadyStrong_sysTxEntry hP)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
