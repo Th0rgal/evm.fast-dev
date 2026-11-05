@@ -2163,6 +2163,16 @@ theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : N
   intro F s hc hp
   exact hb s hc hp
 
+theorem hoare_logPointers_increment :
+    Hoare Phase4LogPointersReady
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  apply Hoare.assign
+  · intro F s v hp _ _
+    exact LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v s hp
+  · intro F s _ hr
+    cases hr
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
