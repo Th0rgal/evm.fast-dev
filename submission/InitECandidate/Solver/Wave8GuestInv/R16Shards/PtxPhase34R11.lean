@@ -3893,6 +3893,29 @@ theorem stable_copy_record_separation {F : Type} (s : PanSemStateFiniteExact 64 
   rw [hs, hd, ha j hj]
   exact he j hj
 
+/-- Carry source-record separation through the stable length update using
+the source backing's allocation and disjointness from the stable header. -/
+theorem stable_length_record_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24))
+    (ha : Allocated s (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8)))
+    (hal : memW s (locN s "logs") % 8 = 0)
+    (hdisj : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (locN s "stable_logs", 24))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hs : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hn : memW {s with memory := mem'} (locN s "logs" + 8) = memW s (locN s "logs" + 8))
+    (hd : memW {s with memory := mem'} (locN s "stable_logs") = memW s (locN s "stable_logs"))
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    let t := {s with memory := mem'}
+    ∀ j, j < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * j), 40)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  exact stable_copy_record_separation s mem' hs hn hd
+    (stable_length_source_cells s mem' _ _ hA hh ha hal hdisj hm) he
+
 /-- Framing the destination header and world footprint retains separation
 from every world-owned interval after the copy store. -/
 theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
