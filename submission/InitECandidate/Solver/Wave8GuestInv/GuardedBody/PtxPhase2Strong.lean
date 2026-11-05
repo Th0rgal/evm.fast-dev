@@ -4088,4 +4088,23 @@ theorem phase2_address_count_store_acc {F : Type} {s : PanSemStateFiniteExact 64
   rw [phase2_address_store_header hp.1.1.1 hin hm 208 (by decide) (by decide)]
   exact ha
 
+/-- Declaring the current record establishes the exact pointer relation. -/
+theorem phase2_address_count_declare_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (hi : locN s "i" < locN s "nal")
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .add
+      [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+       .panop .mul [.var .local (ofString "i"), .const 24]]) = some v) :
+    let post := setVarHOLFinite (ofString "acc") v s
+    PtxAddressCountInv post ∧ locN post "i" < locN post "nal" ∧
+      locN post "acc" = memW post (locN post "tx" + 208) + 24 * locN post "i" := by
+  obtain ⟨w, rfl, hw⟩ := phase2_count_acc_eval s hp hi v he
+  refine ⟨phase2_address_count_set_other s hp _ _ (by decide), ?_, ?_⟩
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "nal" by decide] using hi
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide,
+      show ofString "acc" ≠ ofString "tx" by decide] using hw
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
