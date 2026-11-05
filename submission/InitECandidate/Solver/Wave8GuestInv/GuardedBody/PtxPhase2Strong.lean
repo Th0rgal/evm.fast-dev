@@ -2905,4 +2905,172 @@ theorem phase2_address_store_hoare (addr src : ExpHOL 64)
     (by simpa only [flattenHOL] using hst)
   exact phase2_address_joint_store hp hdom (ha s x hp hx) hmem
 
+/-- Loop-local declarations and clock changes preserve the joint buffer world. -/
+theorem phase2_address_joint_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["al_addrs", "nal", "te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxAddressJoint s) : PtxAddressJoint { s with locals := locals, clock := clock } := by
+  have ha := locN_congr s locals clock "al_addrs" (hl "al_addrs" (by simp))
+  have hn := locN_congr s locals clock "nal" (hl "nal" (by simp))
+  have he := locN_congr s locals clock "te" (hl "te" (by simp))
+  have ht := locN_congr s locals clock "tx" (hl "tx" (by simp))
+  have hc := phase2_accessCountReady_with_locals s locals clock
+    (fun name hm => hl name (List.mem_cons_of_mem _ hm)) hp.1.1
+  obtain ⟨hp, S, Nd, hW, hT, hd, hte⟩ := hp
+  have hW' := (worldTypedWith_with_locals s locals clock S Nd).mpr hW
+  have hT' := R16Shards.PtxP1.txAccessListAt_with_locals s locals clock hT
+  refine ⟨⟨hc, ?_, ?_, ?_, ?_, ?_, ?_, ?_, S, Nd, hW', ?_, ?_⟩,
+    S, Nd, hW', ?_, ?_, ?_⟩
+  · exact (hl "al_addrs" (by simp)) ▸ hp.2.1
+  · rw [ha, hn]; exact hp.2.2.1
+  · rw [ha]; exact hp.2.2.2.1
+  · rw [ha, hn]; exact hp.2.2.2.2.1
+  · rw [he, ha, hn]; exact hp.2.2.2.2.2.1
+  · rw [ht, ha, hn]; exact hp.2.2.2.2.2.2.1
+  · rw [ht, ha, hn]; exact hp.2.2.2.2.2.2.2.1
+  · rw [ht]; exact hT'
+  · rw [ha, hn]; exact hd
+  · rw [ht]; exact hT'
+  · rw [ha, hn]; exact hd
+  · rw [he]; exact hte
+
+/-- The allocation continuation receives the persistent joint world. -/
+theorem phase2_address_alloc_joint_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAddressJoint tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxAddressJoint) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1.1
+  · exact phase2_address_alloc_joint h
+  · exact ht
+
+/-- Allocation and sender initialization expose the joint invariant to the
+access-list continuation without consuming any extra store clock. -/
+theorem phase2_address_initialized_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAddressJoint tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]]
+        (.seq (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender"))) tail))
+      (K.alloc + b + 1) := by
+  apply phase2_address_alloc_joint_bound h
+  have hs : TerminatingProgBoundedOn PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender"))) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_init_hoare ht s hc hp
+
+/-- Each copy-loop destination, including the final access-list entry, is a
+nonwrapping word slot within the allocated address array. -/
+theorem phase2_address_copy_slot {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) (i : Nat) (hi : i < locN s "nal") :
+    let x := BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1))
+    x.toNat = locN s "al_addrs" + 8 * (i + 1) ∧
+      Inside (x.toNat, 8) (locN s "al_addrs")
+        (locN s "al_addrs" + (locN s "nal" + 1) * 8) := by
+  have hA := hp.1.1.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hA.2 (Or.inl hp.1.2.2.1)).2
+  have hlt : locN s "al_addrs" + 8 * (i + 1) < 2 ^ 64 := by
+    dsimp at hb
+    omega
+  have he : (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1))).toNat =
+      locN s "al_addrs" + 8 * (i + 1) := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  refine ⟨he, ?_⟩
+  rw [he]
+  constructor <;> dsimp <;> omega
+
+/-- A successful word store at a copy-loop slot preserves both buffer frames
+and the input access-list witness. -/
+theorem phase2_address_copy_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressJoint s) (i : Nat) (hi : i < locN s "nal")
+    (w : HolWordLab 64) {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (i + 1)))
+      [w] s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxAddressJoint { s with memory := mem } := by
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  exact phase2_address_joint_store hp hdom (phase2_address_copy_slot hp i hi).2 hmem
+
+/-- Updating a loop-local variable leaves the persistent joint world intact. -/
+theorem phase2_address_joint_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_addrs", "nal", "te", "tx", "index", "sender", "mgas", "reservoir", "gas",
+      "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String), ofString n ≠ name) :
+    PtxAddressJoint (setVarHOLFinite name v s) := by
+  apply phase2_address_joint_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- The actual initial address is the block beneficiary loaded from `be + 32`. -/
+theorem phase2_address_beneficiary_hoare :
+    Hoare PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs"))
+        (.load .one (.op .add [.var .global (ofString "be"), .const 32])))
+      (fun r s => r = none → PtxAddressJoint s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec hst
+  apply phase2_address_joint_store hp hdom _ hmem
+  obtain ⟨a, ha⟩ := hp.1.2.1
+  have he : x = a := by simpa [evalAt, evalHOLExact, ha] using hx.symm
+  subst x
+  have hl : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  rw [hl]
+  constructor <;> dsimp <;> omega
+
+/-- The AST-matching allocation/beneficiary prefix passes its joint world to
+the access-list loops. -/
+theorem phase2_address_beneficiary_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAddressJoint tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]]
+        (.seq (.store (.var .local (ofString "al_addrs"))
+          (.load .one (.op .add [.var .global (ofString "be"), .const 32]))) tail))
+      (K.alloc + b + 1) := by
+  apply phase2_address_alloc_joint_bound h
+  have hs : TerminatingProgBoundedOn PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs"))
+        (.load .one (.op .add [.var .global (ofString "be"), .const 32]))) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_beneficiary_hoare ht s hc hp
+
+/-- The address-copy loop retains scalar counters alongside its shared world. -/
+def PtxAddressCopyInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressJoint s ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "i") = some (.val (.word w))) ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "nkeys") = some (.val (.word w))) ∧
+    locN s "i" ≤ locN s "nal"
+
+theorem phase2_address_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  have hkeys := phase2_address_joint_set_other s hp (ofString "nkeys") (.val (.word 0)) (by decide)
+  have hi := phase2_address_joint_set_other _ hkeys (ofString "i") (.val (.word 0)) (by decide)
+  refine ⟨hi, ⟨0, ?_⟩, ⟨0, ?_⟩, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
