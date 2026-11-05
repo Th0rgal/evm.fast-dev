@@ -10123,4 +10123,46 @@ theorem phase2_packed_cases_initialized_loop_hoare (h : PtxCallees) :
     exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
   · exact fun _ _ hr => by cases hr
 
+/-- The cached-count inner loop has a uniform rank bound once its active body
+bound is supplied; the rank is the remaining signed counter range. -/
+theorem phase2_packed_ns_nal_while_bound {body : ProgHOL 64} {B : Nat}
+    (hb : Hoare PtxPackedNsNalCopy body (fun r s => r = none → PtxPackedNsNalIteration s))
+    (hbody : TerminatingProgBoundedOn PtxPackedNsNalCopy body B)
+    (hinc : IncrBody (ofString "j") body) :
+    TerminatingProgBoundedOn PtxPackedNsNalIteration
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))) body)
+      ((2 ^ 63 + 1) * (B + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "j")
+  · intro F s hp
+    exact ⟨phase2_packed_ns_iteration_decClock s hp.1, hp.2⟩
+  · intro F s hc hp
+    obtain ⟨w, hw, hnz⟩ := hp.2
+    have hg := (phase2_packed_ns_guard_eval s w hp.1.1 hw).mp hnz
+    exact hbody s hc ⟨⟨phase2_packed_iteration_guard_pre s hp.1.1.1 hg, hp.1.1.2⟩, hp.1.2⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := (phase2_packed_ns_guard_eval s w hp.1 hw).mp hnz
+    have hd : PtxPackedNsNalIteration (decClockHOLFinite s) :=
+      ⟨phase2_packed_ns_iteration_decClock s hp.1, hp.2⟩
+    obtain ⟨j, hj⟩ := hp.1.1.2.2.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) j hj
+    have hnone := hf.resolve_right hnc
+    have hpost := hb.run (decClockHOLFinite s) hc
+      ⟨⟨phase2_packed_iteration_guard_pre _ hd.1.1 hg, hd.1.2⟩, hd.2⟩
+      (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hjn : locN s "j" = j.toNat := by simp [locN, hj]
+    have hlt := (phase2_packed_inner_signed_bounds hp.1.1.2.1.1).1
+    have hpl := (phase2_packed_inner_signed_bounds hpost.1.1.2.1.1).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "j" =
+        (j.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hjn] at hlt ⊢
+    rw [hpn]
+    have hmod : (j.toNat + 1) % 2 ^ 64 = j.toNat + 1 := Nat.mod_eq_of_lt (by omega)
+    rw [hmod] at *
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
