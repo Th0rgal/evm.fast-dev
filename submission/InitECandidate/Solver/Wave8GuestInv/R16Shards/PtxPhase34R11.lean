@@ -7475,6 +7475,43 @@ theorem ptxReceiptsDone_store_bo72 {F : Type} {s : PanSemStateFiniteExact 64 F}
   simp only [List.mem_append]
   exact Or.inl (Or.inr hmemf)
 
+/-- A heap-only world step preserves an owned non-null stable receipt list. -/
+theorem ptxReceiptsDone_heapStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] Q s r post)
+    (hp : PtxReceiptsDone s) (ho : LogsWorldOwned s (locN s "stable_logs"))
+    (hn : locN s "stable_logs" ≠ 0) :
+    PtxReceiptsDone {post with locals := s.locals} ∧
+      LogsWorldOwned {post with locals := s.locals} (locN s "stable_logs") := by
+  have hgrow : AllocatorGrows s post := ⟨hs.2.1, by
+    have he : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+      R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+    omega⟩
+  have hlogs := logsWorldOwned_scratchStep hs hp.1.1.1 hgrow hp.2.1 ho
+    (gs := []) (by intro e he; cases he) rfl (by decide)
+  have hh := logsWorldOwned_heapStep_header hs hp.1.1.1 hp.2.1 ho hn
+  obtain ⟨S, Nd, hw, _⟩ := ho
+  have henv := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+    (by intro i hi; cases hi) (bo_words hw.2.2.1 hp.1.2.bo_nz).2.1
+    (by intro i hi; cases hi) hp.1.2 (locals := s.locals) rfl
+  have hown := logsWorldOwned_with_locals s.locals post.clock hlogs.2
+  refine ⟨⟨⟨worldOK_of_parts
+    ((arenaReady_with_locals post s.locals post.clock).mpr hs.1)
+    hown.choose_spec.choose_spec.1, henv⟩, ?_, ?_⟩, hown⟩
+  · exact (R13Shards.logsListOK_with_locals post s.locals post.clock _).mpr hlogs.1
+  · change memW post (locN s "stable_logs" + 8) < 2 ^ 28
+    rw [hh.2]
+    exact hp.2.2
+
 /-- Spatial facts required at the final receipt slot. -/
 def Phase4ReceiptSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => PtxReceiptsDone s ∧ locN s "stable_logs" ≠ 0 ∧
