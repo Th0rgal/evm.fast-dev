@@ -6765,4 +6765,38 @@ theorem phase2_packed_restore_input_separation {F : Type}
       (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8) := by
   exact phase2_packed_input_separation_frame s _ (fun _ _ => rfl) hh ht hr
 
+/-- Restore packed readiness across a copy with its evaluated destination and length. -/
+theorem phase2_packed_ready_restored_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat) (dst len : Nat)
+    (hp : PtxPackedKeysReady s) (ha : ArenaReady s) (hpost : GuestInv post)
+    (hg : GlobalsKept [] s post)
+    (hw : WorldTypedWith s S Nd) (hw' : WorldTypedWith post S' Nd')
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hs : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ [(dst, len)] ++ [freeGap s]) (heapFree s))
+    (htx : Disj (locN s "tx", 384) (dst, len))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (dst, len))
+    (hlen : 0 < len) :
+    PtxPackedKeysReady { post with locals := s.locals } := by
+  have hh : globN s "heap_ptr" ≤ globN post "heap_ptr" :=
+    (phase2_copy_globals_heap_eq s post hg).symm.le
+  have hz : ∀ region ∈ ([(dst, len)] : List Ivl), region.2 = 0 → region.1 % 8 = 0 := by
+    intro region hm he
+    simp only [List.mem_singleton] at hm
+    subst region
+    dsimp at he
+    omega
+  have ht' := R16Shards.PtxP1.txAccessListOK_survives_step ha hpost hh hw hz ho hf ht
+    (by simpa only [List.mem_singleton, forall_eq] using htx)
+    (by simpa only [List.mem_singleton, forall_eq] using hrec)
+    (locals := s.locals) rfl
+  apply phase2_packed_ready_owned_growth s { post with locals := s.locals }
+    S Nd S' Nd' hp (fun _ _ => rfl) hg
+    (phase2_memcpy_domain_of_guestInv s post ha.1 hpost)
+    ((worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw') ht' hs
+  exact ho
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
