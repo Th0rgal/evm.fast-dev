@@ -8328,4 +8328,46 @@ theorem phase2_packed_outer_iteration_increment_hoare :
     exact fun _ => phase2_packed_outer_iteration_advance s hp.1 hp.2
   · exact fun _ _ hr => by cases hr
 
+/-- Resetting the key index prepares the strengthened inner loop for a live record. -/
+theorem phase2_packed_outer_iteration_reset {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedOuterIteration s)
+    (hi : locN s "i" < memW s (locN s "tx" + 216))
+    (ha : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") :
+    PtxPackedAccIteration (setVarHOLFinite (ofString "j") (.val (.word 0)) s) := by
+  have hin := phase2_packed_inner_reset s hp.2.1 hi
+  have hsep : PtxPackedSeparatedInner (setVarHOLFinite (ofString "j") (.val (.word 0)) s) := by
+    refine ⟨hin, ?_, ?_⟩
+    · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "j" ≠ ofString "tx" by decide,
+        show ofString "j" ≠ ofString "al_keys" by decide,
+        show ofString "j" ≠ ofString "nkeys" by decide] using hp.2.2.1
+    · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "j" ≠ ofString "tx" by decide,
+        show ofString "j" ≠ ofString "al_keys" by decide,
+        show ofString "j" ≠ ofString "nkeys" by decide] using hp.2.2.2.1
+  refine ⟨⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s _ s.clock).mpr hp.1.1) hin.1,
+    hsep, ?_, ?_, hp.2.2.2.2.2.2⟩, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "k" by decide] using hp.2.2.2.2.1
+  · exact ⟨0, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "j" ≠ ofString "acc" by decide,
+      show ofString "j" ≠ ofString "tx" by decide,
+      show ofString "j" ≠ ofString "i" by decide] using ha
+
+/-- The source reset statement establishes all strengthened inner-loop premises. -/
+theorem phase2_packed_outer_iteration_reset_hoare :
+    Hoare (fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+      (.assign .local (ofString "j") (.const 0))
+      (fun r s => r = none → PtxPackedAccIteration s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact fun _ => phase2_packed_outer_iteration_reset s hp.1 hp.2.1 hp.2.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
