@@ -6799,4 +6799,28 @@ theorem phase2_packed_ready_restored_frame {F : Type}
     ((worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw') ht' hs
   exact ho
 
+/-- A copy's world frame and metadata preservation restore the full guarded invariant. -/
+theorem phase2_packed_guarded_restored_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd S' Nd' : List Nat) (dst len : Nat)
+    (hp : PtxPackedCopyIndex s) (ha : ArenaReady s) (hpost : GuestInv post)
+    (hg : GlobalsKept [] s post)
+    (hw : WorldTypedWith s S Nd) (hw' : WorldTypedWith post S' Nd')
+    (ht : TxAccessListAt s S Nd (locN s "tx"))
+    (hs : IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+      (worldOwned s S Nd))
+    (ho : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hf : FrameOutside s post (worldOwned s S Nd ++ [(dst, len)] ++ [freeGap s]) (heapFree s))
+    (htx : Disj (locN s "tx", 384) (dst, len))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (dst, len))
+    (hlen : 0 < len)
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex { post with locals := s.locals } := by
+  have hready := phase2_packed_ready_restored_frame s post S Nd S' Nd' dst len
+    hp.1 ha hpost hg hw hw' ht hs ho hf htx (fun _ => hrec) hlen
+  exact phase2_packed_copy_restore_indices s post hp hready hh hm
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
