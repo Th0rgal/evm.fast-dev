@@ -33,6 +33,15 @@ theorem phase1_word_of_locN_ne_zero {F : Type} {s : PanSemStateFiniteExact 64 F}
     · simp [locN, hl] at hn
     · simp [locN, hl] at hn
 
+theorem phase1_txReadyStrong_tx_word {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : TxReadyStrong s) :
+    ∃ w : BitVec 64, s.locals.lookup (ofString "tx") = some (.val (.word w)) := by
+  apply phase1_word_of_locN_ne_zero
+  have hb := (R16Shards.PtxP1.txReadyStrong_txValid hp).2.1.1
+  change InitE.sourceBase ≤ locN s "tx" at hb
+  have hs : 0 < InitE.sourceBase := by decide
+  omega
+
 /-- R11 entry interface for the strengthened Phase 2 proof. -/
 def PtxValidatedStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => PtxValidated s ∧ PtxPhase2LocalShapes s
