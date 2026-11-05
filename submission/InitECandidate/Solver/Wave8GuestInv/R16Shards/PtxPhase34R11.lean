@@ -3879,6 +3879,20 @@ theorem stable_copy_source_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F
   simp [valueIsWord, valueWord, memLoadHOLExact, hd, hm, hn,
     BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
+/-- Loading the stable header yields the backing-pointer operand for copy setup. -/
+theorem stable_backing_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64)
+    (hw : s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+    (hp : WordAt s (locN s "stable_logs")) :
+    evalAt s (.load .one (.var .local (ofString "stable_logs"))) =
+      some (.val (.word (BitVec.ofNat 64 (memW s (locN s "stable_logs"))))) := by
+  have hl : locN s "stable_logs" = w.toNat := by simp [locN, hw]
+  obtain ⟨v, hd, hm⟩ := hp
+  have hn : memW s (locN s "stable_logs") = v.toNat := by simp [memW, hm]
+  rw [hl] at hd hm
+  simp [evalAt, evalHOLExact, hw, valueIsWord, valueWord, memLoadHOLExact,
+    hd, hm, hn, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+
 /-- A successful semantic copy store writes the indexed source value. -/
 theorem stable_copy_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
@@ -4174,6 +4188,19 @@ theorem stableCopySpatial_setVar {F : Type} (s : PanSemStateFiniteExact 64 F)
     StableCopySpatial (setVarHOLFinite name v s) := by
   apply stableCopySpatial_with_locals s _ s.clock _ _ _ hp
   all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE, hl, hs, hc]
+
+/-- Local assignments, including the stable backing load, frame the spatial
+contract whenever they leave its three root locals unchanged. -/
+theorem hoare_stableCopySpatial_assign (name : MlS) (e : ExpHOL 64)
+    (hl : name ≠ ofString "logs") (hs : name ≠ ofString "stable_logs")
+    (hc : name ≠ ofString "stable_log_cap") :
+    Hoare StableCopySpatial (.assign .local name e)
+      (fun r t => r = none → StableCopySpatial t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    exact stableCopySpatial_setVar s name v hl hs hc hp
+  · intro F s hp hr
+    cases hr
 
 /-- All copy-entry spatial obligations survive the stable length write. -/
 theorem stableLengthPre_spatial {F : Type} (s : PanSemStateFiniteExact 64 F)
