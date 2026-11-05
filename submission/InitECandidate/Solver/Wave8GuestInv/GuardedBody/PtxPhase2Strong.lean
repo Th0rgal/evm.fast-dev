@@ -3249,4 +3249,20 @@ theorem phase2_address_copy_store_hoare :
   rw [he, phase2_address_copy_word_addr hp.1 a i ha hi] at hst
   exact ⟨phase2_address_copy_inv_store hp.1 hp.2 w hst, hp.2⟩
 
+/-- The store and both counter updates compose inside the record declaration. -/
+theorem phase2_address_copy_inner_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.seq
+        (.store (.op .add [.var .local (ofString "al_addrs"),
+          .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+          (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+        (.seq
+          (.assign .local (ofString "nkeys")
+            (.op .add [.var .local (ofString "nkeys"),
+              .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  exact Hoare.seq_fall phase2_address_copy_store_hoare phase2_address_copy_updates_hoare
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
