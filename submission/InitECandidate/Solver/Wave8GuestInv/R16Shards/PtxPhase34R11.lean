@@ -12915,4 +12915,63 @@ theorem receipt_bloom_encode_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  WkBlockTxEnc.eval_call_local_encode_logs
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Keep the encoded length and local update alongside the receipt frame, so
+the enclosing body can advance `p` and discharge the final-list bounds. -/
+theorem receipt_encode_logs_frame_result {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hpre : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] ∧
+    ∃ w : BitVec 64, w.toNat ≤ bound ∧ post.globals = mid.globals ∧
+      post.locals = mid.locals.update (ofString lname, .val (.word w)) := by
+  have hframe := receipt_encode_logs_frame hA hma hpre lname dstExp logsExp dst logs bound
+    hfresh hnz hL hD hfit hold hd hl hr
+  obtain ⟨hLs, harr, _, _⟩ := receipt_snapshot_logs hA hma hpre hnz hL hD
+  obtain ⟨hsnap, hf⟩ := heapByteEff_snapshot (fresh := [(dst.toNat, bound)]) hA hpre
+  have hsum : WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+      (memW mid logs.toNat) (memW mid (logs.toNat + 8)) =
+      WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat) (memW s (logs.toNat + 8)) := by
+    have heq : ∀ n, WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+        (memW mid logs.toNat) n = WkBlockTxEnc.logsEncodedSum mid (memW mid logs.toNat) n := by
+      intro n
+      induction n with
+      | zero => rfl
+      | succ n ih => simp only [WkBlockTxEnc.logsEncodedSum, ih]; rfl
+    rw [heq, receipt_logs_sum_preserved hA hma hpre hnz hL hD]
+  have he := WkBlockTxEnc.eval_call_local_encode_logs {mid with globals := s.globals} mid
+    lname dstExp logsExp dst logs bound [(dst.toNat, bound)] ["heap_ptr"]
+    hsnap.arena.2 hsnap.arena.1.memaddrs hf hfresh.1 hfresh.2 (by decide) hnz hLs harr
+    (by change 9 + WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+          (memW mid logs.toNat) (memW mid (logs.toNat + 8)) ≤ bound
+        rw [hsum]; exact hfit)
+    ⟨(dst.toNat, bound), by simp, le_rfl, le_rfl⟩ hold hd hl (by rw [hr]; simp)
+  rw [hr] at he
+  obtain ⟨w, hw, hg, hl, _⟩ := he.1 rfl
+  refine ⟨hframe, w, ?_, hg, hl⟩
+  change w.toNat ≤ 9 + WkBlockTxEnc.logsEncodedSum {mid with globals := s.globals}
+    (memW mid logs.toNat) (memW mid (logs.toNat + 8)) at hw
+  rw [hsum] at hw
+  exact le_trans hw hfit
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
