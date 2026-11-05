@@ -6878,4 +6878,14 @@ private theorem rlp_item_total_agree_unchecked_vvh {F : Type}
   intro e2 hc2 hp2 hbytes rv2 hret2
   exact hagree e2 hc2 hp2 hbytes rv2 hret2
 
+theorem «wk_decode_transaction_noExtra» :
+    WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+     ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "decode_transaction") :=
+  ⟨_, _, _, lookup_decode_transaction_vvh, fun s hc hWOK ⟨vals, hl⟩ hnt hres =>
+    (worldEff_decode_transaction_vvh s vals hc hWOK.1 hl hnt hres).to_worldStep_Q
+      hWOK (fun _ h => by cases h) ws_core_out_vvh (fun _ _ _ _ _ _ _ _ => trivial)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc
