@@ -437,6 +437,23 @@ theorem progPrefixStep_raise (eid : MlS) (e : ExpHOL 64) : ProgPrefixStep (.rais
       · exact sysTxPrefixStep_with_locals_clock (sysTxPrefixStep_refl s none hW.1) _ s.clock
       · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
 
+theorem progPrefixStep_dec {x : MlS} {sh : ShapeHOL} {e : ExpHOL 64}
+    {body : ProgHOL 64} (hb : ProgPrefixStep body) :
+    ProgPrefixStep (.dec x sh e body) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e with _ | val
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [hev] at hnt hfr ⊢
+    by_cases hok : shapeEqHOL sh (shapeOfHOLExact val) = true
+    · simp only [hok, ↓reduceIte] at hnt hfr ⊢
+      set s1 := setVarHOLFinite x val s
+      have hW1 : WorldOK s1 := localsFree_worldOK s _ s.clock hW
+      have hstep := hb s1 hc hW1 hnt hfr
+      exact sysTxPrefixStep_with_locals_clock
+        (sysTxPrefixStep_of_pre_locals_clock hstep) _ (evaluateHOLFiniteState s1 body).2.clock
+    · simp [hok] at hfr; exact absurd hfr not_flowingOrResumes_error
+
 theorem progPrefixStep_ite {cond : ExpHOL 64} {yes no : ProgHOL 64}
     (hy : ProgPrefixStep yes) (hn : ProgPrefixStep no) :
     ProgPrefixStep (.ite cond yes no) := by
