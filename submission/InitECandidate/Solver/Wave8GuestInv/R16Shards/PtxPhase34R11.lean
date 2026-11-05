@@ -3130,6 +3130,14 @@ theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro i hi _
   omega
 
+theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hj : locN s "j" < locN s "nl") :
+    WordAt s (locN s "lp" + 8 * locN s "j") ∧
+      LogEntryOK s (memW s (locN s "lp" + 8 * locN s "j")) := by
+  have hl := hp.1.2.1.resolve_left hp.2.1
+  rw [hp.1.2.2.2.2.1]
+  exact hl.2.2.2.2 (locN s "j") (by rw [← hp.1.2.2.2.1]; exact hj)
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "j") :
     PtxReceiptsDone s := by
@@ -3181,6 +3189,23 @@ theorem stable_copy_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
   intro j hj
   exact memW_eq_of_ivlUnhit hu (by omega) (ivl_allocated_bound hA ha).2
     ⟨by dsimp; omega, by dsimp; omega⟩
+
+/-- The actual copy-loop counter increment agrees with natural-number
+successor throughout the bounded source list. -/
+theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hi : w.toNat < locN s "nl") (hn : locN s "nl" < 2 ^ 28)
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    locN (setVarHOLFinite (ofString "i") v s) "i" = w.toNat + 1 := by
+  have hv : v = .val (.word (w + 1)) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+      valueWord, wordOpHOL, wordOp] using he.symm
+  subst v
+  have hb : w.toNat + 1 < 2 ^ 64 := by omega
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    BitVec.toNat_add]
+  exact hb
 
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
