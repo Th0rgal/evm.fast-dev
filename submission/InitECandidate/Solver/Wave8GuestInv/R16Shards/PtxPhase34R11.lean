@@ -1879,6 +1879,28 @@ theorem phase4ThroughReceiptStores_cut (h : PtxCallees) {tail : ProgHOL 64} {b :
   intro F s hc hp
   exact hb s hc hp
 
+theorem phase4LogPointers_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptEncoded
+      (spinePlug 2 (spineAt 126 ptxCode) tail) b := by
+  unfold ptxCode
+  exact dec_bound_trans (fun s v hp he => phase4LogCount_load s v hp he)
+    (dec_bound_trans (fun s v hp he => phase4LogPointer_load s v hp he) htail)
+
+theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 29 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) + (K.encode_receipt + b + 1))) := by
+  have hb := @phase4ThroughReceiptStores_cut h _ _ (phase4LogPointers_cut htail)
+  have he : spinePlug 29 (spineAt 99 ptxCode) tail =
+      spinePlug 27 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 126 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
