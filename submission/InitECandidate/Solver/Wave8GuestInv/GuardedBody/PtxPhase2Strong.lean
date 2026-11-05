@@ -9,11 +9,12 @@ namespace InitECandidate.Solver.Wave8GuestInv.R13Shards
 open Flapjack Flapjack.Pancake.PanLang Flapjack.PanSemStateFiniteExact
 open Flapjack.Basis.Pure.MlString
 open InitECandidate.Solver.PanTerminatingBounded
+open InitECandidate.Solver.GuestCodeLookup
 
 /-- Shape information needed by the untyped stores of Phase 2. `price` is
 the four-word fee value, whereas `mgas` and `reservoir` are scalar words. -/
 structure PtxPhase2LocalShapes {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop where
-  scalar : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir"] : List String),
+  scalar : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String),
     ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))
   price : ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
     some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)])
@@ -103,7 +104,7 @@ theorem ptxValidatedStrong_price_length {F : Type} {s : PanSemStateFiniteExact 6
 
 theorem ptxPhase2LocalShapes_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
-    (hl : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir", "price", "enc", "intrinsic"] : List String),
+    (hl : ∀ name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
       locals.lookup (ofString name) = s.locals.lookup (ofString name))
     (h : PtxPhase2LocalShapes s) :
     PtxPhase2LocalShapes { s with locals := locals, clock := clock } := by
@@ -145,7 +146,7 @@ theorem ptxPhase2LocalShapes_restore {F : Type} (s post : PanSemStateFiniteExact
 
 theorem ptxPhase2LocalShapes_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
     (h : PtxPhase2LocalShapes s) (name : MlS) (v : ValueHOL 64)
-    (hne : ∀ n ∈ (["tx", "index", "sender", "mgas", "reservoir", "price", "enc", "intrinsic"] : List String),
+    (hne : ∀ n ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
       ofString n ≠ name) :
     PtxPhase2LocalShapes (setVarHOLFinite name v s) := by
   apply ptxPhase2LocalShapes_with_locals s _ s.clock _ h
@@ -580,6 +581,8 @@ succeeds. This step uses expression semantics, not the default-zero `locN`. -/
 theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hprefix : PtxPhase1ShapePrefix s)
     (hgas : ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+    (hfees : ∀ n ∈ (["gas", "tx_blob_gas_used"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w)))
     (v : ValueHOL 64)
     (he : evalAt s (.op .sub [.var .local (ofString "execution_gas"),
       .var .local (ofString "mgas")]) = some v) :
@@ -593,12 +596,14 @@ theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
   constructor
   · intro name hn
     simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
-    rcases hn with rfl | rfl | rfl | rfl | rfl
+    rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl
     · simpa only [hkeep "tx" (by decide)] using hprefix.1 "tx" (by simp)
     · simpa only [hkeep "index" (by decide)] using hprefix.1 "index" (by simp)
     · simpa only [hkeep "sender" (by decide)] using hprefix.1 "sender" (by simp)
     · simpa only [hkeep "mgas" (by decide)] using hgas
     · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+    · simpa only [hkeep "gas" (by decide)] using hfees "gas" (by simp)
+    · simpa only [hkeep "tx_blob_gas_used" (by decide)] using hfees "tx_blob_gas_used" (by simp)
   · simpa only [hkeep "price" (by decide)] using hprefix.2.1
   · simpa only [hkeep "enc" (by decide)] using hprefix.2.2.1
   · simpa only [hkeep "intrinsic" (by decide)] using hprefix.2.2.2
@@ -637,29 +642,43 @@ theorem phase1_stage4_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
 
 /-- Bounded composition of the regular-budget, min, and reservoir segment.
 The continuation receives all local shapes and the final numeric stage. -/
+def PtxFeeWords {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ n ∈ (["gas", "tx_blob_gas_used"] : List String),
+    ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))
+
+theorem phase1_feeWords_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hp : PtxFeeWords s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["gas", "tx_blob_gas_used"] : List String), ofString n ≠ name) :
+    PtxFeeWords (setVarHOLFinite name v { post with locals := s.locals }) := by
+  intro n hn
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)] using hp n hn
+
 theorem phase1_gas_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s) tail b) :
     TerminatingProgBoundedOn
-      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => (R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) ∧ PtxFeeWords s)
       (.dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
         (.decCall (ofString "mgas") .one (ofString "min")
           [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")]
           (.dec (ofString "reservoir") .one
             (.op .sub [.var .local (ofString "execution_gas"), .var .local (ofString "mgas")]) tail)))
       (K.min + b + 1) := by
-  apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
-    (fun s v hp he => phase1_declare_regular_budget_shapes s v hp he)
+  apply dec_bound_trans (Q := fun s => (R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s) ∧ PtxFeeWords s)
+    (fun s v hp he => ⟨phase1_declare_regular_budget_shapes s v hp.1 he,
+      phase1_feeWords_resume s s hp.2 _ v (by decide)⟩)
   apply TerminatingProgBoundedOn.decCall_on
-    (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
-      ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w))) h.fb_min
+    (Q := fun s => (R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w))) ∧ PtxFeeWords s) h.fb_min
   · intro F s vs body callee ret hc hp ha hl
-    exact R16Shards.PtxP1.stage_entry 3 _ _ s vs body callee ret hc hp.1 ha hl
-  · exact phase1_resume_min_shapes h
+    exact R16Shards.PtxP1.stage_entry 3 _ _ s vs body callee ret hc hp.1.1 ha hl
+  · intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨phase1_resume_min_shapes h s vs body callee ret v post hc hp.1 ha hl hb,
+      phase1_feeWords_resume s post hp.2 _ v (by decide)⟩
   · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
     · intro F s v hp he
-      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1,
-        phase1_reservoir_shapes s hp.2.1 hp.2.2 v he⟩
+      exact ⟨LocalsOnly.setVar (R16Shards.PtxP1.localsOnly_stage 4) (by decide) v s hp.1.1,
+        phase1_reservoir_shapes s hp.1.2.1 hp.1.2.2 hp.2 v he⟩
     · exact htail
 
 theorem phase1_nonce_shapes (h : PtxCallees) :
@@ -766,6 +785,308 @@ theorem phase1_balance_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : N
   apply phase1_sub_balance_tail_strong h
   exact phase1_set_balance_tail_strong h _ htail
 
+def PtxLocalShapeMap (xs : List (String × ShapeHOL))
+    {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∀ x ∈ xs, ∃ v, s.locals.lookup (ofString x.1) = some v ∧ shapeOfHOLExact v = x.2
+
+theorem ptxLocalShapeMap_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    {xs : List (String × ShapeHOL)} (hp : PtxLocalShapeMap xs s)
+    (name : String) (v : ValueHOL 64)
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name) :
+    PtxLocalShapeMap xs (setVarHOLFinite (ofString name) v { post with locals := s.locals }) := by
+  intro x hx
+  simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm (hne x hx)] using hp x hx
+
+theorem ptxLocalShapeMap_add {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    {xs : List (String × ShapeHOL)} (hp : PtxLocalShapeMap xs s)
+    (name : String) (sh : ShapeHOL) (v : ValueHOL 64)
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name)
+    (hsh : shapeOfHOLExact v = sh) :
+    PtxLocalShapeMap ((name, sh) :: xs)
+      (setVarHOLFinite (ofString name) v { post with locals := s.locals }) := by
+  intro x hx
+  rcases List.mem_cons.mp hx with rfl | hx
+  · exact ⟨v, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE], hsh⟩
+  · exact ptxLocalShapeMap_resume s post hp name v hne x hx
+
+theorem phase1_call_shape_map
+    {P Pc Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {xs : List (String × ShapeHOL)} {fn : MlS} {B b : Nat}
+    (hf : TerminatingFunBoundedOn Pc fn B) (name : String) (sh : ShapeHOL)
+    (args : List (ExpHOL 64)) {tail : ProgHOL 64}
+    (he : CallEntryOn P Pc fn args)
+    (hr : R16Shards.PtxP1.DecCallResumeShapeOn P Q (ofString name) sh fn args)
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name)
+    (ht : TerminatingProgBoundedOn (fun s => Q s ∧ PtxLocalShapeMap ((name, sh) :: xs) s) tail b) :
+    TerminatingProgBoundedOn (fun s => P s ∧ PtxLocalShapeMap xs s)
+      (.decCall (ofString name) sh fn args tail) (B + b + 1) := by
+  apply R16Shards.PtxP1.decCall_shape_bound (Q := fun s => Q s ∧ PtxLocalShapeMap ((name, sh) :: xs) s) hf _ _ _
+  · intro F s vs body callee ret hc hp ha hl
+    exact he s vs body callee ret hc hp.1 ha hl
+  · intro F s vs body callee ret v post hc hp ha hl hb hsh
+    exact ⟨hr s vs body callee ret v post hc hp.1 ha hl hb hsh,
+      ptxLocalShapeMap_add s post hp.2 name sh v hne (by simpa only [shapeEqHOL_eq_true] using hsh)⟩
+  · exact ht
+
+theorem phase1_dec_shape_map
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {xs : List (String × ShapeHOL)} (name : String) (sh : ShapeHOL)
+    (e : ExpHOL 64) {tail : ProgHOL 64} {b : Nat}
+    (he : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v, P s →
+      evalAt s e = some v → Q (setVarHOLFinite (ofString name) v s))
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name)
+    (ht : TerminatingProgBoundedOn (fun s => Q s ∧ PtxLocalShapeMap ((name, sh) :: xs) s) tail b) :
+    TerminatingProgBoundedOn (fun s => P s ∧ PtxLocalShapeMap xs s)
+      (.dec (ofString name) sh e tail) b := by
+  intro F s hc hp hnt
+  rw [evaluateHOLFiniteState_dec_total] at hnt ⊢
+  dsimp only at hnt ⊢
+  revert hnt
+  split <;> intro hnt
+  · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+  · revert hnt
+    split <;> intro hnt
+    · rename_i v hv hs
+      simpa only [setVarHOLFinite] using ht (setVarHOLFinite (ofString name) v s) hc ⟨he s v hp.1 hv,
+        ptxLocalShapeMap_add s s hp.2 name sh v hne (by symm; simpa only [shapeEqHOL_eq_true] using hs)⟩ hnt
+    · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+
+theorem phase1_map_localsOnly (xs : List (String × ShapeHOL)) :
+    LocalsOnly (xs.map Prod.fst) (PtxLocalShapeMap xs) := by
+  intro F s ls k hl hp x hx
+  change ∃ v, ls.lookup (ofString x.1) = some v ∧ shapeOfHOLExact v = x.2
+  rw [hl x.1 (List.mem_map.mpr ⟨x, hx, rfl⟩)]
+  exact hp x hx
+
+theorem phase1_frame_map {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {p : ProgHOL 64} {xs : List (String × ShapeHOL)}
+    (hw : Hoare P p (fun r s => r = none → Q s))
+    (hm : Hoare (PtxLocalShapeMap xs) p (fun r s => r = none → PtxLocalShapeMap xs s)) :
+    Hoare (fun s => P s ∧ PtxLocalShapeMap xs s) p
+      (fun r s => r = none → Q s ∧ PtxLocalShapeMap xs s) := by
+  exact ⟨fun s hc hp hn hr => ⟨hw.run s hc hp.1 hn hr, hm.run s hc hp.2 hn hr⟩⟩
+
+theorem phase1_map_store (xs : List (String × ShapeHOL)) (a v : ExpHOL 64) :
+    Hoare (PtxLocalShapeMap xs) (.store a v) (fun r s => r = none → PtxLocalShapeMap xs s) := by
+  exact Hoare.store_fall (fun _ _ _ _ hp _ _ _ => hp)
+
+theorem phase1_map_call0 (xs : List (String × ShapeHOL)) (fn : MlS) (args : List (ExpHOL 64)) :
+    Hoare (PtxLocalShapeMap xs) (.call (some (none, none)) fn args)
+      (fun r s => r = none → PtxLocalShapeMap xs s) := by
+  exact Hoare.call0_resume (fun _ _ _ _ _ _ _ _ hp _ _ _ => hp)
+
+theorem phase1_map_strong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {xs : List (String × ShapeHOL)} (hp : PtxLocalShapeMap xs s)
+    (hs : ∀ n ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String),
+      (n, ShapeHOL.one) ∈ xs)
+    (hprice : ("price", ShapeHOL.comb [.one, .one, .one, .one]) ∈ xs)
+    (henc : ("enc", ShapeHOL.comb [.one, .one]) ∈ xs)
+    (hi : ("intrinsic", ShapeHOL.comb [.one, .one, .one]) ∈ xs) :
+    PtxPhase2LocalShapes s := by
+  constructor
+  · intro n hn
+    obtain ⟨v, hv, hsh⟩ := hp _ (hs n hn)
+    obtain ⟨w, rfl⟩ := R16Shards.PtxP1.shape_one_word hsh
+    exact ⟨w, hv⟩
+  · obtain ⟨v, hv, hsh⟩ := hp _ hprice
+    obtain ⟨a, b, c, d, rfl⟩ := phase1_shape_four_words (v := v) (by simpa only [shapeEqHOL_eq_true] using hsh)
+    exact ⟨a, b, c, d, hv⟩
+  · obtain ⟨v, hv, hsh⟩ := hp _ henc
+    obtain ⟨a, b, rfl⟩ := R16Shards.PtxP1.shape_pair_words (v := v) (by simpa only [shapeEqHOL_eq_true] using hsh)
+    exact ⟨a, b, hv⟩
+  · obtain ⟨v, hv, hsh⟩ := hp _ hi
+    rcases v with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+    · simp [shapeOfHOLExact] at hsh
+    · simp only [shapeOfHOLExact, ShapeHOL.comb.injEq] at hsh
+      rcases fs with _ | ⟨v0, _ | ⟨v1, _ | ⟨v2, _ | vs⟩⟩⟩ <;> simp at hsh
+      obtain ⟨h0, h1, h2⟩ := hsh
+      obtain ⟨a, rfl⟩ := R16Shards.PtxP1.shape_one_word h0
+      obtain ⟨b, rfl⟩ := R16Shards.PtxP1.shape_one_word h1
+      obtain ⟨c, rfl⟩ := R16Shards.PtxP1.shape_one_word h2
+      exact ⟨a, b, c, hv⟩
+    · simp [shapeOfHOLExact] at hsh
+
+theorem phase1_call_keep_map
+    {P Pc Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {xs : List (String × ShapeHOL)} {fn : MlS} {B b : Nat}
+    (hf : TerminatingFunBoundedOn Pc fn B) (name : String) (sh : ShapeHOL)
+    (args : List (ExpHOL 64)) {tail : ProgHOL 64}
+    (he : CallEntryOn P Pc fn args) (hr : DecCallResumeOn P Q (ofString name) fn args)
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name)
+    (ht : TerminatingProgBoundedOn (fun s => Q s ∧ PtxLocalShapeMap xs s) tail b) :
+    TerminatingProgBoundedOn (fun s => P s ∧ PtxLocalShapeMap xs s)
+      (.decCall (ofString name) sh fn args tail) (B + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := fun s => Q s ∧ PtxLocalShapeMap xs s) hf
+  · intro F s vs body callee ret hc hp ha hl
+    exact he s vs body callee ret hc hp.1 ha hl
+  · intro F s vs body callee ret v post hc hp ha hl hb
+    exact ⟨hr s vs body callee ret v post hc hp.1 ha hl hb,
+      ptxLocalShapeMap_resume s post hp.2 name v hne⟩
+  · exact ht
+
+theorem phase1_dec_keep_map
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {xs : List (String × ShapeHOL)} (name : String) (sh : ShapeHOL)
+    (e : ExpHOL 64) {tail : ProgHOL 64} {b : Nat}
+    (he : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v, P s →
+      evalAt s e = some v → Q (setVarHOLFinite (ofString name) v s))
+    (hne : ∀ x ∈ xs, ofString x.1 ≠ ofString name)
+    (ht : TerminatingProgBoundedOn (fun s => Q s ∧ PtxLocalShapeMap xs s) tail b) :
+    TerminatingProgBoundedOn (fun s => P s ∧ PtxLocalShapeMap xs s)
+      (.dec (ofString name) sh e tail) b := by
+  apply dec_bound_trans (Q := fun s => Q s ∧ PtxLocalShapeMap xs s)
+  · intro F s v hp hv
+    exact ⟨he s v hp.1 hv, ptxLocalShapeMap_resume s s hp.2 name v hne⟩
+  · exact ht
+
+theorem ptxPhase1_cut_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn TxReadyStrong (ptxPhase1 tail) (ptxCost1 + b) := by
+  open R16Shards.PtxP1 in
+  have hb : TerminatingProgBoundedOn (StageP 0) (ptxPhase1 tail) (phase1Budget b) := by
+    unfold phase1Budget ptxPhase1 ptxCode
+    simp only [sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+      InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
+      Option.map_none, Option.map_some, List.map_cons, List.map_nil, spinePlug]
+    refine seq_bound_trans (Q := StageP 0)
+      (bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_state_fresh_tx none [])
+        (fun _ hp => hp.1.1.1.1.1)) ?_ ?_
+    · exact hoare_call_scratch_stage h.wk_state_fresh_tx (gs := []) (by simp [ScratchSpec])
+        (fun _ => rfl) (by decide) (by decide) (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+        (by simp) (by decide) []
+    refine seq_bound_trans
+      (Q := fun s => StageP 0 s ∧ PtxLocalShapeMap [("tx", .one), ("index", .one)] s)
+      (bound_of_clock (fun s => clock_assign s _ _ _)) ?_ ?_
+    · refine ⟨fun s hc hp hn hr => ?_⟩
+      have hh := phase1_assign_bal_index_shapes.run s hc hp hn hr
+      refine ⟨hh.1, ?_⟩
+      intro x hx
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+      rcases hx with rfl | rfl
+      · obtain ⟨w, hw⟩ := hh.2 "tx" (by simp)
+        exact ⟨_, hw, by simp [shapeOfHOLExact]⟩
+      · obtain ⟨w, hw⟩ := hh.2 "index" (by simp)
+        exact ⟨_, hw, by simp [shapeOfHOLExact]⟩
+    refine phase1_call_shape_map (Q := EncReady) h.fb_encode_transaction _ _ _ (stage_entry 0 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb hs
+      exact resume_encode h s vs body callee ret v post hc hp.1 ha hl hb hs
+    refine seq_bound_trans ?_ (phase1_frame_map (store_encSlot false) (phase1_map_store _ _ _)) ?_
+    · intro F s hc hp
+      intro hn
+      rw [clock_store]
+      exact ⟨by omega, le_rfl⟩
+    refine seq_bound_trans ?_ (phase1_frame_map (store_encSlot true) (phase1_map_store _ _ _)) ?_
+    · intro F s hc hp
+      intro hn
+      rw [clock_store]
+      exact ⟨by omega, le_rfl⟩
+    apply seq_bound_trans (Q := fun s => StageP 0 s ∧ PtxLocalShapeMap [("enc", .comb [.one, .one]), ("tx", .one), ("index", .one)] s)
+    · intro F s hc hp
+      intro hn
+      rw [clock_skip]
+      exact ⟨by omega, le_rfl⟩
+    · exact Hoare.skip (fun _ hp _ => ⟨stage0 hp.1.1, hp.2⟩)
+    refine phase1_call_keep_map h.fb_tx_chain_id _ _ _ (stage_entry 0 _ _)
+      (resume_ro_stage h.ro_tx_chain_id (by decide) _) (by decide) ?_
+    refine seq_bound_trans ?_ (phase1_frame_map chainGuard_hoare (phase1_chainGuard_keeps _)) ?_
+    · intro F s hc hp
+      exact chainGuard_bound s hc hp.1
+    refine phase1_call_shape_map (Q := SenderAllocated) h.fb_alloc _ _ _ (stage_entry 0 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb _
+      exact resume_alloc_sender h s vs body callee ret v post hc hp ha hl hb
+    refine seq_bound_trans ?_ (phase1_frame_map (hoare_recover_sender h) (phase1_map_call0 _ _ _)) ?_
+    · intro F s hc hp
+      exact TerminatingProgBoundedOn.call_guestInv h.fb_recover_sender_with_chain_id none _ s hc hp.1.1.1.1.1.1
+    apply seq_bound_trans (Q := fun s => StageP 1 s ∧ PtxLocalShapeMap _ s)
+    · intro F s hc hp hn
+      rw [clock_skip]; exact ⟨by omega, le_rfl⟩
+    · exact Hoare.skip (fun _ hp _ => hp)
+    refine phase1_call_shape_map (Q := StageP 2) h.fb_validate_transaction _ _ _ (stage_entry 1 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb _
+      exact resume_validate h s vs body callee ret v post hc hp ha hl hb
+    apply seq_bound_trans (Q := fun s => StageP 2 s ∧ PtxLocalShapeMap _ s)
+    · intro F s hc hp hn
+      rw [clock_skip]; exact ⟨by omega, le_rfl⟩
+    · exact Hoare.skip (fun _ hp _ => hp)
+    refine phase1_dec_shape_map (Q := StageP 2) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 2) (by decide) v s hp) (by decide) ?_
+    refine phase1_call_shape_map (Q := StageP 2) h.fb_check_transaction _ _ _ (stage_entry 2 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb _
+      exact resume_scratch_stage h.wk_check_transaction
+        (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64), ("sk_buf", 64, 52), ("u256_ws", 640, 640)])
+        (by unfold ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+        (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) (by decide) _
+        s vs body callee ret v post hc hp ha hl hb
+    apply seq_bound_trans (Q := fun s => StageP 2 s ∧ PtxLocalShapeMap _ s)
+    · intro F s hc hp hn
+      rw [clock_skip]; exact ⟨by omega, le_rfl⟩
+    · exact Hoare.skip (fun _ hp _ => hp)
+    refine phase1_call_shape_map (Q := StageP 2) h.fb_calculate_total_blob_gas _ _ _ (stage_entry 2 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb _
+      exact resume_ro_stage h.ro_calculate_total_blob_gas (by decide) _ s vs body callee ret v post hc hp ha hl hb
+    refine phase1_call_keep_map (Q := StageP 2) h.fb_get_account _ _ _ (stage_entry 2 _ _) ?_ (by decide) ?_
+    · exact resume_scratch_stage h.wk_get_account
+        (gs := [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)])
+        (by unfold ScratchSpec; decide) (fun _ => rfl) (by decide) (by decide)
+        (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by simp) (by decide) (by decide) _
+    apply seq_bound_trans (Q := fun s => StageP 2 s ∧ PtxLocalShapeMap _ s)
+    · intro F s hc hp hn
+      rw [clock_skip]; exact ⟨by omega, le_rfl⟩
+    · exact Hoare.skip (fun _ hp _ => hp)
+    refine phase1_dec_keep_map (Q := StageP 2) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 2) (by decide) v s hp) (by decide) ?_
+    apply seq_bound_trans (Q := fun s => StageP 2 s ∧ PtxLocalShapeMap _ s)
+    · apply TerminatingProgBoundedOn.ite_on
+      · intro F s hc hp
+        exact blobBranch_bound h s hc hp.1
+      · intro F s hc hp hn
+        rw [clock_skip]; exact ⟨by omega, le_rfl⟩
+    · apply Hoare.ite
+      · apply Hoare.mono (phase1_frame_map (blobBranch_hoare h) ?_) (fun _ hp => hp.1)
+        apply Hoare.decCall_fall (by decide) (phase1_map_localsOnly _)
+        · intro F s vs body callee ret v post hc hp ha hl hb
+          exact ptxLocalShapeMap_resume s post hp _ v (by decide)
+        · apply Hoare.decCall_fall (by decide) (phase1_map_localsOnly _)
+          · intro F s vs body callee ret v post hc hp ha hl hb
+            exact ptxLocalShapeMap_resume s post hp _ v (by decide)
+          · apply Hoare.assign
+            · intro F s v hp _ _
+              exact LocalsOnly.setVar (phase1_map_localsOnly _) (by decide) v s hp
+            · exact fun _ _ hr => by cases hr
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => by cases hr
+    refine phase1_dec_shape_map (Q := StageP 2) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 2) (by decide) v s hp) (by decide) ?_
+    refine phase1_call_keep_map h.fb_fee_mul _ _ _ (stage_entry 2 _ _)
+      (resume_ro_stage h.ro_fee_mul (by decide) _) (by decide) ?_
+    refine phase1_dec_keep_map (Q := StageP 2) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 2) (by decide) v s hp) (by decide) ?_
+    refine phase1_dec_keep_map (Q := StageP 2) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 2) (by decide) v s hp) (by decide) ?_
+    refine phase1_dec_keep_map (Q := StageP 3) _ _ _ declare_regular_budget (by decide) ?_
+    refine phase1_call_shape_map (Q := StageP 4) h.fb_min _ _ _ (stage_entry 3 _ _) ?_ (by decide) ?_
+    · intro F s vs body callee ret v post hc hp ha hl hb _
+      exact resume_min h s vs body callee ret v post hc hp ha hl hb
+    refine phase1_dec_shape_map (Q := StageP 4) _ _ _
+      (fun s v hp _ => LocalsOnly.setVar (localsOnly_stage 4) (by decide) v s hp) (by decide) ?_
+    apply bound_mono (phase1_balance_suffix_strong h htail)
+    intro F s hp
+    refine ⟨hp.1, phase1_map_strong hp.2 ?_ (by simp) (by simp) (by simp)⟩
+    intro n hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp
+  have he : R16Shards.PtxP1.phase1Budget b = ptxCost1 + b := by
+    simp only [R16Shards.PtxP1.phase1Budget, ptxCost1, Nat.add_zero, Nat.zero_add, Nat.max_zero,
+      Nat.add_comm, Nat.add_left_comm]
+  rw [he] at hb
+  intro F s hc hp
+  exact hb s hc (R16Shards.PtxP1.stage0 hp)
 def phase1GasSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
   .dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
     (.decCall (ofString "mgas") .one (ofString "min")
@@ -777,7 +1098,7 @@ def phase1GasSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
 theorem phase1_gas_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
     TerminatingProgBoundedOn
-      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => (R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) ∧ PtxFeeWords s)
       (phase1GasSuffix tail)
       (K.min + ((K.increment_nonce + 1) + ((K.u256_sub + 1) + ((K.u256_sub + 1) +
         ((K.set_account_balance + 1) + (0 + b))))) + 1) := by
@@ -816,5 +1137,170 @@ theorem phase1_fee_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
         · intro F s v hp he
           exact phase1_stage_prefix_set_other s 2 _ v (by decide) (by decide) hp
         · exact htail
+
+/-- Definitionally the local-shape interface consumed by the R16 Phase 3/4
+composition, kept here without a dependency on the downstream shard. -/
+def PtxPhase4ShapesFromPhase2 : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s =>
+    (∀ name ∈ (["tx", "index", "sender", "gas", "tx_blob_gas_used"] : List String),
+      ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+    (∃ v, s.locals.lookup (ofString "price") = some v ∧
+      shapeOfHOLExact v = .comb [.one, .one, .one, .one]) ∧
+    (∃ v, s.locals.lookup (ofString "intrinsic") = some v ∧
+      shapeOfHOLExact v = .comb [.one, .one, .one])
+
+theorem ptxPhase2LocalShapes_phase4 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : PtxPhase2LocalShapes s) : PtxPhase4ShapesFromPhase2 s := by
+  refine ⟨?_, ?_, ?_⟩
+  · intro n hn
+    apply h.scalar n
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢
+    tauto
+  · obtain ⟨a, b, c, d, hp⟩ := h.price
+    exact ⟨_, hp, by simp [shapeOfHOLExact]⟩
+  · obtain ⟨a, b, c, hi⟩ := h.intrinsic
+    exact ⟨_, hi, by simp [shapeOfHOLExact]⟩
+
+theorem ptxPhase2LocalShapes_localsOnly :
+    LocalsOnly ["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] PtxPhase2LocalShapes :=
+  ptxPhase2LocalShapes_with_locals
+
+/-- Shape frame for the first Phase 2 call, whose fresh transaction environment
+is assigned to `te`. The callee may alter memory, but restores caller locals. -/
+theorem phase2_te_new_shapes (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn PtxValidatedStrong
+      (fun s => PtxValidatedStrong s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "te") = some (.val (.word w)))
+      (ofString "te") .one (ofString "te_new") [] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have hstage : R16Shards.PtxP1.StageP 0 s := R16Shards.PtxP1.stage0 hp.1.1
+  have hworld := R16Shards.PtxP1.resume_scratch_stage h.wk_te_new
+    (gs := []) (by simp [R16Shards.PtxP1.ScratchSpec]) (fun _ => rfl)
+    (by decide) (by decide) (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp) (by decide) (n := 0) (name := ofString "te") (by decide) []
+    s vs body callee ret v post hc hstage ha hl hb
+  have hspec := R16Shards.PtxP1.funSpec_at_lookup h.wk_te_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hspec
+  have hh := (hspec (Or.inl ⟨v, rfl⟩)).2.1
+  change globN s "heap_ptr" ≤ globN post "heap_ptr" at hh
+  obtain ⟨w, rfl⟩ := R16Shards.PtxP1.shape_one_word
+    (by simpa only [shapeEqHOL_eq_true] using hsh)
+  have hs := ptxPhase2LocalShapes_set_other _ (ptxPhase2LocalShapes_restore s post hp.2)
+    (ofString "te") (.val (.word w)) (by decide)
+  have hlu : ∀ n ∈ (["sender", "mgas"] : List String),
+      locN (setVarHOLFinite (ofString "te") (.val (.word w)) { post with locals := s.locals }) n = locN s n := by
+    intro n hn
+    have hne : ofString "te" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl <;> decide
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  refine ⟨⟨⟨hworld.1, ?_, ?_, ?_⟩, hs⟩, w, ?_⟩
+  · rw [hlu "sender" (by simp)]
+    exact ⟨hp.1.2.1.1, hp.1.2.1.2.trans hh⟩
+  · rw [hlu "sender" (by simp)]
+    exact wordsOK_transfer hp.1.1.1.1.1.1 hworld.1.1.1.1.1 hp.1.2.2.1
+  · rw [hlu "mgas" (by simp)]
+    exact hp.1.2.2.2
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- First Phase 2 allocation, including its initialized extent and separation
+from the live world. These facts are needed by the following six stores. -/
+def PtxTeAllocated : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxValidatedStrong s ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "te") = some (.val (.word w))) ∧
+    Inside (locN s "te", 200) InitE.sourceBase (globN s "heap_ptr") ∧
+    locN s "te" % 8 = 0 ∧ WordsOK s (locN s "te", 200) ∧
+    (∀ k, k < 25 → memW s (locN s "te" + 8 * k) = 0) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+theorem phase2_resume_te_new (h : PtxCallees) :
+    R16Shards.PtxP1.DecCallResumeShapeOn PtxValidatedStrong PtxTeAllocated
+      (ofString "te") .one (ofString "te_new") [] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have hs := phase2_te_new_shapes h s vs body callee ret v post hc hp ha hl hb hsh
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_te_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, hAp, hag, hf, hz⟩ := hr v rfl
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_te_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨_, rfl⟩)
+  obtain ⟨S, hWT⟩ := hp.1.1.1.1.2
+  obtain ⟨Nd, hW⟩ := (worldTyped_iff_with s S).mp hWT
+  have hWe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW
+  obtain ⟨S', Nd', _, hW', _, _, hex⟩ := step.2.2.2.2 S Nd hWe (by simp [IvlsDisj])
+  obtain ⟨w', heq, hav⟩ := hex _ rfl
+  have heq' : w = w' := by simpa using heq
+  subst w'
+  have hloc : locN (setVarHOLFinite (ofString "te") (.val (.word w)) { post with locals := s.locals }) "te" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  refine ⟨hs.1, hs.2, ?_, ?_, ?_, ?_, ?_⟩
+  · rw [hloc]
+    exact ⟨Nat.le_trans hp.1.1.1.1.1.2.1 hf.2.1.1, hf.2.1.2⟩
+  · rw [hloc]; exact hf.1
+  · rw [hloc]
+    change WordsOK post (w.toNat, 200)
+    exact hf.2.2
+  · rw [hloc]; exact hz
+  · refine ⟨S', Nd', ?_, ?_⟩
+    · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW'
+    · rw [hloc]; exact hav
+
+theorem phase2_te_new_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxTeAllocated tail b) :
+    TerminatingProgBoundedOn PtxValidatedStrong
+      (.decCall (ofString "te") .one (ofString "te_new") [] tail) (K.te_new + b + 1) := by
+  apply R16Shards.PtxP1.decCall_shape_bound h.fb_te_new
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · exact phase2_resume_te_new h
+  · exact ht
+
+/-- Scalar message-building stores write exactly one word, including when the
+stored value is zero. Numeric projections alone cannot establish this fact. -/
+theorem phase2_scalar_store_length {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : PtxPhase2LocalShapes s) (name : String)
+    (hn : name ∈ (["tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used"] : List String))
+    {v : ValueHOL 64} (he : evalAt s (.var .local (ofString name)) = some v) :
+    (flattenHOL v).length = 1 := by
+  obtain ⟨w, hw⟩ := hs.scalar name hn
+  have hv : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  simp [flattenHOL]
+
+theorem phase2_price_store_length {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hs : PtxPhase2LocalShapes s) {v : ValueHOL 64}
+    (he : evalAt s (.var .local (ofString "price")) = some v) :
+    (flattenHOL v).length = 4 := by
+  obtain ⟨a, b, c, d, hw⟩ := hs.price
+  have hv : v = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] := by
+    simpa [evalAt, evalHOLExact, hw] using he.symm
+  subst v
+  simp [flattenHOL]
+
+theorem phase2_store_preserves_shapes (addr value : ExpHOL 64) :
+    Hoare PtxPhase2LocalShapes (.store addr value)
+      (fun r s => r = none → PtxPhase2LocalShapes s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hm
+  exact ⟨hp.scalar, hp.price, hp.enc, hp.intrinsic⟩
+
+/-- The fresh transaction environment is non-null, and each of its 25 word
+slots fits entirely in the allocated heap extent. -/
+theorem phase2_te_slots {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeAllocated s) :
+    locN s "te" ≠ 0 ∧ ∀ k, k < 25 →
+      Inside (locN s "te" + 8 * k, 8) InitE.sourceBase (globN s "heap_ptr") := by
+  have hi := hp.2.2.1
+  have hb : 0 < InitE.sourceBase := by decide
+  constructor
+  · have := hi.1; omega
+  · intro k hk
+    obtain ⟨hlo, hhi⟩ := hi
+    constructor <;> dsimp at * <;> omega
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
