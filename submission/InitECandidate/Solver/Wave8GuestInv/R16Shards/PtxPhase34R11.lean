@@ -2019,6 +2019,56 @@ def Phase4LogSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       (memW s (memW s (globN s "bo" + 40)) +
         8 * memW s (memW s (globN s "bo" + 40) + 16))
 
+theorem lst_push_logSlot_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4LogPointersReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hback : memW post (memW post (globN post "bo" + 40)) ≠ 0) :
+    Phase4LogSlotReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
+  have hW := hp.1.1.1.1
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hptr := lst_push_logPointers_resume h s vs body callee ret v post hc hl hr hp
+    hp.1.2.2 harg.1
+  obtain ⟨w, rfl, _, hin⟩ := lst_push_bo40_slot_result h s vs body callee ret v post
+    hc hW ha hl hr
+  refine ⟨hptr, hback, ?_⟩
+  simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+
+/-- Additional callee fact needed because a null backing pointer is omitted by
+`blockOutObjects`, while `RetListSlot` alone only states interval containment. -/
+def LstPushBackingNonzero : Prop :=
+  FunSpec BoListArg (fun s r post => ∀ v, r = some (.returned v) →
+    memW post (locN s "l") ≠ 0) (ofString "lst_push")
+
+theorem resume_lst_push_logSlot (h : PtxCallees) (hnonzero : LstPushBackingNonzero) :
+    DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have harg := lst_push_bo40_arg s vs body callee ret hc hp.1.1.1.1 ha hl
+  have hn := funSpec_at_lookup hnonzero s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hn
+  have hn' := hn v rfl
+  have hw := funSpec_at_lookup h.wk_lst_push s hc vs body callee ret hl harg.1
+    (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hm : memW post (globN s "bo" + 40) = memW s (globN s "bo" + 40) :=
+    hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.1.1.1.1.2.bo_nz 40 (by simp) (by intro i hi; cases hi)
+  apply lst_push_logSlot_resume h s vs body callee ret v post hc hp ha hl hr
+  rw [hbo, hm]
+  simpa only [harg.2] using hn'
+
 theorem hoare_logSlot_store (src : ExpHOL 64)
     (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
       evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
@@ -2195,6 +2245,97 @@ theorem hoare_logPointers_increment :
   · intro F s _ hr
     cases hr
 
+theorem hoare_logSlot_store_increment (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare Phase4LogSlotReady
+      (.seq (.store (.var .local (ofString "slot")) src)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → Phase4LogPointersReady t) :=
+  Hoare.seq_fall (hoare_logSlot_store src hword) hoare_logPointers_increment
+
+def phase4LogCopySrc : ExpHOL 64 :=
+  .load .one (.op .add [.var .local (ofString "lp"),
+    .panop .mul [.var .local (ofString "i"), .const 8]])
+
+def phase4LogCopyBody : ProgHOL 64 :=
+  .decCall (ofString "slot") .one (ofString "lst_push")
+    [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+    (.seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+
+theorem phase4LogCopySrc_word {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (he : evalAt s phase4LogCopySrc = some v) : ∃ w : HolWordLab 64, v = .val w := by
+  unfold phase4LogCopySrc at he
+  simp only [evalAt, evalHOLExact] at he
+  split at he
+  · rename_i ha
+    split at he
+    · rename_i hw
+      simp only [memLoadHOLExact] at he
+      split at he
+      · cases he
+        exact ⟨_, rfl⟩
+      · cases he
+    · cases he
+  · cases he
+
+theorem hoare_phase4LogCopyBody
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare Phase4LogPointersReady phase4LogCopyBody
+      (fun r t => r = none → Phase4LogPointersReady t) := by
+  exact Hoare.decCall_fall (by decide) localsOnly_phase4LogPointersReady hresume
+    (hoare_logSlot_store_increment phase4LogCopySrc phase4LogCopySrc_word)
+
+theorem phase4LogCopyLoop_bound (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4LogPointersReady
+  · unfold phase4LogCopyBody
+    have hb : TerminatingProgBoundedOn Phase4LogPointersReady phase4LogCopyBody
+        (K.lst_push + (0 + 0) + 1) := TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+      (ofString "slot") ShapeHOL.one
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+      (P := Phase4LogPointersReady) (Q := Phase4LogSlotReady)
+      (by intro F s vs body callee ret hc hp ha hl
+          exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1)
+      hresume
+      (seq_bound_trans
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+        (hoare_logSlot_store phase4LogCopySrc phase4LogCopySrc_word)
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _)))
+    intro F s hc hp
+    simpa only [phase4LogCopyBody, Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
+theorem phase4LogCopyLoop_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hp : Hoare Phase4LogPointersReady
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) (fun r t => r = none → Phase4LogPointersReady t) :=
+    hoare_while_less_localsOnly localsOnly_phase4LogPointersReady _ _
+      (hoare_phase4LogCopyBody hresume)
+      (by unfold phase4LogCopyBody; ptx_incr) (by decide)
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_bound h hresume) hp htail
+  unfold ptxCode
+  intro F s hc hs
+  exact hb s hc hs
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
@@ -2215,6 +2356,43 @@ theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   intro F s hc hp
   simpa only [Nat.zero_add] using hb s hc hp
+
+theorem phase4ThroughLogCopy_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4LogPointersReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 31 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) + 1))) := by
+  have hloop := @phase4LogCopyLoop_cut h hresume _ _ htail
+  have hcounter := @phase4LogCounter_cut _ _
+    (bound_mono (Q := fun s => Phase4LogPointersReady s ∧ locN s "i" = 0)
+      hloop (fun s hp => hp.1))
+  have hb := @phase4ThroughLogPointers_cut h _ _ hcounter
+  have he : spinePlug 31 (spineAt 99 ptxCode) tail =
+      spinePlug 29 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 128 ptxCode)
+          (spinePlug 1 (spineAt 129 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+def Phase4StableCapInit : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧ locN s "stable_log_cap" = locN s "nl"
+
+theorem phase4StableCap_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : Phase4LogPointersReady s)
+    (he : evalAt s (.var .local (ofString "nl")) = some v) :
+    Phase4StableCapInit (setVarHOLFinite (ofString "stable_log_cap") v s) := by
+  refine ⟨LocalsOnly.setVar localsOnly_phase4LogPointersReady (by decide) v s hp, ?_⟩
+  have hlu : s.locals.lookup (ofString "nl") = some v := he
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hlu,
+    show ofString "stable_log_cap" ≠ ofString "nl" from by decide]
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
