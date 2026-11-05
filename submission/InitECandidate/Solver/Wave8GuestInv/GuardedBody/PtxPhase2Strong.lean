@@ -1087,5 +1087,55 @@ theorem ptxPhase1_cut_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   rw [he] at hb
   intro F s hc hp
   exact hb s hc (R16Shards.PtxP1.stage0 hp)
+def phase1GasSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
+  .dec (ofString "regular_budget") .one R16Shards.PtxP1.regularBudgetExp
+    (.decCall (ofString "mgas") .one (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")]
+      (.dec (ofString "reservoir") .one
+        (.op .sub [.var .local (ofString "execution_gas"), .var .local (ofString "mgas")])
+        (phase1BalanceSuffix tail)))
+
+theorem phase1_gas_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) ∧ PtxFeeWords s)
+      (phase1GasSuffix tail)
+      (K.min + ((K.increment_nonce + 1) + ((K.u256_sub + 1) + ((K.u256_sub + 1) +
+        ((K.set_account_balance + 1) + (0 + b))))) + 1) := by
+  exact phase1_gas_segment_strong h (phase1_balance_suffix_strong h htail)
+
+def phase1FeeSegment (tail : ProgHOL 64) : ProgHOL 64 :=
+  .dec (ofString "gas") .one
+    (.load .one (.op .add [.var .local (ofString "tx"), .const 144]))
+    (.decCall (ofString "egf") (.comb [.one, .one, .one, .one, .one]) (ofString "fee_mul")
+      [.var .local (ofString "gas"), .var .local (ofString "price")]
+      (.dec (ofString "effective_gas_fee") (.comb [.one, .one, .one, .one])
+        (.rstruct [.rfield 1 (.var .local (ofString "egf")), .rfield 2 (.var .local (ofString "egf")),
+          .rfield 3 (.var .local (ofString "egf")), .rfield 4 (.var .local (ofString "egf"))])
+        (.dec (ofString "execution_gas") .one
+          (.op .sub [.var .local (ofString "gas"), .var .local (ofString "intrinsic_gas")]) tail)))
+
+theorem phase1_fee_segment_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      (phase1FeeSegment tail) (K.fee_mul + b + 1) := by
+  unfold phase1FeeSegment
+  apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+  · intro F s v hp he
+    exact phase1_stage_prefix_set_other s 2 _ v (by decide) (by decide) hp
+  · apply TerminatingProgBoundedOn.decCall_on
+      (Q := fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s) h.fb_fee_mul
+    · intro F s vs body callee ret hc hp ha hl
+      exact R16Shards.PtxP1.stage_entry 2 _ _ s vs body callee ret hc hp.1 ha hl
+    · exact phase1_resume_fee_prefix h
+    · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+      · intro F s v hp he
+        exact phase1_stage_prefix_set_other s 2 _ v (by decide) (by decide) hp
+      · apply dec_bound_trans (Q := fun s => R16Shards.PtxP1.StageP 2 s ∧ PtxPhase1ShapePrefix s)
+        · intro F s v hp he
+          exact phase1_stage_prefix_set_other s 2 _ v (by decide) (by decide) hp
+        · exact htail
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
