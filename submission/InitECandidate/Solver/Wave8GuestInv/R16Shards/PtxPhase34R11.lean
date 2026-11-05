@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -10118,6 +10119,97 @@ theorem txBacking_fresh_heap {F : Type}
     (fun k hk => (ivl_allocated_bound hA (hl k hk).1).2)
   intro k hk
   exact allocated_unhit_fresh_heap hA hAp hgrow (hl k hk).1 (by simp) hfr
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- World typing supplies all protected allocation and alignment premises. -/
+theorem txBacking_fresh_heap_world {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hp : TxAfterCallBackingStrong s) (hAp : ArenaOK post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    TxBacking post := by
+  obtain ⟨S, Nd, hW, _⟩ := hp.1.2.2.2.2
+  have hE := hp.1.1.2
+  have hb := bo_words hW.2.2.1 hE.bo_nz
+  apply txBacking_fresh_heap hp.1.1.1.1.2 hAp hp.2 hbo hgrow hb.1 hb.2.1 _ hfr
+  intro k hk
+  have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have ht := (hW.2.2.1.1 _ hm).resolve_left (by simp)
+  exact ⟨ht.1, ht.2.1⟩
+
+/-- The concrete null-log allocation preserves both block-output backing words. -/
+theorem lst_new_receiptReady_backing_resume (h : PtxCallees) :
+    DecCallResumeOn TxAfterCallBackingStrong (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (ofString "logs") (ofString "lst_new") [.const 8, .const 1] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨lst_new_receiptReady_resume h s vs body callee ret v post hc hp.1 ha hl hr, ?_⟩
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+    (ofString "esz") (ofString "cap") .one .one _ _ hlc
+    (.const 8) (.const 1) (.val (.word 8)) (.val (.word 1))
+    vs body callee ret rfl rfl ha hl
+  have hbody := lookupCodeHOLFinite_installed_body _ _ _ _ _ _ _ _ _ hlc hl
+  have hbody' : body = InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody
+      Guest.Software.guestFn_lst_new := hbody
+  let ent := callEntryStateHOLFinite s callee
+  have hrun : evaluateHOLFiniteState ent
+      (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_lst_new) =
+      (some (.returned v), post) := by rw [← hbody']; exact hr
+  have hprops := WkBal.lst_new_heap_props ent 8 1
+    ⟨guestInv_callEntry s callee hp.1.1.1.1.1, hp.1.1.1.1.2⟩
+    (by decide) (by decide) (by decide) (by decide) he hcap v
+    (congrArg Prod.fst hrun)
+  rw [hrun] at hprops
+  obtain ⟨w, hv, hw, hw8, hwn, hmem, hlen, hcap', hheap, hgrow, hAR,
+    hbe, hsp, hfp, hL, hobjs, hd, ha', hfr, hglob⟩ := hprops
+  have hbo : globN post "bo" = globN s "bo" := by
+    unfold globN
+    rw [← hglob (ofString "bo") (by decide)]
+    rfl
+  exact txBacking_fresh_heap_world hp hAR.2 hbo (Nat.le_of_lt hgrow) hfr
+
+/-- Both branches of null-log initialization retain backing. -/
+theorem phase4NullLogs_backing_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 120 ptxCode) tail) ((K.lst_new + 1) + b) := by
+  have hb : TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 120 ptxCode) tail) (max (K.lst_new + 1) 0 + b) := by
+    unfold ptxCode
+    refine seq_bound_trans (P := fun s => Phase4LogsReady s ∧ TxBacking s)
+      (Q := fun s => Phase4ReceiptReady s ∧ TxBacking s) ?_ ?_ htail
+    · apply TerminatingProgBoundedOn.ite_on
+      · exact TerminatingProgBoundedOn.call_on (P := fun s => Phase4LogsReady s ∧ TxBacking s)
+          h.fb_lst_new _ _
+          (fun s vs body callee ret hc hp ha hl => guestInv_callEntry s callee hp.1.1.1.1.1.1)
+      · exact TerminatingProgBoundedOn.of_clock
+          (P := fun s => Phase4LogsReady s ∧ TxBacking s) clock_skip
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := TxAfterCallBackingStrong) _ (fun _ hp => ⟨hp.1.1.1, hp.1.2⟩)
+        exact Hoare.callLocal_resume (lst_new_receiptReady_backing_resume h)
+      · apply Hoare.skip
+        intro F s hp _
+        refine ⟨⟨hp.1.1.1, hp.1.1.2.2.1, hp.1.1.2.2.2, ?_⟩, hp.1.2⟩
+        rw [hp.1.1.2.1]
+        obtain ⟨S, Nd, hw, _, ho⟩ := hp.1.1.1.2.2.2.2
+        exact ⟨S, Nd, hw, ho⟩
+      · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  simpa only [Nat.max_zero] using hb s hc hp
 
 end PtxP34
 
