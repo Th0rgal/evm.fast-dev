@@ -3088,6 +3088,14 @@ theorem fresh_stable_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 
   intro i hi
   exact hd _ (Or.inl (hl.2.2.2.2 i hi).2.2.1)
 
+theorem stable_length_cell_disj {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24))
+    {i : Ivl} (hd : Disj i (locN s "stable_logs", 24)) :
+    Disj i ((BitVec.ofNat 64 (locN s "stable_logs" + 8)).toNat, 8) := by
+  apply disj_of_inside_right ?_ hd
+  rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (stable_length_address_bound s hA hh).1]
+  constructor <;> dsimp <;> omega
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
