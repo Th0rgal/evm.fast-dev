@@ -3095,4 +3095,32 @@ theorem phase2_address_copy_set_nkeys {F : Type} (s : PanSemStateFiniteExact 64 
       show ofString "nkeys" ≠ ofString "i" by decide,
       show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2.2.2
 
+/-- The guarded index increment preserves the loop bound and advances exactly
+one step without word wraparound. -/
+theorem phase2_address_copy_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal") :
+    let post := setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s
+    PtxAddressCopyInv post ∧ locN post "i" = locN s "i" + 1 := by
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  have hnlt : locN s "nal" < 2 ^ 64 := by
+    simpa [locN, hn] using n.isLt
+  have hlt : locN s "i" + 1 < 2 ^ 64 := by omega
+  have he : (BitVec.ofNat 64 (locN s "i" + 1)).toNat = locN s "i" + 1 := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  have hidx : locN (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) "i" = locN s "i" + 1 := by
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using he
+  refine ⟨⟨phase2_address_joint_set_other s hp.1 _ _ (by decide),
+    ⟨BitVec.ofNat 64 (locN s "i" + 1), by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_⟩, hidx⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
+  · rw [hidx]
+    have hnal : locN (setVarHOLFinite (ofString "i")
+        (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) "nal" = locN s "nal" := by
+      simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "i" ≠ ofString "nal" by decide]
+    rw [hnal]
+    omega
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
