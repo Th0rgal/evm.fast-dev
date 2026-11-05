@@ -1320,6 +1320,29 @@ theorem logsWorldOwned_heapStep_array {F : Type}
     (worldOwned_zero_aligned hWT) (by intro j hj; cases hj) hog hfr
     (by intro j hj; cases hj)).2.2
 
+/-- Preserve source ownership with the same witnesses used by a heap call's
+return contract. -/
+theorem logsWorldOwned_heapStep_joint {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {keep : List (String × List Nat)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"] keep Q s r post)
+    (hA : ArenaReady s) (hl : LogsListOK s logs) (ho : LogsWorldOwned s logs) :
+    ∃ S Nd, WorldTypedWith post S Nd ∧ LogsLiveOwned post S Nd logs ∧ Q s r post S Nd := by
+  obtain ⟨S, Nd, hWT, hd⟩ := ho
+  have hgrow : AllocatorGrows s post := ⟨hs.2.1, by
+    have he : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+      R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+    omega⟩
+  obtain ⟨S', Nd', _, hWT', hog, hfr, hQ⟩ := hs.2.2.2.2 S Nd hWT (by intro i hi; cases hi)
+  refine ⟨S', Nd', hWT', ?_, hQ⟩
+  exact logsLiveOwned_survives hA.2 hs.1.2 hA.1 hgrow hl hd
+    (R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide)))
+    (worldOwned_zero_aligned hWT) (by intro j hj; cases hj) hog hfr
+    (by intro j hj; cases hj) (by intro j hj; cases hj)
+    (by intro i hi j hj; cases hj)
+
 def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     LogsDisjFixed s (locN s "logs") ∧ LogsWorldOwned s (locN s "logs")
@@ -3890,6 +3913,7 @@ theorem stable_backing_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
   obtain ⟨v, hd, hm⟩ := hp
   have hn : memW s (locN s "stable_logs") = v.toNat := by simp [memW, hm]
   rw [hl] at hd hm
+  simp only [BitVec.ofNat_toNat, BitVec.setWidth_eq] at hd hm
   simp [evalAt, evalHOLExact, hw, valueIsWord, valueWord, memLoadHOLExact,
     hd, hm, hn, BitVec.ofNat_toNat, BitVec.setWidth_eq]
 
