@@ -13819,4 +13819,37 @@ theorem receipt_gas_encode_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.call_noexc_ne_returned
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Carry gas encoding's bounded result and preserved locals into the receipt
+continuation, ruling out a premature return from the encoding call. -/
+theorem receipt_gas_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p gas old : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word old)))
+    (hfresh : globN s "heap_ptr" ≤ p.toNat ∧ p.toNat + 9 ≤ heapLimit)
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ (next : PanSemStateFiniteExact 64 F) (w : BitVec 64),
+      HeapByteEff s next R gw → 1 ≤ w.toNat → w.toNat ≤ 9 →
+      next.locals = mid.locals.update (ofString "w", .val (.word w)) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) →
+      HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_encode_word")
+        [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")]) tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  obtain ⟨next, hc, ht⟩ := seq_returned_of_not_returned
+    (WkBlockTxEnc.call_noexc_ne_returned mid (some (.local, ofString "w"))
+      (ofString "rlp_encode_word")
+      [.var .local (ofString "p"), .var .local (ofString "cumulative_gas")] v) hr
+  obtain ⟨he', w, hlo, hhi, hloc⟩ := receipt_gas_encode_frame he p gas old hp hg hw hfresh hc
+  exact hcont next w he' hlo hhi hloc ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
