@@ -3413,6 +3413,67 @@ theorem transfer_log_address_store_spec {F : Type}
   refine ⟨rfl, hstep, ?_, heff, hl⟩
   simp [memW, globN, hsys]
 
+theorem transfer_alloc_log_address_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p sysw : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hsys : s.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+          (.var .global (ofString "vm_system_address"))) cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "log") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 40 ∧
+      memW mid p.toNat = globN mid "vm_system_address" ∧
+      WordsOK mid (p.toNat, 40) ∧
+      EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+            (.var .global (ofString "vm_system_address"))) cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+            (.var .global (ofString "vm_system_address"))) cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "log", s.locals.lookup (ofString "log")) } := by
+  obtain ⟨allocated, hx, hhp, hwords, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "log") _ p 40 (Or.inl rfl) hInv hp hres
+  have hsys' : allocated.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)) :=
+    (hstep.1.2.2.1 _ (by decide)).symm.trans hsys
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 40) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨hnone, hstore_step, haddr, heff, hloc⟩ :=
+    transfer_log_address_store_spec s allocated p sysw hInv hstep hm hb hx hsys' hwords hin
+  let mid := (evaluateHOLFiniteState allocated
+    (.store (.op .add [.var .local (ofString "log"), .const 0])
+      (.var .global (ofString "vm_system_address")))).2
+  have hseq : evaluateHOLFiniteState allocated
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address"))) cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    simp only [hnone]
+    rfl
+  change ByteRegionEffect allocated mid [(p.toNat, 40)] at heff
+  change EvmStepCC ["heap_ptr"] s mid at hstore_step
+  rw [hseq] at hr hs
+  refine ⟨mid, hloc ▸ hx, ?_, haddr, ?_, hstore_step, hr ▸ hres, hr, hs⟩
+  · simpa only [globN, heff.globals] using hhp
+  · apply wordsOK_of_inside_heap _ hstore_step.1.1.1.1.memaddrs
+    · exact hwords.1
+    · decide
+    · rw [← hp0]; exact hInv.1.2.1
+    · have hlim := hstore_step.1.1.1.2.2.1
+      have hhp_mid : globN mid "heap_ptr" = p.toNat + 40 := by
+        simpa only [globN, heff.globals] using hhp
+      have : heapLimit ≤ heapEnd := by decide
+      omega
+
 private theorem word_dom_lt_heapEnd_local {s_ma : BitVec 64 → Prop} (hma : s_ma = ordinaryDomain)
     (addr : BitVec 64) (hdom : s_ma addr) :
     addr.toNat + 8 ≤ heapEnd := by
