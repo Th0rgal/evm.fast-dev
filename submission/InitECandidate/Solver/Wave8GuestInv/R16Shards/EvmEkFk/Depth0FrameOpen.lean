@@ -3522,4 +3522,220 @@ theorem evmMsgReady_store_dispatch {F : Type}
   · intro name _
     rw [hpost.2.2.2.2.2.1]
 
+/-- Hoare rule for the actual dispatch stores, retaining caller-local facts
+and the original step frame. -/
+theorem hoare_store_dispatch_word_step_with (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off ∈ ([48, 56, 80] : List Nat)) (value : ExpHOL 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      D0Pre gw hp G ch s → L s.locals → ev s value = some v → ∃ w : BitVec 64, v = .val (.word w)) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) value)
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  apply Hoare.store_fall_of_none
+  refine ⟨fun {F} s _ ⟨hD, hL⟩ _ hnone => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) value)
+      with ⟨res, post⟩
+  rw [hrun] at hnone
+  dsimp only at hnone ⊢
+  subst res
+  have hP := hD.1.1
+  have hInv := evmInv_of_evmMsgReady s hP
+  obtain ⟨hb, _, ⟨ew, hew, hen⟩, _⟩ := R11Shards.evm_head_globals hInv
+  have hofflt : off + 8 ≤ 280 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl <;> decide
+  let x := BitVec.ofNat 64 (globN s "ev" + off)
+  have hx : x.toNat = globN s "ev" + off := Nat.mod_eq_of_lt (by omega)
+  have hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word x)) := by
+    simp only [evalHOLExact, evalListHOLExact, hew, wordOpHOL, wordOp, valueIsWord, valueWord,
+      List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr, BitVec.add_zero]
+    congr 3
+    apply BitVec.eq_of_toNat_eq
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat, hen,
+      show (0 : BitVec 64).toNat = 0 from rfl, Nat.add_zero,
+      Nat.mod_eq_of_lt (show off < 2 ^ 64 by omega),
+      Nat.mod_eq_of_lt (show globN s "ev" + off < 2 ^ 64 by omega), hx]
+  obtain ⟨w, hv, hpst⟩ := R11Shards.store_global_off_word hew hen (by omega)
+    (fun v hv => hword s v hD hL hv) hrun
+  have hdom : s.memaddrs x := by
+    by_contra hn
+    rw [evaluateHOLFiniteState_store, hdst, hv] at hrun
+    simp [flattenHOL, panMemStoresHOL, panMemStoreHOL, hn] at hrun
+  have hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+      post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+      ∀ a : BitVec 64, a ≠ x → post.memory a = s.memory a := by
+    rw [hpst]
+    refine ⟨rfl, rfl, rfl, rfl, rfl, rfl, ?_⟩
+    intro a ha
+    simp [R11Shards.updW, show a ≠ BitVec.ofNat 64 (globN s "ev" + off) from ha]
+  have hs := evmMsgReady_store_dispatch hP hoff hx hdom hpost
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    exact List.mem_cons_self
+  have hslot := (dispatch_store_chain_words hInv hoff hx hpost.2.2.2.2.2.2).1
+    _ hhead 112 (by decide) (by decide)
+  have hloc : post.locals = s.locals := by rw [hpst]
+  refine ⟨d0Pre_of_stepFrom gw hp G ch hD
+    (stepFrom_of_evmStep (fun g hg => by simp at hg) hD.1.2 hs.2) hloc
+    (congrArg (fun gs => gs.lookup (ofString "ev")) hpost.2.2.2.2.2.1) hslot, ?_⟩
+  rw [hloc]
+  exact hL
+
+/-- Local-word specialization of the dispatch store rule. -/
+theorem hoare_store_dispatch_local_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (off : Nat) (hoff : off ∈ ([48, 56, 80] : List Nat)) (name : MlS) (w : BitVec 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hL : ∀ locals, L locals → locals.lookup name = some (.val (.word w))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.store (.op .add [.var .global (ofString "ev"), .const (BitVec.ofNat 64 off)]) (.var .local name))
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  apply hoare_store_dispatch_word_step_with gw hp G ch off hoff (.var .local name) L
+  intro F s v _ hlocals hv
+  simp only [ev, evalHOLExact, hL _ hlocals] at hv
+  exact ⟨w, (Option.some.inj hv).symm⟩
+
+/-- The final code pointer and code length stores retain the owned message. -/
+theorem hoare_prepare_dispatch_code_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (L : HolFiniteMapExact MlS (ValueHOL 64) → Prop)
+    (hc : ∀ locals, L locals → locals.lookup (ofString "code") = some (.val (.word code)))
+    (hn : ∀ locals, L locals → locals.lookup (ofString "code_n") = some (.val (.word code_n))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ L s.locals)
+      (.seq
+        (.store (.op .add [.var .global (ofString "ev"), .const 48#64]) (.var .local (ofString "code")))
+        (.store (.op .add [.var .global (ofString "ev"), .const 56#64]) (.var .local (ofString "code_n"))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧ L s.locals)) := by
+  exact Hoare.seq_fall'
+    (hoare_store_dispatch_local_step gw hp G ch 48 (by decide) _ code L hc)
+    (hoare_store_dispatch_local_step gw hp G ch 56 (by decide) _ code_n L hn)
+    (fun _ h => h)
+
+/-- The four common message/code stores in dispatch, with the source's
+right-associated sequence shape and the subsequent program left abstract. -/
+theorem hoare_prepare_dispatch_common_stores (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (tail : ProgHOL 64) (Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)) → Q s)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) tail (Fall Q)) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+      (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112#64])
+          (.var .local (ofString "code")))
+        (.seq (.store (.op .add [.var .local (ofString "msg"), .const 120#64])
+            (.var .local (ofString "code_n")))
+          (.seq (.store (.op .add [.var .global (ofString "ev"), .const 48#64])
+              (.var .local (ofString "code")))
+            (.seq (.store (.op .add [.var .global (ofString "ev"), .const 56#64])
+                (.var .local (ofString "code_n"))) tail))))
+      (Fall Q) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "code") = some (.val (.word code)) ∧
+    locals.lookup (ofString "code_n") = some (.val (.word code_n))
+  refine Hoare.seq_fall'
+    (hoare_store_msg_local_step gw hp G ch 112 (by decide) _ code L (fun _ h => h.1))
+    (Hoare.seq_fall'
+      (hoare_store_msg_local_step gw hp G ch 120 (by decide) _ code_n L (fun _ h => h.2))
+      (Hoare.seq_fall'
+        (hoare_store_dispatch_local_step gw hp G ch 48 (by decide) _ code L (fun _ h => h.1))
+        (Hoare.seq_fall'
+          (hoare_store_dispatch_local_step gw hp G ch 56 (by decide) _ code_n L (fun _ h => h.2))
+          htail hQ) hQ) hQ) hQ
+
+/-- The final jumpdest store and return, for a word-valued local result. -/
+theorem hoare_prepare_dispatch_jumpdest_finish (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (jd : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "jd") = some (.val (.word jd)))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+          (.var .local (ofString "jd"))) (.return (.const 0#64)))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.seq_fall'
+    (hoare_store_dispatch_local_step gw hp G ch 80 (by decide) _ jd
+      (fun locals => locals.lookup (ofString "jd") = some (.val (.word jd)))
+      (fun _ h => h))
+    (Hoare.mono (Hoare.return_const_fall ?_ 0#64) (fun _ h => h.1.1)) (fun _ h => h.1.1)
+  intro F s locals k h
+  exact ⟨localsFree_evmMsgReady s locals k h.1, localsFree_stepFrom gw hp G ch s locals k h.2⟩
+
+/-- Fresh scratch allocation is below every existing frame record,
+continuation and log header. Its writes preserve all of their words. -/
+theorem fresh_scratch_chain_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hq : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a) :
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 280 →
+      memW post (ec.1 + j) = memW s (ec.1 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 104 →
+      memW post (ec.2 + j) = memW s (ec.2 + j)) ∧
+    (∀ ec ∈ evmChain s, ∀ j, j + 8 ≤ 24 →
+      memW post (memW s (ec.1 + 88) + j) = memW s (memW s (ec.1 + 88) + j)) := by
+  obtain ⟨_, S, hI⟩ := hInv
+  have hpoint : ∀ a, a < 2 ^ 64 → globN s "scratch_ptr" ≤ a →
+      memW post a = memW s a := by
+    intro a ha hlo
+    unfold memW
+    rw [hmem (BitVec.ofNat 64 a) ?_]
+    rw [show (BitVec.ofNat 64 a).toNat = a from Nat.mod_eq_of_lt ha]
+    unfold CellHits
+    dsimp only
+    omega
+  have hblock : ∀ ec ∈ evmChain s, ∀ i ∈
+      [(ec.1, 280), (ec.2, 104), (memW s (ec.1 + 8), 32 * memW s (ec.1 + 232)),
+        (memW s (ec.1 + 88), 24)], ∀ j, j + 8 ≤ i.2 →
+      memW post (i.1 + j) = memW s (i.1 + j) := by
+    intro ec hec i hi j hj
+    have hin := ((hI.2.2.2.2.1 ec hec).1 i hi).1
+    have hend : scratchEnd ≤ 2 ^ 64 := by decide
+    unfold Inside at hin
+    apply hpoint <;> omega
+  exact ⟨fun ec hec j hj => hblock ec hec (ec.1, 280) (by simp) j hj,
+    fun ec hec j hj => hblock ec hec (ec.2, 104) (by simp) j hj,
+    fun ec hec j hj => hblock ec hec (memW s (ec.1 + 88), 24) (by simp) j hj⟩
+
+/-- A fresh scratch write cannot alter the linked frame chain when its two
+root globals are retained. -/
+theorem fresh_scratch_chain_eq {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hq : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (he : globN post "ev" = globN s "ev")
+    (hc : globN post "cur_cont" = globN s "cur_cont") :
+    evmChain post = evmChain s := by
+  have hw := (fresh_scratch_chain_words hInv q n hq hmem).2.1
+  have haux : ∀ fuel e c,
+      (∀ ec ∈ evmChainFrom s fuel e c, ec ∈ evmChain s) →
+      evmChainFrom post fuel e c = evmChainFrom s fuel e c := by
+    intro fuel
+    induction fuel with
+    | zero => intros; rfl
+    | succ fuel ih =>
+      intro e c hsub
+      have hec : (e, c) ∈ evmChain s := hsub (e, c) (by simp [evmChainFrom])
+      have h0 : memW post c = memW s c := by
+        simpa only [Nat.add_zero] using hw (e, c) hec 0 (by decide)
+      simp only [evmChainFrom, hw (e, c) hec 16 (by decide), h0,
+        hw (e, c) hec 8 (by decide)]
+      split
+      · rfl
+      · rename_i hn
+        rw [ih (memW s c) (memW s (c + 8))]
+        intro ec hm
+        apply hsub ec
+        simp only [evmChainFrom, hn, ↓reduceIte, List.mem_cons]
+        exact Or.inr hm
+  unfold evmChain
+  rw [he, hc]
+  exact haux _ _ _ (fun _ h => h)
+
 end HeadStore
