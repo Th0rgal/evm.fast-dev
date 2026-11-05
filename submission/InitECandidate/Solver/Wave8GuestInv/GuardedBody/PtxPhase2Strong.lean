@@ -1407,4 +1407,50 @@ theorem phase2_teLive_memory {F : Type} {s : PanSemStateFiniteExact 64 F}
     obtain ⟨hW', heq⟩ := hw S Nd hW
     exact ⟨S, Nd, hW', by rw [heq]; exact hd⟩
 
+/-- A single-word store in a buffer disjoint from all world-owned objects
+leaves every world-owned interval untouched. -/
+theorem phase2_store_world_unhit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    {p len : Nat} (hd : IvlsDisj [(p, len)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : Inside (x.toNat, 8) p (p + len))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    ∀ i ∈ worldOwned s S Nd, IvlUnhit s { s with memory := mem } i := by
+  intro i hi
+  exact ivlUnhit_single hm (worldOwned_zero_aligned hW i hi)
+    (disj_of_inside_right hx (disj_symm (hd (p, len) (by simp) i hi)))
+
+/-- In particular, the block-output header is untouched by a disjoint store;
+its six transaction-environment fields can therefore be transported together. -/
+theorem phase2_store_txEnv {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hA : ArenaReady s) (hE : TxEnv s) {S Nd : List Nat}
+    (hW : WorldTypedWith s S Nd) {p len : Nat}
+    (hd : IvlsDisj [(p, len)] (worldOwned s S Nd))
+    {x : BitVec 64} (hx : Inside (x.toNat, 8) p (p + len))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    TxEnv { s with memory := mem } := by
+  have hfix : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa only [hE.bo_nz, if_false] using
+      typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by simp [typedRecords])
+  have how : (globN s "bo", 88) ∈ worldOwned s S Nd :=
+    List.mem_append.mpr (Or.inl (List.mem_append.mpr (Or.inr hfix)))
+  have hu := phase2_store_world_unhit hW hd hx hm _ how
+  have hb := bo_words hW.2.2.1 hE.bo_nz
+  have hhi := (ivl_allocated_bound hA.2 hb.1).2
+  have hk : ∀ k, k % 8 = 0 → k + 8 ≤ 88 →
+      memW { s with memory := mem } (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hkal hk
+    exact memW_eq_of_ivlUnhit hu (by have := hb.2.1; omega) hhi
+      ⟨by dsimp; omega, by dsimp; omega⟩
+  refine ⟨hE.bo_nz, ?_, ?_, ?_, ?_, ?_, hE.jcap_nz⟩
+  · change memW { s with memory := mem } (globN s "bo" + 24) ≠ 0
+    rw [hk 24 (by omega) (by omega)]; exact hE.bo24
+  · change memW { s with memory := mem } (globN s "bo" + 32) ≠ 0
+    rw [hk 32 (by omega) (by omega)]; exact hE.bo32
+  · change memW { s with memory := mem } (globN s "bo" + 40) ≠ 0
+    rw [hk 40 (by omega) (by omega)]; exact hE.bo40
+  · change memW { s with memory := mem } (globN s "bo" + 72) ≠ 0
+    rw [hk 72 (by omega) (by omega)]; exact hE.bo72
+  · change locN s "index" < memW { s with memory := mem } (globN s "bo" + 80)
+    rw [hk 80 (by omega) (by omega)]; exact hE.idx_lt
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
