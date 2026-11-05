@@ -1465,6 +1465,139 @@ theorem hoare_stepFrom_of_evmStep {P : ∀ {F : Type}, PanSemStateFiniteExact 64
       (fun r t => r = none → StepFrom gw hp G ch t) :=
   ⟨fun s hcode hP hnt hr => EvmEkFk.stepFrom_of_evmStep hsub hP.2 (h s hcode hP.1 hnt hr)⟩
 
+/-! ## Head-record stores as `EvmStep []` (for `StepFrom` chaining) -/
+
+/-- Generic word store `st ev + k, src` (`k ∈ {192, 200}`) from `EvmMsgReady`, with the source
+evaluating to the word `w` and (for `k = 192`) `w` not exceeding the old spilled gas: `EvmMsgReady`
+again, an `EvmStep []`, and locals unchanged. -/
+theorem store_ev_gas_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) {k : Nat} (hk : k = 192 ∨ k = 200) {src : ExpHOL 64} {w : BitVec 64}
+    (hsrc : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src =
+      some (.val (.word w)))
+    (hgas : k = 200 ∨ w.toNat ≤ memW s (globN s "ev" + 192))
+    {post : PanSemStateFiniteExact 64 F}
+    (hev : evaluateHOLFiniteState s
+      (.store (.op .add [.var .global (ofString "ev"), .const k]) src) = (none, post)) :
+    EvmMsgReady post ∧ EvmStep [] s post ∧ post.locals = s.locals := by
+  have hrun := evaluateHOLFiniteState_store s
+    (.op .add [.var .global (ofString "ev"), .const k]) src
+  rw [hev] at hrun
+  revert hrun
+  rcases hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .global (ofString "ev"), .const k]) with _ | dv
+  · simp
+  · rcases dv with ⟨⟨addr⟩⟩ | _ | _
+    · rw [hsrc]
+      dsimp only
+      split
+      · rename_i m' hst
+        unfold flattenHOL at hst
+        unfold panMemStoresHOL at hst
+        unfold panMemStoreHOL at hst
+        by_cases hdom : s.memaddrs addr
+        · simp only [hdom, ↓reduceIte, panMemStoresHOL, Option.some.injEq] at hst
+          subst hst
+          intro hrun
+          injection hrun with _ hpost
+          subst hpost
+          have hInv := evmInv_of_evmMsgReady s hP
+          have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+            unfold evmChain; exact List.mem_cons_self
+          obtain ⟨_, S, _, _, _, _, hFW_all, _⟩ := hInv
+          have hb_e := (R10Shards.GbodyProcessMsg.frameWF_bounds (hFW_all _ hhead_mem)).1
+          dsimp only at hb_e
+          have hk_lt : k < 280 := by rcases hk with rfl | rfl <;> omega
+          have haddr_nat : addr.toNat = globN s "ev" + k := by
+            simp [evalHOLExact, evalListHOLExact] at hdst
+            rcases hg : s.globals.lookup (ofString "ev") with _ | gv
+            · simp [hg] at hdst
+            · rcases gv with ⟨⟨gw⟩⟩ | _ | _
+              · simp [hg, valueIsWord, valueWord, wordOpHOL, wordOp] at hdst
+                subst hdst
+                have hglob : globN s "ev" = gw.toNat := by simp [globN, hg]
+                rw [hglob] at hb_e ⊢
+                have hkk : (BitVec.ofNat 64 k).toNat = k := Nat.mod_eq_of_lt (by omega)
+                rw [BitVec.toNat_add, hkk, Nat.mod_eq_of_lt (by omega)]
+              · simp [hg, valueIsWord] at hdst
+              · simp [hg, valueIsWord] at hdst
+          set post : PanSemStateFiniteExact 64 F :=
+            { s with memory := fun current => if current = addr then .word w else s.memory current } with hpost_def
+          have hpost : post.code = s.code ∧ post.memaddrs = s.memaddrs ∧ post.shMemaddrs = s.shMemaddrs ∧
+              post.baseAddr = s.baseAddr ∧ post.be = s.be ∧ post.globals = s.globals ∧
+              ∀ a : BitVec 64, a ≠ addr → post.memory a = s.memory a :=
+            ⟨rfl, rfl, rfl, rfl, rfl, rfl, fun a hne => by simp [post, hne]⟩
+          have hne_of : ∀ j, j < 280 → j ≠ k → BitVec.ofNat 64 (globN s "ev" + j) ≠ addr := by
+            intro j hj hjne heq
+            have h1 : (BitVec.ofNat 64 (globN s "ev" + j)).toNat = globN s "ev" + j :=
+              Nat.mod_eq_of_lt (by omega)
+            rw [heq, haddr_nat] at h1
+            omega
+          have hwj : ∀ j, j < 280 → j ≠ k → memW post (globN s "ev" + j) = memW s (globN s "ev" + j) := by
+            intro j hj hjne
+            unfold memW; simp [post, hne_of j hj hjne]
+          have hwk : memW post (globN s "ev" + k) = w.toNat := by
+            unfold memW
+            have heq : BitVec.ofNat 64 (globN s "ev" + k) = addr := by
+              apply BitVec.eq_of_toNat_eq
+              rw [haddr_nat]
+              exact Nat.mod_eq_of_lt (by omega)
+            simp [post, heq]
+          have hgas' : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+              memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192) := by
+            rw [hwj 64 (by omega) (by omega)]
+            rcases hk with rfl | rfl
+            · rw [hwk]
+              rcases hgas with h | h
+              · omega
+              · omega
+            · rw [hwj 192 (by omega) (by omega)]
+          have hres := evmMsgReady_store_ev_gas hP hk haddr_nat hdom hpost hgas'
+          exact ⟨hres.1, hres.2, rfl⟩
+        · simp [hdom] at hst
+      · simp
+    · simp
+    · simp
+
+/-- `st ev + 192, 0` between `StepFrom` states. -/
+theorem hoare_store_ev_192_zero_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+      (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0))
+      (fun r t => r = none → EvmMsgReady t ∧ StepFrom gw hp G ch t) := by
+  refine ⟨fun {F} s _ ⟨hP, hS⟩ _ hr => ?_⟩
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0)) with ⟨res, post⟩
+  rw [hev] at hr
+  dsimp only at hr ⊢
+  subst hr
+  obtain ⟨hP', hstep, _⟩ := store_ev_gas_run s hP (Or.inl rfl) (src := .const 0) (w := 0)
+    (by simp [evalHOLExact]) (Or.inr (by simp)) hev
+  exact ⟨hP', stepFrom_of_evmStep (fun _ h => by cases h) hS hstep⟩
+
+/-- `st ev + 200, used` between `StepFrom` states, carrying the `msg = ev+112` local relation. -/
+theorem hoare_store_ev_200_used_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) :
+    Hoare (fun s => (EvmMsgReady s ∧ StepFrom gw hp G ch s) ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w))) ∧
+        ∃ m : BitVec 64, s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+          m.toNat = memW s (globN s "ev" + 112))
+      (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+      (fun r t => r = none → (EvmMsgReady t ∧ StepFrom gw hp G ch t) ∧
+        ∃ m : BitVec 64, t.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+          m.toNat = memW t (globN t "ev" + 112)) := by
+  refine ⟨fun {F} s _ ⟨⟨hP, hS⟩, ⟨w_used, hused⟩, m, hm, hm_eq⟩ _ hr => ?_⟩
+  rcases hev : evaluateHOLFiniteState s
+    (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used"))) with ⟨res, post⟩
+  rw [hev] at hr
+  dsimp only at hr ⊢
+  subst hr
+  obtain ⟨hP', hloc, hglob, h112⟩ := store_ev_200_used_run s hP hused hev
+  obtain ⟨_, hstep, _⟩ := store_ev_gas_run s hP (Or.inr rfl) (src := .var .local (ofString "used"))
+    (w := w_used) (by simp [evalHOLExact, hused]) (Or.inl rfl) hev
+  have hglobN : globN post "ev" = globN s "ev" := by simp [globN, hglob]
+  refine ⟨⟨hP', stepFrom_of_evmStep (fun _ h => by cases h) hS hstep⟩, m, by rw [hloc]; exact hm, ?_⟩
+  rw [hglobN, h112]; exact hm_eq
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
