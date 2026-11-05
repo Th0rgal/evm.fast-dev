@@ -5441,4 +5441,53 @@ theorem phase2_packed_outer_advance {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
       FUPDATE, hit, hik, Nat.mod_eq_of_lt hb] using hx
 
+/-- The outer prefix invariant survives changes that frame all live key-count fields. -/
+theorem phase2_packed_outer_live_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedOuterInv s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["nkeys", "i", "k"] : List String), locN post n = locN s n)
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedOuterInv post := by
+  have hi := hl "i" (by simp)
+  have hk := hl "k" (by simp)
+  have hn := hl "nkeys" (by simp)
+  refine ⟨hr, ?_, ?_, ?_⟩
+  · rw [hn, phase2_packed_copy_total_frame s post hc hm]; exact hp.2.1
+  · rw [hi, hc]; exact hp.2.2.1
+  · rw [hk, hi]
+    rw [phase2_key_prefix_congr s post (locN s "i")
+      (fun i h => hm i (Nat.lt_of_lt_of_le h hp.2.2.1))]
+    exact hp.2.2.2
+
+/-- Zeroed copy counters establish the outer invariant after allocation. -/
+theorem phase2_packed_outer_init {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hr : PtxPackedKeysReady s)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx"))
+    (hi : locN s "i" = 0) (hk : locN s "k" = 0) :
+    PtxPackedOuterInv s := by
+  refine ⟨hr, hn, ?_, ?_⟩
+  · rw [hi]; exact Nat.zero_le _
+  · simp [hi, hk, phase2_key_prefix]
+
+/-- Resetting the inner counter establishes the next record's inclusive invariant. -/
+theorem phase2_packed_inner_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedOuterInv s)
+    (hi : locN s "i" < memW s (locN s "tx" + 216)) :
+    PtxPackedInnerInv (setVarHOLFinite (ofString "j") (.val (.word 0)) s) := by
+  have hjt : ofString "j" ≠ ofString "tx" := by decide
+  have hji : ofString "j" ≠ ofString "i" := by decide
+  have hjn : ofString "j" ≠ ofString "nkeys" := by decide
+  have hjk : ofString "j" ≠ ofString "k" := by decide
+  refine ⟨phase2_packed_keys_set_other s hp.1 _ _ (by decide), ?_, ?_, ?_, ?_⟩
+  · simpa [txAccessSlots, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hjt, hjn] using hp.2.1
+  · simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hjt, hji] using hi
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
+      FUPDATE, hjt, hji, hjk] using hp.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
