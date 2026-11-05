@@ -4767,6 +4767,24 @@ def StableCopyOwnedFrame : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
     ∀ o ∈ worldOwned s S Nd,
       Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o
 
+/-- Updating the stable length retains the coherent ownership witness. -/
+theorem stableCopyOwnedFrame_length_store {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hframe : StableCopyOwnedFrame s) :
+    StableCopyOwnedFrame {s with memory := mem'} := by
+  obtain ⟨S, Nd, hW, ho, hs, hb⟩ := hframe
+  obtain ⟨_, _, _, _, _, hh, ha, hr⟩ := hp.2.2.2.2
+  have hf := stable_length_store_source s hp.1 hp.2.1 S Nd hW ho hs hh ha hr hx mem' hm
+  have hd := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  refine ⟨S, Nd, hf.1, hf.2.2.2.2.1, ?_,
+    stable_copy_world_separation s mem' S Nd hd hf.2.1 hb⟩
+  intro o hmem
+  rw [hf.2.1] at hmem
+  exact hs o hmem
+
 /-- A separated copy write preserves the coherent header/backing ownership frame. -/
 theorem stableCopyOwnedFrame_store {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
@@ -4982,6 +5000,33 @@ theorem hoare_stable_length_spatial :
   obtain ⟨hdom, hval, hm⟩ := R13Shards.panMemStoresHOL_word_spec
     (by simpa only [flattenHOL] using hst)
   exact stableLengthPre_spatial s hp mem' hdom hm hs hh hd ha he
+
+/-- The concrete stable-length write preserves the coherent ownership frame. -/
+theorem hoare_stable_length_ownedFrame :
+    Hoare (fun s => StableLengthPre s ∧ StableCopyOwnedFrame s)
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hf⟩ := hp
+  have hlocal := hp.2.2.1
+  have hnl := hp.2.2.2.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    have hb := stable_length_address_bound s hp.1.1.1.1.1.1.1.1.1.1.2 hp.2.1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb.1] using hb.2
+  subst x
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact stableCopyOwnedFrame_length_store s hp mem' hdom hm hf
 
 /-- Combine the length and spatial postconditions of the same concrete write. -/
 theorem hoare_stable_length_joint :
@@ -6420,6 +6465,60 @@ theorem stableCopy_backing_decl_cut {tail : ProgHOL 64} {b : Nat}
   apply stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword
   simpa [evalAt, evalHOLExact, hw, valueIsWord, valueWord, evalListHOLExact,
     wordOpHOL, wordOp] using he
+
+/-- The source-level backing declaration retains ownership for the copy loop. -/
+theorem stableCopy_backing_decl_owned_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s) tail b) :
+    TerminatingProgBoundedOn (fun s => (StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      StableCopyOwnedFrame s)
+      (.dec (ofString "stable_lp") .one
+        (.load .one (.op .add [.var .local (ofString "stable_logs"), .const 0]))
+        (.seq (.assign .local (ofString "i") (.const 0)) tail)) b := by
+  have hf := hoare_stableCopyOwnedFrame_assign (ofString "i") (.const 0)
+    (by decide) (by decide) (by decide)
+  have hi : TerminatingProgBoundedOn (fun s =>
+      StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+      StableCopyOwnedFrame s)
+      (.seq (.assign .local (ofString "i") (.const 0)) tail) b := by
+    intro F s hc hp
+    have hj : Hoare (fun s =>
+        StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+        StableCopyOwnedFrame s) (.assign .local (ofString "i") (.const 0))
+        (fun r t => r = none → StableCopyLoopInv t ∧ StableCopyOwnedFrame t) :=
+      ⟨fun t ht h hnt hr => ⟨hoare_stableCopy_zero_entry.run t ht h.1 hnt hr,
+        hf.run t ht h.2 hnt hr⟩⟩
+    simpa only [Nat.zero_add] using seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_assign u .local (ofString "i") (.const 0)
+      exact ⟨by omega, by omega⟩) hj htail s hc hp
+  intro G t ht hpre
+  refine dec_bound_trans (P := fun s => (StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) ∧
+      StableCopyOwnedFrame s) (Q := fun s =>
+      StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+      StableCopyOwnedFrame s) ?_ hi t ht hpre
+  intro F s v hp he
+  obtain ⟨⟨hp, hz, hh, ha, hc, hs, hword, n, p, w, hn, hl, hw⟩, hframe⟩ := hp
+  constructor
+  · apply stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword
+    simpa [evalAt, evalHOLExact, hw, valueIsWord, valueWord, evalListHOLExact,
+      wordOpHOL, wordOp] using he
+  · apply stableCopyOwnedFrame_with_locals s _ s.clock _ _ _ hframe
+    all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "stable_lp" ≠ ofString "logs" by decide,
+      show ofString "stable_lp" ≠ ofString "stable_logs" by decide,
+      show ofString "stable_lp" ≠ ofString "stable_log_cap" by decide]
 
 /-- The concrete length store, setup, and copy loop compose with a receipt tail. -/
 theorem stable_length_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
