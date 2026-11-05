@@ -3014,6 +3014,24 @@ def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       ∀ i, i < memW s (locN s "logs" + 8) →
         Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
 
+/-- The allocation return supplies the canonical word representation of the
+stable header pointer required by the length store. -/
+theorem lst_new_stable_pointer_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    resumed.locals.lookup (ofString "stable_logs") =
+      some (.val (.word (BitVec.ofNat 64 (locN resumed "stable_logs")))) := by
+  obtain ⟨w, rfl, _⟩ := lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
     LogsWorldOwned s (locN s "logs") ∧
