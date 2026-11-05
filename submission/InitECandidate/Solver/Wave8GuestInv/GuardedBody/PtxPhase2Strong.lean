@@ -9700,4 +9700,38 @@ theorem phase2_packed_keys_alloc_world_ready (h : PtxCallees) :
   refine ⟨phase2_packed_ready_worldOK _ ?_ hready, hready⟩
   exact (arenaReady_with_locals post _ post.clock).mpr hpost.1
 
+/-- Restoring the packed allocation result preserves every transaction-header word. -/
+theorem phase2_packed_alloc_header_words (h : PtxCallees)
+    (k value : Nat) (hk : k % 8 = 0) (hkle : k + 8 ≤ 384) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ memW s (locN s "tx" + k) = value)
+      (fun s => memW s (locN s "tx" + k) = value)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have he := phase2_alloc_header_words h _ k value hk hkle
+    s vs body callee ret v post hc ⟨hp.1.1.1.1.1, hp.2⟩ ha hl hb
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "al_addrs" ≠ ofString "tx" by decide,
+    show ofString "al_keys" ≠ ofString "tx" by decide] using he
+
+/-- The positive-count branch retains its cached record bound across allocation. -/
+theorem phase2_packed_alloc_nal (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ locN s "nal" = memW s (locN s "tx" + 216))
+      (fun s => (∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+        locN s "nal" = memW s (locN s "tx" + 216))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have he := phase2_packed_alloc_header_words h 216 (locN s "nal") (by decide) (by decide)
+    s vs body callee ret v post hc ⟨hp.1, hp.2.symm⟩ ha hl hb
+  have hr : PtxAccessCountReady s := hp.1.1.1.1.1
+  constructor
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nal" by decide] using hr.2.1
+  · rw [he]
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nal" by decide]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
