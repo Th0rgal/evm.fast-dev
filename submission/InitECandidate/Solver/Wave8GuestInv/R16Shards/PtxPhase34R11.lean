@@ -2800,6 +2800,12 @@ theorem lst_new_stable_header_resume (h : PtxCallees) {F : Type}
   simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     Allocated, WordsOK, WordAt, globN] using And.intro hw ho
 
+theorem stable_length_field_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hh : WordsOK s (locN s "stable_logs", 24)) :
+    WordAt s (locN s "stable_logs" + 8) := by
+  have hw := hh.2.2 1 (by norm_num)
+  simpa using hw
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
