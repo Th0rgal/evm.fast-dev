@@ -4940,4 +4940,216 @@ theorem hoare_prepare_dispatch_common (gw : List String) (hp : Nat)
   exact hoare_prepare_dispatch_common_stores gw hp G ch code code_n _ _
     (fun _ h => h.1.1) (hoare_prepare_dispatch_jumpdest gw hp G ch code code_n hnb hsub)
 
+/-- Continue directly from the delegated-code assignments and message stores,
+in the right-associated shape of the translated source. -/
+theorem hoare_prepare_dispatch_delegated_cont (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))) tail))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hf := Hoare.weaken (hoare_prepare_dispatch_delegated_finish gw hp G ch code code_n daddr)
+    (Q' := Fall (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))))
+    (fun _ _ h hr => ⟨(h hr).1, (h hr).2.1, (h hr).2.2.1⟩)
+  have h := Hoare.seq_assoc_fall (Hoare.seq_fall' hf htail (fun _ h => h.1.1))
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have hr := h.run s hc hp
+  rw [evaluateHOLFiniteState_seq_line780] at hr hnt ⊢
+  rcases hb : evaluateHOLFiniteState s
+      (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode")))) with ⟨r, t⟩
+  simp only [hb] at hr hnt ⊢
+  cases r with
+  | some _ => exact hr hnt
+  | none =>
+    rw [srd_eval_seq_assoc] at hr
+    rw [evaluateHOLFiniteState_seq_line780] at hr hnt ⊢
+    rcases hb2 : evaluateHOLFiniteState t
+        (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode")))) with ⟨r2, t2⟩
+    simp only [hb2] at hr hnt ⊢
+    cases r2 with
+    | some _ => exact hr hnt
+    | none =>
+      rw [srd_eval_seq_assoc] at hr
+      exact hr hnt
+
+/-- Bind the two words returned by `ext_code_of`, preserving the message and
+step frame for the delegated-code test and common dispatch tail. -/
+theorem hoare_prepare_dispatch_code_binders (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n : BitVec 64) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]))
+      (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+        (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode"))) tail))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLF : LocalsFree (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) :=
+    fun s l k h => ⟨localsFree_evmMsgReady s l k h.1, localsFree_stepFrom gw hp G ch s l k h.2⟩
+  refine Hoare.dec_fall (P' := fun s => D0Pre gw hp G ch s ∧
+    s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    s.locals.lookup (ofString "code") = some (.val (.word code))) ?_ ?_ hLF
+  · intro F s v hP hv
+    have hv' : v = .val (.word code) := by
+      simpa [evalHOLExact, hP.2] using hv.symm
+    subst v
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, ?_, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · refine Hoare.dec_fall ?_ htail hLF
+    intro F s v hP hv
+    have hv' : v = .val (.word code_n) := by
+      simpa [evalHOLExact, hP.2.1] using hv.symm
+    subst v
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, ?_, ?_, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2.1
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2.2
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+/-- The source common dispatch suffix, after resolving direct or delegated code. -/
+def prepareDispatchCommon : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "msg"), .const 112#64])
+      (.var .local (ofString "code")))
+    (.seq (.store (.op .add [.var .local (ofString "msg"), .const 120#64])
+        (.var .local (ofString "code_n")))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 48#64])
+          (.var .local (ofString "code")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"), .const 56#64])
+            (.var .local (ofString "code_n")))
+          (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+            [.var .local (ofString "code"), .var .local (ofString "code_n")]
+            (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+              (.var .local (ofString "jd"))) (.return (.const 0#64)))))))
+
+/-- Direct code-pair binding followed by the complete common dispatch suffix. -/
+theorem hoare_prepare_dispatch_direct (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]))
+      (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+        (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode")))
+          prepareDispatchCommon))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  apply hoare_prepare_dispatch_code_binders
+  exact Hoare.mono (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub)
+    (fun _ h => ⟨h.1, h.2.2⟩)
+
+/-- Delegated code-pair assignment and message updates followed by the same
+complete common dispatch suffix. -/
+theorem hoare_prepare_dispatch_delegated_common (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))) prepareDispatchCommon))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  exact hoare_prepare_dispatch_delegated_cont gw hp G ch code code_n daddr _
+    (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub)
+
+/-- The dispatch value test is read-only: its word result is available to
+the continuation while the owned message and original step frame are retained. -/
+theorem hoare_prepare_dispatch_value_zero (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ w : BitVec 64,
+      s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+        [.load (.comb [.one, .one, .one, .one])
+          (.op .add [.var .local (ofString "msg"), .const 56])] tail)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLO : LocalsOnly ["msg"] (D0Pre gw hp G ch) := by
+    intro F s l k hl h
+    exact d0Pre_locals gw hp G ch s l k (hl "msg" (by simp)) h
+  have hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), D0Pre gw hp G ch s → GuestInv s :=
+    fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1)
+  exact Hoare.decCall_ro_fall EvmFrameSpecs.ro_u256_is_zero hG
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (fun _ h => h.1)
+    (ReadOnlyFn.resumeOn hLO hG EvmFrameSpecs.ro_u256_is_zero (ofString "vz") (by decide) _)
+    htail
+
+/-- The read-only value test also retains the recipient local used by the
+account-aliveness test and subsequent code lookup. -/
+theorem hoare_prepare_dispatch_value_zero_recipient (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (recipient : ValueHOL 64)
+    (tail : ProgHOL 64)
+    (htail : Hoare (fun s => (D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "recipient") = some recipient) ∧ ∃ w : BitVec 64,
+      s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ s.locals.lookup (ofString "recipient") = some recipient)
+      (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+        [.load (.comb [.one, .one, .one, .one])
+          (.op .add [.var .local (ofString "msg"), .const 56])] tail)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLO : LocalsOnly ["msg", "recipient"] (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "recipient") = some recipient) := by
+    intro F s l k hl h
+    exact ⟨d0Pre_locals gw hp G ch s l k (hl "msg" (by simp)) h.1,
+      (hl "recipient" (by simp)).trans h.2⟩
+  have hG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      D0Pre gw hp G ch s ∧ s.locals.lookup (ofString "recipient") = some recipient → GuestInv s :=
+    fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1.1.1)
+  exact Hoare.decCall_ro_fall EvmFrameSpecs.ro_u256_is_zero hG
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩)
+    (fun _ h => h.1.1)
+    (ReadOnlyFn.resumeOn hLO hG EvmFrameSpecs.ro_u256_is_zero (ofString "vz") (by decide) _)
+    htail
+
+/-- Compose the source recipient binder with the value-zero call while
+retaining the recipient for the remaining dispatch prelude. -/
+theorem hoare_prepare_dispatch_recipient (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (tail : ProgHOL 64)
+    (htail : ∀ recipient : ValueHOL 64,
+      Hoare (fun s => (D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "recipient") = some recipient) ∧ ∃ w : BitVec 64,
+        s.locals.lookup (ofString "vz") = some (.val (.word w))) tail
+        (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (D0Pre gw hp G ch)
+      (.dec (ofString "recipient") .one
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 32]))
+        (.decCall (ofString "vz") .one (ofString "u256_is_zero")
+          [.load (.comb [.one, .one, .one, .one])
+            (.op .add [.var .local (ofString "msg"), .const 56])] tail))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.dec_fall (P' := fun s => D0Pre gw hp G ch s ∧
+    ∃ recipient, s.locals.lookup (ofString "recipient") = some recipient) ?_ ?_ ?_
+  · intro F s v hP _
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP, v, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+    obtain ⟨hD, recipient, hrecipient⟩ := hP
+    exact (hoare_prepare_dispatch_value_zero_recipient gw hp G ch recipient tail
+      (htail recipient)).run s hc ⟨hD, hrecipient⟩ hnt hr
+  · exact fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩
+
 end HeadStore

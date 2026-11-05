@@ -11818,4 +11818,205 @@ theorem log_growth_post_of_fresh_g09 {F : Type}
   · simpa only [hl, hn, h0] using hstore
   · exact hlog
 
+/-- The four finishing writes preserve any existing log record separated from
+the list header and the fresh buffer, even across a heap-pointer change. -/
+theorem log_growth_record_preserved_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (l p n cap newLog : BitVec 64) (oldLog : Nat)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hold : oldLog + 40 ≤ 2 ^ 64)
+    (hdheader : Disj (oldLog, 40) (l.toNat, 24))
+    (hdbuffer : Disj (oldLog, 40) (p.toNat, 8 * n.toNat + 8))
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hsys : globN copy "vm_system_address" = globN s "vm_system_address")
+    (hrecord : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW copy (oldLog + k) = memW s (oldLog + k))
+    (hok : LogEntryOK s oldLog) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word newLog
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    LogEntryOK post oldLog ∧ logOwnedIvls post oldLog = logOwnedIvls s oldLog := by
+  dsimp only
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hsepH : oldLog + 40 ≤ l.toNat ∨ l.toNat + 24 ≤ oldLog := by
+    rcases hdheader with hz | hz | h | h
+    · cases hz
+    · cases hz
+    · exact Or.inl h
+    · exact Or.inr h
+  have hsepB : oldLog + 40 ≤ p.toNat ∨ p.toNat + 8 * n.toNat + 8 ≤ oldLog := by
+    rcases hdbuffer with hz | hz | h | h
+    · cases hz
+    · dsimp only at hz; omega
+    · exact Or.inl h
+    · exact Or.inr h
+  have hagree : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW {copy with memory := fun a =>
+        if a = p + n * 8#64 then .word newLog
+        else if a = l + 8#64 then .word (n + 1#64)
+        else if a = l + 16#64 then .word (cap * 2#64)
+        else if a = l then .word p else copy.memory a} (oldLog + k) = memW s (oldLog + k) := by
+    intro k hk
+    have hk32 : k ≤ 32 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    have ha : (BitVec.ofNat 64 (oldLog + k)).toNat = oldLog + k := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+    have hne : ∀ b : BitVec 64, oldLog + k ≠ b.toNat → BitVec.ofNat 64 (oldLog + k) ≠ b := by
+      intro b hb heq; exact hb (ha.symm.trans (congrArg BitVec.toNat heq))
+    have hns := hne (p + n * 8#64) (by rw [hs]; omega)
+    have hn8' := hne (l + 8#64) (by rw [hl8]; omega)
+    have hn16 := hne (l + 16#64) (by rw [hl16]; omega)
+    have hn0 := hne l (by omega)
+    exact (show _ = memW copy (oldLog + k) by simp [memW, hns, hn8', hn16, hn0]).trans (hrecord k hk)
+  exact ⟨logEntryOK_of_record_agree_g09 hdom hheap hagree hok,
+    logOwnedIvls_of_record_agree_g09 hsys hagree⟩
+
+/-- Semantic growth append without a same-globals effect hypothesis: allocation
+may increase the heap pointer while every existing record retains its ownership. -/
+theorem log_growth_post_of_records_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8 * i) = memW s (memW s l.toNat + 8 * i)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    (∀ i, i < n.toNat →
+      LogEntryOK post (memW s (memW s l.toNat + 8 * i)) ∧
+      logOwnedIvls post (memW s (memW s l.toNat + 8 * i)) =
+        logOwnedIvls s (memW s (memW s l.toNat + 8 * i))) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hframe hwords hallocated hslots hrecords hlog
+  obtain ⟨h0, h8, h16, hcapacity, hstore, hprefix⟩ :=
+    log_growth_readback_of_fresh_g09 copy l p n cap q log objects
+      hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hslot : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    have hq := q.isLt
+    obtain ⟨_, _, _, hmul, _, _, _, _, hbound, _⟩ :=
+      log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by rw [hmul] at hbound; omega)]
+    omega
+  rw [hl8] at h8
+  rw [hl16] at h16
+  rw [hslot] at hstore
+  constructor
+  · rw [hframe]
+    apply logsListOK_append_g09 (s := s) hwords hallocated
+    · simpa only [hn] using h8
+    · rw [hn]; omega
+    · simpa only [hn, h16] using hcapacity
+    · intro i hi
+      rw [hn] at hi
+      rw [h0]
+      exact ⟨hslots i (Nat.le_of_lt hi), (hprefix i hi).trans (hcopy i hi), (hrecords i hi).1⟩
+    · simpa only [h0, hn] using hslots n.toNat (le_refl _)
+    · simpa only [h0, hn] using hstore
+    · exact hlog
+  · apply frameLogObjects_append_g09
+    · exact hframe.trans hl.symm
+    · simpa only [hl, hn] using h8
+    · intro i hi
+      rw [hl, hn] at hi
+      simp only [hl, h0]
+      rw [(hprefix i hi).trans (hcopy i hi)]
+      exact (hrecords i hi).2
+    · simpa only [hl, hn, h0] using hstore
+
+/-- Fresh allocation and old-record separation suffice for semantic growth;
+no preservation premise is imposed on the state after the finishing writes. -/
+theorem log_growth_post_of_separated_records_g09 {F : Type}
+    (s copy : PanSemStateFiniteExact 64 F) (ec : Ivl)
+    (l p n cap q log : BitVec 64) (objects : List Ivl)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hheader : (l.toNat, 24) ∈ objects)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] objects)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hcap_pos : 1 ≤ cap.toNat) (hcap_bound : cap.toNat ≤ 31457280)
+    (hlen : n.toNat ≤ cap.toNat) (hgrow : cap.toNat ≤ n.toNat)
+    (hfit : p.toNat + (8#64 * cap * 2#64).toNat ≤ q.toNat)
+    (hcopy : ∀ i, i < n.toNat →
+      memW copy (p.toNat + 8 * i) = memW s (memW s l.toNat + 8 * i))
+    (hdom : copy.memaddrs = s.memaddrs)
+    (hheap : globN s "heap_ptr" ≤ globN copy "heap_ptr")
+    (hsys : globN copy "vm_system_address" = globN s "vm_system_address")
+    (hrecords : ∀ i, i < n.toNat →
+      let oldLog := memW s (memW s l.toNat + 8 * i)
+      LogEntryOK s oldLog ∧ oldLog + 40 ≤ 2 ^ 64 ∧
+      Disj (oldLog, 40) (l.toNat, 24) ∧
+      Disj (oldLog, 40) (p.toNat, q.toNat - p.toNat) ∧
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW copy (oldLog + k) = memW s (oldLog + k)) :
+    let post := {copy with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else copy.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+    frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hframe hwords hallocated hslots hlog
+  apply log_growth_post_of_records_g09 s copy ec l p n cap q log objects
+    hl hn hheader hfresh hl_bound hcap_pos hcap_bound hlen hgrow hfit hcopy
+    hframe hwords hallocated hslots
+  · intro i hi
+    obtain ⟨hok, hbound, hdH, hdB, hagree⟩ := hrecords i hi
+    obtain ⟨_, _, _, hmul, _, _, _, _, hslot, _⟩ :=
+      log_growth_word_bounds_g09 hcap_pos hcap_bound hlen hgrow hfit
+    rw [hmul] at hslot
+    have hq := q.isLt
+    have hdB' : Disj (memW s (memW s l.toNat + 8 * i), 40)
+        (p.toNat, 8 * n.toNat + 8) := by
+      rcases hdB with hz | hz | hleft | hright
+      · exact Or.inl hz
+      · dsimp only at hz; omega
+      · exact Or.inr (Or.inr (Or.inl hleft))
+      · exact Or.inr (Or.inr (Or.inr (by dsimp only at hright ⊢; omega)))
+    exact log_growth_record_preserved_g09 s copy l p n cap log _ hl_bound
+      (by omega) hbound hdH hdB' hdom hheap hsys hagree hok
+  · exact hlog
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

@@ -7616,4 +7616,127 @@ theorem merge_set_call_flow_none {F : Type}
           exact False.elim (WkBal.htab_set_no_catchable_exn (callEntryStateHOLFinite s _) hc e v hne
             (congrArg Prod.fst hr))
 
+/-- Fall-through insertion retains the table exit frame and exact value update. -/
+theorem merge_set_call_flow_props {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw vw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hv : evalAt s ev = some (.val (.word vw)))
+    (hAR : ArenaReady s) (hwf : HtabWF s tw.toNat)
+    (hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).2
+    SoloHtabSet.HtabExitAt tw.toNat s post ∧
+    WkBal.HtabSetValuesPost s post tw.toNat vw.toNat ∧
+    post.be = s.be ∧
+    globN post "scratch_ptr" = globN s "scratch_ptr" ∧
+    globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (none, none)) (ofString "htab_set") [et, ek, ev]
+  have hn : (evaluateHOLFiniteState s p).1 = none :=
+    merge_set_call_flow_none s et ek ev tw kw vw ht hk hv hAR.1.code hfr
+  have he : evaluateHOLFiniteState s (.seq p (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite) := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    rcases hp : evaluateHOLFiniteState s p with ⟨r, post⟩
+    rw [hp] at hn
+    dsimp only at hn
+    subst r
+    simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+  have hnt : (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 ≠ some .timeOut := by
+    rw [he]; simp
+  have hr : Resumes (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 := by
+    rw [he]; exact Or.inl ⟨_, rfl⟩
+  obtain ⟨mid, hexit, hvals, hbe, _, hsp, hfm, _, _, hseq⟩ :=
+    WkBal.seq_call_htab_set_void_resumes s et ek ev (.return (.const 0#64))
+      tw kw vw ht hk hv hAR hwf hal hnt hr
+  have hm : (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite = mid.emptyLocalsHOLFinite := by
+    have h := congrArg Prod.snd hseq
+    rw [he] at h
+    simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact] using h
+  have hm' : (evaluateHOLFiniteState s p).2 =
+      { mid with locals := (evaluateHOLFiniteState s p).2.locals } :=
+    congrArg (fun t => { t with locals := (evaluateHOLFiniteState s p).2.locals }) hm
+  change SoloHtabSet.HtabExitAt tw.toNat s (evaluateHOLFiniteState s p).2 ∧ _
+  rw [hm']
+  refine ⟨?_, hvals, hbe, hsp, hfm⟩
+  obtain ⟨hA, hW, h0, h1, hhp, hfp, hframe, hgl⟩ := hexit
+  exact ⟨(arenaReady_with_locals mid _ _).2 hA,
+    (WkBal.htabWF_with_locals mid _ _ _).2 hW, h0, h1, hhp, hfp, hframe, hgl⟩
+
+/-- The void outer insertion preserves the fresh inner-table local binding. -/
+theorem merge_set_call_flow_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw vw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hv : evalAt s ev = some (.val (.word vw)))
+    (hc : s.code = originalRuntimeCode)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).2.locals = s.locals := by
+  have hn := merge_set_call_flow_none s et ek ev tw kw vw ht hk hv hc hfr
+  rw [evaluateHOLFiniteState_call] at hn ⊢
+  have ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [et, ek, ev] = some [.val (.word tw), .val (.word kw), .val (.word vw)] := by
+    unfold evalAt at ht hk hv
+    simp [evalListHOLFinite, evalListHOLExact, ht, hk, hv]
+  have hl := pan_three_word_lookup s.code.lookup (ofString "htab_set")
+    (ofString "t") (ofString "key") (ofString "value")
+    (sourceFnBody Guest.Software.guestFn_htab_set) tw kw vw
+    (by decide) (by decide) (by decide) (by rw [hc]; exact R16WkMarkAccountCreated.lookup_htab_set)
+  rw [ha] at hn ⊢
+  dsimp only at hn ⊢
+  rw [hl] at hn ⊢
+  dsimp only at hn ⊢
+  split at hn
+  · simp at hn
+  · rename_i hnz
+    rw [if_neg hnz]
+    rcases hr : evaluateHOLFiniteState _ _ with ⟨r, post⟩
+    rw [hr] at hn
+    cases r with
+    | none => simp at hn
+    | some r =>
+      cases r with
+      | returned v =>
+        dsimp only at hn ⊢
+        split at hn
+        · rename_i hshape
+          rw [if_pos hshape]
+        · simp at hn
+      | exception e v => simp at hn
+      | error | «break» | «continue» | timeOut | finalFfi _ => simp at hn
+
+/-- Outer insertion carries the bound inner table into its resulting value list. -/
+theorem merge_set_call_bound_member {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hAR : ArenaReady s) (hwf : HtabWF s tw.toNat)
+    (hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    post.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+      locN post "binner" ∈ htabValues post tw.toNat := by
+  have hv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hv hAR hwf hal hfr
+  have hl := merge_set_call_flow_locals s et ek _ tw kw iw ht hk hv hAR.1.code hfr
+  dsimp only
+  constructor
+  · rw [hl]; exact hi
+  · have hm := (merge_set_values_membership hp.2.1).1
+    simpa [locN, hl, hi] using hm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
