@@ -2531,6 +2531,514 @@ theorem decCall_msg_new_freshStep {F : Type}
               hnt, hfr, rfl, rfl⟩
           · simp [hsh] at hfr; exact absurd hfr not_flowingOrResumes_error
 
+theorem evalAt_add_local_const_sysTx {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {name : MlS} {w : BitVec 64} {off : Nat} {x : BitVec 64}
+    (hl : s.locals.lookup name = some (.val (.word w)))
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .local name, .const (BitVec.ofNat 64 off)]) = some (.val (.word x))) :
+    x = w + BitVec.ofNat 64 off := by
+  simp only [evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord,
+    wordOpHOL, wordOp, List.all, List.map, Option.map, Bool.and_self, ↓reduceIte,
+    Option.some.injEq, ValueHOL.val.injEq, HolWordLab.word.injEq] at hev
+  rw [← hev]
+  simp [BitVec.add_zero]
+
+theorem evalHOLExact_load_comb4_len {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {addr : ExpHOL 64} {v : ValueHOL 64}
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load (.comb [.one, .one, .one, .one]) addr) = some v) :
+    (flattenHOL v).length = 4 := by
+  simp only [evalHOLExact] at hev
+  split_ifs at hev with hwf
+  rcases ha : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) addr with _ | va
+  · rw [ha] at hev; simp at hev
+  · rw [ha] at hev
+    cases va with
+    | rStruct _ => simp at hev
+    | nStruct _ => simp at hev
+    | val wl =>
+      cases wl with
+      | word a =>
+        dsimp only at hev
+        have hone : ∀ {b : BitVec 64} {v1 : ValueHOL 64},
+            @memLoadHOLExact 64 _ .one b s.memaddrs (fun x => Classical.propDecidable (s.memaddrs x))
+              s.memory s.structs = some v1 → (flattenHOL v1).length = 1 := by
+          intro b v1 h1
+          unfold memLoadHOLExact at h1
+          split_ifs at h1
+          simp only [Option.some.injEq] at h1
+          subst h1
+          simp [flattenHOL]
+        unfold memLoadHOLExact at hev
+        rcases hm0 : @memLoadsHOLExact 64 _ [.one, .one, .one, .one] a s.memaddrs
+            (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | vs0
+        · rw [hm0] at hev; simp at hev
+        · rw [hm0] at hev
+          simp only [Option.some.injEq] at hev
+          subst hev
+          unfold memLoadsHOLExact at hm0
+          rcases hl1 : @memLoadHOLExact 64 _ .one a s.memaddrs
+              (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | v1
+          · rw [hl1] at hm0; simp at hm0
+          · rw [hl1] at hm0
+            rcases hm1 : @memLoadsHOLExact 64 _ [.one, .one, .one] _ s.memaddrs
+                (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | vs1
+            · rw [hm1] at hm0; simp at hm0
+            · rw [hm1] at hm0
+              simp only [Option.some.injEq] at hm0
+              subst hm0
+              unfold memLoadsHOLExact at hm1
+              rcases hl2 : @memLoadHOLExact 64 _ .one _ s.memaddrs
+                  (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | v2
+              · rw [hl2] at hm1; simp at hm1
+              · rw [hl2] at hm1
+                rcases hm2 : @memLoadsHOLExact 64 _ [.one, .one] _ s.memaddrs
+                    (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | vs2
+                · rw [hm2] at hm1; simp at hm1
+                · rw [hm2] at hm1
+                  simp only [Option.some.injEq] at hm1
+                  subst hm1
+                  unfold memLoadsHOLExact at hm2
+                  rcases hl3 : @memLoadHOLExact 64 _ .one _ s.memaddrs
+                      (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | v3
+                  · rw [hl3] at hm2; simp at hm2
+                  · rw [hl3] at hm2
+                    rcases hm3 : @memLoadsHOLExact 64 _ [.one] _ s.memaddrs
+                        (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | vs3
+                    · rw [hm3] at hm2; simp at hm2
+                    · rw [hm3] at hm2
+                      simp only [Option.some.injEq] at hm2
+                      subst hm2
+                      unfold memLoadsHOLExact at hm3
+                      rcases hl4 : @memLoadHOLExact 64 _ .one _ s.memaddrs
+                          (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | v4
+                      · rw [hl4] at hm3; simp at hm3
+                      · rw [hl4] at hm3
+                        rcases hm4 : @memLoadsHOLExact 64 _ [] _ s.memaddrs
+                            (fun x => Classical.propDecidable (s.memaddrs x)) s.memory s.structs with _ | vs4
+                        · rw [hm4] at hm3; simp at hm3
+                        · rw [hm4] at hm3
+                          simp only [Option.some.injEq] at hm3
+                          subst hm3
+                          unfold memLoadsHOLExact at hm4
+                          simp only [Option.some.injEq] at hm4
+                          subst hm4
+                          have c1 := hone hl1
+                          have c2 := hone hl2
+                          have c3 := hone hl3
+                          have c4 := hone hl4
+                          conv_lhs => unfold flattenHOL
+                          simp [c1, c2, c3, c4]
+
+theorem evalHOLExact_rfield_len_le_one {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {idx : Nat} {v : ValueHOL 64}
+    (hcode_sh : ∀ vc, s.locals.lookup (ofString "code") = some vc →
+      shapeEqHOL (shapeOfHOLExact vc) (.comb [.one, .one]) = true)
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.rfield idx (.var .local (ofString "code"))) = some v) :
+    (flattenHOL v).length ≤ 1 := by
+  simp only [evalHOLExact] at hev
+  rcases hc : s.locals.lookup (ofString "code") with _ | vc
+  · rw [hc] at hev; simp at hev
+  · rw [hc] at hev
+    have hsh := (shapeEqHOL_eq_true _ _).1 (hcode_sh vc hc)
+    cases vc with
+    | val _ => simp [shapeOfHOLExact] at hsh
+    | nStruct _ _ => simp [shapeOfHOLExact] at hsh
+    | rStruct vs =>
+      simp only [shapeOfHOLExact, ShapeHOL.comb.injEq] at hsh
+      rcases vs with _ | ⟨v0, _ | ⟨v1, _ | _⟩⟩ <;> simp at hsh
+      rcases hsh with ⟨hv0, hv1⟩
+      have hone_len : ∀ u : ValueHOL 64, shapeOfHOLExact u = .one → (flattenHOL u).length ≤ 1 := by
+        intro u hu
+        cases u with
+        | val wl => cases wl; simp [flattenHOL]
+        | rStruct _ => simp [shapeOfHOLExact] at hu
+        | nStruct _ _ => simp [shapeOfHOLExact] at hu
+      rcases idx with _ | ⟨_ | _⟩
+      · simp only [List.getElem?_cons_zero, Option.some.injEq] at hev; subst hev; exact hone_len v0 hv0
+      · simp only [List.getElem?_cons_succ, List.getElem?_cons_zero, Option.some.injEq] at hev
+        subst hev; exact hone_len v1 hv1
+      · simp at hev
+
+theorem evalHOLExact_var_word_len_le_one {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {vk : VarKind} {nm : MlS} {v : ValueHOL 64}
+    (hw : ∃ w : BitVec 64, (match vk with | .local => s.locals.lookup nm | .global => s.globals.lookup nm) =
+      some (.val (.word w)))
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var vk nm) = some v) :
+    (flattenHOL v).length ≤ 1 := by
+  obtain ⟨w, hlu⟩ := hw
+  cases vk <;> (simp only [evalHOLExact, hlu, Option.some.injEq] at hev; subst hev; simp [flattenHOL])
+
+theorem evalHOLExact_const_len_le_one {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {c : BitVec 64} {v : ValueHOL 64}
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.const c) = some v) :
+    (flattenHOL v).length ≤ 1 := by
+  simp only [evalHOLExact, Option.some.injEq] at hev
+  subst hev
+  simp [flattenHOL]
+
+theorem evalHOLExact_panop_mul_const_len_le_one {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {c1 c2 : BitVec 64} {v : ValueHOL 64}
+    (hev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.panop .mul [.const c1, .const c2]) = some v) :
+    (flattenHOL v).length ≤ 1 := by
+  simp only [evalHOLExact, evalListHOLExact, valueIsWord, valueWord, panOpHOL,
+    List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, Option.some.injEq] at hev
+  subst hev
+  simp [flattenHOL]
+
+theorem seq_store_freshBlock_step {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    {bname : MlS} {w_base : BitVec 64} {sz off : Nat} {src : ExpHOL 64} {cont : ProgHOL 64}
+    (hW0 : WorldOK s0)
+    (h0 : SysTxFreshBlockStep s0 none s w_base sz)
+    (hl : s.locals.lookup bname = some (.val (.word w_base)))
+    (hoff8 : off % 8 = 0)
+    (hfit : ∀ v : ValueHOL 64,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src = some v →
+      off + 8 * (flattenHOL v).length ≤ sz)
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont)).1) :
+    ∃ (mem' : BitVec 64 → HolWordLab 64) (v : ValueHOL 64),
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src = some v ∧
+      @panMemStoresHOL 64 _ (w_base + BitVec.ofNat 64 off) (flattenHOL v) s.memaddrs
+        (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem' ∧
+      SysTxFreshBlockStep s0 none { s with memory := mem' } w_base sz ∧
+      WorldOK { s with memory := mem' } ∧
+      (∀ a : BitVec 64,
+        (∀ k, k < (flattenHOL v).length → a ≠ (w_base + BitVec.ofNat 64 off) + BitVec.ofNat 64 (8 * k)) →
+        mem' a = s.memory a) ∧
+      (evaluateHOLFiniteState { s with memory := mem' } cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState { s with memory := mem' } cont).1 ∧
+      evaluateHOLFiniteState s
+        (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont) =
+        evaluateHOLFiniteState { s with memory := mem' } cont := by
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_store] at hnt hfr ⊢
+  rcases hx : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) with _ | vx
+  · simp [hx] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · rcases vx with ⟨⟨x⟩⟩ | _ | _
+    · rcases hv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src with _ | v
+      · simp [hx, hv] at hfr; exact absurd hfr not_flowingOrResumes_error
+      · rcases hst : @panMemStoresHOL 64 _ x (flattenHOL v) s.memaddrs
+            (fun a => Classical.propDecidable (s.memaddrs a)) s.memory with _ | mem'
+        · simp [hx, hv, hst] at hfr; exact absurd hfr not_flowingOrResumes_error
+        · have hv' : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src = some v := hv
+          have hst' : @panMemStoresHOL 64 _ x (flattenHOL v) s.memaddrs
+              (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem' := hst
+          simp only [hx, hv, hst] at hnt hfr ⊢
+          have hx_eq : x = w_base + BitVec.ofNat 64 off := evalAt_add_local_const_sysTx hl hx
+          subst hx_eq
+          obtain ⟨hfb', hW', _, _, hframe⟩ :=
+            sysTxFreshBlockStep_store hW0 h0 hoff8 rfl (hfit v hv') hst'
+          exact ⟨mem', v, rfl, hst', hfb', hW', hframe, hnt, hfr, rfl⟩
+    · simp [hx] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp [hx] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+def SysTxMsgTablesStep {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F)
+    (s : PanSemStateFiniteExact 64 F)
+    (w_m : BitVec 64)
+    (tabs : List (Nat × Nat)) : Prop :=
+  SysTxPrefixStep s0 none s ∧
+  w_m.toNat % 8 = 0 ∧
+  Inside (w_m.toNat, 176) (globN s0 "heap_ptr") (globN s "heap_ptr") ∧
+  ∀ S Nd, WorldTypedWith s0 S Nd →
+    IvlsDisj (bufRegions sysTxBufs s0) (worldTypedIvls s0 S Nd) →
+    ∃ S' Nd',
+      (∀ t ∈ S, t ∈ S') ∧
+      WorldTypedWith s S' Nd' ∧
+      OwnedGrows s0 s (worldOwned s0 S Nd) (worldOwned s S' Nd') ∧
+      FrameOutside s0 s (worldOwned s0 S Nd ++ bufRegions sysTxBufs s0 ++ [freeGap s0]) (heapFree s0) ∧
+      IvlsDisj [(w_m.toNat, 176)] (worldOwned s S' Nd') ∧
+      ∀ p ∈ tabs, p.1 ∈ S' ∧ hdr s p.1 0 = p.2 ∧
+        ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ p.1
+
+theorem sysTxMsgTablesStep_of_freshBlock {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {w_m : BitVec 64}
+    (h : SysTxFreshBlockStep s0 none s w_m 176) :
+    SysTxMsgTablesStep s0 s w_m [] := by
+  obtain ⟨hp, hm8, _, hin, hdisj⟩ := h
+  refine ⟨hp, hm8, hin, fun S Nd hWT0 hD0 => ?_⟩
+  obtain ⟨S', Nd', hsub, hWT', hOG, hFO, hdisj'⟩ := hdisj S Nd hWT0 hD0
+  exact ⟨S', Nd', hsub, hWT', hOG, hFO, hdisj', fun _ hp' => by cases hp'⟩
+
+theorem sysTxMsgTablesStep_htab_new {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    {w_m : BitVec 64} {tabs : List (Nat × Nat)}
+    {x : MlS} {kw capw : BitVec 64} {cont : ProgHOL 64}
+    (hW0 : WorldOK s0)
+    (h0 : SysTxMsgTablesStep s0 s w_m tabs)
+    (hkl : kw.toNat ∈ htabKeyLens)
+    (hcl : capw.toNat ≤ htabCapMax)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "htab_new") [.const kw, .const capw] cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "htab_new") [.const kw, .const capw] cont)).1) :
+    ∃ (tw : BitVec 64) (mid : PanSemStateFiniteExact 64 F),
+      SysTxMsgTablesStep s0 mid w_m (tabs ++ [(tw.toNat, kw.toNat)]) ∧
+      WorldOK mid ∧
+      mid.code = s.code ∧
+      mid.locals.lookup x = some (.val (.word tw)) ∧
+      (∀ y, y ≠ x → mid.locals.lookup y = s.locals.lookup y) ∧
+      (∀ a : BitVec 64, ¬ CellHits a.toNat (heapFree s) → mid.memory a = s.memory a) ∧
+      (evaluateHOLFiniteState mid cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall x .one (ofString "htab_new") [.const kw, .const capw] cont)).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall x .one (ofString "htab_new") [.const kw, .const capw] cont)).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (evaluateHOLFiniteState mid cont).2.locals (x, s.locals.lookup x) } := by
+  obtain ⟨hp0, hm8, hin_m0, hstep0⟩ := h0
+  have hWs : WorldOK s := worldOK_of_sysTxStep hW0 hp0.1
+  obtain ⟨tw, mid, htw_lo, _, hW_mid, hcode_mid, hbe_mid, hsp_mid, hfmp_mid,
+    hwf_mid, _, hhdr0_mid, hfp_mid, hfr_mid, hout_mid, hstep_mid,
+    hlx, hly, hgl_mid, hnt_c, hfr_c, hr_eq, hs_eq⟩ :=
+    decCall_htab_new_sysTxStep s x kw capw cont hWs hkl hcl hnt hfr
+  have hfr_hf : ∀ a : BitVec 64, ¬ CellHits a.toNat (heapFree s) → mid.memory a = s.memory a := by
+    intro a hnhf
+    by_cases hdom : ordinaryDomain a
+    · have ha8 : a.toNat % 8 = 0 := (M13.ordinaryDomain_iff a).1 hdom |>.2.2
+      have hsp8 := hWs.1.2.2.2.2.2.2.2.2.1
+      apply hfr_mid a
+      · intro j hj ⟨hc1, hc2⟩
+        simp only [List.mem_singleton] at hj; subst hj
+        dsimp only at hc1 hc2; omega
+      · intro ⟨hc1, hc2⟩
+        apply hnhf
+        unfold heapFree
+        have hp_lim := hW_mid.1.2.2.1
+        dsimp only at hc1 hc2 ⊢
+        exact ⟨hc1, by omega⟩
+    · exact hout_mid a hdom
+  have hp_tot : SysTxPrefixStep s0 none mid := sysTxPrefixStep_trans hW0.1 hp0 hstep_mid
+  have hin_m_mid : Inside (w_m.toNat, 176) (globN s0 "heap_ptr") (globN mid "heap_ptr") :=
+    ⟨hin_m0.1, le_trans hin_m0.2 hstep_mid.1.2.1⟩
+  refine ⟨tw, mid, ⟨hp_tot, hm8, hin_m_mid, fun S Nd hWT0 hD0 => ?_⟩,
+    hW_mid, hcode_mid, hlx, hly, hfr_hf, hnt_c, hfr_c, hr_eq, hs_eq⟩
+  obtain ⟨S1, Nd1, hsub01, hWT1, hOG01, hFO01, hdisj1, htabs1⟩ := hstep0 S Nd hWT0 hD0
+  obtain ⟨_, _, hslot_tw, hWT2, hOG12, hwrs_eq, hjrs_eq, hfeq, hne_eq, hhdr_eq, hfp_S_eq⟩ :=
+    worldTypedWith_htab_new_sysTx hWs.1 hW_mid.1 hbe_mid hstep_mid.1.2.1 hsp_mid
+      hwf_mid hhdr0_mid hfp_mid hout_mid hfr_mid hgl_mid hWT1
+  have hwo_S1_eq : worldOwned mid S1 Nd1 = worldOwned s S1 Nd1 := by
+    unfold worldOwned
+    rw [List.flatMap_congr hfp_S_eq, hfeq, hne_eq]
+  refine ⟨S1 ++ [tw.toNat], Nd1,
+    fun t ht => List.mem_append_left _ (hsub01 t ht),
+    hWT2, ?_, ?_, ?_, ?_⟩
+  · intro o ho
+    rcases hOG12 o ho with rfl | ⟨j, hj, hin_oj⟩ | hin_o12
+    · exact Or.inl rfl
+    · rcases hOG01 j hj with rfl | ⟨k, hk, hin_jk⟩ | hin_j01
+      · left
+        rcases o with ⟨o1, o2⟩
+        dsimp only [Inside] at hin_oj
+        exact Prod.ext (by omega) (by omega)
+      · exact Or.inr (Or.inl ⟨k, hk, le_trans hin_jk.1 hin_oj.1, le_trans hin_oj.2 hin_jk.2⟩)
+      · exact Or.inr (Or.inr ⟨le_trans hin_j01.1 hin_oj.1,
+          le_trans hin_oj.2 (le_trans hin_j01.2 hstep_mid.1.2.1)⟩)
+    · exact Or.inr (Or.inr ⟨le_trans hp0.1.2.1 hin_o12.1, hin_o12.2⟩)
+  · intro a ha hhf0
+    have hm12 : mid.memory a = s.memory a := by
+      apply hfr_hf a
+      intro ⟨hc1, hc2⟩
+      apply hhf0
+      unfold heapFree at hc1 hc2 ⊢
+      have := hp0.1.2.1
+      have := hWs.1.2.2.1
+      dsimp only at hc1 hc2 ⊢
+      exact ⟨by omega, by omega⟩
+    exact hm12.trans (hFO01 a ha hhf0)
+  · intro i hi o ho
+    simp only [List.mem_singleton] at hi; subst hi
+    unfold worldOwned at ho
+    rcases List.mem_append.1 ho with h1 | hnd
+    · rcases List.mem_append.1 h1 with htab | hfix
+      · rw [List.flatMap_append] at htab
+        rcases List.mem_append.1 htab with htab_S1 | htab_tw
+        · exact hdisj1 (w_m.toNat, 176) (by simp) o (by
+            rw [← hwo_S1_eq]
+            exact List.mem_append_left _ (List.mem_append_left _ htab_S1))
+        · simp only [List.flatMap_cons, List.flatMap_nil, List.append_nil] at htab_tw
+          have hin_tw_o := (hfp_mid o htab_tw).2
+          exact Or.inr (Or.inr (Or.inl (le_trans hin_m0.2 hin_tw_o.1)))
+      · exact hdisj1 (w_m.toNat, 176) (by simp) o (by
+          rw [← hwo_S1_eq]
+          exact List.mem_append_left _ (List.mem_append_right _ hfix))
+    · exact hdisj1 (w_m.toNat, 176) (by simp) o (by
+        rw [← hwo_S1_eq]
+        exact List.mem_append_right _ hnd)
+  · intro p hp_mem
+    rcases List.mem_append.1 hp_mem with hp_old | hp_new
+    · obtain ⟨hp_S1, hp_hdr, hp_slot⟩ := htabs1 p hp_old
+      refine ⟨List.mem_append_left _ hp_S1, ?_, ?_⟩
+      · rw [hhdr_eq p.1 hp_S1]; exact hp_hdr
+      · rw [hwrs_eq, hjrs_eq]; exact hp_slot
+    · simp only [List.mem_singleton] at hp_new; subst hp_new
+      exact ⟨List.mem_append_right _ (List.mem_singleton.2 rfl), hhdr0_mid, hslot_tw⟩
+
+theorem sysTxMsgTablesStep_store_word {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    {bname : MlS} {w_m w_val : BitVec 64} {tabs : List (Nat × Nat)}
+    {off : Nat} {src : ExpHOL 64} {cont : ProgHOL 64}
+    (hW0 : WorldOK s0)
+    (h0 : SysTxMsgTablesStep s0 s w_m tabs)
+    (hl_m : s.locals.lookup bname = some (.val (.word w_m)))
+    (hoff8 : off % 8 = 0)
+    (hoff_fit : off + 8 ≤ 176)
+    (hsrc : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) src =
+      some (.val (.word w_val)))
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont)).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont)).1) :
+    ∃ mem' : BitVec 64 → HolWordLab 64,
+      SysTxMsgTablesStep s0 { s with memory := mem' } w_m tabs ∧
+      WorldOK { s with memory := mem' } ∧
+      memW ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) (w_m.toNat + off) = w_val.toNat ∧
+      (∀ off' : Nat, off' + 8 ≤ 176 → off' ≠ off →
+        memW ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) (w_m.toNat + off') =
+          memW s (w_m.toNat + off')) ∧
+      (evaluateHOLFiniteState { s with memory := mem' } cont).1 ≠ some .timeOut ∧
+      FlowingOrResumes (evaluateHOLFiniteState { s with memory := mem' } cont).1 ∧
+      evaluateHOLFiniteState s
+        (.seq (.store (.op .add [.var .local bname, .const (BitVec.ofNat 64 off)]) src) cont) =
+        evaluateHOLFiniteState { s with memory := mem' } cont := by
+  obtain ⟨hp0, hm8, hin_m, hstep0⟩ := h0
+  have hfb0 : SysTxFreshBlockStep s0 none s w_m 176 :=
+    ⟨hp0, hm8, by decide, hin_m, fun S Nd hWT0 hD0 => by
+      obtain ⟨S', Nd', hsub, hWT', hOG, hFO, hdisj, _⟩ := hstep0 S Nd hWT0 hD0
+      exact ⟨S', Nd', hsub, hWT', hOG, hFO, hdisj⟩⟩
+  obtain ⟨mem', v, hv_eq, hst, hfb', hW', hframe, hnt_c, hfr_c, heval_eq⟩ :=
+    seq_store_freshBlock_step hW0 hfb0 hl_m hoff8
+      (fun v hv => by rw [hsrc] at hv; injection hv with hv'; subst hv'; simp [flattenHOL]; omega)
+      hnt hfr
+  rw [hsrc] at hv_eq
+  injection hv_eq with hv_eq'; subst hv_eq'
+  have hWs : WorldOK s := worldOK_of_sysTxStep hW0 hp0.1
+  have h264 : heapEnd < 2 ^ 64 ∧ heapLimit ≤ heapEnd := ⟨by decide, by decide⟩
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hp0.1.1.2.2.1
+  have hp0_lo : sourceBase ≤ globN s0 "heap_ptr" := hW0.1.2.1
+  have hin_blk : Inside (w_m.toNat, 176) sourceBase (globN s "heap_ptr") :=
+    ⟨le_trans hp0_lo hin_m.1, hin_m.2⟩
+  have hx_nat : (w_m + BitVec.ofNat 64 off).toNat = w_m.toNat + off := by
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat]
+    have hoff_lt : off < 2 ^ 64 := by omega
+    rw [Nat.mod_eq_of_lt hoff_lt]
+    exact Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)
+  have hcell_blk : ∀ a : BitVec 64, ¬ CellHits a.toNat (w_m.toNat, 176) → mem' a = s.memory a := by
+    intro a hnh
+    apply hframe a
+    intro k hk h_eq
+    simp [flattenHOL] at hk
+    subst hk
+    apply hnh
+    simp only [Nat.mul_zero, BitVec.ofNat_eq_ofNat, BitVec.add_zero] at h_eq
+    rw [h_eq]
+    unfold CellHits
+    rw [hx_nat]
+    exact ⟨by omega, by omega⟩
+  have hst_read : memW ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) (w_m.toNat + off) = w_val.toNat := by
+    simp only [flattenHOL, panMemStoresHOL, panMemStoreHOL] at hst
+    split_ifs at hst with hdom
+    simp only [Option.some.injEq] at hst
+    have hbv : BitVec.ofNat 64 (w_m.toNat + off) = w_m + BitVec.ofNat 64 off := by
+      apply BitVec.eq_of_toNat_eq
+      rw [hx_nat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)]
+    unfold memW
+    dsimp only
+    rw [hbv, ← hst]
+    simp
+  have hst_other : ∀ off' : Nat, off' + 8 ≤ 176 → off' ≠ off →
+      memW ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) (w_m.toNat + off') =
+        memW s (w_m.toNat + off') := by
+    intro off' hoff'_fit hne
+    unfold memW
+    dsimp only
+    rw [hframe (BitVec.ofNat 64 (w_m.toNat + off'))]
+    intro k hk h_eq
+    simp [flattenHOL] at hk
+    subst hk
+    simp only [Nat.mul_zero, BitVec.ofNat_eq_ofNat, BitVec.add_zero] at h_eq
+    have hlhs : (BitVec.ofNat 64 (w_m.toNat + off')).toNat = w_m.toNat + off' := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by unfold Inside at hin_blk; omega)]
+    have := congrArg BitVec.toNat h_eq
+    rw [hlhs, hx_nat] at this
+    omega
+  refine ⟨mem', ⟨hfb'.1, hm8, hin_m, fun S Nd hWT0 hD0 => ?_⟩,
+    hW', hst_read, hst_other, hnt_c, hfr_c, heval_eq⟩
+  obtain ⟨S1, Nd1, hsub01, hWT1, hOG01, hFO01, hdisj1, htabs1⟩ := hstep0 S Nd hWT0 hD0
+  have hdisj_t1 : IvlsDisj [(w_m.toNat, 176)] (worldTypedIvls s S1 Nd1) :=
+    fun i hi j hj => hdisj1 i hi j (worldTypedIvls_sub_worldOwned_sysTx s S1 Nd1 j hj)
+  have hcell_s1 : M13.SameTypedCells s { s with memory := mem' } S1 Nd1 := by
+    refine ⟨rfl, rfl, hWs.1.1.memaddrs,
+      fun a hnd => panMemStoresHOL_out_dom hst (by rw [hWs.1.1.memaddrs]; exact hnd), ?_, ?_⟩
+    · intro a ha _ ⟨i, hi, ha1, ha2⟩
+      have ha_mod : (BitVec.ofNat 64 a).toNat = a := by
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha]
+      apply hcell_blk (BitVec.ofNat 64 a)
+      intro ⟨hc1, hc2⟩
+      rw [ha_mod] at hc1 hc2
+      rcases hdisj_t1 (w_m.toNat, 176) (by simp) i hi with h0_d | h0_d | hd | hd <;>
+        dsimp only at * <;> omega
+    · intro b hb64 ⟨i, hi, hb1, hb2⟩
+      unfold memB
+      dsimp only
+      have hal_eq : mem' (panByteAlignHOL (BitVec.ofNat 64 b)) =
+          s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+        apply hcell_blk
+        intro ⟨hc1, hc2⟩
+        have hal_nat : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
+          rw [panByteAlign_toNat64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+        rw [hal_nat] at hc1 hc2
+        rcases hdisj_t1 (w_m.toNat, 176) (by simp) i hi with h0_d | h0_d | hd | hd <;>
+          dsimp only at * <;> omega
+      rw [hal_eq]
+  have hg_core : ∀ g ∈ M13.coreWorldGlobals, globN ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) g = globN s g :=
+    fun _ _ => rfl
+  have hfeq : fixedObjects ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) = fixedObjects s := by
+    unfold fixedObjects
+    rw [M13.blockOutObjects_eq hWs.1.2 hWT1.2.2.1 hcell_s1 rfl,
+        M13.balObjects_eq hWs.1.2 hWT1.1 hWT1.2.2.1 hcell_s1 rfl]
+    rfl
+  have hFT_post : FixedTyped ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) :=
+    M13.fixedTyped_of_eq hW'.1 hWT1.2.2.1 le_rfl le_rfl hfeq
+  obtain ⟨hWT_post, _⟩ := M13.worldTypedWith_congr_w1 hWs.1 hW'.1 le_rfl le_rfl hg_core hcell_s1 hWT1
+    ⟨hFT_post, fun o ho => Or.inl (by rw [← hfeq]; exact ho)⟩
+  have hne_eq : nodeExtents ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) Nd1 = nodeExtents s Nd1 :=
+    M13.nodeExtents_eq hWT1.2.2.2.1 hcell_s1
+  have hfp_eq : ∀ u ∈ S1, htabFootprint ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) u = htabFootprint s u :=
+    fun u hu => M13.htabFootprint_eq hcell_s1 hu (hWT1.1.2.1 u hu).1
+  have hwo_eq : worldOwned ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) S1 Nd1 = worldOwned s S1 Nd1 := by
+    unfold worldOwned
+    rw [List.flatMap_congr hfp_eq, hfeq, hne_eq]
+  have hwrs_eq : worldRoleSlots ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) = worldRoleSlots s :=
+    M13.worldRoleSlots_eq hWs.1.2 hWT1.1 hWT1.2.2.1 hcell_s1 hg_core
+  have hjrs_eq : journalRoleSlots ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) = journalRoleSlots s :=
+    M13.journalRoleSlots_eq hWs.1.2 hWT1.2.1 hWT1.2.2.1 hcell_s1 hg_core
+  have hhdr_eq : ∀ u ∈ S1, hdr ({ s with memory := mem' } : PanSemStateFiniteExact 64 F) u 0 = hdr s u 0 := by
+    intro u hu
+    have htb := ((hWT1.1.2.1 u hu).1.1 (u, 88) (by simp [htabFootprint])).1
+    exact M13.htab_hdr_eq hcell_s1 hu htb 0 (by omega)
+  refine ⟨S1, Nd1, hsub01, hWT_post,
+    by rw [hwo_eq]; exact hOG01,
+    fun a ha hhf => (hcell_blk a (fun ⟨hc1, hc2⟩ => hhf (by
+      unfold heapFree; dsimp only [Inside] at hin_m ⊢; exact ⟨by omega, by omega⟩))).trans (hFO01 a ha hhf),
+    by rw [hwo_eq]; exact hdisj1,
+    fun p hp_mem => ?_⟩
+  obtain ⟨hp_S1, hp_hdr, hp_slot⟩ := htabs1 p hp_mem
+  refine ⟨hp_S1, ?_, ?_⟩
+  · rw [hhdr_eq p.1 hp_S1]; exact hp_hdr
+  · rw [hwrs_eq, hjrs_eq]; exact hp_slot
+
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
       WorldKeeps WorldOK
