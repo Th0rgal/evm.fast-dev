@@ -3490,4 +3490,27 @@ theorem phase2_clock_dec (name : MlS) (shape : ShapeHOL) (init : ExpHOL 64)
       simpa [setVarHOLFinite] using hb (setVarHOLFinite name _ s)
     · rfl
 
+/-- The actual copy body consumes no clock ticks. -/
+theorem phase2_address_copy_body_clock {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))).2.clock = s.clock := by
+  apply phase2_clock_dec
+  intro F t
+  apply phase2_clock_seq
+  · intro F u; exact clock_store u _ _
+  · intro F u
+    exact phase2_clock_seq (fun v => clock_assign v _ _ _) (fun v => clock_assign v _ _ _) u
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
