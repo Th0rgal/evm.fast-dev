@@ -3792,6 +3792,35 @@ def StableCopyStorePre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
         Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
           (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
 
+/-- Framed source pointers retain record/backing separation after a copy
+write. This supplies the record-separation premise for the next iteration. -/
+theorem stable_copy_record_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hs : memW {s with memory := mem'} (locN s "logs") = memW s (locN s "logs"))
+    (hn : memW {s with memory := mem'} (locN s "logs" + 8) =
+      memW s (locN s "logs" + 8))
+    (hd : memW {s with memory := mem'} (locN s "stable_logs") =
+      memW s (locN s "stable_logs"))
+    (ha : ∀ j, j < memW s (locN s "logs" + 8) →
+      memW {s with memory := mem'} (memW s (locN s "logs") + 8 * j) =
+        memW s (memW s (locN s "logs") + 8 * j))
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    let t := {s with memory := mem'}
+    ∀ j, j < memW t (locN t "logs" + 8) →
+      Disj (memW t (memW t (locN t "logs") + 8 * j), 40)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  dsimp only
+  intro j hj
+  change j < memW {s with memory := mem'} (locN s "logs" + 8) at hj
+  rw [hn] at hj
+  change Disj (memW {s with memory := mem'}
+    (memW {s with memory := mem'} (locN s "logs") + 8 * j), 40)
+    (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+  rw [hs, hd, ha j hj]
+  exact he j hj
+
 /-- The actual indexed copy store preserves the length postcondition. -/
 theorem hoare_stableCopy_store_post :
     Hoare StableCopyStorePre
