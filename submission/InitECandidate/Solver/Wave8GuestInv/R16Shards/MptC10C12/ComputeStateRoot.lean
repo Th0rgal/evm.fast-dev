@@ -1046,4 +1046,42 @@ theorem htabNewExit_local_table_csr {F : Type}
     worldTypedWith_htab_new hs hW hp hag hwf hfp hfr hbe hg
   exact ⟨w, hv, hp, hag, hnotS, hnz, hc0, hc3, hlocal, hW', hwrs, hjr, hhdr, hg, hfr⟩
 
+theorem htabCopy_local_table_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    {S Nd : List Nat} {keep : List (String × List Nat)}
+    (hs : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (harg : HtabWF s (locN s "t") ∧
+      ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+    (hstep : WorldStep (fun _ => []) ["heap_ptr"] keep
+      (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+        ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+        (fun _ post w => htabFootprint post w)) s (some (.returned v)) post)
+    (hret : RetWord (fun s post n => ArenaReady post ∧ AllocatorGrows s post ∧
+      locN s "t" ≠ 0 ∧
+      (HtabWF s (locN s "t") →
+        (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
+        HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
+        ∀ i ∈ htabFootprint post n,
+          Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
+      s (some (.returned v)) post) :
+    ∃ (w : BitVec 64) (S' Nd' : List Nat), v = .val (.word w) ∧
+      (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post (S' ++ [w.toNat]) Nd' ∧
+      w.toNat ∉ S' ∧ w.toNat ≠ 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ w.toNat) ∧
+      hdr post w.toNat 3 = hdr s (locN s "t") 3 := by
+  obtain ⟨S', Nd', hsub, hW', _, _, havoid⟩ :=
+    hstep.2.2.2.2 S Nd hW (by intro i hi; simp at hi)
+  obtain ⟨w, hv, hp, _, _, hcopy⟩ := hret v rfl
+  obtain ⟨hwf, hc3, hfp⟩ := hcopy harg.1 harg.2
+  obtain ⟨wa, hva, hdis⟩ := havoid harg v rfl
+  have heq : wa = w := by simpa using hva.symm.trans hv
+  subst wa
+  have halloc : ∀ i ∈ htabFootprint post w.toNat, Allocated post i := by
+    intro i hi
+    have hin := hfp i hi
+    exact Or.inl ⟨Nat.le_trans hs.2.1 hin.1, hin.2⟩
+  obtain ⟨hnot, hnz, hlocal, hjoin⟩ := adjoin_local_table hW' hwf
+    (fun i hi => ⟨halloc i hi, hdis i hi⟩) (klen := hdr post w.toNat 0) rfl
+  exact ⟨w, S', Nd', hv, hsub, hjoin, hnot, hnz, hlocal, hc3⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
