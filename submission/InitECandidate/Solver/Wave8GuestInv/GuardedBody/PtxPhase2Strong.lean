@@ -5301,4 +5301,39 @@ theorem phase2_packed_inner_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
   rw [phase2_key_prefix_succ, ← he]
   exact hp.2.2.2.2
 
+/-- At the last record's inner-loop exit every packed key has been counted. -/
+theorem phase2_packed_last_inner_exit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxPackedInnerInv s)
+    (hlast : locN s "i" + 1 = memW s (locN s "tx" + 216))
+    (hg : ¬ locN s "j" < memW s
+      (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) :
+    locN s "k" = locN s "nkeys" := by
+  have hexit := (phase2_packed_inner_exit hp hg).2
+  rw [hlast] at hexit
+  change locN s "k" = txAccessSlots s (locN s "tx") at hexit
+  exact hexit.trans (hp.2.1.symm)
+
+/-- Only live access-list records need framing to preserve the guarded copy indices. -/
+theorem phase2_packed_copy_live_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["nkeys", "i", "j", "k"] : List String), locN post n = locN s n)
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex post := by
+  have hi := hl "i" (by simp)
+  have hj := hl "j" (by simp)
+  have hk := hl "k" (by simp)
+  have hn := hl "nkeys" (by simp)
+  refine ⟨hr, ?_, ?_, ?_, ?_⟩
+  · rw [hn, phase2_packed_copy_total_frame s post hc hm]; exact hp.2.1
+  · rw [hi, hc]; exact hp.2.2.1
+  · rw [hj, hi, hm _ hp.2.2.1]; exact hp.2.2.2.1
+  · rw [hk, hi, hj]
+    rw [phase2_key_prefix_congr s post (locN s "i")
+      (fun i h => hm i (Nat.lt_trans h hp.2.2.1))]
+    exact hp.2.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
