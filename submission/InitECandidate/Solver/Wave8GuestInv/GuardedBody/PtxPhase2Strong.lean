@@ -3035,4 +3035,24 @@ theorem phase2_address_beneficiary_hoare :
   rw [hl]
   constructor <;> dsimp <;> omega
 
+/-- The AST-matching allocation/beneficiary prefix passes its joint world to
+the access-list loops. -/
+theorem phase2_address_beneficiary_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAddressJoint tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]]
+        (.seq (.store (.var .local (ofString "al_addrs"))
+          (.load .one (.op .add [.var .global (ofString "be"), .const 32]))) tail))
+      (K.alloc + b + 1) := by
+  apply phase2_address_alloc_joint_bound h
+  have hs : TerminatingProgBoundedOn PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs"))
+        (.load .one (.op .add [.var .global (ofString "be"), .const 32]))) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_beneficiary_hoare ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
