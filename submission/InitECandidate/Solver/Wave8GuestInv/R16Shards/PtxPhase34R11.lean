@@ -1487,6 +1487,37 @@ theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
     rw [hlogs]; exact hn
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]
 
+theorem encode_receipt_logs_param {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (e1 e2 e3 : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hc : s.code = originalRuntimeCode)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [e1, e2, e3, .var .local (ofString "logs")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret)) :
+    locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" := by
+  have ha' := ha
+  rw [evalListHOLFinite_eq_toExact] at ha'
+  cases h1 : evalAt s e1 with
+  | none => simp only [evalAt] at h1; simp [evalListHOLExact, h1] at ha'
+  | some v1 =>
+    cases h2 : evalAt s e2 with
+    | none => simp only [evalAt] at h1 h2; simp [evalListHOLExact, h1, h2] at ha'
+    | some v2 =>
+      cases h3 : evalAt s e3 with
+      | none => simp only [evalAt] at h1 h2 h3; simp [evalListHOLExact, h1, h2, h3] at ha'
+      | some v3 =>
+        cases h4 : evalAt s (.var .local (ofString "logs")) with
+        | none => simp only [evalAt] at h1 h2 h3 h4; simp [evalListHOLExact, h1, h2, h3, h4] at ha'
+        | some v4 =>
+          have hlc := R13Shards.lookup_encode_receipt
+          rw [← hc] at hlc
+          have hp := callee_param_four_exp' s (ofString "encode_receipt")
+            _ _ _ _ _ _ _ _ _ _ hlc e1 e2 e3 (.var .local (ofString "logs"))
+            v1 v2 v3 v4 vs body callee ret h1 h2 h3 h4 ha hl
+          have hs : s.locals.lookup (ofString "logs") = some v4 := h4
+          simp only [locN, callEntryStateHOLFinite, hp.2.2.2, hs]
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
