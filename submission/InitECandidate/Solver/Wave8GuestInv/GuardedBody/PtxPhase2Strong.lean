@@ -11823,4 +11823,46 @@ theorem phase2_msg_new_geometry (h : PtxCallees) :
   · rw [hm]; exact hf.2.2
   · rw [hm]; exact hz
 
+/-- Fresh message storage is disjoint from every previously allocated caller buffer. -/
+theorem phase2_msg_new_buffer_separation (h : PtxCallees) (buffer : Ivl) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => Disj buffer (locN s "m", 176))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup h.rt_msg_new s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  obtain ⟨w, rfl, _, _, hf, _⟩ := hr v rfl
+  have hm : locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m" = w.toNat := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  rw [hm]
+  exact Or.inr (Or.inr (Or.inl (hp.2.2.trans hf.2.1.1)))
+
+/-- Joint cut after message allocation: the message is initialized and owned,
+and its stores cannot hit the saved caller buffer. -/
+theorem phase2_msg_new_live_ready (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧
+        (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+        Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+        WordsOK s (locN s "m", 176) ∧
+        (∀ k, k < 22 → memW s (locN s "m" + 8 * k) = 0) ∧
+        Disj buffer (locN s "m", 176) ∧
+        ∃ S Nd, WorldTypedWith s S Nd ∧ PtxLiveBufferAt s S Nd buffer contents ∧
+          IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hg := phase2_msg_new_geometry h s vs body callee ret v post hc hp.1 he hl hb
+  have hw := phase2_msg_new_live_buffer_resume h buffer contents
+    s vs body callee ret v post hc hp he hl hb
+  obtain ⟨S, Nd, _, hbuf⟩ := hp.2
+  have hd := phase2_msg_new_buffer_separation h buffer
+    s vs body callee ret v post hc ⟨hp.1, hbuf.1⟩ he hl hb
+  exact ⟨hw.1, hg.1, hg.2.1, hg.2.2.1, hg.2.2.2, hd, hw.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
