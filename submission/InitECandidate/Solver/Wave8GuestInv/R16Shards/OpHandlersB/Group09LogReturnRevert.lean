@@ -11033,4 +11033,42 @@ theorem log_append_store_return_exact_g09 {F : Type}
     sizeOfShapeWithContextHOL, emptyLocalsHOLFinite]
   rfl
 
+theorem log_append_of_lst_push_execution_g09 {F : Type}
+    (s pushPost : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (slot log : BitVec 64)
+    (hl : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8] = some values)
+    (hlookup : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") values =
+      some (sourceFnBody Guest.Software.guestFn_lst_push, callee, .one))
+    (hclock : s.clock ≠ 0)
+    (hpush : evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (sourceFnBody Guest.Software.guestFn_lst_push) =
+      (some (.returned (.val (.word slot))), pushPost))
+    (hd : pushPost.memaddrs slot) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append) =
+      (some (.returned (.val (.word 0))),
+        {pushPost with
+          locals := HolFiniteMapExact.empty.resVarEq (ofString "slot", s.locals.lookup (ofString "slot"))
+          memory := fun a => if a = slot then .word log else pushPost.memory a}) := by
+  have hb : sourceFnBody Guest.Software.guestFn_log_append =
+      .decCall (ofString "slot") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .local (ofString "e"), .const 88]), .const 8]
+        (.seq (.store (.var .local (ofString "slot")) (.var .local (ofString "log")))
+          (.return (.const 0))) := rfl
+  rw [hb, evaluateHOLFiniteState_decCall_fixClockRewrite, hargs]
+  dsimp only
+  rw [hlookup]
+  simp only [hclock, ↓reduceIte, hpush, shapeOfHOLExact, shapeEqHOL, Bool.and_self]
+  have hsl : ofString "slot" ≠ ofString "log" := by decide
+  have hs : (setVarHOLFinite (ofString "slot") (.val (.word slot))
+      {pushPost with locals := s.locals}).locals.lookup (ofString "slot") = some (.val (.word slot)) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hlog : (setVarHOLFinite (ofString "slot") (.val (.word slot))
+      {pushPost with locals := s.locals}).locals.lookup (ofString "log") = some (.val (.word log)) := by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hsl, Ne.symm hsl, hl]
+  rw [log_append_store_return_exact_g09 _ slot log hs hlog hd]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
