@@ -4940,4 +4940,48 @@ theorem hoare_prepare_dispatch_common (gw : List String) (hp : Nat)
   exact hoare_prepare_dispatch_common_stores gw hp G ch code code_n _ _
     (fun _ h => h.1.1) (hoare_prepare_dispatch_jumpdest gw hp G ch code code_n hnb hsub)
 
+/-- Continue directly from the delegated-code assignments and message stores,
+in the right-associated shape of the translated source. -/
+theorem hoare_prepare_dispatch_delegated_cont (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))) tail))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hf := Hoare.weaken (hoare_prepare_dispatch_delegated_finish gw hp G ch code code_n daddr)
+    (Q' := Fall (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))))
+    (fun _ _ h hr => ⟨(h hr).1, (h hr).2.1, (h hr).2.2.1⟩)
+  have h := Hoare.seq_assoc_fall (Hoare.seq_fall' hf htail (fun _ h => h.1.1))
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have hr := h.run s hc hp
+  rw [evaluateHOLFiniteState_seq_line780] at hr hnt ⊢
+  rcases hb : evaluateHOLFiniteState s
+      (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode")))) with ⟨r, t⟩
+  simp only [hb] at hr hnt ⊢
+  cases r with
+  | some _ => exact hr hnt
+  | none =>
+    rw [srd_eval_seq_assoc] at hr
+    rw [evaluateHOLFiniteState_seq_line780] at hr hnt ⊢
+    rcases hb2 : evaluateHOLFiniteState t
+        (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode")))) with ⟨r2, t2⟩
+    simp only [hb2] at hr hnt ⊢
+    cases r2 with
+    | some _ => exact hr hnt
+    | none =>
+      rw [srd_eval_seq_assoc] at hr
+      exact hr hnt
+
 end HeadStore
