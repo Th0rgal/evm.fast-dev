@@ -4623,4 +4623,47 @@ theorem phase2_key_copy_index_advance {F : Type} (s : PanSemStateFiniteExact 64 
     k + 1 = phase2_key_prefix s i + (j + 1) := by
   omega
 
+/-- At outer-loop exit, the flattened copy index equals the allocated key count. -/
+theorem phase2_key_copy_exit_count {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (i k : Nat) (hi : i = memW s (locN s "tx" + 216))
+    (hk : k = phase2_key_prefix s i)
+    (hn : locN s "nkeys" = txAccessSlots s (locN s "tx")) :
+    k = locN s "nkeys" := by
+  rw [hk, hi, hn]
+  rfl
+
+/-- The actual packed-key pointer retains its rounded live extent after return. -/
+theorem phase2_packed_keys_alloc_live (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s =>
+        (∃ w : BitVec 64, s.locals.lookup (ofString "al_keys") = some (.val (.word w))) ∧
+        Inside (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+          InitE.sourceBase (globN s "heap_ptr") ∧
+        locN s "al_keys" % 8 = 0 ∧
+        WordsOK s (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨w, rfl, hf⟩ := phase2_packed_keys_alloc_fresh h s vs body callee ret v post
+    hc hp ha hl hb
+  let out := setVarHOLFinite (ofString "al_keys") (.val (.word w))
+    { post with locals := s.locals }
+  have hptr : locN out "al_keys" = w.toNat := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  have hcount : locN out "nkeys" = locN s "nkeys" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_keys" ≠ ofString "nkeys" by decide]
+  have hready : PtxAccessCountReady s := hp.1.1.1.1
+  refine ⟨⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_, ?_⟩
+  · change Inside (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+      InitE.sourceBase (globN post "heap_ptr")
+    rw [hptr, hcount]
+    exact ⟨hready.1.1.1.1.1.1.1.1.2.1.trans hf.2.1.1, hf.2.1.2⟩
+  · change locN out "al_keys" % 8 = 0
+    rw [hptr]
+    exact hf.1
+  · change WordsOK post (locN out "al_keys", (locN out "nkeys" * 52 + 8 + 7) / 8 * 8)
+    rw [hptr, hcount]
+    exact hf.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
