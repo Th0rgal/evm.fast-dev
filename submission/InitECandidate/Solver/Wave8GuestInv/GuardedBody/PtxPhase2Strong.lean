@@ -4666,4 +4666,21 @@ theorem phase2_packed_keys_alloc_live (h : PtxCallees) :
     rw [hptr, hcount]
     exact hf.2.2
 
+/-- Even unaligned packed-record bytes have valid containing word cells. -/
+theorem phase2_packed_key_byte_word {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {base count k offset : Nat}
+    (hw : WordsOK s (base, (count * 52 + 8 + 7) / 8 * 8))
+    (hk : k < count) (ho : offset < 52) :
+    WordAt s ((base + 52 * k + offset) / 8 * 8) := by
+  have hal := hw.1
+  have hidx : (52 * k + offset) / 8 < ((count * 52 + 8 + 7) / 8 * 8) / 8 := by
+    omega
+  have hword := hw.2.2 ((52 * k + offset) / 8) hidx
+  have heq : (base + 52 * k + offset) / 8 * 8 =
+      base + 8 * ((52 * k + offset) / 8) := by
+    dsimp at hal
+    omega
+  rw [heq]
+  exact hword
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
