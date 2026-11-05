@@ -4952,6 +4952,103 @@ theorem incorporate_child_on_error_run {F : Type} (s : PanSemStateFiniteExact 64
 
 end FinishLeaves2
 
+section FinishLeaves3
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+open InitECandidate.Solver.Wave8M19.Htab
+
+theorem fl_lookup_min :
+    originalRuntimeCode.lookup (ofString "min") =
+      some ([(ofString "a", .one), (ofString "b", .one)],
+        sourceFnBody Guest.Software.guestFn_min, .one) :=
+  lookup_of_guestAst_getElem 31 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_min) rfl
+
+theorem fl_lookup_credit_state_gas_refund :
+    originalRuntimeCode.lookup (ofString "credit_state_gas_refund") =
+      some ([(ofString "amount", .one)],
+        sourceFnBody Guest.Software.guestFn_credit_state_gas_refund, .one) :=
+  lookup_of_guestAst_getElem 450 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_credit_state_gas_refund) rfl
+
+theorem min_locOnly : locOnly (sourceFnBody Guest.Software.guestFn_min) = true := by
+  decide
+
+/-- A store at `global g + k` of any operator expression. -/
+theorem Ret.storeGlobOp {F : Type} {S : PanSemStateFiniteExact 64 F} {g : MlS} {a k : BitVec 64}
+    {o : BinOp} {args : List (ExpHOL 64)} {b : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hg : S.globals.lookup g = some (.val (.word a)))
+    (hb : ∀ (w : BitVec 64), Ret { S with memory := updW S.memory (a + k) w } b Φ) :
+    Ret S (.seq (.store (.op .add [.var .global g, .const k]) (.op o args)) b) Φ :=
+  Ret.seq_storeWv _ (ev_globOff S g a k hg) (fun v hv => ev_op_word S _ _ v hv)
+    (fun w _ _ => hb w)
+
+/-- A `decCall` of `min`: the continuation runs from a state with the caller's globals, memory,
+code and domain. -/
+theorem Ret.decCall_min {F : Type} {s : PanSemStateFiniteExact 64 F} {x : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode)
+    (hk : ∀ (t : PanSemStateFiniteExact 64 F), t.globals = s.globals → t.memory = s.memory →
+      t.code = s.code → t.memaddrs = s.memaddrs →
+      Ret t cont (fun w u =>
+        Φ w { u with locals := HolFiniteMapExact.resVarEq u.locals (x, s.locals.lookup x) })) :
+    Ret s (.decCall x sh (ofString "min") args cont) Φ := by
+  refine Ret.decCall_gen fun values body callee ret v post _ h2 h3 => ?_
+  have hlk : s.code.lookup (ofString "min") = some ([(ofString "a", .one), (ofString "b", .one)],
+      sourceFnBody Guest.Software.guestFn_min, .one) := by rw [hcode]; exact fl_lookup_min
+  have hb := InitECandidate.Solver.PanRunBounded.lookupCodeHOLFinite_installed_body s.code.lookup _ _ _ _ _ _ _ _ hlk h2
+  subst hb
+  have hlf := locFrame_eval _ min_locOnly (callEntryStateHOLFinite s callee)
+  rw [h3] at hlf
+  unfold LocFrame at hlf
+  simp only at hlf
+  have hpg : post.globals = s.globals := (congrArg PanSemStateFiniteExact.globals hlf).trans rfl
+  have hpm : post.memory = s.memory := (congrArg PanSemStateFiniteExact.memory hlf).trans rfl
+  have hpc : post.code = s.code := (congrArg PanSemStateFiniteExact.code hlf).trans rfl
+  have hpd : post.memaddrs = s.memaddrs := (congrArg PanSemStateFiniteExact.memaddrs hlf).trans rfl
+  exact hk _ (by simp [setVarHOLFinite, hpg]) (by simp [setVarHOLFinite, hpm])
+    (by simp [setVarHOLFinite, hpc]) (by simp [setVarHOLFinite, hpd])
+
+attribute [local irreducible] Ret in
+/-- `credit_state_gas_refund(amount)` writes only the words `ev+64`, `ev+192`, `ev+72`. -/
+theorem credit_state_gas_refund_run {F : Type} (s : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e))) :
+    Ret s (sourceFnBody Guest.Software.guestFn_credit_state_gas_refund) (fun _ post =>
+      post.globals = s.globals ∧ (∃ w1 w2 w3 : BitVec 64, post.memory =
+        updW (updW (updW s.memory (e + 64) w1) (e + 192) w2) (e + 72) w3) ∧
+        post.code = s.code ∧ post.memaddrs = s.memaddrs) := by
+  have hb : sourceFnBody Guest.Software.guestFn_credit_state_gas_refund =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_credit_state_gas_refund).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_credit_state_gas_refund,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural, List.map, Option.map]
+  refine Ret.dec fun sv _ => ?_
+  refine Ret.decCall_min (by simpa [setVarHOLFinite] using hcode) fun t hg hm hc hd => ?_
+  have hgs : (setVarHOLFinite (ofString "spilled") sv s).globals = s.globals := rfl
+  have hms : (setVarHOLFinite (ofString "spilled") sv s).memory = s.memory := rfl
+  have hcs : (setVarHOLFinite (ofString "spilled") sv s).code = s.code := rfl
+  have hds : (setVarHOLFinite (ofString "spilled") sv s).memaddrs = s.memaddrs := rfl
+  have he' : t.globals.lookup (ofString "ev") = some (.val (.word e)) := by rw [hg, hgs]; exact he
+  refine Ret.storeGlobOp he' fun w1 => ?_
+  refine Ret.storeGlobOp he' fun w2 => ?_
+  refine Ret.storeGlobOp he' fun w3 => ?_
+  refine Ret.ret fun _ _ => ?_
+  refine ⟨?_, ⟨w1, w2, w3, ?_⟩, ?_, ?_⟩
+  · simp only [emptyLocalsHOLFinite]; rw [hg, hgs]
+  · simp only [emptyLocalsHOLFinite]; rw [hm, hms]; rfl
+  · simp only [emptyLocalsHOLFinite]; rw [hc, hcs]
+  · simp only [emptyLocalsHOLFinite]; rw [hd, hds]
+
+end FinishLeaves3
+
 /-! ## 4. The required statement -/
 
 /-- `run_frames` is bounded by `K.run_frames` from every `EvmInv ∧ HeadMemChainWF` entry, given
