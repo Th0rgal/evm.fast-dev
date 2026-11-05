@@ -7453,6 +7453,47 @@ theorem transfer_frame_footprints_of_accumulated_frame {F : Type}
     field 40 (by decide), field 88 (by decide), field 216 (by decide),
     field 144 (by decide), hzero, header 16 (by decide), logs]
 
+theorem transfer_chain_footprints_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b) :
+    ∀ ec ∈ evmChain s,
+      frameObjects post ec = frameObjects s ec ∧
+      frameLogObjects post ec = frameLogObjects s ec ∧
+      memW post (ec.1 + 112) = memW s (ec.1 + 112) := by
+  have inv := hInv
+  obtain ⟨_, S, _, _, _, _, frames, _⟩ := inv
+  intro ec hec
+  have fw := frames ec hec
+  have fp := transfer_frame_footprints_of_accumulated_frame hInv hstep fw hbe hout hbyte
+  refine ⟨fp.2, fp.1, ?_⟩
+  apply transfer_memW_of_allocated_frame hInv hstep hbe hout hbyte
+    (Or.inr (fw.1 (ec.1, 280) (by simp)).1) <;> simp only <;> omega
+
+theorem transfer_frame_disjoint_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {x : Ivl}
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s post)
+    (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (hframe : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o)
+    (hmsg : ∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)) :
+    (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj x o) ∧
+      (∀ ec ∈ evmChain post, Disj x (memW post (ec.1 + 112), 176)) := by
+  have fp := transfer_chain_footprints_of_accumulated_frame hInv hstep hbe hout hbyte
+  rw [hstep.1.2.2.2]
+  constructor
+  · intro ec hec o ho
+    rw [(fp ec hec).1] at ho
+    exact hframe ec hec o ho
+  · intro ec hec
+    rw [(fp ec hec).2.2]
+    exact hmsg ec hec
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
