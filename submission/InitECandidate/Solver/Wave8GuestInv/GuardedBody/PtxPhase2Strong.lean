@@ -14222,4 +14222,28 @@ theorem phase2_htab_set_ts8_world_backing (key value : ExpHOL 64) :
   rw [← hl] at he
   exact he
 
+/-- Read-only account-table queries retain the complete backing-aware continuation guard. -/
+theorem phase2_resume_ro_world_backing {fname name : MlS}
+    (hro : ReadOnlyFn fname) (hi : name ≠ ofString "index")
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s) name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [he]; rfl
+  rw [hrestore]
+  refine ⟨?_, ?_, hp.2.2⟩
+  · obtain ⟨S, hS⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+    exact ⟨(arenaReady_with_locals s _ post.clock).mpr hp.1.1,
+      S, (worldTyped_iff_with _ S).mpr ⟨Nd,
+        (worldTypedWith_with_locals s _ post.clock S Nd).mpr hw⟩⟩
+  · apply txEnv_with_locals s _ post.clock _ hp.2.1
+    simp [HolFiniteMapExact.update, FUPDATE, hi]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
