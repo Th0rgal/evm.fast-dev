@@ -142,6 +142,41 @@ theorem phase1_recover_sender_word (h : PtxCallees) :
   exact ⟨(R16Shards.PtxP1.hoare_recover_sender h).run s hc hp.1 hnt hr,
     (phase1_call0_word (ofString "sender") _ _).run s hc hp.2 hnt hr⟩
 
+theorem phase1_shape_four_words {v : ValueHOL 64}
+    (h : shapeEqHOL (shapeOfHOLExact v) (.comb [.one, .one, .one, .one]) = true) :
+    ∃ a b c d : BitVec 64, v = .rStruct
+      [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] := by
+  rw [shapeEqHOL_eq_true] at h
+  rcases v with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+  · simp [shapeOfHOLExact] at h
+  · simp only [shapeOfHOLExact, ShapeHOL.comb.injEq] at h
+    rcases fs with _ | ⟨v0, _ | ⟨v1, _ | ⟨v2, _ | ⟨v3, _ | vs⟩⟩⟩⟩ <;>
+      simp at h
+    obtain ⟨h0, h1, h2, h3⟩ := h
+    obtain ⟨a, rfl⟩ := R16Shards.PtxP1.shape_one_word h0
+    obtain ⟨b, rfl⟩ := R16Shards.PtxP1.shape_one_word h1
+    obtain ⟨c, rfl⟩ := R16Shards.PtxP1.shape_one_word h2
+    obtain ⟨d, rfl⟩ := R16Shards.PtxP1.shape_one_word h3
+    exact ⟨a, b, c, d, rfl⟩
+  · simp [shapeOfHOLExact] at h
+
+/-- Use the declared return shape at the price-producing call to retain the
+four words needed by the later store. -/
+theorem phase1_resume_price_shape
+    {P Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (hres : DecCallResumeOn P Q (ofString "price") (ofString "check_transaction")
+      [.var .local (ofString "tx"), .var .local (ofString "sender")]) :
+    R16Shards.PtxP1.DecCallResumeShapeOn P
+      (fun s => Q s ∧ ∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+        some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)]))
+      (ofString "price") (.comb [.one, .one, .one, .one]) (ofString "check_transaction")
+      [.var .local (ofString "tx"), .var .local (ofString "sender")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb hsh
+  have hq := hres s vs body callee ret v post hc hp ha hl hb
+  obtain ⟨a, b, c, d, rfl⟩ := phase1_shape_four_words hsh
+  refine ⟨hq, a, b, c, d, ?_⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 /-- Local information accumulated before `mgas` and `reservoir` are declared. -/
 def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   (∀ name ∈ (["tx", "index", "sender"] : List String),
