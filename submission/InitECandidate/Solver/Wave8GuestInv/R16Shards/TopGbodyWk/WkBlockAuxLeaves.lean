@@ -7818,4 +7818,15 @@ theorem merge_set_call_nested_owned {F : Type}
   exact ⟨hm.1, hm.2, merge_set_values_owned hp.2.1 howned hiS,
     merge_set_other_table_frame hAR hWT htS hiS hne hp.1⟩
 
+/-- A fresh table with no world role cannot alias the block storage outer table. -/
+theorem merge_fresh_inner_ne_outer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {inner : Nat} (hbs : globN s "bs" ≠ 0)
+    (hout : memW s (globN s "bs" + 32) ≠ 0)
+    (hfresh : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner) :
+    inner ≠ memW s (globN s "bs" + 32) := by
+  have hm : (memW s (globN s "bs" + 32), "bs+32") ∈ worldRoleSlots s := by
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs hout
+    simp [recRoles, hbs]
+  exact (hfresh _ (List.mem_append_left _ hm)).symm
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
