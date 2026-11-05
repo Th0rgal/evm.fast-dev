@@ -116,6 +116,34 @@ def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   (∃ a b c : BitVec 64, s.locals.lookup (ofString "intrinsic") =
     some (.rStruct [.val (.word a), .val (.word b), .val (.word c)]))
 
+theorem phase1_shapePrefix_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (hp : PtxPhase1ShapePrefix s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxPhase1ShapePrefix (setVarHOLFinite name v { post with locals := s.locals }) := by
+  have hk : ∀ n ∈ (["tx", "index", "sender", "price", "enc", "intrinsic"] : List String),
+      (setVarHOLFinite name v { post with locals := s.locals }).locals.lookup (ofString n) =
+        s.locals.lookup (ofString n) := by
+    intro n hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+  refine ⟨?_, ?_, ?_, ?_⟩
+  · intro n hn
+    rw [hk n (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hn ⊢; tauto)]
+    exact hp.1 n hn
+  · simpa only [hk "price" (by simp)] using hp.2.1
+  · simpa only [hk "enc" (by simp)] using hp.2.2.1
+  · simpa only [hk "intrinsic" (by simp)] using hp.2.2.2
+
+theorem phase1_resume_min_shapes (h : PtxCallees) :
+    DecCallResumeOn (fun s => R16Shards.PtxP1.StageP 3 s ∧ PtxPhase1ShapePrefix s)
+      (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase1ShapePrefix s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+      (ofString "mgas") (ofString "min")
+      [.var .local (ofString "regular_budget"), .var .local (ofString "execution_gas")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hm := phase1_resume_min_word h s vs body callee ret v post hc hp.1 ha hl hb
+  exact ⟨hm.1, phase1_shapePrefix_resume s post hp.2 (ofString "mgas") v (by decide), hm.2⟩
+
 /-- Assemble all Phase 2 shapes when the arithmetic reservoir declaration
 succeeds. This step uses expression semantics, not the default-zero `locN`. -/
 theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
