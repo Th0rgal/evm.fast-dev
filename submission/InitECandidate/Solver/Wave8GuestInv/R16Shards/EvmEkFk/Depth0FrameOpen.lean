@@ -4728,4 +4728,91 @@ theorem compute_jumpdests_resume (gw : List String) (hp : Nat)
     rw [hev, hw _ hhead 112 (by decide)]
     exact hmeq
 
+/-- The returning common dispatch tail allocates jumpdest scratch, installs
+the bitmap pointer and retains readiness together with the original step. -/
+theorem prepare_dispatch_jumpdest_ret {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (hcode : s.code = originalRuntimeCode) (code code_n : BitVec 64)
+    (hD : D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Ret s (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+      [.var .local (ofString "code"), .var .local (ofString "code_n")]
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+        (.var .local (ofString "jd"))) (.return (.const 0#64))))
+      (fun _ post => EvmMsgReady post ∧ StepFrom gw hp G ch post) := by
+  apply Ret.decCall_gen
+  intro values body callee ret v post hargs hl hb
+  have hR := compute_jumpdests_resume gw hp G ch code code_n hnb hsub
+    s values body callee ret v post hcode hD hargs hl hb
+  obtain ⟨hD', jd, hjd⟩ := hR
+  have hmeta := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+    (callEntryStateHOLFinite s callee) body).1
+  rw [hb] at hmeta
+  have hc' : (setVarHOLFinite (ofString "jd") v {post with locals := s.locals}).code = originalRuntimeCode :=
+    hmeta.trans hcode
+  intro w hw
+  have h := (hoare_prepare_dispatch_jumpdest_finish gw hp G ch jd).run _ hc' ⟨hD', hjd⟩
+    (by rw [hw]; simp) (Or.inr (Or.inl ⟨w, hw⟩))
+  exact ⟨localsFree_evmMsgReady _ _ _ h.1, localsFree_stepFrom gw hp G ch _ _ _ h.2⟩
+
+/-- The complete common dispatch tail, including all four code stores and
+the returning jumpdest call, retains the caller's original step frame. -/
+theorem prepare_dispatch_common_ret {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (gw : List String) (hp : Nat) (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (hcode : s.code = originalRuntimeCode) (code code_n : BitVec 64)
+    (hD : D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Ret s
+      (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112#64])
+          (.var .local (ofString "code")))
+        (.seq (.store (.op .add [.var .local (ofString "msg"), .const 120#64])
+            (.var .local (ofString "code_n")))
+          (.seq (.store (.op .add [.var .global (ofString "ev"), .const 48#64])
+              (.var .local (ofString "code")))
+            (.seq (.store (.op .add [.var .global (ofString "ev"), .const 56#64])
+                (.var .local (ofString "code_n")))
+              (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+                [.var .local (ofString "code"), .var .local (ofString "code_n")]
+                (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+                  (.var .local (ofString "jd"))) (.return (.const 0#64))))))))
+      (fun _ post => EvmMsgReady post ∧ StepFrom gw hp G ch post) := by
+  let L : HolFiniteMapExact MlS (ValueHOL 64) → Prop := fun locals =>
+    locals.lookup (ofString "code") = some (.val (.word code)) ∧
+    locals.lookup (ofString "code_n") = some (.val (.word code_n))
+  have step : ∀ (t : PanSemStateFiniteExact 64 F) (d e : ExpHOL 64) (tail : ProgHOL 64),
+      t.code = originalRuntimeCode → (D0Pre gw hp G ch t ∧ L t.locals) →
+      Hoare (fun t => D0Pre gw hp G ch t ∧ L t.locals) (.store d e)
+        (Fall (fun t => D0Pre gw hp G ch t ∧ L t.locals)) →
+      (∀ u : PanSemStateFiniteExact 64 F, u.code = originalRuntimeCode →
+        (D0Pre gw hp G ch u ∧ L u.locals) →
+        Ret u tail (fun _ post => EvmMsgReady post ∧ StepFrom gw hp G ch post)) →
+      Ret t (.seq (.store d e) tail) (fun _ post => EvmMsgReady post ∧ StepFrom gw hp G ch post) := by
+    intro t d e tail hc ht hstore htail
+    apply Ret.seq
+    · intro v hv
+      rcases store_result_none_or_error t d e with h | h <;> rw [h] at hv <;> cases hv
+    · intro u hu
+      have h := hstore.run t hc ht (by rw [hu]; simp) (Or.inl (by rw [hu]))
+      rw [hu] at h
+      have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata t (.store d e)).1
+      rw [hu] at hm
+      exact htail u (hm.trans hc) h
+  apply step s _ _ _ hcode hD
+    (hoare_store_msg_local_step gw hp G ch 112 (by decide) _ code L (fun _ h => h.1))
+  intro s1 hc1 h1
+  apply step s1 _ _ _ hc1 h1
+    (hoare_store_msg_local_step gw hp G ch 120 (by decide) _ code_n L (fun _ h => h.2))
+  intro s2 hc2 h2
+  apply step s2 _ _ _ hc2 h2
+    (hoare_store_dispatch_local_step gw hp G ch 48 (by decide) _ code L (fun _ h => h.1))
+  intro s3 hc3 h3
+  apply step s3 _ _ _ hc3 h3
+    (hoare_store_dispatch_local_step gw hp G ch 56 (by decide) _ code_n L (fun _ h => h.2))
+  intro s4 hc4 h4
+  exact prepare_dispatch_jumpdest_ret s4 gw hp G ch hc4 code code_n h4 hnb hsub
+
 end HeadStore
