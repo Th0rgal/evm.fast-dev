@@ -2949,4 +2949,22 @@ theorem phase2_address_alloc_joint_bound (h : PtxCallees) {tail : ProgHOL 64} {b
   · exact phase2_address_alloc_joint h
   · exact ht
 
+/-- Allocation and sender initialization expose the joint invariant to the
+access-list continuation without consuming any extra store clock. -/
+theorem phase2_address_initialized_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxAddressJoint tail b) :
+    TerminatingProgBoundedOn PtxAccessCountReady
+      (.decCall (ofString "al_addrs") .one (ofString "alloc")
+        [.panop .mul [.op .add [.var .local (ofString "nal"), .const 1], .const 8]]
+        (.seq (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender"))) tail))
+      (K.alloc + b + 1) := by
+  apply phase2_address_alloc_joint_bound h
+  have hs : TerminatingProgBoundedOn PtxAddressJoint
+      (.store (.var .local (ofString "al_addrs")) (.var .local (ofString "sender"))) 0 := by
+    intro F s hc hp hn
+    rw [clock_store]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.zero_add] using seq_bound_trans hs phase2_address_init_hoare ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
