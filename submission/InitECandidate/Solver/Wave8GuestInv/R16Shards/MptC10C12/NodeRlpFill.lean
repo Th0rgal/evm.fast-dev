@@ -96,6 +96,315 @@ private theorem scratch48_progress {F : Type} {s post : PanSemStateFiniteExact 6
   rw [hp]
   exact hf.2.2.1.2
 
+private theorem nodeSize_ge32 (k : Nat) : 32 ≤ nodeSize k := by
+  unfold nodeSize
+  split_ifs <;> omega
+
+private theorem nodeHeap_congr_cache {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hgS : GuestInv s) (hgP : GuestInv post) (hag : AllocatorGrows s post)
+    {Nd : List Nat} (hN : NodeHeap s Nd)
+    (hnonCache : ∀ n ∈ Nd, ∀ k, k < nodeSize (memW s n) / 8 →
+      k ≠ 1 → k ≠ 2 → k ≠ 3 → memW post (n + 8 * k) = memW s (n + 8 * k))
+    (hrlp_len : ∀ n ∈ Nd, memW post (n + 16) < 2 ^ 40)
+    (hpath_bytes : ∀ n ∈ Nd, (memW s n = 1 ∨ memW s n = 2) → memW s (n + 40) ≠ 0 →
+      ∀ j, j < memW s (n + 40) → memB post (memW s (n + 32) + j) = memB s (memW s (n + 32) + j)) :
+    NodeHeap post Nd ∧ nodeExtents post Nd = nodeExtents s Nd := by
+  have hw0 : ∀ n ∈ Nd, memW post n = memW s n := by
+    intro n hn
+    have hsz := nodeSize_ge32 (memW s n)
+    simpa using hnonCache n hn 0 (by omega) (by decide) (by decide) (by decide)
+  have hivl : ∀ n ∈ Nd, nodeIvl post n = nodeIvl s n := by
+    intro n hn
+    simp [nodeIvl, hw0 n hn]
+  have hpath : ∀ n ∈ Nd, nodePath post n = nodePath s n := by
+    intro n hn
+    have hk_eq := hw0 n hn
+    unfold nodePath
+    by_cases h12 : memW s n = 1 ∨ memW s n = 2
+    · have hsz : 56 ≤ nodeSize (memW s n) := by
+        unfold nodeSize
+        rcases h12 with h1 | h2 <;> [simp [h1]; simp [h2]]
+      have hw32 := hnonCache n hn 4 (by omega) (by decide) (by decide) (by decide)
+      have hw40 := hnonCache n hn 5 (by omega) (by decide) (by decide) (by decide)
+      simp [hk_eq, h12, hw32, hw40]
+    · simp [hk_eq, h12]
+  have hext_eq : nodeExtents post Nd = nodeExtents s Nd := by
+    unfold nodeExtents
+    apply List.flatMap_congr
+    intro n hn
+    rw [hivl n hn, hpath n hn]
+  refine ⟨⟨fun n hn => ?_, fun n hn m hm hne => ?_⟩, hext_eq⟩
+  · obtain ⟨hk3, hal_n, hin_n, hw_n, hext, hbr, hkey_n, _, hleaf, hbranch⟩ := hN.1 n hn
+    rw [hw0 n hn, hivl n hn]
+    refine ⟨hk3, hag.allocated hal_n, hin_n, P3MptSet.wordsOK_transfer hgS hgP hw_n,
+      ?_, ?_, ?_, hrlp_len n hn, ?_, ?_⟩
+    · intro h2
+      have hsz : nodeSize (memW s n) = 56 := by unfold nodeSize; simp [h2]
+      have hw48 := hnonCache n hn 6 (by omega) (by decide) (by decide) (by decide)
+      simpa only [Nat.mul_succ, Nat.mul_zero] using
+        (by rw [hw48]; exact hext h2 : RootIn Nd (memW post (n + 48)))
+    · intro h3 i hi
+      have hsz : nodeSize (memW s n) = 176 := by unfold nodeSize; simp [h3]
+      have hw_ch := hnonCache n hn (4 + i) (by omega) (by omega) (by omega) (by omega)
+      have hadd : n + 8 * (4 + i) = n + 32 + 8 * i := by omega
+      rw [← hadd, hw_ch, hadd]
+      exact hbr h3 i hi
+    · intro h12
+      have hsz : 56 ≤ nodeSize (memW s n) := by
+        unfold nodeSize
+        rcases h12 with h1 | h2 <;> [simp [h1]; simp [h2]]
+      have hw32 := hnonCache n hn 4 (by omega) (by decide) (by decide) (by decide)
+      have hw40 := hnonCache n hn 5 (by omega) (by decide) (by decide) (by decide)
+      rw [hw32, hw40]
+      rcases hkey_n h12 with h0 | ⟨hnib, hal_p, hin_p, hdisj_p⟩
+      · exact Or.inl h0
+      · by_cases hlen0 : memW s (n + 40) = 0
+        · exact Or.inl hlen0
+        · right
+          refine ⟨fun j hj => ?_, hag.allocated hal_p, hin_p, fun m hm => ?_⟩
+          · rw [hpath_bytes n hn h12 hlen0 j hj]
+            exact hnib j hj
+          · rw [hivl m hm]
+            exact hdisj_p m hm
+    · intro h1
+      have hsz : nodeSize (memW s n) = 64 := by unfold nodeSize; simp [h1]
+      have hw56 := hnonCache n hn 7 (by omega) (by decide) (by decide) (by decide)
+      simpa only [Nat.reduceMul, hw56] using hleaf h1
+    · intro h3
+      have hsz : nodeSize (memW s n) = 176 := by unfold nodeSize; simp [h3]
+      have hw168 := hnonCache n hn 21 (by omega) (by decide) (by decide) (by decide)
+      simpa only [Nat.reduceMul, hw168] using hbranch h3
+  · rw [hivl n hn, hivl m hm]
+    exact hN.2 n hn m hm hne
+
+private theorem nodeSize_mod8 (k : Nat) : nodeSize k % 8 = 0 := by
+  unfold nodeSize
+  split_ifs <;> omega
+
+private theorem memW_eq_of_cell_eq {F : Type} {s post : PanSemStateFiniteExact 64 F} {a : Nat}
+    (h : post.memory (BitVec.ofNat 64 a) = s.memory (BitVec.ofNat 64 a)) :
+    memW post a = memW s a := by
+  unfold memW; rw [h]
+
+private def nodeCacheIvls (Nd : List Nat) : List Ivl :=
+  Nd.map fun n => (n + 8, 24)
+
+private def keccakBufIvls {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  [bufferRegion s ("keccak_pad", 136), bufferRegion s ("keccak_st", 200)]
+
+private theorem disj_comm {a b : Ivl} (h : Disj a b) : Disj b a := by
+  rcases h with h0 | h0 | h1 | h2
+  · exact Or.inr (Or.inl h0)
+  · exact Or.inl h0
+  · exact Or.inr (Or.inr (Or.inr h1))
+  · exact Or.inr (Or.inr (Or.inl h2))
+
+private theorem keccakBufIvls_disj_of_safe {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} (hsafe : KeccakBufsSafe s Nd) :
+    ∀ e ∈ keccakBufIvls s, ∀ o ∈ nodeExtents s Nd, Disj e o := by
+  intro e he o ho
+  simp only [keccakBufIvls, List.mem_cons, List.not_mem_nil, or_false] at he
+  rcases he with rfl | rfl
+  · exact disj_comm ((hsafe ("keccak_pad", 136) (by decide)).2 o ho)
+  · exact disj_comm ((hsafe ("keccak_st", 200) (by decide)).2 o ho)
+
+private theorem nodeHeap_of_heapByteEff_cache {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Nd : List Nat} {extra : List Ivl} {gw : List String}
+    (hAs : ArenaReady s) (hN : NodeHeap s Nd)
+    (heff : R16Shards.WkBlockTxEnc.HeapByteEff s post (nodeCacheIvls Nd ++ extra) gw)
+    (hextra_disj : ∀ e ∈ extra, ∀ o ∈ nodeExtents s Nd, Disj e o)
+    (hrlp_len : ∀ n ∈ Nd, memW post (n + 16) < 2 ^ 40) :
+    NodeHeap post Nd ∧ nodeExtents post Nd = nodeExtents s Nd := by
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hag : AllocatorGrows s post := ⟨heff.hp_le, heff.sp_le⟩
+  apply nodeHeap_congr_cache hAs.1 heff.arena.1 hag hN ?_ hrlp_len ?_
+  · intro n hn k hk hk1 hk2 hk3
+    obtain ⟨_, hal_n, hin_n, hw_n, _⟩ := hN.1 n hn
+    have hn8 : n % 8 = 0 := hw_n.1
+    have hsz : 8 * k + 8 ≤ nodeSize (memW s n) := by
+      have := nodeSize_mod8 (memW s n); omega
+    have ha_lt : n + 8 * k < 2 ^ 64 := by
+      have := hin_n.2; dsimp [nodeIvl] at this; omega
+    apply memW_eq_of_cell_eq
+    by_contra hne
+    have ha_nat : (BitVec.ofNat 64 (n + 8 * k)).toNat = n + 8 * k := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt]
+    rcases heff.cell_frame (BitVec.ofNat 64 (n + 8 * k)) hne with
+      ⟨iv, hiv, _, hc1, hc2⟩ | ⟨_, hfg1, hfg2⟩ | ⟨_, hhf1, hhf2⟩
+    · rw [ha_nat] at hc1 hc2
+      rcases List.mem_append.1 hiv with hcache | hex
+      · obtain ⟨m, hm, rfl⟩ := List.mem_map.1 hcache
+        by_cases hnm : n = m
+        · subst hnm; dsimp only at hc1 hc2; omega
+        · have hdj := hN.2 n hn m hm hnm
+          have hsz_m := nodeSize_ge32 (memW s m)
+          dsimp [nodeIvl] at hdj hc1 hc2
+          rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+      · have ho_mem : nodeIvl s n ∈ nodeExtents s Nd := by
+          unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, List.mem_cons_self⟩
+        have hdj := hextra_disj iv hex (nodeIvl s n) ho_mem
+        dsimp [nodeIvl] at hdj
+        rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+    · rw [ha_nat] at hfg1 hfg2
+      have hfm8 : globN s "frame_mem_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.2.1
+      have hsp8 : globN s "scratch_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.2.2.1
+      have hdj := P3MptSet.disj_allocated_freeGap hAs.2 hal_n
+      dsimp [nodeIvl, freeGap] at hdj hfg1 hfg2
+      rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+    · rw [ha_nat] at hhf1 hhf2
+      have hhp8 : globN s "heap_ptr" % 8 = 0 := hAs.2.2.2.2.2.2.1
+      have hdj := P3MptSet.disj_allocated_heapFree hAs.2 hal_n
+      dsimp [nodeIvl, heapFree] at hdj hhf1 hhf2
+      rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+  · intro n hn h12 hlen0 j hj
+    obtain ⟨_, _, _, _, _, _, hkey_n, _⟩ := hN.1 n hn
+    rcases hkey_n h12 with h0 | ⟨_, hal_p, hin_p, hdisj_p⟩
+    · exact absurd h0 hlen0
+    · have hb_lt : memW s (n + 32) + j < 2 ^ 64 := by
+        have := hin_p.2; dsimp at this; omega
+      by_contra hne
+      rcases heff.byte_frame (memW s (n + 32) + j) hb_lt hne with
+        ⟨iv, hiv, hb1, hb2⟩ | ⟨hfg1, hfg2⟩ | ⟨hhf1, hhf2⟩
+      · rcases List.mem_append.1 hiv with hcache | hex
+        · obtain ⟨m, hm, rfl⟩ := List.mem_map.1 hcache
+          have hdj := hdisj_p m hm
+          have hsz_m := nodeSize_ge32 (memW s m)
+          dsimp [nodeIvl] at hdj hb1 hb2
+          rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+        · have hp_mem : (memW s (n + 32), memW s (n + 40)) ∈ nodeExtents s Nd := by
+            unfold nodeExtents
+            exact List.mem_flatMap.2 ⟨n, hn, by simp [nodePath, h12, hlen0]⟩
+          have hdj := hextra_disj iv hex _ hp_mem
+          rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+      · have hdj := P3MptSet.disj_allocated_freeGap hAs.2 hal_p
+        dsimp [freeGap] at hdj hfg1 hfg2
+        rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+      · have hdj := P3MptSet.disj_allocated_heapFree hAs.2 hal_p
+        dsimp [heapFree] at hdj hhf1 hhf2
+        rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+
+private theorem memW_eq_of_heapByteEff_disj {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {gw : List String} {a : Nat}
+    (hAs : ArenaReady s) (heff : R16Shards.WkBlockTxEnc.HeapByteEff s post Rl gw)
+    (_ha8 : a % 8 = 0) (hal : Allocated s (a, 8)) (ha_lt : a < 2 ^ 64)
+    (hdisj : ∀ iv ∈ Rl, 0 < iv.2 → Disj (a, 8) iv) :
+    memW post a = memW s a := by
+  apply memW_eq_of_cell_eq
+  by_contra hne
+  have ha_nat : (BitVec.ofNat 64 a).toNat = a := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha_lt]
+  rcases heff.cell_frame (BitVec.ofNat 64 a) hne with
+    ⟨iv, hiv, hpos, hc1, hc2⟩ | ⟨hpos_fg, hfg1, hfg2⟩ | ⟨hpos_hf, hhf1, hhf2⟩
+  · rw [ha_nat] at hc1 hc2
+    have hdj := hdisj iv hiv hpos
+    rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+  · rw [ha_nat] at hfg1 hfg2
+    have hdj := P3MptSet.disj_allocated_freeGap hAs.2 hal
+    dsimp [freeGap] at hdj hpos_fg hfg1 hfg2
+    rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+  · rw [ha_nat] at hhf1 hhf2
+    have hdj := P3MptSet.disj_allocated_heapFree hAs.2 hal
+    dsimp [heapFree] at hdj hpos_hf hhf1 hhf2
+    rcases hdj with h0 | h0 | hd1 | hd2 <;> omega
+
+private theorem eval_load_memW_of_wordsOK {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {base : BitVec 64} {off len : Nat}
+    (hW : WordsOK s (base.toNat, len)) (hoff8 : off % 8 = 0) (hoff_lt : off + 8 ≤ len)
+    (hhi : base.toNat + len ≤ 2 ^ 64) {e : ExpHOL 64}
+    (he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) e =
+      some (.val (.word (base + BitVec.ofNat 64 off)))) :
+    ∃ w : BitVec 64,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) (.load .one e) =
+        some (.val (.word w)) ∧
+      w.toNat = memW s (base.toNat + off) := by
+  have hk_lt : off / 8 < len / 8 := by omega
+  obtain ⟨w, hdom, hmem⟩ := hW.2.2 (off / 8) hk_lt
+  have haddr_eq : base + BitVec.ofNat 64 off = BitVec.ofNat 64 (base.toNat + 8 * (off / 8)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
+    omega
+  have hdom' : s.memaddrs (base + BitVec.ofNat 64 off) := haddr_eq ▸ hdom
+  have hmem' : s.memory (base + BitVec.ofNat 64 off) = .word w := haddr_eq ▸ hmem
+  refine ⟨w, ?_, ?_⟩
+  · simp [evalHOLExact, he, memLoadHOLExact, hdom', hmem']
+  · unfold memW
+    have hbv : BitVec.ofNat 64 (base.toNat + off) = base + BitVec.ofNat 64 off := by
+      rw [haddr_eq]; congr 1; omega
+    rw [hbv, hmem']
+
+private theorem heapByteEff_of_p26_byteEff {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {gw : List String}
+    (hAR : ArenaReady s) (heff : R10Shards.P26_P28.ByteEff s post Rl) :
+    R16Shards.WkBlockTxEnc.HeapByteEff s post Rl gw := by
+  have hG : GuestInv post :=
+    guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAR.1
+  have hA : ArenaOK post := arenaOK_congr heff.globals hAR.2
+  have hg_eq : ∀ nm, globN post nm = globN s nm := fun nm => by simp [globN, heff.globals]
+  refine ⟨⟨hG, hA⟩, heff.memaddrs, by rw [hg_eq], hg_eq _, by rw [hg_eq], heff.be,
+    fun k _ => by rw [heff.globals], heff.out_dom,
+    fun a hne => Or.inl (heff.cell_frame a hne),
+    fun b hb hne => Or.inl (heff.byte_frame b hb hne)⟩
+
+private theorem eval_store_memW_at {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {base w : BitVec 64} {off len : Nat} {Rl : List Ivl} {gw : List String}
+    (hAR : ArenaReady s) (hW : WordsOK s (base.toNat, len))
+    (hoff8 : off % 8 = 0) (hoff_lt : off + 8 ≤ len) (hhi : base.toNat + len ≤ heapEnd)
+    (hin_Rl : ∃ i ∈ Rl, i.1 ≤ base.toNat + off ∧ base.toNat + off + 8 ≤ i.1 + i.2)
+    {dstExp valExp : ExpHOL 64}
+    (hdst : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) dstExp =
+      some (.val (.word (base + BitVec.ofNat 64 off))))
+    (hval : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) valExp =
+      some (.val (.word w))) :
+    let out := evaluateHOLFiniteState s (.store dstExp valExp)
+    out.1 = none ∧ out.2.locals = s.locals ∧ out.2.globals = s.globals ∧
+    memW out.2 (base.toNat + off) = w.toNat ∧
+    (∀ b : Nat, b < 2 ^ 64 → b ≠ base.toNat + off →
+      out.2.memory (BitVec.ofNat 64 b) = s.memory (BitVec.ofNat 64 b)) ∧
+    R16Shards.WkBlockTxEnc.HeapByteEff s out.2 Rl gw := by
+  intro out; dsimp only [out]
+  have h264 : heapEnd < 2 ^ 64 := by rw [R16Shards.WkBlockTxEnc.heapEnd_val]; decide
+  have hk_lt : off / 8 < len / 8 := by omega
+  obtain ⟨w0, hdom, _⟩ := hW.2.2 (off / 8) hk_lt
+  have haddr_eq : base + BitVec.ofNat 64 off = BitVec.ofNat 64 (base.toNat + 8 * (off / 8)) := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, BitVec.toNat_ofNat,
+      Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt (by omega)]
+    omega
+  have haddr_nat : (base + BitVec.ofNat 64 off).toNat = base.toNat + off := by
+    rw [haddr_eq, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]; omega
+  have hdom' : s.memaddrs (base + BitVec.ofNat 64 off) := haddr_eq ▸ hdom
+  have hbeff : R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s (.store dstExp valExp)).2 Rl :=
+    (R10Shards.P26_P28.byteEff_store_one hAR.1 dstExp valExp
+      (fun v hv => by rw [hval] at hv; injection hv with h; exact ⟨w, h.symm⟩)
+      (fun x hx _ => by
+        rw [hdst] at hx; injection hx with h1; injection h1 with h2; injection h2 with h3
+        subst h3; rw [haddr_nat]; exact hin_Rl)).1
+  have hev : evaluateHOLFiniteState s (.store dstExp valExp) =
+      (none, { s with memory := Function.update s.memory (base + BitVec.ofNat 64 off) (.word w) }) := by
+    rw [evaluateHOLFiniteState_store]
+    simp only [hdst, hval, flattenHOL, panMemStoresHOL, panMemStoreHOL, hdom', BitVec.add_zero, ↓reduceIte]
+    congr 1; congr 1
+    funext current
+    by_cases hc : current = base + BitVec.ofNat 64 off <;> simp [hc, Function.update]
+  refine ⟨congrArg Prod.fst hev, ?_, ?_, ?_, ?_, heapByteEff_of_p26_byteEff hAR hbeff⟩
+  · rw [hev]
+  · rw [hev]
+  · rw [hev]
+    unfold memW
+    have hbv : BitVec.ofNat 64 (base.toNat + off) = base + BitVec.ofNat 64 off := by
+      apply BitVec.eq_of_toNat_eq
+      rw [haddr_nat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega)]
+    rw [hbv]; simp
+  · intro b hb hne
+    rw [hev]; dsimp only
+    have hne_bv : BitVec.ofNat 64 b ≠ base + BitVec.ofNat 64 off := by
+      intro heq
+      have := congrArg BitVec.toNat heq
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb, haddr_nat] at this
+      exact hne this
+    exact Function.update_of_ne hne_bv _ _
+
 private theorem localsOnlyNonNull : LocalsOnly ["node"] NodeRlpReadyNonNull := by
   intro F s locals k hl hP
   have ht := locN_congr s locals k "node" (hl "node" (by simp))
