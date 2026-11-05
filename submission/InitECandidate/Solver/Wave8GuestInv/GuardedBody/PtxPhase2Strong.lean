@@ -8527,4 +8527,28 @@ theorem phase2_packed_outer_declare_acc {F : Type} (s : PanSemStateFiniteExact 6
       show ofString "acc" ≠ ofString "i" by decide,
       show ofString "acc" ≠ ofString "tx" by decide] using hw
 
+/-- Restoring a declaration scope preserves the complete outer packing state. -/
+theorem phase2_packed_outer_iteration_with_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
+    (clock : Nat) (hp : PtxPackedOuterIteration s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedOuterIteration {s with locals := locals, clock := clock} := by
+  have hr := phase2_packed_keys_with_locals s locals clock hp.2.1.1
+    (fun n hn => hl n (by simp only [List.mem_cons, List.mem_singleton] at hn ⊢; tauto))
+  have he : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "k"] : List String),
+      locN {s with locals := locals, clock := clock} n = locN s n := by
+    intro n hn
+    simp [locN, hl n hn]
+  have hout : PtxPackedOuterInv {s with locals := locals, clock := clock} := by
+    refine ⟨hr, ?_⟩
+    simpa only [he "nkeys" (by simp), he "i" (by simp), he "k" (by simp),
+      txAccessSlots, phase2_key_prefix, he "tx" (by simp), memW] using hp.2.1.2
+  refine ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals s locals clock).mpr hp.1.1) hr, hout, ?_, ?_, ?_, ?_, hp.2.2.2.2.2.2⟩
+  · simpa only [he "tx" (by simp), he "al_keys" (by simp), he "nkeys" (by simp)] using hp.2.2.1
+  · simpa only [he "tx" (by simp), he "al_keys" (by simp), he "nkeys" (by simp), memW] using hp.2.2.2.1
+  · simpa only [hl "k" (by simp)] using hp.2.2.2.2.1
+  · simpa only [hl "i" (by simp)] using hp.2.2.2.2.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
