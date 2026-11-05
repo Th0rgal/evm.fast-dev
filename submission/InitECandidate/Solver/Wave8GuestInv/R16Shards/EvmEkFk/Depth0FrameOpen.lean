@@ -5978,4 +5978,38 @@ theorem dispatch_code_record_return {F : Type} {s : PanSemStateFiniteExact 64 F}
   cases hv
   exact ⟨code, code_n, rfl, hb, rfl⟩
 
+/-- The successful `ws_get_code` suffix forwards the concrete code words
+from `nodedb_lookup`, retaining their heap-derived bound. -/
+theorem ws_get_code_tail_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (found code code_n : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word code), .val (.word code_n)]))
+    (hn : code_n.toNat < 2 ^ 40) (hf : found ≠ 0) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip)
+        (.return (.rstruct [.rfield 1 (.var .local (ofString "r")),
+          .rfield 2 (.var .local (ofString "r"))])))
+      (fun v post => v = .rStruct [.val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  intro v hv
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 0)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hf
+  have hi : evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.raise (ofString "StateErr") (.const 2)) .skip) = (none, s) := by
+    rw [evaluateHOLFiniteState_ite]
+    change ev s _ = _ at he
+    unfold ev at he
+    rw [he]
+    simp [evaluateHOLFiniteState_skip]
+  rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
+  dsimp only at hv ⊢
+  rw [evaluateHOLFiniteState_return] at hv ⊢
+  simp [evalHOLExact, evalListHOLExact, hr, shapeOfHOLExact,
+    sizeOfShapeWithContextHOL] at hv ⊢
+  exact ⟨hv.symm, hn, rfl⟩
+
 end HeadStore
