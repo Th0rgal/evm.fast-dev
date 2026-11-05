@@ -3270,4 +3270,62 @@ theorem alloc_csrLiveBufsAt {F : Type}
   · exact hnb
   · exact csrHeapBufAt_transfer hA heff.arena heff.hp_lo (hbs b hb_tl) hog_all
 
+def CsrMptBufs (name : String) (buffers : List (String × Nat)) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s name)
+    (buffers.map fun b => (locN s b.1, b.2))
+
+theorem localsOnly_csrMptBufs (name : String) (buffers : List (String × Nat)) :
+    LocalsOnly (["cache", "new_roots", name] ++ buffers.map Prod.fst)
+      (CsrMptBufs name buffers) := by
+  intro F s locals k hl hs
+  have hbuf : buffers.map (fun b => (locN { s with locals := locals, clock := k } b.1, b.2)) =
+      buffers.map (fun b => (locN s b.1, b.2)) := by
+    apply List.map_congr_left
+    intro b hb
+    rw [locN_congr s locals k b.1 (hl b.1 (List.mem_append_right _
+      (List.mem_map.mpr ⟨b, hb, rfl⟩)))]
+  unfold CsrMptBufs
+  rw [locN_congr s locals k "cache" (hl "cache" (by simp)),
+    locN_congr s locals k "new_roots" (hl "new_roots" (by simp)),
+    locN_congr s locals k name (hl name (by simp)), hbuf]
+  exact localsFree_csrLiveBufsAt _ _ _ _ s locals k hs
+
+theorem csrMptBufs_mpt (name : String) (buffers : List (String × Nat))
+    {F : Type} {s : PanSemStateFiniteExact 64 F} (hs : CsrMptBufs name buffers s) :
+    CsrMpt name s := csrLiveBufsAt_liveAt hs
+
+theorem csrMptBufs_worldOK (name : String) (buffers : List (String × Nat))
+    {F : Type} {s : PanSemStateFiniteExact 64 F} (hs : CsrMptBufs name buffers s) :
+    WorldOK s := csrMpt_worldOK name (csrMptBufs_mpt name buffers hs)
+
+theorem csrMptBufs_nil_iff (name : String) {F : Type}
+    {s : PanSemStateFiniteExact 64 F} : CsrMptBufs name [] s ↔ CsrMpt name s :=
+  ⟨csrLiveBufsAt_liveAt, csrLiveBufsAt_of_liveAt⟩
+
+theorem csrLiveBufsAt_mptObjReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots (locN s "m") bs) : MptObjReady s :=
+  csrLiveAt_mptObjReady (csrLiveBufsAt_liveAt hs)
+
+theorem csrLiveBufsAt_mptSetReady {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots (locN s "m") bs)
+    (hk : locN s "klen" ≤ 32) (hv : locN s "vlen" ≤ 110) : MptSetReady s :=
+  csrLiveAt_mptSetReady (csrLiveBufsAt_liveAt hs) hk hv
+
+theorem csrLiveBufsAt_htabArgWF {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs)
+    (ht : locN s "t" = cache ∨ locN s "t" = roots) : HtabArgWF s :=
+  csrLiveAt_htabArgWF (csrLiveBufsAt_liveAt hs) ht
+
+theorem csrLiveBufsAt_buffer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} {bs : List Ivl} {b : Ivl}
+    (hs : CsrLiveBufsAt s cache roots m bs) (hb : b ∈ bs) :
+    CsrLiveBufAt s cache roots m b := by
+  apply csrLiveBufsAt_singleton_iff.mp
+  exact csrLiveBufsAt_sub hs (fun x hx => (List.mem_singleton.mp hx) ▸ hb)
+    (List.pairwise_singleton _ _)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
