@@ -6962,6 +6962,25 @@ theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
   intro F s hc hp
   exact hb s hc hp
 
+/-- The existing slot-return proof also retains the typed source operands. -/
+theorem resume_lst_push_typed_logSlot (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero) :
+    DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨resume_lst_push_logSlot h hnonzero s vs body callee ret v post hc hp.1 ha hl hr,
+    ?_, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.2.1
+    exact ⟨n, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "nl" by decide] using hn⟩
+  · obtain ⟨p, hp⟩ := hp.2.2.2
+    exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
+
 /-- Full Phase-4 composition with the two push preservation obligations explicit. -/
 theorem ptxPhase4_cut_strong_of_slots (h : PtxCallees)
     (hlogs : DecCallResumeOn Phase4TypedLogPointers
