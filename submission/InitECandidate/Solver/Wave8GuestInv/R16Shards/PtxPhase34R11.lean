@@ -4095,6 +4095,48 @@ theorem stableLengthPre_world_separation {F : Type} (s : PanSemStateFiniteExact 
     hp.2.1 mem' hm).1
   exact ⟨hf.1, hf.2.2.2.2.1, stable_copy_world_separation s mem' S Nd hd hf.2.1 hb⟩
 
+/-- Package the spatial obligations needed at copy entry independently of
+the counter and operand locals. -/
+def StableCopySpatial : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+    (∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) ∧
+    Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    Disj (locN s "stable_logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+/-- All copy-entry spatial obligations survive the stable length write. -/
+theorem stableLengthPre_spatial {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hs : ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+      (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+      (∀ o ∈ worldOwned s S Nd,
+        Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o))
+    (hh : Disj (locN s "logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (hd : Disj (locN s "stable_logs", 24)
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (ha : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap"))
+    (he : ∀ j, j < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    StableCopySpatial {s with memory := mem'} := by
+  obtain ⟨S, Nd, hW, ho, hs, hb⟩ := hs
+  obtain ⟨hW', ho', hb'⟩ := stableLengthPre_world_separation s hp mem' hx hm S Nd hW ho hs hb
+  obtain ⟨hh', hd'⟩ := stableLengthPre_headers_separation s hp mem' hm hh hd
+  exact ⟨S, Nd, hW', ho', hb', hh', hd',
+    stableLengthPre_array_separation s hp mem' hx hm ha,
+    stableLengthPre_record_separation s hp mem' hx hm he⟩
+
 /-- Reassemble the separated store contract from framed source cells and
 preserved ownership after a memory update. -/
 theorem stableCopyStorePre_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
