@@ -78,4 +78,25 @@ theorem rootIn_tagged_word {F : Type} {s : PanSemStateFiniteExact 64 F}
   have hlt := rootIn_lt_word_limit hh hr
   simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt, Nat.add_sub_cancel] using hr
 
+theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n * 1530).toNat = n.toNat * 1530 := by
+  rw [BitVec.toNat_mul]
+  change n.toNat * 1530 % 2 ^ 64 = n.toNat * 1530
+  exact Nat.mod_eq_of_lt (by omega)
+
+theorem create_finish_alloc_add_no_wrap (n : BitVec 64)
+    (hn : n.toNat ≤ 65536) :
+    (n + 8).toNat = n.toNat + 8 := by
+  apply BitVec.toNat_add_of_lt
+  change n.toNat + 8 < 2 ^ 64
+  omega
+
+theorem create_finish_word_charge_no_wrap (w : BitVec 64)
+    (hw : w.toNat ≤ 2048) :
+    (6 * w).toNat = 6 * w.toNat := by
+  rw [BitVec.toNat_mul]
+  change 6 * w.toNat % 2 ^ 64 = 6 * w.toNat
+  exact Nat.mod_eq_of_lt (by omega)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
