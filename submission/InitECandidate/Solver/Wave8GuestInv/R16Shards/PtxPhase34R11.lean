@@ -4509,6 +4509,50 @@ theorem stableCopy_loop_bound_of_step
     exact stableCopyLoopInv_rank s hp
   · exact hstep
 
+/-- The concrete stable-copy loop terminates under its full loop contract. -/
+theorem stableCopy_loop_bound :
+    TerminatingProgBoundedOn StableCopyLoopInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      ((2 ^ 28 + 1) * (0 + 1)) := by
+  apply stableCopy_loop_bound_of_step
+  intro F s hc hp ha
+  dsimp only
+  intro hf
+  let body : ProgHOL 64 := .seq
+    (.store (.op .add [.var .local (ofString "stable_lp"),
+      .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+    (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+  have hinc : IncrBody (ofString "i") body := by
+    dsimp [body]
+    ptx_incr
+  obtain ⟨i, n, hi, hn⟩ := hp.2.1
+  obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) i hi
+  have hnone := hf.resolve_right hnc
+  have hd := stableCopyLoopInv_decClock s hp
+  have hactive := stableCopyLoopInv_active s hp ha
+  have hpost := hoare_stableCopy_body_loop.run (decClockHOLFinite s) hc
+    ⟨stableCopyStorePre_decClock s hactive, n, hn⟩ (by rw [hnone]; simp) hnone
+  refine ⟨hpost, ?_⟩
+  have hkeep := evaluate_avoidsLocal_flowing (ofString "nl") body (by decide)
+    (decClockHOLFinite s) (Or.inl hnone)
+  have hlen : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "nl" =
+      locN s "nl" := by
+    simp only [locN, hkeep]
+    rfl
+  have hidx : locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "i" =
+      (i.toNat + 1) % 2 ^ 64 := by
+    simp [locN, hnext hnone, BitVec.toNat_add]
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hb := (stableLengthPost_length_bound s hp.1.1 hp.1.2.1).1
+  have hai := hactive.2.1
+  change locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "nl" -
+    locN (evaluateHOLFiniteState (decClockHOLFinite s) body).2 "i" < _
+  rw [hlen, hidx, Nat.mod_eq_of_lt (by omega)]
+  omega
+
 /-- Continue from the actual copy body without adding to the tail budget. -/
 theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn StableCopyInv tail b) :
