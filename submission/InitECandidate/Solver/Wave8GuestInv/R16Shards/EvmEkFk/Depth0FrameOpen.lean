@@ -4348,4 +4348,297 @@ theorem compute_jumpdests_evm_run_with_out_dom {F : Type} (s : PanSemStateFinite
     hlow hhigh hm (InitECandidate.Solver.Wave8GuestInv.R16Shards.evaluate_be_eq s _) hd hout hglob hsp
   exact ⟨q, hval, hr, hs⟩
 
+/-- Shared-memory operations leave ordinary memory unchanged. -/
+theorem scratch_shMemStore_mem_eq {F : Type} (state : PanSemStateFiniteExact 64 F) (operator : OpSize)
+    (address value : ExpHOL 64) :
+    (evaluateHOLFiniteState state (.shMemStore operator address value)).2.memory = state.memory := by
+  classical
+  rw [evaluateHOLFiniteState_shMemStore_total]
+  dsimp only
+  split
+  · unfold shMemStoreHOLExact
+    split <;> split
+    all_goals simp [ofExact, toExact]
+    all_goals split <;> simp
+  · rfl
+
+theorem scratch_shMemLoad_mem_eq {F : Type} (state : PanSemStateFiniteExact 64 F) (operator : OpSize)
+    (kind : VarKind) (name : MlS) (address : ExpHOL 64) :
+    (evaluateHOLFiniteState state (.shMemLoad operator kind name address)).2.memory = state.memory := by
+  classical
+  rw [evaluateHOLFiniteState_shMemLoad_source]
+  split
+  · split
+    · unfold shMemLoadHOLFiniteExact
+      dsimp only
+      cases kind <;> split <;> split <;> (try split) <;>
+        simp [emptyLocalsHOLFinite, setKvarFfiHOLFinite, setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite]
+    · rfl
+  · rfl
+
+/-- Out-of-domain preservation across a function call and its exception handler. -/
+theorem scratch_call_out_dom_aux {F : Type}
+    (info : Option (Option (VarKind × MlS) × Option (MlS × MlS × ProgHOL 64)))
+    (function : MlS) (arguments : List (ExpHOL 64)) (state : PanSemStateFiniteExact 64 F)
+    {a : BitVec 64} (ha : ¬ state.memaddrs a)
+    (ihBody : ∀ values body callee rs,
+      lookupCodeHOLFinite state.code.lookup function values = some (body, callee, rs) →
+      state.clock ≠ 0 →
+      (evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body).2.memory a = state.memory a)
+    (ihHandler : ∀ dest hid hv hp, info = some (dest, some (hid, hv, hp)) →
+      ∀ (t : PanSemStateFiniteExact 64 F),
+        t.clock < state.clock → ¬ t.memaddrs a →
+        (evaluateHOLFiniteState t hp).2.memory a = t.memory a) :
+    (evaluateHOLFiniteState state (.call info function arguments)).2.memory a = state.memory a := by
+  rw [evaluateHOLFiniteState_call]
+  split
+  · rfl
+  · rename_i values _
+    split
+    · rfl
+    · rename_i body callee rs found
+      split
+      · rfl
+      · rename_i nonzero
+        have ih := ihBody values body callee rs found nonzero
+        have meta' := InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite state callee) body
+        have cl := evaluateHOLFiniteState_clock_le (callEntryStateHOLFinite state callee) body
+        generalize evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body = out at ih meta' cl
+        obtain ⟨r, st⟩ := out
+        dsimp only at ih meta' cl ⊢
+        change st.clock ≤ state.clock - 1 at cl
+        have stc : st.clock < state.clock := by omega
+        have st_ha : ¬ st.memaddrs a := by
+          have hm : st.memaddrs = state.memaddrs := meta'.2.1
+          rw [hm]; exact ha
+        rcases info with _ | ⟨dest, handler⟩
+        · rcases r with _ | (_ | _ | _ | _ | v | _ | _) <;> dsimp only <;> (repeat' split) <;>
+            simp [setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite, emptyLocalsHOLFinite, ih]
+        · rcases handler with _ | ⟨hid, hv, hp⟩
+          · rcases dest with _ | ⟨⟨⟩, nm⟩ <;>
+              rcases r with _ | (_ | _ | _ | _ | v | _ | _) <;> dsimp only <;> (repeat' split) <;>
+              simp [setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite, emptyLocalsHOLFinite, ih]
+          · rcases dest with _ | ⟨⟨⟩, nm⟩ <;>
+              rcases r with _ | (_ | _ | _ | _ | v | _ | _) <;> dsimp only <;> (repeat' split) <;>
+              first
+                | (exact (ihHandler _ hid hv hp rfl _ (by exact stc) (by exact st_ha)).trans ih)
+                | (simp [setKvarHOLFinite, setVarHOLFinite, setGlobalHOLFinite, emptyLocalsHOLFinite, ih])
+
+/-- Evaluation preserves every memory cell outside the initial memory domain,
+including on errors, timeouts and exceptions. -/
+theorem scratch_evaluate_mem_out_dom {F : Type}
+    (state : PanSemStateFiniteExact 64 F) (program : ProgHOL 64)
+    {a : BitVec 64} (ha : ¬ state.memaddrs a) :
+    (evaluateHOLFiniteState state program).2.memory a = state.memory a := by
+  cases shape : program with
+  | skip => rw [evaluateHOLFiniteState_skip]
+  | dec name kind initializer body =>
+    rw [evaluateHOLFiniteState_dec_total]
+    dsimp only
+    split
+    · rfl
+    · split
+      · exact scratch_evaluate_mem_out_dom _ body ha
+      · rfl
+  | decCall name kind function arguments continuation =>
+    rw [evaluateHOLFiniteState_decCall_fixClockRewrite]
+    split
+    · rfl
+    · rename_i values _
+      split
+      · rfl
+      · rename_i body callee rs found
+        split
+        · rfl
+        · rename_i nonzero
+          dsimp only
+          have ih : (evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body).2.memory a = state.memory a :=
+            scratch_evaluate_mem_out_dom (callEntryStateHOLFinite state callee) body ha
+          have meta' := InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+            (callEntryStateHOLFinite state callee) body
+          have cl := evaluateHOLFiniteState_clock_le (callEntryStateHOLFinite state callee) body
+          generalize evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body = out at ih meta' cl
+          obtain ⟨r, st⟩ := out
+          dsimp only at ih meta' cl ⊢
+          change st.clock ≤ state.clock - 1 at cl
+          have st_ha : ¬ st.memaddrs a := by
+            have hm : st.memaddrs = state.memaddrs := meta'.2.1
+            rw [hm]; exact ha
+          rcases r with _ | (_ | _ | _ | _ | v | _ | _)
+          all_goals (dsimp only [emptyLocalsHOLFinite])
+          all_goals (try exact ih)
+          split
+          · have small : st.clock < state.clock := by omega
+            exact (scratch_evaluate_mem_out_dom
+              (setVarHOLFinite name v { st with locals := state.locals })
+              continuation st_ha).trans ih
+          · exact ih
+  | assign kind name value =>
+    rw [evaluateHOLFiniteState_assign]
+    split
+    · rfl
+    · split
+      · cases kind <;> rfl
+      · rfl
+  | seq first second =>
+    have memory := scratch_evaluate_mem_out_dom state first ha
+    have remaining := evaluateHOLFiniteState_clock_le state first
+    have meta' := InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata state first
+    rw [evaluateHOLFiniteState_seq_line780]
+    cases firstRun : evaluateHOLFiniteState state first with
+    | mk result middle =>
+      rw [firstRun] at memory remaining meta'
+      dsimp only at memory remaining meta'
+      cases result with
+      | none =>
+        have mclock : middle.clock ≤ state.clock := remaining
+        have m_ha : ¬ middle.memaddrs a := by rw [meta'.2.1]; exact ha
+        exact (scratch_evaluate_mem_out_dom middle second m_ha).trans memory
+      | some _ => exact memory
+  | ite condition yes no =>
+    rw [evaluateHOLFiniteState_ite]
+    split
+    · split
+      · exact scratch_evaluate_mem_out_dom state no ha
+      · exact scratch_evaluate_mem_out_dom state yes ha
+    · rfl
+  | «while» condition body =>
+    rw [evaluateHOLFiniteState_while_total]
+    split
+    · split
+      · split
+        · rfl
+        · rename_i nonzero
+          dsimp only
+          rw [fixClockHOLFinite_evaluateState]
+          have memory := scratch_evaluate_mem_out_dom (decClockHOLFinite state) body ha
+          have remaining := evaluateHOLFiniteState_clock_le (decClockHOLFinite state) body
+          have meta' := InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite state) body
+          cases bodyRun : evaluateHOLFiniteState (decClockHOLFinite state) body with
+          | mk result middle =>
+            rw [bodyRun] at memory remaining meta'
+            dsimp only at memory remaining meta'
+            have smaller : middle.clock < state.clock := by
+              change middle.clock ≤ state.clock - 1 at remaining
+              omega
+            have m_ha : ¬ middle.memaddrs a := by rw [meta'.2.1]; exact ha
+            cases result with
+            | none => exact (scratch_evaluate_mem_out_dom middle (.while condition body) m_ha).trans memory
+            | some result =>
+              cases result with
+              | «continue» =>
+                exact (scratch_evaluate_mem_out_dom middle (.while condition body) m_ha).trans memory
+              | «break» | returned _ | exception _ _ | finalFfi _ | error | timeOut => exact memory
+      · rfl
+    · rfl
+  | «break» => rw [evaluateHOLFiniteState_break]
+  | «continue» => rw [evaluateHOLFiniteState_continue]
+  | annot _ _ => rw [evaluateHOLFiniteState_annot]
+  | tick =>
+    rw [evaluateHOLFiniteState_tick]
+    split <;> rfl
+  | raise _ value =>
+    rw [evaluateHOLFiniteState_raise]
+    split
+    · dsimp only; split <;> rfl
+    · rfl
+  | «return» value =>
+    rw [evaluateHOLFiniteState_return]
+    split
+    · rfl
+    · split <;> rfl
+  | store destination value =>
+    rw [evaluateHOLFiniteState_store]
+    split
+    · split
+      · split
+        · rename_i mem' hst
+          exact scratch_panMemStores_out_dom _ _ _ _ hst a ha
+        · rfl
+      · rfl
+    · rfl
+  | store32 destination value =>
+    rw [evaluateHOLFiniteState_store32]
+    split
+    · split
+      · split
+        · rename_i mem' hst
+          exact scratch_panMemStore32_out_dom hst ha
+        · rfl
+      · rfl
+    · rfl
+  | storeByte destination value =>
+    rw [evaluateHOLFiniteState_storeByte]
+    split
+    · split
+      · split
+        · rename_i mem' hst
+          exact scratch_panMemStoreByte_out_dom hst ha
+        · rfl
+      · rfl
+    · rfl
+  | extCall _ _ _ _ _ =>
+    rw [evaluateHOLFiniteState_extCall_source]
+    split
+    · split
+      · split
+        · rfl
+        · dsimp only [ofExact, toExact]
+          exact scratch_panWriteBytearray_out_dom _ _ _ _ ha
+      · rfl
+    · rfl
+  | primitive _ _ _ =>
+    rw [evaluateHOLFiniteState_primitive]
+    split
+    · rfl
+    · split
+      · rfl
+      · split <;> rfl
+  | shMemStore op addr val =>
+    exact congrFun (scratch_shMemStore_mem_eq state op addr val) a
+  | shMemLoad op kind name addr =>
+    exact congrFun (scratch_shMemLoad_mem_eq state op kind name addr) a
+  | call info function arguments =>
+    refine scratch_call_out_dom_aux info function arguments state ha
+      (fun values body callee rs _ _ =>
+        scratch_evaluate_mem_out_dom (callEntryStateHOLFinite state callee) body ha)
+      (fun _ _ _ hp _ t _ tha => scratch_evaluate_mem_out_dom t hp tha)
+termination_by (state.clock, sizeOf program)
+decreasing_by
+  all_goals
+    simp_wf
+    apply InitECandidate.Solver.GuestGlobalKeep.lex_of
+    try subst shape
+    try simp only [setVarHOLFinite, decClockHOLFinite, callEntryStateHOLFinite, ProgHOL.seq.sizeOf_spec,
+      ProgHOL.ite.sizeOf_spec, ProgHOL.dec.sizeOf_spec, ProgHOL.while.sizeOf_spec, ProgHOL.decCall.sizeOf_spec, true_and]
+    first
+      | exact Or.inl small
+      | (simp only [callEntryStateHOLFinite] at small; exact Or.inl small)
+      | omega
+      | (by_cases hc : state.clock = 0
+         · right; refine ⟨by omega, ?_⟩; simp +arith
+         · left; omega)
+      | (rcases Nat.lt_or_eq_of_le mclock with h | h
+         · exact Or.inl h
+         · right; refine ⟨h, ?_⟩; simp +arith)
+      | (right; refine ⟨rfl, ?_⟩; simp +arith)
+
+/-- Jump-destination computation needs no additional memory-frame assumption. -/
+theorem compute_jumpdests_evm_run {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hP : EvmMsgReady s) (nw p f : BitVec 64)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (hp : s.globals.lookup (ofString "scratch_ptr") = some (.val (.word p)))
+    (hf : s.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word f)))
+    (hnb : nw.toNat < 2 ^ 40) :
+    InitECandidate.Solver.Wave8M19.Htab.Ret s
+      (sourceFnBody Guest.Software.guestFn_compute_jumpdests) (fun v post =>
+      ∃ q : BitVec 64, v = .val (.word q) ∧
+        EvmMsgReady post ∧ EvmStep ["scratch_ptr"] s post) := by
+  apply compute_jumpdests_evm_run_with_out_dom s hP nw p f hn hp hf hnb
+  intro a ha
+  apply scratch_evaluate_mem_out_dom
+  rwa [hP.1.1.memaddrs]
+
 end HeadStore

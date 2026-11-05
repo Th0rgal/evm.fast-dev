@@ -14,6 +14,7 @@ import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.wk_u256_to_be_min
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.rv_u256_to_be_min
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_mul
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkSysTxLeaves
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -7282,5 +7283,88 @@ theorem merge_new_call_flow_props {F : Type}
       [.const kw, .const capw])).2 = { mid with locals := (evaluateHOLFiniteState s p).2.locals } from hm']
   exact ⟨tw, hlo, hhi, (arenaReady_with_locals mid _ _).2 hAm, hbe, hsp, hfm,
     (WkBal.htabWF_with_locals mid _ _ _).2 hwf, hcnt, hkey, hfp, hframe, (hlocal rfl).2.2⟩
+
+/-- Fresh inner allocation preserves the world before the table is installed
+in the block outer table. -/
+theorem merge_new_call_worldStep {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS) (kw capw : BitVec 64)
+    (hW : WorldOK s) (hkl : kw.toNat ∈ htabKeyLens)
+    (hcl : capw.toNat ≤ htabCapMax)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])).1) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (some (.local, x), none)) (ofString "htab_new")
+        [.const kw, .const capw])
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s out.1 out.2 := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (some (.local, x), none)) (ofString "htab_new")
+    [.const kw, .const capw]
+  let post := (evaluateHOLFiniteState s p).2
+  obtain ⟨tw, hlo, hhi, hA, hbe, hsp, hfm, _, _, _, _, hframe, hgl⟩ :=
+    merge_new_call_flow_props s x kw capw hW.1 hkl hcl hfr
+  change ArenaReady post at hA
+  change post.be = s.be at hbe
+  change globN post "scratch_ptr" = globN s "scratch_ptr" at hsp
+  change globN post "frame_mem_ptr" = globN s "frame_mem_ptr" at hfm
+  change tw.toNat + 88 ≤ globN post "heap_ptr" at hhi
+  have hhp : globN s "heap_ptr" ≤ globN post "heap_ptr" := by omega
+  have hdom : ∀ a : BitVec 64, post.memory a ≠ s.memory a → s.memaddrs a := by
+    intro a hn
+    by_contra ha
+    exact hn (evaluateHOLFiniteState_mem_out_dom s p ha)
+  have hframe' : ∀ a : BitVec 64,
+      ¬ CellHits a.toNat (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") →
+      post.memory a = s.memory a := by
+    intro a ha
+    by_cases heq : post.memory a = s.memory a
+    · exact heq
+    apply hframe a ?_ ha
+    intro i hi hh
+    simp only [List.mem_singleton] at hi
+    subst i
+    dsimp [CellHits] at hh
+    have ha8 : a.toNat % 8 = 0 := by
+      have hd := hdom a heq
+      rw [hW.1.1.memaddrs, ordinaryDomain_iff] at hd
+      exact hd.1
+    have hs8 : globN s "scratch_ptr" % 8 = 0 := hW.1.2.2.2.2.2.2.2.2.1
+    omega
+  apply heapByteEff_to_worldStepSc (by simp) hW
+  refine ⟨hA, hA.1.memaddrs.trans hW.1.1.memaddrs.symm, hhp, hfm,
+    le_of_eq hsp, hbe, ?_, hdom, ?_, ?_⟩
+  · intro k hk
+    exact hgl k (by simpa using hk)
+  · intro a hn
+    have hh : CellHits a.toNat
+        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      by_contra ha
+      exact hn (hframe' a ha)
+    have ha := hdom a hn
+    rw [hW.1.1.memaddrs, ordinaryDomain_iff] at ha
+    have hs8 : globN s "heap_ptr" % 8 = 0 := hW.1.2.2.2.2.2.2.1
+    have hp8 := hA.2.2.2.2.2.2.1
+    have hpmax := hA.2.2.1
+    obtain ⟨h1, h2⟩ := hh
+    exact Or.inr (Or.inr ⟨by dsimp [CellHitsPos, heapFree]; omega,
+      by dsimp [heapFree]; omega, by dsimp [heapFree]; omega⟩)
+  · intro b hb hn
+    have hm : post.memory (panByteAlignHOL (BitVec.ofNat 64 b)) ≠
+        s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+      intro hm
+      apply hn
+      unfold memB
+      rw [hm, hbe]
+    have hh : CellHits (panByteAlignHOL (BitVec.ofNat 64 b)).toNat
+        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      by_contra ha
+      exact hm (hframe' _ ha)
+    have hal := panByteAlign_toNat64 (BitVec.ofNat 64 b)
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb] at hal
+    have hs8 : globN s "heap_ptr" % 8 = 0 := hW.1.2.2.2.2.2.2.1
+    have hp8 := hA.2.2.2.2.2.2.1
+    have hpmax := hA.2.2.1
+    obtain ⟨h1, h2⟩ := hh
+    exact Or.inr (Or.inr ⟨by dsimp [heapFree]; omega, by dsimp [heapFree]; omega⟩)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

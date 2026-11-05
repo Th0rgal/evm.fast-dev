@@ -11567,4 +11567,62 @@ theorem log_append_growth_exact_g09 {F : Type}
   exact log_append_of_lst_push_execution_g09 s _ _ cal (p + n * 8#64) log
     hlg hargs hlook hclock hpush hdslot
 
+/-- The allocation and copy prefix of list growth preserves the full EVM
+invariant while the fresh buffer is still detached from the list header. -/
+theorem lst_push_alloc_copy_preserves_g09 {F : Type}
+    (s allocPost copyPost : PanSemStateFiniteExact 64 F)
+    (p q esz cap bytes : BitVec 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hfit : p.toNat + (esz * cap * 2#64).toNat ≤ q.toNat)
+    (hq : q.toNat ≤ heapLimit) (hq8 : q.toNat % 8 = 0)
+    (halloc : evaluateHOLFiniteState
+      (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (esz * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) =
+        (some (.returned (.val (.word p))), allocPost))
+    (hg : allocPost.globals = s.globals.update (ofString "heap_ptr", .val (.word q)))
+    (hm : allocPost.memory = s.memory)
+    (hbytes : bytes.toNat ≤ (esz * cap * 2#64).toNat)
+    (heff : ByteRegionEffect
+      (setVarHOLFinite (ofString "np") (.val (.word p)) {allocPost with locals := s.locals})
+      copyPost [(p.toNat, bytes.toNat)]) :
+    EvmInv copyPost ∧ evmChain copyPost = evmChain s ∧ evmR copyPost = evmR s ∧
+    (HeadMemAligned s → HeadMemAligned copyPost) ∧
+    globN copyPost "heap_ptr" = q.toNat := by
+  obtain ⟨S, Nd, hInvW⟩ := evmInvWith_of_evmInv hInv
+  let entry := callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+    (ofString "n", .val (.word (esz * cap * 2#64))))
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata entry
+    (sourceFnBody Guest.Software.guestFn_alloc)
+  have hbase := evaluate_baseAddr entry (sourceFnBody Guest.Software.guestFn_alloc)
+  rw [halloc] at hmeta hbase
+  dsimp only at hmeta hbase
+  obtain ⟨hInvA, hwti, hfo, hchain, hR, hHM, hpNat, hqNat, hp8, hpLo, hw, hdj⟩ :=
+    evmInvWith_of_alloc_pure (post := allocPost) hInvW hp hfit hq hq8
+      hmeta.1 hmeta.2.1 hmeta.2.2.2.1 hbase hmeta.2.2.1 hg hm
+  let copyEntry := setVarHOLFinite (ofString "np") (.val (.word p))
+    {allocPost with locals := s.locals}
+  have hlocalEff : ByteRegionEffect allocPost copyEntry [] :=
+    (ByteRegionEffect.refl allocPost []).with_locals_clock copyEntry.locals allocPost.clock
+  obtain ⟨hInvE, hwtiE, hfoE, _, hchainE, hRE, hHME⟩ :=
+    evmInvWith_of_bre hInvA (fun _ hi _ _ => by simp at hi) hlocalEff
+  have hdjCopy : IvlsDisj [(p.toNat, bytes.toNat)]
+      (worldTypedIvls copyEntry S Nd ++ ((evmChain copyEntry).map (frameObjects copyEntry)).flatten) := by
+    rw [hwtiE, hfoE]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    have hfull : Disj (p.toNat, q.toNat - p.toNat) j :=
+      hdj (p.toNat, q.toNat - p.toNat) (by simp) j hj
+    rcases hfull with hzero | hzero | hleft | hright
+    · exact Or.inl (by dsimp only at hzero ⊢; omega)
+    · exact Or.inr (Or.inl hzero)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr hright))
+  obtain ⟨hInvC, _, _, hgC, hchainC, hRC, hHMC⟩ := evmInvWith_of_bre hInvE hdjCopy heff
+  exact ⟨evmInvWith_to_evmInv hInvC, hchainC.trans (hchainE.trans hchain),
+    hRC.trans (hRE.trans hR), fun h => hHMC (hHME (hHM h)),
+    (congrFun (globN_congr hgC) "heap_ptr").trans hqNat⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
