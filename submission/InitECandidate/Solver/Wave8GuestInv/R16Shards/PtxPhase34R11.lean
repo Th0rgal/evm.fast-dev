@@ -496,6 +496,55 @@ theorem logsLiveOwned_list_survives {F : Type}
       he.1.1 (by norm_num) he.2.1
       (fun j hj => (hd hn).2.2 i hi _ hmem j hj) (hRe i hi)).2.2
 
+/-- Full ownership transport, so the same invariant can be used again for the
+second ether-creation call and then for receipt encoding. -/
+theorem logsLiveOwned_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd S' Nd' : List Nat} {logs : Nat}
+    {R : List Ivl} (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hgS : GuestInv s) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsLiveOwned post S' Nd' logs := by
+  intro hn
+  have hl' := hl.resolve_left hn
+  have hh := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
+    hl'.1.1 (by norm_num : 24 % 8 = 0) hl'.2.1
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRh
+  have ha := logsLiveOwned_array_survives hAs hAp hgS hgrow hl hd hn
+    hold0 hR0 hog hfr hRa
+  have hb := (R13Shards.ivl_allocated_bound hAs hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    R13Shards.memW_eq_of_ivlUnhit hh.2.2 hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    R13Shards.memW_eq_of_ivlUnhit hh.2.2 (by have := hl'.1.1; omega) hb
+      ⟨by omega, by omega⟩
+  refine ⟨?_, ?_, ?_⟩
+  · rw [h0, h8]; exact ha.1
+  · intro o ho j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl
+    · exact hh.2.1 j hj
+    · rw [h0, h8]; exact ha.2.1 j hj
+  · intro i hi
+    rw [h8] at hi
+    rw [h0, ha.2.2 i hi]
+    have he := (hl'.2.2.2.2 i hi).2
+    have hmem : (memW s (memW s logs + 8 * i), 40) ∈
+        logOwnedIvls s (memW s (memW s logs + 8 * i)) := by
+      simp [logOwnedIvls, logRecordIvls]
+    have hu := (R13Shards.heap_ivl_survives_step hAs hgrow.1 hold0 hR0 hog hfr
+      he.1.1 (by norm_num) he.2.1
+      (fun j hj => (hd hn).2.2 i hi _ hmem j hj) (hRe i hi)).2.2
+    exact logOwnedIvls_disj_survives hAs hAp he hu hsys hog ((hd hn).2.2 i hi)
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
