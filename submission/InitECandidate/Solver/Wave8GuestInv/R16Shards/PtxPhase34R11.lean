@@ -2902,6 +2902,57 @@ theorem stable_length_store_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
     (stable_length_store_header_unchanged s hA hh mem' hm).2]
   exact (stable_storage_length_fits s hp).1
 
+/-- A store separated from the source header, live array and records retains
+both source-log validity and ownership under an unchanged world footprint. -/
+theorem logsLiveOwned_disjoint_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} {x : BitVec 64}
+    {mem' : BitVec 64 → HolWordLab 64}
+    (hA : ArenaOK s) (hg : GuestInv s) (hgp : GuestInv {s with memory := mem'})
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hh : Disj (logs, 24) (x.toNat, 8))
+    (ha : Disj (memW s logs, 8 * memW s (logs + 8)) (x.toNat, 8))
+    (he : ∀ i, i < memW s (logs + 8) →
+      Disj (memW s (memW s logs + 8 * i), 40) (x.toNat, 8))
+    (howned : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    LogsListOK {s with memory := mem'} logs ∧
+      LogsLiveOwned {s with memory := mem'} S Nd logs := by
+  let post := {s with memory := mem'}
+  by_cases hn : logs = 0
+  · exact ⟨Or.inl hn, fun h => False.elim (h hn)⟩
+  have hl' := hl.resolve_left hn
+  have hu : IvlUnhit s post (logs, 24) := ivlUnhit_single hm (by simp) hh
+  have hb := (ivl_allocated_bound hA hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    memW_eq_of_ivlUnhit hu hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩
+  have hp : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i) := by
+    intro i hi
+    have hal := logsListOK_array_aligned hg hl hn (by omega)
+    have hua : IvlUnhit s post (memW s logs, 8 * memW s (logs + 8)) :=
+      ivlUnhit_single hm (fun _ => hal) ha
+    exact memW_eq_of_ivlUnhit hua (by omega)
+      (ivl_allocated_bound hA (hd hn).1).2 ⟨by dsimp; omega, by dsimp; omega⟩
+  have hue : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40) :=
+    fun i hi => ivlUnhit_single hm (by simp) (he i hi)
+  refine ⟨logsListOK_congr_header_unhit hA hg hgp (by rfl) hl
+    (fun h => h) hu hp hue, ?_⟩
+  intro _
+  change Allocated post (memW post logs, 8 * memW post (logs + 8)) ∧ _
+  rw [h0, h8]
+  refine ⟨(hd hn).1, ?_, ?_⟩
+  · change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.1
+  · intro i hi
+    rw [hp i hi, logOwnedIvls_eq_of_unhit hA (hl'.2.2.2.2 i hi).2 (hue i hi) rfl]
+    change IvlsDisj _ (worldOwned post S Nd)
+    rw [howned]
+    exact (hd hn).2.2 i hi
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
