@@ -8241,4 +8241,79 @@ theorem merge_set_bal_roles_kept {F : Type}
   simp only [Nat.add_zero] at h0
   rw [h0, h8]
 
+/-- Insertion preserves the key-length header of every owned table. -/
+theorem merge_set_key_lengths_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ u ∈ S, hdr post u 0 = hdr s u 0 := by
+  intro u hu
+  by_cases hn : u = t
+  · subst u
+    exact he.2.2.1
+  · exact (merge_set_other_table_frame hA hW ht hu hn he).2.2 0 (by decide)
+
+/-- All world roles remain compatible when a fresh block-inner role is installed. -/
+theorem merge_set_world_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t inner : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32))
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    RolesOK post S (worldRoleSlots post) (journalRoleSlots post) := by
+  have hj := (merge_set_journal_kept hA hW ht he).1
+  have hws := merge_set_recRoles_kept hA hW ht he "ws" 40
+    [(16, "ws+16"), (32, "ws+32")] (by simp [typedRecords]) (by decide)
+    (by decide) (by decide)
+  have hbr := merge_set_recRoles_kept hA hW ht he "bs" 80
+    [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"),
+      (40, "bs+40"), (48, "bs+48"), (72, "bs+72")]
+    (by simp [typedRecords]) (by decide) (by decide) (by decide)
+  have htr := merge_set_recRoles_kept hA hW ht he "ts" 72
+    [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"),
+      (40, "ts+40"), (48, "ts+48"), (56, "ts+56"), (64, "ts+64")]
+    (by simp [typedRecords]) (by decide) (by decide) (by decide)
+  have hba : globN post "bal_accounts" = globN s "bal_accounts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide))
+  have hbi : globN post "bal_idx_accts" = globN s "bal_idx_accts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_idx_accts") (by decide))
+  have hbj : globN post "bal_idx_stor" = globN s "bal_idx_stor" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_idx_stor") (by decide))
+  have htn := merge_set_ts_nestRoles_kept hA hW ht he hbs ht0 htbs
+  have hbal := merge_set_bal_roles_kept hA hW ht he hbs ht0 htbs
+  have hp := merge_set_bs_outer_kept hA hW ht he hbs
+  let pre := (recRoles s "ws" [(16, "ws+16"), (32, "ws+32")] ++
+    recRoles s "bs" [(8, "bs+8"), (16, "bs+16"), (24, "bs+24"), (32, "bs+32"),
+      (40, "bs+40"), (48, "bs+48"), (72, "bs+72")] ++
+    recRoles s "ts" [(8, "ts+8"), (16, "ts+16"), (24, "ts+24"), (32, "ts+32"),
+      (40, "ts+40"), (48, "ts+48"), (56, "ts+56"), (64, "ts+64")] ++
+    [(globN s "bal_accounts", "bal_accounts"), (globN s "bal_idx_accts", "bal_idx_accts"),
+      (globN s "bal_idx_stor", "bal_idx_stor")]).filter (fun a => a.1 != 0)
+  let suf := (nestRoles s "ts" "ts.inner" ++ (balRecords s).flatMap
+    (fun ad => [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")])).filter
+    (fun a => a.1 != 0)
+  have hpre : worldRoleSlots s = pre ++
+      (nestRoles s "bs" "bs.inner").filter (fun a => a.1 != 0) ++ suf := by
+    simp only [worldRoleSlots, pre, suf, List.filter_append, List.append_assoc]
+  have hpost : worldRoleSlots post = pre ++
+      (nestRoles post "bs" "bs.inner").filter (fun a => a.1 != 0) ++ suf := by
+    simp only [worldRoleSlots, hws, hbr, htr, hba, hbi, hbj, htn, hbal,
+      pre, suf, List.filter_append, List.append_assoc]
+  rw [hpost, hj]
+  apply merge_roles_transport_inner (s := s) (t := t) (inner := inner)
+  · rw [← hpre]; exact hW.1.2.2.2.2.2.2.2.2.2.2.2
+  · exact hi
+  · exact hk
+  · rwa [← hpre]
+  · exact merge_set_key_lengths_kept hA hW ht he
+  · exact hbs
+  · exact htbs
+  · exact ht0
+  · exact hp.1
+  · exact hp.2.trans htbs.symm
+  · exact hv
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
