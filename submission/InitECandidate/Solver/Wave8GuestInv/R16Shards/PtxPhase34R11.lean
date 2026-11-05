@@ -832,6 +832,18 @@ theorem alloc_return_nonzero (h : PtxCallees) {F : Type}
   obtain ⟨np, hv, hpost, _, hf⟩ := ha v rfl
   exact ⟨np, hv, fresh_backing_nonzero hA.2 hf, hpost⟩
 
+/-- A declaration whose continuation preserves locals preserves every local
+other than its temporary binding across the whole call. -/
+theorem dec_call_fall_lookup {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {x fname : MlS} {sh : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hcont : ∀ (a b : PanSemStateFiniteExact 64 F),
+      evaluateHOLFiniteState a cont = (none, b) → b.locals = a.locals)
+    (hr : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (none, post))
+    (k : MlS) (hk : k ≠ x) : post.locals.lookup k = s.locals.lookup k := by
+  obtain ⟨_, _, _, _, rv, allocated, done, _, _, hrun, _, hlocal⟩ := dec_call_fall_inv hr
+  rw [hlocal k hk, hcont _ _ hrun]
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hk, Ne.symm hk]
+
 /-- The complete allocating branch establishes nonzero backing, including
 copying and restoration of the temporary `np` local. -/
 theorem lst_push_alloc_branch_fall (h : PtxCallees) {F : Type}
@@ -869,6 +881,32 @@ theorem lst_push_alloc_branch_fall (h : PtxCallees) {F : Type}
       show ofString "np" ≠ ofString "cap" by decide] using hcap)
     (by simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]) hnz hcont
   simpa only [memW, hmem] using hb
+
+/-- The allocating branch preserves all caller lookups except its temporary
+`np` binding; in particular it preserves the list address and old length. -/
+theorem lst_push_alloc_branch_lookup {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (args : List (ExpHOL 64))
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "np") .one (ofString "alloc") args
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.var .local (ofString "np"),
+             .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "l"), .const 0])
+              (.var .local (ofString "np")))
+            (.store (.op .add [.var .local (ofString "l"), .const 16])
+              (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post))
+    (k : MlS) (hk : k ≠ ofString "np") : post.locals.lookup k = s.locals.lookup k := by
+  apply dec_call_fall_lookup ?_ hr k hk
+  intro a b hab
+  apply seq_fall_locals ?_ ?_ hab
+  · intro mid hm
+    exact (ignored_call_fall_locals a mid _ _ hm).1
+  · intro mid hm
+    exact seq_fall_locals (fun _ hs => store_fall_locals hs)
+      (fun _ hs => store_fall_locals hs) hm
 
 /-- A falling conditional either executes its growth branch or skips it.
 This exposes the branch result without imposing a condition-evaluation premise. -/
@@ -908,10 +946,37 @@ theorem lst_push_capacity_branch_fall (h : PtxCallees) {F : Type}
                 (.var .local (ofString "np")))
               (.store (.op .add [.var .local (ofString "l"), .const 16])
                 (.panop .mul [.var .local (ofString "cap"), .const 2]))))) .skip) =
-      (none, post)) : memW post l.toNat ≠ 0 := by
+      (none, post)) : memW post l.toNat ≠ 0 ∧
+        (∀ k, k ≠ ofString "np" → post.locals.lookup k = s.locals.lookup k) := by
   rcases ite_skip_fall_inv hr with hg | rfl
-  · exact lst_push_alloc_branch_fall h s post l cap hc hA hl hcap hg
-  · exact hb
+  · exact ⟨lst_push_alloc_branch_fall h s post l cap hc hA hl hcap hg,
+      fun k hk => lst_push_alloc_branch_lookup s post _ hg k hk⟩
+  · exact ⟨hb, fun _ _ => rfl⟩
+
+/-- A falling capacity branch supplies precisely the backing and local facts
+needed by the common tail. -/
+theorem lst_push_branch_to_tail {F : Type}
+    (s mid post : PanSemStateFiniteExact 64 F) (l n : BitVec 64) (v : ValueHOL 64)
+    (branch : ProgHOL 64) (hc : s.code = originalRuntimeCode)
+    (hbranch : evaluateHOLFiniteState s branch = (none, mid))
+    (hb : memW mid l.toNat ≠ 0)
+    (hl : mid.locals.lookup (ofString "l") = s.locals.lookup (ofString "l"))
+    (hn : mid.locals.lookup (ofString "n") = s.locals.lookup (ofString "n"))
+    (hsl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (hsn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hr : evaluateHOLFiniteState s
+      (.seq branch
+        (.seq (.store (.op .add [.var .local (ofString "l"), .const 8])
+          (.op .add [.var .local (ofString "n"), .const 1]))
+          (.return (.op .add
+            [.load .one (.op .add [.var .local (ofString "l"), .const 0]),
+             .panop .mul [.var .local (ofString "n"), .var .local (ofString "esz")]])))) =
+      (some (.returned v), post)) : memW post l.toNat ≠ 0 := by
+  have hm := (evaluateHOLFiniteState_metadata s branch).1
+  rw [hbranch] at hm
+  rw [evaluateHOLFiniteState_seq_line780, hbranch] at hr
+  exact lst_push_tail_backing_nonzero mid post l n v (hm.trans hc)
+    (hl.trans hsl) (hn.trans hsn) hb hr
 
 /-- A push may relocate either backing array. Preserve the outer header
 pointers, and allow each data word either to stay fixed or to become a fresh
