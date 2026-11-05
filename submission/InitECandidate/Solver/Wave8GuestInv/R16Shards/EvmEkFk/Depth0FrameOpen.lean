@@ -1306,6 +1306,114 @@ theorem hoare_depth0_auth_stores :
     have h2 := (hoare_store_msg_48).run s hcode hR hnt
     exact ⟨fun hr => h2 hr, fun hr hr' => absurd hr' hr⟩
 
+/-- `frame_state_gas_used` (AST index 451) reads only. -/
+theorem ro_frame_state_gas_used : ReadOnlyFn (ofString "frame_state_gas_used") :=
+  OpHandlersB.HeadMemBridge.RbM15.readOnlyFn_of_guestAst 451 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_frame_state_gas_used rfl (fun _ => false) (fun _ h => by cases h) rfl
+
+/-- The guard of the `depth0_prepare` auth branch reads only the local `msg`. -/
+theorem localsOnly_msgPtr :
+    LocalsOnly ["msg"] (fun s => EvmMsgReady s ∧ ∃ m : BitVec 64,
+      s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+      m.toNat = memW s (globN s "ev" + 112)) := by
+  intro F s locals k hl ⟨hP, m, hm, hm_eq⟩
+  exact ⟨localsFree_evmMsgReady s locals k hP, m, by rw [hl "msg" (by simp)]; exact hm, hm_eq⟩
+
+/-- `decCall` with a word result shape: the continuation additionally knows the declared local
+holds a word (`Hoare.decCall_fall` of `PtxPhase45R11` with the shape check exposed). -/
+theorem Hoare.decCall_fall_word {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {names : List String} {name fname : MlS}
+    {arguments : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hname : ∀ n ∈ names, ofString n ≠ name)
+    (hQ : LocalsOnly names Q)
+    (hres : DecCallResumeOn P R name fname arguments)
+    (hcont : Hoare (fun s => R s ∧ ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)))
+      cont (fun r t => r = none → Q t)) :
+    Hoare P (.decCall name .one fname arguments cont) (fun r t => r = none → Q t) := by
+  refine ⟨fun {F} s hcode hP _ hr => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s (.decCall name .one fname arguments cont) with ⟨r, post⟩
+  rw [hrun] at hr
+  dsimp only at hr
+  subst hr
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) arguments with _ | values
+  · rw [hargs] at hrun; simp at hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun; simp at hrun
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun; simp at hrun
+      · rw [if_neg hz] at hrun
+        have hmeta := (evaluateHOLFiniteState_metadata (callEntryStateHOLFinite s callee) body').1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        cases bres with
+        | none => simp at hrun
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · rename_i hsh
+              obtain ⟨w, rfl⟩ := R10Shards.GbodyProcessMsg.value_shape_one_word
+                (Bool.and_eq_true_iff.1 hsh).1
+              set resumed := setVarHOLFinite name (.val (.word w)) { bpost with locals := s.locals }
+              have hresR : R resumed := hres s values body' callee ret' _ bpost hcode hP hargs hl hb
+              have hresW : resumed.locals.lookup name = some (.val (.word w)) := by
+                simp [resumed, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc0 := hcont.run resumed hresCode ⟨hresR, w, hresW⟩ (by rw [hc]; simp)
+              rw [hc] at hQc0
+              have hQc : Q cpost := hQc0 rfl
+              dsimp only
+              rw [← hpost_eq]
+              exact hQ cpost _ cpost.clock
+                (fun n hn => resVarEq_lookup_ne _ _ _ _ (hname n hn)) hQc
+            · simp at hrun
+          | _ => simp [emptyLocalsHOLFinite] at hrun
+
+/-- The `depth0_prepare` auth branch after `set_delegation`:
+`var used = frame_state_gas_used(ev); st ev+200, used; st msg+48, lds(ev+72); st ev+192, 0`,
+from `EvmMsgReady` with `msg = ev+112`: `EvmMsgReady` again. -/
+theorem hoare_depth0_auth_tail :
+    Hoare (fun s => EvmMsgReady s ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (.decCall (ofString "used") .one (ofString "frame_state_gas_used") [.var .global (ofString "ev")]
+        (.seq
+          (.store (.op .add [.var .global (ofString "ev"), .const 200]) (.var .local (ofString "used")))
+          (.seq
+            (.store (.op .add [.var .local (ofString "msg"), .const 48])
+              (.load .one (.op .add [.var .global (ofString "ev"), .const 72])))
+            (.store (.op .add [.var .global (ofString "ev"), .const 192]) (.const 0)))))
+      (fun r t => r = none → EvmMsgReady t) := by
+  have hres : DecCallResumeOn
+      (fun s => EvmMsgReady s ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (fun s => EvmMsgReady s ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112))
+      (ofString "used") (ofString "frame_state_gas_used") [.var .global (ofString "ev")] :=
+    ReadOnlyFn.resumeOn localsOnly_msgPtr
+      (fun s h => evmInv_guestInv s (evmInv_of_evmMsgReady s h.1))
+      ro_frame_state_gas_used (ofString "used") (by decide) _
+  have hcont := Hoare.mono hoare_depth0_auth_stores
+    (P := fun s => (EvmMsgReady s ∧ ∃ m : BitVec 64,
+        s.locals.lookup (ofString "msg") = some (.val (.word m)) ∧
+        m.toNat = memW s (globN s "ev" + 112)) ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "used") = some (.val (.word w)))
+    (fun s h => ⟨h.1.1, h.2, h.1.2⟩)
+  exact Hoare.decCall_fall_word (names := []) (by simp)
+    (LocalsOnly.of_localsFree localsFree_evmMsgReady) (fun {F} => @hres F) hcont
+
 end HeadStore
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
