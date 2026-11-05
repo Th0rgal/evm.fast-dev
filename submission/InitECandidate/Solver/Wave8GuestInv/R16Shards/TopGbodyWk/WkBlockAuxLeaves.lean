@@ -8201,4 +8201,44 @@ theorem merge_set_bs_balRecords_kept {F : Type}
   exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
     hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
 
+/-- Every aligned field of an existing BAL account record survives table insertion. -/
+theorem merge_set_bal_record_fields_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t ad : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (had : ad ∈ balRecords s)
+    (k : Nat) (hk : k % 8 = 0) (hkb : k + 8 ≤ 40) :
+    memW post (ad + k) = memW s (ad + k) := by
+  have hm : (ad, 40) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+  have hu := merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  obtain hz | ⟨hal, hw⟩ := hW.2.2.1.1 _ hm
+  · simp at hz
+  have hb := (InitECandidate.Solver.Wave8Contracts.M08.ivl_allocated_bound hA.2 hal).2
+  apply memW_eq_of_ivlUnhit hu
+  · have ha := hw.1
+    omega
+  · exact hb
+  · constructor <;> omega
+
+/-- The BAL role segment is unchanged by insertion into the block outer table. -/
+theorem merge_set_bal_roles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    (balRecords post).flatMap (fun ad =>
+      [(memW post ad, "bal.stor"), (memW post (ad + 8), "bal.reads")]) =
+    (balRecords s).flatMap (fun ad =>
+      [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")]) := by
+  rw [merge_set_bs_balRecords_kept hA hW ht he hbs ht0 htbs]
+  apply List.flatMap_congr
+  intro ad had
+  have h0 := merge_set_bal_record_fields_kept hA hW ht he had 0 (by decide) (by decide)
+  have h8 := merge_set_bal_record_fields_kept hA hW ht he had 8 (by decide) (by decide)
+  simp only [Nat.add_zero] at h0
+  rw [h0, h8]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
