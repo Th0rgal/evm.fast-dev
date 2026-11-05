@@ -2902,6 +2902,15 @@ theorem stable_length_store_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
     (stable_length_store_header_unchanged s hA hh mem' hm).2]
   exact (stable_storage_length_fits s hp).1
 
+theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
+    (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
+    Disj (p, 24) (locN s "logs", 24) := by
+  have hl := hp.1.1.2.1
+  rcases hl with hz | hl
+  · exact False.elim (hp.1.2.2 hz)
+  · exact hh.disj_allocated hA hPost hl.2.1
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
