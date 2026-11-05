@@ -5674,6 +5674,44 @@ theorem stableCopy_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact stableCopy_backing_init_cut (stableCopy_loop_cut htail) s hc hp
 
+/-- The concrete length store, setup, and copy loop compose with a receipt tail. -/
+theorem stable_length_setup_loop_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn (fun s => (StableLengthPre s ∧
+      (∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+        (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+        (∀ o ∈ worldOwned s S Nd,
+          Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o)) ∧
+      Disj (locN s "logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (locN s "stable_logs", 24)
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+      ∀ j, j < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * j), 40)
+          (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) ∧
+      locN s "logs" ≠ 0 ∧ WordsOK s (locN s "stable_logs", 24) ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (.seq (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+        (.seq (.assign .local (ofString "stable_lp")
+          (.load .one (.var .local (ofString "stable_logs"))))
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.seq (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+              (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+                .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+                (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+              tail)))) (2 ^ 28 + 1 + b) := by
+  intro F s hc hp
+  rw [← Nat.zero_add (2 ^ 28 + 1 + b)]
+  refine seq_bound_trans ?_ hoare_stable_length_copy_ready
+    (stableCopy_setup_loop_cut htail) s hc hp
+  intro G t _ _ hclock
+  have ht := clock_store t (.op .add [.var .local (ofString "stable_logs"), .const 8])
+    (.var .local (ofString "nl"))
+  exact ⟨by omega, by omega⟩
+
 /-- Package the length-write framing facts into the complete copy setup contract. -/
 theorem stable_length_copy_setup_ready {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
@@ -6159,6 +6197,59 @@ theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
       show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
   · change ∀ o ∈ worldOwned post S Nd, Disj _ o
     simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hdisj
+
+/-- Allocation supplies length validity and copy separation in the same resumed state. -/
+theorem lst_new_stable_length_spatial (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    StableLengthPre t ∧ StableCopySpatial t := by
+  exact ⟨lst_new_stable_length_pre h s vs body callee ret v post hc hp hn ha hl hr,
+    lst_new_stable_resumed_spatial h s vs body callee ret v post hc hp ha hl hr⟩
+
+/-- Allocation supplies the coherent spatial precondition of the length write. -/
+theorem lst_new_stable_length_joint_pre (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : s.locals.lookup (ofString "nl") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "nl")))))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    StableLengthPre t ∧
+      (∃ S Nd, WorldTypedWith t S Nd ∧ LogsLiveOwned t S Nd (locN t "logs") ∧
+        (∀ o ∈ worldOwned t S Nd, Disj (locN t "stable_logs", 24) o) ∧
+        (∀ o ∈ worldOwned t S Nd,
+          Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o)) ∧
+      Disj (locN t "logs", 24)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      Disj (locN t "stable_logs", 24)
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+        (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") ∧
+      ∀ j, j < memW t (locN t "logs" + 8) →
+        Disj (memW t (memW t (locN t "logs") + 8 * j), 40)
+          (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  exact ⟨lst_new_stable_length_pre h s vs body callee ret v post hc hp hn ha hl hr,
+    lst_new_stable_resumed_joint_regions h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_header h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_header_backing h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_source_array h s vs body callee ret v post hc hp ha hl hr,
+    lst_new_stable_resumed_backing_records h s vs body callee ret v post hc hp ha hl hr⟩
 
 /-- A nonempty copy obtains its typed length operand directly from positivity. -/
 theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
