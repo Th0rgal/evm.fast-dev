@@ -5001,6 +5001,33 @@ theorem hoare_stable_length_spatial :
     (by simpa only [flattenHOL] using hst)
   exact stableLengthPre_spatial s hp mem' hdom hm hs hh hd ha he
 
+/-- The concrete stable-length write preserves the coherent ownership frame. -/
+theorem hoare_stable_length_ownedFrame :
+    Hoare (fun s => StableLengthPre s ∧ StableCopyOwnedFrame s)
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hf⟩ := hp
+  have hlocal := hp.2.2.1
+  have hnl := hp.2.2.2.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    have hb := stable_length_address_bound s hp.1.1.1.1.1.1.1.1.1.1.2 hp.2.1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb.1] using hb.2
+  subst x
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact stableCopyOwnedFrame_length_store s hp mem' hdom hm hf
+
 /-- Combine the length and spatial postconditions of the same concrete write. -/
 theorem hoare_stable_length_joint :
     Hoare (fun s => StableLengthPre s ∧
