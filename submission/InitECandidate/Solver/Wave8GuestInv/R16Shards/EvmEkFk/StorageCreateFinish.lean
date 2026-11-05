@@ -8973,6 +8973,69 @@ theorem rlp_list_to_slices_ret_spec_so {F : Type}
               | _ => simp at hrun_k1
         | _ => simp at hret
 
+/-- Each returned pair is itself a well-formed witness slice.  This packages the
+array-level RLP bounds in the form consumed by the node insertion loop. -/
+theorem rlp_list_to_slices_witness_slices_so {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (P L : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hAR : ArenaReady s)
+    (hin : Inside (P.toNat, L.toNat) sourceBase (globN s "heap_ptr"))
+    (hL40 : L.toNat < 2 ^ 40)
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word L)))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_to_slices) =
+      (some (.returned rv), post)) :
+    ∃ (pw wcnt : BitVec 64),
+      rv = .rStruct [.val (.word pw), .val (.word wcnt)] ∧
+      R16Shards.WorldEff s post [] [] R16Shards.wsGw ∧
+      Inside (pw.toNat, 16 * wcnt.toNat) (globN s "heap_ptr") (globN post "heap_ptr") ∧
+      wcnt.toNat ≤ L.toNat ∧
+      ∀ k < wcnt.toNat, WitnessSliceOK post (pw.toNat + 16 * k) := by
+  obtain ⟨pw, wcnt, hrv, heff, hw, hfresh, hcnt, hitems⟩ :=
+    rlp_list_to_slices_ret_spec_so s post P L rv hc hAR hin hL40 hp hl hret
+  refine ⟨pw, wcnt, hrv, heff, hfresh, hcnt, fun k hk => ?_⟩
+  obtain ⟨hi, _, hlen⟩ := hitems k hk
+  have hwords : WordsOK post (pw.toNat + 16 * k, 16) := by
+    refine ⟨by have := hw.1; omega, by norm_num, fun j hj => ?_⟩
+    have hj' : 2 * k + j < 16 * wcnt.toNat / 8 := by omega
+    have hjw := hw.2.2 (2 * k + j) hj'
+    have heq : pw.toNat + 16 * k + 8 * j = pw.toNat + 8 * (2 * k + j) := by omega
+    change WordAt post (pw.toNat + 16 * k + 8 * j)
+    rw [heq]
+    exact hjw
+  refine ⟨hwords, ⟨?_, ?_⟩, lt_of_le_of_lt hlen hL40, hi.1,
+    le_trans hi.2 heff.hp_lo⟩
+  · have := hAR.2.1; have := hfresh.1; omega
+  · have := hfresh.2; omega
+
+/-- The concrete RLP slice allocator preserves the caller's EVM and witness
+database while supplying typed, bounded input records for node decoding. -/
+theorem rlp_list_to_slices_evm_and_witness_so {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (P L : BitVec 64) (rv : ValueHOL 64)
+    (hc : s.code = originalRuntimeCode) (hInv : EvmInv s) (hdb : WitnessDbOK s)
+    (hin : Inside (P.toNat, L.toNat) sourceBase (globN s "heap_ptr"))
+    (hL40 : L.toNat < 2 ^ 40)
+    (hp : s.locals.lookup (ofString "p") = some (.val (.word P)))
+    (hl : s.locals.lookup (ofString "len") = some (.val (.word L)))
+    (hret : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_list_to_slices) =
+      (some (.returned rv), post)) :
+    EvmStep ["heap_ptr", "scratch_ptr"] s post ∧ WitnessDbOK post ∧
+    ∃ (pw wcnt : BitVec 64),
+      rv = .rStruct [.val (.word pw), .val (.word wcnt)] ∧
+      Inside (pw.toNat, 16 * wcnt.toNat) (globN s "heap_ptr") (globN post "heap_ptr") ∧
+      wcnt.toNat ≤ L.toNat ∧
+      ∀ k < wcnt.toNat, WitnessSliceOK post (pw.toNat + 16 * k) := by
+  obtain ⟨pw, wcnt, hrv, heff, hfresh, hcnt, hslices⟩ :=
+    rlp_list_to_slices_witness_slices_so s post P L rv hc hInv.1 hin hL40 hp hl hret
+  have hsteps : ∀ Nd, NodeHeap s Nd → ∃ Nd', DecoderNodeStep s post Nd Nd' ∧
+      RetRootIn s (some (.returned rv)) post [] Nd' := by
+    intro Nd hNd
+    refine ⟨Nd, decoderNodeStep_of_worldEff hInv.1 hNd heff, ?_⟩
+    intro w hw
+    rw [hrv] at hw
+    cases hw
+  obtain ⟨hE, hdb', _⟩ := decoderNodeStep_evm_and_witness hInv hdb hsteps
+  exact ⟨hE, hdb', pw, wcnt, hrv, hfresh, hcnt, hslices⟩
+
 end StorageOriginal
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.StorageCreateFinish
