@@ -11028,4 +11028,27 @@ theorem phase4LogLoop_stable_backing_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Loading the source count and pointer retains both transaction backings. -/
+theorem phase4LogPointers_backing_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 2 (spineAt 126 ptxCode) tail) b := by
+  unfold ptxCode
+  refine dec_bound_trans (P := fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+    (Q := fun s => (Phase4LogCountReady s ∧
+      ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧ TxBacking s)
+    (fun s v hp he => ⟨phase4LogCount_load_typed s v hp.1 he, hp.2⟩) ?_
+  intro F t hc ht
+  refine dec_bound_trans (P := fun s => (Phase4LogCountReady s ∧
+    ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧ TxBacking s)
+    ?_ htail t hc ht
+  intro F s v hp he
+  obtain ⟨hr, n, p, hn, hl⟩ := phase4LogPointer_load_typed s v hp.1.1 hp.1.2 he
+  exact ⟨⟨hr, ⟨n, hn⟩, hr.1.2.2, ⟨p, hl⟩⟩, hp.2⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
