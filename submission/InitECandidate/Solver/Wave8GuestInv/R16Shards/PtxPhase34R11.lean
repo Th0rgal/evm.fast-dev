@@ -7386,6 +7386,38 @@ theorem stable_allocation_decl_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b 
         (stable_length_canonical_operand t hp.2.1) ha hl hr,
       lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
+/-- Allocation enters the owned length/copy suffix with its joint witnesses. -/
+theorem stable_allocation_decl_loop_owned_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (spinePlug 5 (spineAt 132 ptxCode) tail)
+      (K.lst_new + (2 ^ 28 + 1 + b) + 1) := by
+  have he : spinePlug 5 (spineAt 132 ptxCode) tail =
+      .decCall (ofString "stable_logs") .one (ofString "lst_new")
+        [.const 8, .var .local (ofString "stable_log_cap")]
+        (spinePlug 4 (spineAt 133 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  refine TerminatingProgBoundedOn.decCall_on
+    (P := fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    h.fb_lst_new _ _ _ ?_ ?_ (stable_length_decl_loop_owned_cut htail) s hc hp
+  · intro G t vs body callee ret hc hp ha hl
+    exact guestInv_callEntry t callee hp.1.1.1.1.1.1.1.1.1
+  · intro G t vs body callee ret v post hc hp ha hl hr
+    exact ⟨lst_new_stable_length_joint_pre h t vs body callee ret v post hc hp.1
+        (stable_length_canonical_operand t hp.2.1) ha hl hr,
+      lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
+
 /-- A world-owned slot write preserves a separately owned stable receipt list. -/
 theorem ptxReceiptsDone_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
     (hp : PtxReceiptsDone s) (hn : locN s "stable_logs" ≠ 0)
