@@ -2831,6 +2831,34 @@ theorem stable_length_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hm]
   exact Nat.mod_eq_of_lt hn
 
+theorem stable_length_store_header_unchanged {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    memW {s with memory := mem'} (locN s "stable_logs") = memW s (locN s "stable_logs") ∧
+    memW {s with memory := mem'} (locN s "stable_logs" + 16) =
+      memW s (locN s "stable_logs" + 16) := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have h0 : locN s "stable_logs" < 2 ^ 64 := by dsimp at hb; omega
+  have h8 : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  have h16 : locN s "stable_logs" + 16 < 2 ^ 64 := by dsimp at hb; omega
+  have hn0 : BitVec.ofNat 64 (locN s "stable_logs") ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h0, Nat.mod_eq_of_lt h8] at he'
+    omega
+  have hn16 : BitVec.ofNat 64 (locN s "stable_logs" + 16) ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h16, Nat.mod_eq_of_lt h8] at he'
+    omega
+  constructor <;> simp only [memW]
+  · rw [hm _ hn0]
+  · rw [hm _ hn16]
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
