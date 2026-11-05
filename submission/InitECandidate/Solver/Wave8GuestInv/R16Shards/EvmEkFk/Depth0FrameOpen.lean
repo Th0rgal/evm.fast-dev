@@ -4984,4 +4984,43 @@ theorem hoare_prepare_dispatch_delegated_cont (gw : List String) (hp : Nat)
       rw [srd_eval_seq_assoc] at hr
       exact hr hnt
 
+/-- Bind the two words returned by `ext_code_of`, preserving the message and
+step frame for the delegated-code test and common dispatch tail. -/
+theorem hoare_prepare_dispatch_code_binders (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n : BitVec 64) (tail : ProgHOL 64)
+    (htail : Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+      s.locals.lookup (ofString "code_n") = some (.val (.word code_n))) tail
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]))
+      (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+        (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode"))) tail))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  have hLF : LocalsFree (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s) :=
+    fun s l k h => ⟨localsFree_evmMsgReady s l k h.1, localsFree_stepFrom gw hp G ch s l k h.2⟩
+  refine Hoare.dec_fall (P' := fun s => D0Pre gw hp G ch s ∧
+    s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+    s.locals.lookup (ofString "code") = some (.val (.word code))) ?_ ?_ hLF
+  · intro F s v hP hv
+    have hv' : v = .val (.word code) := by
+      simpa [evalHOLExact, hP.2] using hv.symm
+    subst v
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, ?_, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · refine Hoare.dec_fall ?_ htail hLF
+    intro F s v hP hv
+    have hv' : v = .val (.word code_n) := by
+      simpa [evalHOLExact, hP.2.1] using hv.symm
+    subst v
+    refine ⟨d0Pre_locals gw hp G ch s _ _ ?_ hP.1, ?_, ?_, ?_⟩
+    · simp (config := {decide := true}) [HolFiniteMapExact.lookup_update, FUPDATE]
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2.1
+    · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2.2
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
 end HeadStore
