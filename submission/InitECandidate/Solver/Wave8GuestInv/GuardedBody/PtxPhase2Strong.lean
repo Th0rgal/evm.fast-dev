@@ -14780,4 +14780,47 @@ theorem phase2_acct_empty_call_backing (name : MlS) (args : List (ExpHOL 64)) :
       (fun r t => r = none → R16Shards.TxBacking t) := by
   exact Hoare.callLocal_resume (phase2_acct_empty_resume_backing name args)
 
+/-- Optional lookup restores the full guard needed by the empty-account branch. -/
+theorem phase2_get_account_optional_resume_world_backing (name : MlS)
+    (args : List (ExpHOL 64)) (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      name (ofString "get_account_optional") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hb := phase2_get_account_optional_resume_backing name args s vs body callee ret v post hc hp ha hl hr
+  have hh := R16Shards.PtxP1.funSpec_at_lookup
+    R16Shards.EvmEkFk.wkSc_get_account_optional s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hr]; simp)
+  rw [hr] at hh
+  have hs := (R16WkAcctWs.WorldStepSc.of_pre_locals_clock
+    (hh (Or.inl ⟨v, rfl⟩))).1
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  have hd : ∀ i ∈ R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs s,
+      Disj i (globN s "bo", 88) := by
+    intro i hi
+    simp only [R16WkAcctWs.bufRegions, R16Shards.EvmEkFk.wsAcctBufs, List.map_cons,
+      List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    · exact bufferRegion_disj_le hw ("keccak_pad", 136) (by decide) (by decide) 136 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+    · exact bufferRegion_disj_le hw ("keccak_st", 200) (by decide) (by decide) 200 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+    · exact bufferRegion_disj_le hw ("mpt_nib_scratch", 64) (by decide) (by decide) 64 (by omega) _ (R16Shards.PtxP1.bo_mem_typed hp.2.1.bo_nz)
+  have hz : ∀ i ∈ R16WkAcctWs.bufRegions R16Shards.EvmEkFk.wsAcctBufs s,
+      i.2 = 0 → i.1 % 8 = 0 := by
+    intro i hi
+    simp only [R16WkAcctWs.bufRegions, R16Shards.EvmEkFk.wsAcctBufs, List.map_cons,
+      List.map_nil, List.mem_cons, List.not_mem_nil, or_false] at hi
+    rcases hi with rfl | rfl | rfl
+    all_goals exact R16Shards.PtxP1.bufferRegion_zero_aligned s _ _ (by omega)
+  have he := txEnv_preserved_by_worldStep hs (by decide) (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by decide)
+    (by intro k hk; simp at hk ⊢; tauto) hd
+    (bo_words hw.2.2.1 hp.2.1.bo_nz).2.1 hz
+    hp.2.1 (locals := (setVarHOLFinite name v {post with locals := s.locals}).locals)
+    (by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hi])
+  have hwpost := R16WkAcctWs.WorldStepSc.worldOK_bufs
+    R16Shards.EvmEkFk.validBufList_wsAcctBufs hp.1
+    (R16WkAcctWs.WorldStepSc.of_pre_locals_clock (hh (Or.inl ⟨v, rfl⟩)))
+  exact ⟨localsFree_worldOK post _ post.clock hwpost, he, hb⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
