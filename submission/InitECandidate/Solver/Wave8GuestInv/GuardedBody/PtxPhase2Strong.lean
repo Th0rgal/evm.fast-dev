@@ -5945,4 +5945,35 @@ theorem phase2_world_frame_heap_disjoint {F : Type}
   · intro region hm
     exact not_cellHits_of_disj hal (hrzero region hm) hp (hr region hm)
 
+/-- Reassemble the guarded copy invariant from domain, world, and input-frame guarantees. -/
+theorem phase2_packed_copy_reassemble {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      post.locals.lookup (ofString n) = s.locals.lookup (ofString n))
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hd : ∀ a, s.memaddrs a → post.memaddrs a)
+    (hw : ∃ S Nd, WorldTypedWith post S Nd ∧ TxAccessListAt post S Nd (locN post "tx") ∧
+      IvlsDisj [(locN post "al_keys", (locN post "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned post S Nd))
+    (hc : memW post (locN post "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW post (locN post "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex post := by
+  have hr : PtxPackedKeysReady post := by
+    apply phase2_packed_ready_after_copy s post hp.1 _ hh hd hw
+    intro n hn
+    exact hl n (by simp at hn ⊢; tauto)
+  apply phase2_packed_copy_live_frame s post hp hr _ hc hm
+  intro n hn
+  have he := hl n (by simp at hn ⊢; tauto)
+  simp [locN, he]
+
+/-- Empty global-write contracts, as used by memcpy, fix the heap boundary exactly. -/
+theorem phase2_copy_globals_heap_eq {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hg : GlobalsKept [] s post) :
+    globN post "heap_ptr" = globN s "heap_ptr" := by
+  have he := hg (ofString "heap_ptr") (by simp)
+  simp only [globN, he]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
