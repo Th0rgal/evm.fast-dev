@@ -2953,6 +2953,51 @@ theorem logsLiveOwned_disjoint_store {F : Type} {s : PanSemStateFiniteExact 64 F
     rw [howned]
     exact (hd hn).2.2 i hi
 
+/-- The stable length update preserves the source logs and their ownership.
+The separation premises are the freshness facts to retain from `lst_new`. -/
+theorem stable_length_store_source {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (S Nd : List Nat) (hW : WorldTypedWith s S Nd)
+    (ho : LogsLiveOwned s S Nd (locN s "logs"))
+    (hs : ∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o)
+    (hhead : Disj (locN s "logs", 24) (locN s "stable_logs", 24))
+    (harray : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (locN s "stable_logs", 24))
+    (hentry : ∀ i, i < memW s (locN s "logs" + 8) →
+      Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24))
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    let post := {s with memory := mem'}
+    WorldTypedWith post S Nd ∧ worldOwned post S Nd = worldOwned s S Nd ∧
+      TxEnv post ∧ LogsListOK post (locN s "logs") ∧
+      LogsLiveOwned post S Nd (locN s "logs") ∧
+      memW post (locN s "logs") = memW s (locN s "logs") ∧
+      memW post (locN s "logs" + 8) = memW s (locN s "logs" + 8) := by
+  have hptr := hp.1.1.1
+  have htw := hptr.1.1.1.1
+  have hA := htw.1.1
+  have hbound := (stable_length_address_bound s hA.2 hh).1
+  have hxin : Inside ((BitVec.ofNat 64 (locN s "stable_logs" + 8)).toNat, 8)
+      (locN s "stable_logs") (locN s "stable_logs" + 24) := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hbound]
+    constructor <;> dsimp <;> omega
+  obtain ⟨hW', heq, hE'⟩ := store_outside_worldOwned hA htw.2 hW hs hx hxin hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hA.1
+  have hl := hptr.1.1.2.1
+  have hr := logsLiveOwned_disjoint_store hA.2 hA.1 hg hl ho hm
+    (disj_of_inside_right hxin hhead) (disj_of_inside_right hxin harray)
+    (fun i hi => disj_of_inside_right hxin (hentry i hi)) heq
+  have hl' := hl.resolve_left hptr.1.2.2
+  have hu : IvlUnhit s {s with memory := mem'} (locN s "logs", 24) :=
+    ivlUnhit_single hm (by simp) (disj_of_inside_right hxin hhead)
+  have hb := (ivl_allocated_bound hA.2 hl'.2.1).2
+  exact ⟨hW', heq, hE', hr.1, hr.2,
+    memW_eq_of_ivlUnhit hu hl'.1.1 hb ⟨by omega, by omega⟩,
+    memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩⟩
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
