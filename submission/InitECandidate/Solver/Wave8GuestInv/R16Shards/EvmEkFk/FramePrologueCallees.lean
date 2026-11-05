@@ -7052,6 +7052,54 @@ theorem transfer_data_tail_step {F : Type}
   exact ⟨⟨localsFree_evmInv _ _ _ both.1.1, both.1.2.1, both.1.2.2.1,
     (evmChain_with_locals _ _ _).trans both.1.2.2.2⟩, both.2⟩
 
+theorem transfer_accumulated_alloc_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (name : MlS) (p : BitVec 64)
+    (n : Nat) (cont : ProgHOL 64) (hn : n = 40 ∨ n = 96 ∨ n = 32)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1) :
+    ∃ allocated : PanSemStateFiniteExact 64 F,
+      allocated.locals.lookup name = some (.val (.word p)) ∧
+      globN allocated "heap_ptr" = p.toNat + n ∧ WordsOK allocated (p.toNat, n) ∧
+      EvmStepCC ["heap_ptr"] s allocated ∧ allocated.memory = cur.memory ∧
+      allocated.be = s.be ∧
+      (∀ k, k ≠ name → allocated.locals.lookup k = cur.locals.lookup k) ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → allocated.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN allocated "heap_ptr") → memB allocated b = memB s b) ∧
+      Resumes (evaluateHOLFiniteState allocated cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1 =
+        (evaluateHOLFiniteState allocated cont).1 ∧
+      (evaluateHOLFiniteState cur
+        (.decCall name .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).2 =
+        { (evaluateHOLFiniteState allocated cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState allocated cont).2.locals
+            (name, cur.locals.lookup name) } := by
+  obtain ⟨allocated, hx, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec cur name cont p n hn hstep.1.1 hp hr
+  have both : EvmStepCC ["heap_ptr"] s allocated := by
+    refine ⟨⟨st.1.1, le_trans hstep.1.2.1 st.1.2.1,
+      fun k hk => (hstep.1.2.2.1 k hk).trans (st.1.2.2.1 k hk),
+      st.1.2.2.2.trans hstep.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := hstep.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := st.2 ec (hstep.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  refine ⟨allocated, hx, hhp, hw, both, hm, hb.trans hbe, hl, ?_, ?_, er ▸ hr, er, es⟩
+  · intro a ha
+    exact (congrFun hm a).trans (hout a ha)
+  · intro b hb64 hnot
+    rw [show memB allocated b = memB cur b by simp only [memB, hm, hb]]
+    apply hbyte b hb64
+    have hmono := st.1.2.1
+    omega
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
