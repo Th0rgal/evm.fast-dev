@@ -4826,4 +4826,57 @@ theorem phase2_key_copy_index_frame {F : Type}
   rw [phase2_key_prefix_congr s post i hm]
   exact hk
 
+/-- The entire rounded packed allocation is separate from the live address array. -/
+theorem phase2_packed_keys_address_separation {F : Type}
+    (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (base : Nat)
+    (hp : PtxAddressCountInv s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post base (locN s "nkeys" * 52 + 8)) :
+    Disj (locN s "al_addrs", (locN s "nal" + 1) * 8)
+      (base, (locN s "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  have hready : PtxAddressReady s := hp.1.1.1
+  have hstart : globN s "heap_ptr" ≤ base := hf.2.1.1
+  exact Or.inr (Or.inr (Or.inl (hready.2.2.1.2.trans hstart)))
+
+/-- Packed-buffer readiness depends only on its pointer, count and transaction locals. -/
+theorem phase2_packed_keys_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hp : PtxPackedKeysReady s)
+    (hl : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String),
+      locals.lookup (ofString n) = s.locals.lookup (ofString n)) :
+    PtxPackedKeysReady { s with locals := locals, clock := clock } := by
+  have ha : locN { s with locals := locals, clock := clock } "al_keys" = locN s "al_keys" := by
+    simp [locN, hl "al_keys" (by simp)]
+  have hn : locN { s with locals := locals, clock := clock } "nkeys" = locN s "nkeys" := by
+    simp [locN, hl "nkeys" (by simp)]
+  have ht : locN { s with locals := locals, clock := clock } "tx" = locN s "tx" := by
+    simp [locN, hl "tx" (by simp)]
+  obtain ⟨hs, hi, hal, hw, S, Nd, hW, hT, hd⟩ := hp
+  refine ⟨?_, ?_, ?_, ?_, S, Nd, ?_, ?_, ?_⟩
+  · simpa only [hl "al_keys" (by simp)] using hs
+  · rw [ha, hn]; exact hi
+  · rw [ha]; exact hal
+  · rw [ha, hn]; exact hw
+  · exact (worldTypedWith_with_locals s locals clock S Nd).mpr hW
+  · rw [ht]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals s locals clock hT
+  · rw [ha, hn]; exact hd
+
+/-- Loop-counter declarations preserve the packed allocation facts. -/
+theorem phase2_packed_keys_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx"] : List String), ofString n ≠ name) :
+    PtxPackedKeysReady (setVarHOLFinite name v s) := by
+  apply phase2_packed_keys_with_locals s _ s.clock hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- Resetting the flattened copy index preserves the packed buffer and starts at prefix zero. -/
+theorem phase2_packed_keys_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedKeysReady s) :
+    let post := setVarHOLFinite (ofString "k") (.val (.word 0)) s
+    PtxPackedKeysReady post ∧ locN post "k" = phase2_key_prefix post 0 := by
+  refine ⟨phase2_packed_keys_set_other s hp _ _ (by decide), ?_⟩
+  simp [locN, phase2_key_prefix, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
