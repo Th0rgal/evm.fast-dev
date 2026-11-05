@@ -4832,6 +4832,19 @@ theorem stableCopyOwnedFrame_with_locals {F : Type} (s : PanSemStateFiniteExact 
   simp only [el, es, ec]
   exact ⟨ho, hh, hb⟩
 
+/-- Assignments to temporary locals retain the coherent ownership frame. -/
+theorem hoare_stableCopyOwnedFrame_assign (name : MlS) (e : ExpHOL 64)
+    (hl : name ≠ ofString "logs") (hs : name ≠ ofString "stable_logs")
+    (hc : name ≠ ofString "stable_log_cap") :
+    Hoare StableCopyOwnedFrame (.assign .local name e)
+      (fun r t => r = none → StableCopyOwnedFrame t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    apply stableCopyOwnedFrame_with_locals s _ s.clock _ _ _ hp
+    all_goals simp [HolFiniteMapExact.lookup_update, FUPDATE, hl, hs, hc]
+  · intro F s hp hr
+    cases hr
+
 /-- The coherent ownership frame strengthens the copy exit postcondition. -/
 theorem stableCopyOwnedFrame_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hf : StableCopyOwnedFrame s)
