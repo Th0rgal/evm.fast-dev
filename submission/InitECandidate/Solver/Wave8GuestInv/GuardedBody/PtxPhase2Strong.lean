@@ -4178,4 +4178,32 @@ theorem phase2_address_count_inner_hoare :
   exact Hoare.seq_fall phase2_address_count_store_record_hoare
     phase2_address_count_updates_hoare
 
+/-- The complete counting/address-copy body preserves the strengthened invariant. -/
+theorem phase2_address_count_body_hoare :
+    Hoare (fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal")
+      (.dec (ofString "acc") .one
+        (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+          .panop .mul [.var .local (ofString "i"), .const 24]])
+        (.seq
+          (.store (.op .add [.var .local (ofString "al_addrs"),
+            .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+            (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+          (.seq
+            (.assign .local (ofString "nkeys")
+              (.op .add [.var .local (ofString "nkeys"),
+                .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])))))
+      (fun r s => r = none → PtxAddressCountInv s) := by
+  apply Hoare.dec (names := ["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+    "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"])
+    (P' := fun s => PtxAddressCountInv s ∧ locN s "i" < locN s "nal" ∧
+      locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i") (by decide)
+  · intro F s v hp he
+    exact phase2_address_count_declare_acc s hp.1 hp.2 v he
+  · exact phase2_address_count_inner_hoare
+  · intro F r s locals hl hp hr
+    exact phase2_address_count_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
