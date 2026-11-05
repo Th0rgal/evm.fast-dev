@@ -5599,4 +5599,59 @@ theorem progWithdrawalStep_fresh_then {p : ProgHOL 64}
   progWithdrawalStep_seq
     (progWithdrawalStep_call0 wkSc_state_fresh_tx_withdrawal) hp
 
+/-- The full withdrawal body reduces to the incorporation suffix's world frame. -/
+theorem wkSc_process_withdrawals_of_incorporate
+    (hinc : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "incorporate_tx_into_block")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "process_withdrawals") := by
+  refine ⟨_, _, _, lookup_process_withdrawals, ?_⟩
+  have hbody : ProgWithdrawalStep
+      (sourceFunctionEntry Guest.Software.guestFn_process_withdrawals).2.2.1 := by
+    simp only [sourceFunctionEntry, Guest.Software.guestFn_process_withdrawals,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+      Option.map_none, List.map_nil]
+    apply progWithdrawalStep_fresh_then
+    apply progWithdrawalStep_dec
+    apply progWithdrawalStep_dec
+    apply progWithdrawalStep_dec
+    refine progWithdrawalStep_seq (progWithdrawalStep_credit_loop _ _ _ _ _) ?_
+    refine progWithdrawalStep_seq (progWithdrawalStep_call0 hinc) ?_
+    exact progWithdrawalStep_of_progWStep (B := []) (gw := [])
+      (by simp) (by simp) (progWStep_return [] [] _)
+  intro F s hc hW _ hnt hres
+  exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
+
+/-- Incorporation composes the builder update and table merge under the
+withdrawal mask, including their resumable exceptional exits. -/
+theorem wkSc_incorporate_tx_into_block_of_steps
+    (hbuilder : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "update_builder_from_tx"))
+    (hmerge : WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "merge_tx_into_block")) :
+    WorldKeepsSc WorldOK (bufRegions withdrawalBufs) withdrawalGlobals
+      withdrawalKeep NoExtra (ofString "incorporate_tx_into_block") := by
+  have hlookup : originalRuntimeCode.lookup (ofString "incorporate_tx_into_block") =
+      some (sourceFunctionEntry Guest.Software.guestFn_incorporate_tx_into_block).2 :=
+    originalRuntimeCode_lookup_of_guestAst_getElem 428 (by rw [guestAst_len]; decide)
+      (extractFn Guest.Software.guestFn_incorporate_tx_into_block) rfl
+  refine ⟨_, _, _, hlookup, ?_⟩
+  have hbody : ProgWithdrawalStep
+      (sourceFunctionEntry Guest.Software.guestFn_incorporate_tx_into_block).2.2.1 := by
+    simp only [sourceFunctionEntry, Guest.Software.guestFn_incorporate_tx_into_block,
+      InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+      InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+      Option.map_none, List.map_nil]
+    refine progWithdrawalStep_seq (progWithdrawalStep_call0 hbuilder) ?_
+    refine progWithdrawalStep_seq (progWithdrawalStep_call0 hmerge) ?_
+    exact progWithdrawalStep_of_progWStep (B := []) (gw := [])
+      (by simp) (by simp) (progWStep_return [] [] _)
+  intro F s hc hW _ hnt hres
+  exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
