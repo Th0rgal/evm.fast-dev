@@ -13119,4 +13119,61 @@ theorem phase2_message_suffix_ready {ι F : Type}
   phase2_message_ready_backing_shapes hp.1.1 hp.2.1 hp.2.2.1 hp.2.2.2.1
     hp.2.2.2.2.1 hp.2.2.2.2.2.1 hp.2.2.2.2.2.2
 
+/-- Both concrete branch-store blocks are clock-neutral. -/
+theorem phase2_message_call_stores_clock {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s phase2_message_call_stores).2.clock = s.clock := by
+  unfold phase2_message_call_stores
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  exact fun t => clock_store t _ _
+
+theorem phase2_message_create_stores_clock {F : Type} (s : PanSemStateFiniteExact 64 F) :
+    (evaluateHOLFiniteState s phase2_message_create_stores).2.clock = s.clock := by
+  unfold phase2_message_create_stores
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  apply phase2_clock_seq (fun t => clock_store t _ _)
+  exact fun t => clock_store t _ _
+
+/-- The ordinary-call stores feed the exact backing-aware tail guard at zero cost. -/
+theorem phase2_message_call_stores_suffix_bound {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (he : "empty" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.seq phase2_message_call_stores tail) b := by
+  have hb : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      phase2_message_call_stores 0 := PtxP1.bound_of_clock
+    (P := PtxMessageSuffixReady buffers contents names aa ak) phase2_message_call_stores_clock
+  have ht' : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b :=
+    fun s hc hp => ht s hc (phase2_message_suffix_ready hp)
+  intro F s hcode hp
+  simpa only [Nat.zero_add] using seq_bound_trans hb
+    (phase2_message_call_stores_suffix_hoare buffers contents names aa ak he) ht' s hcode hp
+
+/-- The create stores feed the exact backing-aware tail guard at zero cost. -/
+theorem phase2_message_create_stores_suffix_bound {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (hc : "ct" ∈ names) (he : "empty" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      (.seq phase2_message_create_stores tail) b := by
+  have hb : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak)
+      phase2_message_create_stores 0 := PtxP1.bound_of_clock
+    (P := PtxMessageSuffixReady buffers contents names aa ak) phase2_message_create_stores_clock
+  have ht' : TerminatingProgBoundedOn (PtxMessageSuffixReady buffers contents names aa ak) tail b :=
+    fun s hc hp => ht s hc (phase2_message_suffix_ready hp)
+  intro F s hcode hp
+  simpa only [Nat.zero_add] using seq_bound_trans hb
+    (phase2_message_create_stores_suffix_hoare buffers contents names aa ak hc he) ht' s hcode hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
