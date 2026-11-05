@@ -339,4 +339,30 @@ theorem ptxPhase3_cut_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
   intro F s hc hp
   exact hb s hc hp
 
+/-- Composition interface for the remaining Phase-4 proof and the shape-aware
+Phase-1/2 prefix. Both missing cuts are explicit hypotheses here. -/
+theorem gbody_process_transaction_strong_of_cuts
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (h4 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn PtxReceiptsDone tail b →
+      TerminatingProgBoundedOn (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s)
+        (ptxPhase4 tail) (ptxCost4 + b)) :
+    TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  refine ⟨_, _, _, ptx_lookup, ?_⟩
+  have hb : TerminatingProgBoundedOn TxReadyStrong
+      (ptxPhase1 (ptxPhase2 (ptxPhase3 (ptxPhase4 ptxPhase5))))
+      (ptxCost1 + (ptxCost2 + (ptxCost3 + (ptxCost4 + ptxCost5)))) :=
+    h12 _ _ (ptxPhase3_cut_strong_shapes h hwk
+      (h4 _ _ (R13Shards.ptxPhase5_cut h)))
+  rw [← ptx_phases_eq, ptx_cost_eq] at hb
+  intro F s hc hp
+  simpa only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
+    (hb (F := F) s hc hp)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
