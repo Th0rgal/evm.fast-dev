@@ -42,3 +42,18 @@ theorem compile_append
       (tailFrames ++ rightFrames) hhead (ih headState tailBodies tailFrames htail)
 
 end InitECandidate.Solver.Wave8Stage.ConcreteM7313.TableComposition
+
+namespace InitECandidate.Solver.Wave8Stage.ConcreteM7313.TableComposition
+open Flapjack Flapjack.Compiler.Backend Flapjack.Compiler.Backend.StackLang
+
+/-- Frame discovery can be reduced a chunk at a time in source order. -/
+theorem collectInfo_append (left right : List (Nat × HolProg 64)) (info : Spt Nat) :
+    StackRawCall.collectInfo (left ++ right) info =
+      StackRawCall.collectInfo right (StackRawCall.collectInfo left info) := by
+  induction left generalizing info with
+  | nil => rfl
+  | cons entry rest ih =>
+    simp only [List.cons_append, StackRawCall.collectInfo]
+    exact ih _
+
+end InitECandidate.Solver.Wave8Stage.ConcreteM7313.TableComposition
