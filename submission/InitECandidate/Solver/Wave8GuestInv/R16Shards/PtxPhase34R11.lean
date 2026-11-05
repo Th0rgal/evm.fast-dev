@@ -3836,6 +3836,31 @@ def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       memW s (memW s (locN s "stable_logs") + 8 * i) =
         memW s (memW s (locN s "logs") + 8 * i)
 
+/-- The allocated stable header supplies the non-null word used by the receipt push. -/
+theorem stableCopyInv_stable_local {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) :
+    locN s "stable_logs" ≠ 0 ∧
+      ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w)) := by
+  have hA : ArenaOK s := hp.1.1.1.1.2
+  have hn : locN s "stable_logs" ≠ 0 := by
+    have hb : 0 < sourceBase := by decide
+    have hs : 0 < scratchStart := by decide
+    rcases hp.2.2.2.1 with hh | hh
+    · have := hh.1; omega
+    · have := hh.1
+      have := hA.2.2.1
+      have := hA.2.2.2.1
+      omega
+  refine ⟨hn, ?_⟩
+  cases hl : s.locals.lookup (ofString "stable_logs") with
+  | none => simp [locN, hl] at hn
+  | some v =>
+    cases v with
+    | val x =>
+      cases x with
+      | word w => exact ⟨w, rfl⟩
+    | _ => simp [locN, hl] at hn
+
 /-- The loop invariant survives clock changes and unrelated temporary locals. -/
 theorem stableCopyInv_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
     (locals : HolFiniteMapExact MlS (ValueHOL 64)) (k : Nat)
