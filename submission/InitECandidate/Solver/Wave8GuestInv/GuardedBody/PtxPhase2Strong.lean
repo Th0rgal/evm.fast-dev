@@ -9016,4 +9016,74 @@ theorem phase2_packed_outer_declare_ns {F : Type} (s : PanSemStateFiniteExact 64
       show ofString "ns" ≠ ofString "i" by decide,
       show ofString "ns" ≠ ofString "tx" by decide] using hnat
 
+/-- The source-order inner loop followed by the record increment. -/
+def phase2_packed_source_inner_tail : ProgHOL 64 :=
+  .seq
+    (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns")))
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]],
+           .load .one (.op .add [.var .local (ofString "acc2"), .const 0]), .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20],
+             .op .add [.load .one (.op .add [.var .local (ofString "acc2"), .const 8]),
+               .panop .mul [.var .local (ofString "j"), .const 32]], .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1]))))))
+    (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+
+theorem phase2_packed_source_inner_tail_hoare (h : PtxCallees) :
+    Hoare PtxPackedNsIteration phase2_packed_source_inner_tail
+      (fun r s => r = none → PtxPackedOuterIteration s) := by
+  exact Hoare.seq_fall (phase2_packed_inner_ns_hoare h _ _)
+    phase2_packed_ns_outer_increment_hoare
+
+/-- The actual nested declarations and copy loop form a complete outer record body. -/
+def phase2_packed_source_outer_body : ProgHOL 64 :=
+  .dec (ofString "acc2") .one
+    (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+      .panop .mul [.var .local (ofString "i"), .const 24]])
+    (.dec (ofString "ns") .one
+      (.load .one (.op .add [.var .local (ofString "acc2"), .const 16]))
+      (.dec (ofString "j") .one (.const 0) phase2_packed_source_inner_tail))
+
+theorem phase2_packed_source_outer_body_hoare (h : PtxCallees) :
+    Hoare (fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) phase2_packed_source_outer_body
+      (fun r s => r = none → PtxPackedOuterIteration s) := by
+  unfold phase2_packed_source_outer_body
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k"])
+    (P' := fun s => PtxPackedOuterIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i") (by decide)
+  · intro F s v hp he
+    exact phase2_packed_outer_declare_acc2 s hp.1 hp.2 v he
+  · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k"])
+      (P' := fun s => PtxPackedOuterIteration s ∧
+        locN s "i" < memW s (locN s "tx" + 216) ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+        locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)) (by decide)
+    · intro F s v hp he
+      exact phase2_packed_outer_declare_ns s hp.1 hp.2.1 hp.2.2 v he
+    · apply Hoare.dec (names := ["al_keys", "nkeys", "tx", "i", "k"])
+        (P' := PtxPackedNsIteration) (by decide)
+      · intro F s v hp he
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        exact phase2_packed_ns_reset s hp.1 hp.2.1 hp.2.2.1 hp.2.2.2
+      · exact phase2_packed_source_inner_tail_hoare h
+      · intro F r s locals hl hp hr
+        exact phase2_packed_outer_iteration_with_locals s locals s.clock (hp hr) hl
+      · exact fun _ _ hr => by cases hr
+    · intro F r s locals hl hp hr
+      exact phase2_packed_outer_iteration_with_locals s locals s.clock (hp hr) hl
+    · exact fun _ _ hr => by cases hr
+  · intro F r s locals hl hp hr
+    exact phase2_packed_outer_iteration_with_locals s locals s.clock (hp hr) hl
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
