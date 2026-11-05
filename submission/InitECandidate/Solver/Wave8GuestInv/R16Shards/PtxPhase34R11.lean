@@ -4867,6 +4867,26 @@ theorem stableCopyLoopInv_backing_init {F : Type} (s : PanSemStateFiniteExact 64
   · exact hq
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString] using hd
 
+/-- Backing assignment establishes the precondition for zero-counter entry. -/
+theorem hoare_stableCopy_backing_entry :
+    Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
+      WordsOK s (locN s "stable_logs", 24) ∧ Allocated s (locN s "stable_logs", 24) ∧
+      locN s "nl" ≤ locN s "stable_log_cap" ∧ StableCopySpatial s ∧
+      WordAt s (locN s "stable_logs") ∧ ∃ n p w : BitVec 64,
+        s.locals.lookup (ofString "nl") = some (.val (.word n)) ∧
+        s.locals.lookup (ofString "lp") = some (.val (.word p)) ∧
+        s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+      (.assign .local (ofString "stable_lp")
+        (.load .one (.var .local (ofString "stable_logs"))))
+      (fun r t => r = none →
+        StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0)) t)) := by
+  apply Hoare.assign
+  · intro F s v hp he _
+    obtain ⟨hp, hz, hh, ha, hc, hs, hword, n, p, w, hn, hl, hw⟩ := hp
+    exact stableCopyLoopInv_backing_init s hp hz hh ha hc hs n p w v hn hl hw hword he
+  · intro F s hp hr
+    cases hr
+
 /-- Concrete counter initialization from the post-length spatial contract. -/
 theorem hoare_stableCopy_init_spatial :
     Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
@@ -5589,6 +5609,22 @@ theorem lst_new_stable_length_pre (h : PtxCallees) {F : Type}
       show ofString "stable_logs" ≠ ofString "logs" by decide] using hO
   · change ∀ o ∈ worldOwned post S Nd, Disj _ o
     simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hdisj
+
+/-- A nonempty copy obtains its typed length operand directly from positivity. -/
+theorem lst_new_stable_length_pre_nonempty (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (hn : 0 < locN s "nl")
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    StableLengthPre (setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}) := by
+  exact lst_new_stable_length_pre h s vs body callee ret v post hc hp
+    (stable_positive_local_word s "nl" hn) ha hl hr
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
