@@ -6761,4 +6761,90 @@ theorem merge_inserted_inner_union_entry {F : Type}
   rw [hi, ← ht]
   exact (merge_set_values_membership hvalues).1
 
+/-- The merge lookup exposes its owned inner table directly to a continuation,
+while restoring the caller's local binding on every resumable exit. -/
+theorem merge_outer_get_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS)
+    (tExp keyExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0)
+    (ht : ∀ tw : BitVec 64,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) tExp =
+        some (.val (.word tw)) → tw.toNat = memW s (globN s "bs" + 32))
+    (hcont : ∀ (f0 f1 : BitVec 64) (ck : Nat),
+      (f0 ≠ 0 → f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32))) →
+      let next := setVarHOLFinite x (.rStruct [.val (.word f0), .val (.word f1)])
+        { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState next cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        next (evaluateHOLFiniteState next cont).1 (evaluateHOLFiniteState next cont).2)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).1
+        (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one]) (ofString "htab_get") [tExp, keyExp] cont)).2 := by
+  obtain ⟨tw, kw, f0, f1, ck, he, _, hnz, hm, hntc, hresc, hr, hp⟩ :=
+    WkBal.decCall_htab_get_resumes s x tExp keyExp cont hW.1.1 hnt hres
+  have heq := ht tw he
+  have hn : tw.toNat ≠ 0 := by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz
+  obtain ⟨S, hT, _⟩ := hW.2
+  have hmem : tw.toNat ∈ S := by
+    have hs := hT.2.2.2.2.1 32 (by simp [bsTableSlots]) hbs
+    rw [← heq] at hs
+    exact hs.resolve_left hn
+  have howned : f0 ≠ 0 → f1.toNat ∈ htabValues s (memW s (globN s "bs" + 32)) := by
+    simpa only [heq] using hm (hT.2.1 _ hmem).1
+  have hs := hcont f0 f1 ck howned hntc hresc
+  rw [hr, hp]
+  exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
+
+/-- Enumeration of the transaction outer table supplies owned inner values and
+valid key slices to the storage-merge continuation. -/
+theorem merge_outer_item_continuation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (x : MlS)
+    (tExp ordExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hW : WorldOK s) (hts : globN s "ts" ≠ 0)
+    (ht : ∀ tw : BitVec 64,
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) tExp =
+        some (.val (.word tw)) → tw.toNat = memW s (globN s "ts" + 32))
+    (hcont : ∀ (tw f0 f1 f2 : BitVec 64) (ck : Nat),
+      tw.toNat = memW s (globN s "ts" + 32) →
+      (f0 ≠ 0 →
+        Inside (f1.toNat, hdr s tw.toNat 1) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        Inside (f1.toNat, hdr s tw.toNat 0) (hdr s tw.toNat 4)
+          (hdr s tw.toNat 4 + (hdr s tw.toNat 10 + 1) * hdr s tw.toNat 1) ∧
+        f2.toNat ∈ htabValues s tw.toNat) →
+      let next := setVarHOLFinite x (.rStruct [.val (.word f0), .val (.word f1), .val (.word f2)])
+        { s with clock := ck }
+      (evaluateHOLFiniteState next cont).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState next cont).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        next (evaluateHOLFiniteState next cont).1 (evaluateHOLFiniteState next cont).2)
+    (hnt : (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1 ≠ some .timeOut)
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).1
+        (evaluateHOLFiniteState s
+        (.decCall x (.comb [.one, .one, .one]) (ofString "htab_item") [tExp, ordExp] cont)).2 := by
+  obtain ⟨tw, ordw, f0, f1, f2, ck, he, _, hnz, hm, hntc, hresc, hr, hp⟩ :=
+    decCall_htab_item_resumes s x tExp ordExp cont hW.1.1 hnt hres
+  have heq := ht tw he
+  have hn : tw.toNat ≠ 0 := by intro hz; apply hnz; exact BitVec.eq_of_toNat_eq hz
+  obtain ⟨S, hT, _⟩ := hW.2
+  have hmem : tw.toNat ∈ S := by
+    have hs := hT.2.2.2.2.2.1 32 (by simp [tsTableSlots]) hts
+    rw [← heq] at hs
+    exact hs.resolve_left hn
+  have hs := hcont tw f0 f1 f2 ck heq (hm (hT.2.1 _ hmem).1) hntc hresc
+  rw [hr, hp]
+  exact (WorldStepSc.of_pre_locals_clock (s := s) hs).with_locals_clock _ _
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
