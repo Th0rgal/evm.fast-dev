@@ -2001,4 +2001,59 @@ theorem phase2_nal_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Read-only calls preserve the initialized environment and its live buffers. -/
+theorem phase2_resume_ro_teStoreReady {fname name : MlS}
+    (hro : ReadOnlyFn fname)
+    (hne : ∀ n ∈ (["te", "tx", "index", "sender", "mgas", "reservoir", "gas", "tx_blob_gas_used",
+      "price", "enc", "intrinsic"] : List String), ofString n ≠ name)
+    (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxTeStoreReady PtxTeStoreReady name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({ post with locals := s.locals } : PanSemStateFiniteExact 64 F) =
+      { s with locals := s.locals, clock := post.clock } := by rw [he]; rfl
+  apply phase2_teStoreReady_set_other _ _ name v hne
+  rw [hrestore]
+  exact phase2_teStoreReady_with_locals s s.locals post.clock (fun _ _ => rfl) hp
+
+theorem phase2_resume_has_access_list (h : PtxCallees) :
+    DecCallResumeOn PtxTeStoreReady PtxTeStoreReady (ofString "hal")
+      (ofString "tx_has_access_list") [.var .local (ofString "tx")] :=
+  phase2_resume_ro_teStoreReady h.ro_tx_has_access_list (by decide) _
+
+/-- Loading the transaction's access-list count changes only its bookkeeping local. -/
+theorem phase2_nal_set_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxTeStoreReady s) (w : BitVec 64) :
+    let post := setVarHOLFinite (ofString "nal") (.val (.word w)) s
+    PtxTeStoreReady post ∧ locN post "nal" = w.toNat ∧
+      post.locals.lookup (ofString "nal") = some (.val (.word w)) := by
+  refine ⟨phase2_teStoreReady_set_other s hp _ _ (by decide), ?_, ?_⟩
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Either outcome of the access-list test preserves the environment frame. -/
+theorem phase2_nal_assign_hoare (e : ExpHOL 64) :
+    Hoare PtxTeStoreReady (.assign .local (ofString "nal") e)
+      (fun r t => r = none → PtxTeStoreReady t) := by
+  apply Hoare.assign
+  · intro F s v hp _ _
+    exact phase2_teStoreReady_set_other s hp _ v (by decide)
+  · intro F s hp hr
+    simp at hr
+
+/-- The conditional count update preserves the environment on both branches. -/
+theorem phase2_nal_cond_hoare (cond e : ExpHOL 64) :
+    Hoare PtxTeStoreReady (.ite cond (.assign .local (ofString "nal") e) .skip)
+      (fun r t => r = none → PtxTeStoreReady t) := by
+  apply Hoare.ite
+  · refine ⟨fun s hc hp hn => ?_⟩
+    exact (phase2_nal_assign_hoare e).run s hc hp.1 hn
+  · exact Hoare.skip (fun s hp _ => hp.1)
+  · intro F s hp hr
+    simp at hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
