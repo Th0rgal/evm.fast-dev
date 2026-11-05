@@ -7,6 +7,7 @@ import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.AllocJournalStep
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkKeccak256
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkGetCode
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalBase
 
 /-! `fk_frame_open` and `ek_depth0_prepare`: the outermost frame is opened by `frame_open`
 (kind 0) on top of `MsgReady`, and `depth0_prepare` keeps the EVM invariant. -/
@@ -6169,5 +6170,31 @@ theorem nodedb_lookup_code_tail_cases {F : Type} (s : PanSemStateFiniteExact 64 
     obtain ⟨hw, hin⟩ := hrecord hf
     obtain ⟨code, code_n, hv, hn, hp⟩ := nodedb_lookup_code_tail s hA found ptr hr hf hw hin v hv
     exact ⟨1, code, code_n, hv, hn, Or.inr rfl, hp⟩
+
+/-- Concrete table lookup selects actual bounded code words once its live
+values are known to designate heap-contained code records. -/
+theorem htab_get_code_record_words {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (hW : HtabWF s tw.toNat)
+    (hvalues : ∀ p ∈ htabValues s tw.toNat, WordsOK s (p, 16) ∧
+      Inside (memW s p, memW s (p + 8)) sourceBase (globN s "heap_ptr"))
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).1 =
+      some (.returned v)) :
+    ∃ found ptr : BitVec 64,
+      v = .rStruct [.val (.word found), .val (.word ptr)] ∧
+      (found ≠ 0 → WordsOK s (ptr.toNat, 16) ∧
+        ∃ code code_n : BitVec 64,
+          s.memory ptr = .word code ∧
+          s.memory (BitVec.ofNat 64 (ptr.toNat + 8)) = .word code_n ∧
+          code_n.toNat < 2 ^ 40) := by
+  obtain ⟨found, ptr, hv, hm⟩ := WkBal.htab_get_ret_in_values s tw kw hcode ht hk hW v hret
+  refine ⟨found, ptr, hv, fun hf => ?_⟩
+  obtain ⟨hw, hin⟩ := hvalues ptr.toNat (hm hf)
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
+  exact ⟨hw, code, code_n, by simpa using hc, hn, hb⟩
 
 end HeadStore
