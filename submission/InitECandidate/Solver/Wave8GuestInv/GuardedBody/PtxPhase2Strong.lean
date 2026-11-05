@@ -3083,4 +3083,16 @@ theorem phase2_address_copy_inv_store {F : Type} {s : PanSemStateFiniteExact 64 
     PtxAddressCopyInv { s with memory := mem } := by
   exact ⟨phase2_address_copy_store hp.1 (locN s "i") hi w hst, hp.2⟩
 
+/-- Updating the key counter with a scalar preserves the address-copy invariant. -/
+theorem phase2_address_copy_set_nkeys {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (w : BitVec 64) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "nkeys") (.val (.word w)) s) := by
+  refine ⟨phase2_address_joint_set_other s hp.1 _ _ (by decide), ?_, ⟨w, ?_⟩, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide] using hp.2.1
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
