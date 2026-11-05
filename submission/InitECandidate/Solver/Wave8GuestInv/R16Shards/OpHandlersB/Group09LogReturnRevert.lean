@@ -9381,7 +9381,7 @@ private theorem memcpy_word_loop_runner_g09 {F : Type}
       exact ⟨fun _ => ⟨⟨heff_s, hs_dst, hs_src, hs_n, iv, hs_i, hiv_le, hiv8, hcop_s⟩, iv, hs_i, by omega⟩,
         fun h => False.elim (h rfl)⟩
 
-private theorem eval_call_memcpy_words_g09 {F : Type}
+theorem eval_call_memcpy_words_g09 {F : Type}
     (s : PanSemStateFiniteExact 64 F) (dstExp srcExp nExp : ExpHOL 64)
     (dst0 src0 n0 : BitVec 64)
     (hcode : s.code = originalRuntimeCode)
@@ -11274,5 +11274,95 @@ theorem lst_push_alloc_return_effect_g09 {F : Type}
   rw [hrun] at hg hm
   obtain ⟨hv, hglob, hmem, hsize, hmax, halign⟩ := hg v rfl
   exact ⟨hv, hglob, hmem, hm.2.1, hm.1, hsize, hmax, halign⟩
+
+/-- Allocation followed by the growth copy preserves the old source words,
+frames the copy destination, and exposes the exact new heap pointer. -/
+theorem lst_push_alloc_memcpy_effect_g09 {F : Type}
+    (s allocPost copyPost : PanSemStateFiniteExact 64 F)
+    (p src l esz cap n : BitVec 64) (v : ValueHOL 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlimit : p.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat)
+    (halloc : evaluateHOLFiniteState
+      (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update
+        (ofString "n", .val (.word (esz * cap * 2#64)))))
+      (sourceFnBody Guest.Software.guestFn_alloc) = (some (.returned v), allocPost))
+    (hma : s.memaddrs = ordinaryDomain)
+    (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))
+    (he : s.locals.lookup (ofString "esz") = some (.val (.word esz)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hdl : s.memaddrs l) (hml : s.memory l = .word src)
+    (hd8 : p.toNat % 8 = 0) (hs8 : src.toNat % 8 = 0)
+    (hn8 : (esz * n).toNat % 8 = 0)
+    (hsmall : (esz * n).toNat + 32 < 2 ^ 63)
+    (hdnw : p.toNat + (esz * n).toNat ≤ 2 ^ 64)
+    (hsnw : src.toNat + (esz * n).toNat ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, (esz * n).toNat) (src.toNat, (esz * n).toNat))
+    (hcopy : evaluateHOLFiniteState
+      (setVarHOLFinite (ofString "np") (.val (.word p)) {allocPost with locals := s.locals})
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]]) =
+        (none, copyPost)) :
+    let q := (p + (esz * cap * 2#64 + 7)) &&& ((0 : BitVec 64) - 8)
+    let copyEntry := setVarHOLFinite (ofString "np") (.val (.word p))
+      {allocPost with locals := s.locals}
+    v = .val (.word p) ∧
+    copyPost.globals = s.globals.update (ofString "heap_ptr", .val (.word q)) ∧
+    copyPost.memaddrs = s.memaddrs ∧ copyPost.code = s.code ∧
+    copyPost.locals = copyEntry.locals ∧
+    ByteRegionEffect copyEntry copyPost [(p.toNat, (esz * n).toNat)] ∧
+    (∀ k, 8 * k < (esz * n).toNat →
+      memW copyPost (p.toNat + 8 * k) = memW s (src.toNat + 8 * k)) ∧
+    p.toNat + (esz * cap * 2#64).toNat ≤ q.toNat ∧
+    q.toNat ≤ InitECandidate.Solver.HeapPotential.cMax.toNat ∧ q.toNat % 8 = 0 := by
+  dsimp only
+  obtain ⟨hv, hg, hm, hd, hc, hfit, hmax, halign⟩ :=
+    lst_push_alloc_return_effect_g09 s allocPost p esz cap v hcode hp hlimit halloc
+  let entry := setVarHOLFinite (ofString "np") (.val (.word p))
+    {allocPost with locals := s.locals}
+  have hnp_l : ofString "np" ≠ ofString "l" := by decide
+  have hnp_e : ofString "np" ≠ ofString "esz" := by decide
+  have hnp_n : ofString "np" ≠ ofString "n" := by decide
+  have hdl' : allocPost.memaddrs l := hd ▸ hdl
+  have hdst : @evalHOLExact 64 F _ entry.toExact
+      (fun a => Classical.propDecidable (entry.memaddrs a)) (.var .local (ofString "np")) =
+        some (.val (.word p)) := by
+    simp [entry, setVarHOLFinite, evalHOLExact, HolFiniteMapExact.lookup_update, FUPDATE]
+  have hsrc : @evalHOLExact 64 F _ entry.toExact
+      (fun a => Classical.propDecidable (entry.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "l"), .const 0])) =
+        some (.val (.word src)) := by
+    have hload : @memLoadHOLExact 64 _ .one l entry.memaddrs
+        (fun a => Classical.propDecidable (entry.memaddrs a)) entry.memory entry.structs =
+          some (.val (.word src)) := by
+      rw [memLoadHOLExact]
+      exact if_pos hdl' |>.trans (by rw [show entry.memory l = .word src from hm ▸ hml])
+    simp [entry, setVarHOLFinite, evalHOLExact, evalListHOLExact,
+      HolFiniteMapExact.lookup_update, FUPDATE, hnp_l, Ne.symm hnp_l, hl,
+      valueIsWord, valueWord, wordOpHOL, wordOp] at hload ⊢
+    exact hload
+  have hsize : @evalHOLExact 64 F _ entry.toExact
+      (fun a => Classical.propDecidable (entry.memaddrs a))
+      (.panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]) =
+        some (.val (.word (esz * n))) := by
+    simp [entry, setVarHOLFinite, evalHOLExact, evalListHOLExact,
+      HolFiniteMapExact.lookup_update, FUPDATE, hnp_e, Ne.symm hnp_e,
+      hnp_n, Ne.symm hnp_n, he, hn, panOpHOL, valueIsWord, valueWord]
+  have hnt : (evaluateHOLFiniteState entry
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "np"), .load .one (.op .add [.var .local (ofString "l"), .const 0]),
+          .panop .mul [.var .local (ofString "esz"), .var .local (ofString "n")]])).1 ≠ some .timeOut := by
+    rw [hcopy]; simp
+  have heff := eval_call_memcpy_words_g09 entry _ _ _ p src (esz * n)
+    (by exact hc.trans hcode) (by exact hd.trans hma)
+    hdst hsrc hsize hd8 hs8 hn8 hsmall hdnw hsnw hdisj hnt
+  dsimp only at heff
+  rw [hcopy] at heff
+  obtain ⟨heff, hlocals, hcopied⟩ := heff.1 rfl
+  refine ⟨hv, heff.globals.trans hg, heff.memaddrs.trans hd, heff.code.trans hc,
+    hlocals, heff, ?_, hfit, hmax, halign⟩
+  intro k hk
+  exact (hcopied k hk).trans (by simp [memW, entry, setVarHOLFinite, hm])
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
