@@ -4604,6 +4604,80 @@ theorem stableCopy_loop_budget :
   intro F s hc hp
   simpa only [Nat.zero_add, Nat.mul_one] using stableCopy_loop_bound s hc hp
 
+/-- Normal exit from the concrete copy loop establishes receipt readiness. -/
+theorem hoare_stableCopy_loop_done :
+    Hoare StableCopyLoopInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+          .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r t => r = none → PtxReceiptsDone t) := by
+  let body : ProgHOL 64 := .seq
+    (.store (.op .add [.var .local (ofString "stable_lp"),
+      .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+    (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+  have hinc : IncrBody (ofString "i") body := by dsimp [body]; ptx_incr
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  rcases hrun : evaluateHOLFiniteState s (.while
+    (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl"))) body) with ⟨r, post⟩
+  change (evaluateHOLFiniteState s (.while _ body)).1 = none at hr
+  rw [hrun] at hr
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F),
+      st.clock = k → st.code = originalRuntimeCode → StableCopyLoopInv st →
+      evaluateHOLFiniteState st (.while
+        (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl"))) body) =
+        (none, post) → PtxReceiptsDone post from
+    this s.clock s rfl hc hp hrun
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp hrun
+    rw [evaluateHOLFiniteState_while_total] at hrun
+    split at hrun
+    · rename_i w hw
+      split at hrun
+      · rename_i hnz
+        split at hrun
+        · simp at hrun
+        · dsimp only at hrun
+          rw [fixClockHOLFinite_evaluateState] at hrun
+          have hrem := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hmeta := (evaluateHOLFiniteState_metadata (decClockHOLFinite st) body).1
+          have hnb := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak
+            body (by decide) (decClockHOLFinite st)
+          obtain ⟨i, n, hi, hn⟩ := hp.2.1
+          obtain ⟨hnc, _⟩ := hinc.run (decClockHOLFinite st) i hi
+          have ha := stableCopyLoopInv_active st hp ⟨w, hw, hnz⟩
+          rcases hb : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hb] at hrun hrem hmeta hnb hnc
+          have hlt : mid.clock < k := by
+            change mid.clock ≤ st.clock - 1 at hrem
+            omega
+          cases r with
+          | none =>
+            have hm := hoare_stableCopy_body_loop.run (decClockHOLFinite st) hc
+              ⟨stableCopyStorePre_decClock st ha, n, hn⟩
+              (by change (evaluateHOLFiniteState _ body).1 ≠ _; rw [hb]; simp)
+              (by change (evaluateHOLFiniteState _ body).1 = _; rw [hb])
+            change StableCopyLoopInv (evaluateHOLFiniteState _ body).2 at hm
+            rw [hb] at hm
+            exact ih mid.clock hlt mid rfl (hmeta.trans hc) hm hrun
+          | some r =>
+            cases r with
+            | «continue» => exact absurd rfl hnc
+            | «break» => exact absurd rfl hnb
+            | _ => simp at hrun
+      · rename_i hz
+        have hw0 : w = 0 := Classical.not_not.mp hz
+        subst w
+        simp at hrun
+        obtain ⟨_, rfl⟩ := hrun
+        apply stableCopyLoopInv_done _ hp
+        exact hw
+    · simp at hrun
+
 /-- Continue from the actual copy body without adding to the tail budget. -/
 theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn StableCopyInv tail b) :
