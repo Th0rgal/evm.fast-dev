@@ -12723,4 +12723,76 @@ theorem log_growth_final_effect_g09 {F : Type}
     ⟨(p.toNat, 8 * n.toNat + 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
   exact (h0.trans h16).trans (h8.trans hslot)
 
+/-- Fresh-buffer separation and header/world separation discharge typed-cell
+preservation for the concrete four-write growth tail. -/
+theorem log_growth_final_typed_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap q log : BitVec 64) (S Nd : List Nat)
+    (hma : s.memaddrs = ordinaryDomain) (hWT : WorldTypedWith s S Nd)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64))
+    (hd16 : s.memaddrs (l + 16#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hslot : p.toNat + 8 * n.toNat + 8 ≤ q.toNat)
+    (hheader : ∀ i ∈ worldTypedIvls s S Nd, Disj (l.toNat, 24) i)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] (worldTypedIvls s S Nd)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else s.memory a}
+    SameTypedCells s post S Nd := by
+  dsimp only
+  have hq := q.isLt
+  have heff := log_growth_final_effect_g09 s l p n cap log hma hd0 hd8 hd16 hdslot hl (by omega)
+  apply ByteRegionEffect.sameTypedCells (Rl := [(l.toNat, 24), (p.toNat, 8 * n.toNat + 8)])
+    (extra := []) hma hWT ?_ (by simp) (by simpa using heff)
+  intro x hx i hi
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+  rcases hx with rfl | rfl
+  · exact hheader i hi
+  · have hd := hfresh (p.toNat, q.toNat - p.toNat) (by simp) i hi
+    rcases hd with hz | hz | hleft | hright
+    · dsimp only at hz; omega
+    · exact Or.inr (Or.inl hz)
+    · exact Or.inr (Or.inr (Or.inl (by dsimp only at hleft ⊢; omega)))
+    · exact Or.inr (Or.inr (Or.inr hright))
+
+/-- Frame object disjointness and fresh-copy framing supply every old-record
+premise needed by the concrete growth-frame postcondition. -/
+theorem log_growth_old_records_g09 {F : Type}
+    {s copy : PanSemStateFiniteExact 64 F} {ec : Ivl} {S : List Nat}
+    (l p n q : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hpw : (frameObjects s ec).Pairwise Disj)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hnonnull : l.toNat ≠ 0)
+    (hfresh : IvlsDisj [(p.toNat, q.toNat - p.toNat)] (frameObjects s ec))
+    (heff : ByteRegionEffect s copy [(p.toNat, q.toNat - p.toNat)]) :
+    ∀ i, i < n.toNat →
+      let oldLog := memW s (memW s l.toNat + 8 * i)
+      LogEntryOK s oldLog ∧ oldLog + 40 ≤ 2 ^ 64 ∧
+      Disj (oldLog, 40) (l.toNat, 24) ∧
+      Disj (oldLog, 40) (p.toNat, q.toNat - p.toNat) ∧
+      ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+        memW copy (oldLog + k) = memW s (oldLog + k) := by
+  intro i hi
+  have hi' : i < memW s (memW s (ec.1 + 88) + 8) := by rwa [hl, hn]
+  have hheap : globN s "heap_ptr" ≤ 2 ^ 64 := by
+    have hh := hA.2.2.1
+    rw [R11Shards.heapLimit_val] at hh
+    omega
+  obtain ⟨hok, hbound, hheader⟩ := log_records_of_frame_pairwise_g09 hFW hpw hheap
+    (by rwa [hl]) i hi'
+  simp only [hl] at hok hbound hheader
+  have hmem : (memW s (memW s l.toNat + 8 * i), 40) ∈ frameObjects s ec := by
+    simpa only [hl] using logRecord_in_frameObjects_g09 hi'
+  have hd := hfresh (p.toNat, q.toNat - p.toNat) (by simp) _ hmem
+  refine ⟨hok, hbound, hheader, R11Shards.Disj.symm hd, ?_⟩
+  intro k hk
+  have hkbound : k + 8 ≤ 40 ∧ k % 8 = 0 := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+  exact memW_eq_of_frameDisj_g09 hA.1.memaddrs heff hbound hok.1.1 hkbound.2 hkbound.1
+    (by intro x hx; obtain rfl := List.mem_singleton.1 hx; exact hd)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

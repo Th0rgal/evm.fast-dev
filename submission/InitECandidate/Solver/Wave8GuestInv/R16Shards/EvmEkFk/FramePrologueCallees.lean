@@ -6918,6 +6918,10 @@ theorem transfer_alloc_data_record_prefix {F : Type}
       memW mid (logw.toNat + 24) = data.toNat ∧ memW mid (logw.toNat + 32) = 32 ∧
       (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat →
         b ≠ logw.toNat + 24 → b ≠ logw.toNat + 32 → memW mid b = memW cur b) ∧
+      mid.be = s.be ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
       Resumes (evaluateHOLFiniteState mid cont).1 ∧
       (evaluateHOLFiniteState cur
         (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
@@ -6952,7 +6956,7 @@ theorem transfer_alloc_data_record_prefix {F : Type}
     transfer_record_pair_writes_prefix s written logw data 32 24 (ofString "data") cont
       (Or.inr rfl) hInv step wb out bytes ((loc _ (by decide)).trans hl) hd ww wi resum
   refine ⟨mid, lc ▸ hd, lc ▸ ((loc _ (by decide)).trans hl), ?_, st', ?_, ?_, words, ptr, count,
-    ?_, res, er.trans (congrArg Prod.fst eq), ?_⟩
+    ?_, eff.be.trans wb, out', bytes', res, er.trans (congrArg Prod.fst eq), ?_⟩
   · simpa only [globN, eff.globals] using heap
   · exact (hstep.1.2.2.1 _ (by decide)).symm.trans (st'.1.2.2.1 _ (by decide)) |>.symm
   · unfold globN
@@ -6995,6 +6999,10 @@ theorem transfer_data_tail_step {F : Type}
     (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data.toNat)
     (hdisj : ∀ mid : PanSemStateFiniteExact 64 F,
       EvmStepCC ["heap_ptr"] s mid →
+      mid.be = s.be →
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) →
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) →
       ∀ x ∈ [(logw.toNat, 40), (topics, 96), (data.toNat, 32)],
       (∀ t, ∀ S0, TablesTyped mid S0 → t ∈ S0 → ∀ i ∈ htabFootprint mid t, Disj x i) ∧
       (∀ j ∈ fixedObjects mid, Disj x j) ∧
@@ -7003,7 +7011,7 @@ theorem transfer_data_tail_step {F : Type}
       (∀ ec ∈ evmChain mid, Disj x (memW mid (ec.1 + 112), 176)))
     (hr : Resumes (evaluateHOLFiniteState cur transferDataTail).1) :
     EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur transferDataTail).2 := by
-  obtain ⟨mid, hd, hl', heap, step, ev, sys, words, dp, dn, frame, resum, er, es⟩ :=
+  obtain ⟨mid, hd, hl', heap, step, ev, sys, words, dp, dn, frame, be, out, bytes, resum, er, es⟩ :=
     transfer_alloc_data_record_prefix s cur data logw av transferAppendReturn
       hInv hstep hbe hout hbyte ha hl hw hin hp hr
   have hbound : logw.toNat + 40 < 2 ^ 64 := by
@@ -7031,7 +7039,7 @@ theorem transfer_data_tail_step {F : Type}
           change sourceBase ≤ data.toNat
           omega,
         by rw [heap]⟩ addr tp tn dp dn hlt htd
-      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step)
+      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step be out bytes)
       (by simpa only [evalHOLExact, ev] using hev)
       (by simpa only [evalHOLExact] using hl')
       (transfer_log_append_tail_resumes_returned mid step.1.1.1.1.code resum)
@@ -7268,6 +7276,25 @@ theorem transfer_accumulated_topics_record_step {F : Type}
   rw [es]
   exact ⟨⟨localsFree_evmInv _ _ _ tail.1.1, tail.1.2.1, tail.1.2.2.1,
     (evmChain_with_locals _ _ _).trans tail.1.2.2.2⟩, tail.2⟩
+
+theorem transfer_memW_of_accumulated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → post.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN post "heap_ptr") → memB post b = memB s b)
+    (a : Nat) (ha : a + 8 ≤ 2 ^ 64)
+    (hsep : a + 8 ≤ globN s "heap_ptr" ∨ globN post "heap_ptr" ≤ a) :
+    memW post a = memW s a := by
+  have hnat : (BitVec.ofNat 64 a).toNat = a := Nat.mod_eq_of_lt (by omega)
+  unfold memW
+  by_cases hd : ordinaryDomain (BitVec.ofNat 64 a)
+  · rw [R13Shards.mem_eq_of_bytes_eq_ord hbe _ hd (by
+      intro k hk
+      rw [hnat]
+      apply hbyte _ (by omega)
+      rcases hsep with hl | hh <;> omega)]
+  · rw [hout _ (by rwa [hInv.1.1.memaddrs])]
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
