@@ -2856,6 +2856,37 @@ theorem stable_capacity_setup_copy_cut {tail : ProgHOL 64} {b : Nat}
   simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "stable_log_cap" ≠ ofString "logs" by decide] using hp.2.2.1
 
+/-- Source loads, log pushing, and capacity setup form one concrete prefix. -/
+theorem phase4Logs_capacity_typed_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      locN s "logs" ≠ 0 ∧
+      ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptEncoded
+      (spinePlug 6 (spineAt 126 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hc := @stable_capacity_setup_copy_cut _ _ htail
+  have hl := @phase4LogCopyLoop_typed_cut h hresume _ _ hc
+  have hi := @phase4LogCounter_typed_cut _ _ hl
+  have hb := @phase4LogPointers_copy_cut _ _ hi
+  have he : spinePlug 6 (spineAt 126 ptxCode) tail =
+      spinePlug 2 (spineAt 126 ptxCode)
+        (spinePlug 1 (spineAt 128 ptxCode)
+          (spinePlug 1 (spineAt 129 ptxCode)
+            (spinePlug 2 (spineAt 130 ptxCode) tail))) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hcode hp
+  exact hb s hcode hp
+
 theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
     TerminatingProgBoundedOn Phase4LogPointersReady
