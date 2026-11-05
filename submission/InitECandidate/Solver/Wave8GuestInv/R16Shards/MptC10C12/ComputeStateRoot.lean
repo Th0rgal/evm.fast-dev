@@ -2052,4 +2052,89 @@ theorem localsFree_csrTablesAt (cache roots : Nat) :
     (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
     hc, hr, hcl, hrl⟩
 
+theorem nodeHeap_append_disj_csr {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {Nd1 Nd2 : List Nat}
+    (h1 : NodeHeap s Nd1) (h2 : NodeHeap s Nd2)
+    (hd : IvlsDisj (nodeExtents s Nd1) (nodeExtents s Nd2)) :
+    NodeHeap s (Nd1 ++ Nd2) := by
+  have hroot1 : ∀ {v}, RootIn Nd1 v → RootIn (Nd1 ++ Nd2) v := by
+    rintro v (rfl | hv)
+    · exact Or.inl rfl
+    · exact Or.inr (List.mem_append_left _ hv)
+  have hroot2 : ∀ {v}, RootIn Nd2 v → RootIn (Nd1 ++ Nd2) v := by
+    rintro v (rfl | hv)
+    · exact Or.inl rfl
+    · exact Or.inr (List.mem_append_right _ hv)
+  have hnivl1 : ∀ n ∈ Nd1, nodeIvl s n ∈ nodeExtents s Nd1 := fun n hn =>
+    List.mem_flatMap.2 ⟨n, hn, by simp⟩
+  have hnivl2 : ∀ n ∈ Nd2, nodeIvl s n ∈ nodeExtents s Nd2 := fun n hn =>
+    List.mem_flatMap.2 ⟨n, hn, by simp⟩
+  refine ⟨fun n hn => ?_, fun n hn m hm hne => ?_⟩
+  · rcases List.mem_append.1 hn with hn1 | hn2
+    · obtain ⟨hk3, hal, hin, hw, hext, hbr, hkey, hb16, hb56, hb168⟩ := h1.1 n hn1
+      refine ⟨hk3, hal, hin, hw,
+        fun h2k => hroot1 (hext h2k),
+        fun h3k i hi => hroot1 (hbr h3k i hi),
+        fun h12 => ?_, hb16, hb56, hb168⟩
+      rcases hkey h12 with hz | ⟨hnib, halp, hinp, hdjp⟩
+      · exact Or.inl hz
+      · right
+        refine ⟨hnib, halp, hinp, fun m hm => ?_⟩
+        rcases List.mem_append.1 hm with hm1 | hm2
+        · exact hdjp m hm1
+        · by_cases hlen0 : memW s (n + 40) = 0
+          · exact Or.inl hlen0
+          · have hp1 : (memW s (n + 32), memW s (n + 40)) ∈ nodeExtents s Nd1 := by
+              unfold nodeExtents
+              exact List.mem_flatMap.2 ⟨n, hn1, by simp [nodePath, h12, hlen0]⟩
+            exact hd _ hp1 _ (hnivl2 m hm2)
+    · obtain ⟨hk3, hal, hin, hw, hext, hbr, hkey, hb16, hb56, hb168⟩ := h2.1 n hn2
+      refine ⟨hk3, hal, hin, hw,
+        fun h2k => hroot2 (hext h2k),
+        fun h3k i hi => hroot2 (hbr h3k i hi),
+        fun h12 => ?_, hb16, hb56, hb168⟩
+      rcases hkey h12 with hz | ⟨hnib, halp, hinp, hdjp⟩
+      · exact Or.inl hz
+      · right
+        refine ⟨hnib, halp, hinp, fun m hm => ?_⟩
+        rcases List.mem_append.1 hm with hm1 | hm2
+        · by_cases hlen0 : memW s (n + 40) = 0
+          · exact Or.inl hlen0
+          · have hp2 : (memW s (n + 32), memW s (n + 40)) ∈ nodeExtents s Nd2 := by
+              unfold nodeExtents
+              exact List.mem_flatMap.2 ⟨n, hn2, by simp [nodePath, h12, hlen0]⟩
+            exact (hd _ (hnivl1 m hm1) _ hp2).flip
+        · exact hdjp m hm2
+  · rcases List.mem_append.1 hn with hn1 | hn2 <;>
+    rcases List.mem_append.1 hm with hm1 | hm2
+    · exact h1.2 n hn1 m hm1 hne
+    · exact hd _ (hnivl1 n hn1) _ (hnivl2 m hm2)
+    · exact (hd _ (hnivl1 m hm1) _ (hnivl2 n hn2)).flip
+    · exact h2.2 n hn2 m hm2 hne
+
+theorem worldTypedWith_append_mptNodes_csr {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd Nm : List Nat} {m : Nat}
+    (hW : WorldTypedWith s S Nd) (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd)) :
+    WorldTypedWith s S (Nd ++ Nm) := by
+  obtain ⟨hT, hJ, hF, hTr⟩ := hW
+  have hd_nodes : IvlsDisj (nodeExtents s Nd) (nodeExtents s Nm) :=
+    fun o1 ho1 o2 ho2 => (hd o2 (List.mem_cons_of_mem _ ho2) o1 ho1).flip
+  have hNH : NodeHeap s (Nd ++ Nm) :=
+    nodeHeap_append_disj_csr hTr.1 hm.2.2.2.2.1 hd_nodes
+  have hroot1 : ∀ {v}, RootIn Nd v → RootIn (Nd ++ Nm) v := by
+    rintro v (rfl | hv)
+    · exact Or.inl rfl
+    · exact Or.inr (List.mem_append_left _ hv)
+  refine ⟨hT, hJ, hF, ⟨hNH, ?_, ?_⟩⟩
+  · intro o ho
+    unfold nodeExtents at ho
+    rw [List.flatMap_append] at ho
+    rcases List.mem_append.1 ho with ho_nd | ho_nm
+    · exact hTr.2.1 o ho_nd
+    · exact (hm.2.2.2.2.2.2 o ho_nm).2
+  · intro hnz
+    obtain ⟨hr24, hr32⟩ := hTr.2.2 hnz
+    exact ⟨hroot1 hr24, fun hm32 i hi => hroot1 (hr32 hm32 i hi)⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
