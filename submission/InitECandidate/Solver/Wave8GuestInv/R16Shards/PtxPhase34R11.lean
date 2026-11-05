@@ -3007,6 +3007,25 @@ theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64
   · exact False.elim (hp.1.2.2 hz)
   · exact hh.disj_allocated hA hPost hl.2.1
 
+/-- Fresh stable storage avoids every source cell that the stable-copy loop
+will read, including a scratch-resident source array. -/
+theorem fresh_stable_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p n : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
+    (hf : FreshBlock s post p n) (hn : n % 8 = 0) (hp : Phase4LogPointersReady s) :
+    Disj (p, n) (locN s "logs", 24) ∧
+      Disj (p, n) (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8)) ∧
+      ∀ i, i < memW s (locN s "logs" + 8) →
+        Disj (p, n) (memW s (memW s (locN s "logs") + 8 * i), 40) := by
+  have hl := hp.1.1.2.1.resolve_left hp.1.2.2
+  obtain ⟨a, b, _, _, _, _, S, Nd, _, ho⟩ := hp.1.1.2.2.2
+  have hround : (n + 7) / 8 * 8 = n := by omega
+  have hd : ∀ i, Allocated s i → Disj (p, n) i := by
+    intro i hi
+    simpa only [hround] using hf.disj_allocated hA hPost hi
+  refine ⟨hd _ hl.2.1, hd _ (ho hp.1.2.2).1, ?_⟩
+  intro i hi
+  exact hd _ (Or.inl (hl.2.2.2.2 i hi).2.2.1)
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
