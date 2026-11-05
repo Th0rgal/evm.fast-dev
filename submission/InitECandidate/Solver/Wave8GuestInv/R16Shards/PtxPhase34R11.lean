@@ -6311,13 +6311,16 @@ theorem hoare_stableCopy_loop_owned :
         (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
           .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
           (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
-      (fun r t => r = none → PtxReceiptsDone t ∧ LogsWorldOwned t (locN t "stable_logs")) := by
+      (fun r t => r = none → PtxReceiptsDone t ∧ LogsWorldOwned t (locN t "stable_logs") ∧
+        locN t "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, t.locals.lookup (ofString "stable_logs") = some (.val (.word w))) := by
   have hf := hoare_stableCopy_loop_done_frame StableCopyOwnedFrame
     (fun s hp => stableCopyOwnedFrame_with_locals s s.locals (s.clock - 1) rfl rfl rfl hp)
     hoare_stableCopy_body_ownedFrame
   refine ⟨fun s hc hp hnt hr => ?_⟩
   have h := hf.run s hc hp hnt hr
-  exact stableCopyLoopInv_done_owned _ h.2.2.1 h.2.1 h.2.2.2
+  have hd := stableCopyLoopInv_done_owned _ h.2.2.1 h.2.1 h.2.2.2
+  exact ⟨hd.1, hd.2, stableCopyInv_stable_local _ h.2.2.1.1⟩
 
 /-- The unframed copy-loop rule is the trivial-frame specialization. -/
 theorem hoare_stableCopy_loop_done :
@@ -6348,7 +6351,9 @@ theorem stableCopy_loop_cut {tail : ProgHOL 64} {b : Nat}
 at the same concrete loop budget. -/
 theorem stableCopy_loop_owned_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
-      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) tail b) :
     TerminatingProgBoundedOn (fun s => StableCopyLoopInv s ∧ StableCopyOwnedFrame s)
       (.seq
         (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
@@ -6658,7 +6663,9 @@ theorem stable_length_decl_loop_cut {tail : ProgHOL 64} {b : Nat}
 /-- Length storage and scoped copying retain ownership for the receipt tail. -/
 theorem stable_length_decl_loop_owned_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
-      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) tail b) :
     TerminatingProgBoundedOn (fun s => (StableLengthPre s ∧ StableCopyOwnedFrame s ∧
       Disj (locN s "logs", 24)
         (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
@@ -7415,7 +7422,9 @@ theorem stable_allocation_decl_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b 
 theorem stable_allocation_decl_loop_owned_cut (h : PtxCallees)
     {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
-      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) tail b) :
     TerminatingProgBoundedOn (fun s => Phase4StableCapReady s ∧
       (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
       locN s "logs" ≠ 0 ∧
@@ -7745,7 +7754,9 @@ theorem phase4ThroughStableCopy_owned_cut (h : PtxCallees)
       [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
     {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
-      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs")) tail b) :
+      (fun s => PtxReceiptsDone s ∧ LogsWorldOwned s (locN s "stable_logs") ∧
+        locN s "stable_logs" ≠ 0 ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))) tail b) :
     TerminatingProgBoundedOn TxAfterCallStrong
       (spinePlug 38 (spineAt 99 ptxCode) tail)
       (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
