@@ -1375,6 +1375,46 @@ theorem phase4BeforeReceipt_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact hb s hc hp
 
+def receiptScratchSpec : List (String × Nat × Nat) :=
+  [("keccak_pad", 136, 136), ("keccak_st", 200, 200)]
+
+theorem receiptScratchSpec_ok : ScratchSpec receiptScratchSpec := by
+  unfold ScratchSpec receiptScratchSpec
+  decide
+
+/-- Receipt encoding preserves the message output independently of its returned slice. -/
+theorem encode_receipt_output_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    TxAfterCallStrong { post with locals := s.locals } := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact txAfterCallStrong_scratchStep
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    hs' hp.1 ⟨hs.2.1, by omega⟩ receiptScratchSpec_ok
+    rfl (by decide) (by decide) (by decide) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
