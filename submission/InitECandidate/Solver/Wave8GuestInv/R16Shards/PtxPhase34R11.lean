@@ -15,12 +15,32 @@ open InitECandidate.Solver.PanTerminatingBounded InitECandidate.Solver.PanRunBou
 open InitECandidate.Solver.Wave8GuestInv
 open InitECandidate.Solver.Wave8GuestInv.R13Shards
 
-/-- The message result additionally owns its live log storage outside the world. -/
+/-- Before the Phase-4 stable copy, the header and live pointer array may be
+scratch-resident. `frame_new` uses `lst_new_scratch`; `lst_push` moves only the
+backing array to the heap when it grows. -/
+def LogsLiveOwned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (logs : Nat) : Prop :=
+  logs ≠ 0 →
+    Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
+    IvlsDisj [(logs, 24), (memW s logs, 8 * memW s (logs + 8))] (worldOwned s S Nd) ∧
+    ∀ i, i < memW s (logs + 8) →
+      IvlsDisj (logOwnedIvls s (memW s (memW s logs + 8 * i))) (worldOwned s S Nd)
+
+/-- The message result owns its live log storage outside the world, without
+requiring the temporary header or its initial array to be heap-resident. -/
 def RetMessageOutputStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
     Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
   fun s r post S Nd => RetMessageOutput s r post S Nd ∧
     ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
-      v = .val (.word w) ∧ LogsOwnedDisj post S Nd (memW post (w.toNat + 16))
+      v = .val (.word w) ∧ LogsLiveOwned post S Nd (memW post (w.toNat + 16))
+
+def TxAfterCallStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxWorld s ∧ WordsOK s (locN s "out", 96) ∧
+    Inside (locN s "out", 96) sourceBase (globN s "heap_ptr") ∧
+    LogsListOK s (memW s (locN s "out" + 16)) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧
+      IvlsDisj [(locN s "out", 96)] (worldOwned s S Nd) ∧
+      LogsLiveOwned s S Nd (memW s (locN s "out" + 16))
 
 def BoListArgStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => WorldOK s ∧ BoListArg s ∧ memW s (locN s "l") ≠ 0
@@ -58,6 +78,143 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 
 namespace PtxP34
 open PtxP1
+
+/-- Receipt encoding's frozen guard asks for placement even for an empty array.
+The allocator-created backing buffer supplies it independently of live cells. -/
+theorem logsLiveOwned_disjFixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} (hd : LogsLiveOwned s S Nd logs) :
+    LogsDisjFixed s logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  refine Or.inr ⟨?_, ?_⟩
+  · exact (hd hn).1
+  · intro o ho j hj
+    have hjw : j ∈ worldOwned s S Nd := by
+      unfold worldOwned
+      simp only [List.mem_append]
+      exact Or.inl (Or.inr hj)
+    rcases List.mem_append.mp ho with hh | he
+    · exact (hd hn).2.1 o hh j hjw
+    · obtain ⟨i, hi, ho⟩ := List.mem_flatMap.mp he
+      exact (hd hn).2.2 i (List.mem_range.mp hi) o ho j hjw
+
+/-- Allocated scratch survives a framed step just like allocated heap. The
+scratch frontier must be retained (or move down), not equal `scratchEnd`. -/
+theorem allocated_ivl_survives_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new R : List Ivl} {b : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hgrow : AllocatorGrows s post)
+    (hold0 : ∀ j ∈ old, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post old new)
+    (hfr : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hb : Allocated s b) (hold : ∀ j ∈ old, Disj b j)
+    (hR : ∀ j ∈ R, Disj b j) :
+    Allocated post b ∧ (∀ o ∈ new, Disj b o) ∧ IvlUnhit s post b := by
+  refine ⟨hgrow.allocated hb, ?_⟩
+  rcases hb with hh | hs
+  · exact (R13Shards.heap_ivl_survives_step hAs hgrow.1 hold0 hR0 hog hfr
+      hb1 hb2 hh hold hR).2
+  have hsep : heapLimit ≤ scratchStart := by decide
+  have hfm := hAs.2.2.1
+  have hsc := hAs.2.2.2.1
+  have hhp := hAs.2.1
+  have hhpp := hAp.2.1
+  constructor
+  · intro o ho
+    rcases hog o ho with rfl | ⟨j, hj, hin⟩ | hfresh
+    · exact R13Shards.disj_zero_right b
+    · exact R13Shards.disj_of_inside_right hin (hold j hj)
+    · exact Or.inr (Or.inr (Or.inr (by have := hs.1; have := hfresh.2; omega)))
+  · intro a ha8 hhit
+    obtain ⟨hc1, hc2⟩ := hhit
+    have ha_in : b.1 ≤ a.toNat ∧ a.toNat + 8 ≤ b.1 + b.2 := by omega
+    apply hfr a
+    · intro j hj hcj
+      rcases List.mem_append.mp hj with hj12 | hfg
+      · rcases List.mem_append.mp hj12 with ho | hr
+        · exact R13Shards.not_cellHits_of_disj ha8 (hold0 j ho) ha_in (hold j ho) hcj
+        · exact R13Shards.not_cellHits_of_disj ha8 (hR0 j hr) ha_in (hR j hr) hcj
+      · simp only [List.mem_singleton] at hfg
+        subst j
+        obtain ⟨hj1, hj2⟩ := hcj
+        unfold freeGap at hj1 hj2
+        have := hs.1
+        dsimp at hj1 hj2
+        omega
+    · intro hcf
+      obtain ⟨hf1, hf2⟩ := hcf
+      unfold heapFree at hf1 hf2
+      have := hs.1
+      dsimp at hf1 hf2
+      omega
+
+/-- Separation from newly owned world storage needs placement, but no cell
+alignment. This also covers byte-sized log payload intervals. -/
+theorem allocated_disj_ownedGrows {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new : List Ivl} {b : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hb : Allocated s b)
+    (hog : OwnedGrows s post old new) (hd : ∀ j ∈ old, Disj b j) :
+    ∀ o ∈ new, Disj b o := by
+  intro o ho
+  rcases hog o ho with rfl | ⟨j, hj, hin⟩ | hfresh
+  · exact R13Shards.disj_zero_right b
+  · exact R13Shards.disj_of_inside_right hin (hd j hj)
+  · rcases hb with hh | hs
+    · exact Or.inr (Or.inr (Or.inl (hh.2.trans hfresh.1)))
+    · have hsep : heapLimit ≤ scratchStart := by decide
+      have hfm := hAs.2.2.1
+      have hsc := hAs.2.2.2.1
+      have hhp := hAp.2.1
+      exact Or.inr (Or.inr (Or.inr (by have := hs.1; have := hfresh.2; omega)))
+
+/-- All four log intervals are heap-resident, including the byte payloads. -/
+theorem logEntryOK_record_placed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {log : Nat} (hl : LogEntryOK s log) :
+    ∀ o ∈ logRecordIvls s log, Inside o sourceBase (globN s "heap_ptr") := by
+  intro o ho
+  simp only [logRecordIvls, List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl | rfl | rfl
+  · exact hl.2.1
+  · exact hl.2.2.2.2.1
+  · exact hl.2.2.2.2.2.1
+  · exact hl.2.2.2.2.2.2
+
+/-- Framing the record fixes the payload intervals used by the receipt guard.
+The shared system address is filtered identically when its global is retained. -/
+theorem logOwnedIvls_eq_of_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hAs : ArenaOK s) (hl : LogEntryOK s log)
+    (hu : IvlUnhit s post (log, 40))
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address") :
+    logOwnedIvls post log = logOwnedIvls s log := by
+  have hb := (R13Shards.ivl_allocated_bound hAs (Or.inl hl.2.1)).2
+  have ha := hl.1.1
+  have hm : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (log + k) = memW s (log + k) := by
+    intro k hk
+    apply R13Shards.memW_eq_of_ivlUnhit hu
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    · exact hb
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> (constructor <;> omega)
+  have h0 : memW post log = memW s log := by simpa using hm 0 (by simp)
+  simp only [logOwnedIvls, logRecordIvls, hsys, h0,
+    hm 8 (by simp), hm 16 (by simp), hm 24 (by simp), hm 32 (by simp)]
+
+theorem logOwnedIvls_disj_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new : List Ivl} {log : Nat}
+    (hAs : ArenaOK s) (hAp : ArenaOK post) (hl : LogEntryOK s log)
+    (hu : IvlUnhit s post (log, 40))
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hog : OwnedGrows s post old new) (hd : IvlsDisj (logOwnedIvls s log) old) :
+    IvlsDisj (logOwnedIvls post log) new := by
+  rw [logOwnedIvls_eq_of_unhit hAs hl hu hsys]
+  intro o ho
+  have hmem := (List.mem_filter.mp ho).1
+  exact allocated_disj_ownedGrows hAs hAp
+    (Or.inl (logEntryOK_record_placed hl o hmem)) hog (hd o ho)
 
 /-- Reassemble the log-list invariant from preservation of the header, live
 pointer cells and individual log records. This isolates the memory obligations
@@ -191,6 +348,23 @@ theorem logsOwnedDisj_array_survives {F : Type}
   · exact (R13Shards.ivl_allocated_bound hAs (Or.inl hin)).2
   · constructor <;> dsimp <;> omega
 
+/-- A nonempty log list does provide alignment of its backing pointer, through
+the ordinary-domain membership of its first live cell. This does not bound
+that cell by the current allocation frontier. -/
+theorem logsListOK_array_aligned {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {logs : Nat} (hg : GuestInv s) (h : LogsListOK s logs) (hn : logs ≠ 0)
+    (hlen : 0 < memW s (logs + 8)) : memW s logs % 8 = 0 := by
+  rcases h with hz | hl
+  · exact False.elim (hn hz)
+  obtain ⟨w, hdom, _⟩ := (hl.2.2.2.2 0 hlen).1
+  rw [hg.memaddrs] at hdom
+  have ha := (R13Shards.ordinaryDomain_iff _).mp hdom
+  have hlt : memW s logs < 2 ^ 64 := by
+    unfold memW
+    cases s.memory (BitVec.ofNat 64 logs) with
+    | word v => exact v.isLt
+  simpa only [Nat.mul_zero, Nat.add_zero, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] using ha.1
+
 /-- A framed world step preserves the entire log list when its live array is
 heap-resident and all live log storage avoids the explicit write footprint. -/
 theorem logsListOK_of_framed_step {F : Type}
@@ -219,6 +393,157 @@ theorem logsListOK_of_framed_step {F : Type}
   intro i hi
   exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
     hold0 hR0 hog hfr (hRe i hi)).2.2
+
+/-- Empty arrays need no placement premise. For nonempty arrays, alignment
+follows from `LogsListOK`, leaving only heap placement as an extra obligation. -/
+theorem logsListOK_of_framed_step_live {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hlogs : LogsListOK s logs) (hd : LogsOwnedDisj s S Nd logs)
+    (harray : logs ≠ 0 → 0 < memW s (logs + 8) →
+      Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsListOK post logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  have hh := logsOwnedDisj_header_survives hAs hhp hlogs hd hn hold0 hR0 hog hfr hRh
+  apply logsListOK_congr_header_unhit hAs hgS hgP hhp hlogs
+    (fun _ => Or.inl hh.1) hh.2.2
+  · intro i hi
+    have hpos : 0 < memW s (logs + 8) := by omega
+    exact (logsOwnedDisj_array_survives hAs hhp hd hn
+      (logsListOK_array_aligned hgS hlogs hn hpos) (harray hn hpos)
+      hold0 hR0 hog hfr hRa).1 i hi
+  · intro i hi
+    exact (logsOwnedDisj_entry_survives hAs hhp hlogs hd hn hi
+      hold0 hR0 hog hfr (hRe i hi)).2.2
+
+/-- Live arrays retain both their pointer cells and their separation from the
+new world. Empty arrays need no alignment, even when their pointer is arbitrary. -/
+theorem logsLiveOwned_array_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hgS : GuestInv s) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs) (hn : logs ≠ 0)
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j) :
+    Allocated post (memW s logs, 8 * memW s (logs + 8)) ∧
+    (∀ o ∈ new, Disj (memW s logs, 8 * memW s (logs + 8)) o) ∧
+    (∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i)) := by
+  refine ⟨hgrow.allocated (hd hn).1, ?_⟩
+  by_cases hz : memW s (logs + 8) = 0
+  · constructor
+    · intro o ho
+      exact Or.inl (by simp [hz])
+    · intro i hi
+      omega
+  have hp : 0 < memW s (logs + 8) := by omega
+  have ha := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
+    (logsListOK_array_aligned hgS hl hn hp) (by simp)
+    (hd hn).1 (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRa
+  refine ⟨ha.2.1, ?_⟩
+  intro i hi
+  apply R13Shards.memW_eq_of_ivlUnhit ha.2.2
+  · have := logsListOK_array_aligned hgS hl hn hp; omega
+  · exact (R13Shards.ivl_allocated_bound hAs (hd hn).1).2
+  · constructor <;> dsimp <;> omega
+
+/-- Preservation for the actual temporary lists returned by the guest: both
+heap and live scratch headers/arrays are allowed, and empty arrays are ignored. -/
+theorem logsLiveOwned_list_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hgS : GuestInv s) (hgP : GuestInv post) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsListOK post logs := by
+  by_cases hn : logs = 0
+  · exact Or.inl hn
+  have hl' := hl.resolve_left hn
+  have hh := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
+    hl'.1.1 (by norm_num : 24 % 8 = 0) hl'.2.1
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRh
+  apply logsListOK_congr_header_unhit hAs hgS hgP hgrow.1 hl
+    (fun _ => hh.1) hh.2.2
+  · intro i hi
+    exact (logsLiveOwned_array_survives hAs hAp hgS hgrow hl hd hn
+      hold0 hR0 hog hfr hRa).2.2 i hi
+  · intro i hi
+    have he := (hl'.2.2.2.2 i hi).2
+    have hmem : (memW s (memW s logs + 8 * i), 40) ∈
+        logOwnedIvls s (memW s (memW s logs + 8 * i)) := by
+      simp [logOwnedIvls, logRecordIvls]
+    exact (R13Shards.heap_ivl_survives_step hAs hgrow.1 hold0 hR0 hog hfr
+      he.1.1 (by norm_num) he.2.1
+      (fun j hj => (hd hn).2.2 i hi _ hmem j hj) (hRe i hi)).2.2
+
+/-- Full ownership transport, so the same invariant can be used again for the
+second ether-creation call and then for receipt encoding. -/
+theorem logsLiveOwned_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd S' Nd' : List Nat} {logs : Nat}
+    {R : List Ivl} (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hgS : GuestInv s) (hgrow : AllocatorGrows s post)
+    (hl : LogsListOK s logs) (hd : LogsLiveOwned s S Nd logs)
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hRh : ∀ j ∈ R, Disj (logs, 24) j)
+    (hRa : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j)
+    (hRe : ∀ i, i < memW s (logs + 8) →
+      ∀ j ∈ R, Disj (memW s (memW s logs + 8 * i), 40) j) :
+    LogsLiveOwned post S' Nd' logs := by
+  intro hn
+  have hl' := hl.resolve_left hn
+  have hh := allocated_ivl_survives_step hAs hAp hgrow hold0 hR0 hog hfr
+    hl'.1.1 (by norm_num : 24 % 8 = 0) hl'.2.1
+    (fun j hj => (hd hn).2.1 _ (by simp) j hj) hRh
+  have ha := logsLiveOwned_array_survives hAs hAp hgS hgrow hl hd hn
+    hold0 hR0 hog hfr hRa
+  have hb := (R13Shards.ivl_allocated_bound hAs hl'.2.1).2
+  have h0 : memW post logs = memW s logs :=
+    R13Shards.memW_eq_of_ivlUnhit hh.2.2 hl'.1.1 hb ⟨by omega, by omega⟩
+  have h8 : memW post (logs + 8) = memW s (logs + 8) :=
+    R13Shards.memW_eq_of_ivlUnhit hh.2.2 (by have := hl'.1.1; omega) hb
+      ⟨by omega, by omega⟩
+  refine ⟨?_, ?_, ?_⟩
+  · rw [h0, h8]; exact ha.1
+  · intro o ho j hj
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+    rcases ho with rfl | rfl
+    · exact hh.2.1 j hj
+    · rw [h0, h8]; exact ha.2.1 j hj
+  · intro i hi
+    rw [h8] at hi
+    rw [h0, ha.2.2 i hi]
+    have he := (hl'.2.2.2.2 i hi).2
+    have hmem : (memW s (memW s logs + 8 * i), 40) ∈
+        logOwnedIvls s (memW s (memW s logs + 8 * i)) := by
+      simp [logOwnedIvls, logRecordIvls]
+    have hu := (R13Shards.heap_ivl_survives_step hAs hgrow.1 hold0 hR0 hog hfr
+      he.1.1 (by norm_num) he.2.1
+      (fun j hj => (hd hn).2.2 i hi _ hmem j hj) (hRe i hi)).2.2
+    exact logOwnedIvls_disj_survives hAs hAp he hu hsys hog ((hd hn).2.2 i hi)
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
@@ -336,7 +661,7 @@ def PmcStrong : Prop :=
     RetMessageOutputStrong (ofString "process_message_call")
 
 theorem resume_pmc_strong (hwk_strong : PmcStrong) :
-    DecCallResumeOn PtxMessageReady TxAfterCall (ofString "out")
+    DecCallResumeOn PtxMessageReady TxAfterCallStrong (ofString "out")
       (ofString "process_message_call") [.var .local (ofString "m")] := by
   intro F s vs body callee ret v post hc hP ha hl hb
   unfold PmcStrong at hwk_strong
@@ -450,14 +775,14 @@ theorem resume_pmc_strong (hwk_strong : PmcStrong) :
     exact (R13Shards.logsListOK_with_locals post resumed.locals post.clock _).mpr hll_out
   · change IvlsDisj [(locN resumed "out", 96)] (worldOwned post S' Nd')
     rw [hout_loc]; exact hdisj_out
-  · change LogsOwnedDisj post S' Nd' (memW post (locN resumed "out" + 16))
+  · change LogsLiveOwned post S' Nd' (memW post (locN resumed "out" + 16))
     rw [hout_loc]; exact hlogs_disj
 
 end PtxP34
 
 theorem ptxPhase3_cut_strong (h : PtxCallees) (hwk : PtxP34.PmcStrong)
     {tail : ProgHOL 64} {b : Nat}
-    (htail : TerminatingProgBoundedOn TxAfterCall tail b) :
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
     TerminatingProgBoundedOn PtxMessageReady (ptxPhase3 tail) (ptxCost3 + b) := by
   have hb : TerminatingProgBoundedOn PtxMessageReady (ptxPhase3 tail)
       (K.«process_message_call» + b + 1) := by
@@ -475,7 +800,7 @@ theorem ptxPhase3_cut_strong (h : PtxCallees) (hwk : PtxP34.PmcStrong)
 theorem ptxPhase3_cut_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
     {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
-      (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s) tail b) :
+      (fun s => TxAfterCallStrong s ∧ PtxPhase4LocalShapes s) tail b) :
     TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
       (ptxPhase3 tail) (ptxCost3 + b) := by
   have he : CallEntryOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
@@ -483,7 +808,7 @@ theorem ptxPhase3_cut_strong_shapes (h : PtxCallees) (hwk : PtxP34.PmcStrong)
     intro F s vs body callee ret hc hp ha hl
     exact PtxP34.entry_pmc s vs body callee ret hc hp.1 ha hl
   have hr : DecCallResumeOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s)
-      (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s) (ofString "out")
+      (fun s => TxAfterCallStrong s ∧ PtxPhase4LocalShapes s) (ofString "out")
       (ofString "process_message_call") [.var .local (ofString "m")] := by
     intro F s vs body callee ret v post hc hp ha hl hb
     exact ⟨PtxP34.resume_pmc_strong hwk s vs body callee ret v post hc hp.1 ha hl hb,
@@ -510,7 +835,7 @@ theorem gbody_process_transaction_strong_of_cuts
         (ptxCost1 + (ptxCost2 + b)))
     (h4 : ∀ (tail : ProgHOL 64) (b : Nat),
       TerminatingProgBoundedOn PtxReceiptsDone tail b →
-      TerminatingProgBoundedOn (fun s => TxAfterCall s ∧ PtxPhase4LocalShapes s)
+      TerminatingProgBoundedOn (fun s => TxAfterCallStrong s ∧ PtxPhase4LocalShapes s)
         (ptxPhase4 tail) (ptxCost4 + b)) :
     TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction")
       K.«process_transaction» := by
