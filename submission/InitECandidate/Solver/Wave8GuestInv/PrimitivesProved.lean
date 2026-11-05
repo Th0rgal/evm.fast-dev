@@ -77,6 +77,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.PrimC08Closure
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.BlobGasPrice
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.LogsBloom
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkIdxStateInit
 import InitECandidate.Solver.Wave8GuestInv.R10Shards.Fast_GbodyC17ToC21
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
@@ -232,7 +233,7 @@ theorem primitives : Primitives where
   «wk_add_storage_write» := «wk_add_storage_write»
   «wk_bal_remove_change» := R16Shards.PrimC08Closure.«wk_bal_remove_change»
   «wk_get_code» := R16Shards.«wk_get_code»
-  «wk_idx_start_account» := «wk_idx_start_account»
+  «wk_idx_start_account» := R16Shards.WkBalStateInit.«wk_idx_start_account»
   «wk_idx_start_storage» := «wk_idx_start_storage»
   «wk_remove_storage_write» := R16Shards.PrimC08Closure.«wk_remove_storage_write»
   «ro_u256_eq» := M17.«ro_u256_eq»
