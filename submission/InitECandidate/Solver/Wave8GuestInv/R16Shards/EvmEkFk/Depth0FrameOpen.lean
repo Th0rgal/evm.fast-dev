@@ -6085,4 +6085,37 @@ theorem nodedb_code_record_return {F : Type} (s : PanSemStateFiniteExact 64 F)
   cases hv
   exact ⟨code, code_n, rfl, hb, rfl⟩
 
+/-- A successful table lookup reaches the bounded code-record return through
+the concrete `nodedb_lookup` found/not-found branch. -/
+theorem nodedb_lookup_code_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hfound : found ≠ 0)
+    (hw : WordsOK s (ptr.toNat, 16))
+    (hin : Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s
+      (.seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip)
+        (.return (.rstruct [.const 1,
+          .load .one (.rfield 1 (.var .local (ofString "r"))),
+          .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])])) )
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word 1), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  have he : ev s (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0)) =
+      some (.val (.word 0)) := by
+    simp [ev, evalHOLExact, hr, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hfound
+  have hi : evaluateHOLFiniteState s
+      (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "r"))) (.const 0))
+        (.return (.rstruct [.const 0, .const 0, .const 0])) .skip) = (none, s) := by
+    rw [evaluateHOLFiniteState_ite]
+    unfold ev at he
+    rw [he]
+    simp [evaluateHOLFiniteState_skip]
+  intro v hv
+  rw [evaluateHOLFiniteState_seq_line780, hi] at hv ⊢
+  exact nodedb_code_record_return s hA found ptr hr hw hin v hv
+
 end HeadStore
