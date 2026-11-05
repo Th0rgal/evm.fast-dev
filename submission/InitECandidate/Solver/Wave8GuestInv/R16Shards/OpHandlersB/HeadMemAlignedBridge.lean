@@ -9207,6 +9207,38 @@ theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
     simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
       noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
 
+/-- Arena bounds are stronger than the explicit log-count bound: even the
+backing-array capacity is below `2^25`. -/
+theorem frameWF_logs_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ec : Ivl} (hA : ArenaOK s) (hf : FrameWF s S ec) :
+    memW s (memW s (ec.1 + 88) + 8) < 2 ^ 25 := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hlen, hloc, _⟩ := hf
+  have hhp := hA.2.1
+  have hsp := hA.2.2.1
+  have hfmsp := hA.2.2.2.1
+  rcases hloc with h | h
+  · unfold Inside frameLogs at h
+    have hsb := R11Shards.sourceBase_val
+    have hhl := R11Shards.heapLimit_val
+    dsimp only at h
+    omega
+  · unfold Inside frameLogs at h
+    have hss := R11Shards.scratchStart_val
+    have hse := R11Shards.scratchEnd_val
+    dsimp only at h
+    omega
+
+/-- Parent and child log counts jointly satisfy `LogsListOK`'s strict bound,
+using their allocated backing-array bounds rather than separate count limits. -/
+theorem frameWF_logs_combined_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ec₁ ec₂ : Ivl} (hA : ArenaOK s)
+    (h₁ : FrameWF s S ec₁) (h₂ : FrameWF s S ec₂) :
+    memW s (memW s (ec₁.1 + 88) + 8) +
+      memW s (memW s (ec₂.1 + 88) + 8) < 2 ^ 28 := by
+  have h₁b := frameWF_logs_count_bound hA h₁
+  have h₂b := frameWF_logs_count_bound hA h₂
+  omega
+
 /-- Normal loop exit fixes the exact combined log count, without modular
 wraparound. -/
 theorem laInv_exit_count {F : Type} {s post : PanSemStateFiniteExact 64 F}
