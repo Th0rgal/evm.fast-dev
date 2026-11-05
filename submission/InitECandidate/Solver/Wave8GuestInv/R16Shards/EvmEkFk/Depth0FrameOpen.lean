@@ -6221,4 +6221,23 @@ theorem ws_get_code_tail_return_cases {F : Type} (s : PanSemStateFiniteExact 64 
   · intro v hv
     exact ⟨hf, ws_get_code_tail_return s found code code_n hr (hn hf) hf v hv⟩
 
+/-- Equality with the empty code hash returns the empty pair immediately,
+independently of the table-lookup continuation. -/
+theorem ws_get_code_empty_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (eqw : BitVec 64) (heq : s.locals.lookup (ofString "eq") = some (.val (.word eqw)))
+    (hne : eqw ≠ 0) (tail : ProgHOL 64) :
+    evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notEqual (.var .local (ofString "eq")) (.const 0))
+        (.return (.rstruct [.const 0, .const 0])) .skip) tail) =
+      (some (.returned (.rStruct [.val (.word 0), .val (.word 0)])), emptyLocalsHOLFinite s) := by
+  have he : ev s (.cmp .notEqual (.var .local (ofString "eq")) (.const 0)) =
+      some (.val (.word 1)) := by
+    simp [ev, evalHOLExact, heq, Compiler.Encoders.Asm.wordCmpHOL]
+    exact hne
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  unfold ev at he
+  rw [he]
+  simp [evaluateHOLFiniteState_return, evalHOLExact, evalListHOLExact,
+    shapeOfHOLExact, sizeOfShapeWithContextHOL]
+
 end HeadStore
