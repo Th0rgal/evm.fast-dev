@@ -10495,4 +10495,57 @@ theorem ics_tail_tables {F : Type} (X : PanSemStateFiniteExact 64 F) (e tw : Bit
     change updW X.memory (e + 96) w a = _
     rw [updW_ne _ _ _ _ ha]
 
+/-- Prefix and child-suffix contents reconstruct the appended log-list invariant. -/
+theorem logsListOK_of_append_contents {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {L child n nc : Nat}
+    (hp : LogsListOK s L) (hc : LogsListOK s child)
+    (hn : memW s (L + 8) = n) (hnc : memW s (child + 8) = nc)
+    (hpn : L ≠ 0) (hcn : child ≠ 0)
+    (hwords : WordsOK post (L, 24)) (halloc : Allocated post (L, 24))
+    (hcount : memW post (L + 8) = n + nc)
+    (hbound : n + nc < 2 ^ 28)
+    (hcap : n + nc ≤ memW post (L + 16))
+    (hslots : ∀ i, i < n + nc → WordAt post (memW post L + 8 * i))
+    (hprefix : ∀ i, i < n →
+      memW post (memW post L + 8 * i) = memW s (memW s L + 8 * i))
+    (hsuffix : ∀ i, i < nc →
+      memW post (memW post L + 8 * (n + i)) = memW s (memW s child + 8 * i))
+    (hkeep : ∀ log, LogEntryOK s log → LogEntryOK post log) :
+    LogsListOK post L := by
+  rcases hp with hz | ⟨_, _, _, _, hp⟩
+  · exact False.elim (hpn hz)
+  rcases hc with hz | ⟨_, _, _, _, hc⟩
+  · exact False.elim (hcn hz)
+  refine Or.inr ⟨hwords, halloc, by omega, by omega, ?_⟩
+  intro i hi
+  rw [hcount] at hi
+  refine ⟨hslots i hi, ?_⟩
+  by_cases hip : i < n
+  · rw [hprefix i hip]
+    exact hkeep _ (hp i (by omega)).2
+  · have his : i - n < nc := by omega
+    have hieq : i = n + (i - n) := by omega
+    rw [hieq, hsuffix (i - n) his]
+    exact hkeep _ (hc (i - n) (by omega)).2
+
+/-- Heap growth preserves a log entry once its five record fields and words survive. -/
+theorem logEntryOK_of_record_preserved {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (h : LogEntryOK s log) (hheap : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hwords : WordsOK post (log, 40))
+    (hfields : ∀ k ∈ [0, 8, 16, 24, 32], memW post (log + k) = memW s (log + k)) :
+    LogEntryOK post log := by
+  have h0 := hfields 0 (by simp)
+  have h8 := hfields 8 (by simp)
+  have h16 := hfields 16 (by simp)
+  have h24 := hfields 24 (by simp)
+  have h32 := hfields 32 (by simp)
+  simp only [Nat.add_zero] at h0
+  unfold LogEntryOK at h ⊢
+  rw [h0, h8, h16, h24, h32]
+  obtain ⟨_, hr, ht, hn, ha, hb, hc⟩ := h
+  exact ⟨hwords, ⟨hr.1, hr.2.trans hheap⟩, ht, hn,
+    ⟨ha.1, ha.2.trans hheap⟩, ⟨hb.1, hb.2.trans hheap⟩,
+    ⟨hc.1, hc.2.trans hheap⟩⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
