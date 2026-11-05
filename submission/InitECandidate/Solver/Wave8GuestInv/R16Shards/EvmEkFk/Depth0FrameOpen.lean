@@ -2854,4 +2854,53 @@ theorem Hoare.seq_assoc_fall
   rw [← heq] at hnt ⊢
   exact h.run s hc hp hnt
 
+theorem eval_seq_assoc_six {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c d e f : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq a (.seq (.seq b (.seq c d)) (.seq e f))) =
+      evaluateHOLFiniteState s (.seq a (.seq b (.seq c (.seq d (.seq e f))))) := by
+  have ht : ∀ t : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState t (.seq (.seq b (.seq c d)) (.seq e f)) =
+        evaluateHOLFiniteState t (.seq b (.seq c (.seq d (.seq e f)))) := by
+    intro t
+    rw [srd_eval_seq_assoc]
+    conv_lhs => rw [evaluateHOLFiniteState_seq_line780]
+    conv_rhs => rw [evaluateHOLFiniteState_seq_line780]
+    rcases evaluateHOLFiniteState t b with ⟨r, u⟩
+    cases r with
+    | none => exact srd_eval_seq_assoc u c d (.seq e f)
+    | some _ => rfl
+  conv_lhs => rw [evaluateHOLFiniteState_seq_line780]
+  conv_rhs => rw [evaluateHOLFiniteState_seq_line780]
+  rcases evaluateHOLFiniteState s a with ⟨r, t⟩
+  cases r with
+  | none => exact ht t
+  | some _ => rfl
+
+/-- The delegated message tail in the right-associated shape emitted by the
+source translator. -/
+theorem hoare_prepare_dispatch_delegated_msg_tail_source (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+                (.var .local (ofString "daddr")))
+              (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112])
+                  (.var .local (ofString "code")))
+                (.store (.op .add [.var .local (ofString "msg"), .const 120])
+                  (.var .local (ofString "code_n"))))))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))) := by
+  have h := Hoare.seq_assoc_fall
+    (hoare_prepare_dispatch_delegated_msg_tail gw hp G ch code code_n daddr)
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have hr := h.run s hc hp
+  rw [eval_seq_assoc_six] at hr
+  exact hr hnt
+
 end HeadStore
