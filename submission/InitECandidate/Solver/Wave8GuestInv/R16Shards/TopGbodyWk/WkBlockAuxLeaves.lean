@@ -6328,4 +6328,105 @@ theorem wkSc_merge_tx_into_block_of_storage_suffix
   intro F s hc hW _ hnt hres
   exact hbody s hc hW hnt (Or.inr (Or.inr (Or.inr hres)))
 
+/-- Branches preserve the withdrawal mask, including resumable exits. -/
+theorem progWithdrawalStep_ite {cond : ExpHOL 64} {yes no : ProgHOL 64}
+    (hy : ProgWithdrawalStep yes) (hn : ProgWithdrawalStep no) :
+    ProgWithdrawalStep (.ite cond yes no) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_ite] at hnt hfr ⊢
+  rcases hev : @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+  · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · rcases cv with ⟨⟨w⟩⟩ | _ | _
+    · simp only [hev] at hnt hfr ⊢
+      by_cases hw : w = 0
+      · simp only [hw, ↓reduceIte] at hnt hfr ⊢; exact hn s hc hW hnt hfr
+      · simp only [hw, ↓reduceIte] at hnt hfr ⊢; exact hy s hc hW hnt hfr
+    · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+
+/-- Loop composition for the withdrawal mask permits the replaced `ts` root. -/
+theorem progWithdrawalStep_while {cond : ExpHOL 64} {body : ProgHOL 64}
+    (hb : ProgWithdrawalStep body) :
+    ProgWithdrawalStep (.while cond body) := by
+  intro F s0 hc0 hW0 hnt0 hfr0
+  suffices ∀ (k : Nat) (s : PanSemStateFiniteExact 64 F),
+      s.clock = k → s.code = originalRuntimeCode → WorldOK s →
+      (evaluateHOLFiniteState s (.while cond body)).1 ≠ some .timeOut →
+      FlowingOrResumes (evaluateHOLFiniteState s (.while cond body)).1 →
+      WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+        s (evaluateHOLFiniteState s (.while cond body)).1
+        (evaluateHOLFiniteState s (.while cond body)).2 from
+    this s0.clock s0 rfl hc0 hW0 hnt0 hfr0
+  intro k
+  induction k using Nat.strong_induction_on with
+  | h k ih =>
+    intro s hclk hc hW hnt hfr
+    rw [evaluateHOLFiniteState_while_fixClockRewrite] at hnt hfr ⊢
+    rcases hev : @evalHOLFinite 64 F _ s
+        (fun a => Classical.propDecidable (s.memaddrs a)) cond with _ | cv
+    · simp only [hev] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hev] at hnt hfr ⊢
+      rcases cv with ⟨⟨w⟩⟩ | _ | _
+      · dsimp only at hnt hfr ⊢
+        by_cases hw : w = 0
+        · subst hw; exact WorldStepSc.refl s none hW.1
+        · rw [if_pos hw] at hnt hfr ⊢
+          by_cases hk0 : s.clock = 0
+          · simp [hk0] at hnt
+          · rw [if_neg hk0] at hnt hfr ⊢
+            set sd := decClockHOLFinite s
+            have hWd : WorldOK sd := localsFree_worldOK s s.locals (s.clock - 1) hW
+            have hclk_le := evaluateHOLFiniteState_clock_le sd body
+            have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata sd body).1
+            rcases hbo : evaluateHOLFiniteState sd body with ⟨rb, mid⟩
+            have hbo' : evaluateHOLFiniteState (decClockHOLFinite s) body = (rb, mid) := hbo
+            simp only [sd, hbo'] at hnt hfr hclk_le hmeta ⊢
+            have hmid_lt : mid.clock < k := by
+              change mid.clock ≤ s.clock - 1 at hclk_le; omega
+            have hnt_b : (evaluateHOLFiniteState sd body).1 ≠ some .timeOut := by
+              rw [hbo]; rintro rfl; exact hnt rfl
+            cases rb with
+            | none =>
+              have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inl rfl)
+              rw [hbo] at hsb
+              have hW_mid := hsb.worldOK_bufs validBufList_withdrawal hWd
+              have hsb' : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals
+                  withdrawalKeep NoExtra s none mid :=
+                (WorldStepSc.of_pre_locals_clock hsb).with_locals_clock mid.locals mid.clock
+              exact withdrawalStep_trans hsb'
+                (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) hW_mid hnt hfr)
+            | some r =>
+              cases r with
+              | «continue» =>
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inl rfl))
+                rw [hbo] at hsb
+                have hW_mid := hsb.worldOK_bufs validBufList_withdrawal hWd
+                have hsb' : WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals
+                    withdrawalKeep NoExtra s (some .continue) mid :=
+                  (WorldStepSc.of_pre_locals_clock hsb).with_locals_clock mid.locals mid.clock
+                exact withdrawalStep_trans hsb'
+                  (ih mid.clock hmid_lt mid rfl (hmeta.trans hc) hW_mid hnt hfr)
+              | «break» =>
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inr (Or.inl rfl)))
+                rw [hbo] at hsb
+                exact (WorldStepSc.of_pre_locals_clock hsb).with_locals_clock mid.locals mid.clock
+              | timeOut => exact absurd rfl hnt
+              | error => exact absurd hfr not_flowingOrResumes_error
+              | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+              | returned v =>
+                have hsb := hb sd hc hWd hnt_b
+                  (by rw [hbo]; exact Or.inr (Or.inr (Or.inr (Or.inl ⟨v, rfl⟩))))
+                rw [hbo] at hsb
+                exact (WorldStepSc.of_pre_locals_clock hsb).with_locals_clock mid.locals mid.clock
+              | exception eid ev =>
+                have hres_ex : Resumes (some (.exception eid ev)) := by
+                  rcases hfr with h | h | h | hr <;> try simp at h
+                  exact hr
+                have hsb := hb sd hc hWd hnt_b (by rw [hbo]; exact Or.inr (Or.inr (Or.inr hres_ex)))
+                rw [hbo] at hsb
+                exact (WorldStepSc.of_pre_locals_clock hsb).with_locals_clock mid.locals mid.clock
+      · exact absurd hfr not_flowingOrResumes_error
+      · exact absurd hfr not_flowingOrResumes_error
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
