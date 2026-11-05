@@ -11927,4 +11927,128 @@ theorem lst_push_body_memory_frame (h : PtxCallees) {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Transaction typing bounds the active capacity and allocates the other header. -/
+theorem txWorld_log_push_frame_bounds {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) :
+    let l := memW s (globN s "bo" + 40)
+    let a := memW s (globN s "bo" + 72)
+    l + 24 ≤ 2 ^ 64 ∧ memW s (l + 8) ≤ memW s (l + 16) ∧
+      8 * memW s (l + 16) * 2 < 2 ^ 64 ∧ Allocated s (a, 8) := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hok := hWT.1.2.2.2.2.2.2.2.2.2.2.1 hE.bo_nz 40 (by simp) hE.bo40
+  have hpositive := hok.1
+  have hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) := by
+    intro k hk
+    apply ((hWT.2.2.1.1 _ ?_).resolve_left (by simp)).1
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have harr : (memW s (memW s (globN s "bo" + 40)),
+      8 * memW s (memW s (globN s "bo" + 40) + 16)) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp [blockOutObjects, hE.bo_nz, hE.bo40, hback.1,
+      show memW s (memW s (globN s "bo" + 40) + 16) ≠ 0 by omega]
+  have halloc := ((hWT.2.2.1.1 _ harr).resolve_left (by dsimp; omega)).1
+  have hsmall : 8 * memW s (memW s (globN s "bo" + 40) + 16) ≤ heapEnd := by
+    rcases halloc with hi | hi
+    · have := hW.1.1.2.2.1
+      have hh : heapLimit ≤ heapEnd := by decide
+      dsimp [Inside] at hi
+      omega
+    · dsimp [Inside] at hi
+      have hs : scratchEnd ≤ heapEnd := by decide
+      omega
+  refine ⟨(ivl_allocated_bound hW.1.1.2 (hheaders 40 (by simp))).2, hok.2, ?_, ?_⟩
+  · have hh : heapEnd * 2 < 2 ^ 64 := by decide
+    omega
+  · rcases hheaders 72 (by simp) with hi | hi
+    · left; unfold Inside at *; dsimp at *; omega
+    · right; unfold Inside at *; dsimp at *; omega
+
+/-- The concrete block-log push preserves the receipt-list data word. -/
+theorem lst_push_bo40_other_header (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : TxWorld s) (hback : TxBacking s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    memW post (memW s (globN s "bo" + 72)) = memW s (memW s (globN s "bo" + 72)) := by
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hbody := lookupCodeHOLFinite_installed_body s.code.lookup (ofString "lst_push")
+    [(ofString "l", .one), (ofString "esz", .one)] _ body .one ret vs callee
+    (by rw [hc]; exact R13Shards.lookup_lst_push) hl
+  subst body
+  have hret := lookupCodeHOLFinite_installed_return s (ofString "lst_push")
+    [(ofString "l", .one), (ofString "esz", .one)] _ _ .one ret vs callee
+    (by rw [hc]; exact R13Shards.lookup_lst_push) hl
+  subst ret
+  have hl' := hl
+  rw [hc] at hl'
+  obtain ⟨l, esz, _, hloc, hesz⟩ := R13Shards.lookupCode_two_words (by decide) R13Shards.lookup_lst_push hl'
+  have hln : l.toNat = memW s (globN s "bo" + 40) := by
+    simpa only [locN, callEntryStateHOLFinite, hloc] using harg.2
+  have hen : esz.toNat = 8 := by
+    simpa only [locN, callEntryStateHOLFinite, hesz] using harg.1.2.2.2
+  have hlbv : l = BitVec.ofNat 64 (memW s (globN s "bo" + 40)) := by
+    simp [← hln]
+  let a := BitVec.ofNat 64 (memW s (globN s "bo" + 72))
+  have han : a.toNat = memW s (globN s "bo" + 72) := by
+    unfold a memW
+    split
+    simp
+  obtain ⟨hb, hn, hcap, haa⟩ := txWorld_log_push_frame_bounds hW hback
+  obtain ⟨h0, h8, h16⟩ := txWorld_other_header_ne_push_writes hW
+  have hf := lst_push_body_memory_frame h (callEntryStateHOLFinite s callee) post l esz a v hc
+    harg.1.1.1 hloc hesz (by simpa [hln] using hb)
+    (by simpa only [callEntryStateHOLFinite, memW, hln] using hn)
+    (by simpa only [callEntryStateHOLFinite, memW, hln, hen] using hcap)
+    (by change Allocated s (a.toNat, 8); rw [han]; exact haa)
+    (by simpa only [hlbv] using h0) (by simpa only [hlbv] using h8)
+    (by simpa only [hlbv] using h16) hr
+  change (match post.memory a with | .word w => w.toNat) =
+    (match s.memory a with | .word w => w.toNat)
+  rw [hf]
+  rfl
+
+/-- The log-push resume now preserves both backing pointers without an extra
+other-header preservation hypothesis. -/
+theorem resume_lst_push_typed_logSlot_txBacking (h : PtxCallees) :
+    DecCallResumeOn (fun s => Phase4TypedLogPointers s ∧ TxBacking s)
+      (fun s => (Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))) ∧ TxBacking s)
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  apply resume_lst_push_typed_logSlot_backing_of_other_header h
+  intro F s vs body callee ret v post hc hp ha hl hr
+  exact lst_push_bo40_other_header h s vs body callee ret v post hc
+    hp.1.1.1.1.1.1 hp.2 ha hl hr
+
+/-- The encoded-receipt suffix retains backing through concrete log pushes
+and the stable-log copy, with no additional push-resume premise. -/
+theorem phase4Encoded_stable_txBacking_cut (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableBackingReady tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s)
+      (spinePlug 13 (spineAt 124 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + (K.lst_new + (2 ^ 28 + 1 + b) + 1)) := by
+  exact phase4Encoded_stable_backing_cut h
+    (resume_lst_push_typed_logSlot_txBacking h) htail
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
