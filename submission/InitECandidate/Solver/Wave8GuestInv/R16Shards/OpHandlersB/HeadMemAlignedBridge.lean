@@ -4,6 +4,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
 import InitECandidate.Solver.GuestGlobalKeep
 import InitECandidate.Solver.GuestFrameMemKeep
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M28.ww_memzero
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M29.zv_memzero
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.U256WsSpecs
 
 /-! # `HeadMemAligned` as a frame-chain invariant through `run_frames`
@@ -2386,6 +2387,55 @@ theorem goodFrameMem_frame_new_helpers :
   decide
 
 end FmpKeep
+
+/-! ## 3h'. `memzero`: zero-fill of `[dst, dst+n)` plus its write frame, at an explicit call -/
+
+section MemzeroZero
+open InitECandidate.Solver.GuestCodeLookup
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- `memzero(d, n)` called from `s0` (an `ArenaReady` state) on a normal return: every aligned
+word of `[d, d+n)` reads `0`, and the call only wrote memory inside `[d, d+n)` (globals, code and
+domain unchanged). Composes `Wave8Contracts.M29.zv_memzero` (zeroing) with
+`Wave8Contracts.M28.memzero_body_frame` (write frame). -/
+theorem memzero_call_zero {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (hcode : s0.code = originalRuntimeCode) (hAR : ArenaReady s0) (d n : BitVec 64)
+    (rv : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hrun : evaluateHOLFiniteState (callEntryStateHOLFinite s0
+        ((HolFiniteMapExact.empty.update (ofString "dst", .val (.word d))).update
+          (ofString "n", .val (.word n)))) (sourceFnBody Guest.Software.guestFn_memzero) =
+        (some (.returned rv), post)) :
+    (∀ a, d.toNat ≤ a → a + 8 ≤ d.toNat + n.toNat → a % 8 = 0 → memW post a = 0) ∧
+    Wave8Contracts.M28.MemzeroWriteFrame (callEntryStateHOLFinite s0
+        ((HolFiniteMapExact.empty.update (ofString "dst", .val (.word d))).update
+          (ofString "n", .val (.word n)))) post (d.toNat, n.toNat) := by
+  have hml := pan_two_word_lookup s0.code.lookup (ofString "memzero")
+    (ofString "dst") (ofString "n") (sourceFnBody Guest.Software.guestFn_memzero)
+    d n (by decide) (by rw [hcode]; exact lookup_memzero)
+  set E := callEntryStateHOLFinite s0
+    ((HolFiniteMapExact.empty.update (ofString "dst", .val (.word d))).update
+      (ofString "n", .val (.word n))) with hE
+  have hEc : E.code = originalRuntimeCode := hcode
+  have hEAR : ArenaReady E :=
+    ⟨guestInv_callEntry _ _ hAR.1, hAR.2⟩
+  have hdst : locN E "dst" = d.toNat := by
+    simp [hE, locN, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+      show ofString "n" ≠ ofString "dst" by decide]
+  have hnn : locN E "n" = n.toNat := by
+    simp [hE, locN, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  obtain ⟨ps, b, rt, hl, hspec⟩ := Wave8Contracts.M29.zv_memzero
+  rw [lookup_memzero] at hl
+  obtain ⟨rfl, rfl, rfl⟩ : ps = _ ∧ b = _ ∧ rt = _ := by
+    simp only [Option.some.injEq, Prod.mk.injEq] at hl; exact ⟨hl.1.symm, hl.2.1.symm, hl.2.2.symm⟩
+  have hz := hspec E hEc hEAR ⟨[.val (.word d), .val (.word n)], by
+      rw [hcode] at hml; exact hml⟩ (by rw [hrun]; simp)
+  rw [hrun, hdst, hnn] at hz
+  have hfr := Wave8Contracts.M28.memzero_body_frame E hEc hEAR.1
+    (by rw [hrun]; exact Or.inl ⟨rv, rfl⟩)
+  rw [hrun, hdst, hnn] at hfr
+  exact ⟨hz rv rfl, hfr⟩
+
+end MemzeroZero
 
 /-! ## 3i. `lst_new_scratch`: exact run (frame-memory footprint for `frame_new`) -/
 

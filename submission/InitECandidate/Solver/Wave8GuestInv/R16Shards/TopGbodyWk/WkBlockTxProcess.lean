@@ -4,6 +4,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers.U256WsSpecs
 import InitECandidate.Solver.Wave8GuestInv.R10Ports.ReadOnly
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.ro_min
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_sub
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 
 /-!
 # R16k Shard `WkBlockTxProcess`: Block & Transaction Execution `wk_*` Contracts
@@ -63,6 +64,10 @@ private theorem ro_u256_add_carry : ReadOnlyFn (ofString "u256_add_carry") :=
 private theorem ro_u256_add : ReadOnlyFn (ofString "u256_add") :=
   Wave8Contracts.M18.readOnlyFn_of_guestAst 56 (by rw [guestAst_len]; decide)
     Guest.Software.guestFn_u256_add rfl (fun _ => false) (fun _ h => by cases h) rfl
+
+theorem ro_frame_state_gas_used : ReadOnlyFn (ofString "frame_state_gas_used") :=
+  readOnlyFn_of_roProgR16 451 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_frame_state_gas_used rfl (fun _ => false) noCallee_good (by decide)
 
 private theorem ro_is_valid_delegation : ReadOnlyFn (ofString "is_valid_delegation") :=
   readOnlyFn_of_roProgR16 446 (by rw [guestAst_len]; decide)
@@ -522,5 +527,245 @@ theorem «wk_check_transaction» :
     [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
     NoExtra (ofString "check_transaction") :=
   wkSc_check_transaction.to_worldKeeps
+
+def PmcLogsLiveOwned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (logs : Nat) : Prop :=
+  logs ≠ 0 →
+    Allocated s (memW s logs, 8 * memW s (logs + 8)) ∧
+    IvlsDisj [(logs, 24), (memW s logs, 8 * memW s (logs + 8))] (worldOwned s S Nd) ∧
+    ∀ i, i < memW s (logs + 8) →
+      IvlsDisj (logOwnedIvls s (memW s (memW s logs + 8 * i))) (worldOwned s S Nd)
+
+def RetFrameResultStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S Nd => RetFrameResult s r post S Nd ∧
+    ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+      v = .val (.word w) ∧
+      IvlsDisj [(w.toNat, 280)] (worldOwned post S Nd) ∧
+      PmcLogsLiveOwned post S Nd (memW post (w.toNat + 88))
+
+theorem worldStepIn_mono_extra
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q Q' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    (hQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) r post S Nd,
+      Q s r post S Nd → Q' s r post S Nd)
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : WorldStepIn T R gw keep Q s r post) :
+    WorldStepIn T R gw keep Q' s r post := by
+  obtain ⟨hA, hH, hG, hK, hW⟩ := h
+  refine ⟨hA, hH, hG, hK, ?_⟩
+  intro S Nd hT hTS hD
+  obtain ⟨S', Nd', hsub, hWT, hOG, hFO, hret⟩ := hW S Nd hT hTS hD
+  exact ⟨S', Nd', hsub, hWT, hOG, hFO, hQ s r post S' Nd' hret⟩
+
+def RetMessageOutputStrong : ∀ {F : Type}, PanSemStateFiniteExact 64 F →
+    Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop :=
+  fun s r post S Nd => RetMessageOutput s r post S Nd ∧
+    ∀ v, r = some (.returned v) → ∃ w : BitVec 64,
+      v = .val (.word w) ∧ PmcLogsLiveOwned post S Nd (memW post (w.toNat + 16))
+
+theorem worldKeepsIn_mono_extra
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q Q' : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {fname : MlS}
+    (hQ : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) r post S Nd,
+      Q s r post S Nd → Q' s r post S Nd)
+    (h : WorldKeepsIn P T R gw keep Q fname) :
+    WorldKeepsIn P T R gw keep Q' fname := by
+  obtain ⟨ps, body, ret, hl, hb⟩ := h
+  refine ⟨ps, body, ret, hl, fun s hc hp hex hnt hr => ?_⟩
+  exact worldStepIn_mono_extra hQ (hb s hc hp hex hnt hr)
+
+theorem worldKeepsIn_of_strong_message_output
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)} {fname : MlS}
+    (h : WorldKeepsIn P T R gw keep RetMessageOutputStrong fname) :
+    WorldKeepsIn P T R gw keep RetMessageOutput fname :=
+  worldKeepsIn_mono_extra (fun _ _ _ _ _ hret => hret.1) h
+
+theorem pmcLogsLiveOwned_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) : PmcLogsLiveOwned s S Nd 0 := by
+  intro h
+  exact (h rfl).elim
+
+theorem pmcLogsLiveOwned_disjFixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} {logs : Nat} (h : PmcLogsLiveOwned s S Nd logs) :
+    LogsDisjFixed s logs := by
+  by_cases hz : logs = 0
+  · exact Or.inl hz
+  · obtain ⟨halloc, hhead, hentry⟩ := h hz
+    refine Or.inr ⟨halloc, ?_⟩
+    intro i hi j hj
+    have hjw : j ∈ worldOwned s S Nd :=
+      List.mem_append_left _ (List.mem_append_right _ hj)
+    rcases List.mem_append.mp hi with hi | hi
+    · exact hhead i hi j hjw
+    · obtain ⟨k, hk, hi⟩ := List.mem_flatMap.mp hi
+      exact hentry k (List.mem_range.mp hk) i hi j hjw
+
+theorem pmcLogsLiveOwned_mono_world {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd S' Nd' : List Nat} {logs : Nat}
+    (hsub : ∀ i ∈ worldOwned s S' Nd', i ∈ worldOwned s S Nd)
+    (h : PmcLogsLiveOwned s S Nd logs) : PmcLogsLiveOwned s S' Nd' logs := by
+  intro hnz
+  obtain ⟨halloc, hhead, hentry⟩ := h hnz
+  exact ⟨halloc, fun i hi j hj => hhead i hi j (hsub j hj),
+    fun k hk i hi j hj => hentry k hk i hi j (hsub j hj)⟩
+
+theorem retFrameResultStrong_logsDisjFixed {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    {S Nd : List Nat} (h : RetFrameResultStrong s r post S Nd)
+    {v : ValueHOL 64} (hr : r = some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      LogsListOK post (memW post (w.toNat + 88)) ∧
+      LogsDisjFixed post (memW post (w.toNat + 88)) := by
+  obtain ⟨w, hw, _, _, hlogs⟩ := h.1 v hr
+  obtain ⟨w', hw', _, howned⟩ := h.2 v hr
+  have heq : w = w' := by cases hw.symm.trans hw'; rfl
+  subst w'
+  exact ⟨w, hw, hlogs, pmcLogsLiveOwned_disjFixed howned⟩
+
+theorem worldKeepsIn_of_strong_frame_result
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)} {fname : MlS}
+    (h : WorldKeepsIn P T R gw keep RetFrameResultStrong fname) :
+    WorldKeepsIn P T R gw keep RetFrameResult fname :=
+  worldKeepsIn_mono_extra (fun _ _ _ _ _ hret => hret.1) h
+
+theorem pmc_logOwnedIvls_eq_of_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat}
+    (hAs : ArenaOK s) (hl : LogEntryOK s log)
+    (hu : R13Shards.IvlUnhit s post (log, 40))
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address") :
+    logOwnedIvls post log = logOwnedIvls s log := by
+  have hb := (R13Shards.ivl_allocated_bound hAs (Or.inl hl.2.1)).2
+  have ha := hl.1.1
+  have hm : ∀ k ∈ ([0, 8, 16, 24, 32] : List Nat),
+      memW post (log + k) = memW s (log + k) := by
+    intro k hk
+    apply R13Shards.memW_eq_of_ivlUnhit hu
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+    · exact hb
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> (constructor <;> omega)
+  have h0 : memW post log = memW s log := by simpa using hm 0 (by simp)
+  simp only [logOwnedIvls, logRecordIvls, hsys, h0,
+    hm 8 (by simp), hm 16 (by simp), hm 24 (by simp), hm 32 (by simp)]
+
+theorem pmc_logsListOK_congr_live {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {logs : Nat} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (h : LogsListOK s logs)
+    (halloc : Allocated s (logs, 24) → Allocated post (logs, 24))
+    (hhead : ∀ k ∈ ([0, 8, 16] : List Nat),
+      memW post (logs + k) = memW s (logs + k))
+    (hptr : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i))
+    (hentry : ∀ i, i < memW s (logs + 8) →
+      R13Shards.IvlUnhit s post (memW s (memW s logs + 8 * i), 40)) :
+    LogsListOK post logs := by
+  rcases h with hz | ⟨hw, ha, hn, hc, he⟩
+  · exact Or.inl hz
+  have h0 : memW post logs = memW s logs := by simpa using hhead 0 (by simp)
+  have h8 := hhead 8 (by simp)
+  have h16 := hhead 16 (by simp)
+  refine Or.inr ⟨R13Shards.wordsOK_transfer hgS hgP hw, halloc ha, ?_, ?_, ?_⟩
+  · rw [h8]; exact hn
+  · rw [h8, h16]; exact hc
+  · intro i hi
+    rw [h8] at hi
+    rw [h0, hptr i hi]
+    exact ⟨R13Shards.wordAt_transfer hgS hgP (he i hi).1,
+      R13Shards.logEntryOK_congr_unhit hAs hgS hgP hhp (he i hi).2 (hentry i hi)⟩
+
+theorem pmcLogsLiveOwned_congr_live {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd S' Nd' : List Nat} {logs : Nat}
+    (hAs : ArenaOK s) (hl : LogsListOK s logs)
+    (h : PmcLogsLiveOwned s S Nd logs)
+    (hworld : worldOwned post S' Nd' = worldOwned s S Nd)
+    (hsys : globN post "vm_system_address" = globN s "vm_system_address")
+    (halloc : Allocated s (memW s logs, 8 * memW s (logs + 8)) →
+      Allocated post (memW s logs, 8 * memW s (logs + 8)))
+    (hhead : ∀ k ∈ ([0, 8] : List Nat),
+      memW post (logs + k) = memW s (logs + k))
+    (hptr : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i))
+    (hentry : ∀ i, i < memW s (logs + 8) →
+      R13Shards.IvlUnhit s post (memW s (memW s logs + 8 * i), 40)) :
+    PmcLogsLiveOwned post S' Nd' logs := by
+  intro hnz
+  obtain ⟨ha, hd, he⟩ := h hnz
+  have h0 : memW post logs = memW s logs := by simpa using hhead 0 (by simp)
+  have h8 := hhead 8 (by simp)
+  rcases hl with hz | hl
+  · exact (hnz hz).elim
+  refine ⟨?_, ?_, ?_⟩
+  · rw [h0, h8]
+    exact halloc ha
+  · rw [h0, h8, hworld]
+    exact hd
+  · intro i hi
+    rw [h8] at hi
+    rw [h0, hptr i hi, pmc_logOwnedIvls_eq_of_unhit hAs (hl.2.2.2.2 i hi).2
+      (hentry i hi) hsys, hworld]
+    exact he i hi
+
+def ptxRegions {F : Type} (s : PanSemStateFiniteExact 64 F) : List Ivl :=
+  [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)]
+
+def ptxGlobals : List String :=
+  ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+
+def ptxKeep : List (String × List Nat) :=
+  [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]),
+   ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+
+def PtxRelRun {F : Type} (entry : PanSemStateFiniteExact 64 F)
+    (p : ProgHOL 64) (s : PanSemStateFiniteExact 64 F) : Prop :=
+  Resumes (evaluateHOLFiniteState s p).1 →
+    WorldStep ptxRegions ptxGlobals ptxKeep RetTransactionLogs entry
+      (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2
+
+def PtxRelCut (phase : ProgHOL 64 → ProgHOL 64)
+    (A B : ∀ {F : Type}, PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop) : Prop :=
+  ∀ {F : Type} (entry : PanSemStateFiniteExact 64 F) (tail : ProgHOL 64),
+    (∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      B entry s → PtxRelRun entry tail s) →
+    ∀ s : PanSemStateFiniteExact 64 F, s.code = originalRuntimeCode →
+      A entry s → PtxRelRun entry (phase tail) s
+
+theorem wk_process_transaction_of
+    (A0 A1 A2 A3 A4 : ∀ {F : Type},
+      PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hinit : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), TxReadyStrong s → A0 s s)
+    (h1 : PtxRelCut R13Shards.ptxPhase1 A0 A1)
+    (h2 : PtxRelCut R13Shards.ptxPhase2 A1 A2)
+    (h3 : PtxRelCut R13Shards.ptxPhase3 A2 A3)
+    (h4 : PtxRelCut R13Shards.ptxPhase4 A3 A4)
+    (h5 : ∀ {F : Type} (entry s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → A4 entry s → PtxRelRun entry R13Shards.ptxPhase5 s) :
+    WorldKeeps TxReadyStrong
+      (fun s => [(globN s "b2_v", if globN s "b2_v" = 0 then 0 else 128), (globN s "bal_key_buf", if globN s "bal_key_buf" = 0 then 0 else 64), (globN s "bn_expw", if globN s "bn_expw" = 0 then 0 else 352), (globN s "bn_gamma", if globN s "bn_gamma" = 0 then 0 else 384), (globN s "evm_key_buf", if globN s "evm_key_buf" = 0 then 0 else 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64), (globN s "pre_hdr_buf", if globN s "pre_hdr_buf" = 0 then 0 else 96), (globN s "rmd_h", if globN s "rmd_h" = 0 then 0 else 40), (globN s "rmd_pad", if globN s "rmd_pad" = 0 then 0 else 128), (globN s "rmd_x", if globN s "rmd_x" = 0 then 0 else 128), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64), (globN s "sk_buf", if globN s "sk_buf" = 0 then 0 else 52), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["bal_index", "bn_expw", "bn_gamma", "cur_cont", "ev", "frame_mem_ptr", "heap_ptr", "journal_n", "scratch_ptr", "ts"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 72]), ("ts", []), ("bo", [24, 32, 40, 56, 64, 72, 80])]
+      RetTransactionLogs (ofString "process_transaction") := by
+  refine ⟨_, _, _, R13Shards.ptx_lookup, ?_⟩
+  intro F s hcode hready _hparams _hnt
+  have hb := h1 s _ (h2 s _ (h3 s _ (h4 s _ (h5 s)))) s hcode (hinit s hready)
+  rw [← R13Shards.ptx_phases_eq] at hb
+  unfold PtxRelRun R13Shards.ptxCode ptxRegions ptxGlobals ptxKeep at hb
+  exact hb
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
