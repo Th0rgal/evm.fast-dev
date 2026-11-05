@@ -3661,6 +3661,54 @@ theorem stable_copy_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
     dsimp only
     rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn, hp.1.2.2.2.2.1]
 
+/-- The stored word is exactly the source pointer, with no truncation. -/
+theorem stable_copy_written_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
+    (hi : locN s "i" < locN s "nl")
+    (he : mem' (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")) =
+      .word (BitVec.ofNat 64 (memW s (locN s "lp" + 8 * locN s "i")))) :
+    memW {s with memory := mem'}
+        (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i") := by
+  obtain ⟨w, _, hw⟩ := (stableCopyInv_source_word s hp hi).1
+  have hv : memW s (locN s "lp" + 8 * locN s "i") = w.toNat := by
+    simp [memW, hw]
+  have hdest : memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") = w.toNat := by
+    change (mem' (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i"))).1.toNat = w.toNat
+    rw [he, hv]
+    simp
+  rw [hdest, ← hv, hp.1.2.2.2.2.1]
+
+/-- Extract the value and frame facts from the actual one-word copy store. -/
+theorem stable_copy_store_semantics {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w p : BitVec 64)
+    (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hi : locN s "i" < locN s "nl") (v : ValueHOL 64)
+    (hv : evalAt s phase4LogCopySrc = some v)
+    (hst : @panMemStoresHOL 64 _
+      (BitVec.ofNat 64 (memW s (locN s "stable_logs") + 8 * locN s "i"))
+      (flattenHOL v) s.memaddrs
+      (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem') :
+    s.memaddrs (BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i")) ∧
+    memW {s with memory := mem'}
+      (memW s (locN s "stable_logs") + 8 * locN s "i") =
+      memW s (memW s (locN s "logs") + 8 * locN s "i") ∧
+    ∀ a, a ≠ BitVec.ofNat 64
+      (memW s (locN s "stable_logs") + 8 * locN s "i") → mem' a = s.memory a := by
+  have hv' := stable_copy_source_load_eval s w p hp hw hl hi
+  rw [hv] at hv'
+  have heq := Option.some.inj hv'
+  subst v
+  obtain ⟨hd, he, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact ⟨hd, (stable_copy_store_value s mem' w p hp hw hl hi _ hv he).2, hm⟩
+
 /-- The actual copy-loop counter increment agrees with natural-number
 successor throughout the bounded source list. -/
 theorem stable_copy_increment_nat {F : Type} (s : PanSemStateFiniteExact 64 F)
