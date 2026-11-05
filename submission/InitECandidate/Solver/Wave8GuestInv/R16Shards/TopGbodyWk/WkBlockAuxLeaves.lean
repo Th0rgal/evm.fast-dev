@@ -8316,4 +8316,99 @@ theorem merge_set_world_roles {F : Type}
   · exact hp.2.trans htbs.symm
   · exact hv
 
+/-- Insertion frames every other table in the word-addressed memory view. -/
+theorem merge_set_other_table_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ u ∈ S, u ≠ t → ∀ i ∈ htabFootprint s u,
+      R16WkMarkAccountCreated.M08IvlUnhit s post i := by
+  intro u hu hn i hi
+  apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+  · intro j hj
+    exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+  · exact hA.2.2.2.2.2.2.1
+  · intro j hj
+    exact hW.1.2.2.1 u hu t ht hn i hi j hj
+  · exact R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+      he.2.2.2.2.1 (Or.inr ((hW.1.2.1 u hu).2 i hi).1)
+
+/-- Insertion leaves low sentinel words unchanged. -/
+theorem merge_set_low_words_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    memW post 0 = memW s 0 ∧ memW post 8 = memW s 8 ∧
+      memW post 16 = memW s 16 := by
+  have hlow : ∀ a : Nat, a + 8 ≤ sourceBase → memW post a = memW s a := by
+    intro a ha
+    have hsb : sourceBase < 2 ^ 64 := by decide
+    have ha' : a < 2 ^ 64 := by omega
+    have hm := he.2.2.2.2.2.2.1 (BitVec.ofNat 64 a)
+      (fun j hj hc => by
+        obtain ⟨h1, _⟩ := hc
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha'] at h1
+        have hlo := ((hW.1.2.1 t ht).1.1 j hj).1.1
+        omega)
+      (fun hc => by
+        obtain ⟨h1, _⟩ := hc
+        dsimp at h1
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt ha'] at h1
+        have hlo := hA.2.1
+        omega)
+    unfold memW
+    rw [hm]
+  exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
+
+/-- Block outer insertion preserves BAL objects and the typing of their lists. -/
+theorem merge_set_bal_objects_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    balObjects post = balObjects s ∧
+    (∀ ad ∈ balRecords post, memW post ad = memW s ad ∧
+      memW post (ad + 8) = memW s (ad + 8) ∧
+      htabValues post (memW post ad) = htabValues s (memW s ad) ∧
+      (∀ k ∈ ([16, 24, 32] : List Nat), LstOK post (memW post (ad + k))) ∧
+      (∀ l ∈ htabValues post (memW post ad), LstOK post l)) := by
+  have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+    rw [htbs]
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+      (by rwa [← htbs])
+    simp [recRoles, hbs]
+  apply R16WkMarkAccountCreated.balObjects_eq_of_unhit_except hA.2 hW.1 hW.2.2.1
+    (globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide)))
+    (merge_set_other_table_unhit hA hW ht he)
+  · constructor
+    · by_cases hz : globN s "bal_accounts" = 0
+      · rw [hz]; exact Ne.symm ht0
+      have hx : (globN s "bal_accounts", "bal_accounts") ∈ worldRoleSlots s := by
+        simp [worldRoleSlots, hz]
+      exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+        hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+    · intro ad had
+      by_cases hz : memW s ad = 0
+      · rw [hz]; exact Ne.symm ht0
+      have hx : (memW s ad, "bal.stor") ∈ worldRoleSlots s := by
+        unfold worldRoleSlots
+        apply List.mem_filter.2
+        refine ⟨List.mem_append_right _ ?_, by simpa using hz⟩
+        exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+      exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+        hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+  · intro i hi hn
+    have hm : i ∈ fixedObjects s := List.mem_append_right _ hi
+    apply R16WkMarkAccountCreated.m08_ivlUnhit_of_frameOutside he.2.2.2.2.2.2.1
+    · intro j hj; exact ((hW.1.2.1 t ht).1.1 j hj).2.1
+    · exact hA.2.2.2.2.2.2.1
+    · intro j hj; exact (((hW.1.2.1 t ht).2 j hj).2 i hm).flip
+    · apply R16WkMarkAccountCreated.disj_fresh_of_zero_or_allocated hA.2 he.1.2
+        he.2.2.2.2.1
+      rcases hW.2.2.1.1 i hm with hz | ⟨hal, _⟩
+      · exact Or.inl hz
+      · exact Or.inr hal
+  · exact merge_set_low_words_kept hA hW ht he
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
