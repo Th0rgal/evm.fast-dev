@@ -2496,6 +2496,53 @@ theorem phase4LogCopyLoop_bound (h : PtxCallees)
   · unfold phase4LogCopyBody
     ptx_incr
 
+theorem phase4LogCopyLoop_typed_bound (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    TerminatingProgBoundedOn Phase4TypedLogPointers
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nl")))
+        phase4LogCopyBody) ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1)) := by
+  apply while_less_localsOnly localsOnly_phase4TypedLogPointers
+  · have hb : TerminatingProgBoundedOn Phase4TypedLogPointers phase4LogCopyBody
+        (K.lst_push + (0 + 0) + 1) := TerminatingProgBoundedOn.decCall_on h.fb_lst_push
+      (ofString "slot") ShapeHOL.one
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]
+      (Bc := 0 + 0)
+      (continuation := .seq (.store (.var .local (ofString "slot")) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (P := Phase4TypedLogPointers)
+      (Q := fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (by intro F s vs body callee ret hc hp ha hl
+          exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1)
+      hresume
+      (by
+        intro F t hc ht
+        exact seq_bound_trans
+          (P := fun s => Phase4LogSlotReady s ∧
+            (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+            ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+          (by
+            intro G u _ _ _
+            have hu := clock_store u (.var .local (ofString "slot")) phase4LogCopySrc
+            exact ⟨by omega, by omega⟩)
+          (hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word)
+          (by
+            intro G u _ _ _
+            have hu := clock_assign u .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const 1])
+            exact ⟨by omega, by omega⟩) t hc ht)
+    intro F s hc hp
+    simpa only [Nat.zero_add, Nat.add_zero] using hb s hc hp
+  · exact hoare_phase4LogCopyBody_typed hresume
+  · unfold phase4LogCopyBody
+    ptx_incr
+
 theorem phase4LogCopyLoop_cut (h : PtxCallees)
     (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
