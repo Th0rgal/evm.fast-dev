@@ -6905,6 +6905,64 @@ theorem stable_allocation_decl_loop_cut (h : PtxCallees) {tail : ProgHOL 64} {b 
         (stable_length_canonical_operand t hp.2.1) ha hl hr,
       lst_new_stable_copy_operands h t vs body callee ret v post hc hp.1 hp.2.2.1 hp.2.2.2 ha hl hr⟩
 
+/-- A world-owned slot write preserves a separately owned stable receipt list. -/
+theorem ptxReceiptsDone_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxReceiptsDone s) (hn : locN s "stable_logs" ≠ 0)
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hown : LogsLiveOwned s S Nd (locN s "stable_logs"))
+    {x : BitVec 64} {mem' : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem' a = s.memory a)
+    (hwrite : ∃ o ∈ worldOwned s S Nd, Inside (x.toNat, 8) o.1 (o.1 + o.2))
+    (hpost : TxWorld {s with memory := mem'})
+    (heq : worldOwned {s with memory := mem'} S Nd = worldOwned s S Nd) :
+    PtxReceiptsDone {s with memory := mem'} := by
+  have hl := logsLiveOwned_single_store hp.1.1.1.2 hp.1.1.1.1 hpost.1.1.1
+    hp.2.1 hown hm hwrite heq
+  obtain ⟨o, ho, hin⟩ := hwrite
+  have hu : IvlUnhit s {s with memory := mem'} (locN s "stable_logs", 24) :=
+    ivlUnhit_single hm (by simp)
+      (disj_of_inside_right hin ((hown hn).2.1 _ (by simp) o ho))
+  have hh := hp.2.1.resolve_left hn
+  have h8 := memW_eq_of_ivlUnhit (a := locN s "stable_logs" + 8) hu
+    (by have := hh.1.1; omega) (ivl_allocated_bound hp.1.1.1.2 hh.2.1).2
+    ⟨by omega, by omega⟩
+  refine ⟨hpost, hl.1, ?_⟩
+  change memW {s with memory := mem'} (locN s "stable_logs" + 8) < 2 ^ 28
+  rw [h8]
+  exact hp.2.2
+
+/-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
+theorem phase4ReceiptPush_cut (h : PtxCallees)
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hresume : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn PtxReceiptsDone
+      (spinePlug 2 (spineAt 137 ptxCode) tail) (K.lst_push + b + 1) := by
+  have hs : TerminatingProgBoundedOn R
+      (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) b := by
+    intro F s hc hp
+    have hb := seq_bound_trans (a := 0) (fun u _ _ _ => by
+      have hu := clock_store u (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))
+      exact ⟨by omega, by omega⟩) hstore htail s hc hp
+    simpa only [Nat.zero_add] using hb
+  have he : spinePlug 2 (spineAt 137 ptxCode) tail =
+      .decCall (ofString "rl") .one (ofString "lst_push")
+        [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8]
+        (.seq (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs"))) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact TerminatingProgBoundedOn.decCall_on (P := PtxReceiptsDone)
+    h.fb_lst_push _ _ _
+    (fun t vs body callee ret hc hp ha hl => guestInv_callEntry t callee hp.1.1.1.1)
+    hresume hs s hc hp
+
 /-- The receipt prefix, log pushing, allocation, and stable copying compose. -/
 theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
     (hresume : DecCallResumeOn Phase4TypedLogPointers
@@ -6929,6 +6987,55 @@ theorem phase4ThroughStableCopy_typed_cut (h : PtxCallees)
   rw [he]
   intro F s hc hp
   exact hb s hc hp
+
+/-- The existing slot-return proof also retains the typed source operands. -/
+theorem resume_lst_push_typed_logSlot (h : PtxCallees)
+    (hnonzero : LstPushBackingNonzero) :
+    DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  refine ⟨resume_lst_push_logSlot h hnonzero s vs body callee ret v post hc hp.1 ha hl hr,
+    ?_, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.2.1
+    exact ⟨n, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "nl" by decide] using hn⟩
+  · obtain ⟨p, hp⟩ := hp.2.2.2
+    exact ⟨p, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "slot" ≠ ofString "lp" by decide] using hp⟩
+
+/-- Full Phase-4 composition with the two push preservation obligations explicit. -/
+theorem ptxPhase4_cut_strong_of_slots (h : PtxCallees)
+    (hlogs : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hreceipt : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxReceiptsDone tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong (ptxPhase4 tail) (ptxCost4 + b) := by
+  have hb := @phase4ThroughStableCopy_typed_cut h hlogs _ _
+    (phase4ReceiptPush_cut h R hreceipt hstore htail)
+  have he : ptxPhase4 tail =
+      spinePlug 38 (spineAt 99 ptxCode) (spinePlug 2 (spineAt 137 ptxCode) tail) := by
+    unfold ptxPhase4 ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  apply (hb s hc hp).weaken
+  unfold phase4CreditCost ptxCost4
+  simp only [Nat.max_eq_left (Nat.zero_le _)]
+  omega
 
 /-- The concrete allocator call adds its callee budget before a copy-ready tail. -/
 theorem stable_allocation_copy_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
@@ -7308,5 +7415,31 @@ theorem gbody_process_transaction_strong_of_cuts
   simpa only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction,
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
     (hb (F := F) s hc hp)
+
+open PtxP34 in
+/-- Transaction composition now needs only the prefix and local push contracts. -/
+theorem gbody_process_transaction_strong_of_h12_slots
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b)))
+    (hlogs : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
+    (hreceipt : DecCallResumeOn PtxReceiptsDone R (ofString "rl") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 72]), .const 8])
+    (hstore : Hoare R
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t)) :
+    TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  apply gbody_process_transaction_strong_of_cuts h hwk h12
+  intro tail b ht F s hc hp
+  exact ptxPhase4_cut_strong_of_slots h hlogs R hreceipt hstore ht s hc hp.1
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
