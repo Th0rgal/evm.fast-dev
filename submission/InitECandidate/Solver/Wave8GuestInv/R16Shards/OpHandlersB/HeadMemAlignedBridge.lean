@@ -10882,6 +10882,37 @@ theorem append_contents_step (old child current next : Nat → Nat) (n i : Nat)
       subst k
       exact hnew
 
+/-- The growth-copy continuation receives the prefix after all three header stores. -/
+theorem Flw.seq_memcpy_header_contents {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {ed es en : ExpHOL 64} {cont : ProgHOL 64}
+    {Ψ : Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode) (l dst src n : BitVec 64)
+    (hdw : dst.toNat + 8 * n.toNat < 2 ^ 64)
+    (hsw : src.toNat + 8 * n.toNat < 2 ^ 64)
+    (hn : 8 * n.toNat + 32 < 2 ^ 63)
+    (hlen : (n * 8).toNat = 8 * n.toNat)
+    (hdisj : Disj (dst.toNat, 8 * n.toNat) (src.toNat, 8 * n.toNat))
+    (hd8 : dst.toNat % 8 = 0) (hs8 : src.toNat % 8 = 0)
+    (hlw : l.toNat + 24 ≤ 2 ^ 64)
+    (hsep : l.toNat + 24 ≤ dst.toNat ∨ dst.toNat + 8 * n.toNat ≤ l.toNat)
+    (hed : ev s ed = some (.val (.word dst)))
+    (hes : ev s es = some (.val (.word src)))
+    (hen : ev s en = some (.val (.word (n * 8))))
+    (hk : ∀ copied : PanSemStateFiniteExact 64 F,
+      SoloHtabSet.MemCopyRel s copied dst src (8 * n.toNat) (8 * n.toNat) →
+      copied.locals = s.locals →
+      (∀ i, i < n.toNat →
+        memW { copied with memory := updW (updW (updW copied.memory l dst) (l + 16) (n * 2)) (l + 8) (n + 1) }
+          (dst.toNat + 8 * i) = memW s (src.toNat + 8 * i)) →
+      Flw copied cont Ψ) :
+    Flw s (.seq (.call (some (none, none)) (ofString "memcpy") [ed, es, en]) cont) Ψ := by
+  refine Flw.seq_memcpy_disj (cont := cont) (Ψ := Ψ) hcode dst src (n * 8)
+    (by rw [hlen]; exact hdw) (by rw [hlen]; exact hsw)
+    (by rw [hlen]; exact hn) (by simpa only [hlen] using hdisj) hed hes hen ?_
+  intro copied hc hl
+  rw [hlen] at hc
+  exact hk copied hc hl (lst_push_growth_prefix l dst src n hc hd8 hs8 hdw hsw hlw hsep)
+
 theorem lst_push_run_no_growth_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (l arr0 n cap : BitVec 64) (hA : ArenaReady s)
     (hl : s.locals.lookup (ofString "l") = some (.val (.word l)))

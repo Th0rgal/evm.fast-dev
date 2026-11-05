@@ -14432,4 +14432,56 @@ theorem phase2_record_pre_state_read_world_backing (args : List (ExpHOL 64)) :
   rw [← hl] at he
   exact he
 
+/-- Compose returning lookup continuations without losing backing at binder restoration. -/
+theorem phase2_decCall_backing
+    {P R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {shape : ShapeHOL} {arguments : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hres : DecCallResumeOn P R name fname arguments)
+    (hcont : Hoare R cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.decCall name shape fname arguments cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  refine ⟨fun {F} s hcode hP _ hr => ?_⟩
+  obtain ⟨vout, hr⟩ := hr
+  rcases hrun : evaluateHOLFiniteState s (.decCall name shape fname arguments cont) with ⟨r, post⟩
+  rw [hrun] at hr
+  dsimp only at hr
+  subst r
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hrun
+  rcases hargs : evalListHOLFinite s
+      (h := fun a => Classical.propDecidable (s.memaddrs a)) arguments with _ | values
+  · rw [hargs] at hrun; simp at hrun
+  · rw [hargs] at hrun; dsimp only at hrun
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body', callee, ret'⟩
+    · rw [hl] at hrun; simp at hrun
+    · rw [hl] at hrun; dsimp only at hrun
+      by_cases hz : s.clock = 0
+      · rw [if_pos hz] at hrun; simp at hrun
+      · rw [if_neg hz] at hrun
+        have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body').1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body' with ⟨bres, bpost⟩
+        rw [hb] at hrun hmeta
+        dsimp only at hmeta
+        cases bres with
+        | none => simp at hrun
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hrun
+            split at hrun
+            · set resumed := setVarHOLFinite name v { bpost with locals := s.locals }
+              have hresR : R resumed := hres s values body' callee ret' v bpost hcode hP hargs hl hb
+              have hresCode : resumed.code = originalRuntimeCode := hmeta.trans hcode
+              rcases hc : evaluateHOLFiniteState resumed cont with ⟨cres, cpost⟩
+              rw [hc] at hrun
+              dsimp only at hrun
+              obtain ⟨rfl, hpost_eq⟩ := Prod.mk.inj hrun
+              have hQc := hcont.run resumed hresCode hresR (by rw [hc]; simp)
+              rw [hc] at hQc
+              dsimp only
+              rw [← hpost_eq]
+              exact hQc ⟨vout, rfl⟩
+            · simp at hrun
+          | _ => simp [emptyLocalsHOLFinite] at hrun
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

@@ -6540,6 +6540,7 @@ theorem transfer_alloc_data_write_prefix {F : Type}
         ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
       (∀ k, k ≠ ofString "data" → mid.locals.lookup k = cur.locals.lookup k) ∧
       mid.be = s.be ∧
+      (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat → memW mid b = memW cur b) ∧
       (evaluateHOLFiniteState cur
         (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
           (.seq (.call (some (none, none)) (ofString "u256_to_be32")
@@ -6578,11 +6579,21 @@ theorem transfer_alloc_data_write_prefix {F : Type}
       ((hl _ (by decide)).trans ha) hd hw.1
       ⟨by rw [← hpNat]; exact hstep.1.2.1, by rw [hheap]⟩ (er ▸ hr)
   refine ⟨mid, loc ▸ hd, ?_, step, resum, out, bytes, ?_, eff.be.trans (hb.trans hbe),
-    er.trans (congrArg Prod.fst eq), ?_⟩
+    ?_, er.trans (congrArg Prod.fst eq), ?_⟩
   · simpa only [globN, eff.globals] using hheap
   · intro k hk
     rw [loc]
     exact hl k hk
+  · intro b hb64 hsep
+    have ha : (BitVec.ofNat 64 b).toNat = b := by
+      rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+    have hm' := eff.cell_frame (BitVec.ofNat 64 b) (by
+      intro i hi
+      rcases List.mem_singleton.mp hi with rfl
+      rw [ha]
+      simp only [CellHits]
+      omega)
+    simp only [memW, hm', hm]
   · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
       { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
         (ofString "data", cur.locals.lookup (ofString "data"))) }) eq)
@@ -6903,6 +6914,8 @@ theorem transfer_alloc_data_record_prefix {F : Type}
       globN mid "heap_ptr" = data.toNat + 32 ∧ EvmStepCC ["heap_ptr"] s mid ∧
       WordsOK mid (logw.toNat, 40) ∧
       memW mid (logw.toNat + 24) = data.toNat ∧ memW mid (logw.toNat + 32) = 32 ∧
+      (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat →
+        b ≠ logw.toNat + 24 → b ≠ logw.toNat + 32 → memW mid b = memW cur b) ∧
       Resumes (evaluateHOLFiniteState mid cont).1 ∧
       (evaluateHOLFiniteState cur
         (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
@@ -6918,7 +6931,7 @@ theorem transfer_alloc_data_record_prefix {F : Type}
         { (evaluateHOLFiniteState mid cont).2 with
           locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
             (ofString "data", cur.locals.lookup (ofString "data")) } := by
-  obtain ⟨written, hd, heap, step, resum, out, bytes, loc, wb, er, es⟩ :=
+  obtain ⟨written, hd, heap, step, resum, out, bytes, loc, wb, wframe, er, es⟩ :=
     transfer_alloc_data_write_prefix s cur data av _ hInv hstep hbe hout hbyte ha hp hr
   have ww : WordsOK written (logw.toNat, 40) := by
     apply wordsOK_of_inside_heap _ step.1.1.1.1.memaddrs
@@ -6937,8 +6950,10 @@ theorem transfer_alloc_data_record_prefix {F : Type}
     transfer_record_pair_writes_prefix s written logw data 32 24 (ofString "data") cont
       (Or.inr rfl) hInv step wb out bytes ((loc _ (by decide)).trans hl) hd ww wi resum
   refine ⟨mid, lc ▸ hd, lc ▸ ((loc _ (by decide)).trans hl), ?_, st', words, ptr, count,
-    res, er.trans (congrArg Prod.fst eq), ?_⟩
+    ?_, res, er.trans (congrArg Prod.fst eq), ?_⟩
   · simpa only [globN, eff.globals] using heap
+  · intro b hb hsep hn hn'
+    rw [frame b hb hn hn', wframe b hb hsep]
   · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
       { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
         (ofString "data", cur.locals.lookup (ofString "data"))) }) eq)

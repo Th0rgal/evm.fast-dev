@@ -5187,6 +5187,41 @@ theorem worldStepSc_of_decoderNodeStep {F : Type}
       hnot_hf
   exact ⟨S, Nd', fun _ h => h, ⟨hT_post, hJ_post, hF_post, hTr_post⟩, hOG_world, hFO_world, hQ⟩
 
+/-- Forget a decoder's returned-root refinement while retaining its world frame. -/
+theorem worldStepSc_forget_extra {F : Type}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (h : R16WkAcctWs.WorldStepSc R gw keep Q s r post) :
+    R16WkAcctWs.WorldStepSc R gw keep NoExtra s r post := by
+  obtain ⟨⟨hA, hhp, hG, hK, hW⟩, hsp⟩ := h
+  refine ⟨⟨hA, hhp, hG, hK, fun S Nd hWT hD => ?_⟩, hsp⟩
+  obtain ⟨S', Nd', hsub, hWT', hOG, hfr, _⟩ := hW S Nd hWT hD
+  exact ⟨S', Nd', hsub, hWT', hOG, hfr, trivial⟩
+
+/-- A decoder which only adds fresh nodes preserves the EVM frame chain and the
+witness database, as well as exposing its returned root to its caller. -/
+theorem decoderNodeStep_evm_and_witness {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hInv : EvmInv s) (hdb : WitnessDbOK s)
+    (hstep : ∀ Nd, NodeHeap s Nd → ∃ Nd', DecoderNodeStep s post Nd Nd' ∧
+      RetRootIn s r post [] Nd') :
+    EvmStep ["heap_ptr", "scratch_ptr"] s post ∧ WitnessDbOK post ∧
+      R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions []) ["heap_ptr", "scratch_ptr"]
+        EvmBase.stdKeep RetRootIn s r post := by
+  have hW : WorldOK s := ⟨hInv.1, hInv.2.elim fun S hS => ⟨S, hS.1⟩⟩
+  have hfull := worldStepSc_of_decoderNodeStep hW hstep
+  have hplain := worldStepSc_forget_extra hfull
+  have hB : R16WkAcctWs.ValidBufList [] := by intro p hp; cases hp
+  have hgw : R16WkAcctWs.SafeStepGlobals ["heap_ptr", "scratch_ptr"] := by
+    intro g hg
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hg
+    rcases hg with rfl | rfl <;> simp
+  exact ⟨evmStep_of_worldStepSc hB hgw hInv.1 hInv.2 hplain,
+    witnessDbOK_of_worldStepSc hB hgw hInv.1 hdb hplain, hfull⟩
+
 theorem nodeStep_of_stepFrame {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat}
     (ha : ArenaReady s) (hNd : NodeHeap s Nd)
