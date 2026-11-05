@@ -4010,6 +4010,27 @@ theorem stableLengthPre_record_separation {F : Type} (s : PanSemStateFiniteExact
   exact stable_copy_record_separation s mem' hf.2.2.2.2.2.1 hf.2.2.2.2.2.2 hd
     (stableLengthPre_source_cells s hp mem' hm) he
 
+/-- Source-array/backing separation survives the stable length update. -/
+theorem stableLengthPre_array_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (hd : Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+      (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")) :
+    let t := {s with memory := mem'}
+    Disj (memW t (locN t "logs"), 8 * memW t (locN t "logs" + 8))
+      (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") := by
+  obtain ⟨S, Nd, hW, ho, hs, hh, ha, hr⟩ := hp.2.2.2.2
+  have hf := stable_length_store_source s hp.1 hp.2.1 S Nd hW ho hs hh ha hr hx mem' hm
+  have hb := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  dsimp only
+  change Disj (memW {s with memory := mem'} (locN s "logs"),
+    8 * memW {s with memory := mem'} (locN s "logs" + 8))
+    (memW {s with memory := mem'} (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+  rw [hf.2.2.2.2.2.1, hf.2.2.2.2.2.2, hb]
+  exact hd
+
 /-- Framing the destination header and world footprint retains separation
 from every world-owned interval after the copy store. -/
 theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
