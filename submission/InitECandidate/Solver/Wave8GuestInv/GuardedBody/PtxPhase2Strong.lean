@@ -11865,4 +11865,234 @@ theorem phase2_msg_new_live_ready (h : PtxCallees)
     s vs body callee ret v post hc ⟨hp.1, hbuf.1⟩ he hl hb
   exact ⟨hw.1, hg.1, hg.2.1, hg.2.2.1, hg.2.2.2, hd, hw.2⟩
 
+/-- Reusable message-store cut, retaining all saved warm buffers and the
+nonzero block-output backing pointers carried by `TxEnv`. -/
+def PtxMessageStoreReady {ι : Type} (buffers : ι → Ivl)
+    (contents : ι → Nat → BitVec 64) :
+    ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+  WorldOK s ∧ TxEnv s ∧
+  (∃ w : BitVec 64, s.locals.lookup (ofString "m") = some (.val (.word w))) ∧
+  Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr") ∧
+  WordsOK s (locN s "m", 176) ∧
+  ∀ i, Disj (buffers i) (locN s "m", 176) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ PtxLiveBufferAt s S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd)
+
+/-- Every single-word message-field write preserves the complete saved-buffer
+family and its separating world witnesses. -/
+theorem phase2_message_store_ready_store {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "m") (locN s "m" + 176))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxMessageStoreReady buffers contents {s with memory := mem} := by
+  have hA : ArenaReady {s with memory := mem} :=
+    ⟨guestInv_congr (s := s) rfl rfl rfl rfl hp.1.1.1, hp.1.1.2⟩
+  have hf : ∀ i, ∃ S Nd, WorldTypedWith {s with memory := mem} S Nd ∧
+      PtxLiveBufferAt {s with memory := mem} S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned {s with memory := mem} S Nd) ∧
+      TxEnv {s with memory := mem} := by
+    intro i
+    obtain ⟨hd, S, Nd, hw, hb, hsep⟩ := hp.2.2.2.2.2 i
+    have hdw : ∀ o ∈ worldOwned s S Nd, Disj (locN s "m", 176) o :=
+      fun o ho => hsep _ (by simp) o ho
+    obtain ⟨hw', he', hb'⟩ := phase2_live_buffer_store hp.1.1 hp.2.1 hw hb hdw hd hx hin hm
+    have how := (store_outside_worldOwned hp.1.1 hp.2.1 hw hdw hx hin hm).2.1
+    exact ⟨S, Nd, hw', hb', by rw [how]; exact hsep, he'⟩
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨S, Nd, hw, _, _, he⟩ := hf i
+  refine ⟨⟨hA, S, (worldTyped_iff_with _ S).mpr ⟨Nd, hw⟩⟩,
+    he, hp.2.2.1, hp.2.2.2.1, ?_, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1 hA.1 hp.2.2.2.2.1
+  · intro j
+    obtain ⟨S', Nd', hw', hb', hd', _⟩ := hf j
+    exact ⟨(hp.2.2.2.2.2 j).1, S', Nd', hw', hb', hd'⟩
+
+/-- Message offsets do not wrap and remain inside the allocated record. -/
+theorem phase2_message_offset_inside {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (off : Nat) (hoff : off + 8 ≤ 176) {x : BitVec 64}
+    (hx : evalAt s (.op .add [.var .local (ofString "m"), .const off]) =
+      some (.val (.word x))) :
+    Inside (x.toNat, 8) (locN s "m") (locN s "m" + 176) := by
+  obtain ⟨w, hw⟩ := hp.2.2.1
+  have hl : locN s "m" = w.toNat := by simp [locN, hw]
+  have hhi := (ivl_allocated_bound hp.1.1.2 (Or.inl hp.2.2.2.1)).2
+  have he : x = w + BitVec.ofNat 64 off := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr] using hx.symm
+  have ho : off < 2 ^ 64 := by omega
+  have hn : x.toNat = w.toNat + off := by
+    rw [he, BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt ho,
+      Nat.mod_eq_of_lt (by dsimp at hhi; rw [hl] at hhi; omega)]
+  rw [hn, hl]
+  constructor <;> dsimp <;> omega
+
+/-- Any scalar-valued message-field expression can be stored while retaining
+the saved warm buffers and the nonzero backing-pointer environment. -/
+theorem phase2_message_offset_store_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hv : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxMessageStoreReady buffers contents s → evalAt s value = some v →
+      ∃ w, v = .val (.word w)) :
+    Hoare (PtxMessageStoreReady buffers contents)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) value)
+      (fun r s => r = none → PtxMessageStoreReady buffers contents s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, rfl⟩ := hv s v hp he
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact phase2_message_store_ready_store buffers contents hp hdom
+    (phase2_message_offset_inside hp off hoff hx) hmem
+
+/-- Message allocation retains the transaction environment after restoring the
+caller locals, including both nonzero block-output backing pointers. -/
+theorem phase2_msg_new_txEnv (h : PtxCallees) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s) TxEnv
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_msg_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" := by
+    have hg := hs.2.2.1 (ofString "bo") (by decide)
+    change s.globals.lookup (ofString "bo") = post.globals.lookup (ofString "bo") at hg
+    simp only [globN, hg]
+  have hj : globN post "journal_cap" = globN s "journal_cap" := by
+    have hg := hs.2.2.1 (ofString "journal_cap") (by decide)
+    change s.globals.lookup (ofString "journal_cap") = post.globals.lookup (ofString "journal_cap") at hg
+    simp only [globN, hg]
+  have hk : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hk
+    apply hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz k
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+    · simp
+  have hi : locN (setVarHOLFinite (ofString "m") v {post with locals := s.locals}) "index" =
+      locN s "index" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "m" ≠ ofString "index" by decide]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "bo" ≠ 0; rw [hbo]; exact hp.2.bo_nz
+  · change memW post (globN post "bo" + 24) ≠ 0; rw [hbo, hk 24 (by simp)]; exact hp.2.bo24
+  · change memW post (globN post "bo" + 32) ≠ 0; rw [hbo, hk 32 (by simp)]; exact hp.2.bo32
+  · change memW post (globN post "bo" + 40) ≠ 0; rw [hbo, hk 40 (by simp)]; exact hp.2.bo40
+  · change memW post (globN post "bo" + 72) ≠ 0; rw [hbo, hk 72 (by simp)]; exact hp.2.bo72
+  · change locN (setVarHOLFinite (ofString "m") v {post with locals := s.locals}) "index" <
+      memW post (globN post "bo" + 80)
+    rw [hi, hbo, hk 80 (by simp)]; exact hp.2.idx_lt
+  · change globN post "journal_cap" ≠ 0; rw [hj]; exact hp.2.jcap_nz
+
+/-- Allocation establishes the reusable message-store invariant for all saved
+warm buffers while preserving the block-output backing pointers. -/
+theorem phase2_msg_new_store_ready (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ TxEnv s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (PtxMessageStoreReady buffers contents)
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hg := phase2_msg_new_geometry h s vs body callee ret v post hc hp.1 he hl hb
+  have henv := phase2_msg_new_txEnv h s vs body callee ret v post hc
+    ⟨hp.1, hp.2.1⟩ he hl hb
+  have hf := fun i => phase2_msg_new_live_ready h (buffers i) (contents i)
+    s vs body callee ret v post hc ⟨hp.1, hp.2.2 i⟩ he hl hb
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  exact ⟨(hf i).1, henv, hg.1, hg.2.1, hg.2.2.1,
+    fun j => ⟨(hf j).2.2.2.2.2.1, (hf j).2.2.2.2.2.2⟩⟩
+
+/-- Every aligned message slot is allocated and its address does not wrap. -/
+theorem phase2_message_slot {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (k : Nat) (hk : k < 22) :
+    let x := BitVec.ofNat 64 (locN s "m" + 8 * k)
+    x.toNat = locN s "m" + 8 * k ∧ s.memaddrs x ∧
+      Inside (x.toNat, 8) (locN s "m") (locN s "m" + 176) := by
+  have hhi := (ivl_allocated_bound hp.1.1.2 (Or.inl hp.2.2.2.1)).2
+  have hlt : locN s "m" + 8 * k < 2 ^ 64 := by dsimp at hhi; omega
+  have heq : (BitVec.ofNat 64 (locN s "m" + 8 * k)).toNat = locN s "m" + 8 * k := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  refine ⟨heq, ?_, ?_⟩
+  · exact (hp.2.2.2.2.1.2.2 k (by omega)).choose_spec.1
+  · rw [heq]
+    constructor <;> dsimp <;> omega
+
+/-- Consecutive message writes preserve every saved buffer and the transaction
+environment; in particular this covers the four-word value field at offset 56. -/
+theorem phase2_message_store_ready_words {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (ws : List (HolWordLab 64)) {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageStoreReady buffers contents s) (k : Nat) (hk : k + ws.length ≤ 22)
+    {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "m" + 8 * k)) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxMessageStoreReady buffers contents {s with memory := mem} := by
+  induction ws generalizing s k mem with
+  | nil =>
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    subst mem
+    exact hp
+  | cons w ws ih =>
+    have hk' : k < 22 := by simp only [List.length_cons] at hk; omega
+    have hslot := phase2_message_slot hp k hk'
+    let x := BitVec.ofNat 64 (locN s "m" + 8 * k)
+    let mem1 := fun a => if a = x then w else s.memory a
+    have hp1 : PtxMessageStoreReady buffers contents {s with memory := mem1} :=
+      phase2_message_store_ready_store buffers contents hp hslot.2.1 hslot.2.2
+        (fun a ha => if_neg ha)
+    have he : x + BitVec.ofNat 64 8 = BitVec.ofNat 64 (locN s "m" + 8 * (k + 1)) := by
+      simp only [x, ← BitVec.ofNat_add]
+      congr 1
+    simp only [panMemStoresHOL, panMemStoreHOL, hslot.2.1, ↓reduceIte] at hst
+    apply ih hp1 (k + 1) (by simp only [List.length_cons] at hk; omega)
+    change @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "m" + 8 * (k + 1))) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem
+    change @panMemStoresHOL 64 _ (x + BitVec.ofNat 64 8) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem at hst
+    rw [he] at hst
+    exact hst
+
+/-- A shape-sized source expression may initialize any fitting message slice. -/
+theorem phase2_message_expr_store_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (src : ExpHOL 64) (k n : Nat) (hk : k + n ≤ 22)
+    (hlen : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) v,
+      PtxMessageStoreReady buffers contents s → evalAt s src = some v →
+      (flattenHOL v).length = n) :
+    Hoare (PtxMessageStoreReady buffers contents)
+      (.store (.op .add [.var .local (ofString "m"), .const (8 * k)]) src)
+      (fun r s => r = none → PtxMessageStoreReady buffers contents s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨w, hw⟩ := hp.2.2.1
+  have hl : locN s "m" = w.toNat := by simp [locN, hw]
+  have he : x = w + BitVec.ofNat 64 (8 * k) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord, valueWord,
+      panOpHOL, wordOpHOL, wordOp, List.foldr, BitVec.ofNat_mul] using hx.symm
+  have hx' : x = BitVec.ofNat 64 (locN s "m" + 8 * k) := by
+    simp [he, hl, BitVec.ofNat_add]
+  rw [hx'] at hst
+  exact phase2_message_store_ready_words buffers contents (flattenHOL v) hp k
+    (by rw [hlen s v hp hv]; exact hk) hst
+
+/-- The transaction value is copied as four words into message slots 7 through 10. -/
+theorem phase2_message_value_store_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    Hoare (PtxMessageStoreReady buffers contents)
+      (.store (.op .add [.var .local (ofString "m"), .const 56])
+        (.load (.comb [.one, .one, .one, .one])
+          (.op .add [.var .local (ofString "tx"), .const 160])))
+      (fun r s => r = none → PtxMessageStoreReady buffers contents s) := by
+  exact phase2_message_expr_store_hoare buffers contents _ 7 4 (by decide)
+    (fun s v _ hv => phase2_load_quad_length s _ v hv)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
