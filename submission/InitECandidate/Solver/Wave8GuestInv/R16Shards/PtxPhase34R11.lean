@@ -2341,6 +2341,23 @@ theorem phase4ThroughLogPointers_cut (h : PtxCallees) {tail : ProgHOL 64} {b : N
   intro F s hc hp
   exact hb s hc hp
 
+/-- The source-load contract needed after the log-push loop. -/
+def Phase4TypedLogPointers : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4LogPointersReady s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    locN s "logs" ≠ 0 ∧
+    ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p))
+
+theorem localsOnly_phase4TypedLogPointers :
+    LocalsOnly ["index", "out", "logs", "rc", "nl", "lp"] Phase4TypedLogPointers := by
+  intro F s locals k hl hp
+  have hr := localsOnly_phase4LogPointersReady s locals k hl hp.1
+  refine ⟨hr, ?_, hr.1.2.2, ?_⟩
+  · obtain ⟨n, hn⟩ := hp.2.1
+    exact ⟨n, (hl "nl" (by simp)).trans hn⟩
+  · obtain ⟨p, hp⟩ := hp.2.2.2
+    exact ⟨p, (hl "lp" (by simp)).trans hp⟩
+
 theorem hoare_logPointers_increment :
     Hoare Phase4LogPointersReady
       (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
