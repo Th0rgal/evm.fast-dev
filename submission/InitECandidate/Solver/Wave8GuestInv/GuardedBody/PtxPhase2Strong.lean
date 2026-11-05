@@ -1362,4 +1362,49 @@ theorem phase2_store_txReadyStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
     (by rw [how]; exact hT.2.1) (fun hn => by rw [how]; exact (hT.2.2 hn).2) hu hur
   exact R16Shards.PtxP1.txReadyStrong_of_parts hAp hE hW hT'
 
+/-- Lift the transaction frame to the actual Phase 2 entry invariant. Sender
+allocation and gas bounds are unaffected by a memory-only update. -/
+theorem phase2_store_validatedStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxValidatedStrong s) {S Nd : List Nat}
+    (hT : TxAccessListAt s S Nd (locN s "tx"))
+    {x : BitVec 64} {mem : BitVec 64 → HolWordLab 64}
+    (hm : ∀ a, a ≠ x → mem a = s.memory a)
+    (hW : WorldTypedWith { s with memory := mem } S Nd)
+    (how : worldOwned { s with memory := mem } S Nd = worldOwned s S Nd)
+    (hE : TxEnv { s with memory := mem })
+    (htx : Disj (locN s "tx", 384) (x.toNat, 8))
+    (hrec : 0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (x.toNat, 8)) :
+    PtxValidatedStrong { s with memory := mem } := by
+  have ht := phase2_store_txReadyStrong hp.1.1 hT hm hW how hE htx hrec
+  refine ⟨⟨ht, hp.1.2.1, ?_, hp.1.2.2.2⟩, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1 ht.1.1.1.1 hp.1.2.2.1
+  · exact ⟨hp.2.scalar, hp.2.price, hp.2.enc, hp.2.intrinsic⟩
+
+/-- Keep the transaction environment's allocated extent and world separation
+after a framed store. Zero-initialization is intentionally consumed by stores. -/
+def PtxTeLive : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxValidatedStrong s ∧
+    (∃ w : BitVec 64, s.locals.lookup (ofString "te") = some (.val (.word w))) ∧
+    Inside (locN s "te", 200) InitE.sourceBase (globN s "heap_ptr") ∧
+    locN s "te" % 8 = 0 ∧ WordsOK s (locN s "te", 200) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd)
+
+theorem phase2_teAllocated_live {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeAllocated s) : PtxTeLive s :=
+  ⟨hp.1, hp.2.1, hp.2.2.1, hp.2.2.2.1, hp.2.2.2.2.1, hp.2.2.2.2.2.2⟩
+
+theorem phase2_teLive_memory {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxTeLive s) {mem : BitVec 64 → HolWordLab 64}
+    (hv : PtxValidatedStrong { s with memory := mem })
+    (hw : ∀ S Nd, WorldTypedWith s S Nd →
+      WorldTypedWith { s with memory := mem } S Nd ∧
+        worldOwned { s with memory := mem } S Nd = worldOwned s S Nd) :
+    PtxTeLive { s with memory := mem } := by
+  refine ⟨hv, hp.2.1, hp.2.2.1, hp.2.2.2.1, ?_, ?_⟩
+  · exact wordsOK_transfer hp.1.1.1.1.1.1.1 hv.1.1.1.1.1.1 hp.2.2.2.2.1
+  · obtain ⟨S, Nd, hW, hd⟩ := hp.2.2.2.2.2
+    obtain ⟨hW', heq⟩ := hw S Nd hW
+    exact ⟨S, Nd, hW', by rw [heq]; exact hd⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
