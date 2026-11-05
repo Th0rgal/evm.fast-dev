@@ -11239,4 +11239,43 @@ theorem phase2_packed_live_continuation_bound (h : PtxCallees)
     (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
     (phase2_packed_cases_initialized_live_hoare h buffer contents) ht s hc hp
 
+/-- Several saved caller buffers can be carried through the same packing run.
+Each buffer retains its own joint world witness and its original contents. -/
+theorem phase2_packed_cases_initialized_live_family_hoare (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) :
+    Hoare (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧
+      ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s)
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → (WorldOK s ∧ PtxPackedKeysReady s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  refine ⟨(phase2_packed_cases_initialized_world_hoare h).run s hc hp.1 hnt hr, ?_⟩
+  intro i
+  exact ((phase2_packed_cases_initialized_live_hoare h (buffers i) (contents i)).run
+    s hc ⟨hp.1, hp.2 i⟩ hnt hr).2
+
+/-- The warm-state continuation may consume all retained buffers at once. -/
+theorem phase2_packed_live_family_continuation_bound (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedKeysReady s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => (WorldOK s ∧ PtxPackedInitCases s) ∧
+        ∀ i, PtxPackedLiveFrame (buffers i) (contents i) s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.1.2)
+    (phase2_packed_cases_initialized_live_family_hoare h buffers contents) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
