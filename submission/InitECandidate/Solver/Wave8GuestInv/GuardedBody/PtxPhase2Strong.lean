@@ -11660,4 +11660,78 @@ theorem phase2_warm_packed_readonly_resume {F₀ : Type}
   rcases hmem with rfl | rfl | rfl <;>
     simp [HolFiniteMapExact.update, FUPDATE, ha, hn, ht]
 
+/-- Allocation in the suffix preserves a saved caller buffer and its ownership witness. -/
+theorem phase2_alloc_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  refine ⟨?_, S', Nd', ?_, hbuf'⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+
+/-- A suffix allocation preserves an arbitrary family of saved buffers. -/
+theorem phase2_alloc_live_family_resume (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      name (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  constructor
+  · have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+      (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+    rw [hb] at hh
+    have step := hh (Or.inl ⟨v, rfl⟩)
+    obtain ⟨S, hw⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hw
+    obtain ⟨S', Nd', _, hw', _⟩ := step.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+    exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · intro i
+    exact (phase2_alloc_live_buffer_resume h (buffers i) (contents i) name args
+      s vs body callee ret v post hc ⟨hp.1, hp.2 i⟩ he hl hb).2
+
+/-- Compose a suffix allocation with a continuation that consumes all saved buffers. -/
+theorem phase2_alloc_live_family_bound (h : PtxCallees) {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64)) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i)) tail b) :
+    TerminatingProgBoundedOn
+      (fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd (buffers i) (contents i))
+      (.decCall name .one (ofString "alloc") args tail) (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => WorldOK s ∧ ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧
+      PtxLiveBufferAt s S Nd (buffers i) (contents i)) h.fb_alloc
+  · intro F s vs body callee ret hc hp he hl
+    exact guestInv_callEntry s callee hp.1.1.1
+  · exact phase2_alloc_live_family_resume h buffers contents name args
+  · exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
