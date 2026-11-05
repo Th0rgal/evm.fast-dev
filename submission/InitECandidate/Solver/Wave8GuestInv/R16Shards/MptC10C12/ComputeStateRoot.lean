@@ -1022,4 +1022,28 @@ theorem htab_frame_liveMpt_csr {F : Type}
     hfa hdis
   exact ⟨hW', hm', hd', heq⟩
 
+theorem htabNewExit_local_table_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {v : ValueHOL 64}
+    (hs : ArenaReady s) {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hbe : post.be = s.be)
+    (hexit : HtabNewExit s (some (.returned v)) post) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      ArenaReady post ∧ AllocatorGrows s post ∧
+      w.toNat ∉ S ∧ w.toNat ≠ 0 ∧
+      hdr post w.toNat 0 = locN s "key_len" ∧
+      hdr post w.toNat 3 = 0 ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ w.toNat) ∧
+      WorldTypedWith post (S ++ [w.toNat]) Nd ∧
+      worldRoleSlots post = worldRoleSlots s ∧
+      journalRoleSlots post = journalRoleSlots s ∧
+      (∀ u ∈ S, hdr post u 0 = hdr s u 0) ∧
+      GlobalsKept ["heap_ptr", "scratch_ptr"] s post ∧
+      FrameOutside s post
+        [(globN post "scratch_ptr", globN s "scratch_ptr" - globN post "scratch_ptr")]
+        (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+  obtain ⟨w, hv, hp, hag, hwf, hc3, hc0, hfp, hfr, hg⟩ := hexit v rfl
+  obtain ⟨hnotS, hnz, hlocal, hW', hwrs, hjr, hhdr, _⟩ :=
+    worldTypedWith_htab_new hs hW hp hag hwf hfp hfr hbe hg
+  exact ⟨w, hv, hp, hag, hnotS, hnz, hc0, hc3, hlocal, hW', hwrs, hjr, hhdr, hg, hfr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
