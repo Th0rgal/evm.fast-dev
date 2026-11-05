@@ -2306,4 +2306,45 @@ theorem phase2_fresh_separation {F : Type} (s post : PanSemStateFiniteExact 64 F
   · intro hn
     exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
 
+/-- Allocation preserves a common world witness for the transaction and the
+live environment, including every environment word. -/
+theorem phase2_alloc_joint_world (h : PtxCallees) (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxAccessCountReady
+      (fun s => ∃ S Nd, WorldTypedWith s S Nd ∧
+        TxAccessListAt s S Nd (locN s "tx") ∧
+        IvlsDisj [(locN s "te", 200)] (worldOwned s S Nd))
+      (ofString "al_addrs") (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨_, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, hd, _⟩ := hp.1.2
+  have hWe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW
+  obtain ⟨S', Nd', _, hW', hgrow, hframe, _⟩ := step.2.2.2.2 S Nd hWe (by simp [IvlsDisj])
+  have hTp := R16Shards.PtxP1.txAccessListOK_survives_step
+    hp.1.1.1.1.1.1.1.1 step.1.1 step.2.1 hW (R := []) (by simp)
+    hgrow hframe hT (by simp) (by simp) (locals := s.locals) rfl
+  have hte := heap_ivl_survives_step hp.1.1.1.1.1.1.1.1.2 step.2.1
+    (worldOwned_zero_aligned hW) (R := []) (by simp) hgrow hframe
+    hp.1.1.2.2.2.1 (by norm_num) hp.1.1.2.2.1
+    (fun j hj => hd _ (by simp) j hj) (by simp)
+  let out := setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }
+  have htx : locN out "tx" = locN s "tx" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "tx" by decide]
+  have htel : locN out "te" = locN s "te" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "te" by decide]
+  refine ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hW', ?_, ?_⟩
+  · change TxAccessListAt out S' Nd' (locN out "tx")
+    rw [htx]
+    exact R16Shards.PtxP1.txAccessListAt_with_locals _ _ _ hTp
+  · change IvlsDisj [(locN out "te", 200)] (worldOwned post S' Nd')
+    rw [htel]
+    intro i hi j hj
+    simp only [List.mem_singleton] at hi
+    subst i
+    exact hte.2.1 j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
