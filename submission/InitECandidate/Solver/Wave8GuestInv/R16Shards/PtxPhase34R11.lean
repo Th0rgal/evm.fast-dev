@@ -12714,4 +12714,75 @@ theorem receipt_snapshot_logs {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  WkBlockTxEnc.memW_eq_of_allocated_disj_fixed
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem receipt_logs_sum_preserved {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} {logs : Nat}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (hnz : logs ≠ 0) (hL : LogsListOK s logs) (hD : LogsDisjFixed s logs) :
+    WkBlockTxEnc.logsEncodedSum mid (memW mid logs) (memW mid (logs + 8)) =
+      WkBlockTxEnc.logsEncodedSum s (memW s logs) (memW s (logs + 8)) := by
+  obtain ⟨_, _, hm0, hm8⟩ := receipt_snapshot_logs hA hma he hnz hL hD
+  rw [hm0, hm8]
+  rcases hL with hz | ⟨_, _, _, _, hentries⟩
+  · exact False.elim (hnz hz)
+  rcases hD with hz | ⟨hal_arr, hdisj⟩
+  · exact False.elim (hnz hz)
+  have hdj_arr : ∀ f ∈ fixedObjects s,
+      Disj (memW s logs, 8 * memW s (logs + 8)) f :=
+    fun f hf => hdisj _ (List.mem_append_left _ (List.mem_cons_of_mem _ List.mem_cons_self)) f hf
+  have hsum : ∀ k, k ≤ memW s (logs + 8) →
+      WkBlockTxEnc.logsEncodedSum mid (memW s logs) k =
+        WkBlockTxEnc.logsEncodedSum s (memW s logs) k := by
+    intro k hk
+    induction k with
+    | zero => rfl
+    | succ k ih =>
+      have hkl : k < memW s (logs + 8) := by omega
+      obtain ⟨hwa, hle⟩ := hentries k hkl
+      have ha64 : memW s logs + 8 * k < 2 ^ 64 := by
+        have := M13.allocated_le_2pow64 hA hal_arr
+        dsimp only at this
+        omega
+      have ha8 : (memW s logs + 8 * k) % 8 = 0 := by
+        obtain ⟨_, hdom, _⟩ := hwa
+        rw [hma, ordinaryDomain_iff] at hdom
+        have hbv : (BitVec.ofNat 64 (memW s logs + 8 * k)).toNat = memW s logs + 8 * k :=
+          Nat.mod_eq_of_lt ha64
+        rw [hbv] at hdom
+        exact hdom.1
+      have hm_elem : memW mid (memW s logs + 8 * k) = memW s (memW s logs + 8 * k) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_arr hdj_arr ha8
+          (by dsimp; omega) (by dsimp; omega)
+      let log := memW s (memW s logs + 8 * k)
+      obtain ⟨hw_log, hin_log, _⟩ := hle
+      have hal_log : Allocated s (log, 40) := Or.inl hin_log
+      have howned : (log, 40) ∈ logOwnedIvls s log := by
+        unfold logOwnedIvls
+        refine List.mem_filter.2 ⟨by simp [logRecordIvls], ?_⟩
+        simp only [bne_iff_ne, ne_eq, Prod.mk.injEq, not_and]
+        intro _ h40
+        omega
+      have hflat : (log, 40) ∈ (List.range (memW s (logs + 8))).flatMap
+          (fun i => logOwnedIvls s (memW s (memW s logs + 8 * i))) :=
+        List.mem_flatMap.2 ⟨k, List.mem_range.2 hkl, howned⟩
+      have hdj : ∀ f ∈ fixedObjects s, Disj (log, 40) f :=
+        fun f hf => hdisj _ (List.mem_append_right _ hflat) f hf
+      have hm16 : memW mid (log + 16) = memW s (log + 16) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_log hdj
+          (by have := hw_log.1; omega) (by dsimp [log]; omega) (by dsimp [log]; omega)
+      have hm32 : memW mid (log + 32) = memW s (log + 32) :=
+        WkBlockTxEnc.memW_eq_of_allocated_disj_fixed he hA hma hal_log hdj
+          (by have := hw_log.1; omega) (by dsimp [log]; omega) (by dsimp [log]; omega)
+      dsimp [log] at hm16 hm32
+      simp only [WkBlockTxEnc.logsEncodedSum, ih (by omega), hm_elem, hm16, hm32]
+  exact hsum _ le_rfl
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
