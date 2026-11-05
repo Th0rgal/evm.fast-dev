@@ -2543,6 +2543,28 @@ theorem lst_new_stable_fresh (h : PtxCallees) {F : Type}
   · simpa only [hargs.1, hargs.2.1] using hb
   · simpa only [hargs.1, hargs.2.1] using hd
 
+/-- Fresh header allocation establishes the allocation premise of the length store. -/
+theorem lst_new_stable_header_allocated (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    Allocated t (locN t "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ := lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hbase := hp.1.1.1.1.1.1.1.2.1
+  have hi := hh.2.1
+  apply Or.inl
+  simpa [Inside, locN, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    callEntryStateHOLFinite] using
+    (show sourceBase ≤ w.toNat ∧ w.toNat + 24 ≤ globN post "heap_ptr" from
+      ⟨hbase.trans hi.1, hi.2⟩)
+
 theorem lst_new_stable_source_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
     (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
