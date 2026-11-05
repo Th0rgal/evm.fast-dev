@@ -4107,4 +4107,25 @@ theorem phase2_address_count_declare_acc {F : Type} (s : PanSemStateFiniteExact 
       show ofString "acc" ≠ ofString "i" by decide,
       show ofString "acc" ≠ ofString "tx" by decide] using hw
 
+/-- Strengthening the counting invariant retains the established loop clock bound. -/
+theorem phase2_address_count_loop_bound :
+    TerminatingProgBoundedOn PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (2 ^ 63 + 1) := by
+  intro F s hc hp
+  exact phase2_address_copy_loop_bound s hc hp.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
