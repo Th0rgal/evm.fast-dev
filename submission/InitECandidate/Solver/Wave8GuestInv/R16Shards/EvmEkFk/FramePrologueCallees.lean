@@ -5834,6 +5834,16 @@ open InitECandidate.Solver.Wave8GuestInv.R13
 
 open InitECandidate.Solver.Wave8Contracts.M23
 
+theorem transfer_seq_resumes_left {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b : ProgHOL 64) (hr : Resumes (evaluateHOLFiniteState s (.seq a b)).1) :
+    (evaluateHOLFiniteState s a).1 = none ∨ Resumes (evaluateHOLFiniteState s a).1 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  cases he : (evaluateHOLFiniteState s a).1 with
+  | none => exact Or.inl rfl
+  | some r =>
+    right
+    simpa only [he] using hr
+
 theorem transfer_accumulated_memcpy_step {F : Type}
     (s cur : PanSemStateFiniteExact 64 F) (dst src n : ExpHOL 64)
     (dw sw nw : BitVec 64) (Rl : List Ivl)
@@ -5850,8 +5860,10 @@ theorem transfer_accumulated_memcpy_step {F : Type}
       (fun a => Classical.propDecidable (cur.memaddrs a)) n = some (.val (.word nw)))
     (hsub : 0 < nw.toNat → ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + nw.toNat ≤ i.1 + i.2)
     (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
-    (hr : Resumes (evaluateHOLFiniteState cur
-      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1) :
+    (hr : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 = none ∨
+      Resumes (evaluateHOLFiniteState cur
+        (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1) :
     let out := evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memcpy") [dst, src, n])
     out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
@@ -5863,13 +5875,15 @@ theorem transfer_accumulated_memcpy_step {F : Type}
   have hnt : (evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 ≠ some .timeOut := by
     intro he
-    rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
+    rcases hr with hz | hr
+    · rw [he] at hz; cases hz
+    · rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
   obtain ⟨hgood, hbad⟩ := M11.eval_call_memcpy_bre cur dst src n dw sw nw Rl
     hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs hd hs hn hsub hnt
   have hz : (evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 = none := by
     by_contra hne
-    exact hbad hne hr
+    exact hr.elim hne (hbad hne)
   obtain ⟨heff, hl⟩ := hgood hz
   have heff' : ByteRegionEffect cur (evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).2 Rl :=
@@ -5893,8 +5907,10 @@ theorem transfer_accumulated_memzero_step {F : Type}
       (fun a => Classical.propDecidable (cur.memaddrs a)) n = some (.val (.word nw)))
     (hsub : 0 < nw.toNat → ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + nw.toNat ≤ i.1 + i.2)
     (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
-    (hr : Resumes (evaluateHOLFiniteState cur
-      (.call (some (none, none)) (ofString "memzero") [dst, n])).1) :
+    (hr : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 = none ∨
+      Resumes (evaluateHOLFiniteState cur
+        (.call (some (none, none)) (ofString "memzero") [dst, n])).1) :
     let out := evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memzero") [dst, n])
     out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
@@ -5906,13 +5922,15 @@ theorem transfer_accumulated_memzero_step {F : Type}
   have hnt : (evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memzero") [dst, n])).1 ≠ some .timeOut := by
     intro he
-    rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
+    rcases hr with hz | hr
+    · rw [he] at hz; cases hz
+    · rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
   obtain ⟨hgood, hbad⟩ := R16Shards.OpHandlersB.eval_call_memzero_bre cur dst n dw nw Rl
     hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs hd hn hsub hnt
   have hz : (evaluateHOLFiniteState cur
       (.call (some (none, none)) (ofString "memzero") [dst, n])).1 = none := by
     by_contra hne
-    exact hbad hne hr
+    exact hr.elim hne (hbad hne)
   obtain ⟨heff, hl⟩ := hgood hz
   obtain ⟨hstep', hout', hbyte'⟩ :=
     evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte heff hin

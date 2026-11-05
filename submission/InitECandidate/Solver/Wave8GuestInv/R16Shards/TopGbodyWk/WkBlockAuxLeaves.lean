@@ -7898,4 +7898,94 @@ theorem merge_roles_append_fresh {F : Type} {s : PanSemStateFiniteExact 64 F}
         exact False.elim (hf a (List.mem_append_right _ ha) heq)
     · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
 
+/-- Outer insertion introduces only the installed block-inner role. -/
+theorem merge_set_nestRoles_provenance {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t inner : Nat}
+    (hbs : globN s "bs" ≠ 0) (ht : t = memW s (globN s "bs" + 32))
+    (ht0 : t ≠ 0) (hg : globN post "bs" = globN s "bs")
+    (hp : memW post (globN post "bs" + 32) = t)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    (inner, "bs.inner") ∈ nestRoles post "bs" "bs.inner" ∧
+    ∀ a ∈ nestRoles post "bs" "bs.inner",
+      a ∈ nestRoles s "bs" "bs.inner" ∨ a = (inner, "bs.inner") := by
+  have hpost : nestRoles post "bs" "bs.inner" =
+      (htabValues post t).map (fun v => (v, "bs.inner")) := by
+    have hbpost : globN post "bs" ≠ 0 := by rwa [hg]
+    simp [nestRoles, hbpost, hp, ht0]
+  have hpre : nestRoles s "bs" "bs.inner" =
+      (htabValues s t).map (fun v => (v, "bs.inner")) := by
+    simp [nestRoles, hbs, ← ht, ht0]
+  rw [hpost, hpre]
+  refine ⟨List.mem_map.2 ⟨inner, (merge_set_values_membership hv).1, rfl⟩, ?_⟩
+  intro a ha
+  obtain ⟨v, hv', rfl⟩ := List.mem_map.1 ha
+  rcases (merge_set_values_membership hv).2 v hv' with hold | heq
+  · exact Or.inl (List.mem_map.2 ⟨v, hold, rfl⟩)
+  · exact Or.inr (by rw [heq])
+
+/-- Replace the nested block-role segment using old-or-fresh provenance. -/
+theorem merge_roles_replace_inner {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {pre old new suf jr : List (Nat × String)} {inner : Nat}
+    (h : RolesOK s S (pre ++ old ++ suf) jr)
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ (pre ++ old ++ suf) ++ jr, a.1 ≠ inner)
+    (hp : ∀ a ∈ new, a ∈ old ∨ a = (inner, "bs.inner"))
+    (hr : ∀ a ∈ new, a.2 = "bs.inner") :
+    RolesOK s S (pre ++ new ++ suf) jr := by
+  have hold : ∀ a ∈ old, a ∈ pre ++ old ++ suf := by
+    intro a ha; simp only [List.mem_append]; exact Or.inl (Or.inr ha)
+  have hpre : ∀ a ∈ pre, a ∈ pre ++ old ++ suf := by
+    intro a ha; simp only [List.mem_append]; exact Or.inl (Or.inl ha)
+  have hsuf : ∀ a ∈ suf, a ∈ pre ++ old ++ suf := by
+    intro a ha; exact List.mem_append_right _ ha
+  have hprov : ∀ a ∈ pre ++ new ++ suf,
+      a ∈ pre ++ old ++ suf ∨ a = (inner, "bs.inner") := by
+    intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases List.mem_append.1 ha with ha | ha
+      · exact Or.inl (hpre a ha)
+      · exact (hp a ha).imp (hold a) id
+    · exact Or.inl (hsuf a ha)
+  have hpair := List.pairwise_append.1 h.2.1
+  have hleft := List.pairwise_append.1 hpair.1
+  refine ⟨?_, ?_, ?_⟩
+  · intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases hprov a ha with ha | rfl
+      · exact h.1 a (List.mem_append_left _ ha)
+      · exact ⟨hi, hk⟩
+    · exact h.1 a (List.mem_append_right _ ha)
+  · apply List.pairwise_append.2
+    refine ⟨List.pairwise_append.2 ⟨hleft.1, ?_, ?_⟩, hpair.2.1, ?_⟩
+    · have hall : ∀ l : List (Nat × String), (∀ a ∈ l, a.2 = "bs.inner") →
+          l.Pairwise (fun a b => a.1 = b.1 → a.2 = b.2 ∧ a.2 ∈ sharedRoles) := by
+        intro l
+        induction l with
+        | nil => simp
+        | cons a l ih =>
+          intro hh
+          apply List.pairwise_cons.2
+          refine ⟨?_, ih (fun b hb => hh b (List.mem_cons_of_mem _ hb))⟩
+          intro b hb heq
+          have ha := hh a (List.mem_cons_self)
+          have hb' := hh b (List.mem_cons_of_mem _ hb)
+          exact ⟨ha.trans hb'.symm, by rw [ha]; simp [sharedRoles]⟩
+      exact hall new hr
+    · intro a ha b hb heq
+      rcases hp b hb with hb | rfl
+      · exact hleft.2.2 a ha b hb heq
+      · exact False.elim (hf a (List.mem_append_left _ (hpre a ha)) heq)
+    · intro a ha b hb heq
+      rcases List.mem_append.1 ha with ha | ha
+      · exact hpair.2.2 a (List.mem_append_left _ ha) b hb heq
+      · rcases hp a ha with ha | rfl
+        · exact hpair.2.2 a (List.mem_append_right _ ha) b hb heq
+        · exact False.elim (hf b (List.mem_append_left _ (hsuf b hb)) heq.symm)
+  · intro a ha b hb heq
+    rcases List.mem_append.1 hb with hb | hb
+    · rcases hprov b hb with hb | rfl
+      · exact h.2.2 a ha b (List.mem_append_left _ hb) heq
+      · exact False.elim (hf a (List.mem_append_right _ ha) heq)
+    · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
