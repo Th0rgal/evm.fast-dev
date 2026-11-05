@@ -8289,4 +8289,21 @@ theorem gbody_process_transaction_strong_of_h12_slots
   intro tail b ht F s hc hp
   exact ptxPhase4_cut_strong_of_slots h hlogs R hreceipt hstore ht s hc hp.1
 
+/-- The complete transaction bound, with the remaining backing contract explicit.
+`BoListArg` and `TxReadyStrong` constrain list headers but do not assert that
+their backing pointers are nonzero; that obligation must not be hidden by the
+composition theorem. -/
+theorem gbody_process_transaction_strong_of_h12_backing_nonzero
+    (h : PtxCallees) (hwk : PtxP34.PmcStrong)
+    (hnonzero : PtxP34.LstPushBackingNonzero)
+    (h12 : ∀ (tail : ProgHOL 64) (b : Nat),
+      TerminatingProgBoundedOn (fun s => PtxMessageReady s ∧ PtxPhase4LocalShapes s) tail b →
+      TerminatingProgBoundedOn TxReadyStrong (ptxPhase1 (ptxPhase2 tail))
+        (ptxCost1 + (ptxCost2 + b))) :
+    TerminatingFunBoundedOn TxReadyStrong (ofString "process_transaction")
+      K.«process_transaction» := by
+  apply gbody_process_transaction_strong_of_cuts h hwk h12
+  intro tail b ht F s hc hp
+  exact PtxP34.ptxPhase4_cut_strong_of_backing_nonzero h hnonzero ht s hc hp.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
