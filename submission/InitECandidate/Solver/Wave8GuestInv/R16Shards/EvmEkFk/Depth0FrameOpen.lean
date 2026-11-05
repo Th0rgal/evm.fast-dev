@@ -461,4 +461,75 @@ theorem memzero_run {F : Type} (s : PanSemStateFiniteExact 64 F) (dst n : BitVec
         subst hval'
         exact ⟨rfl, _, C, rfl⟩
 
+/-! ## Single-frame assembly for `fk_frame_open`
+
+After `frame_open(msg, 0)` the chain is the one frame `(ev, cur_cont)` with kind `0`. The
+following lemmas assemble `EvmMsgReady` from explicit facts about that one frame, so that a body
+run of `frame_open` only has to deliver the head-frame facts. -/
+
+theorem evmChain_single {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h0 : memW s (globN s "cur_cont" + 16) = 0) :
+    evmChain s = [(globN s "ev", globN s "cur_cont")] := by
+  rw [evmChain_cons, if_pos h0]
+
+theorem evmInvAt_single {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (h0 : memW s (globN s "cur_cont" + 16) = 0)
+    (hWT : WorldTyped s S)
+    (hWF : FrameWF s S (globN s "ev", globN s "cur_cont"))
+    (hPD : (frameObjects s (globN s "ev", globN s "cur_cont")).Pairwise Disj)
+    (hTF : ∀ o ∈ frameObjects s (globN s "ev", globN s "cur_cont"),
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j)
+    (hAT : AvoidsTries s S (frameObjects s (globN s "ev", globN s "cur_cont")))
+    (hRO : RolesOK s S (worldRoleSlots s ++ frameRoleSlots s [(globN s "ev", globN s "cur_cont")])
+      (journalRoleSlots s))
+    (hG : memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192) + 1 < 2 ^ 64) :
+    EvmInvAt s S := by
+  have hch := evmChain_single s h0
+  refine ⟨hWT, ?_⟩
+  simp only [hch]
+  refine ⟨List.cons_ne_nil _ _, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, hRO, ?_⟩
+  · simp [maxChain]
+  · exact ⟨(globN s "ev", globN s "cur_cont"), by simp, h0⟩
+  · intro ec hec; simp at hec; subst hec; exact hWF
+  · intro ec hec; simp at hec
+  · intro i hi; simp at hi
+  · simpa using hPD
+  · intro ec hec; simp at hec; subst hec; exact hTF
+  · simpa using hAT
+  · intro i hi; simp at hi
+  · simpa using hG
+
+theorem evmMsgReady_of_single {F : Type} (s : PanSemStateFiniteExact 64 F) (S : List Nat)
+    (hAR : ArenaReady s)
+    (h0 : memW s (globN s "cur_cont" + 16) = 0)
+    (hWT : WorldTyped s S)
+    (hWF : FrameWF s S (globN s "ev", globN s "cur_cont"))
+    (hPD : (frameObjects s (globN s "ev", globN s "cur_cont")).Pairwise Disj)
+    (hTF : ∀ o ∈ frameObjects s (globN s "ev", globN s "cur_cont"),
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj o i) ∧ ∀ j ∈ fixedObjects s, Disj o j)
+    (hAT : AvoidsTries s S (frameObjects s (globN s "ev", globN s "cur_cont")))
+    (hRO : RolesOK s S (worldRoleSlots s ++ frameRoleSlots s [(globN s "ev", globN s "cur_cont")])
+      (journalRoleSlots s))
+    (hG : memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192) + 1 < 2 ^ 64) :
+    EvmMsgReady s :=
+  ⟨hAR, S, evmInvAt_single s S h0 hWT hWF hPD hTF hAT hRO hG,
+    hWF.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2⟩
+
+/-- `fk_frame_open` reduced to a `Ret` run of the `frame_open` body from a `FrameOpenReady` entry
+with word parameters `msg = m`, `kind = k`. -/
+theorem fk_frame_open_of_ret
+    (hrun : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      FrameOpenReady s → ∀ (m k : BitVec 64),
+      s.locals.lookup (ofString "msg") = some (.val (.word m)) →
+      s.locals.lookup (ofString "kind") = some (.val (.word k)) → k.toNat = 0 →
+      Ret s (sourceFnBody Guest.Software.guestFn_frame_open) (fun _ post => EvmMsgReady post)) :
+    KeepsOn FrameOpenReady EvmMsgReady (ofString "frame_open") := by
+  refine ⟨_, _, _, lookup_frame_open, fun s hcode hP hex _hnt hr => ?_⟩
+  obtain ⟨w1, hw1⟩ := hex
+  obtain ⟨⟨m, hm⟩, ⟨k, hk⟩⟩ := fo_param_words_two s (p1 := "msg") (p2 := "kind") (by decide)
+    lookup_frame_open ⟨w1, hw1⟩
+  have hlk : locN s "kind" = k.toNat := by unfold locN; rw [hk]
+  obtain ⟨v, hv⟩ := frame_open_resumes_returned s hcode hw1 hr
+  exact hrun s hcode hP m k hm hk (by rw [← hlk]; exact hP.2) v hv
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
