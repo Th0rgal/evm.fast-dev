@@ -2778,6 +2778,28 @@ theorem stable_storage_length_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
     have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hb.2.1
     simpa using hic
 
+theorem lst_new_stable_header_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    WordsOK resumed (locN resumed "stable_logs", 24) ∧
+      Allocated resumed (locN resumed "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hi : Inside (w.toNat, 24) sourceBase (globN post "heap_ptr") :=
+    ⟨(worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2.1.trans hh.2.1.1, hh.2.1.2⟩
+  have hw : WordsOK post (w.toNat, 24) := hh.2.2
+  have ho : Allocated post (w.toNat, 24) := Or.inl hi
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN] using And.intro hw ho
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
