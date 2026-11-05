@@ -16,6 +16,20 @@ def lowerEntry (info : Spt Nat) (entry : Nat × HolProg 64) : Nat × HolProg 64 
 def Bounded (info : Spt Nat) (table : List (Nat × HolProg 64)) : Prop :=
   ∀ entry ∈ table, stepCost (lowerEntry info entry).2 ≤ 7313
 
+theorem bounded_nil (info : Spt Nat) : Bounded info [] := by
+  intro entry h
+  cases h
+
+theorem bounded_cons (info : Spt Nat) (entry : Nat × HolProg 64)
+    (table : List (Nat × HolProg 64))
+    (head : stepCost (lowerEntry info entry).2 ≤ 7313)
+    (tail : Bounded info table) : Bounded info (entry :: table) := by
+  intro candidate h
+  rcases List.mem_cons.mp h with h | h
+  · subst candidate
+    exact head
+  · exact tail candidate h
+
 theorem bounded_append (info : Spt Nat) (left right : List (Nat × HolProg 64))
     (hl : Bounded info left) (hr : Bounded info right) :
     Bounded info (left ++ right) := by
