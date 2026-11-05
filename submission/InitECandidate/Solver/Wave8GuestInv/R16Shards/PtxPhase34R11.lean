@@ -1049,6 +1049,26 @@ theorem txAfterCallStrong_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F
   · change LogsLiveOwned post S Nd (memW post (locN s "out" + 16))
     rw [h16]; exact hlogs.2
 
+theorem txAfterCallStrong_store_receipt {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallStrong s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (memW s (globN s "bo" + 32))
+      (memW s (globN s "bo" + 32) + (16 * memW s (globN s "bo" + 80) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxAfterCallStrong {s with memory := mem'} := by
+  apply txAfterCallStrong_worldStore h hm
+  · intro S Nd hWT
+    exact store_bo_array_world h.1.1.1 h.1.2 hWT (Or.inl ⟨rfl, rfl⟩) hx hin hm
+  · intro S Nd hWT
+    obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list h.1.2 hWT.1
+    refine ⟨(memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16), ?_, hin⟩
+    have hmemb : (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+        ∈ blockOutObjects s := by rw [hbo]; simp
+    have hmemf : (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
+        ∈ fixedObjects s := List.mem_append_left _ (List.mem_append_right _ hmemb)
+    unfold worldOwned
+    simp only [List.mem_append]
+    exact Or.inl (Or.inr hmemf)
+
 theorem eval_add_global_const {F : Type} {s : PanSemStateFiniteExact 64 F}
     {g : String} {k x : BitVec 64}
     (hx : evalAt s (.op .add [.var .global (ofString g), .const k]) = some (.val (.word x))) :
