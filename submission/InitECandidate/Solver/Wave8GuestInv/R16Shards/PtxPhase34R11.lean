@@ -2666,6 +2666,14 @@ theorem lst_new_stable_capacity_resume (h : PtxCallees) {F : Type}
   simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hw
 
+theorem stable_backing_allocated {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {p cap : Nat} (hA : ArenaOK s) (hb : FreshBlock s post p (8 * cap)) :
+    p % 8 = 0 ∧ Allocated post (p, 8 * cap) ∧ WordsOK post (p, 8 * cap) := by
+  have hround : (8 * cap + 7) / 8 * 8 = 8 * cap := by omega
+  obtain ⟨halign, hi, hw⟩ := hb
+  rw [hround] at hi hw
+  exact ⟨halign, Or.inl ⟨hA.1.trans hi.1, hi.2⟩, hw⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
