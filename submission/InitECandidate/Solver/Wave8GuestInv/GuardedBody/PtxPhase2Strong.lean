@@ -105,4 +105,43 @@ theorem phase1_mgas_word_resume {F : Type} (s post : PanSemStateFiniteExact 64 F
   obtain ⟨w, hw⟩ := h
   exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hw⟩
 
+/-- Local information accumulated before `mgas` and `reservoir` are declared. -/
+def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (∀ name ∈ (["tx", "index", "sender"] : List String),
+    ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w))) ∧
+  (∃ a b c d : BitVec 64, s.locals.lookup (ofString "price") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)])) ∧
+  (∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+    some (.rStruct [.val (.word a), .val (.word b)])) ∧
+  (∃ a b c : BitVec 64, s.locals.lookup (ofString "intrinsic") =
+    some (.rStruct [.val (.word a), .val (.word b), .val (.word c)]))
+
+/-- Assemble all Phase 2 shapes when the arithmetic reservoir declaration
+succeeds. This step uses expression semantics, not the default-zero `locN`. -/
+theorem phase1_reservoir_shapes {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hprefix : PtxPhase1ShapePrefix s)
+    (hgas : ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+    (v : ValueHOL 64)
+    (he : evalAt s (.op .sub [.var .local (ofString "execution_gas"),
+      .var .local (ofString "mgas")]) = some v) :
+    PtxPhase2LocalShapes (setVarHOLFinite (ofString "reservoir") v s) := by
+  obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+  have hkeep : ∀ name : String, ofString name ≠ ofString "reservoir" →
+      (setVarHOLFinite (ofString "reservoir") (.val (.word w)) s).locals.lookup (ofString name) =
+        s.locals.lookup (ofString name) := by
+    intro name hn
+    simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, Ne.symm hn]
+  constructor
+  · intro name hn
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+    rcases hn with rfl | rfl | rfl | rfl | rfl
+    · simpa only [hkeep "tx" (by decide)] using hprefix.1 "tx" (by simp)
+    · simpa only [hkeep "index" (by decide)] using hprefix.1 "index" (by simp)
+    · simpa only [hkeep "sender" (by decide)] using hprefix.1 "sender" (by simp)
+    · simpa only [hkeep "mgas" (by decide)] using hgas
+    · exact ⟨w, by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+  · simpa only [hkeep "price" (by decide)] using hprefix.2.1
+  · simpa only [hkeep "enc" (by decide)] using hprefix.2.2.1
+  · simpa only [hkeep "intrinsic" (by decide)] using hprefix.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
