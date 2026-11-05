@@ -2019,6 +2019,27 @@ def Phase4LogSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
       (memW s (memW s (globN s "bo" + 40)) +
         8 * memW s (memW s (globN s "bo" + 40) + 16))
 
+theorem lst_push_logSlot_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4LogPointersReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_push") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hback : memW post (memW post (globN post "bo" + 40)) ≠ 0) :
+    Phase4LogSlotReady (setVarHOLFinite (ofString "slot") v {post with locals := s.locals}) := by
+  have hW := hp.1.1.1.1
+  have harg := lst_push_bo40_arg s vs body callee ret hc hW ha hl
+  have hptr := lst_push_logPointers_resume h s vs body callee ret v post hc hl hr hp
+    hp.1.2.2 harg.1
+  obtain ⟨w, rfl, _, hin⟩ := lst_push_bo40_slot_result h s vs body callee ret v post
+    hc hW ha hl hr
+  refine ⟨hptr, hback, ?_⟩
+  simpa [locN, memW, globN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hin
+
 theorem hoare_logSlot_store (src : ExpHOL 64)
     (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
       evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
