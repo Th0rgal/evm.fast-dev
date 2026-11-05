@@ -10663,4 +10663,164 @@ theorem phase2_memcpy_eval_packed_live (h : PtxCallees) {F : Type}
   exact phase2_packed_live_copy_frame s post S Nd S' Nd' _ _ buffer contents
     hindex ha step.1.1 step.2.2.1 hw hw' ht hsep hb ho hf htx hrec hbuf hlen
 
+/-- Either concrete packed destination preserves the shared caller resource. -/
+theorem phase2_memcpy_eval_packed_live_destination (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedLiveCopy s buffer contents)
+    (hb : Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hdest : (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n") ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents := by
+  have hregions := phase2_packed_copy_input_regions s hi.1.1 hi.1.2.1 hi.1.2.2 _ hdest
+  have hbuffer := phase2_packed_guarded_input_disjoint s hi.1.1 buffer hb
+  refine phase2_memcpy_eval_packed_live h s post vs body callee ret r buffer contents
+    hc hl he hn hr hp ha hi ?_ hregions.1 hregions.2 ?_ ?_
+  · intro S Nd hw hs
+    apply phase2_packed_typed_of_owned (callEntryStateHOLFinite s callee) S Nd
+    intro dest hmem region hregion
+    simp only [List.mem_singleton] at hmem
+    subst dest
+    have hdis := hs (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+      (by simp) region hregion
+    have hc' := phase2_packed_guarded_input_disjoint s hi.1.1 region (disj_symm hdis)
+    rcases List.mem_cons.mp hdest with heq | hm
+    · rw [heq]
+      exact disj_symm hc'.1
+    · have heq := List.mem_singleton.mp hm
+      rw [heq]
+      exact disj_symm hc'.2
+  · rcases List.mem_cons.mp hdest with heq | hm
+    · rw [heq]
+      exact hbuffer.1
+    · rw [List.mem_singleton.mp hm]
+      exact hbuffer.2
+  · rcases List.mem_cons.mp hdest with heq | hm
+    · have heq' := congrArg Prod.snd heq
+      change locN (callEntryStateHOLFinite s callee) "n" = 20 at heq'
+      omega
+    · have heq' := congrArg Prod.snd (List.mem_singleton.mp hm)
+      change locN (callEntryStateHOLFinite s callee) "n" = 32 at heq'
+      omega
+
+/-- Evaluated source arguments connect the live-resource invariant to either
+of the actual packing calls. -/
+theorem phase2_memcpy_packed_arguments_live (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src len : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (d n : BitVec 64)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedLiveCopy s buffer contents)
+    (hb : Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hlen : evalAt s len = some (.val (.word n)))
+    (hpair : (d.toNat, n.toNat) ∈
+      [(locN s "al_keys" + 52 * locN s "k", 20),
+       (locN s "al_keys" + 52 * locN s "k" + 20, 32)]) :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents ∧
+      Disj buffer (locN {post with locals := s.locals} "al_keys",
+        (locN {post with locals := s.locals} "nkeys" * 52 + 8 + 7) / 8 * 8) := by
+  refine ⟨?_, hb⟩
+  have hentry := phase2_memcpy_entry_destination s dst src len vs body callee ret d n
+    hc hargs hl hd hlen
+  apply phase2_memcpy_eval_packed_live_destination h s post vs body callee ret r
+    buffer contents hc hl he hn hr hp ha hi hb
+  change (locN {s with locals := callee, clock := s.clock - 1} "dst",
+    locN {s with locals := callee, clock := s.clock - 1} "n") ∈ _
+  rw [hentry.1, hentry.2]
+  exact hpair
+
+/-- Call-ready packing state carrying a fixed caller buffer through both copies. -/
+def PtxPackedLiveCall {F : Type} (buffer : Ivl) (contents : Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ PtxPackedLiveCopy s buffer contents ∧
+    (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+    globN s "heap_ptr" ≤ 2 ^ 64 ∧
+    Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+
+/-- The source address-copy command preserves the caller-buffer call invariant. -/
+theorem phase2_packed_address_copy_live_hoare (h : PtxCallees) (src : ExpHOL 64)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedLiveCall buffer contents t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1 callee
+  have hcopy := phase2_memcpy_packed_arguments_live h s post _ src (.const 20)
+    vs body callee ret (some (.returned v)) (base + k * 52) 20 buffer contents
+    hc hargs hl he (by simp) (by simp [Resumes]) hentry hp.1.1 hp.2.1 hp.2.2.2.2
+    (phase2_packed_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) (by
+      rw [phase2_packed_destination_toNat s hp.2.1.1.1 base k hbase hk hp.2.2.2.1]
+      simp)
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.2.2.2.1
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  have hn := phase2_packed_next_call_pre s post harena.1 hcopy.1.1 ⟨k, hk⟩ hg hp.2.2.2.1
+  exact ⟨hn.1, hcopy.1, hn.2.2.1, hn.2.2.2, hcopy.2⟩
+
+/-- The source key-copy command preserves the caller-buffer call invariant. -/
+theorem phase2_packed_storage_copy_live_hoare (h : PtxCallees) (src : ExpHOL 64)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32])
+      (fun r t => r = none → PtxPackedLiveCall buffer contents t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1 callee
+  have hcopy := phase2_memcpy_packed_arguments_live h s post _ src (.const 32)
+    vs body callee ret (some (.returned v)) (base + k * 52 + 20) 32 buffer contents
+    hc hargs hl he (by simp) (by simp [Resumes]) hentry hp.1.1 hp.2.1 hp.2.2.2.2
+    (phase2_packed_key_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) (by
+      rw [phase2_packed_key_destination_toNat s hp.2.1.1.1 base k hbase hk hp.2.2.2.1]
+      simp)
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.2.2.2.1
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  have hn := phase2_packed_next_call_pre s post harena.1 hcopy.1.1 ⟨k, hk⟩ hg hp.2.2.2.1
+  exact ⟨hn.1, hcopy.1, hn.2.2.1, hn.2.2.2, hcopy.2⟩
+
+/-- Both source-order copies retain the same saved caller contents. -/
+theorem phase2_packed_copies_live_hoare (h : PtxCallees)
+    (addressSrc keySrc : ExpHOL 64) (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32]))
+      (fun r t => r = none → PtxPackedLiveCall buffer contents t) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_live_hoare h addressSrc buffer contents)
+    (phase2_packed_storage_copy_live_hoare h keySrc buffer contents)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
