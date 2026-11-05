@@ -2810,4 +2810,1328 @@ theorem runAttemptPhaseC1_bounded
   intro F s hc hp
   exact TerminatingRunBounded.weaken (hall s hc hp) (by omega)
 
+def runAttemptScanBlockProg : ProgHOL 64 :=
+  .dec (ofString "txs") .one
+    (.load .one (.op .add [.var .local (ofString "pl"), .const 32#64]))
+    (.dec (ofString "ntx") .one
+      (.load .one (.op .add [.var .local (ofString "pl"), .const 40#64]))
+      (.dec (ofString "i") .one (.const 0#64)
+        (.seq runAttemptScanLoopProg runAttemptPhaseC1Prog)))
+
+def runAttemptFullProg : ProgHOL 64 :=
+  .dec (ofString "pl") .one
+    (.load .one (.op .add [.var .local (ofString "si"), .const 0#64]))
+    (.seq .skip
+      (.decCall (ofString "vh") (.comb [.one, .one]) (ofString "validate_headers")
+        [.load .one (.op .add [.var .local (ofString "si"), .const 72#64]),
+         .load .one (.op .add [.var .local (ofString "si"), .const 80#64])]
+        (.dec (ofString "nh") .one
+          (.load .one (.op .add [.var .local (ofString "si"), .const 80#64]))
+          (.seq
+            (.ite (.cmp .equal (.var .local (ofString "nh")) (.const 0#64))
+              (.raise (ofString "BlockErr") (.const 3#64))
+              .skip)
+            (.dec (ofString "parent") .one
+              (.load .one
+                (.op .add
+                  [.rfield 0 (.var .local (ofString "vh")),
+                   .panop .mul
+                     [.op .sub [.var .local (ofString "nh"), .const 1#64],
+                      .const 8#64]]))
+              (.seq
+                (.assign .global (ofString "block_hashes")
+                  (.rfield 1 (.var .local (ofString "vh"))))
+                (.seq
+                  (.assign .global (ofString "block_hashes_n")
+                    (.var .local (ofString "nh")))
+                  (.seq .skip
+                    (.seq
+                      (.ite
+                        (.cmp .lower
+                          (.load .one (.op .add [.var .local (ofString "pl"), .const 88#64]))
+                          (.load .one (.op .add [.var .local (ofString "pl"), .const 96#64])))
+                        (.raise (ofString "BlockErr") (.const 22#64))
+                        .skip)
+                      (.decCall (ofString "gas_ok") .one (ofString "check_gas_limit")
+                        [.load .one (.op .add [.var .local (ofString "pl"), .const 88#64]),
+                         .load .one (.op .add [.var .local (ofString "parent"), .const 104#64])]
+                        (.seq
+                          (.ite (.cmp .equal (.var .local (ofString "gas_ok")) (.const 0#64))
+                            (.raise (ofString "BlockErr") (.const 10#64))
+                            .skip)
+                          (.decCall (ofString "nodedb") .one (ofString "nodedb_build")
+                            [.load .one (.op .add [.var .local (ofString "si"), .const 40#64]),
+                             .load .one (.op .add [.var .local (ofString "si"), .const 48#64])]
+                            (.decCall (ofString "codedb") .one (ofString "nodedb_build")
+                              [.load .one (.op .add [.var .local (ofString "si"), .const 56#64]),
+                               .load .one (.op .add [.var .local (ofString "si"), .const 64#64])]
+                              (.seq
+                                (.call (some (none, none)) (ofString "state_init")
+                                  [.var .local (ofString "nodedb"),
+                                   .load .one (.op .add [.var .local (ofString "parent"), .const 32#64]),
+                                   .var .local (ofString "codedb")])
+                                (.seq .skip runAttemptScanBlockProg)))))))))))))))
+
+theorem sourceFnBody_run_attempt_eq :
+    (sourceFunctionEntry Guest.Software.guestFn_run_attempt).2.2.1 = runAttemptFullProg := by
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_run_attempt,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map, List.map]
+  rfl
+
+def RA_Pl {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl))
+
+def RA_Vh {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl a b : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    a.toNat % 8 = 0 ∧
+    WordsOK s (a.toNat, 8 * memW s (w_si.toNat + 80)) ∧
+    Inside (a.toNat, 8 * memW s (w_si.toNat + 80)) sourceBase (globN s "heap_ptr") ∧
+    (∀ i, i < memW s (w_si.toNat + 80) →
+      let h := memW s (a.toNat + 8 * i)
+      HeaderAt s h ∧ Inside (h, 248) sourceBase (globN s "heap_ptr") ∧
+        IvlsDisj [(h, 248)] (worldOwned s S Nd)) ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "vh") = some (.rStruct [.val (.word a), .val (.word b)])
+
+def RA_Nh (pos : Bool) {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl a b w_nh : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    w_nh.toNat = memW s (w_si.toNat + 80) ∧
+    (pos = true → 0 < w_nh.toNat) ∧
+    a.toNat % 8 = 0 ∧
+    WordsOK s (a.toNat, 8 * w_nh.toNat) ∧
+    Inside (a.toNat, 8 * w_nh.toNat) sourceBase (globN s "heap_ptr") ∧
+    (∀ i, i < w_nh.toNat →
+      let h := memW s (a.toNat + 8 * i)
+      HeaderAt s h ∧ Inside (h, 248) sourceBase (globN s "heap_ptr") ∧
+        IvlsDisj [(h, 248)] (worldOwned s S Nd)) ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "vh") = some (.rStruct [.val (.word a), .val (.word b)]) ∧
+    s.locals.lookup (ofString "nh") = some (.val (.word w_nh))
+
+def RA_ParentPre {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent a b w_nh : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent)) ∧
+    s.locals.lookup (ofString "vh") = some (.rStruct [.val (.word a), .val (.word b)]) ∧
+    s.locals.lookup (ofString "nh") = some (.val (.word w_nh))
+
+def RA_Parent {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent))
+
+theorem ra_pl_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F} (h : RA_Pl s) : GuestInv s := by
+  obtain ⟨_, _, _, _, hIA, _⟩ := h; exact hIA.1.1.1
+
+theorem ra_parent_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F} (h : RA_Parent s) :
+    GuestInv s := by
+  obtain ⟨_, _, _, _, _, hIA, _⟩ := h; exact hIA.1.1.1
+
+theorem localsOnly_ra_parent : LocalsOnly ["si", "pl", "parent"] RA_Parent := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hpl_mem, hsi, hpl, hpar⟩ := hP
+  exact ⟨w_si, w_pl, w_parent, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_parent.toNat, 248)]).2 hBs,
+    hPar, hpl_mem,
+    (hl "si" (by simp)).trans hsi,
+    (hl "pl" (by simp)).trans hpl,
+    (hl "parent" (by simp)).trans hpar⟩
+
+theorem ra_entry_dec_pl {K : Nat} {body : ProgHOL 64}
+    (hbody : TerminatingProgBoundedOn RA_Pl body K) :
+    TerminatingProgBoundedOn InputReadyStrong
+      (.dec (ofString "pl") .one
+        (.load .one (.op .add [.var .local (ofString "si"), .const 0#64])) body) K := by
+  refine dec_eval_on (P := InputReadyStrong) (Q := RA_Pl) (ofString "pl") .one
+    (.load .one (.op .add [.var .local (ofString "si"), .const 0#64])) ?_ hbody
+  intro F s v hIR hev
+  obtain ⟨S, Nd, hIA⟩ := (inputAtStrong_iff_with s (locN s "si")).1 hIR
+  obtain ⟨a, w_pl, ha, rfl, hpl_mem, _⟩ := evalAt_load_one_word hIA.1.1.1 hev
+  obtain ⟨w_si, w0, hsi_ev, hw0_ev, ha_eq⟩ := evalAt_add2_words ha
+  have hlsi : s.locals.lookup (ofString "si") = some (.val (.word w_si)) := by
+    simpa [evalAt, evalHOLExact] using hsi_ev
+  have hw0 : w0 = 0#64 := by
+    simp only [evalAt, evalHOLExact, Option.some.injEq, ValueHOL.val.injEq,
+      HolWordLab.word.injEq] at hw0_ev
+    exact hw0_ev.symm
+  subst hw0
+  have ha_si : a = w_si := by rw [ha_eq, BitVec.add_zero]
+  have hloc_si : locN s "si" = w_si.toNat := by simp [locN, hlsi]
+  rw [hloc_si] at hIA
+  rw [ha_si] at hpl_mem
+  set s1 := setVarHOLFinite (ofString "pl") (.val (.word w_pl)) s
+  exact ⟨w_si, w_pl, S, Nd,
+    (inputAtStrongWith_with_locals s _ s.clock S Nd w_si.toNat).2 hIA,
+    hpl_mem,
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "pl" ≠ ofString "si" by decide, hlsi],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+
+theorem decCallResumeOn_validate_headers
+    (wvh : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeadersStrong (ofString "validate_headers")) :
+    DecCallResumeOn RA_Pl RA_Vh (ofString "vh") (ofString "validate_headers")
+      [.load .one (.op .add [.var .local (ofString "si"), .const 72#64]),
+       .load .one (.op .add [.var .local (ofString "si"), .const 80#64])] := by
+  intro F state values body callee ret value post hcode hP hargs hl hrun
+  obtain ⟨w_si, w_pl, S, Nd, hIA, hpl_mem, hlsi, hlpl⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hsi_rc := hIA.2.1 (w_si.toNat, 96) (by simp [runAttemptCells])
+  have hsi_in : Inside (w_si.toNat, 96) sourceBase (globN state "heap_ptr") := hsi_rc.2.1
+  have hsi_lt : w_si.toNat + 96 ≤ 2 ^ 64 := by unfold Inside at hsi_in; omega
+  have hargs_ex := hargs
+  rw [evalListHOLFinite_eq_toExact] at hargs_ex
+  simp only [evalListHOLExact] at hargs_ex
+  rcases he1 : @evalHOLExact 64 F _ state.toExact
+      (fun a => Classical.propDecidable (state.memaddrs a))
+      (.load .one (.op .add [.var .local (ofString "si"), .const 72#64])) with _ | v1
+  · rw [he1] at hargs_ex; simp at hargs_ex
+  · rw [he1] at hargs_ex
+    rcases he2 : @evalHOLExact 64 F _ state.toExact
+        (fun a => Classical.propDecidable (state.memaddrs a))
+        (.load .one (.op .add [.var .local (ofString "si"), .const 80#64])) with _ | v2
+    · rw [he2] at hargs_ex; simp at hargs_ex
+    · rw [he2] at hargs_ex
+      simp only [Option.some.injEq] at hargs_ex
+      subst values
+      obtain ⟨a2, w_n, ha2, rfl, hn_mem, _⟩ := evalAt_load_one_word hAs.1 he2
+      obtain ⟨w1, w80, hw1, hw80, ha2_eq⟩ := evalAt_add2_words ha2
+      have hw1_eq : w1 = w_si := by
+        have hl1 : state.locals.lookup (ofString "si") = some (.val (.word w1)) := by
+          simpa [evalAt, evalHOLExact] using hw1
+        exact (by simpa [hlsi] using hl1 : w_si = w1).symm
+      have hw80_eq : w80 = 80#64 := by
+        simp only [evalAt, evalHOLExact, Option.some.injEq, ValueHOL.val.injEq,
+          HolWordLab.word.injEq] at hw80
+        exact hw80.symm
+      subst w1; subst w80
+      have ha2_nat : a2.toNat = w_si.toNat + 80 := by
+        rw [ha2_eq, BitVec.toNat_add]
+        change (w_si.toNat + 80) % 2 ^ 64 = w_si.toNat + 80
+        exact Nat.mod_eq_of_lt (by omega)
+      rw [ha2_nat] at hn_mem
+      have hpc := callee_param_two state (ofString "validate_headers")
+        (ofString "arr") (ofString "n") .one .one _ _
+        (by rw [hcode]; exact lookup_validate_headers_fn)
+        (.load .one (.op .add [.var .local (ofString "si"), .const 72#64]))
+        (.load .one (.op .add [.var .local (ofString "si"), .const 80#64]))
+        v1 (.val (.word w_n)) [v1, .val (.word w_n)] body callee ret he1 he2 hargs hl
+      set entry := callEntryStateHOLFinite state callee
+      have hloc_n : locN entry "n" = w_n.toNat := by
+        simp [entry, locN, callEntryStateHOLFinite, hpc.2]
+      have hstep := FunSpec.at_lookup wvh state hcode [v1, .val (.word w_n)] body callee ret hl
+        (localsFree_worldOK state callee (state.clock - 1) hW) (by rw [hrun]; simp)
+      rw [hrun] at hstep; dsimp only at hstep
+      have hws := hstep (Or.inl ⟨value, rfl⟩)
+      have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+        (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+      have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry (allBlocksGood_nil entry S Nd) ("keccak_pad", 136) (by decide) (by decide) (by decide)
+      have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry (allBlocksGood_nil entry S Nd) ("keccak_st", 200) (by decide) (by decide) (by decide)
+      obtain ⟨S', Nd', hIA_post, _, _, hu_rc, _, _, _, hQ⟩ :=
+        worldStep_preserves_strongAndBlocks hIA_entry (allBlocksGood_nil entry S Nd) hws
+          (fun j hj => by
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+            rcases hj with rfl | rfl
+            · exact hc1.1
+            · exact hc2.1)
+          (fun j hj k hk => by
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+            rcases hj with rfl | rfl
+            · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+            · exact hc2.2.1 _ (by simp [bufferRegion]) k hk)
+          (fun c hc j hj => by
+            simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+            rcases hj with rfl | rfl
+            · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+            · exact hc2.2.2.1 c hc _ (by simp [bufferRegion]))
+          (fun b hb _ _ => nomatch hb)
+      obtain ⟨a, b, rfl, ha8, hWok, hIn, _, hh⟩ := hQ value rfl
+      rw [hloc_n] at hWok hIn hh
+      have hsi_unhit := hu_rc (w_si.toNat, 96) (by simp [runAttemptCells])
+      have hmem_si0 : memW post w_si.toNat = memW state w_si.toNat :=
+        R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit hsi_unhit hsi_rc.1
+          hsi_lt ⟨by omega, by omega⟩
+      have hmem_si80 : memW post (w_si.toNat + 80) = memW state (w_si.toNat + 80) :=
+        R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit hsi_unhit (by have := hsi_rc.1; omega)
+          hsi_lt ⟨by omega, by omega⟩
+      have hn_post : w_n.toNat = memW post (w_si.toNat + 80) := by omega
+      rw [hn_post] at hWok hIn hh
+      set res := setVarHOLFinite (ofString "vh") (.rStruct [.val (.word a), .val (.word b)])
+        { post with locals := state.locals }
+      refine ⟨w_si, w_pl, a, b, S', Nd',
+        (inputAtStrongWith_with_locals post res.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+        by change w_pl.toNat = memW post w_si.toNat; omega,
+        ha8, hWok, hIn, hh, ?_, ?_, ?_⟩
+      · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlsi,
+          show ofString "vh" ≠ ofString "si" by decide]
+      · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpl,
+          show ofString "vh" ≠ ofString "pl" by decide]
+      · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem ra_dec_nh {K : Nat} {body : ProgHOL 64}
+    (hbody : TerminatingProgBoundedOn (RA_Nh false) body K) :
+    TerminatingProgBoundedOn RA_Vh
+      (.dec (ofString "nh") .one
+        (.load .one (.op .add [.var .local (ofString "si"), .const 80#64])) body) K := by
+  refine dec_eval_on (P := RA_Vh) (Q := RA_Nh false) (ofString "nh") .one
+    (.load .one (.op .add [.var .local (ofString "si"), .const 80#64])) ?_ hbody
+  intro F s v hP hev
+  obtain ⟨w_si, w_pl, a, b, S, Nd, hIA, hpl_mem, ha8, hWok, hIn, hh, hlsi, hlpl, hlvh⟩ := hP
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
+  have hsi_in := (hIA.2.1 (w_si.toNat, 96) (by simp [runAttemptCells])).2.1
+  obtain ⟨addr, w_nh, ha, rfl, hnh_mem, _⟩ := evalAt_load_one_word hIA.1.1.1 hev
+  obtain ⟨w1, w80, hw1, hw80, ha_eq⟩ := evalAt_add2_words ha
+  have hw1_eq : w1 = w_si := by
+    have hl1 : s.locals.lookup (ofString "si") = some (.val (.word w1)) := by
+      simpa [evalAt, evalHOLExact] using hw1
+    exact (by simpa [hlsi] using hl1 : w_si = w1).symm
+  have hw80_eq : w80 = 80#64 := by
+    simp only [evalAt, evalHOLExact, Option.some.injEq, ValueHOL.val.injEq,
+      HolWordLab.word.injEq] at hw80
+    exact hw80.symm
+  subst w1; subst w80
+  have ha_nat : addr.toNat = w_si.toNat + 80 := by
+    rw [ha_eq, BitVec.toNat_add]
+    change (w_si.toNat + 80) % 2 ^ 64 = w_si.toNat + 80
+    exact Nat.mod_eq_of_lt (by unfold Inside at hsi_in; omega)
+  rw [ha_nat] at hnh_mem
+  rw [← hnh_mem] at hWok hIn hh
+  set s1 := setVarHOLFinite (ofString "nh") (.val (.word w_nh)) s
+  exact ⟨w_si, w_pl, a, b, w_nh, S, Nd,
+    (inputAtStrongWith_with_locals s _ s.clock S Nd w_si.toNat).2 hIA,
+    hpl_mem, hnh_mem, (fun h => by cases h), ha8, hWok, hIn, hh,
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "nh" ≠ ofString "si" by decide, hlsi],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "nh" ≠ ofString "pl" by decide, hlpl],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "nh" ≠ ofString "vh" by decide, hlvh],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩
+
+theorem hoare_ite_nh_zero :
+    Hoare (RA_Nh false)
+      (.ite (.cmp .equal (.var .local (ofString "nh")) (.const 0#64))
+        (.raise (ofString "BlockErr") (.const 3#64))
+        .skip)
+      (fun r t => r = none → RA_Nh true t) := by
+  apply Hoare.ite_fall
+  · exact ⟨fun s _ _ _ hr => absurd hr (raise_ne_none s _ _)⟩
+  · refine Hoare.skip fun s ⟨hP, hcond⟩ _ => ?_
+    obtain ⟨w_si, w_pl, a, b, w_nh, S, Nd, hIA, hpl_mem, hnh_mem, _, ha8, hWok, hIn, hh,
+      hlsi, hlpl, hlvh, hlnh⟩ := hP
+    have hpos : 0 < w_nh.toNat := by
+      obtain ⟨w1, w2, hw1, hw2, hcw⟩ := evalAt_cmp s .equal
+        (.var .local (ofString "nh")) (.const 0#64) 0#64 hcond
+      have hw1_eq : w1 = w_nh := by
+        have hl1 : s.locals.lookup (ofString "nh") = some (.val (.word w1)) := by
+          simpa [evalAt, evalHOLExact] using hw1
+        exact (by simpa [hlnh] using hl1 : w_nh = w1).symm
+      have hw2_eq : w2 = 0#64 := by
+        simp only [evalAt, evalHOLExact, Option.some.injEq, ValueHOL.val.injEq,
+          HolWordLab.word.injEq] at hw2
+        exact hw2.symm
+      subst w1; subst w2
+      have hne : w_nh ≠ 0#64 := by
+        intro heq; subst heq
+        simp [wordCmpHOL] at hcw
+      have hne_nat : w_nh.toNat ≠ 0 := fun hz => hne (BitVec.eq_of_toNat_eq hz)
+      omega
+    exact ⟨w_si, w_pl, a, b, w_nh, S, Nd, hIA, hpl_mem, hnh_mem, fun _ => hpos,
+      ha8, hWok, hIn, hh, hlsi, hlpl, hlvh, hlnh⟩
+
+theorem ra_dec_parent {K : Nat} {body : ProgHOL 64}
+    (hbody : TerminatingProgBoundedOn RA_ParentPre body K) :
+    TerminatingProgBoundedOn (RA_Nh true)
+      (.dec (ofString "parent") .one
+        (.load .one
+          (.op .add
+            [.rfield 0 (.var .local (ofString "vh")),
+             .panop .mul
+               [.op .sub [.var .local (ofString "nh"), .const 1#64],
+                .const 8#64]])) body) K := by
+  refine dec_eval_on (P := RA_Nh true) (Q := RA_ParentPre) (ofString "parent") .one
+    (.load .one
+      (.op .add
+        [.rfield 0 (.var .local (ofString "vh")),
+         .panop .mul
+           [.op .sub [.var .local (ofString "nh"), .const 1#64],
+            .const 8#64]])) ?_ hbody
+  intro F s v hP hev
+  obtain ⟨w_si, w_pl, a, b, w_nh, S, Nd, hIA, hpl_mem, hnh_mem, hpos_f,
+    ha8, hWok, hIn, hh, hlsi, hlpl, hlvh, hlnh⟩ := hP
+  have hpos : 0 < w_nh.toNat := hpos_f rfl
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
+  obtain ⟨addr, w_parent, haddr, rfl, hpar_mem, _⟩ := evalAt_load_one_word hIA.1.1.1 hev
+  have hsub_nat : (w_nh - 1#64).toNat = w_nh.toNat - 1 := by
+    have h1 : (1#64 : BitVec 64).toNat = 1 := rfl
+    rw [BitVec.toNat_sub_of_le]
+    · omega
+    · rw [BitVec.le_def]; omega
+  have hbound : a.toNat + 8 * w_nh.toNat ≤ 2 ^ 64 := by
+    unfold Inside at hIn; omega
+  have hmul_nat : ((w_nh - 1#64) * 8#64).toNat = 8 * (w_nh.toNat - 1) := by
+    have h8 : (8#64 : BitVec 64).toNat = 8 := rfl
+    rw [BitVec.toNat_mul, hsub_nat, h8]
+    change ((w_nh.toNat - 1) * 8) % 2 ^ 64 = 8 * (w_nh.toNat - 1)
+    rw [Nat.mul_comm, Nat.mod_eq_of_lt (by omega)]
+  have haddr_expected : evalAt s
+      (.op .add
+        [.rfield 0 (.var .local (ofString "vh")),
+         .panop .mul
+           [.op .sub [.var .local (ofString "nh"), .const 1#64],
+            .const 8#64]]) =
+      some (.val (.word (a + (w_nh - 1#64) * 8#64))) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlvh, hlnh,
+      valueIsWord, valueWord, panOpHOL, wordOpHOL, wordOp, BitVec.add_zero]
+  rw [haddr_expected] at haddr
+  injection haddr with haddr'; injection haddr' with haddr''; injection haddr'' with haddr_eq
+  subst addr
+  have haddr_nat : (a + (w_nh - 1#64) * 8#64).toNat = a.toNat + 8 * (w_nh.toNat - 1) := by
+    rw [BitVec.toNat_add, hmul_nat]
+    exact Nat.mod_eq_of_lt (by omega)
+  rw [haddr_nat] at hpar_mem
+  obtain ⟨hPar_h, hIn_h, hDisj_h⟩ := hh (w_nh.toNat - 1) (by omega)
+  rw [← hpar_mem] at hPar_h hIn_h hDisj_h
+  have hBs : AllBlocksGood s S Nd [(w_parent.toNat, 248)] := by
+    intro blk hblk
+    rw [List.mem_singleton.1 hblk]
+    exact ⟨hPar_h.1.1, show 248 % 8 = 0 by decide, hIn_h, hPar_h.1, hDisj_h⟩
+  set s1 := setVarHOLFinite (ofString "parent") (.val (.word w_parent)) s
+  exact ⟨w_si, w_pl, w_parent, a, b, w_nh, S, Nd,
+    (inputAtStrongWith_with_locals s _ s.clock S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s _ s.clock S Nd [(w_parent.toNat, 248)]).2 hBs,
+    hPar_h, hpl_mem,
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "parent" ≠ ofString "si" by decide, hlsi],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "parent" ≠ ofString "pl" by decide, hlpl],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "parent" ≠ ofString "vh" by decide, hlvh],
+    by simp [s1, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+         show ofString "parent" ≠ ofString "nh" by decide, hlnh]⟩
+
+theorem hoare_assign_block_hashes :
+    Hoare RA_ParentPre
+      (.assign .global (ofString "block_hashes") (.rfield 1 (.var .local (ofString "vh"))))
+      (fun r t => r = none → RA_ParentPre t) := by
+  apply Hoare.assign_fall
+  intro F s v hP hev
+  obtain ⟨w_si, w_pl, w_parent, a, b, w_nh, S, Nd, hIA, hBs, hPar, hpl_mem,
+    hlsi, hlpl, hlpar, hlvh, hlnh⟩ := hP
+  have hv : v = .val (.word b) := by
+    have hexp : evalAt s (.rfield 1 (.var .local (ofString "vh"))) = some (.val (.word b)) := by
+      simp [evalAt, evalHOLExact, hlvh]
+    rw [hexp] at hev; exact Option.some.inj hev |>.symm
+  subst hv
+  obtain ⟨hIA', hBs', _⟩ := strongAndBlocks_setGlobal_untracked (gname := ofString "block_hashes")
+    (w := b) (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide) (by decide) hIA hBs
+  exact ⟨w_si, w_pl, w_parent, a, b, w_nh, S, Nd, hIA', hBs', hPar, hpl_mem,
+    hlsi, hlpl, hlpar, hlvh, hlnh⟩
+
+theorem hoare_assign_block_hashes_n :
+    Hoare RA_ParentPre
+      (.assign .global (ofString "block_hashes_n") (.var .local (ofString "nh")))
+      (fun r t => r = none → RA_Parent t) := by
+  apply Hoare.assign_fall
+  intro F s v hP hev
+  obtain ⟨w_si, w_pl, w_parent, a, b, w_nh, S, Nd, hIA, hBs, hPar, hpl_mem,
+    hlsi, hlpl, hlpar, _, hlnh⟩ := hP
+  have hv : v = .val (.word w_nh) := by
+    have hexp : evalAt s (.var .local (ofString "nh")) = some (.val (.word w_nh)) := by
+      simp [evalAt, evalHOLExact, hlnh]
+    rw [hexp] at hev; exact Option.some.inj hev |>.symm
+  subst hv
+  obtain ⟨hIA', hBs', _⟩ := strongAndBlocks_setGlobal_untracked (gname := ofString "block_hashes_n")
+    (w := w_nh) (by decide) (by decide) (by decide) (by decide) (by decide)
+    (by decide) (by decide) (by decide) hIA hBs
+  exact ⟨w_si, w_pl, w_parent, S, Nd, hIA', hBs', hPar, hpl_mem, hlsi, hlpl, hlpar⟩
+
+theorem decCallResumeOn_check_gas_limit
+    (rocgl : ReadOnlyFn (ofString "check_gas_limit"))
+    (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn RA_Parent RA_Parent
+      (ofString "gas_ok") (ofString "check_gas_limit") arguments :=
+  ReadOnlyFn.resumeOn localsOnly_ra_parent (fun _ h => ra_parent_guestInv h)
+    rocgl (ofString "gas_ok")
+    (by intro n hn; simp at hn; rcases hn with rfl | rfl | rfl <;> decide) arguments
+
+def RA_Nodedb {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent w_nodedb : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent)) ∧
+    s.locals.lookup (ofString "nodedb") = some (.val (.word w_nodedb))
+
+def RA_Codedb {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent w_nodedb w_codedb : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    HtabWF s w_codedb.toNat ∧
+    hdr s w_codedb.toNat 0 = 32 ∧
+    (∀ i ∈ htabFootprint s w_codedb.toNat, Inside i sourceBase (globN s "heap_ptr")) ∧
+    IvlsDisj (htabFootprint s w_codedb.toNat) (worldOwned s S Nd) ∧
+    IvlsDisj (runAttemptCells s w_si.toNat) (htabFootprint s w_codedb.toNat) ∧
+    IvlsDisj [(w_parent.toNat, 248)] (htabFootprint s w_codedb.toNat) ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent)) ∧
+    s.locals.lookup (ofString "nodedb") = some (.val (.word w_nodedb)) ∧
+    s.locals.lookup (ofString "codedb") = some (.val (.word w_codedb))
+
+def RunAttemptPreScan {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w_si w_pl w_parent : BitVec 64, ∃ S Nd : List Nat,
+    InputAtStrongWith s S Nd w_si.toNat ∧
+    AllBlocksGood s S Nd [(w_parent.toNat, 248)] ∧
+    HeaderAt s w_parent.toNat ∧
+    w_pl.toNat = memW s w_si.toNat ∧
+    globN s "journal_cap" ≠ 0 ∧
+    s.locals.lookup (ofString "si") = some (.val (.word w_si)) ∧
+    s.locals.lookup (ofString "pl") = some (.val (.word w_pl)) ∧
+    s.locals.lookup (ofString "parent") = some (.val (.word w_parent))
+
+theorem ra_nodedb_guestInv {F : Type} {s : PanSemStateFiniteExact 64 F} (h : RA_Nodedb s) :
+    GuestInv s := by
+  obtain ⟨_, _, _, _, _, _, hIA, _⟩ := h; exact hIA.1.1.1
+
+theorem ra_codedb_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F} (h : RA_Codedb s) :
+    WorldOK s := by
+  obtain ⟨_, _, _, _, _, S, Nd, hIA, _⟩ := h
+  exact ⟨hIA.1.1, S, (worldTyped_iff_with s S).2 ⟨Nd, hIA.1.2.1⟩⟩
+
+theorem runAttemptPreScan_postScan {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : RunAttemptPreScan s) : RunAttemptPostScan s := by
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, _, hjc, hsi, hpl, hpar⟩ := h
+  exact ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hjc, hsi, hpl, hpar⟩
+
+theorem localsOnly_runAttemptPreScan : LocalsOnly ["si", "pl", "parent"] RunAttemptPreScan := by
+  intro F s locals k hl hP
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hpl_mem, hjc, hsi, hpl, hpar⟩ := hP
+  exact ⟨w_si, w_pl, w_parent, S, Nd,
+    (inputAtStrongWith_with_locals s locals k S Nd w_si.toNat).2 hIA,
+    (allBlocksGood_with_locals s locals k S Nd [(w_parent.toNat, 248)]).2 hBs,
+    hPar, hpl_mem, hjc,
+    (hl "si" (by simp)).trans hsi,
+    (hl "pl" (by simp)).trans hpl,
+    (hl "parent" (by simp)).trans hpar⟩
+
+theorem decCallResumeOn_nodedb_first
+    (wnb : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build"))
+    (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn RA_Parent RA_Nodedb
+      (ofString "nodedb") (ofString "nodedb_build") arguments := by
+  intro F state values body callee ret value post hcode hP _ hl hrun
+  obtain ⟨w_si, w_pl, w_parent, S, Nd, hIA, hBs, hPar, hpl_mem, hlsi, hlpl, hlpar⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hsi_rc := hIA.2.1 (w_si.toNat, 96) (by simp [runAttemptCells])
+  have hsi_in := hsi_rc.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  set entry := callEntryStateHOLFinite state callee
+  have hstep := FunSpec.at_lookup wnb state hcode values body callee ret hl
+    (localsFree_worldOK state callee (state.clock - 1) hW) (by rw [hrun]; simp)
+  rw [hrun] at hstep; dsimp only at hstep
+  have hws := hstep (Or.inl ⟨value, rfl⟩)
+  have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+    (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+  have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248)] :=
+    (allBlocksGood_with_locals state callee (state.clock - 1) S Nd [(w_parent.toNat, 248)]).2 hBs
+  have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_pad", 136) (by decide) (by decide) (by decide)
+  have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_st", 200) (by decide) (by decide) (by decide)
+  have hc3 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("mpt_hash_scratch", 40) (by decide) (by decide) (by decide)
+  obtain ⟨S', Nd', hIA_post, hBs_post, _, hu_rc, hu_bs, _, _, hQ⟩ :=
+    worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+      (fun j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.1
+        · exact hc2.1
+        · exact hc3.1)
+      (fun j hj k hk => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc2.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc3.2.1 _ (by simp [bufferRegion]) k hk)
+      (fun c hc j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc2.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc3.2.2.1 c hc _ (by simp [bufferRegion]))
+      (fun b hb j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc2.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc3.2.2.2 b hb _ (by simp [bufferRegion]))
+  obtain ⟨w_nodedb, rfl, _⟩ := hQ value rfl
+  have hPar_post : HeaderAt post w_parent.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+      (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+  have hmem_si0 : memW post w_si.toNat = memW state w_si.toNat :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+      (hu_rc (w_si.toNat, 96) (by simp [runAttemptCells])) hsi_rc.1
+      (by unfold Inside at hsi_in; omega) ⟨by omega, by omega⟩
+  set res := setVarHOLFinite (ofString "nodedb") (.val (.word w_nodedb))
+    { post with locals := state.locals }
+  refine ⟨w_si, w_pl, w_parent, w_nodedb, S', Nd',
+    (inputAtStrongWith_with_locals post res.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+    (allBlocksGood_with_locals post res.locals post.clock S' Nd' [(w_parent.toNat, 248)]).2 hBs_post,
+    hPar_post,
+    by change w_pl.toNat = memW post w_si.toNat; omega,
+    ?_, ?_, ?_, ?_⟩
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlsi,
+      show ofString "nodedb" ≠ ofString "si" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpl,
+      show ofString "nodedb" ≠ ofString "pl" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpar,
+      show ofString "nodedb" ≠ ofString "parent" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem decCallResumeOn_nodedb_codedb
+    (wnb : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build"))
+    (arguments : List (ExpHOL 64)) :
+    DecCallResumeOn RA_Nodedb RA_Codedb
+      (ofString "codedb") (ofString "nodedb_build") arguments := by
+  intro F state values body callee ret value post hcode hP _ hl hrun
+  obtain ⟨w_si, w_pl, w_parent, w_nodedb, S, Nd, hIA, hBs, hPar, hpl_mem,
+    hlsi, hlpl, hlpar, hlnb⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have hW : WorldOK state := ⟨hAs, S, (worldTyped_iff_with state S).2 ⟨Nd, hIA.1.2.1⟩⟩
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hsi_rc := hIA.2.1 (w_si.toNat, 96) (by simp [runAttemptCells])
+  have hsi_in := hsi_rc.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  set entry := callEntryStateHOLFinite state callee
+  have hstep := FunSpec.at_lookup wnb state hcode values body callee ret hl
+    (localsFree_worldOK state callee (state.clock - 1) hW) (by rw [hrun]; simp)
+  rw [hrun] at hstep; dsimp only at hstep
+  have hws := hstep (Or.inl ⟨value, rfl⟩)
+  have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+    (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+  have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248)] :=
+    (allBlocksGood_with_locals state callee (state.clock - 1) S Nd [(w_parent.toNat, 248)]).2 hBs
+  have hc1 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_pad", 136) (by decide) (by decide) (by decide)
+  have hc2 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("keccak_st", 200) (by decide) (by decide) (by decide)
+  have hc3 := strongAndBlocks_bufferRegion_conditions hIA_entry hBs_entry ("mpt_hash_scratch", 40) (by decide) (by decide) (by decide)
+  obtain ⟨S', Nd', hIA_post, hBs_post, _, hu_rc, hu_bs, _, _, hQ⟩ :=
+    worldStep_preserves_strongAndBlocks hIA_entry hBs_entry hws
+      (fun j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.1
+        · exact hc2.1
+        · exact hc3.1)
+      (fun j hj k hk => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc2.2.1 _ (by simp [bufferRegion]) k hk
+        · exact hc3.2.1 _ (by simp [bufferRegion]) k hk)
+      (fun c hc j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc2.2.2.1 c hc _ (by simp [bufferRegion])
+        · exact hc3.2.2.1 c hc _ (by simp [bufferRegion]))
+      (fun b hb j hj => by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hj
+        rcases hj with rfl | rfl | rfl
+        · exact hc1.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc2.2.2.2 b hb _ (by simp [bufferRegion])
+        · exact hc3.2.2.2 b hb _ (by simp [bufferRegion]))
+  obtain ⟨w_codedb, rfl, hWF, hhdr32, hfp_in, hfp_ow⟩ := hQ value rfl
+  have hrc_eq : runAttemptCells post w_si.toNat = runAttemptCells entry w_si.toNat :=
+    runAttemptCells_eq_of_unhit (inputAtStrongWith_strong hIA_entry) hu_rc
+  have hsb_le : sourceBase ≤ globN entry "heap_ptr" := hAs.2.1
+  have hfp_sb : ∀ i ∈ htabFootprint post w_codedb.toNat, Inside i sourceBase (globN post "heap_ptr") :=
+    fun i hi => ⟨le_trans hsb_le (hfp_in i hi).1, (hfp_in i hi).2⟩
+  have hrc_fp : IvlsDisj (runAttemptCells post w_si.toNat) (htabFootprint post w_codedb.toNat) := by
+    rw [hrc_eq]
+    intro c hc i hi
+    have hc_in : Inside c sourceBase (globN entry "heap_ptr") := (hIA.2.1 c hc).2.1
+    have hi_in := hfp_in i hi
+    unfold Inside at hc_in hi_in
+    unfold Disj; omega
+  have hpar_fp : IvlsDisj [(w_parent.toNat, 248)] (htabFootprint post w_codedb.toNat) := by
+    intro b hb i hi
+    rw [List.mem_singleton.1 hb]
+    have hb_in : Inside (w_parent.toNat, 248) sourceBase (globN entry "heap_ptr") := hpar_in
+    have hi_in := hfp_in i hi
+    unfold Inside at hb_in hi_in
+    unfold Disj; omega
+  have hPar_post : HeaderAt post w_parent.toNat :=
+    headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+      (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+  have hmem_si0 : memW post w_si.toNat = memW state w_si.toNat :=
+    R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+      (hu_rc (w_si.toNat, 96) (by simp [runAttemptCells])) hsi_rc.1
+      (by unfold Inside at hsi_in; omega) ⟨by omega, by omega⟩
+  set res := setVarHOLFinite (ofString "codedb") (.val (.word w_codedb))
+    { post with locals := state.locals }
+  refine ⟨w_si, w_pl, w_parent, w_nodedb, w_codedb, S', Nd',
+    (inputAtStrongWith_with_locals post res.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+    (allBlocksGood_with_locals post res.locals post.clock S' Nd' [(w_parent.toNat, 248)]).2 hBs_post,
+    hPar_post,
+    by change w_pl.toNat = memW post w_si.toNat; omega,
+    (htabWF_with_locals post res.locals post.clock w_codedb.toNat).2 hWF,
+    hhdr32, hfp_sb, hfp_ow, hrc_fp, hpar_fp,
+    ?_, ?_, ?_, ?_, ?_⟩
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlsi,
+      show ofString "codedb" ≠ ofString "si" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpl,
+      show ofString "codedb" ≠ ofString "pl" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlpar,
+      show ofString "codedb" ≠ ofString "parent" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hlnb,
+      show ofString "codedb" ≠ ofString "nodedb" by decide]
+  · simp [res, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem hoare_state_init
+    (wsi : WorldReturnsIn StateInitReady
+      (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
+      ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
+      [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetStateInit (ofString "state_init")) :
+    Hoare RA_Codedb
+      (.call (some (none, none)) (ofString "state_init")
+        [.var .local (ofString "nodedb"),
+         .load .one (.op .add [.var .local (ofString "parent"), .const 32#64]),
+         .var .local (ofString "codedb")])
+      (fun r t => r = none → RunAttemptPreScan t) := by
+  refine ⟨fun {F} state hcode hP _ hr => ?_⟩
+  rcases hcall : evaluateHOLFiniteState state
+      (.call (some (none, none)) (ofString "state_init")
+        [.var .local (ofString "nodedb"),
+         .load .one (.op .add [.var .local (ofString "parent"), .const 32#64]),
+         .var .local (ofString "codedb")]) with ⟨cres, cpost⟩
+  have hr' : cres = none := by rw [hcall] at hr; exact hr
+  subst hr'
+  obtain ⟨w_si, w_pl, w_parent, w_nodedb, w_codedb, S, Nd, hIA, hBs, hPar, hpl_mem,
+    hWF, hhdr32, hfp_sb, hfp_ow, hrc_fp, hpar_fp, hlsi, hlpl, hlpar, hlnb, hlcb⟩ := hP
+  have hAs : ArenaReady state := hIA.1.1
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN state "heap_ptr" ≤ heapLimit := hAs.2.2.1
+  have hsi_rc := hIA.2.1 (w_si.toNat, 96) (by simp [runAttemptCells])
+  have hsi_in := hsi_rc.2.1
+  have hpar_in := (hBs (w_parent.toNat, 248) (by simp)).2.2.1
+  rw [evaluateHOLFiniteState_call] at hcall
+  rcases hargs : evalListHOLFinite state (h := fun a => Classical.propDecidable (state.memaddrs a))
+      [.var .local (ofString "nodedb"),
+       .load .one (.op .add [.var .local (ofString "parent"), .const 32#64]),
+       .var .local (ofString "codedb")] with _ | values
+  · rw [hargs] at hcall; simp at hcall
+  · rw [hargs] at hcall; dsimp only at hcall
+    rcases hl : lookupCodeHOLFinite state.code.lookup (ofString "state_init") values
+      with _ | ⟨body, callee, ret⟩
+    · rw [hl] at hcall; simp at hcall
+    · rw [hl] at hcall; dsimp only at hcall
+      split_ifs at hcall with hz
+      · simp at hcall
+      · rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite state callee) body with ⟨bres, post⟩
+        rw [hrun] at hcall
+        cases bres with
+        | none => simp at hcall
+        | some br =>
+          cases br with
+          | returned v =>
+            dsimp only at hcall
+            split_ifs at hcall with hsh
+            · obtain ⟨_, hpost_eq⟩ := Prod.mk.inj hcall
+              have hargs_ex := hargs
+              rw [evalListHOLFinite_eq_toExact] at hargs_ex
+              simp only [evalListHOLExact] at hargs_ex
+              have he1 : evalAt state (.var .local (ofString "nodedb")) =
+                  some (.val (.word w_nodedb)) := by
+                simpa [evalAt, evalHOLExact] using hlnb
+              have he3 : evalAt state (.var .local (ofString "codedb")) =
+                  some (.val (.word w_codedb)) := by
+                simpa [evalAt, evalHOLExact] using hlcb
+              rw [show @evalHOLExact 64 F _ state.toExact
+                    (fun a => Classical.propDecidable (state.memaddrs a))
+                    (.var .local (ofString "nodedb")) = some (.val (.word w_nodedb)) from he1] at hargs_ex
+              rcases he2 : @evalHOLExact 64 F _ state.toExact
+                  (fun a => Classical.propDecidable (state.memaddrs a))
+                  (.load .one (.op .add [.var .local (ofString "parent"), .const 32#64]))
+                with _ | v2
+              · rw [he2] at hargs_ex; simp at hargs_ex
+              · have hpc := callee_param_three state (ofString "state_init")
+                  (ofString "nodedb") (ofString "state_root") (ofString "codedb")
+                  .one .one .one _ _ (by rw [hcode]; exact lookup_state_init_fn)
+                  (.var .local (ofString "nodedb"))
+                  (.load .one (.op .add [.var .local (ofString "parent"), .const 32#64]))
+                  (.var .local (ofString "codedb"))
+                  (.val (.word w_nodedb)) v2 (.val (.word w_codedb))
+                  values body callee ret he1 he2 he3 hargs hl
+                set entry := callEntryStateHOLFinite state callee
+                have hloc_cb : locN entry "codedb" = w_codedb.toNat := by
+                  simp [entry, locN, callEntryStateHOLFinite, hpc.2.2]
+                have hWF_entry : HtabWF entry w_codedb.toNat :=
+                  (htabWF_with_locals state callee (state.clock - 1) w_codedb.toNat).2 hWF
+                have hSIR : StateInitReady entry := by
+                  refine ⟨localsFree_arenaReady state callee (state.clock - 1) hAs, S, Nd,
+                    (worldTypedWith_with_locals state callee (state.clock - 1) S Nd).2 hIA.1.2.1,
+                    Or.inr ?_⟩
+                  rw [hloc_cb]
+                  exact ⟨hWF_entry, hhdr32, hfp_sb, hfp_ow⟩
+                have hstep := FunSpec.at_lookup wsi state hcode values body callee ret hl
+                  hSIR (by rw [hrun]; simp)
+                rw [hrun] at hstep; dsimp only at hstep
+                have hws := hstep ⟨v, rfl⟩
+                have hIA_entry : InputAtStrongWith entry S Nd w_si.toNat :=
+                  (inputAtStrongWith_with_locals state callee (state.clock - 1) S Nd w_si.toNat).2 hIA
+                have hBs_entry : AllBlocksGood entry S Nd [(w_parent.toNat, 248)] :=
+                  (allBlocksGood_with_locals state callee (state.clock - 1) S Nd [(w_parent.toNat, 248)]).2 hBs
+                have hIA_cons : InputAtStrongWith entry (w_codedb.toNat :: S) Nd w_si.toNat :=
+                  inputAtStrongWith_cons_fresh hIA_entry hWF_entry hfp_sb hfp_ow hrc_fp
+                have hBs_cons : AllBlocksGood entry (w_codedb.toNat :: S) Nd [(w_parent.toNat, 248)] :=
+                  allBlocksGood_cons_fresh hBs_entry hpar_fp
+                obtain ⟨S', Nd', hIA_post, hBs_post, _, hu_rc, hu_bs, _, _, hQ⟩ :=
+                  worldStepIn_preserves_strongAndBlocks hIA_cons hBs_cons hws
+                    (fun t ht => by
+                      split_ifs at ht with hz_cb
+                      · nomatch ht
+                      · rw [List.mem_singleton.1 ht, hloc_cb]
+                        exact List.mem_cons_self)
+                    (fun _ hj => nomatch hj)
+                    (fun _ hj => nomatch hj)
+                    (fun _ _ _ hj => nomatch hj)
+                    (fun _ _ _ hj => nomatch hj)
+                have hjc_post : globN post "journal_cap" ≠ 0 := hQ v rfl
+                have hPar_post : HeaderAt post w_parent.toNat :=
+                  headerAt_of_unhit hAs.1 hIA_post.1.1.1 (by unfold Inside at hpar_in; omega)
+                    (hu_bs (w_parent.toNat, 248) (by simp)) hPar
+                have hmem_si0 : memW post w_si.toNat = memW state w_si.toNat :=
+                  R10Shards.Fast_GbodyC17ToC21.memW_eq_of_ivlUnhit
+                    (hu_rc (w_si.toNat, 96) (by simp [runAttemptCells])) hsi_rc.1
+                    (by unfold Inside at hsi_in; omega) ⟨by omega, by omega⟩
+                have hRes : RunAttemptPreScan { post with locals := state.locals } :=
+                  ⟨w_si, w_pl, w_parent, S', Nd',
+                    (inputAtStrongWith_with_locals post state.locals post.clock S' Nd' w_si.toNat).2 hIA_post,
+                    (allBlocksGood_with_locals post state.locals post.clock S' Nd' [(w_parent.toNat, 248)]).2 hBs_post,
+                    hPar_post,
+                    by change w_pl.toNat = memW post w_si.toNat; omega,
+                    hjc_post, hlsi, hlpl, hlpar⟩
+                exact hpost_eq ▸ hRes
+            · simp at hcall
+          | _ => simp [emptyLocalsHOLFinite] at hcall
+
+theorem runAttemptScanBlock_bounded
+    (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+      (ofString "execute_block") K.«execute_block»)
+    (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
+    (hvvh : TerminatingFunBoundedOn GuestInv
+      (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
+    (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
+    (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
+    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
+    (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc"))
+    (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc"))
+    (whh : WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+      (fun s => [(locN s "out", 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "header_hash"))
+    (wvvh : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "is_valid_versioned_hashes"))
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (wmz : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")]) []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "memzero"))
+    (wph : WorldKeeps InputReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+        (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeader (ofString "payload_header"))
+    (wvh : WorldKeeps
+      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header")) :
+    TerminatingProgBoundedOn RunAttemptPreScan runAttemptScanBlockProg
+      ((31104957952 + 1) * (0 + 1) +
+        ((K.«payload_header» + 1) + (K.«alloc» + 1) + (K.«header_hash» + 1) +
+          (K.«memeq» + 1) + (K.«is_valid_versioned_hashes» + 1) + (K.«validate_header» + 1) +
+          (K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1))) := by
+  have hc1 : TerminatingProgBoundedOn RunAttemptPreScan runAttemptPhaseC1Prog
+      ((K.«payload_header» + 1) + (K.«alloc» + 1) + (K.«header_hash» + 1) +
+        (K.«memeq» + 1) + (K.«is_valid_versioned_hashes» + 1) + (K.«validate_header» + 1) +
+        (K.«alloc» + 1) + (K.«memzero» + 1) + (K.«execute_block» + 1)) := by
+    intro F s hc hp
+    exact runAttemptPhaseC1_bounded hal hexec hhh hvvh hmeq hmz hph hvh
+      wal rtal whh wvvh romeq wmz wph wvh s hc (runAttemptPreScan_postScan hp)
+  unfold runAttemptScanBlockProg
+  intro F s hc hp
+  refine runAttemptScan_init_bounded (W := RunAttemptPreScan)
+    (fun s h => localsOnly_runAttemptPreScan s s.locals (s.clock - 1) (fun _ _ => rfl) h)
+    (fun s v h => localsOnly_runAttemptPreScan s _ s.clock
+      (fun n hn => by
+        rcases List.mem_cons.1 hn with rfl | hn
+        · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "txs" ≠ ofString "si" by decide]
+        · rcases List.mem_cons.1 hn with rfl | hn
+          · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "txs" ≠ ofString "pl" by decide]
+          · rcases List.mem_singleton.1 hn with rfl
+            simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "txs" ≠ ofString "parent" by decide]) h)
+    (fun s v h => localsOnly_runAttemptPreScan s _ s.clock
+      (fun n hn => by
+        rcases List.mem_cons.1 hn with rfl | hn
+        · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "ntx" ≠ ofString "si" by decide]
+        · rcases List.mem_cons.1 hn with rfl | hn
+          · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "ntx" ≠ ofString "pl" by decide]
+          · rcases List.mem_singleton.1 hn with rfl
+            simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "ntx" ≠ ofString "parent" by decide]) h)
+    (fun s v h => localsOnly_runAttemptPreScan s _ s.clock
+      (fun n hn => by
+        rcases List.mem_cons.1 hn with rfl | hn
+        · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "i" ≠ ofString "si" by decide]
+        · rcases List.mem_cons.1 hn with rfl | hn
+          · simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "i" ≠ ofString "pl" by decide]
+          · rcases List.mem_singleton.1 hn with rfl
+            simp [HolFiniteMapExact.lookup_update, FUPDATE, show ofString "i" ≠ ofString "parent" by decide]) h)
+    ?_ hc1 s hc hp
+  intro F s hP
+  obtain ⟨w_si, w_pl, _, S, Nd, hIA, _, _, hpl_mem, _, _, hlpl, _⟩ := hP
+  have h264 : heapLimit ≤ 2 ^ 64 := by decide
+  have hhp_lim : globN s "heap_ptr" ≤ heapLimit := hIA.1.1.2.2.1
+  have hpl_in : Inside (memW s w_si.toNat, 136) sourceBase (globN s "heap_ptr") :=
+    (hIA.2.1 (memW s w_si.toNat, 136) (by simp [runAttemptCells])).2.1
+  have hntx_lt : memW s (memW s w_si.toNat + 40) < 2 ^ 32 :=
+    hIA.1.2.2.2.2.2.1.2.2.1
+  refine ⟨hIA.1.1.1, w_pl, hlpl, ?_, ?_⟩
+  · unfold Inside at hpl_in; omega
+  · rw [hpl_mem]; exact hntx_lt
+
+theorem runAttemptFullProg_bounded
+    (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (hcgl : TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit»)
+    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+      (ofString "execute_block") K.«execute_block»)
+    (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
+    (hvvh : TerminatingFunBoundedOn GuestInv
+      (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
+    (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
+    (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
+    (hnb : TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build»)
+    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hsi : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»)
+    (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
+    (hvhs : TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers»)
+    (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc"))
+    (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc"))
+    (rocgl : ReadOnlyFn (ofString "check_gas_limit"))
+    (whh : WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+      (fun s => [(locN s "out", 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "header_hash"))
+    (wvvh : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "is_valid_versioned_hashes"))
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (wmz : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")]) []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "memzero"))
+    (_zvmz : ZeroFills (ofString "memzero"))
+    (wnb : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build"))
+    (wph : WorldKeeps InputReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+        (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeader (ofString "payload_header"))
+    (wsi : WorldReturnsIn StateInitReady
+      (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
+      ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
+      [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetStateInit (ofString "state_init"))
+    (wvh : WorldKeeps
+      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header"))
+    (wvhs : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeadersStrong (ofString "validate_headers")) :
+    TerminatingProgBoundedOn InputReadyStrong runAttemptFullProg K.«run_attempt» := by
+  have hscan : TerminatingProgBoundedOn RunAttemptPreScan runAttemptScanBlockProg _ :=
+    runAttemptScanBlock_bounded hal hexec hhh hvvh hmeq hmz hph hvh
+      wal rtal whh wvvh romeq wmz wph wvh
+  have hskip_scan : TerminatingProgBoundedOn RunAttemptPreScan
+      (.seq .skip runAttemptScanBlockProg) _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RunAttemptPreScan)
+      (TerminatingProgBoundedOn.of_clock (P := RunAttemptPreScan) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hscan
+  set siArgs : List (ExpHOL 64) :=
+    [.var .local (ofString "nodedb"),
+     .load .one (.op .add [.var .local (ofString "parent"), .const 32#64]),
+     .var .local (ofString "codedb")]
+  have hsi_seq : TerminatingProgBoundedOn RA_Codedb _ _ :=
+    TerminatingProgBoundedOn.seq_hoare_trans (P := RA_Codedb) (Q := RunAttemptPreScan)
+      (TerminatingProgBoundedOn.call_on hsi none siArgs
+        (callEntryOn_of_imp localsFree_worldOK (fun _ h => ra_codedb_worldOK h) _ siArgs))
+      (hoare_state_init wsi)
+      hskip_scan
+  set cbArgs : List (ExpHOL 64) :=
+    [.load .one (.op .add [.var .local (ofString "si"), .const 56#64]),
+     .load .one (.op .add [.var .local (ofString "si"), .const 64#64])]
+  have hcb_call : TerminatingProgBoundedOn RA_Nodedb _ _ :=
+    TerminatingProgBoundedOn.decCall_on hnb (ofString "codedb") .one cbArgs
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => ra_nodedb_guestInv h) _ cbArgs)
+      (decCallResumeOn_nodedb_codedb wnb cbArgs)
+      hsi_seq
+  set nbArgs : List (ExpHOL 64) :=
+    [.load .one (.op .add [.var .local (ofString "si"), .const 40#64]),
+     .load .one (.op .add [.var .local (ofString "si"), .const 48#64])]
+  have hnb_call : TerminatingProgBoundedOn RA_Parent _ _ :=
+    TerminatingProgBoundedOn.decCall_on hnb (ofString "nodedb") .one nbArgs
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => ra_parent_guestInv h) _ nbArgs)
+      (decCallResumeOn_nodedb_first wnb nbArgs)
+      hcb_call
+  have hite_gok : TerminatingProgBoundedOn RA_Parent
+      (.ite (.cmp .equal (.var .local (ofString "gas_ok")) (.const 0#64))
+        (.raise (ofString "BlockErr") (.const 10#64))
+        .skip)
+      (max 0 0) :=
+    TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (P := RA_Parent) (fun s => clock_raise s _ _))
+      (TerminatingProgBoundedOn.of_clock (P := RA_Parent) (fun s => clock_skip s))
+  have hafter_cgl : TerminatingProgBoundedOn RA_Parent _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RA_Parent)
+      hite_gok (Hoare.ite_raise_skip _ _ _) hnb_call
+  set cglArgs : List (ExpHOL 64) :=
+    [.load .one (.op .add [.var .local (ofString "pl"), .const 88#64]),
+     .load .one (.op .add [.var .local (ofString "parent"), .const 104#64])]
+  have hcgl_call : TerminatingProgBoundedOn RA_Parent _ _ :=
+    TerminatingProgBoundedOn.decCall_on hcgl (ofString "gas_ok") .one cglArgs
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => ra_parent_guestInv h) _ cglArgs)
+      (decCallResumeOn_check_gas_limit rocgl cglArgs)
+      hafter_cgl
+  have hite_gas22 : TerminatingProgBoundedOn RA_Parent
+      (.ite
+        (.cmp .lower
+          (.load .one (.op .add [.var .local (ofString "pl"), .const 88#64]))
+          (.load .one (.op .add [.var .local (ofString "pl"), .const 96#64])))
+        (.raise (ofString "BlockErr") (.const 22#64))
+        .skip)
+      (max 0 0) :=
+    TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (P := RA_Parent) (fun s => clock_raise s _ _))
+      (TerminatingProgBoundedOn.of_clock (P := RA_Parent) (fun s => clock_skip s))
+  have hgas22_seq : TerminatingProgBoundedOn RA_Parent _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RA_Parent)
+      hite_gas22 (Hoare.ite_raise_skip _ _ _) hcgl_call
+  have hskip_gas : TerminatingProgBoundedOn RA_Parent _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RA_Parent)
+      (TerminatingProgBoundedOn.of_clock (P := RA_Parent) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hgas22_seq
+  have hbhn_seq : TerminatingProgBoundedOn RA_ParentPre _ _ :=
+    TerminatingProgBoundedOn.seq_hoare_trans (P := RA_ParentPre) (Q := RA_Parent)
+      (TerminatingProgBoundedOn.of_clock (P := RA_ParentPre) (fun s => clock_assign s _ _ _))
+      hoare_assign_block_hashes_n
+      hskip_gas
+  have hbh_seq : TerminatingProgBoundedOn RA_ParentPre _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RA_ParentPre)
+      (TerminatingProgBoundedOn.of_clock (P := RA_ParentPre) (fun s => clock_assign s _ _ _))
+      hoare_assign_block_hashes
+      hbhn_seq
+  have hpar_dec : TerminatingProgBoundedOn (RA_Nh true) _ _ :=
+    ra_dec_parent hbh_seq
+  have hite_nh0 : TerminatingProgBoundedOn (RA_Nh false)
+      (.ite (.cmp .equal (.var .local (ofString "nh")) (.const 0#64))
+        (.raise (ofString "BlockErr") (.const 3#64))
+        .skip)
+      (max 0 0) :=
+    TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (P := RA_Nh false) (fun s => clock_raise s _ _))
+      (TerminatingProgBoundedOn.of_clock (P := RA_Nh false) (fun s => clock_skip s))
+  have hnh0_seq : TerminatingProgBoundedOn (RA_Nh false) _ _ :=
+    TerminatingProgBoundedOn.seq_hoare_trans (P := RA_Nh false) (Q := RA_Nh true)
+      hite_nh0 hoare_ite_nh_zero hpar_dec
+  have hnh_dec : TerminatingProgBoundedOn RA_Vh _ _ :=
+    ra_dec_nh hnh0_seq
+  set vhsArgs : List (ExpHOL 64) :=
+    [.load .one (.op .add [.var .local (ofString "si"), .const 72#64]),
+     .load .one (.op .add [.var .local (ofString "si"), .const 80#64])]
+  have hvhs_call : TerminatingProgBoundedOn RA_Pl _ _ :=
+    TerminatingProgBoundedOn.decCall_on hvhs (ofString "vh") (.comb [.one, .one]) vhsArgs
+      (callEntryOn_of_imp localsFree_guestInv (fun _ h => ra_pl_guestInv h) _ vhsArgs)
+      (decCallResumeOn_validate_headers wvhs)
+      hnh_dec
+  have hskip_vhs : TerminatingProgBoundedOn RA_Pl _ _ :=
+    TerminatingProgBoundedOn.seq_hoare (P := RA_Pl)
+      (TerminatingProgBoundedOn.of_clock (P := RA_Pl) (fun s => clock_skip s))
+      (Hoare.skip fun _ h _ => h)
+      hvhs_call
+  have hall : TerminatingProgBoundedOn InputReadyStrong runAttemptFullProg _ :=
+    ra_entry_dec_pl hskip_vhs
+  intro F s hc hp
+  exact TerminatingRunBounded.weaken (hall s hc hp) (by unfold K.«run_attempt»; omega)
+
+def GBody.«run_attempt_strong» : Prop :=
+  (TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc») →
+  (TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit») →
+  (TerminatingFunBoundedOn BlockReadyExecStrong (ofString "execute_block") K.«execute_block») →
+  (TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash») →
+  (TerminatingFunBoundedOn GuestInv (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes») →
+  (TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq») →
+  (TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero») →
+  (TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build») →
+  (TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header») →
+  (TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init») →
+  (TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header») →
+  (TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers») →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc")) →
+  (Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n"))
+    (ofString "alloc")) →
+  (ReadOnlyFn (ofString "check_gas_limit")) →
+  (WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+    (fun s => [(locN s "out", 32), (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "header_hash")) →
+  (WorldKeeps WorldOK (fun _ => [])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "is_valid_versioned_hashes")) →
+  (ReadOnlyFn (ofString "memeq")) →
+  (WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")])
+    []
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "memzero")) →
+  (ZeroFills (ofString "memzero")) →
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetNodeDb (ofString "nodedb_build")) →
+  (WorldKeeps InputReady (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40), (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16), (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128), (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+    ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetHeader (ofString "payload_header")) →
+  (WorldReturnsIn StateInitReady (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
+    ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
+    [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetStateInit (ofString "state_init")) →
+  (WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+    (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200), (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+    ["heap_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    NoExtra (ofString "validate_header")) →
+  (WorldKeeps WorldOK (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136), (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+    ["heap_ptr", "scratch_ptr"]
+    [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+    RetHeadersStrong (ofString "validate_headers")) →
+  TerminatingFunBoundedOn InputReadyStrong (ofString "run_attempt") K.«run_attempt»
+
+theorem gbody_run_attempt_strong_of
+    (hal : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (hcgl : TerminatingFunBoundedOn GuestInv (ofString "check_gas_limit") K.«check_gas_limit»)
+    (hexec : TerminatingFunBoundedOn BlockReadyExecStrong
+      (ofString "execute_block") K.«execute_block»)
+    (hhh : TerminatingFunBoundedOn GuestInv (ofString "header_hash") K.«header_hash»)
+    (hvvh : TerminatingFunBoundedOn GuestInv
+      (ofString "is_valid_versioned_hashes") K.«is_valid_versioned_hashes»)
+    (hmeq : TerminatingFunBoundedOn GuestInv (ofString "memeq") K.«memeq»)
+    (hmz : TerminatingFunBoundedOn GuestInv (ofString "memzero") K.«memzero»)
+    (hnb : TerminatingFunBoundedOn GuestInv (ofString "nodedb_build") K.«nodedb_build»)
+    (hph : TerminatingFunBoundedOn InputReady (ofString "payload_header") K.«payload_header»)
+    (hsi : TerminatingFunBoundedOn WorldOK (ofString "state_init") K.«state_init»)
+    (hvh : TerminatingFunBoundedOn GuestInv (ofString "validate_header") K.«validate_header»)
+    (hvhs : TerminatingFunBoundedOn GuestInv (ofString "validate_headers") K.«validate_headers»)
+    (wal : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoids (fun s _ w => [(w, (locN s "n" + 7) / 8 * 8)])) (ofString "alloc"))
+    (rtal : Returns ArenaReady (fun s post p => FreshBlock s post p (locN s "n")) (ofString "alloc"))
+    (rocgl : ReadOnlyFn (ofString "check_gas_limit"))
+    (whh : WorldKeeps (fun s => WorldOK s ∧ HeaderOKStrongLocal s)
+      (fun s => [(locN s "out", 32),
+        (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "header_hash"))
+    (wvvh : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "is_valid_versioned_hashes"))
+    (romeq : ReadOnlyFn (ofString "memeq"))
+    (wmz : WorldKeeps WorldOK (fun s => [(locN s "dst", locN s "n")]) []
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "memzero"))
+    (zvmz : ZeroFills (ofString "memzero"))
+    (wnb : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetNodeDb (ofString "nodedb_build"))
+    (wph : WorldKeeps InputReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40),
+        (globN s "mpt_key_scratch", if globN s "mpt_key_scratch" = 0 then 0 else 16),
+        (globN s "sha_pad", if globN s "sha_pad" = 0 then 0 else 128),
+        (globN s "sha_st", if globN s "sha_st" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr", "wd_rlp_slices"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeader (ofString "payload_header"))
+    (wsi : WorldReturnsIn StateInitReady
+      (fun s => if locN s "codedb" = 0 then [] else [locN s "codedb"]) (fun _ => [])
+      ["bs", "heap_ptr", "journal", "journal_cap", "journal_n", "scratch_ptr", "sk_buf", "ts", "ws"]
+      [("ws", []), ("bs", []), ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetStateInit (ofString "state_init"))
+    (wvh : WorldKeeps
+      (fun s => WorldOK s ∧ HeaderOKStrongLocal s ∧ HeaderAtStrongLocal s (locN s "parent"))
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+        (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header"))
+    (wvhs : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+        (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetHeadersStrong (ofString "validate_headers")) :
+    TerminatingFunBoundedOn InputReadyStrong (ofString "run_attempt") K.«run_attempt» := by
+  refine ⟨(sourceFunctionEntry Guest.Software.guestFn_run_attempt).2.1,
+    (sourceFunctionEntry Guest.Software.guestFn_run_attempt).2.2.1,
+    (sourceFunctionEntry Guest.Software.guestFn_run_attempt).2.2.2,
+    R10Shards.Fast_GbodyC17ToC21.lookup_run_attempt_fn, ?_⟩
+  rw [sourceFnBody_run_attempt_eq]
+  exact runAttemptFullProg_bounded
+    hal hcgl hexec hhh hvvh hmeq hmz hnb hph hsi hvh hvhs
+    wal rtal rocgl whh wvvh romeq wmz zvmz wnb wph wsi wvh wvhs
+
+theorem «gbody_run_attempt_strong» : GBody.«run_attempt_strong» :=
+  gbody_run_attempt_strong_of
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

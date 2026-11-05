@@ -3,6 +3,9 @@ import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_CsrLoops
 import InitECandidate.Solver.Wave8GuestInv.R14Shards.P3C10C12.P3_MptSet_Memory
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkEncodeAccount
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.GbodyC17ToC21Common
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkCacheGetRootTop
+import InitECandidate.Solver.Wave8GuestInv.R13Shards.WkShard01AllocMpt
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.wk_u256_to_be_min
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -2136,5 +2139,319 @@ theorem worldTypedWith_append_mptNodes_csr {F : Type}
   · intro hnz
     obtain ⟨hr24, hr32⟩ := hTr.2.2 hnz
     exact ⟨hroot1 hr24, fun hm32 i hi => hroot1 (hr32 hm32 i hi)⟩
+
+theorem mptObjInWith_transfer_bytes_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hp : ArenaReady post)
+    (hag : AllocatorGrows s post) {S S' Nd Nd' Nm : List Nat} {m : Nat}
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hg : OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd'))
+    (hu_m : R10Shards.P26_P28.IvlUnhit s post (m, 16))
+    (hu_rec : ∀ n ∈ Nm, R10Shards.P26_P28.IvlUnhit s post (nodeIvl s n))
+    (hu_byte : ∀ n ∈ Nm, (memW s n = 1 ∨ memW s n = 2) → memW s (n + 40) ≠ 0 →
+      ∀ k, k < memW s (n + 40) → memB post (memW s (n + 32) + k) = memB s (memW s (n + 32) + k)) :
+    MptObjInWith post S' Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd') ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m := by
+  obtain ⟨hn, hext⟩ := R10Shards.P26_P28.nodeHeap_congr_bytes hs.1 hp.1 hag
+    hm.2.2.2.2.1 hu_rec hu_byte
+  have hivl : mptObjIvls post Nm m = mptObjIvls s Nm m := by
+    simp only [mptObjIvls, hext]
+  have hdis : IvlsDisj (mptObjIvls post Nm m) (worldOwned post S' Nd') := by
+    rw [hivl]
+    exact ivlsDisj_ownedGrows_csr hs.2 hp.2 hg (mptObjInWith_allocated_csr hm)
+      (mptObjInWith_disj_world_csr hm hd)
+  have hroot : memW post m = memW s m :=
+    R10Shards.P26_P28.memW_eq_of_ivlUnhit hu_m hm.2.1.1
+      (P3MptSet.ivl_allocated_bound hs.2 hm.1) ⟨le_rfl, by omega⟩
+  refine ⟨mptObjInWith_of_parts_csr (hag.allocated hm.1)
+    (P3MptSet.wordsOK_transfer hs.1 hp.1 hm.2.1) hn ?_ hdis ?_, ?_, hivl⟩
+  · rw [hroot]
+    exact hm.2.2.2.2.2.1
+  · intro o ho
+    rw [hext] at ho
+    exact (hm.2.2.2.2.2.2 o ho).1
+  · intro o ho j hj
+    exact hdis o ho j (List.mem_append.mpr (Or.inr hj))
+
+theorem worldEff_liveMpt_csr {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {S Nd Nm : List Nat} {m : Nat}
+    (hs : ArenaReady s)
+    (hB_ok : ∀ gs ∈ B, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst)
+    (hcore_out : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (heff : R16Shards.WorldEff s post Rl B gw)
+    (hW : WorldTypedWith s S Nd)
+    (hm : MptObjInWith s S Nm m)
+    (hd : IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd))
+    (hR : IvlsDisj Rl (worldTypedIvls s S Nd ++ mptObjIvls s Nm m)) :
+    WorldTypedWith post S Nd ∧
+      MptObjInWith post S Nm m ∧
+      IvlsDisj (mptObjIvls post Nm m) (nodeExtents post Nd) ∧
+      mptObjIvls post Nm m = mptObjIvls s Nm m ∧
+      nodeExtents post Nd = nodeExtents s Nd ∧
+      (∀ t ∈ S, htabFootprint post t = htabFootprint s t) ∧
+      (∀ t ∈ S, ∀ k, k < 11 → hdr post t k = hdr s t k) ∧
+      (∀ a ∈ worldRoleSlots post ++ journalRoleSlots post,
+        a ∈ worldRoleSlots s ++ journalRoleSlots s) ∧
+      OwnedGrows s post (worldOwned s S Nd) (worldOwned post S Nd) := by
+  have hAp : ArenaReady post := heff.arena
+  have hag : AllocatorGrows s post := ⟨heff.hp_lo, heff.sp_hi⟩
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g :=
+    fun g hg => R10Shards.P26_P28.globN_eq_of_lookup (heff.gw_kept (ofString g) (hcore_out g hg))
+  have hlow : memW post 8 = memW s 8 ∧ memW post 16 = memW s 16 :=
+    ⟨R10Shards.P26_P28.mem_low_eq_of_domain_writes heff.out_dom hs.1 (by rw [sourceBase_val]; omega),
+     R10Shards.P26_P28.mem_low_eq_of_domain_writes heff.out_dom hs.1 (by rw [sourceBase_val]; omega)⟩
+  obtain ⟨hT, hJ, hF, hTr⟩ := hW
+  have hR_wti : IvlsDisj Rl (worldTypedIvls s S Nd) :=
+    fun r hr i hi => hR r hr i (List.mem_append_left _ hi)
+  have hR_mpt : IvlsDisj Rl (mptObjIvls s Nm m) :=
+    fun r hr o ho => hR r hr o (List.mem_append_right _ ho)
+  let keep0 : List Ivl := Rl ++ B.map (bufferRegion s) ++ [freeGap s]
+  have hfr_pos : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      (∃ j ∈ keep0, CellHitsPos a.toNat j) ∨ CellHitsPos a.toNat (heapFree s) := by
+    intro a hne
+    rcases heff.cell_frame a hne with ⟨ivl, hivl, hhit⟩ | ⟨gs, hgs, hhit⟩ | hfg | hhf
+    · left; refine ⟨ivl, ?_, hhit⟩
+      simp only [keep0, List.mem_append]; exact Or.inl (Or.inl hivl)
+    · left; refine ⟨bufferRegion s gs, ?_, hhit⟩
+      simp only [keep0, List.mem_append]; exact Or.inl (Or.inr (List.mem_map.2 ⟨gs, hgs, rfl⟩))
+    · left; refine ⟨freeGap s, ?_, hfg⟩
+      simp only [keep0, List.mem_append, List.mem_singleton]; exact Or.inr trivial
+    · exact Or.inr hhf
+  have hu_wti_aligned : ∀ i ∈ worldTypedIvls s S Nd, Allocated s i → i.1 % 8 = 0 → i.2 % 8 = 0 →
+      R10Shards.P26_P28.IvlUnhit s post i := by
+    intro i hi hal hi1 hi2
+    refine R10Shards.P26_P28.ivlUnhit_of_cellHitsPos hi1 hi2 hfr_pos (fun j hj => ?_)
+      (R10Shards.P26_P28.disj_allocated_heapFree hs.2 hal)
+    simp only [keep0, List.mem_append, List.mem_singleton] at hj
+    rcases hj with (hjR | hjB) | rfl
+    · exact Disj.flip (hR_wti j hjR i hi)
+    · obtain ⟨gs, hgs, rfl⟩ := List.mem_map.1 hjB
+      obtain ⟨hgs_gb, hgs_nt⟩ := hB_ok gs hgs
+      exact Disj.flip (R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls ⟨hT, hJ, hF, hTr⟩ gs hgs_gb hgs_nt i hi)
+    · exact R10Shards.P26_P28.disj_allocated_freeGap hs.2 hal
+  have hu_mpt_aligned : ∀ o ∈ mptObjIvls s Nm m, Allocated s o → o.1 % 8 = 0 → o.2 % 8 = 0 →
+      R10Shards.P26_P28.IvlUnhit s post o := by
+    intro o ho hal ho1 ho2
+    refine R10Shards.P26_P28.ivlUnhit_of_cellHitsPos ho1 ho2 hfr_pos (fun j hj => ?_)
+      (R10Shards.P26_P28.disj_allocated_heapFree hs.2 hal)
+    simp only [keep0, List.mem_append, List.mem_singleton] at hj
+    rcases hj with (hjR | hjB) | rfl
+    · exact Disj.flip (hR_mpt j hjR o ho)
+    · obtain ⟨gs, hgs, rfl⟩ := List.mem_map.1 hjB
+      exact Disj.flip (mptObjInWith_disj_buffer_csr hm (hB_ok gs hgs).1 _ List.mem_cons_self o ho)
+    · exact R10Shards.P26_P28.disj_allocated_freeGap hs.2 hal
+  have hu_fix_wti : ∀ i ∈ worldTypedIvls s S Nd, i ∈ fixedObjects s → i.2 ≠ 0 →
+      R10Shards.P26_P28.IvlUnhit s post i := by
+    intro i hwti hfi hpos
+    rcases hF.1 i hfi with h0 | ⟨hal, hw⟩
+    · exact absurd h0 hpos
+    · exact hu_wti_aligned i hwti hal hw.1 hw.2.1
+  have hu_tab : ∀ t ∈ S, ∀ i ∈ htabFootprint s t, R10Shards.P26_P28.IvlUnhit s post i := by
+    intro t ht i hi
+    have hal := ((hT.2.1 t ht).2 i hi).1
+    have hw := ((hT.2.1 t ht).1.1 i hi).2
+    refine hu_wti_aligned i ?_ hal hw.1 hw.2.1
+    unfold worldTypedIvls
+    apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; left
+    apply List.mem_append.2; left; apply List.mem_append.2; left
+    exact List.mem_flatMap.2 ⟨t, ht, hi⟩
+  have hu_ws : globN s "ws" ≠ 0 → R10Shards.P26_P28.IvlUnhit s post (globN s "ws", 40) := fun hnz =>
+    hu_fix_wti _
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; right
+          exact List.mem_map.2 ⟨("ws", 40), by simp [typedRecords], by simp [hnz]⟩)
+      (by simpa [hnz] using R10Shards.P26_P28.typedRecord_mem_fixedObjects s (r := ("ws", 40)) (by simp [typedRecords]))
+      (by simp)
+  have hu_bs : globN s "bs" ≠ 0 → R10Shards.P26_P28.IvlUnhit s post (globN s "bs", 80) := fun hnz =>
+    hu_fix_wti _
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; right
+          exact List.mem_map.2 ⟨("bs", 80), by simp [typedRecords], by simp [hnz]⟩)
+      (by simpa [hnz] using R10Shards.P26_P28.typedRecord_mem_fixedObjects s (r := ("bs", 80)) (by simp [typedRecords]))
+      (by simp)
+  have hu_ts : globN s "ts" ≠ 0 → R10Shards.P26_P28.IvlUnhit s post (globN s "ts", 72) := fun hnz =>
+    hu_fix_wti _
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; right
+          exact List.mem_map.2 ⟨("ts", 72), by simp [typedRecords], by simp [hnz]⟩)
+      (by simpa [hnz] using R10Shards.P26_P28.typedRecord_mem_fixedObjects s (r := ("ts", 72)) (by simp [typedRecords]))
+      (by simp)
+  have hu_bo : globN s "bo" ≠ 0 → R10Shards.P26_P28.IvlUnhit s post (globN s "bo", 88) := fun hnz =>
+    hu_fix_wti _
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; left; apply List.mem_append.2; left; apply List.mem_append.2; right
+          exact List.mem_map.2 ⟨("bo", 88), by simp [typedRecords], by simp [hnz]⟩)
+      (by simpa [hnz] using R10Shards.P26_P28.typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by simp [typedRecords]))
+      (by simp)
+  have hu_jr : globN s "journal_cap" ≠ 0 →
+      R10Shards.P26_P28.IvlUnhit s post (globN s "journal", 32 * globN s "journal_cap") := fun hcnz =>
+    hu_fix_wti _
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; left; apply List.mem_append.2; right; simp [hcnz])
+      (by unfold fixedObjects; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; right; simp [hcnz])
+      (by dsimp only; omega)
+  have hu_bo_lst : ∀ i ∈ blockOutObjects s, i.2 = 24 → R10Shards.P26_P28.IvlUnhit s post i := fun i hi h24 =>
+    hu_fix_wti i
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; left
+          apply List.mem_append.2; right; exact hi)
+      (by unfold fixedObjects; apply List.mem_append.2; left; apply List.mem_append.2; right; exact hi)
+      (by omega)
+  have hu_bal : ∀ i ∈ balObjects s, i.2 ≠ 0 → R10Shards.P26_P28.IvlUnhit s post i := fun i hi hpos =>
+    hu_fix_wti i
+      (by unfold worldTypedIvls; apply List.mem_append.2; left; apply List.mem_append.2; right; exact hi)
+      (by unfold fixedObjects; exact List.mem_append.2 (Or.inr hi))
+      hpos
+  have hu_nd_rec : ∀ n ∈ Nd, R10Shards.P26_P28.IvlUnhit s post (nodeIvl s n) := fun n hn => by
+    have hal := (hTr.1.1 n hn).2.1
+    have hw := (hTr.1.1 n hn).2.2.2.1
+    refine hu_wti_aligned _ ?_ hal hw.1 hw.2.1
+    unfold worldTypedIvls; refine List.mem_append.2 (Or.inr ?_)
+    unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, by simp [nodeIvl]⟩
+  have hu_nd_byte : ∀ n ∈ Nd, (memW s n = 1 ∨ memW s n = 2) → memW s (n + 40) ≠ 0 →
+      ∀ k, k < memW s (n + 40) → memB post (memW s (n + 32) + k) = memB s (memW s (n + 32) + k) := by
+    intro n hn h12 hlen0 k hk
+    have h264 : heapLimit ≤ 2 ^ 64 := by decide
+    rcases (hTr.1.1 n hn).2.2.2.2.2.2.1 h12 with h0 | ⟨_, hal_p, hin_p, _⟩
+    · exact absurd h0 hlen0
+    · have hp_wti : (memW s (n + 32), memW s (n + 40)) ∈ worldTypedIvls s S Nd := by
+        unfold worldTypedIvls; refine List.mem_append.2 (Or.inr ?_)
+        unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, by simp [nodePath, h12, hlen0]⟩
+      by_contra hne_b
+      have ha_lt : memW s (n + 32) + k < 2 ^ 64 := by have := hin_p.2; dsimp at this; omega
+      rcases heff.byte_frame _ ha_lt hne_b with ⟨ivl, hivl, hin_ivl⟩ | ⟨gs, hgs, hin_gs⟩ | hfg | hhf
+      · have hdj := hR_wti ivl hivl _ hp_wti
+        unfold InIvl at hin_ivl; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · obtain ⟨hgs_gb, hgs_nt⟩ := hB_ok gs hgs
+        have hdj := R10Shards.P26_P28.untypedBuf_disj_worldTypedIvls ⟨hT, hJ, hF, hTr⟩ gs hgs_gb hgs_nt _ hp_wti
+        unfold InIvl at hin_gs; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · have hdj := R10Shards.P26_P28.disj_allocated_freeGap hs.2 hal_p
+        unfold InIvl at hfg; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · have hdj := R10Shards.P26_P28.disj_allocated_heapFree hs.2 hal_p
+        unfold InIvl at hhf; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+  have hbo_eq := (R10Shards.P26_P28.blockOutObjects_eq_of_bo_unhit hs.2 hF (hcore "bo" (by decide))
+    hT.2.2.2.2.2.2.2.2.2.2.1 hu_bo hu_bo_lst).1
+  have hbal_eq := (R10Shards.P26_P28.balObjects_eq_of_unhit hs.2 hT hF (hcore "bal_accounts" (by decide))
+    hu_tab hu_bal hlow).1
+  have hwrs_eq := R10Shards.P26_P28.worldRoleSlots_eq_of_unhit hs.2 hT hF hcore hu_tab hu_ws hu_bs hu_ts hu_bal hlow
+  have hjrs_eq := (R10Shards.P26_P28.journalRoleSlots_eq_of_unhit hs.1 hAp.1 hs.2 hag
+    (fun _ hx => hx) hJ hF hcore hu_ts hu_jr).1
+  obtain ⟨hF_post, hfix_new⟩ := R10Shards.P26_P28.fixedTyped_of_freshBufsOK hs hAp hag hF
+    (hcore "journal" (by decide)) (hcore "journal_cap" (by decide)) hbo_eq hbal_eq heff.fresh_bufs
+  obtain ⟨hWT_post, hOG, hne_eq, hfp_eq⟩ := R10Shards.P26_P28.worldTypedWith_congr_w1 hs hAp hag hcore
+    ⟨hT, hJ, hF, hTr⟩ hu_tab hu_ws hu_bs hu_ts hu_bo hu_jr hu_bo_lst hu_bal hu_nd_rec hu_nd_byte
+    hlow hF_post hfix_new
+  have hhdr_eq : ∀ t ∈ S, ∀ k, k < 11 → hdr post t k = hdr s t k := by
+    have h264_he : heapEnd ≤ 2 ^ 64 := by decide
+    intro t ht
+    have hwf := (hT.2.1 t ht).1
+    have ht_fp : (t, 88) ∈ htabFootprint s t := by simp [htabFootprint]
+    have ht8 : t % 8 = 0 := (hwf.1 _ ht_fp).2.1
+    have hhi : t + 88 ≤ 2 ^ 64 := by have := (hwf.1 _ ht_fp).1.2; dsimp at this; omega
+    exact (R10Shards.P26_P28.htabFootprint_eq_of_hdr_unhit ht8 hhi (hu_tab t ht _ ht_fp)).1
+  have hu_m : R10Shards.P26_P28.IvlUnhit s post (m, 16) :=
+    hu_mpt_aligned _ List.mem_cons_self hm.1 hm.2.1.1 hm.2.1.2.1
+  have hu_nm_rec : ∀ n ∈ Nm, R10Shards.P26_P28.IvlUnhit s post (nodeIvl s n) := fun n hn => by
+    have hal := (hm.2.2.2.2.1.1 n hn).2.1
+    have hw := (hm.2.2.2.2.1.1 n hn).2.2.2.1
+    refine hu_mpt_aligned _ (List.mem_cons_of_mem _ ?_) hal hw.1 hw.2.1
+    unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, by simp [nodeIvl]⟩
+  have hu_nm_byte : ∀ n ∈ Nm, (memW s n = 1 ∨ memW s n = 2) → memW s (n + 40) ≠ 0 →
+      ∀ k, k < memW s (n + 40) → memB post (memW s (n + 32) + k) = memB s (memW s (n + 32) + k) := by
+    intro n hn h12 hlen0 k hk
+    have h264 : heapLimit ≤ 2 ^ 64 := by decide
+    rcases (hm.2.2.2.2.1.1 n hn).2.2.2.2.2.2.1 h12 with h0 | ⟨_, hal_p, hin_p, _⟩
+    · exact absurd h0 hlen0
+    · have hp_mpt : (memW s (n + 32), memW s (n + 40)) ∈ mptObjIvls s Nm m := by
+        refine List.mem_cons_of_mem _ ?_
+        unfold nodeExtents; exact List.mem_flatMap.2 ⟨n, hn, by simp [nodePath, h12, hlen0]⟩
+      by_contra hne_b
+      have ha_lt : memW s (n + 32) + k < 2 ^ 64 := by have := hin_p.2; dsimp at this; omega
+      rcases heff.byte_frame _ ha_lt hne_b with ⟨ivl, hivl, hin_ivl⟩ | ⟨gs, hgs, hin_gs⟩ | hfg | hhf
+      · have hdj := hR_mpt ivl hivl _ hp_mpt
+        unfold InIvl at hin_ivl; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · have hdj := mptObjInWith_disj_buffer_csr hm (hB_ok gs hgs).1 _ List.mem_cons_self _ hp_mpt
+        unfold InIvl at hin_gs; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · have hdj := R10Shards.P26_P28.disj_allocated_freeGap hs.2 hal_p
+        unfold InIvl at hfg; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+      · have hdj := R10Shards.P26_P28.disj_allocated_heapFree hs.2 hal_p
+        unfold InIvl at hhf; rcases hdj with h0 | h0 | h1 | h2 <;> (dsimp at *; omega)
+  obtain ⟨hm_post, hd_post, hm_ivl_eq⟩ :=
+    mptObjInWith_transfer_bytes_csr hs hAp hag hm hd hOG hu_m hu_nm_rec hu_nm_byte
+  refine ⟨hWT_post, hm_post, hd_post, hm_ivl_eq, hne_eq, hfp_eq, hhdr_eq, ?_, hOG⟩
+  intro a ha
+  rwa [hwrs_eq, hjrs_eq] at ha
+
+def CsrLiveAt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (cache roots m : Nat) : Prop :=
+  ArenaReady s ∧ cache ≠ roots ∧ ∃ S Nd Nm,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧ roots ∈ S ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache) ∧
+    (∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ roots) ∧
+    MptObjInWith s S Nm m ∧
+    IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd)
+
+theorem localsFree_csrLiveAt (cache roots m : Nat) :
+    LocalsFree (fun s => CsrLiveAt s cache roots m) := by
+  intro F s locals k h
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := h
+  exact ⟨localsFree_arenaReady s locals k hA, hne, S, Nd, Nm,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW,
+    hc, hr, hcl, hrl, (mptObjInWith_with_locals_csr s locals k S Nm m).2 hm, hd⟩
+
+theorem csrLiveAt_tables {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {cache roots m : Nat} (h : CsrLiveAt s cache roots m) :
+    CsrTablesAt s cache roots := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := h
+  exact ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩
+
+theorem worldEff_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (hB_ok : ∀ gs ∈ B, gs ∈ globalBuffers ∧ gs.1 ∉ typedRecords.map Prod.fst)
+    (hcore_out : ∀ g ∈ coreWorldGlobals, ofString g ∉ gw.map ofString)
+    (heff : R16Shards.WorldEff s post Rl B gw)
+    (hR : ∀ S Nd Nm, WorldTypedWith s S Nd →
+      MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      IvlsDisj Rl (worldTypedIvls s S Nd ++ mptObjIvls s Nm m)) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  obtain ⟨hWp, hmp, hdp, _, _, _, _, hroles, _⟩ :=
+    worldEff_liveMpt_csr hA hB_ok hcore_out heff hW hm hd (hR S Nd Nm hW hm hd)
+  exact ⟨heff.arena, hne, S, Nd, Nm, hWp, hc, hr,
+    fun a ha => hcl a (hroles a ha), fun a ha => hrl a (hroles a ha), hmp, hdp⟩
+
+theorem mptObjStep_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {cache roots : Nat}
+    (hs : CsrLiveAt s cache roots (locN s "m"))
+    (hstep : MptObjStep R gw keep s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR_ti : ∀ S Nd Nm, WorldTypedWith s S Nd →
+      MptObjInWith s S Nm (locN s "m") →
+      IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd) →
+      IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m"))) :
+    CsrLiveAt post cache roots (locN s "m") := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have hR := hR_ti S Nd Nm hW hm hd
+  have hRN : IvlsDisj (R s) (nodeExtents s Nd) := by
+    intro r hr i hi
+    exact hR r hr i (List.mem_append_left _ (by
+      unfold worldTypedIvls
+      exact List.mem_append_right _ hi))
+  obtain ⟨S', Nd', Nm', hWp, hc', hr', hcl', hrl', _, _, _, _, hmp, hdp, _, _⟩ :=
+    mptObjStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl hm hd
+      hstep hR_z hR hRN
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm', hWp,
+    hc', hr', hcl', hrl', hmp, hdp⟩
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
