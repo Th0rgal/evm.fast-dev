@@ -8523,6 +8523,45 @@ theorem finish_child_release_aligned {F : Type}
     exact ⟨halign, hend, hlinks⟩
   exact ⟨mid, heval, ⟨⟨hAmid, S, hImid⟩, hAligned⟩, hm, hch, hfmp, hR⟩
 
+/-- Compose parent-cell transport with the concrete release pair. -/
+theorem finish_child_release_from_parent {F : Type}
+    {s st : PanSemStateFiniteExact 64 F} (cmw cmmw : BitVec 64) {S : List Nat}
+    (hs : HeadMemChainWF s) (hk : memW s (globN s "cur_cont" + 16) ≠ 0)
+    (hAs : ArenaReady st)
+    (hInv : InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt st S)
+    (hRel : EvmEkFk.ReleaseReadyAt st S cmw.toNat cmmw.toNat)
+    (hcm : st.locals.lookup (ofString "child_mark") = some (.val (.word cmw)))
+    (hcmm : st.locals.lookup (ofString "child_mem_mark") = some (.val (.word cmmw)))
+    (hchain : evmChain st = (evmChain s).tail)
+    (hmem : ∀ ec ∈ evmChain st, memW st (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW st (ec.1 + 32) = memW s (ec.1 + 32) ∧
+      memW st (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW st (ec.2 + 56) = memW s (ec.2 + 56))
+    (hev : globN st "ev" = memW s (globN s "cur_cont"))
+    (hmark : cmmw.toNat = memW s (globN s "cur_cont" + 56))
+    (hnt : (evaluateHOLFiniteState st EvmEkFk.fcCleanup).1 ≠ some .timeOut) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState st EvmEkFk.fcCleanup =
+        evaluateHOLFiniteState mid
+          (.seq (.call (some (none, none)) (ofString "pc_add") [.const 1#64])
+            (.return (.const 0#64))) ∧
+      EvmInvA mid ∧
+      evmChain mid = (evmChain s).tail ∧
+      EvmEkFk.ChainCellsAgree st mid ∧
+      globN mid "ev" = memW s (globN s "cur_cont") ∧
+      globN mid "frame_mem_ptr" = memW s (globN s "cur_cont" + 56) ∧
+      R11Shards.OpDispatchSpec.evmR mid = R11Shards.OpDispatchSpec.evmR st := by
+  obtain ⟨halign, hlinks, hend⟩ := finish_child_parent_alignment hs hk hchain hmem hev
+  obtain ⟨mid, heval, hi, hm, hch, hfmp, hR⟩ :=
+    finish_child_release_aligned st cmw cmmw hAs hInv hRel hcm hcmm halign hlinks
+      (hend.trans hmark.symm) hnt
+  have hevMid : globN mid "ev" = globN st "ev" := by
+    have hh := congrArg List.head? hch
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).1
+  exact ⟨mid, heval, hi, hch.trans hchain,
+    EvmEkFk.chainCellsAgree_of_memory_eq hm, hevMid.trans hev, hfmp.trans hmark, hR⟩
+
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by
   induction xs with
