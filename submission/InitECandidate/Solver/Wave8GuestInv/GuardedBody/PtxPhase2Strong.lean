@@ -2347,4 +2347,34 @@ theorem phase2_alloc_joint_world (h : PtxCallees) (args : List (ExpHOL 64)) :
     subst i
     exact hte.2.1 j hj
 
+/-- Allocation preserves the transaction header values used by both copy loops. -/
+theorem phase2_alloc_header_words (h : PtxCallees) (args : List (ExpHOL 64))
+    (k value : Nat) (hk : k % 8 = 0) (hkle : k + 8 ≤ 384) :
+    DecCallResumeOn
+      (fun s => PtxAccessCountReady s ∧ memW s (locN s "tx" + k) = value)
+      (fun s => memW s (locN s "tx" + k) = value)
+      (ofString "al_addrs") (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have step := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hW, hT, _⟩ := hp.1.1.2
+  have hWe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hW
+  obtain ⟨S', Nd', _, _, hgrow, hframe, _⟩ := step.2.2.2.2 S Nd hWe (by simp [IvlsDisj])
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  obtain ⟨_, _, hu⟩ := heap_ivl_survives_step (s := s) (post := post)
+    hA.2 step.2.1 (worldOwned_zero_aligned hW) (R := []) (by simp) hgrow hframe
+    hT.1.1.1 (by simp) hT.1.2.1 (fun j hj => hT.2.1 _ (by simp) j hj) (by simp)
+  have he := memW_eq_of_ivlUnhit hu (a := locN s "tx" + k)
+    (by have := hT.1.1.1; omega)
+    (ivl_allocated_bound hA.2 (Or.inl hT.1.2.1)).2
+    ⟨by dsimp; omega, by dsimp; omega⟩
+  have htx : locN (setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }) "tx" =
+      locN s "tx" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "al_addrs" ≠ ofString "tx" by decide]
+  rw [htx]
+  exact he.trans hp.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
