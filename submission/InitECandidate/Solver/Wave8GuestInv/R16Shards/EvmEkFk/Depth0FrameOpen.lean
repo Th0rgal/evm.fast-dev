@@ -3738,4 +3738,171 @@ theorem fresh_scratch_chain_eq {F : Type}
   rw [he, hc]
   exact haux _ _ _ (fun _ h => h)
 
+/-- Fresh scratch writes preserve words in every previously allocated block. -/
+theorem fresh_scratch_allocated_words {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hA : ArenaOK s)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    {i : Ivl} (hi : Allocated s i) {k : Nat} (hk : k + 8 ≤ i.2) :
+    memW post (i.1 + k) = memW s (i.1 + k) := by
+  have hb := allocated_le_2pow64 hA hi
+  unfold memW
+  rw [hmem (BitVec.ofNat 64 (i.1 + k)) ?_]
+  rw [show (BitVec.ofNat 64 (i.1 + k)).toNat = i.1 + k from Nat.mod_eq_of_lt (by omega)]
+  unfold CellHits
+  rcases hi with hi | hi
+  · have hh := hA.2.1
+    have hs := hA.2.2.1
+    have hsep : heapLimit ≤ scratchStart := by decide
+    unfold Inside at hi
+    dsimp only at hi ⊢
+    omega
+  · unfold Inside at hi
+    dsimp only at hi ⊢
+    omega
+
+/-- All live log-object intervals retain their original addresses and sizes
+through fresh scratch writes. -/
+theorem fresh_scratch_log_objects {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hvm : globN post "vm_system_address" = globN s "vm_system_address") :
+    ∀ ec ∈ evmChain s, frameLogObjects post ec = frameLogObjects s ec := by
+  have hw := fresh_scratch_chain_words hInv q n hhi hmem
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have heq := fun {i : Ivl} (hi : Allocated s i) {k : Nat} (hk : k + 8 ≤ i.2) =>
+    fresh_scratch_allocated_words hAs.2 q n hlo hhi hmem hi hk
+  intro ec hec
+  have hfw := hI.2.2.2.2.1 ec hec
+  have hh := hw.2.2 ec hec
+  unfold frameLogObjects
+  dsimp only
+  rw [hw.1 ec hec 88 (by decide), hh 8 (by decide),
+    show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hh 0 (by decide)]
+  apply List.flatMap_congr
+  intro i hi
+  have hi' := List.mem_range.1 hi
+  have hle := hfw.2.2.2.2.2.2.2.2.2.2.2.1
+  have hal : Allocated s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.1
+  have hslot := heq hal (k := 8 * i) (by dsimp [frameLogs]; omega)
+  change memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+    memW s (memW s (memW s (ec.1 + 88)) + 8 * i) at hslot
+  rw [hslot]
+  have hll := hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1
+  rcases hll with hz | ⟨_, _, _, _, hentries⟩
+  · have hs := (hfw.1 (memW s (ec.1 + 88), 24) (by simp)).1
+    have h1 := hAs.2.2.2.1
+    have h2 := hAs.2.2.2.2.1
+    have hpos : 0 < scratchStart := by decide
+    unfold Inside at hs
+    dsimp only at hs
+    omega
+  · have hlog : Allocated s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) :=
+      Or.inl (hentries i hi').2.2.1
+    unfold logOwnedIvls logRecordIvls
+    have h0 := heq hlog (k := 0) (by omega)
+    simp only [Nat.add_zero] at h0
+    simp only [hvm, h0, heq hlog (k := 8) (by omega),
+      heq hlog (k := 16) (by omega), heq hlog (k := 24) (by omega),
+      heq hlog (k := 32) (by omega)]
+
+/-- Fresh scratch writes preserve each live log list, including allocation
+when the scratch frontier is lowered. -/
+theorem fresh_scratch_logs_ok {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hInv : EvmInv s)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hdom : post.memaddrs = s.memaddrs)
+    (hhp : globN post "heap_ptr" = globN s "heap_ptr")
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr") :
+    ∀ ec ∈ evmChain s, LogsListOK post (memW s (ec.1 + 88)) := by
+  have hw := (fresh_scratch_chain_words hInv q n hhi hmem).2.2
+  obtain ⟨hAs, S, hI⟩ := hInv
+  have heq := fun {i : Ivl} (hi : Allocated s i) {k : Nat} (hk : k + 8 ≤ i.2) =>
+    fresh_scratch_allocated_words hAs.2 q n hlo hhi hmem hi hk
+  intro ec hec
+  have hfw := hI.2.2.2.2.1 ec hec
+  have hh := hw ec hec
+  have h0 : memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) := by
+    simpa only [Nat.add_zero] using hh 0 (by decide)
+  rcases hfw.2.2.2.2.2.2.2.2.2.2.2.2.2.2.2.1 with hz | ⟨hw24, ha24, hb, hc, he⟩
+  · exact Or.inl hz
+  refine Or.inr ⟨(wordsOK_congr_of_dom hdom).2 hw24,
+    allocated_mono (by omega) hsp ha24, ?_, ?_, ?_⟩
+  · rw [hh 8 (by decide)]; exact hb
+  · rw [hh 8 (by decide), hh 16 (by decide)]; exact hc
+  · intro i hi
+    rw [hh 8 (by decide)] at hi
+    rw [h0]
+    have hback : Allocated s (frameLogs s ec) := hfw.2.2.2.2.2.2.2.2.2.2.2.2.1
+    have hs := heq hback (k := 8 * i) (by dsimp [frameLogs]; omega)
+    change memW post (memW s (memW s (ec.1 + 88)) + 8 * i) =
+      memW s (memW s (memW s (ec.1 + 88)) + 8 * i) at hs
+    rw [hs]
+    obtain ⟨hwptr, hw40, hin40, hn4, hn32, hin20, hintop, hindat⟩ := he i hi
+    have hal : Allocated s (memW s (memW s (memW s (ec.1 + 88)) + 8 * i), 40) := Or.inl hin40
+    have hz := heq hal (k := 0) (by omega)
+    simp only [Nat.add_zero] at hz
+    refine ⟨?_, (wordsOK_congr_of_dom hdom).2 hw40, ?_⟩
+    · obtain ⟨_, hptrdom, _⟩ := hwptr
+      rcases hm : post.memory (BitVec.ofNat 64 (memW s (memW s (ec.1 + 88)) + 8 * i)) with ⟨w⟩
+      exact ⟨w, by rw [hdom]; exact hptrdom, hm⟩
+    · rw [hz, heq hal (k := 8) (by omega), heq hal (k := 16) (by omega),
+        heq hal (k := 24) (by omega), heq hal (k := 32) (by omega), hhp]
+      exact ⟨hin40, hn4, hn32, hin20, hintop, hindat⟩
+
+/-- The frame shape survives fresh scratch writes and a decreasing scratch
+frontier once its owned message has been transported. -/
+theorem frameWF_of_fresh_scratch {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hInv : EvmInv s)
+    (q n : Nat) (hlo : globN s "frame_mem_ptr" ≤ q)
+    (hhi : q + n ≤ globN s "scratch_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (q, n) → post.memory a = s.memory a)
+    (hg : ∀ name, name ≠ "scratch_ptr" → globN post name = globN s name)
+    (hsp : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (hdom : post.memaddrs = s.memaddrs)
+    {ec : Ivl} (hec : ec ∈ evmChain s) (hfw : FrameWF s S ec)
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) :
+    FrameWF post S ec := by
+  have hw := fresh_scratch_chain_words hInv q n hhi hmem
+  have hk := hw.1 ec hec
+  have hh := hw.2.2 ec hec
+  have hlogs := fresh_scratch_logs_ok hInv q n hlo hhi hmem hdom (hg _ (by decide)) hsp ec hec
+  have hfl : frameLogs post ec = frameLogs s ec := by
+    unfold frameLogs
+    rw [hk 88 (by decide)]
+    rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hh 0 (by decide), hh 16 (by decide)]
+  have hfr : frameRet post ec = frameRet s ec := by
+    unfold frameRet
+    rw [hk 216 (by decide), hk 144 (by decide)]
+  obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
+    c14, c15, _, _⟩ := hfw
+  unfold FrameWF
+  dsimp only
+  rw [hk 8 (by decide), hk 232 (by decide), hk 88 (by decide), hk 24 (by decide),
+    hk 40 (by decide), hk 16 (by decide), hk 32 (by decide), hk 136 (by decide),
+    hk 168 (by decide), hk 176 (by decide), hh 16 (by decide), hh 8 (by decide), hfl,
+    hk 216 (by decide), hk 144 (by decide), hfr, hk 112 (by decide),
+    hg "frame_mem_ptr" (by decide), hg "heap_ptr" (by decide), hg "evm_empty" (by decide)]
+  refine ⟨?_, c2, (wordsOK_congr_of_dom hdom).2 c3, c4, c5, c6, c7,
+    c8, c9, c10, c11, c12, ?_, (wordsOK_congr_of_dom hdom).2 c14, ?_, hlogs, hmsg⟩
+  · intro i hi
+    obtain ⟨hin, hw⟩ := c1 i hi
+    refine ⟨?_, (wordsOK_congr_of_dom hdom).2 hw⟩
+    unfold Inside at hin ⊢
+    exact ⟨le_trans hsp hin.1, hin.2⟩
+  · rcases c13 with hh | hs
+    · exact Or.inl hh
+    · exact Or.inr ⟨le_trans hsp hs.1, hs.2⟩
+  · rcases c15 with hz | ⟨hin, hw⟩
+    · exact Or.inl hz
+    · exact Or.inr ⟨hin, (wordsOK_congr_of_dom hdom).2 hw⟩
+
 end HeadStore
