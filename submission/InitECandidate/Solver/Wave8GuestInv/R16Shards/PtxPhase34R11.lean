@@ -7595,6 +7595,23 @@ theorem hoare_receiptSlot_store :
   apply ptxReceiptsDone_store_bo72 hdone hn hW hown hback hdom _ hmem
   simpa only [hrl] using hin
 
+/-- Restoring the receipt-slot local preserves the stable receipt cut. -/
+theorem ptxReceiptsDone_set_rl {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (hp : PtxReceiptsDone s) :
+    PtxReceiptsDone (setVarHOLFinite (ofString "rl") v s) := by
+  have ht : TxWorld (setVarHOLFinite (ofString "rl") v s) :=
+    LocalsOnly.setVar localsOnly_txWorld (by decide) v s hp.1
+  have he : locN (setVarHOLFinite (ofString "rl") v s) "stable_logs" =
+      locN s "stable_logs" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "rl" ≠ ofString "stable_logs" by decide]
+  refine ⟨ht, ?_, ?_⟩
+  · rw [he]
+    exact (R13Shards.logsListOK_with_locals s _ s.clock _).mpr hp.2.1
+  · change memW s (locN (setVarHOLFinite (ofString "rl") v s) "stable_logs" + 8) < 2 ^ 28
+    rw [he]
+    exact hp.2.2
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
