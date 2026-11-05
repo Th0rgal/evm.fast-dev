@@ -10416,4 +10416,46 @@ theorem txBacking_store_disjoint_fixed {F : Type} {s : PanSemStateFiniteExact 64
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- The concrete stable-list length write preserves both block-output backings. -/
+theorem hoare_stable_length_txBacking :
+    Hoare (fun s => StableLengthPre s ∧ TxBacking s)
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → TxBacking t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hback⟩ := hp
+  have hlocal := hp.2.2.1
+  have hnl := hp.2.2.2.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    have hb := stable_length_address_bound s hp.1.1.1.1.1.1.1.1.1.1.2 hp.2.1
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb.1] using hb.2
+  subst x
+  obtain ⟨hdom, _, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hW : TxWorld s := hp.1.1.1.1.1.1.1.1
+  have hb := (ivl_allocated_bound hW.1.1.2 hp.2.1).2
+  have hlt : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  apply txBacking_store_disjoint_fixed hW hback (i := (locN s "stable_logs", 24)) _ _ hm
+  · simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+    constructor <;> omega
+  · obtain ⟨S, Nd, _, _, hd, _⟩ := hp.2.2.2.2
+    intro j hj
+    apply hd j
+    unfold worldOwned
+    exact List.mem_append_left _ (List.mem_append_right _ hj)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
