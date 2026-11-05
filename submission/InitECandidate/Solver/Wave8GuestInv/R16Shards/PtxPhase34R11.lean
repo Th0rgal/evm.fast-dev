@@ -10271,4 +10271,99 @@ theorem phase4BeforeReceipt_backing_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Fresh allocations preserve backing using only the transaction world guard. -/
+theorem txBacking_fresh_heap_txWorld {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) (hAp : ArenaOK post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hgrow : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post [(globN s "scratch_ptr", 0)]
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr")) :
+    TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hb := bo_words hWT.2.2.1 hE.bo_nz
+  apply txBacking_fresh_heap hW.1.1.2 hAp hback hbo hgrow hb.1 hb.2.1 _ hfr
+  intro k hk
+  have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have ht := (hWT.2.2.1.1 _ hm).resolve_left (by simp)
+  exact ⟨ht.1, ht.2.1⟩
+
+/-- Concrete list allocation retains backing for any positive aligned size. -/
+theorem lst_new_txBacking_resume {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hW : TxWorld s) (hback : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (esz cap : BitVec 64)
+    (he : callee.lookup (ofString "esz") = some (.val (.word esz)))
+    (hcap : callee.lookup (ofString "cap") = some (.val (.word cap)))
+    (hepos : 1 ≤ esz.toNat) (hmul : esz.toNat * cap.toNat < 2 ^ 64)
+    (hal : (esz.toNat * cap.toNat) % 8 = 0) (hcpos : 1 ≤ cap.toNat) :
+    TxBacking post := by
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  have hbody := lookupCodeHOLFinite_installed_body _ _ _ _ _ _ _ _ _ hlc hl
+  have hbody' : body = InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody
+      Guest.Software.guestFn_lst_new := hbody
+  let ent := callEntryStateHOLFinite s callee
+  have hrun : evaluateHOLFiniteState ent
+      (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_lst_new) =
+      (some (.returned v), post) := by rw [← hbody']; exact hr
+  have hprops := WkBal.lst_new_heap_props ent esz cap
+    ⟨guestInv_callEntry s callee hW.1.1.1, hW.1.1.2⟩
+    hepos hmul hal hcpos he hcap v (congrArg Prod.fst hrun)
+  rw [hrun] at hprops
+  obtain ⟨w, hv, hw, hw8, hwn, hmem, hlen, hcap', hheap, hgrow, hAR,
+    hbe, hsp, hfp, hL, hobjs, hd, ha', hfr, hglob⟩ := hprops
+  have hbo : globN post "bo" = globN s "bo" := by
+    unfold globN
+    rw [← hglob (ofString "bo") (by decide)]
+    rfl
+  exact txBacking_fresh_heap_txWorld hW hback hAR.2 hbo (Nat.le_of_lt hgrow) hfr
+
+/-- The stable-log capacity guard discharges the variable allocation premises. -/
+theorem lst_new_stable_txBacking_resume :
+    DecCallResumeOn (fun s => Phase4StableCapReady s ∧ TxBacking s) TxBacking
+      (ofString "stable_logs") (ofString "lst_new")
+      [.const 8, .var .local (ofString "stable_log_cap")] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hargs := lst_new_stable_args s vs body callee ret hc hp.1 ha hl
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  have hpos := (phase4StableCap_bounds s hp.1).1
+  obtain ⟨cap, hcap⟩ : ∃ cap : BitVec 64,
+      s.locals.lookup (ofString "stable_log_cap") = some (.val (.word cap)) := by
+    unfold locN at hpos
+    split at hpos
+    · rename_i w hw
+      exact ⟨w, hw⟩
+    · omega
+  obtain ⟨_, he, hcap'⟩ := callee_param_two_exp s (ofString "lst_new")
+    (ofString "esz") (ofString "cap") .one .one _ _ hlc
+    (.const 8) (.var .local (ofString "stable_log_cap")) (.val (.word 8)) (.val (.word cap))
+    vs body callee ret rfl hcap ha hl
+  have hcapN : locN (callEntryStateHOLFinite s callee) "cap" = cap.toNat := by
+    simp [locN, callEntryStateHOLFinite, hcap']
+  have hbound : (8 : BitVec 64).toNat * cap.toNat < 2 ^ 64 := by
+    simpa only [hargs.1, hcapN, show (8 : BitVec 64).toNat = 8 from rfl] using hargs.2.2.2
+  have hpositive : 1 ≤ cap.toNat := by simpa only [hcapN] using hargs.2.2.1
+  exact lst_new_txBacking_resume s vs body callee ret v post hc hp.1.1.1.1.1.1 hp.2 hl hr
+    8 cap he hcap' (by decide) hbound (by simp) hpositive
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
