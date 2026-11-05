@@ -2398,4 +2398,38 @@ theorem phase2_alloc_count_relation (h : PtxCallees) (args : List (ExpHOL 64)) :
     rw [hloc, hm]
     exact hp.2.2
 
+/-- Allocation retains the validated transaction, sender buffer, gas bound,
+and all Phase 1 local shapes. -/
+theorem phase2_alloc_validated (h : PtxCallees) (args : List (ExpHOL 64)) :
+    DecCallResumeOn PtxValidatedStrong PtxValidatedStrong
+      (ofString "al_addrs") (ofString "alloc") args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hstage : R16Shards.PtxP1.StageP 0 s := R16Shards.PtxP1.stage0 hp.1.1
+  have hworld := R16Shards.PtxP1.resume_scratch_stage h.wk_alloc
+    (gs := []) (by simp [R16Shards.PtxP1.ScratchSpec]) (fun _ => rfl)
+    (by decide) (by decide) (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by simp) (by decide) (n := 0) (name := ofString "al_addrs") (by decide) args
+    s vs body callee ret v post hc hstage ha hl hb
+  have hspec := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hspec
+  have hh := (hspec (Or.inl ⟨v, rfl⟩)).2.1
+  change globN s "heap_ptr" ≤ globN post "heap_ptr" at hh
+  have hs := ptxPhase2LocalShapes_set_other _ (ptxPhase2LocalShapes_restore s post hp.2)
+    (ofString "al_addrs") v (by decide)
+  have hlu : ∀ n ∈ (["sender", "mgas"] : List String),
+      locN (setVarHOLFinite (ofString "al_addrs") v { post with locals := s.locals }) n = locN s n := by
+    intro n hn
+    have hne : ofString "al_addrs" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl <;> decide
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne]
+  refine ⟨⟨hworld.1, ?_, ?_, ?_⟩, hs⟩
+  · rw [hlu "sender" (by simp)]
+    exact ⟨hp.1.2.1.1, hp.1.2.1.2.trans hh⟩
+  · rw [hlu "sender" (by simp)]
+    exact wordsOK_transfer hp.1.1.1.1.1.1 hworld.1.1.1.1.1 hp.1.2.2.1
+  · rw [hlu "mgas" (by simp)]
+    exact hp.1.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
