@@ -9489,6 +9489,35 @@ theorem finish_child_pop_state_invariants {F : Type}
   rw [hch, EvmEkFk.evmChain_cons_of_cont_ne_zero hne]
   simp
 
+/-- Compose prelude preservation with the concrete parent pop. -/
+theorem finish_child_prelude_pop_invariants {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    (hpre : EvmEkFk.PreludeRel s0 s)
+    (hk0 : memW s0 (globN s0 "cur_cont" + 16) ≠ 0) :
+    let post := setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s)
+    ArenaReady post ∧ ∃ S' : List Nat,
+      InitECandidate.Solver.Wave8Contracts.M23.EvmInvAt post S' ∧
+      EvmEkFk.ReleaseReadyAt post S' (memW s (globN s "cur_cont" + 48))
+        (memW s (globN s "cur_cont" + 56)) ∧
+      evmChain post = (evmChain s0).tail ∧
+      (evmChain post).length + 1 = (evmChain s0).length ∧
+      R11Shards.OpDispatchSpec.evmR post +
+        (memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) ≤
+        R11Shards.OpDispatchSpec.evmR s0 := by
+  obtain ⟨hk, hp, _⟩ := finish_child_prelude_parent hpre hk0
+  obtain ⟨S, hI⟩ := hpre.inv.2
+  have hA : ArenaReady s := hpre.inv.1
+  obtain ⟨hAp, S', _, hIp, hRel, hch, hlen, hR⟩ :=
+    finish_child_pop_state_invariants hA hI hk
+  dsimp only
+  rw [← hp]
+  refine ⟨hAp, S', hIp, hRel, hch.trans (congrArg List.tail hpre.chain_eq), ?_, ?_⟩
+  · simpa only [hpre.chain_eq] using hlen
+  · exact hR.le.trans hpre.r_le
+
 /-- Parent memory alignment and links are already available immediately after
 the concrete global pop, before restoring the frame-memory pointer. -/
 theorem finish_child_pop_alignment {F : Type} {s : PanSemStateFiniteExact 64 F}
@@ -9523,6 +9552,38 @@ theorem finish_child_pop_alignment {F : Type} {s : PanSemStateFiniteExact 64 F}
     exact Nat.mod_eq_of_lt (memW_lt s _)
   have hch := EvmEkFk.evmChain_pop_eq_tail hk hInv.2.choose_spec.2.2.2.1 (by rfl) hev hcc
   exact finish_child_parent_alignment hs hk hch (fun _ _ => ⟨rfl, rfl, rfl, rfl⟩) hev
+
+/-- Transport alignment through the prelude's preserved chain cells. -/
+theorem finish_child_prelude_alignment {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    (hpre : EvmEkFk.PreludeRel s0 s) (hs : HeadMemChainWF s0)
+    (hfmp : globN s "frame_mem_ptr" = globN s0 "frame_mem_ptr") :
+    HeadMemChainWF s := by
+  apply headMemChainWF_of_agree hs hpre.chain_eq hpre.cells
+  · have hh := congrArg List.head? hpre.chain_eq
+    rw [evmChain_cons, evmChain_cons] at hh
+    exact (Prod.mk.inj (Option.some.inj hh)).1
+  · exact hfmp
+
+/-- Alignment and links after executing the prelude and concrete pop. -/
+theorem finish_child_prelude_pop_alignment {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F}
+    (hpre : EvmEkFk.PreludeRel s0 s) (hs : HeadMemChainWF s0)
+    (hfmp : globN s "frame_mem_ptr" = globN s0 "frame_mem_ptr")
+    (hk0 : memW s0 (globN s0 "cur_cont" + 16) ≠ 0) :
+    let post := setGlobalHOLFinite (ofString "cur_cont")
+      (.val (.word (BitVec.ofNat 64 (memW s (globN s "cur_cont" + 8)))))
+      (setGlobalHOLFinite (ofString "ev")
+        (.val (.word (BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont"))))) s)
+    (∀ ec ∈ evmChain post,
+      memW post (ec.1 + 32) % 32 = 0 ∧ memW post (ec.1 + 40) % 8 = 0) ∧
+    ChainLinks (memW post) (evmChain post) ∧
+    memW post (globN post "ev" + 24) + memW post (globN post "ev" + 40) =
+      memW s (globN s "cur_cont" + 56) := by
+  obtain ⟨hk, hp, _⟩ := finish_child_prelude_parent hpre hk0
+  dsimp only
+  rw [← hp]
+  exact finish_child_pop_alignment (finish_child_prelude_alignment hpre hs hfmp) hpre.inv hk
 
 theorem chainLinks_iff_finishChild (m : Nat → Nat) (xs : List Ivl) :
     ChainLinks m xs ↔ EvmEkFk.ChainLinks m xs := by

@@ -2975,6 +2975,30 @@ open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlers
   (globN_eq_of_lookup_eq allocated_mono_scr wordsOK_of_allocated_scr)
 open InitECandidate.Solver.Wave8Contracts.M23
 
+theorem alloc_body_evmStepCC {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hInv : EvmInv s)
+    (hres : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).1) :
+    EvmStepCC ["heap_ptr"] s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_alloc)).2 := by
+  obtain ⟨hA, S, hAt⟩ := (evmInv_iff_at s).1 hInv
+  obtain ⟨p, q, hr, hp, hq, hlim, h8, hpq, hg, hm, hb, hma, hAp, hhp, hsp⟩ :=
+    R13Shards.alloc_body_resumes_props s hA.1.code hA hres
+  apply evmStepCC_of_fresh_heap_step hA hAt hAp hb
+  · rw [hhp, ← hp]
+    exact hpq
+  · intro k hk
+    rw [hg, HolFiniteMapExact.lookup_update]
+    have hne : ofString "heap_ptr" ≠ k := by
+      intro heq
+      apply hk
+      simp [← heq]
+    simp [FUPDATE, hne]
+  · intro a ha
+    rw [hm]
+  · intro b hb64 hnot
+    unfold memB
+    rw [hm, hb]
+
 private theorem lookup_lst_push_local :
     originalRuntimeCode.lookup (ofString "lst_push") =
       some ([(ofString "l", .one), (ofString "esz", .one)],
@@ -5335,8 +5359,6 @@ theorem transfer_log_append_returned_step {F : Type}
       (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
       (∀ S0 Nd0, TriesTypedWith s S0 Nd0 → ∀ j ∈ nodeExtents s Nd0, Disj x j) ∧
       (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
-    (hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40))
-    (hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40))
     (hcall : (evaluateHOLFiniteState s
       (.call (some (none, none)) (ofString "log_append")
         [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none)
@@ -5348,6 +5370,15 @@ theorem transfer_log_append_returned_step {F : Type}
       (.call (some (none, none)) (ofString "log_append")
         [.var .global (ofString "ev"), .var .local (ofString "log")])
     EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
+  have hrecord : (logw.toNat, 40) ∈ logOwnedIvls s logw.toNat := by
+    rw [logOwnedIvls_of_transfer haddr htp htn hdp hdn]
+    simp
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := List.mem_cons_self
+  have hframe := (hdisj _ hrecord).2.2.1 _ hhead
+  have hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  have hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
   exact log_append_head_returned_spec s evw logw hInv hev
     (head_log_count_succ_lt_of_evmInv hInv)
     (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
