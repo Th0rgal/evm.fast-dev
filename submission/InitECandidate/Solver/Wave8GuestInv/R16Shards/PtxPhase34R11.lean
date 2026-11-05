@@ -2806,6 +2806,19 @@ theorem stable_length_field_word {F : Type} (s : PanSemStateFiniteExact 64 F)
   have hw := hh.2.2 1 (by norm_num)
   simpa using hw
 
+theorem stable_length_address_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24)) :
+    locN s "stable_logs" + 8 < 2 ^ 64 ∧
+      (BitVec.ofNat 64 (locN s "stable_logs") + (8 : BitVec 64)).toNat =
+        locN s "stable_logs" + 8 := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have hlt : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  refine ⟨hlt, ?_⟩
+  have hl : locN s "stable_logs" < 2 ^ 64 := by omega
+  simp only [BitVec.toNat_add, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hl, show (8 : BitVec 64).toNat = 8 from rfl,
+    Nat.mod_eq_of_lt hlt]
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
