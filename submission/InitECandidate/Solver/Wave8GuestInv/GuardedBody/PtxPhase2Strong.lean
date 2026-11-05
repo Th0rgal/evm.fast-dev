@@ -5178,4 +5178,44 @@ theorem phase2_packed_copy_set_other {F : Type} (s : PanSemStateFiniteExact 64 F
   intro n hn
   simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
 
+/-- A scratch assignment preserves all guarded packed-copy facts. -/
+theorem phase2_packed_copy_scratch_hoare (name : MlS) (e : ExpHOL 64)
+    (hne : ∀ n ∈ (["al_keys", "nkeys", "tx", "i", "j", "k"] : List String),
+      ofString n ≠ name) :
+    Hoare PtxPackedCopyIndex (.assign .local name e)
+      (fun r s => r = none → PtxPackedCopyIndex s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    exact fun _ => phase2_packed_copy_set_other s hp name v hne
+  · exact fun _ _ hr => by cases hr
+
+/-- Evaluate the concrete packed address-copy destination from its scalar locals. -/
+theorem phase2_packed_destination_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (base k : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k))) :
+    evalAt s (.op .add [.var .local (ofString "al_keys"),
+      .panop .mul [.var .local (ofString "k"), .const 52]]) =
+      some (.val (.word (base + k * 52))) := by
+  simp [evalAt, evalHOLExact, evalListHOLExact, ha, hk, valueIsWord, valueWord,
+    wordOpHOL, wordOp, panOpHOL]
+
+/-- The allocated packed destination agrees with the evaluated machine pointer without wrapping. -/
+theorem phase2_packed_destination_toNat {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedCopyIndex s) (base k : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    (base + k * 52).toNat = locN s "al_keys" + 52 * locN s "k" := by
+  have hin := hp.1.2.1.2
+  have hslot := (phase2_packed_copy_index_destinations hp).1.2
+  dsimp at hin hslot
+  have hlt : locN s "al_keys" + 52 * locN s "k" < 2 ^ 64 := by omega
+  have han : locN s "al_keys" = base.toNat := by simp [locN, ha]
+  have hkn : locN s "k" = k.toNat := by simp [locN, hk]
+  rw [han, hkn] at hlt ⊢
+  rw [BitVec.toNat_add, BitVec.toNat_mul]
+  change (base.toNat + k.toNat * 52 % 2 ^ 64) % 2 ^ 64 = base.toNat + 52 * k.toNat
+  rw [Nat.add_mod_mod, Nat.mul_comm k.toNat 52, Nat.mod_eq_of_lt hlt]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
