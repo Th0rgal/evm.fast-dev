@@ -3136,4 +3136,26 @@ theorem phase2_address_copy_nkeys_hoare :
     exact fun _ => phase2_address_copy_set_nkeys s hp w
   · exact fun _ _ hr => by cases hr
 
+/-- The AST increment preserves the guarded copy invariant. -/
+theorem phase2_address_copy_increment_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, hw⟩ := hp.1.2.1
+    have hv : v = .val (.word (w + 1)) := by
+      simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+        valueWord, wordOpHOL, wordOp] using he.symm
+    subst v
+    have hwN : locN s "i" = w.toNat := by simp [locN, hw]
+    have hadd : w + 1 = BitVec.ofNat 64 (locN s "i" + 1) := by
+      rw [hwN]
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, BitVec.toNat_ofNat]
+    rw [hadd]
+    exact fun _ => (phase2_address_copy_increment s hp.1 hp.2).1
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
