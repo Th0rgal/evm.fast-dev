@@ -5023,4 +5023,51 @@ theorem hoare_prepare_dispatch_code_binders (gw : List String) (hp : Nat)
     · simpa (config := {decide := true}) [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hP.2.2
     · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
 
+/-- The source common dispatch suffix, after resolving direct or delegated code. -/
+def prepareDispatchCommon : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "msg"), .const 112#64])
+      (.var .local (ofString "code")))
+    (.seq (.store (.op .add [.var .local (ofString "msg"), .const 120#64])
+        (.var .local (ofString "code_n")))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 48#64])
+          (.var .local (ofString "code")))
+        (.seq (.store (.op .add [.var .global (ofString "ev"), .const 56#64])
+            (.var .local (ofString "code_n")))
+          (.decCall (ofString "jd") .one (ofString "compute_jumpdests")
+            [.var .local (ofString "code"), .var .local (ofString "code_n")]
+            (.seq (.store (.op .add [.var .global (ofString "ev"), .const 80#64])
+              (.var .local (ofString "jd"))) (.return (.const 0#64)))))))
+
+/-- Direct code-pair binding followed by the complete common dispatch suffix. -/
+theorem hoare_prepare_dispatch_direct (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (code code_n : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "rcode") = some (.rStruct [.val (.word code), .val (.word code_n)]))
+      (.dec (ofString "code") .one (.rfield 0 (.var .local (ofString "rcode")))
+        (.dec (ofString "code_n") .one (.rfield 1 (.var .local (ofString "rcode")))
+          prepareDispatchCommon))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  apply hoare_prepare_dispatch_code_binders
+  exact Hoare.mono (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub)
+    (fun _ h => ⟨h.1, h.2.2⟩)
+
+/-- Delegated code-pair assignment and message updates followed by the same
+complete common dispatch suffix. -/
+theorem hoare_prepare_dispatch_delegated_common (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64)
+    (hnb : code_n.toNat < 2 ^ 40) (hsub : "scratch_ptr" ∈ gw) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+              (.var .local (ofString "daddr"))) prepareDispatchCommon))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  exact hoare_prepare_dispatch_delegated_cont gw hp G ch code code_n daddr _
+    (hoare_prepare_dispatch_common gw hp G ch code code_n hnb hsub)
+
 end HeadStore
