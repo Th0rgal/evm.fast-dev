@@ -9745,4 +9745,22 @@ theorem h4_backing_strong (h : PtxCallees) (hprefix : Phase4BackingPrefix) :
   intro tail b ht F s hc hp
   exact ptxPhase4_cut_backing_strong h hprefix ht s hc hp
 
+/-- Callee-level backing contract for the cross-shard message-call bridge. -/
+def PmcBackingStrong : Prop :=
+  FunSpec (fun s => MsgReady s ∧ TxBacking s)
+    (fun _ r post => ∀ v, r = some (.returned v) → TxBacking post)
+    (ofString "process_message_call")
+
+/-- Convert callee backing preservation to the caller resume obligation. -/
+theorem resume_pmc_backing (hkeep : PmcBackingStrong) :
+    DecCallResumeOn (fun s => PtxMessageReady s ∧ TxBacking s)
+      TxBacking (ofString "out") (ofString "process_message_call") [.var .local (ofString "m")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hm := entry_pmc s vs body callee ret hc hp.1 ha hl
+  have hpre : MsgReady (callEntryStateHOLFinite s callee) ∧
+      TxBacking (callEntryStateHOLFinite s callee) := ⟨hm, hp.2⟩
+  have hk := PtxP1.funSpec_at_lookup hkeep s hc vs body callee ret hl hpre (by rw [hb]; simp)
+  rw [hb] at hk
+  exact hk v rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
