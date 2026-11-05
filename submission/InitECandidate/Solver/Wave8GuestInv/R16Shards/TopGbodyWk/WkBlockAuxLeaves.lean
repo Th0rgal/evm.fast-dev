@@ -6599,4 +6599,48 @@ theorem union_bs_inner_call_entry {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [hn]
   exact hinner
 
+/-- A hit in the block outer table supplies the inner-union entry condition,
+including preservation across the read-only lookup and binding of `binner`. -/
+theorem merge_outer_get_hit_union_entry {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw kw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (hbs : globN s "bs" ≠ 0) (hnz : tw.toNat ≠ 0)
+    (houter : tw.toNat = memW s (globN s "bs" + 32))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "key") = some (.val (.word kw)))
+    (v : ValueHOL 64)
+    (hret : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).1 =
+      some (.returned v)) :
+    ∃ f0 f1 : BitVec 64, v = .rStruct [.val (.word f0), .val (.word f1)] ∧
+      (f0 ≠ 0 → ∀ (L : HolFiniteMapExact MlS (ValueHOL 64))
+        (src : ExpHOL 64) vs body callee ret,
+        let post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_get)).2
+        let next := setVarHOLFinite (ofString "binner") (.val (.word f1))
+          { post with locals := L }
+        evalListHOLFinite next (h := fun a => Classical.propDecidable (next.memaddrs a))
+          [.var .local (ofString "binner"), src] = some vs →
+        lookupCodeHOLFinite next.code.lookup (ofString "htab_union_into") vs =
+          some (body, callee, ret) →
+        WorldOK (callEntryStateHOLFinite next callee) ∧
+          globN (callEntryStateHOLFinite next callee) "bs" ≠ 0 ∧
+          memW (callEntryStateHOLFinite next callee)
+            (globN (callEntryStateHOLFinite next callee) "bs" + 32) ≠ 0 ∧
+          locN (callEntryStateHOLFinite next callee) "dst" ∈
+            htabValues (callEntryStateHOLFinite next callee)
+              (memW (callEntryStateHOLFinite next callee)
+                (globN (callEntryStateHOLFinite next callee) "bs" + 32))) := by
+  obtain ⟨f0, f1, hv, hmem⟩ :=
+    merge_outer_get_ret_in_values s tw kw hc hW hbs hnz houter ht hk v hret
+  refine ⟨f0, f1, hv, ?_⟩
+  intro hhit L src vs body callee ret post next ha hl
+  have hframe := WkBal.locFrame_htab_get s hc
+  have hn : next = { s with locals := L.update (ofString "binner", .val (.word f1)), clock := post.clock } := by
+    dsimp only [next, setVarHOLFinite]
+    rw [show post = { s with locals := post.locals, clock := post.clock } from hframe]
+  apply union_bs_inner_call_entry next (by rw [hn]; exact hc)
+    (by rw [hn]; exact localsFree_worldOK s _ _ hW)
+    (by rw [hn]; exact hbs) (by rw [hn]; exact houter ▸ hnz) ?_ src vs body callee ret ha hl
+  rw [hn]
+  simpa [locN, HolFiniteMapExact.lookup_update, FUPDATE, htabValues, hdr, nodeF, memW, globN] using hmem hhit
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
