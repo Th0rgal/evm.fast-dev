@@ -2288,4 +2288,22 @@ theorem phase2_address_alloc_fresh (h : PtxCallees) {F : Type}
   refine ⟨w, hv, ?_⟩
   simpa only [hcn] using hf
 
+/-- A fresh allocation is separate from the live environment, transaction
+header, and every nonempty access-list record array. -/
+theorem phase2_fresh_separation {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (p size : Nat)
+    (hp : PtxAccessCountReady s)
+    (hf : FreshBlock (callEntryStateHOLFinite s callee) post p size) :
+    Disj (locN s "te", 200) (p, size) ∧
+    Disj (locN s "tx", 384) (p, size) ∧
+    (0 < memW s (locN s "tx" + 216) →
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (p, size)) := by
+  have hstart : globN s "heap_ptr" ≤ p := hf.2.1.1
+  obtain ⟨S, Nd, _, ht, _⟩ := hp.1.2
+  refine ⟨Or.inr (Or.inr (Or.inl ?_)), Or.inr (Or.inr (Or.inl ?_)), ?_⟩
+  · exact hp.1.1.2.2.1.2.trans hstart
+  · exact ht.1.2.1.2.trans hstart
+  · intro hn
+    exact Or.inr (Or.inr (Or.inl ((ht.2.2 hn).1.2.trans hstart)))
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
