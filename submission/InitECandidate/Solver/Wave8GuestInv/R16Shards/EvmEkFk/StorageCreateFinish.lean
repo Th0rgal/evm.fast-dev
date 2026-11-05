@@ -221,6 +221,42 @@ theorem allocated_survives_world_frame {F : Type}
       subst j
       exact hgap
 
+theorem arena_survives_world_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {old new R : List Ivl} {o : Ivl}
+    (hAs : ArenaOK s) (hAp : ArenaOK post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (ho : Allocated s o ∨ Inside o scratchStart (globN s "frame_mem_ptr"))
+    (hd : ∀ j ∈ old, Disj o j) (hR : ∀ j ∈ R, Disj o j)
+    (hshape : ∀ j ∈ old ++ R ++ [freeGap s],
+      j = (0, 0) ∨ j.1 % 8 = 0 ∨ j.2 ≠ 0)
+    (hfr : FrameOutside s post (old ++ R ++ [freeGap s]) (heapFree s))
+    (hgrow : OwnedGrows s post old new) :
+    InitECandidate.Solver.Wave8Contracts.M08.IvlUnhit s post o ∧
+      ∀ j ∈ new, Disj o j := by
+  rcases ho with hal | hfm
+  · exact allocated_survives_world_frame hAs hAp hhp hal hd hR hshape hfr hgrow
+  · have hsep : heapLimit ≤ scratchStart := by decide
+    have hgap : Disj o (freeGap s) := Or.inr (Or.inr (Or.inl hfm.2))
+    have hheap : Disj o (heapFree s) := by
+      right; right; right
+      have := hAs.2.1; have := hfm.1
+      unfold heapFree; dsimp only; omega
+    refine ⟨aligned_cell_unhit_of_frameOutside hfr hshape ?_ ?_ hheap, ?_⟩
+    · right; left; exact hAs.2.2.2.2.2.1
+    · intro j hj
+      rcases List.mem_append.1 hj with hj | hj
+      · rcases List.mem_append.1 hj with hj | hj
+        · exact hd j hj
+        · exact hR j hj
+      · exact List.mem_singleton.1 hj ▸ hgap
+    · intro j hj
+      rcases hgrow j hj with rfl | ⟨i, hi, hin⟩ | hfresh
+      · exact Or.inr (Or.inl rfl)
+      · exact InitECandidate.Solver.Wave8Contracts.M08.disj_of_inside_right hin (hd i hi)
+      · right; right; right
+        have := hAp.2.1
+        exact le_trans hfresh.2 (le_trans this (le_trans hsep hfm.1))
+
 private theorem globalBuffers_sz_pos : ∀ gn ∈ globalBuffers, gn.2 ≠ 0 := by decide
 
 private theorem lstObjects_well_shaped {F : Type} (s : PanSemStateFiniteExact 64 F) (l esz : Nat) :
@@ -776,6 +812,59 @@ theorem avoidsTries_list_combine {F : Type} {s : PanSemStateFiniteExact 64 F} {S
     have hcomb := avoidsTries_combine (hx x (List.mem_cons_self ..))
       (avoidsTries_list_combine h0 xs (fun y hy => hx y (List.mem_cons_of_mem _ hy)))
     simpa using hcomb
+
+theorem not_frame_role_of_world_or_journal {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {a : Nat × String} (ha : a ∈ worldRoleSlots s ++ journalRoleSlots s) :
+    a.2 ∉ ["frame.del", "frame.addr", "frame.key"] := by
+  intro hm
+  rcases List.mem_append.1 ha with hw | hjr
+  · unfold worldRoleSlots at hw
+    obtain ⟨hw, _⟩ := List.mem_filter.1 hw
+    simp only [List.mem_append, List.mem_cons, List.not_mem_nil, or_false] at hw
+    rcases hw with (((((hws | hbs) | hts) | hg) | hnbs) | hnts) | hbal
+    · unfold recRoles at hws; split at hws
+      · simp at hws
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hws
+        rw [← heq_k] at hm; simp at hk hm; rcases hk with rfl | rfl <;> simp at hm
+    · unfold recRoles at hbs; split at hbs
+      · simp at hbs
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hbs
+        rw [← heq_k] at hm; simp at hk hm
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp at hm
+    · unfold recRoles at hts; split at hts
+      · simp at hts
+      · obtain ⟨k, hk, heq_k⟩ := List.mem_map.1 hts
+        rw [← heq_k] at hm; simp at hk hm
+        rcases hk with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> simp at hm
+    · rcases hg with rfl | rfl | rfl <;> simp at hm
+    · unfold nestRoles at hnbs; split at hnbs
+      · simp at hnbs
+      · split at hnbs
+        · simp at hnbs
+        · obtain ⟨_, _, heq_v⟩ := List.mem_map.1 hnbs; rw [← heq_v] at hm; simp at hm
+    · unfold nestRoles at hnts; split at hnts
+      · simp at hnts
+      · split at hnts
+        · simp at hnts
+        · obtain ⟨_, _, heq_v⟩ := List.mem_map.1 hnts; rw [← heq_v] at hm; simp at hm
+    · obtain ⟨_, _, had_m⟩ := List.mem_flatMap.1 hbal
+      simp at had_m; rcases had_m with rfl | rfl <;> simp at hm
+  · unfold journalRoleSlots at hjr
+    obtain ⟨_, _, hitem⟩ := List.mem_flatMap.1 hjr
+    simp only [List.mem_cons] at hitem
+    rcases hitem with rfl | hrest
+    · dsimp only at hm; unfold journalRole at hm; split_ifs at hm <;> simp at hm
+    · split_ifs at hrest
+      · simp only [List.mem_singleton] at hrest; rw [hrest] at hm; simp at hm
+      · simp at hrest
+
+theorem frameRoleSlots_role_mem {F : Type} {s : PanSemStateFiniteExact 64 F} {ch : List Ivl}
+    {b : Nat × String} (hb : b ∈ frameRoleSlots s ch) :
+    b.2 ∈ ["frame.del", "frame.addr", "frame.key"] := by
+  unfold frameRoleSlots at hb
+  obtain ⟨_, _, hb3⟩ := List.mem_flatMap.1 hb
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hb3
+  rcases hb3 with rfl | rfl | rfl <;> simp
 
 theorem create_finish_deposit_mul_no_wrap (n : BitVec 64)
     (hn : n.toNat ≤ 65536) :
