@@ -1792,7 +1792,7 @@ theorem Hoare.call_evmKeeps_fall {P' : ∀ {F : Type}, PanSemStateFiniteExact 64
     {gw gw' : List String} {hp : Nat} {G : MlS → Option (ValueHOL 64)} {ch : List Ivl}
     {fname : MlS} (hk : EvmKeeps P' gw' fname) (hsub : ∀ g ∈ gw', g ∈ gw)
     (hP' : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), StepFrom gw hp G ch s → P' s)
-    (hLF : LocalsFree P') (arguments : List (ExpHOL 64)) :
+    (arguments : List (ExpHOL 64)) :
     Hoare (StepFrom gw hp G ch) (.call (some (none, none)) fname arguments)
       (Fall (StepFrom gw hp G ch)) := by
   refine ⟨fun {F} s hcode hS hnt hr => ?_⟩
@@ -1963,6 +1963,77 @@ theorem Hoare.decCall_ro_fall {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64
             rcases hr with hr | hr
             · cases hr
             · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
+/-- `dec name .one init body` with the `Fall` post shape, `Q` locals-free: the initializer's
+failure is an error (not a resuming result), and resuming results restore the outer local. -/
+theorem Hoare.dec_fall {P P' Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name : MlS} {shape : ShapeHOL} {init : ExpHOL 64} {body : ProgHOL 64}
+    (hinit : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64), P s →
+      @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) init =
+        some v → P' (setVarHOLFinite name v s))
+    (hbody : Hoare P' body (Fall Q)) (hQ : LocalsFree Q) :
+    Hoare P (.dec name shape init body) (Fall Q) :=
+  Hoare.dec (names := []) (by simp) hinit hbody
+    (fun r t locals _ h hr => hQ t locals t.clock (h hr))
+    (fun _ _ h => by
+      rcases h with h | h
+      · cases h
+      · exact absurd h not_resumes_error)
+
+/-- The initializer `lds 1 (ev + 112)` of `depth0_prepare`'s `msg` local evaluates to the owned
+message pointer. -/
+theorem dec_msg_init {F : Type} (s : PanSemStateFiniteExact 64 F) (hP : EvmMsgReady s)
+    (v : ValueHOL 64)
+    (hv : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) = some v) :
+    ∃ m : BitVec 64, v = .val (.word m) ∧ m.toNat = memW s (globN s "ev" + 112) := by
+  have hInv := evmInv_of_evmMsgReady s hP
+  have hhead_mem : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain; exact List.mem_cons_self
+  obtain ⟨hAs, S, _, _, _, _, hFW_all, _⟩ := hInv
+  have hb_e := (R10Shards.GbodyProcessMsg.frameWF_bounds (hFW_all _ hhead_mem)).1
+  dsimp only at hb_e
+  generalize haddrE : (.op .add [.var .global (ofString "ev"), .const 112] : ExpHOL 64) = addrE at hv
+  simp only [evalHOLExact] at hv
+  rcases ha : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      addrE with _ | va
+  · rw [ha] at hv; simp at hv
+  · rw [ha] at hv
+    subst haddrE
+    rcases va with ⟨⟨a⟩⟩ | _ | _
+    · simp only [memLoadHOLExact] at hv
+      by_cases hdom : s.memaddrs a
+      · simp only [hdom, ↓reduceIte, Option.some.injEq] at hv
+        cases hmem : s.memory a with
+        | word w =>
+          rw [hmem] at hv
+          have hv' : v = .val (.word w) := by
+            split at hv
+            · exact (Option.some.inj hv).symm
+            · cases hv
+          have haddr : a.toNat = globN s "ev" + 112 := by
+            simp [evalHOLExact, evalListHOLExact] at ha
+            rcases hg : s.globals.lookup (ofString "ev") with _ | gv
+            · simp [hg] at ha
+            · rcases gv with ⟨⟨gw⟩⟩ | _ | _
+              · simp [hg, valueIsWord, valueWord, wordOpHOL, wordOp] at ha
+                subst ha
+                have hglob : globN s "ev" = gw.toNat := by simp [globN, hg]
+                rw [hglob] at hb_e ⊢
+                have h112 : (112#64).toNat = 112 := by decide
+                rw [BitVec.toNat_add, h112, Nat.mod_eq_of_lt (by omega)]
+              · simp [hg, valueIsWord] at ha
+              · simp [hg, valueIsWord] at ha
+          refine ⟨w, hv', ?_⟩
+          unfold memW
+          have heq : BitVec.ofNat 64 (globN s "ev" + 112) = a := by
+            apply BitVec.eq_of_toNat_eq
+            rw [haddr]
+            exact Nat.mod_eq_of_lt (by omega)
+          rw [heq, hmem]
+      · simp [hdom] at hv
+    · simp at hv
+    · simp at hv
 
 end HeadStore
 
