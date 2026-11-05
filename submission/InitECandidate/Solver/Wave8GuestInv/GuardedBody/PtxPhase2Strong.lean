@@ -12415,4 +12415,41 @@ theorem phase2_alloc_message_store_ready (h : PtxCallees) {ι : Type} [Nonempty 
       ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
     exact ⟨S', Nd', (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw', hg, hf⟩
 
+/-- Final message readiness from one joint world witness for the two access tables.
+The message geometry and transaction environment come from the store cut. -/
+theorem phase2_message_ready_of_tables {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ha : memW s (locN s "m" + 152) ∈ S)
+    (hk : memW s (locN s "m" + 160) ∈ S)
+    (hd : IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+    (hg : memW s (locN s "m" + 40) < 2 ^ 63)
+    (hr : RolesOK s S (worldRoleSlots s ++
+      [(memW s (locN s "m" + 152), "frame.addr"),
+        (memW s (locN s "m" + 160), "frame.key")]) (journalRoleSlots s)) :
+    PtxMessageReady s := by
+  have hbound := (ivl_allocated_bound hp.1.1.2 (Or.inl hp.2.2.2.1)).2
+  have hm : locN (setVarHOLFinite (ofString "msg")
+      (.val (.word (BitVec.ofNat 64 (locN s "m")))) s) "msg" = locN s "m" := by
+    change (BitVec.ofNat 64 (locN s "m")).toNat = locN s "m"
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by dsimp at hbound; omega)]
+  refine ⟨⟨hp.1, hp.2.1⟩, ?_⟩
+  unfold MsgReady
+  rw [hm]
+  refine ⟨(arenaReady_with_locals s _ s.clock).mpr hp.1.1, S,
+    (worldTyped_with_locals s _ s.clock S).mpr ((worldTyped_iff_with s S).mpr ⟨Nd, hw⟩),
+    ha, hk, hp.2.2.2.1, hp.2.2.2.2.1, ?_, ?_, ?_, hg, hr⟩
+  · intro t ht i hi
+    exact hd _ (by simp) i (by
+      simp only [worldOwned, List.mem_append]
+      exact Or.inl (Or.inl (List.mem_flatMap.mpr ⟨t, ht, hi⟩)))
+  · intro j hj
+    exact hd _ (by simp) j (by
+      simp only [worldOwned, List.mem_append]
+      exact Or.inl (Or.inr hj))
+  · refine ⟨Nd, hw.2.2.2, ?_⟩
+    intro o ho j hj
+    exact hd o ho j (by simp only [worldOwned, List.mem_append]; exact Or.inr hj)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
