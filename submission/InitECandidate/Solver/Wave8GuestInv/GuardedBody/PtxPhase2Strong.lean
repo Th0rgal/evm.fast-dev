@@ -10432,4 +10432,36 @@ theorem phase2_count_cases_alloc_world_init (h : PtxCallees) :
   exact ⟨phase2_packed_ready_worldOK _
     ((arenaReady_with_locals post _ post.clock).mpr hs.1) hk, hi⟩
 
+/-- The packed allocation exposes its retained world to any subsequent setup. -/
+theorem phase2_count_cases_alloc_world_bound (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedInitCases s) tail b) :
+    TerminatingProgBoundedOn PtxAddressCountExit
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => WorldOK s ∧ PtxPackedInitCases s) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr := phase2_count_exit_access_ready hp
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_cases_alloc_world_init h
+  · exact ht
+
+/-- Initialized packing composes with a world-aware continuation. -/
+theorem phase2_packed_world_continuation_bound (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedKeysReady s) tail b) :
+    TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedInitCases s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.2)
+    (phase2_packed_cases_initialized_world_hoare h) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
