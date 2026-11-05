@@ -5075,7 +5075,7 @@ theorem phase2_packed_copy_index_preserved {F : Type}
   · rw [hi, hc]; exact hp.2.2.1
   · rw [hj, hi, hm]; exact hp.2.2.2.1
   · rw [hk, hi, hj]
-    have he := phase2_key_prefix_congr post s (locN s "i") (fun i _ => hm i)
+    have he := phase2_key_prefix_congr s post (locN s "i") (fun i _ => hm i)
     rw [he]
     exact hp.2.2.2.2
 
@@ -5093,6 +5093,9 @@ theorem phase2_packed_copy_update_indices {F : Type} (s : PanSemStateFiniteExact
   refine ⟨phase2_packed_keys_set_other _ hready (ofString "j") _ (by decide), ?_⟩
   obtain ⟨hk, hj⟩ := phase2_packed_copy_counter_bounds hp
   have hrel := hp.2.2.2.2
+  change locN s "k" + 1 < 18446744073709551616 at hk
+  change locN s "j" + 1 < 18446744073709551616 at hj
+  simp only [locN] at hk hj
   simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
     show ofString "j" ≠ ofString "k" by decide,
     show ofString "j" ≠ ofString "i" by decide,
@@ -5100,6 +5103,6 @@ theorem phase2_packed_copy_update_indices {F : Type} (s : PanSemStateFiniteExact
     show ofString "j" ≠ ofString "tx" by decide,
     show ofString "k" ≠ ofString "tx" by decide,
     Nat.mod_eq_of_lt hk, Nat.mod_eq_of_lt hj, Nat.add_assoc]
-    using congrArg (fun n => n + 1) hrel
+    using (show locN s "k" + 1 = phase2_key_prefix s (locN s "i") + (locN s "j" + 1) by omega)
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
