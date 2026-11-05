@@ -2686,4 +2686,14 @@ theorem phase2_address_store_txAccess {F : Type} {s : PanSemStateFiniteExact 64 
   · rw [how]
     exact hd
 
+/-- Address-array stores preserve the live environment's complete contents. -/
+theorem phase2_address_store_te_unhit {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    IvlUnhit s { s with memory := mem } (locN s "te", 200) := by
+  exact ivlUnhit_single hm (by simp)
+    (disj_of_inside_right hin hp.2.2.2.2.2.1)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
