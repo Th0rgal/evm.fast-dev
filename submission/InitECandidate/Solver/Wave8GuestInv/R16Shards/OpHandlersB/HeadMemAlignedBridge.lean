@@ -10958,7 +10958,7 @@ theorem lst_push_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hd0 : s.memaddrs l) (hle : n.toNat ≤ cap.toNat) (hcap : n.toNat < 2 ^ 59)
     (ha8 : arr0.toNat % 8 = 0)
     (hw : arr0.toNat + 8 * n.toNat < 2 ^ 64)
-    (hold : arr0.toNat + 8 * n.toNat ≤ globN s "heap_ptr")
+    (hold : arr0.toNat + 8 * n.toNat ≤ globN s "heap_ptr" ∨ heapLimit ≤ arr0.toNat)
     (hLw : l.toNat + 24 ≤ 2 ^ 64)
     (hsep : l.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * n.toNat ≤ l.toNat)
     (hLh : l.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ l.toNat) :
@@ -11035,7 +11035,14 @@ theorem lst_push_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     show Flw X _ _
     refine Flw.seq_memcpy_disj hA.1.code hp arr0 (8 * n)
       (by rw [hmul]; omega) (by rw [hmul]; exact hw)
-      (by rw [hmul]; omega) (by unfold Disj; simp only [hmul]; right; omega)
+      (by rw [hmul]; omega) (by
+        unfold Disj; simp only [hmul]
+        rcases hold with hold | hold
+        · exact Or.inr (Or.inr (Or.inr (by omega)))
+        · apply Or.inr; apply Or.inr; apply Or.inl
+          change 2952790016 ≤ arr0.toNat at hold
+          have hqbound : q.toNat ≤ 2952790016 := hqm
+          omega)
       (by rw [ev_loc]; exact hXp)
       (ev_load_loc_eq X _ l 0 arr0 hXl (by show s.memaddrs (l + 0); simpa using hd0)
         (by show s.memory (l + 0) = _; simpa using hma))
@@ -11158,7 +11165,8 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59)
     (ha8 : arr0.toNat % 8 = 0)
     (hw : arr0.toNat + 8 * cap.toNat ≤ 2 ^ 64)
-    (hold : arr0.toNat + 8 * n.toNat ≤ globN s "heap_ptr")
+    (hold : arr0.toNat + 8 * n.toNat ≤ globN s "heap_ptr" ∨
+      (heapLimit ≤ arr0.toNat ∧ arr0.toNat + 8 * n.toNat < 2 ^ 64))
     (hLw : L.toNat + 24 ≤ 2 ^ 64)
     (hsep : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap.toNat ≤ L.toNat)
     (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
@@ -11199,8 +11207,11 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
       (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
       (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
       hma hmn hmc hd0 hle (by omega) ha8
-      (by have hh := hA.2.2.1; change globN s "heap_ptr" ≤ 2952790016 at hh; omega)
-      hold hLw (by rcases hsep with h | h <;> [left; right] <;> omega) hLh) h3
+      (by
+        rcases hold with hold | hold
+        · have hh := hA.2.2.1; change globN s "heap_ptr" ≤ 2952790016 at hh; omega
+        · exact hold.2)
+      (hold.imp id And.left) hLw (by rcases hsep with h | h <;> [left; right] <;> omega) hLh) h3
   obtain ⟨_, _, _, _, _, _, _, pA, arr', d, len, pmL', _, _, halt, _⟩ := hp
   have harr : arr' = arr := by have h := pmL'.symm.trans pmL; cases h; rfl
   subst arr'
@@ -11324,7 +11335,8 @@ theorem log_append_run_contents_step {F : Type} (s u : PanSemStateFiniteExact 64
     (hle : n.toNat ≤ cap.toNat) (hcap : cap.toNat < 2 ^ 59)
     (ha8 : arr.toNat % 8 = 0)
     (hw : arr.toNat + 8 * cap.toNat ≤ 2 ^ 64)
-    (hold : arr.toNat + 8 * n.toNat ≤ globN u "heap_ptr")
+    (hold : arr.toNat + 8 * n.toNat ≤ globN u "heap_ptr" ∨
+      (heapLimit ≤ arr.toNat ∧ arr.toNat + 8 * n.toNat < 2 ^ 64))
     (hLw : L.toNat + 24 ≤ 2 ^ 64)
     (hsep : L.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap.toNat ≤ L.toNat)
     (hLh : L.toNat + 24 ≤ globN u "heap_ptr" ∨ heapLimit ≤ L.toNat)
