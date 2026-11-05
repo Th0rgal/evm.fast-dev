@@ -2501,4 +2501,60 @@ theorem htabExit_csrLiveAt {F : Type}
     by simpa only [hwrs, hjrs] using hcl,
     by simpa only [hwrs, hjrs] using hrl, hmp, hdp⟩
 
+theorem worldStep_csrTablesAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {cache roots : Nat}
+    (hs : CsrTablesAt s cache roots)
+    (hstep : WorldStep R gw keep Q s r post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR : ∀ S Nd, WorldTypedWith s S Nd →
+      IvlsDisj (R s) (worldTypedIvls s S Nd)) :
+    CsrTablesAt post cache roots := by
+  obtain ⟨hA, hne, S, Nd, hW, hc, hr, hcl, hrl⟩ := hs
+  obtain ⟨S', Nd', hWp, hc', hr', hcl', hrl', _⟩ :=
+    worldStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl
+      hstep hR_z (hR S Nd hW)
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', hWp, hc', hr', hcl', hrl'⟩
+
+theorem worldStep_csrLiveAt {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)} {cache roots m : Nat}
+    (hs : CsrLiveAt s cache roots m)
+    (hstep : WorldStep R gw keep Q s r post)
+    (hbe : post.be = s.be) (hag : AllocatorGrows s post)
+    (hR_z : ∀ j ∈ R s, j.2 = 0 → j.1 % 8 = 0)
+    (hR : ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm m))
+    (hcells : ∀ S Nd Nm, WorldTypedWith s S Nd → MptObjInWith s S Nm m →
+      IvlsDisj (mptObjIvls s Nm m) (nodeExtents s Nd) →
+      ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 →
+      ∀ a : BitVec 64, a.toNat % 8 = 0 → CellHits a.toNat o →
+        (∀ j ∈ worldOwned s S Nd ++ R s ++ [freeGap s], ¬ CellHits a.toNat j) ∧
+        ¬ CellHits a.toNat (heapFree s)) :
+    CsrLiveAt post cache roots m := by
+  obtain ⟨hA, hne, S, Nd, Nm, hW, hc, hr, hcl, hrl, hm, hd⟩ := hs
+  have hR_all := hR S Nd Nm hW hm hd
+  have hR_wti : IvlsDisj (R s) (worldTypedIvls s S Nd) :=
+    fun r' hr' i hi => hR_all r' hr' i (List.mem_append_left _ hi)
+  obtain ⟨S', Nd', hWp, hc', hr', hcl', hrl', _, _, _, _, _, hog, hfr⟩ :=
+    worldStep_preserves_two_local_tables_csr hA hW hc hr hne hcl hrl
+      hstep hR_z hR_wti
+  have hu : ∀ o ∈ mptObjIvls s Nm m, o.2 ≠ 0 → P3MptSet.IvlUnhit s post o := by
+    intro o ho hnz a ha hh
+    obtain ⟨hkeep, hfresh⟩ := hcells S Nd Nm hW hm hd o ho hnz a ha hh
+    exact hfr a hkeep hfresh
+  obtain ⟨hm', hd', _⟩ :=
+    mptObjInWith_transfer_csr hA hstep.1 hbe hag hm hd hog hu
+  exact ⟨hstep.1, hne, S' ++ [cache, roots], Nd', Nm, hWp,
+    hc', hr', hcl', hrl', hm', hd'⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
