@@ -9823,4 +9823,120 @@ theorem phase2_packed_alloc_init_ready (h : PtxCallees) :
     · exact Nat.le_of_lt (BitVec.isLt _)
     · exact Nat.zero_le _
 
+/-- The counting-loop exit supplies both equalities required by packed allocation. -/
+theorem phase2_count_exit_alloc_pre {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s ∧ locN s "i" = locN s "nal") :
+    PtxAddressCountInv s ∧ locN s "nkeys" = txAccessSlots s (locN s "tx") ∧
+      locN s "nal" = memW s (locN s "tx" + 216) :=
+  ⟨hp.1, phase2_address_count_exit_total hp.1 hp.2, hp.1.2.1⟩
+
+/-- Packed allocation is ready for initialization directly from counting-loop exit. -/
+theorem phase2_count_exit_alloc_ready (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => PtxAddressCountInv s ∧ locN s "i" = locN s "nal")
+      PtxPackedInitReady (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  exact phase2_packed_alloc_init_ready h s vs body callee ret v post hc
+    (phase2_count_exit_alloc_pre s hp) ha hl hb
+
+/-- The counted allocation exposes the full initialization predicate to its tail. -/
+theorem phase2_count_exit_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxPackedInitReady tail b) :
+    TerminatingProgBoundedOn
+      (fun s => PtxAddressCountInv s ∧ locN s "i" = locN s "nal")
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxPackedInitReady) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr : PtxAccessCountReady s := hp.1.1.1.1.1
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_exit_alloc_ready h
+  · exact ht
+
+/-- A zero cached access count skips either source loop, independently of its body. -/
+theorem phase2_zero_nal_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (body : ProgHOL 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word 0)))
+    (hn : s.locals.lookup (ofString "nal") = some (.val (.word 0))) :
+    evaluateHOLFiniteState s
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+      (none, s) := by
+  rw [evaluateHOLFiniteState_while_total]
+  simp [evalHOLExact, hi, hn]
+  intro h
+  have hf : Compiler.Encoders.Asm.wordCmpHOL .less (0#64) (0#64) ≠ true := by decide
+  exact False.elim (hf h)
+
+/-- Scalar shape plus a zero numeric projection identifies the actual zero word. -/
+theorem phase2_local_zero_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String)
+    (hw : ∃ w : BitVec 64, s.locals.lookup (ofString name) = some (.val (.word w)))
+    (hz : locN s name = 0) :
+    s.locals.lookup (ofString name) = some (.val (.word 0)) := by
+  obtain ⟨w, hw⟩ := hw
+  have hn : w.toNat = 0 := by simpa [locN, hw] using hz
+  have he : w = 0 := BitVec.eq_of_toNat_eq hn
+  simpa [he] using hw
+
+/-- The address-copy invariant alone suffices to skip a zero-count loop. -/
+theorem phase2_address_zero_loop {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (body : ProgHOL 64) (hp : PtxAddressCopyInv s) (hn : locN s "nal" = 0) :
+    evaluateHOLFiniteState s
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) =
+      (none, s) := by
+  apply phase2_zero_nal_loop
+  · apply phase2_local_zero_word s "i" hp.2.1
+    have hi := hp.2.2.2
+    omega
+  · exact phase2_local_zero_word s "nal" hp.1.1.1.2.1 hn
+
+/-- Counting entry includes the no-access-list case without equating a disabled
+cached count with the transaction's unused header field. -/
+def PtxAddressCountCases {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressCountInv s ∨
+    (PtxAddressCopyInv s ∧ locN s "nal" = 0 ∧ locN s "nkeys" = 0)
+
+theorem phase2_address_count_cases_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressJoint s) :
+    PtxAddressCountCases (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "nkeys") (.val (.word 0)) s)) := by
+  by_cases hn : locN s "nal" = 0
+  · refine Or.inr ⟨phase2_address_copy_init s hp, ?_, ?_⟩
+    · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "i" ≠ ofString "nal" by decide,
+        show ofString "nkeys" ≠ ofString "nal" by decide] using hn
+    · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · exact Or.inl (phase2_address_count_init s hp hn)
+
+/-- Both counting cases exit with a complete allocation size: the active case
+has the full key sum, and the disabled case retains its initialized zero. -/
+def PtxAddressCountExit {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  (PtxAddressCountInv s ∧ locN s "i" = locN s "nal") ∨
+    (PtxAddressCopyInv s ∧ locN s "nal" = 0 ∧ locN s "nkeys" = 0)
+
+theorem phase2_count_cases_while_hoare {body : ProgHOL 64}
+    (hb : Hoare PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" = locN s "nal")) :
+    Hoare PtxAddressCountCases
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → PtxAddressCountExit s) := by
+  refine ⟨?_⟩
+  intro F s hc hp hnt hr
+  rcases hp with hp | hp
+  · exact Or.inl (hb.run s hc hp hnt hr)
+  · rw [phase2_address_zero_loop s body hp.1 hp.2.1]
+    exact Or.inr hp
+
+/-- The disabled count has the same allocation bound without using any header
+count equality. -/
+theorem phase2_count_cases_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountExit s) : locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  rcases hp with hp | hp
+  · exact phase2_address_count_alloc_bound hp.1
+  · rw [hp.2.2]
+    decide
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
