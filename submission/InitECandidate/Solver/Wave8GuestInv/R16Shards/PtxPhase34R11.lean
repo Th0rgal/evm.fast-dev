@@ -2543,6 +2543,25 @@ theorem phase4LogCopyLoop_typed_bound (h : PtxCallees)
   · unfold phase4LogCopyBody
     ptx_incr
 
+/-- Compose the typed log-push loop with its stable-allocation continuation. -/
+theorem phase4LogCopyLoop_typed_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4TypedLogPointers tail b) :
+    TerminatingProgBoundedOn Phase4TypedLogPointers
+      (spinePlug 1 (spineAt 129 ptxCode) tail)
+      ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) + b) := by
+  have hb := @seq_bound_trans _ _ _ _ _ _ (phase4LogCopyLoop_typed_bound h hresume)
+    (hoare_phase4LogCopyLoop_typed hresume) htail
+  unfold ptxCode
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem phase4LogCopyLoop_cut (h : PtxCallees)
     (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
