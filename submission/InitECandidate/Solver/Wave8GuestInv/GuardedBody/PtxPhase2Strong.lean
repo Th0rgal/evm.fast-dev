@@ -1653,4 +1653,55 @@ theorem phase2_teStoreReady_offset_scalar (off : Nat) (hoff : off + 8 ≤ 200)
   intro F s x hp hx
   exact phase2_te_offset_inside hp.1 off hoff hx
 
+/-- Consecutive word writes preserve the store-ready invariant when all writes
+fit in the environment. This covers the four-word price store. -/
+theorem phase2_teStoreReady_words {F : Type} (ws : List (HolWordLab 64))
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxTeStoreReady s)
+    (k : Nat) (hk : k + ws.length ≤ 25)
+    {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "te" + 8 * k)) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxTeStoreReady { s with memory := mem } := by
+  induction ws generalizing s k mem with
+  | nil =>
+    simp only [panMemStoresHOL, Option.some.injEq] at hst
+    subst mem
+    exact hp
+  | cons w ws ih =>
+    have hk' : k < 25 := by simp only [List.length_cons] at hk; omega
+    have hslot := phase2_teLive_slot hp.1 k hk'
+    let x := BitVec.ofNat 64 (locN s "te" + 8 * k)
+    let mem1 := fun a => if a = x then w else s.memory a
+    have hp1 : PtxTeStoreReady { s with memory := mem1 } :=
+      phase2_teStoreReady_slot_store hp k hk' (fun a ha => if_neg ha)
+    have he : x + BitVec.ofNat 64 8 = BitVec.ofNat 64 (locN s "te" + 8 * (k + 1)) := by
+      simp only [x, ← BitVec.ofNat_add]
+      congr 1
+    simp only [panMemStoresHOL, panMemStoreHOL, hslot.2.1, ↓reduceIte] at hst
+    apply ih hp1 (k + 1) (by simp only [List.length_cons] at hk; omega)
+    change @panMemStoresHOL 64 _ (BitVec.ofNat 64 (locN s "te" + 8 * (k + 1))) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem
+    change @panMemStoresHOL 64 _ (x + BitVec.ofNat 64 8) ws
+      s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) mem1 = some mem at hst
+    rw [he] at hst
+    exact hst
+
+/-- Four-word price initialization, using consecutive-word preservation. -/
+theorem phase2_teStoreReady_price_hoare (addr : ExpHOL 64) (k : Nat)
+    (hk : k + 4 ≤ 25)
+    (ha : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (x : BitVec 64),
+      PtxTeStoreReady s → evalAt s addr = some (.val (.word x)) →
+      x = BitVec.ofNat 64 (locN s "te" + 8 * k)) :
+    Hoare PtxTeStoreReady (.store addr (.var .local (ofString "price")))
+      (fun r s => r = none → PtxTeStoreReady s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  obtain ⟨a, b, c, d, hw⟩ := hp.1.1.2.price
+  have he : v = .rStruct [.val (.word a), .val (.word b), .val (.word c), .val (.word d)] := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  subst v
+  rw [ha s x hp hx] at hst
+  exact phase2_teStoreReady_words [.word a, .word b, .word c, .word d] hp k
+    (by simpa using hk) (by simpa [flattenHOL] using hst)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
