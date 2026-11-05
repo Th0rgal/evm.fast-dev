@@ -1602,6 +1602,25 @@ theorem localsOnly_phase4ReceiptEncoded :
   · exact (hl "rc" (by simp)).trans he
   · rw [hg]; exact logsWorldOwned_with_locals locals k hw
 
+def Phase4LogCountReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4ReceiptEncoded s ∧ locN s "nl" = memW s (locN s "logs" + 8)
+
+theorem phase4LogCount_load {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (v : ValueHOL 64) (h : Phase4ReceiptEncoded s)
+    (he : evalAt s (.load .one (.op .add [.var .local (ofString "logs"), .const 8])) = some v) :
+    Phase4LogCountReady (setVarHOLFinite (ofString "nl") v s) := by
+  obtain ⟨w, rfl, hw⟩ := evalAt_load_local s "logs" 8 v he
+  have hlt : locN s "logs" + 8 < 2 ^ 64 := by
+    rcases h.2.1 with hz | hl
+    · rw [hz]; norm_num
+    · have hb := (ivl_allocated_bound h.1.1.1.1.2 hl.2.1).2
+      dsimp at hb; omega
+  have hwe : w.toNat = memW s (locN s "logs" + 8) := by
+    simpa only [show (8 : BitVec 64).toNat = 8 from rfl, Nat.mod_eq_of_lt hlt] using hw
+  refine ⟨LocalsOnly.setVar localsOnly_phase4ReceiptEncoded (by decide) _ s h, ?_⟩
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "nl" ≠ ofString "logs" from by decide] using hwe
+
 def receiptArray {F : Type} (s : PanSemStateFiniteExact 64 F) : Ivl :=
   (memW s (globN s "bo" + 32), 16 * memW s (globN s "bo" + 80) + 16)
 
