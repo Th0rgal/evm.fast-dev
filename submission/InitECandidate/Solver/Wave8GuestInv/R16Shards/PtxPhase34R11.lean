@@ -13589,4 +13589,51 @@ theorem receipt_logs_finish_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- A receipt cursor increment transports the frame and every other local to
+the continuation, including when the continuation returns from the receipt. -/
+theorem receipt_cursor_continuation_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (he : HeapByteEff s mid R gw) (p w : BitVec 64)
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word w)))
+    (tail : ProgHOL 64) (v : ValueHOL 64)
+    (hcont : ∀ next : PanSemStateFiniteExact 64 F,
+      HeapByteEff s next R gw →
+      next.locals.lookup (ofString "p") = some (.val (.word (p + w))) →
+      (∀ name, name ≠ ofString "p" → next.locals.lookup name = mid.locals.lookup name) →
+      evaluateHOLFiniteState next tail = (some (.returned v), post) →
+      HeapByteEff s post R gw)
+    (hr : evaluateHOLFiniteState mid
+      (.seq (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) tail) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have ha : evaluateHOLFiniteState mid
+      (.assign .local (ofString "p")
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")])) =
+      (none, setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid) := by
+    rw [evaluateHOLFiniteState_assign]
+    have hev : @evalHOLExact 64 F _ mid.toExact
+        (fun a => Classical.propDecidable (mid.memaddrs a))
+        (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]) =
+        some (.val (.word (p + w))) := by
+      simp [evalHOLExact, evalListHOLExact, hp, hw, wordOpHOL, wordOp, valueIsWord, valueWord]
+    have hv : mid.isValidValueHOLFinite .local (ofString "p") (.val (.word (p + w))) = true := by
+      simp [PanSemStateFiniteExact.isValidValueHOLFinite, lookupKvarHOLExact, hp,
+        shapeOfHOLExact, shapeEqHOL]
+    rw [hev]
+    dsimp only
+    rw [if_pos hv]
+    rfl
+  rw [evaluateHOLFiniteState_seq_line780, ha] at hr
+  let next := setVarHOLFinite (ofString "p") (.val (.word (p + w))) mid
+  apply hcont next (he.locals_clock next.locals next.clock) ?_ ?_ hr
+  · simp [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · intro name hn
+    simp [next, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hn]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
