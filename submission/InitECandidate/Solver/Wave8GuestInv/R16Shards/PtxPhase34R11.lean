@@ -165,6 +165,32 @@ theorem logsOwnedDisj_entry_survives {F : Type}
     he.1.1 (by norm_num) he.2.1
     (fun j hj => (hd hn).2.2 i hi _ (by simp) j hj) hR
 
+/-- Live pointer-array preservation additionally needs its heap placement.
+`LogsOwnedDisj` itself specifies disjointness but not placement of this array. -/
+theorem logsOwnedDisj_array_survives {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {logs : Nat}
+    {new R : List Ivl} (hAs : ArenaOK s)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hd : LogsOwnedDisj s S Nd logs) (hn : logs ≠ 0)
+    (halign : memW s logs % 8 = 0)
+    (hin : Inside (memW s logs, 8 * memW s (logs + 8)) sourceBase (globN s "heap_ptr"))
+    (hold0 : ∀ j ∈ worldOwned s S Nd, j.2 = 0 → j.1 % 8 = 0)
+    (hR0 : ∀ j ∈ R, j.2 = 0 → j.1 % 8 = 0)
+    (hog : OwnedGrows s post (worldOwned s S Nd) new)
+    (hfr : FrameOutside s post (worldOwned s S Nd ++ R ++ [freeGap s]) (heapFree s))
+    (hR : ∀ j ∈ R, Disj (memW s logs, 8 * memW s (logs + 8)) j) :
+    (∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i)) ∧
+    (∀ o ∈ new, Disj (memW s logs, 8 * memW s (logs + 8)) o) := by
+  have hs := R13Shards.heap_ivl_survives_step hAs hhp hold0 hR0 hog hfr
+    halign (by simp) hin (fun j hj => (hd hn).2.1 _ (by simp) j hj) hR
+  refine ⟨?_, hs.2.1⟩
+  intro i hi
+  apply R13Shards.memW_eq_of_ivlUnhit hs.2.2
+  · omega
+  · exact (R13Shards.ivl_allocated_bound hAs (Or.inl hin)).2
+  · constructor <;> dsimp <;> omega
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
