@@ -2743,6 +2743,26 @@ theorem phase4StableSetup_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   exact hb s hc hp
 
+theorem phase4ThroughStableSetup_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 34 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + b + 1)) + 1))) := by
+  have hb := @phase4ThroughLogCopy_cut h hresume _ _ (phase4StableSetup_cut h htail)
+  have he : spinePlug 34 (spineAt 99 ptxCode) tail =
+      spinePlug 31 (spineAt 99 ptxCode) (spinePlug 3 (spineAt 130 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
