@@ -5490,4 +5490,22 @@ theorem phase2_packed_inner_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simpa [phase2_key_prefix, locN, memW, setVarHOLFinite, HolFiniteMapExact.update,
       FUPDATE, hjt, hji, hjk] using hp.2.2.2
 
+/-- The concrete outer increment restores the record-boundary invariant. -/
+theorem phase2_packed_outer_increment_hoare :
+    Hoare (fun s => PtxPackedInnerInv s ∧
+      ¬ locN s "j" < memW s
+        (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16) ∧
+      locN s "i" + 1 < 2 ^ 64)
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxPackedOuterInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "i" v hp.2.2 he
+    have heq : w = BitVec.ofNat 64 (locN s "i" + 1) := by
+      apply BitVec.eq_of_toNat_eq
+      rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hp.2.2]
+    subst w
+    exact fun _ => phase2_packed_outer_advance s hp.1 hp.2.1 hp.2.2
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
