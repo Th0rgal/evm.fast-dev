@@ -7616,4 +7616,55 @@ theorem merge_set_call_flow_none {F : Type}
           exact False.elim (WkBal.htab_set_no_catchable_exn (callEntryStateHOLFinite s _) hc e v hne
             (congrArg Prod.fst hr))
 
+/-- Fall-through insertion retains the table exit frame and exact value update. -/
+theorem merge_set_call_flow_props {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw vw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hv : evalAt s ev = some (.val (.word vw)))
+    (hAR : ArenaReady s) (hwf : HtabWF s tw.toNat)
+    (hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).2
+    SoloHtabSet.HtabExitAt tw.toNat s post ∧
+    WkBal.HtabSetValuesPost s post tw.toNat vw.toNat ∧
+    post.be = s.be ∧
+    globN post "scratch_ptr" = globN s "scratch_ptr" ∧
+    globN post "frame_mem_ptr" = globN s "frame_mem_ptr" := by
+  dsimp only
+  let p : ProgHOL 64 := .call (some (none, none)) (ofString "htab_set") [et, ek, ev]
+  have hn : (evaluateHOLFiniteState s p).1 = none :=
+    merge_set_call_flow_none s et ek ev tw kw vw ht hk hv hAR.1.code hfr
+  have he : evaluateHOLFiniteState s (.seq p (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite) := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    rcases hp : evaluateHOLFiniteState s p with ⟨r, post⟩
+    rw [hp] at hn
+    dsimp only at hn
+    subst r
+    simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+  have hnt : (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 ≠ some .timeOut := by
+    rw [he]; simp
+  have hr : Resumes (evaluateHOLFiniteState s (.seq p (.return (.const 0#64)))).1 := by
+    rw [he]; exact Or.inl ⟨_, rfl⟩
+  obtain ⟨mid, hexit, hvals, hbe, _, hsp, hfm, _, _, hseq⟩ :=
+    WkBal.seq_call_htab_set_void_resumes s et ek ev (.return (.const 0#64))
+      tw kw vw ht hk hv hAR hwf hal hnt hr
+  have hm : (evaluateHOLFiniteState s p).2.emptyLocalsHOLFinite = mid.emptyLocalsHOLFinite := by
+    have h := congrArg Prod.snd hseq
+    rw [he] at h
+    simpa [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact] using h
+  have hm' : (evaluateHOLFiniteState s p).2 =
+      { mid with locals := (evaluateHOLFiniteState s p).2.locals } :=
+    congrArg (fun t => { t with locals := (evaluateHOLFiniteState s p).2.locals }) hm
+  change SoloHtabSet.HtabExitAt tw.toNat s (evaluateHOLFiniteState s p).2 ∧ _
+  rw [hm']
+  refine ⟨?_, hvals, hbe, hsp, hfm⟩
+  obtain ⟨hA, hW, h0, h1, hhp, hfp, hframe, hgl⟩ := hexit
+  exact ⟨(arenaReady_with_locals mid _ _).2 hA,
+    (WkBal.htabWF_with_locals mid _ _ _).2 hW, h0, h1, hhp, hfp, hframe, hgl⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
