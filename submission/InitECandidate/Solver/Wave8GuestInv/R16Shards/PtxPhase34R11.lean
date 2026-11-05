@@ -1183,6 +1183,56 @@ theorem fresh_empty_logs {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (fun j hj => hd _ (by simp) j hj) hn
   exact ⟨logsListOK_empty hh.2.2 (Or.inl hhi) hn, ho, logsLiveOwned_disjFixed ho⟩
 
+def Phase4ReceiptReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
+    LogsDisjFixed s (locN s "logs")
+
+theorem lst_new_receiptReady_resume (h : PtxCallees) :
+    DecCallResumeOn TxAfterCallStrong Phase4ReceiptReady (ofString "logs")
+      (ofString "lst_new") [.const 8, .const 4] := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hlc := R13Shards.lookup_lst_new
+  rw [← hc] at hlc
+  obtain ⟨_, he, hcap⟩ := callee_param_two_exp s (ofString "lst_new")
+    (ofString "esz") (ofString "cap") .one .one _ _ hlc
+    (.const 8) (.const 4) (.val (.word 8)) (.val (.word 4))
+    vs body callee ret rfl rfl ha hl
+  let ent := callEntryStateHOLFinite s callee
+  have he8 : locN ent "esz" = 8 := by simp [ent, locN, callEntryStateHOLFinite, he]
+  have hc4 : locN ent "cap" = 4 := by simp [ent, locN, callEntryStateHOLFinite, hcap]
+  have hmul : locN ent "esz" * locN ent "cap" < 2 ^ 64 := by rw [he8, hc4]; norm_num
+  have hpos : 1 ≤ locN ent "cap" := by rw [hc4]; norm_num
+  have hw := funSpec_at_lookup h.wk_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hWT, _, _⟩ := hp.2.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc
+    (by intro i hi; cases hi)
+  obtain ⟨w, hv, hd⟩ := hret hmul v rfl
+  have ht := funSpec_at_lookup h.rt_lst_new s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1 callee).1 (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w', hv', _, _, hf⟩ := ht v rfl
+  have heq : w' = w := by rw [hv] at hv'; cases hv'; rfl
+  subst w'
+  obtain ⟨hh, hb, _, hn, _⟩ := hf hmul hpos
+  have hb32 : FreshBlock ent post (memW post w.toNat) 32 := by
+    change FreshBlock ent post (memW post w.toNat) (locN ent "esz" * locN ent "cap") at hb
+    simpa only [he8, hc4] using hb
+  have hd32 : IvlsDisj [(w.toNat, 24), (memW post w.toNat, 32)]
+      (worldOwned post S' Nd') := by
+    change IvlsDisj [(w.toNat, 24), (memW post w.toNat, locN ent "esz" * locN ent "cap")]
+      (worldOwned post S' Nd') at hd
+    simpa only [he8, hc4] using hd
+  obtain ⟨hL, _, hD⟩ := fresh_empty_logs (s := ent) hp.1.1.1.2 hh hb32 hd32 hn
+  have hout := lst_new_txAfterCallStrong_resume h s vs body callee ret v post hc hl hr hp
+  refine ⟨hout, ?_, ?_⟩
+  all_goals rw [hv]; simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, if_pos rfl]
+  · exact (R13Shards.logsListOK_with_locals post _ post.clock w.toNat).mpr hL
+  · exact hD
+
 def Phase4LogsReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧
     locN s "logs" = memW s (locN s "out" + 16) ∧
