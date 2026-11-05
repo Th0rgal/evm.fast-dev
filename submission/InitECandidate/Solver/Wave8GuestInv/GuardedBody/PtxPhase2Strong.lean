@@ -14520,4 +14520,47 @@ theorem phase2_pre_state_account_tail_backing :
   exact phase2_decCall_backing (phase2_ws_get_account_optional_resume_backing _ _)
     (phase2_return_backing _)
 
+/-- Preserve backing across an early cache hit or a returning miss continuation. -/
+theorem phase2_lookup_hit_or_miss_backing
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (c e : ExpHOL 64) (cont : ProgHOL 64)
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → R16Shards.TxBacking s)
+    (hcont : Hoare P cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.seq (.ite c (.return e) .skip) cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply Hoare.seq
+  · apply Hoare.ite
+    · refine ⟨fun s hc hs hn => ⟨?_, ?_⟩⟩
+      · intro hr
+        exact (return_ne_none s e hr).elim
+      · intro _ hr
+        exact (phase2_return_backing e).run s hc (hp s hs.1) hn hr
+    · exact Hoare.skip (fun s hs => ⟨fun _ => hs.1, fun hn => (hn rfl).elim⟩)
+    · intro F s hs
+      refine ⟨?_, ?_⟩
+      · intro hr; cases hr
+      · intro _ hr
+        obtain ⟨v, hv⟩ := hr
+        cases hv
+  · exact hcont
+
+/-- The full pre-state account lookup preserves backing on both cache branches. -/
+theorem phase2_get_pre_state_account_optional_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_get_pre_state_account_optional,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  apply phase2_call0_seq_backing (phase2_htab_set_ts8_world_backing _ _)
+  apply phase2_decCall_backing (R := fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+    (phase2_resume_ro_world_backing (name := ofString "w") EvmFrameSpecs.ro_htab_get (by decide) _)
+  exact phase2_lookup_hit_or_miss_backing _ _ _ (fun _ h => h.2.2)
+    phase2_pre_state_account_tail_backing
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
