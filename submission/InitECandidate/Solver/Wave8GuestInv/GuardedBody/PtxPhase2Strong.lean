@@ -5755,4 +5755,47 @@ theorem phase2_copy_total_of_metadata {F : Type}
   · rw [ht]; exact hh.2
   · intro i hi; rw [ht, hh.1]; exact hm i hi
 
+/-- Only the two header words and live record counts are needed to frame copy indices. -/
+theorem phase2_packed_copy_metadata_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["tx", "nkeys", "i", "j", "k"] : List String),
+      locN post n = locN s n)
+    (hh : memW post (locN s "tx" + 208) = memW s (locN s "tx" + 208) ∧
+      memW post (locN s "tx" + 216) = memW s (locN s "tx" + 216))
+    (hm : ∀ i, i < memW s (locN s "tx" + 216) →
+      memW post (memW s (locN s "tx" + 208) + 24 * i + 16) =
+        memW s (memW s (locN s "tx" + 208) + 24 * i + 16)) :
+    PtxPackedCopyIndex post := by
+  have ht := hl "tx" (by simp)
+  apply phase2_packed_copy_live_frame s post hp hr
+  · intro n hn
+    exact hl n (List.mem_cons_of_mem _ hn)
+  · rw [ht]; exact hh.2
+  · intro i hi
+    rw [ht, hh.1]
+    exact hm i hi
+
+/-- A nonallocating copy outside the input regions preserves the guarded indices. -/
+theorem phase2_packed_copy_frame_preserves {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst len : Nat)
+    (hp : PtxPackedCopyIndex s) (hr : PtxPackedKeysReady post)
+    (hl : ∀ n ∈ (["tx", "nkeys", "i", "j", "k"] : List String), locN post n = locN s n)
+    (hf : FrameOutside s post [(dst, len)] (0, 0)) (hlen : 0 < len)
+    (htb : locN s "tx" + 384 ≤ 2 ^ 64)
+    (htd : Disj (locN s "tx", 384) (dst, len))
+    (hab : memW s (locN s "tx" + 208) + 24 * memW s (locN s "tx" + 216) ≤ 2 ^ 64)
+    (haa : memW s (locN s "tx" + 208) % 8 = 0)
+    (had : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) (dst, len)) :
+    PtxPackedCopyIndex post := by
+  have ht := hl "tx" (by simp)
+  have hh := phase2_copy_frame_tx_headers s post dst len hf hlen htb htd
+  have hm := phase2_copy_frame_record_counts s post dst len
+    (memW s (locN s "tx" + 208)) (memW s (locN s "tx" + 216)) (0, 0)
+    hf hab haa had (by simp [Disj]) (by omega) (by simp)
+  apply phase2_packed_copy_live_frame s post hp hr
+  · intro n hn; exact hl n (List.mem_cons_of_mem _ hn)
+  · rw [ht]; exact hh.2
+  · intro i hi; rw [ht, hh.1]; exact hm i hi
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
