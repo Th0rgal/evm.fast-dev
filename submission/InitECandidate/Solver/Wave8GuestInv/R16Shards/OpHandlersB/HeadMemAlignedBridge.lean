@@ -11362,4 +11362,34 @@ theorem laInvContents_exit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     split at hcw <;> omega
   rwa [hieq] at hc
 
+/-- The loop's exact contents discharge both segments of the appended-list
+reconstruction, leaving only allocation, word validity and record preservation. -/
+theorem laContents_logsListOK {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr n : BitVec 64} {child nc : Nat}
+    (h : LAContents s L arr n
+      (fun i => memW s (memW s child + 8 * i)) nc post)
+    (hma : memW s L.toNat = arr.toNat)
+    (hp : LogsListOK s L.toNat) (hc : LogsListOK s child)
+    (hn : memW s (L.toNat + 8) = n.toNat)
+    (hnc : memW s (child + 8) = nc)
+    (hpn : L.toNat ≠ 0) (hcn : child ≠ 0)
+    (hwords : WordsOK post (L.toNat, 24)) (halloc : Allocated post (L.toNat, 24))
+    (hcount : memW post (L.toNat + 8) = n.toNat + nc)
+    (hbound : n.toNat + nc < 2 ^ 28)
+    (hcap : n.toNat + nc ≤ memW post (L.toNat + 16))
+    (hslots : ∀ i, i < n.toNat + nc → WordAt post (memW post L.toNat + 8 * i))
+    (hkeepP : ∀ i, i < n.toNat →
+      LogEntryOK post (memW s (memW s L.toNat + 8 * i)))
+    (hkeepC : ∀ i, i < nc →
+      LogEntryOK post (memW s (memW s child + 8 * i))) :
+    LogsListOK post L.toNat := by
+  obtain ⟨next, hm, hprefix, hsuffix⟩ := h
+  have hnext : memW post L.toNat = next.toNat := by
+    unfold memW
+    rw [BitVec.ofNat_toNat, hm]
+  apply logsListOK_of_append_contents hp hc hn hnc hpn hcn hwords halloc
+    hcount hbound hcap hslots _ _ hkeepP hkeepC
+  · simpa only [hnext, hma] using hprefix
+  · simpa only [hnext] using hsuffix
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
