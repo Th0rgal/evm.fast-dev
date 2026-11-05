@@ -6284,4 +6284,15 @@ theorem progWStep_union_bs (off : BitVec 64)
   intro F s hc hW vs body callee ret ha hl
   exact union_bs_call_entry s hc hW off hoff src vs body callee ret ha hl
 
+/-- Ordinary table merging composes with any withdrawal-framed storage suffix. -/
+theorem progWithdrawalStep_union_bs_then (off : BitVec 64)
+    (hoff : off.toNat ∈ [8, 16, 24, 40, 48]) (src : ExpHOL 64)
+    {p : ProgHOL 64} (hp : ProgWithdrawalStep p) :
+    ProgWithdrawalStep
+      (.seq (.call (some (none, none)) (ofString "htab_union_into")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const off]), src]) p) := by
+  refine progWithdrawalStep_seq ?_ hp
+  exact progWithdrawalStep_of_progWStep (by simp)
+    (by simp [withdrawalGlobals]) (progWStep_union_bs off hoff src)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
