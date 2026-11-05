@@ -9683,4 +9683,21 @@ theorem phase2_packed_initialized_loop_hoare (h : PtxCallees) :
     exact phase2_packed_keys_with_locals s locals s.clock (hp hr) hl
   · exact fun _ _ hr => by cases hr
 
+/-- Packed allocation retains the arena needed to turn its joint witness into
+the world component of the packing-loop entry invariant. -/
+theorem phase2_packed_keys_alloc_world_ready (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountInv
+      (fun s => WorldOK s ∧ PtxPackedKeysReady s)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hready := phase2_packed_keys_alloc_ready h s vs body callee ret v post hc hp ha hl hb
+  have hcount : PtxAccessCountReady s := hp.1.1.1.1
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hcount.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hpost := hw (Or.inl ⟨v, rfl⟩)
+  refine ⟨phase2_packed_ready_worldOK _ ?_ hready, hready⟩
+  exact (arenaReady_with_locals post _ post.clock).mpr hpost.1
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
