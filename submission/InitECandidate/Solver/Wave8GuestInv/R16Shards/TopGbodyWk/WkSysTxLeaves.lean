@@ -2026,6 +2026,32 @@ theorem msgReady_of_sysTx_owned {F : Type} {s : PanSemStateFiniteExact 64 F}
     unfold worldOwned
     exact List.mem_append_right _ hj
 
+theorem msgReady_of_sysTx_parts {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S Nd : List Nat} (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    {m aa ak : Nat} (hm : locN s "msg" = m)
+    (hm152 : memW s (m + 152) = aa) (hm160 : memW s (m + 160) = ak)
+    (haa : aa ∈ S) (hak : ak ∈ S) (hne : aa ≠ ak)
+    (hka : hdr s aa 0 = 20) (hkk : hdr s ak 0 = 52)
+    (hla : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ aa)
+    (hlk : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ ak)
+    (hin : Inside (m, 176) sourceBase (globN s "heap_ptr"))
+    (hm8 : m % 8 = 0)
+    (hdisj : ∀ o ∈ worldOwned s S Nd, Disj (m, 176) o)
+    (hgas : memW s (m + 40) = 30000000) : MsgReady s := by
+  have hwords : WordsOK s (m, 176) :=
+    R10Shards.P26_P28.wordsOK_of_inside_heap hA.1 hm8 (by decide) hin.1
+      (le_trans hin.2 (le_trans hA.2.2.1 (by decide : heapLimit ≤ heapEnd)))
+  apply msgReady_of_sysTx_owned hA hW
+  · simpa only [hm] using hin
+  · simpa only [hm] using hwords
+  · simpa only [hm] using hdisj
+  · simpa only [hm, hm152] using haa
+  · simpa only [hm, hm160] using hak
+  · rw [hm, hgas]
+    decide
+  · simpa only [hm, hm152, hm160] using
+      rolesOK_sysTx_msgReady hW.1 haa hak hne hka hkk hla hlk
+
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
       WorldKeeps WorldOK
