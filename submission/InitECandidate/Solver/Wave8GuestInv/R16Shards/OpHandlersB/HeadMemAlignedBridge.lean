@@ -7664,6 +7664,7 @@ theorem incorporate_child_on_error_gas {F : Type}
     Nat.mod_eq_of_lt (show c.toNat + 64 < 2 ^ 64 by omega)] at h
   exact h
 
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
@@ -10405,5 +10406,93 @@ theorem fcPrelude_headMemChainWF (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
     unfold globN
     rw [hg]
     exact hfmp
+
+/-- Restoring caller locals preserves the destination table supplied by union. -/
+theorem unionExit_restore_tables {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : UnionExit s post) (L : HolFiniteMapExact MlS (ValueHOL 64)) :
+    HtabWF { post with locals := L } (locN s "dst") ∧
+      ∀ i ∈ htabFootprint { post with locals := L } (locN s "dst"),
+        Allocated { post with locals := L } i := by
+  refine ⟨(htabWF_with_locals post L post.clock _).2 h.2.1, ?_⟩
+  intro i hi
+  exact h.2.2.2.2.2.1 i hi
+
+attribute [local irreducible] Ret in
+/-- The success tail retains the destination table invariant as well as its write frame. -/
+theorem ics_tail_tables {F : Type} (X : PanSemStateFiniteExact 64 F) (e tw : BitVec 64)
+    (hcode : X.code = originalRuntimeCode)
+    (he : X.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hA : ArenaReady X) (htw : X.memory (e + 136) = .word tw)
+    (hwf : HtabWF X tw.toNat) (hal : ∀ i ∈ htabFootprint X tw.toNat, Allocated X i)
+    (h96 : ∀ i ∈ htabFootprint X tw.toNat, ¬ CellHits (e + 96).toNat i) :
+    Ret X (.seq (.store (.op .add [.var .global (ofString "ev"), .const 96])
+        (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const 96]),
+          .load .one (.op .add [.var .local (ofString "child"), .const 96])]))
+      (.seq (.call (some (none, none)) (ofString "htab_union_into")
+          [.load .one (.op .add [.var .global (ofString "ev"), .const 136]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 136])])
+        (.return (.const 0))))
+      (fun _ post => ICSTail X e tw.toNat post ∧ HtabWF post tw.toNat ∧
+        ∀ i ∈ htabFootprint post tw.toNat, Allocated post i) := by
+  refine Ret.storeGlobOp he fun w => ?_
+  let Y := { X with memory := updW X.memory (e + 96) w }
+  have hun : ∀ i ∈ htabFootprint X tw.toNat, Wave8Contracts.M08.IvlUnhit X Y i :=
+    fun i hi => ivlUnhit_updW X _ w i (h96 i hi)
+  have hG : GuestInv Y := guestInv_congr (s := X) rfl rfl rfl rfl hA.1
+  have hAY : ArenaReady Y := ⟨hG, arenaOK_congr (s := X) rfl hA.2⟩
+  have ht_fp : ((tw.toNat, 88) : Ivl) ∈ htabFootprint X tw.toNat := by simp [htabFootprint]
+  have ht8 : tw.toNat % 8 = 0 := (hwf.1 _ ht_fp).2.1
+  have hthi : tw.toNat + 88 ≤ 2 ^ 64 := by
+    have := (hwf.1 _ ht_fp).1
+    unfold Inside at this
+    have : heapEnd ≤ 2 ^ 64 := by decide
+    simp only at *; omega
+  have hfpeq := (Wave8Contracts.M08.htabFootprint_eq_of_hdr_unhit ht8 hthi (hun _ ht_fp)).2
+  have hwfY : HtabWF Y tw.toNat := Wave8Contracts.M08.htabWF_congr_unhit hA.1 hG hwf hun
+  have halY : ∀ i ∈ htabFootprint Y tw.toNat, Allocated Y i := by
+    rw [hfpeq]; exact hal
+  have h136 : Y.memory (e + 136) = .word tw := by
+    change updW X.memory (e + 96) w (e + 136) = _
+    rw [updW_ne _ _ _ _ (by bv_omega)]; exact htw
+  refine Ret.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, v2, rfl, hv1, _⟩ := evalList2_inv Y _ _ h1
+  have hv1' := ev_load_glob Y _ e 136 he v1 hv1
+  rw [h136] at hv1'
+  subst hv1'
+  obtain ⟨_, hdst⟩ := rb_param_at Y.code.lookup (ofString "htab_union_into") []
+    (ofString "dst") .one [(ofString "src", .one)] _ _
+    (by simp only [List.mem_singleton]; rintro _ rfl; decide)
+    (by rw [show Y.code = originalRuntimeCode from hcode];
+        simpa using UXT.HtabUnionInto.lookup_htab_union_into) (vpre := []) (by simp) h2
+  have hlocT : locN (callEntryStateHOLFinite Y callee) "dst" = tw.toNat := by
+    simp only [locN, callEntryStateHOLFinite, hdst]
+  have hPc : UnionArgWF (callEntryStateHOLFinite Y callee) := by
+    refine ⟨(arenaReady_with_locals Y callee (Y.clock - 1)).2 hAY, ?_, ?_⟩
+    · rw [hlocT]; exact (htabWF_with_locals Y callee (Y.clock - 1) _).2 hwfY
+    · rw [hlocT]; exact halY
+  have hQ := HtabC00Ports.FunSpec.at_lookup UXT.rb_htab_union_into_spec Y hcode
+    _ body callee ret h2 hPc (by rw [h3]; simp)
+  rw [h3] at hQ
+  have hx := hQ v rfl
+  have ht := unionExit_restore_tables hx (emptyLocalsHOLFinite cpost).locals
+  rw [hlocT] at ht
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata (callEntryStateHOLFinite Y callee) body
+  rw [h3] at hmeta
+  obtain ⟨hAR, _, _, _, hgrow, _, hfr, hglob⟩ := hx
+  rw [hlocT] at hfr
+  refine Ret.ret fun val _ => ⟨?_, ht⟩
+  refine ⟨hmeta.1, hmeta.2.1, ?_, ?_, hgrow, ?_⟩
+  · exact arenaReady_locals _ _ (arenaReady_locals _ _ hAR)
+  · intro k hk
+    exact (hglob k (by simpa using hk)).symm
+  · intro a ha hk hf
+    have h1 := hfr a (by
+        intro i hi
+        have hi' : i ∈ htabFootprint Y tw.toNat := hi
+        rw [hfpeq] at hi'; exact hk i hi') hf
+    change cpost.memory a = _
+    rw [h1]
+    change updW X.memory (e + 96) w a = _
+    rw [updW_ne _ _ _ _ ha]
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
