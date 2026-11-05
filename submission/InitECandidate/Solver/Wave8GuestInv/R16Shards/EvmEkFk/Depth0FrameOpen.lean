@@ -6049,4 +6049,40 @@ theorem ws_get_code_missing_tail {F : Type} (s : PanSemStateFiniteExact 64 F)
   rw [he]
   simp [evaluateHOLFiniteState_raise, hshape, evalHOLExact, shapeOfHOLExact]
 
+/-- The successful `nodedb_lookup` return loads a typed code record into
+three actual words, with the length bound needed by the `ws_get_code` suffix. -/
+theorem nodedb_code_record_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (found ptr : BitVec 64)
+    (hr : s.locals.lookup (ofString "r") =
+      some (.rStruct [.val (.word found), .val (.word ptr)]))
+    (hw : WordsOK s (ptr.toNat, 16))
+    (hin : Inside (memW s ptr.toNat, memW s (ptr.toNat + 8)) sourceBase (globN s "heap_ptr")) :
+    Ret s (.return (.rstruct [.const 1,
+      .load .one (.rfield 1 (.var .local (ofString "r"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])]))
+      (fun v post => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word 1), .val (.word code), .val (.word code_n)] ∧
+        code_n.toNat < 2 ^ 40 ∧ post = {s with locals := post.locals, clock := post.clock}) := by
+  obtain ⟨code, code_n, hc, hn, hb⟩ := dispatch_code_record_words hA hw hin
+  have hd0 := (hw.2.2 0 (by omega)).choose_spec.1
+  have hd8 := (hw.2.2 1 (by omega)).choose_spec.1
+  simp only [Nat.mul_zero, Nat.add_zero] at hd0
+  simp only [Nat.mul_one] at hd8
+  have hc' : s.memory ptr = .word code := by simpa using hc
+  have hd0' : s.memaddrs ptr := by simpa using hd0
+  have haddr : ptr + 8#64 = BitVec.ofNat 64 (ptr.toNat + 8) := by
+    rw [BitVec.ofNat_add]; simp
+  have he : ev s (.rstruct [.const 1,
+      .load .one (.rfield 1 (.var .local (ofString "r"))),
+      .load .one (.op .add [.rfield 1 (.var .local (ofString "r")), .const 8])]) =
+      some (.rStruct [.val (.word 1), .val (.word code), .val (.word code_n)]) := by
+    simp [ev, evalHOLExact, evalListHOLExact, hr, memLoadHOLExact,
+      isWfShapeExactHOL, wordOpHOL, wordOp, valueIsWord, valueWord,
+      haddr, hd0', hd8, hc', hn]
+  apply Ret.ret
+  intro v hv
+  rw [he] at hv
+  cases hv
+  exact ⟨code, code_n, rfl, hb, rfl⟩
+
 end HeadStore
