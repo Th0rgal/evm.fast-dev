@@ -2696,4 +2696,19 @@ theorem phase2_address_store_te_unhit {F : Type} {s : PanSemStateFiniteExact 64 
   exact ivlUnhit_single hm (by simp)
     (disj_of_inside_right hin hp.2.2.2.2.2.1)
 
+/-- Address-array writes preserve the count relation that controls loop entry. -/
+theorem phase2_address_store_count {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressReady s) {x : BitVec 64}
+    (hin : Inside (x.toNat, 8) (locN s "al_addrs")
+      (locN s "al_addrs" + (locN s "nal" + 1) * 8))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    let post : PanSemStateFiniteExact 64 F := { s with memory := mem }
+    (∃ w : BitVec 64, post.locals.lookup (ofString "nal") = some (.val (.word w))) ∧
+      (locN post "nal" = 0 ∨ locN post "nal" = memW post (locN post "tx" + 216)) := by
+  have he := phase2_address_store_header hp hin hm 216 (by decide) (by decide)
+  refine ⟨hp.1.2.1, ?_⟩
+  change locN s "nal" = 0 ∨ locN s "nal" = memW { s with memory := mem } (locN s "tx" + 216)
+  rw [he]
+  exact hp.1.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
