@@ -2998,6 +2998,68 @@ theorem stable_length_store_source {F : Type} (s : PanSemStateFiniteExact 64 F)
     memW_eq_of_ivlUnhit hu hl'.1.1 hb ⟨by omega, by omega⟩,
     memW_eq_of_ivlUnhit hu (by have := hl'.1.1; omega) hb ⟨by omega, by omega⟩⟩
 
+/-- The length store needs the separation facts supplied by fresh allocation,
+as well as the word shapes of its two local operands. -/
+def StableLengthPre : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableStorageReady s ∧
+    Allocated s (locN s "stable_logs", 24) ∧
+    s.locals.lookup (ofString "stable_logs") =
+      some (.val (.word (BitVec.ofNat 64 (locN s "stable_logs")))) ∧
+    s.locals.lookup (ofString "nl") = some (.val (.word (BitVec.ofNat 64 (locN s "nl")))) ∧
+    ∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "logs") ∧
+      (∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o) ∧
+      Disj (locN s "logs", 24) (locN s "stable_logs", 24) ∧
+      Disj (memW s (locN s "logs"), 8 * memW s (locN s "logs" + 8))
+        (locN s "stable_logs", 24) ∧
+      ∀ i, i < memW s (locN s "logs" + 8) →
+        Disj (memW s (memW s (locN s "logs") + 8 * i), 40) (locN s "stable_logs", 24)
+
+def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
+    LogsWorldOwned s (locN s "logs") ∧
+    locN s "nl" = memW s (locN s "logs" + 8) ∧
+    locN s "lp" = memW s (locN s "logs") ∧
+    memW s (locN s "stable_logs" + 8) = locN s "nl" ∧
+    memW s (locN s "stable_logs" + 8) ≤ memW s (locN s "stable_logs" + 16) ∧
+    Allocated s (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") ∧
+    WordsOK s (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap")
+
+theorem hoare_stable_length_store :
+    Hoare StableLengthPre
+      (.store (.op .add [.var .local (ofString "stable_logs"), .const 8])
+        (.var .local (ofString "nl")))
+      (fun r t => r = none → StableLengthPost t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hp, hh, hlocal, hnl, S, Nd, hW, ho, hs, hhead, harray, hentry⟩ := hp
+  have hA := hp.1.1.1.1.1.1.1.1.1
+  have hv' : v = .val (.word (BitVec.ofNat 64 (locN s "nl"))) := by
+    change s.locals.lookup (ofString "nl") = some v at hv
+    rw [hnl] at hv
+    exact (Option.some.inj hv).symm
+  subst v
+  have hx' : x = BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    simp [evalAt, evalHOLExact, evalListHOLExact, hlocal, valueIsWord,
+      valueWord, wordOpHOL, wordOp] at hx
+    subst x
+    apply BitVec.eq_of_toNat_eq
+    simpa [BitVec.toNat_ofNat, Nat.mod_eq_of_lt
+      (stable_length_address_bound s hA.2 hh).1] using
+      (stable_length_address_bound s hA.2 hh).2
+  subst x
+  obtain ⟨hdom, he, hm⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  obtain ⟨hW', _, hE', hl', ho', h0, h8⟩ :=
+    stable_length_store_source s hp hh S Nd hW ho hs hhead harray hentry hdom mem' hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hA.1
+  have hAp : ArenaReady {s with memory := mem'} := ⟨hg, hA.2⟩
+  refine ⟨⟨worldOK_of_parts hAp hW', hE'⟩, hl', ⟨S, Nd, hW', ho'⟩,
+    ?_, ?_, stable_length_store_value s hp mem' he,
+    stable_length_store_fits s hp hA.2 hh mem' he hm,
+    stable_length_store_backing s hp hA.2 hh mem' _ he hm⟩
+  · exact hp.1.1.1.1.2.1.trans h8.symm
+  · exact hp.1.1.1.2.trans h0.symm
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
