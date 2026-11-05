@@ -4945,14 +4945,18 @@ private theorem log_append_head_returned_spec {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (evw logw : BitVec 64)
     (hInv : EvmInv s)
+    (S Nd_at : List Nat) (hInvAt_s : EvmInvAt s S)
+    (hTr_at_s : TriesTypedWith s S Nd_at)
+    (hAT_at_s : ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten,
+      ∀ j ∈ nodeExtents s Nd_at, Disj o j)
     (hev_eq : evw.toNat = globN s "ev")
     (hlogs_lt : memW s (memW s (globN s "ev" + 88) + 8) + 1 < 2 ^ 28)
     (hlog_ok : LogEntryOK s logw.toNat)
     (hlog_disj : ∀ x ∈ logOwnedIvls s logw.toNat,
-      (∀ t, ∀ S0, TablesTyped s S0 → t ∈ S0 → ∀ i ∈ htabFootprint s t, Disj x i) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj x i) ∧
       (∀ j ∈ fixedObjects s, Disj x j) ∧
       (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
-      (∀ S0 Nd0, TriesTypedWith s S0 Nd0 → ∀ j ∈ nodeExtents s Nd0, Disj x j) ∧
+      (∀ j ∈ nodeExtents s Nd_at, Disj x j) ∧
       (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
     (hlog_pw : (logOwnedIvls s logw.toNat).Pairwise Disj)
     (hlog_disj_l0 : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40))
@@ -5025,11 +5029,9 @@ private theorem log_append_head_returned_spec {F : Type}
                       (.return (.const 0#64))) := rfl
           rw [hbody_eq, evaluateHOLFiniteState_decCall_fixClockRewrite] at hb
           -- Evaluate `*(e + 88)`:
-          obtain ⟨_, S, hInvAt_s⟩ := (evmInv_iff_at s).1 hInv
           have hW := hInvAt_s.1
           have hFW_all := hInvAt_s.2.2.2.2.1
           have hFO_pw := hInvAt_s.2.2.2.2.2.2.2.1
-          obtain ⟨Nd_at, hTr_at_s, hAT_at_s⟩ := hInvAt_s.2.2.2.2.2.2.2.2.2.1
           set e0 := globN s "ev"
           set c0 := globN s "cur_cont"
           have hhead_mem : (e0, c0) ∈ evmChain s := List.mem_cons_self
@@ -5354,8 +5356,7 @@ private theorem log_append_head_returned_spec {F : Type}
                             fun _ _ => Or.inl rfl,
                             fun _ _ => Or.inl rfl⟩
                         · obtain ⟨hd1, hd2, hd3, hd4, hd5⟩ := hlog_disj x hx_nl
-                          exact ⟨fun t ht i hi => hd1 t S hW.1 ht i hi, hd2, hd3,
-                            fun j hj => hd4 S Nd_at hTr_at_s j hj, hd5⟩)
+                          exact ⟨hd1, hd2, hd3, hd4, hd5⟩)
                       (List.pairwise_cons.2 ⟨fun _ _ => Or.inl rfl, hlog_pw⟩)
                       (Or.inl ⟨rfl, hpost_m0, hpost_m16⟩)
                       hpost_m8 hlogs_lt
@@ -5646,10 +5647,8 @@ private theorem log_append_head_returned_spec {F : Type}
                       · rw [hmemW_ma]; exact hfresh_disj_s_arr.2.2.2.2 ec hec
                     · obtain ⟨hd1, hd2, hd3, hd4, hd5⟩ := hlog_disj x hx_nl
                       refine ⟨fun t ht i hi => ?_, hd2,
-                        fun ec hec o ho => ?_,
-                        fun j hj => hd4 S Nd_at hTr_at_s j hj,
-                        fun ec hec => ?_⟩
-                      · rw [hfp_ma t] at hi; exact hd1 t S hW.1 ht i hi
+                        fun ec hec o ho => ?_, hd4, fun ec hec => ?_⟩
+                      · rw [hfp_ma t] at hi; exact hd1 t ht i hi
                       · rw [hfo_ma ec] at ho; exact hd3 ec hec o ho
                       · rw [hmemW_ma]; exact hd5 ec hec
                   have hfresh_pw : (freshArr :: logOwnedIvls s logw.toNat).Pairwise Disj := by
@@ -5691,6 +5690,56 @@ private theorem log_append_head_returned_spec {F : Type}
         · simp at hcall
       | _ => simp at hcall
 
+theorem transfer_log_append_returned_step_at {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
+    (S Nd : List Nat) (hInvAt : EvmInvAt s S) (hTr : TriesTypedWith s S Nd)
+    (hAT : ∀ o ∈ ((evmChain s).map (frameObjects s)).flatten,
+      ∀ j ∈ nodeExtents s Nd, Disj o j)
+    (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
+    (hwords : WordsOK s (logw.toNat, 40))
+    (hlog : Inside (logw.toNat, 40) sourceBase (globN s "heap_ptr"))
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (htopics : Inside (topics, 96) sourceBase (globN s "heap_ptr"))
+    (hdata : Inside (data, 32) sourceBase (globN s "heap_ptr"))
+    (haddr : memW s logw.toNat = globN s "vm_system_address")
+    (htp : memW s (logw.toNat + 8) = topics)
+    (htn : memW s (logw.toNat + 16) = 3)
+    (hdp : memW s (logw.toNat + 24) = data)
+    (hdn : memW s (logw.toNat + 32) = 32)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data)
+    (hdisj : ∀ x ∈ logOwnedIvls s logw.toNat,
+      (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj x i) ∧
+      (∀ j ∈ fixedObjects s, Disj x j) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
+      (∀ j ∈ nodeExtents s Nd, Disj x j) ∧
+      (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
+    (hcall : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none)
+    (heval_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global (ofString "ev")) = some (.val (.word evw)))
+    (heval_log : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .local (ofString "log")) = some (.val (.word logw))) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+    EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
+  have hrecord : (logw.toNat, 40) ∈ logOwnedIvls s logw.toNat := by
+    rw [logOwnedIvls_of_transfer haddr htp htn hdp hdn]
+    simp
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := List.mem_cons_self
+  have hframe := (hdisj _ hrecord).2.2.1 _ hhead
+  have hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  have hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40) :=
+    disj_comm (hframe _ (by simp [frameObjects]))
+  apply log_append_head_returned_spec s evw logw hInv S Nd hInvAt hTr hAT hev
+    (head_log_count_succ_lt_of_evmInv hInv)
+    (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
+    hdisj
+    (transfer_logOwnedIvls_pairwise haddr htp htn hdp hdn hlt htd)
+    hdisj_header hdisj_array hcall heval_ev heval_log
+
 theorem transfer_log_append_returned_step {F : Type}
     (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
     (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
@@ -5722,20 +5771,14 @@ theorem transfer_log_append_returned_step {F : Type}
       (.call (some (none, none)) (ofString "log_append")
         [.var .global (ofString "ev"), .var .local (ofString "log")])
     EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
-  have hrecord : (logw.toNat, 40) ∈ logOwnedIvls s logw.toNat := by
-    rw [logOwnedIvls_of_transfer haddr htp htn hdp hdn]
-    simp
-  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := List.mem_cons_self
-  have hframe := (hdisj _ hrecord).2.2.1 _ hhead
-  have hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40) :=
-    disj_comm (hframe _ (by simp [frameObjects]))
-  have hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40) :=
-    disj_comm (hframe _ (by simp [frameObjects]))
-  exact log_append_head_returned_spec s evw logw hInv hev
-    (head_log_count_succ_lt_of_evmInv hInv)
-    (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
-    hdisj (transfer_logOwnedIvls_pairwise haddr htp htn hdp hdn hlt htd)
-    hdisj_header hdisj_array hcall heval_ev heval_log
+  obtain ⟨_, S, inv⟩ := (evmInv_iff_at s).1 hInv
+  obtain ⟨Nd, tries, avoids⟩ := inv.2.2.2.2.2.2.2.2.2.1
+  exact transfer_log_append_returned_step_at s evw logw topics data S Nd inv tries avoids
+    hInv hev hwords hlog hsys htopics hdata haddr htp htn hdp hdn hlt htd
+    (fun x hx => ⟨fun t ht => (hdisj x hx).1 t S inv.1.1 ht,
+      (hdisj x hx).2.1, (hdisj x hx).2.2.1,
+      (hdisj x hx).2.2.2.1 S Nd tries, (hdisj x hx).2.2.2.2⟩)
+    hcall heval_ev heval_log
 
 private theorem transfer_call0_no_return {F : Type} (s : PanSemStateFiniteExact 64 F)
     (fn : MlS) (args : List (ExpHOL 64)) (u : ValueHOL 64) :
