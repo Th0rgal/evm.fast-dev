@@ -3235,6 +3235,445 @@ theorem msgReady_of_sysTxMsgTablesStep {F : Type}
     haa_S hak_S haa_hdr hak_hdr haa_slot hak_slot hin_m_ent hm8
     (fun o ho => hdisj' (w_m.toNat, 176) (by simp) o ho) hgas
 
+def SysTxPrefixOutcome {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (prog : ProgHOL 64)
+    (pmcCont : ProgHOL 64) : Prop :=
+  (SysTxPrefixStep s0 (evaluateHOLFiniteState s0 prog).1 (evaluateHOLFiniteState s0 prog).2 ∧
+   ∃ e ev, (evaluateHOLFiniteState s0 prog).1 = some (.exception e ev)) ∨
+  ∃ (s_pmc : PanSemStateFiniteExact 64 F) (w_m : BitVec 64)
+    (L_wrap : HolFiniteMapExact MlS (ValueHOL 64) → HolFiniteMapExact MlS (ValueHOL 64)),
+    SysTxPrefixStep s0 none s_pmc ∧
+    WorldOK s_pmc ∧
+    s_pmc.code = originalRuntimeCode ∧
+    s_pmc.locals.lookup (ofString "m") = some (.val (.word w_m)) ∧
+    (∀ callee : HolFiniteMapExact MlS (ValueHOL 64),
+      callee.lookup (ofString "msg") = some (.val (.word w_m)) →
+      MsgReady (callEntryStateHOLFinite s_pmc callee)) ∧
+    (evaluateHOLFiniteState s_pmc
+      (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont)).1 ≠
+      some .timeOut ∧
+    FlowingOrResumes (evaluateHOLFiniteState s_pmc
+      (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont)).1 ∧
+    (evaluateHOLFiniteState s0 prog).1 =
+      (evaluateHOLFiniteState s_pmc
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont)).1 ∧
+    (evaluateHOLFiniteState s0 prog).2 =
+      { (evaluateHOLFiniteState s_pmc
+          (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont)).2 with
+        locals := L_wrap
+          (evaluateHOLFiniteState s_pmc
+            (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont)).2.locals }
+
+def SysTxAtProg {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (prog : ProgHOL 64)
+    (s : PanSemStateFiniteExact 64 F) (p : ProgHOL 64) : Prop :=
+  ∃ L_wrap : HolFiniteMapExact MlS (ValueHOL 64) → HolFiniteMapExact MlS (ValueHOL 64),
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut ∧
+    FlowingOrResumes (evaluateHOLFiniteState s p).1 ∧
+    (evaluateHOLFiniteState s0 prog).1 = (evaluateHOLFiniteState s p).1 ∧
+    (evaluateHOLFiniteState s0 prog).2 =
+      { (evaluateHOLFiniteState s p).2 with locals := L_wrap (evaluateHOLFiniteState s p).2.locals }
+
+theorem sysTxAtProg_refl {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (prog : ProgHOL 64)
+    (hnt : (evaluateHOLFiniteState s0 prog).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s0 prog).1) :
+    SysTxAtProg s0 prog s0 prog :=
+  ⟨id, hnt, hfr, rfl, rfl⟩
+
+theorem sysTxAtProg_eq {F : Type}
+    {s0 s s' : PanSemStateFiniteExact 64 F} {prog p p' : ProgHOL 64}
+    (h : SysTxAtProg s0 prog s p)
+    (hnt' : (evaluateHOLFiniteState s' p').1 ≠ some .timeOut)
+    (hfr' : FlowingOrResumes (evaluateHOLFiniteState s' p').1)
+    (heq : evaluateHOLFiniteState s p = evaluateHOLFiniteState s' p') :
+    SysTxAtProg s0 prog s' p' := by
+  obtain ⟨Lw, _, _, hr, hs⟩ := h
+  exact ⟨Lw, hnt', hfr', hr.trans (congrArg Prod.fst heq), by rw [hs, heq]⟩
+
+theorem sysTxAtProg_resVar {F : Type}
+    {s0 s s' : PanSemStateFiniteExact 64 F} {prog p p' : ProgHOL 64}
+    {x : MlS}
+    (h : SysTxAtProg s0 prog s p)
+    (hnt' : (evaluateHOLFiniteState s' p').1 ≠ some .timeOut)
+    (hfr' : FlowingOrResumes (evaluateHOLFiniteState s' p').1)
+    (hr_eq : (evaluateHOLFiniteState s p).1 = (evaluateHOLFiniteState s' p').1)
+    (hs_eq : (evaluateHOLFiniteState s p).2 =
+      { (evaluateHOLFiniteState s' p').2 with
+        locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState s' p').2.locals (x, s.locals.lookup x) }) :
+    SysTxAtProg s0 prog s' p' := by
+  obtain ⟨Lw, _, _, hr, hs⟩ := h
+  exact ⟨fun L => Lw (HolFiniteMapExact.resVarEq L (x, s.locals.lookup x)),
+    hnt', hfr', hr.trans hr_eq, by rw [hs, hs_eq]⟩
+
+theorem sysTxPrefixOutcome_ex {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {prog pmcCont p : ProgHOL 64}
+    (hat : SysTxAtProg s0 prog s p)
+    (hex : SysTxPrefixStep s0 (evaluateHOLFiniteState s p).1 (evaluateHOLFiniteState s p).2 ∧
+      ∃ e ev, (evaluateHOLFiniteState s p).1 = some (.exception e ev)) :
+    SysTxPrefixOutcome s0 prog pmcCont := by
+  obtain ⟨Lw, _, _, hr, hs⟩ := hat
+  obtain ⟨hstep, e, ev, hev⟩ := hex
+  refine Or.inl ⟨?_, e, ev, hr.trans hev⟩
+  rw [hr, hs]
+  exact sysTxPrefixStep_with_locals_clock hstep _ (evaluateHOLFiniteState s p).2.clock
+
+theorem sysTxPrefixOutcome_done {F : Type}
+    {s0 s_pmc : PanSemStateFiniteExact 64 F} {prog pmcCont : ProgHOL 64}
+    {w_m : BitVec 64}
+    (hat : SysTxAtProg s0 prog s_pmc
+      (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] pmcCont))
+    (hstep : SysTxPrefixStep s0 none s_pmc)
+    (hW : WorldOK s_pmc)
+    (hc : s_pmc.code = originalRuntimeCode)
+    (hl_m : s_pmc.locals.lookup (ofString "m") = some (.val (.word w_m)))
+    (hmr : ∀ callee : HolFiniteMapExact MlS (ValueHOL 64),
+      callee.lookup (ofString "msg") = some (.val (.word w_m)) →
+      MsgReady (callEntryStateHOLFinite s_pmc callee)) :
+    SysTxPrefixOutcome s0 prog pmcCont := by
+  obtain ⟨Lw, hnt, hfr, hr, hs⟩ := hat
+  exact Or.inr ⟨s_pmc, w_m, Lw, hstep, hW, hc, hl_m, hmr, hnt, hfr, hr, hs⟩
+
+def sysTxPmcCont : ProgHOL 64 :=
+  .seq .skip
+    (.seq (.call (some (none, none)) (ofString "incorporate_tx_into_block") [])
+      (.dec (ofString "system_mark") .one
+        (.load .one (.op .add [.var .local (ofString "out"), .const (BitVec.ofNat 64 80)]))
+        (.seq
+          (.ite (.cmp .notEqual (.var .local (ofString "system_mark")) (.const (BitVec.ofNat 64 0)))
+            (.dec (ofString "system_ret_n") .one
+              (.load .one (.op .add [.var .local (ofString "out"), .const (BitVec.ofNat 64 48)]))
+              (.seq
+                (.ite (.cmp .lower (.const (BitVec.ofNat 64 0)) (.var .local (ofString "system_ret_n")))
+                  (.decCall (ofString "system_ret") .one (ofString "alloc")
+                    [.op .add [.var .local (ofString "system_ret_n"), .const (BitVec.ofNat 64 8)]]
+                    (.seq
+                      (.call (some (none, none)) (ofString "memcpy")
+                        [.var .local (ofString "system_ret"),
+                         .load .one (.op .add [.var .local (ofString "out"), .const (BitVec.ofNat 64 40)]),
+                         .var .local (ofString "system_ret_n")])
+                      (.store (.op .add [.var .local (ofString "out"), .const (BitVec.ofNat 64 40)])
+                        (.var .local (ofString "system_ret")))))
+                  .skip)
+                (.seq
+                  (.call (some (none, none)) (ofString "scratch_release") [.var .local (ofString "system_mark")])
+                  (.call (some (none, none)) (ofString "frame_mem_release")
+                    [.load .one (.op .add [.var .local (ofString "out"), .const (BitVec.ofNat 64 88)])]))))
+            .skip)
+          (.return (.var .local (ofString "out"))))))
+
+def sysTxAfterMsgNewProg : ProgHOL 64 :=
+  .seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 0)])
+      (.var .global (ofString "be")))
+    (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 8)])
+        (.var .local (ofString "te")))
+      (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 16)])
+          (.var .global (ofString "vm_system_address")))
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 24)])
+            (.var .local (ofString "target")))
+          (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 32)])
+              (.var .local (ofString "target")))
+            (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 40)])
+                (.const (BitVec.ofNat 64 30000000)))
+              (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 48)])
+                  (.panop .mul [.const (BitVec.ofNat 64 97920), .const (BitVec.ofNat 64 16)]))
+                (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 88)])
+                    (.var .local (ofString "data")))
+                  (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 96)])
+                      (.var .local (ofString "data_n")))
+                    (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 104)])
+                        (.var .local (ofString "target")))
+                      (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 112)])
+                          (.rfield 0 (.var .local (ofString "code"))))
+                        (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 120)])
+                            (.rfield 1 (.var .local (ofString "code"))))
+                          (.decCall (ofString "aa") .one (ofString "htab_new")
+                            [.const (BitVec.ofNat 64 20), .const (BitVec.ofNat 64 8)]
+                            (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 152)])
+                                (.var .local (ofString "aa")))
+                              (.decCall (ofString "ak") .one (ofString "htab_new")
+                                [.const (BitVec.ofNat 64 52), .const (BitVec.ofNat 64 8)]
+                                (.seq (.store (.op .add [.var .local (ofString "m"), .const (BitVec.ofNat 64 160)])
+                                    (.var .local (ofString "ak")))
+                                  (.seq .skip
+                                    (.decCall (ofString "out") .one (ofString "process_message_call")
+                                      [.var .local (ofString "m")] sysTxPmcCont)))))))))))))))))
+
+theorem sourceFnBody_unchecked_sysTx_eq :
+    sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction =
+      .seq (.call (some (none, none)) (ofString "state_fresh_tx") [])
+        (.decCall (ofString "code") (.comb [.one, .one]) (ofString "ext_code_of")
+          [.var .local (ofString "target")]
+          (.decCall (ofString "te") .one (ofString "te_new") []
+            (.seq (.store (.op .add [.var .local (ofString "te"), .const (BitVec.ofNat 64 0)])
+                (.var .global (ofString "vm_system_address")))
+              (.seq (.store (.op .add [.var .local (ofString "te"), .const (BitVec.ofNat 64 8)])
+                  (.var .local (ofString "target")))
+                (.seq (.store (.op .add [.var .local (ofString "te"), .const (BitVec.ofNat 64 48)])
+                    (.load (.comb [.one, .one, .one, .one])
+                      (.op .add [.var .global (ofString "be"), .const (BitVec.ofNat 64 48)])))
+                  (.seq (.store (.op .add [.var .local (ofString "te"), .const (BitVec.ofNat 64 80)])
+                      (.const (BitVec.ofNat 64 30000000)))
+                    (.seq (.store (.op .add [.var .local (ofString "te"), .const (BitVec.ofNat 64 88)])
+                        (.panop .mul [.const (BitVec.ofNat 64 97920), .const (BitVec.ofNat 64 16)]))
+                      (.decCall (ofString "m") .one (ofString "msg_new") [] sysTxAfterMsgNewProg)))))))) := rfl
+
+theorem prefix_unchecked_sysTx_after_msg_new {F : Type}
+    {s0 s9 : PanSemStateFiniteExact 64 F} {prog : ProgHOL 64}
+    {w_te w_m wt wd wdn wc0 wc1 : BitVec 64}
+    (hW0 : WorldOK s0)
+    (hat9 : SysTxAtProg s0 prog s9 sysTxAfterMsgNewProg)
+    (hmt9 : SysTxMsgTablesStep s0 s9 w_m [])
+    (hW9 : WorldOK s9)
+    (hc9 : s9.code = originalRuntimeCode)
+    (hl_m9 : s9.locals.lookup (ofString "m") = some (.val (.word w_m)))
+    (hl_te9 : s9.locals.lookup (ofString "te") = some (.val (.word w_te)))
+    (hl_t9 : s9.locals.lookup (ofString "target") = some (.val (.word wt)))
+    (hl_d9 : s9.locals.lookup (ofString "data") = some (.val (.word wd)))
+    (hl_dn9 : s9.locals.lookup (ofString "data_n") = some (.val (.word wdn)))
+    (hl_code9 : s9.locals.lookup (ofString "code") = some (.rStruct [.val (.word wc0), .val (.word wc1)])) :
+    SysTxPrefixOutcome s0 prog sysTxPmcCont := by
+  have hnt9 := hat9.choose_spec.1
+  have hfr9 := hat9.choose_spec.2.1
+  unfold sysTxAfterMsgNewProg at hat9 hnt9 hfr9
+  have hgw9 := hW9.1.2.2.2.2.2.2.2.2.2
+  obtain ⟨w_be, hw_be⟩ := hgw9 "be" (by decide)
+  obtain ⟨w_vsa, hw_vsa⟩ := hgw9 "vm_system_address" (by decide)
+  obtain ⟨mem10, hmt10, hW10, _, _, hnt10, hfr10, heq10⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt9 hl_m9 (by decide) (by decide)
+      (w_val := w_be) (by unfold GlobalWord at hw_be; simp [evalHOLExact, hw_be]) hnt9 hfr9
+  have hat10 := sysTxAtProg_eq hat9 hnt10 hfr10 heq10
+  obtain ⟨mem11, hmt11, hW11, _, _, hnt11, hfr11, heq11⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt10 hl_m9 (by decide) (by decide)
+      (w_val := w_te) (by simp [evalHOLExact, hl_te9]) hnt10 hfr10
+  have hat11 := sysTxAtProg_eq hat10 hnt11 hfr11 heq11
+  obtain ⟨mem12, hmt12, hW12, _, _, hnt12, hfr12, heq12⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt11 hl_m9 (by decide) (by decide)
+      (w_val := w_vsa) (by unfold GlobalWord at hw_vsa; simp [evalHOLExact, hw_vsa]) hnt11 hfr11
+  have hat12 := sysTxAtProg_eq hat11 hnt12 hfr12 heq12
+  obtain ⟨mem13, hmt13, hW13, _, _, hnt13, hfr13, heq13⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt12 hl_m9 (by decide) (by decide)
+      (w_val := wt) (by simp [evalHOLExact, hl_t9]) hnt12 hfr12
+  have hat13 := sysTxAtProg_eq hat12 hnt13 hfr13 heq13
+  obtain ⟨mem14, hmt14, hW14, _, _, hnt14, hfr14, heq14⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt13 hl_m9 (by decide) (by decide)
+      (w_val := wt) (by simp [evalHOLExact, hl_t9]) hnt13 hfr13
+  have hat14 := sysTxAtProg_eq hat13 hnt14 hfr14 heq14
+  obtain ⟨mem15, hmt15, hW15, hgas15, _, hnt15, hfr15, heq15⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt14 hl_m9 (by decide) (by decide)
+      (w_val := BitVec.ofNat 64 30000000) (by simp [evalHOLExact]) hnt14 hfr14
+  have hat15 := sysTxAtProg_eq hat14 hnt15 hfr15 heq15
+  obtain ⟨mem16, hmt16, hW16, _, hoth16, hnt16, hfr16, heq16⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt15 hl_m9 (by decide) (by decide)
+      (w_val := BitVec.ofNat 64 97920 * BitVec.ofNat 64 16)
+      (by simp [evalHOLExact, evalListHOLExact, valueIsWord, valueWord, panOpHOL]) hnt15 hfr15
+  have hat16 := sysTxAtProg_eq hat15 hnt16 hfr16 heq16
+  have hgas16 : memW ({ s9 with memory := mem16 } : PanSemStateFiniteExact 64 F) (w_m.toNat + 40) = 30000000 :=
+    (hoth16 40 (by decide) (by decide)).trans (by simpa using hgas15)
+  obtain ⟨mem17, hmt17, hW17, _, hoth17, hnt17, hfr17, heq17⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt16 hl_m9 (by decide) (by decide)
+      (w_val := wd) (by simp [evalHOLExact, hl_d9]) hnt16 hfr16
+  have hat17 := sysTxAtProg_eq hat16 hnt17 hfr17 heq17
+  have hgas17 := (hoth17 40 (by decide) (by decide)).trans hgas16
+  obtain ⟨mem18, hmt18, hW18, _, hoth18, hnt18, hfr18, heq18⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt17 hl_m9 (by decide) (by decide)
+      (w_val := wdn) (by simp [evalHOLExact, hl_dn9]) hnt17 hfr17
+  have hat18 := sysTxAtProg_eq hat17 hnt18 hfr18 heq18
+  have hgas18 := (hoth18 40 (by decide) (by decide)).trans hgas17
+  obtain ⟨mem19, hmt19, hW19, _, hoth19, hnt19, hfr19, heq19⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt18 hl_m9 (by decide) (by decide)
+      (w_val := wt) (by simp [evalHOLExact, hl_t9]) hnt18 hfr18
+  have hat19 := sysTxAtProg_eq hat18 hnt19 hfr19 heq19
+  have hgas19 := (hoth19 40 (by decide) (by decide)).trans hgas18
+  obtain ⟨mem20, hmt20, hW20, _, hoth20, hnt20, hfr20, heq20⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt19 hl_m9 (by decide) (by decide)
+      (w_val := wc0) (by simp [evalHOLExact, hl_code9]) hnt19 hfr19
+  have hat20 := sysTxAtProg_eq hat19 hnt20 hfr20 heq20
+  have hgas20 := (hoth20 40 (by decide) (by decide)).trans hgas19
+  obtain ⟨mem21, hmt21, hW21, _, hoth21, hnt21, hfr21, heq21⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt20 hl_m9 (by decide) (by decide)
+      (w_val := wc1) (by simp [evalHOLExact, hl_code9]) hnt20 hfr20
+  have hat21 := sysTxAtProg_eq hat20 hnt21 hfr21 heq21
+  have hgas21 := (hoth21 40 (by decide) (by decide)).trans hgas20
+  obtain ⟨w_aa, s22, hmt22, hW22, hc22, hl_aa22, hl_other22, hfr_aa22, hnt22, hfr22, hr22, hs22⟩ :=
+    sysTxMsgTablesStep_htab_new hW0 hmt21 (by decide) (by decide) hnt21 hfr21
+  have hat22 := sysTxAtProg_resVar hat21 hnt22 hfr22 hr22 hs22
+  have hl_m22 : s22.locals.lookup (ofString "m") = some (.val (.word w_m)) :=
+    (hl_other22 _ (by decide)).trans hl_m9
+  have hgas22 : memW s22 (w_m.toNat + 40) = 30000000 := by
+    have hin21 := hmt21.2.2.1
+    have hp0_lo := hW0.1.2.1
+    have hhp21_lim := hW21.1.2.2.1
+    have h264 : heapLimit ≤ heapEnd ∧ heapEnd < 2 ^ 64 := ⟨by decide, by decide⟩
+    unfold memW
+    rw [hfr_aa22 (BitVec.ofNat 64 (w_m.toNat + 40))]
+    · exact hgas21
+    · intro ⟨hc1, _⟩
+      unfold heapFree at hc1
+      have hlhs : (BitVec.ofNat 64 (w_m.toNat + 40)).toNat = w_m.toNat + 40 := by
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by unfold Inside at hin21; omega)]
+      dsimp only at hc1
+      rw [hlhs] at hc1
+      unfold Inside at hin21
+      omega
+  obtain ⟨mem23, hmt23, hW23, hm152_23, hoth23, hnt23, hfr23, heq23⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt22 hl_m22 (by decide) (by decide)
+      (w_val := w_aa) (by simp [evalHOLExact, hl_aa22]) hnt22 hfr22
+  have hat23 := sysTxAtProg_eq hat22 hnt23 hfr23 heq23
+  have hgas23 := (hoth23 40 (by decide) (by decide)).trans hgas22
+  obtain ⟨w_ak, s24, hmt24, hW24, hc24, hl_ak24, hl_other24, hfr_ak24, hnt24, hfr24, hr24, hs24⟩ :=
+    sysTxMsgTablesStep_htab_new hW0 hmt23 (by decide) (by decide) hnt23 hfr23
+  have hat24 := sysTxAtProg_resVar hat23 hnt24 hfr24 hr24 hs24
+  have hl_m24 : s24.locals.lookup (ofString "m") = some (.val (.word w_m)) :=
+    (hl_other24 _ (by decide)).trans hl_m22
+  have hin23 := hmt23.2.2.1
+  have hp0_lo := hW0.1.2.1
+  have hhp23_lim := hW23.1.2.2.1
+  have h264 : heapLimit ≤ heapEnd ∧ heapEnd < 2 ^ 64 := ⟨by decide, by decide⟩
+  have hgas24 : memW s24 (w_m.toNat + 40) = 30000000 := by
+    unfold memW
+    rw [hfr_ak24 (BitVec.ofNat 64 (w_m.toNat + 40))]
+    · exact hgas23
+    · intro ⟨hc1, _⟩
+      unfold heapFree at hc1
+      have hlhs : (BitVec.ofNat 64 (w_m.toNat + 40)).toNat = w_m.toNat + 40 := by
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by unfold Inside at hin23; omega)]
+      dsimp only at hc1; rw [hlhs] at hc1; unfold Inside at hin23; omega
+  have hm152_24 : memW s24 (w_m.toNat + 152) = w_aa.toNat := by
+    unfold memW
+    rw [hfr_ak24 (BitVec.ofNat 64 (w_m.toNat + 152))]
+    · exact hm152_23
+    · intro ⟨hc1, _⟩
+      unfold heapFree at hc1
+      have hlhs : (BitVec.ofNat 64 (w_m.toNat + 152)).toNat = w_m.toNat + 152 := by
+        rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by unfold Inside at hin23; omega)]
+      dsimp only at hc1; rw [hlhs] at hc1; unfold Inside at hin23; omega
+  obtain ⟨mem25, hmt25, hW25, hm160_25, hoth25, hnt25, hfr25, heq25⟩ :=
+    sysTxMsgTablesStep_store_word hW0 hmt24 hl_m24 (by decide) (by decide)
+      (w_val := w_ak) (by simp [evalHOLExact, hl_ak24]) hnt24 hfr24
+  have hat25 := sysTxAtProg_eq hat24 hnt25 hfr25 heq25
+  have hgas25 := (hoth25 40 (by decide) (by decide)).trans hgas24
+  have hm152_25 := (hoth25 152 (by decide) (by decide)).trans hm152_24
+  set s25 := { s24 with memory := mem25 }
+  have hskip : evaluateHOLFiniteState s25
+      (.seq .skip (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] sysTxPmcCont)) =
+      evaluateHOLFiniteState s25
+        (.decCall (ofString "out") .one (ofString "process_message_call") [.var .local (ofString "m")] sysTxPmcCont) := by
+    rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_skip]
+  rw [hskip] at hnt25 hfr25
+  have hat26 := sysTxAtProg_eq hat25 hnt25 hfr25 hskip
+  have hc25 : s25.code = originalRuntimeCode := hc24.trans (hc22.trans hc9)
+  exact sysTxPrefixOutcome_done hat26 hmt25.1 hW25 hc25 hl_m24
+    (fun callee hcallee => msgReady_of_sysTxMsgTablesStep hW0 hmt25 hgas25 hm152_25 hm160_25 hcallee)
+
+theorem prefix_unchecked_sysTx_to_pmc {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F)
+    (hc0 : s0.code = originalRuntimeCode)
+    (hW0 : WorldOK s0)
+    (wt wd wdn : BitVec 64)
+    (hl_t0 : s0.locals.lookup (ofString "target") = some (.val (.word wt)))
+    (hl_d0 : s0.locals.lookup (ofString "data") = some (.val (.word wd)))
+    (hl_dn0 : s0.locals.lookup (ofString "data_n") = some (.val (.word wdn)))
+    (hnt0 : (evaluateHOLFiniteState s0
+      (sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction)).1 ≠ some .timeOut)
+    (hfr0 : FlowingOrResumes (evaluateHOLFiniteState s0
+      (sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction)).1) :
+    SysTxPrefixOutcome s0
+      (sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction) sysTxPmcCont := by
+  rw [sourceFnBody_unchecked_sysTx_eq] at hnt0 hfr0
+  have hat0' : SysTxAtProg s0 (sourceFnBody Guest.Software.guestFn_process_unchecked_system_transaction) s0 _ :=
+    ⟨id, hnt0, hfr0, congrArg Prod.fst (congrArg (evaluateHOLFiniteState s0) sourceFnBody_unchecked_sysTx_eq),
+      congrArg Prod.snd (congrArg (evaluateHOLFiniteState s0) sourceFnBody_unchecked_sysTx_eq)⟩
+  have hp0 : SysTxPrefixStep s0 none s0 := sysTxPrefixStep_refl s0 none hW0.1
+  rcases seq_call0_prefix_step hc0 hW0 hp0 sysTxPrefix_state_fresh_tx hnt0 hfr0 with
+    hex | ⟨s1, hp1, hW1, hc1, hloc1, hnt1, hfr1, heq1⟩
+  · exact sysTxPrefixOutcome_ex hat0' hex
+  have hat1 := sysTxAtProg_eq hat0' hnt1 hfr1 heq1
+  rcases decCall_prefix_shaped_step hc1 hW0 hp1 sysTxPrefix_ext_code_of hnt1 hfr1 with
+    hex | ⟨vcode, s2, hp2, hW2, hc2, hcode_sh, hl_code2, hl_other2, hnt2, hfr2, hr2, hs2⟩
+  · exact sysTxPrefixOutcome_ex hat1 hex
+  have hat2 := sysTxAtProg_resVar hat1 hnt2 hfr2 hr2 hs2
+  have hl_t2 : s2.locals.lookup (ofString "target") = some (.val (.word wt)) :=
+    (hl_other2 _ (by decide)).trans ((congrArg (fun L => L.lookup (ofString "target")) hloc1).trans hl_t0)
+  have hl_d2 : s2.locals.lookup (ofString "data") = some (.val (.word wd)) :=
+    (hl_other2 _ (by decide)).trans ((congrArg (fun L => L.lookup (ofString "data")) hloc1).trans hl_d0)
+  have hl_dn2 : s2.locals.lookup (ofString "data_n") = some (.val (.word wdn)) :=
+    (hl_other2 _ (by decide)).trans ((congrArg (fun L => L.lookup (ofString "data_n")) hloc1).trans hl_dn0)
+  rcases decCall_te_new_freshStep s2 (ofString "te") _ hc2 hW2 hnt2 hfr2 with
+    ⟨hstep_ex, e, ev, hev⟩ | ⟨w_te, s3, hfb3_2, hW3, hc3, hl_te3, hl_other3, _, hnt3, hfr3, hr3, hs3⟩
+  · exact sysTxPrefixOutcome_ex hat2 ⟨sysTxPrefixStep_trans hW0.1 hp2 hstep_ex, e, ev, hev⟩
+  have hat3 := sysTxAtProg_resVar hat2 hnt3 hfr3 hr3 hs3
+  have hfb3 : SysTxFreshBlockStep s0 none s3 w_te 200 := sysTxFreshBlockStep_prepend hW0 hp2 hfb3_2
+  have hl_t3 : s3.locals.lookup (ofString "target") = some (.val (.word wt)) :=
+    (hl_other3 _ (by decide)).trans hl_t2
+  have hl_d3 : s3.locals.lookup (ofString "data") = some (.val (.word wd)) :=
+    (hl_other3 _ (by decide)).trans hl_d2
+  have hl_dn3 : s3.locals.lookup (ofString "data_n") = some (.val (.word wdn)) :=
+    (hl_other3 _ (by decide)).trans hl_dn2
+  have hl_code3 : s3.locals.lookup (ofString "code") = some vcode :=
+    (hl_other3 _ (by decide)).trans hl_code2
+  have hgw3 := hW3.1.2.2.2.2.2.2.2.2.2
+  obtain ⟨wvsa3, hwvsa3⟩ := hgw3 "vm_system_address" (by decide)
+  obtain ⟨mem4, _, _, _, hfb4, hW4, _, hnt4, hfr4, heq4⟩ :=
+    seq_store_freshBlock_step hW0 hfb3 hl_te3 (by decide)
+      (fun v hv => by
+        unfold GlobalWord at hwvsa3
+        simp only [evalHOLExact, hwvsa3, Option.some.injEq] at hv
+        subst hv; simp [flattenHOL]) hnt3 hfr3
+  have hat4 := sysTxAtProg_eq hat3 hnt4 hfr4 heq4
+  obtain ⟨mem5, _, _, _, hfb5, hW5, _, hnt5, hfr5, heq5⟩ :=
+    seq_store_freshBlock_step hW0 hfb4 hl_te3 (by decide)
+      (fun v hv => by
+        simp only [evalHOLExact, hl_t3, Option.some.injEq] at hv
+        subst hv; simp [flattenHOL]) hnt4 hfr4
+  have hat5 := sysTxAtProg_eq hat4 hnt5 hfr5 heq5
+  obtain ⟨mem6, _, _, _, hfb6, hW6, _, hnt6, hfr6, heq6⟩ :=
+    seq_store_freshBlock_step hW0 hfb5 hl_te3 (by decide)
+      (fun v hv => by
+        rw [evalHOLExact_load_comb4_len hv]; omega) hnt5 hfr5
+  have hat6 := sysTxAtProg_eq hat5 hnt6 hfr6 heq6
+  obtain ⟨mem7, _, _, _, hfb7, hW7, _, hnt7, hfr7, heq7⟩ :=
+    seq_store_freshBlock_step hW0 hfb6 hl_te3 (by decide)
+      (fun v hv => by
+        have := evalHOLExact_const_len_le_one hv; omega) hnt6 hfr6
+  have hat7 := sysTxAtProg_eq hat6 hnt7 hfr7 heq7
+  obtain ⟨mem8, _, _, _, hfb8, hW8, _, hnt8, hfr8, heq8⟩ :=
+    seq_store_freshBlock_step hW0 hfb7 hl_te3 (by decide)
+      (fun v hv => by
+        have := evalHOLExact_panop_mul_const_len_le_one hv; omega) hnt7 hfr7
+  have hat8 := sysTxAtProg_eq hat7 hnt8 hfr8 heq8
+  set s8 := { s3 with memory := mem8 }
+  have hp8 : SysTxPrefixStep s0 none s8 := hfb8.1
+  have hc8 : s8.code = originalRuntimeCode := hc3
+  rcases decCall_msg_new_freshStep s8 (ofString "m") _ hc8 hW8 hnt8 hfr8 with
+    ⟨hstep_ex, e, ev, hev⟩ | ⟨w_m, s9, hfb9_8, hW9, hc9, hl_m9, hl_other9, _, hnt9, hfr9, hr9, hs9⟩
+  · exact sysTxPrefixOutcome_ex hat8 ⟨sysTxPrefixStep_trans hW0.1 hp8 hstep_ex, e, ev, hev⟩
+  have hat9 := sysTxAtProg_resVar hat8 hnt9 hfr9 hr9 hs9
+  have hfb9 : SysTxFreshBlockStep s0 none s9 w_m 176 := sysTxFreshBlockStep_prepend hW0 hp8 hfb9_8
+  have hmt9 : SysTxMsgTablesStep s0 s9 w_m [] := sysTxMsgTablesStep_of_freshBlock hfb9
+  have hl_te9 : s9.locals.lookup (ofString "te") = some (.val (.word w_te)) :=
+    (hl_other9 _ (by decide)).trans hl_te3
+  have hl_t9 : s9.locals.lookup (ofString "target") = some (.val (.word wt)) :=
+    (hl_other9 _ (by decide)).trans hl_t3
+  have hl_d9 : s9.locals.lookup (ofString "data") = some (.val (.word wd)) :=
+    (hl_other9 _ (by decide)).trans hl_d3
+  have hl_dn9 : s9.locals.lookup (ofString "data_n") = some (.val (.word wdn)) :=
+    (hl_other9 _ (by decide)).trans hl_dn3
+  have hl_code9 : s9.locals.lookup (ofString "code") = some vcode :=
+    (hl_other9 _ (by decide)).trans hl_code3
+  have hcode_pair : ∃ c0 c1 : BitVec 64, vcode = .rStruct [.val (.word c0), .val (.word c1)] := by
+    cases vcode with
+    | val _ => simp [shapeOfHOLExact] at hcode_sh
+    | nStruct _ _ => simp [shapeOfHOLExact] at hcode_sh
+    | rStruct vs =>
+      simp only [shapeOfHOLExact, ShapeHOL.comb.injEq] at hcode_sh
+      rcases vs with _ | ⟨u0, _ | ⟨u1, _ | _⟩⟩ <;> simp at hcode_sh
+      rcases u0 with ⟨⟨c0⟩⟩ | _ | _ <;> try simp [shapeOfHOLExact] at hcode_sh
+      rcases u1 with ⟨⟨c1⟩⟩ | _ | _ <;> try simp [shapeOfHOLExact] at hcode_sh
+      exact ⟨c0, c1, rfl⟩
+  obtain ⟨wc0, wc1, rfl⟩ := hcode_pair
+  exact prefix_unchecked_sysTx_after_msg_new hW0 hat9 hmt9 hW9 hc9 hl_m9 hl_te9 hl_t9 hl_d9 hl_dn9 hl_code9
+
 theorem «wk_process_checked_system_transaction_of_unchecked»
     (h_unchecked :
       WorldKeeps WorldOK
