@@ -742,4 +742,28 @@ theorem phase1_nonce_balance_decl_strong (h : PtxCallees)
         ptxPhase2LocalShapes_set_other s hp.2 _ v (by decide)⟩
     · exact htail
 
+/-- The complete Phase 1 suffix after the reservoir declaration. -/
+def phase1BalanceSuffix (tail : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "increment_nonce") [.var .local (ofString "sender")])
+    (.dec (ofString "bal") (.comb [.one, .one, .one, .one])
+      (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "acct"), .const 8]))
+      (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub")
+        [.var .local (ofString "bal"), .var .local (ofString "effective_gas_fee")])
+        (.seq (.call (some (some (.local, ofString "bal"), none)) (ofString "u256_sub")
+          [.var .local (ofString "bal"), .var .local (ofString "blob_gas_fee")])
+          (.seq (.call (some (none, none)) (ofString "set_account_balance")
+            [.var .local (ofString "sender"), .var .local (ofString "bal")]) (.seq .skip tail)))))
+
+theorem phase1_balance_suffix_strong (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn PtxValidatedStrong tail b) :
+    TerminatingProgBoundedOn (fun s => R16Shards.PtxP1.StageP 4 s ∧ PtxPhase2LocalShapes s)
+      (phase1BalanceSuffix tail)
+      ((K.increment_nonce + 1) + ((K.u256_sub + 1) + ((K.u256_sub + 1) +
+        ((K.set_account_balance + 1) + (0 + b))))) := by
+  unfold phase1BalanceSuffix
+  apply phase1_nonce_balance_decl_strong h
+  apply phase1_sub_balance_tail_strong h
+  apply phase1_sub_balance_tail_strong h
+  exact phase1_set_balance_tail_strong h _ htail
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
