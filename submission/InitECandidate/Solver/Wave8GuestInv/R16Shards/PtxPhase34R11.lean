@@ -2216,6 +2216,15 @@ theorem hoare_logPointers_increment :
   · intro F s _ hr
     cases hr
 
+theorem hoare_logSlot_store_increment (src : ExpHOL 64)
+    (hword : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      evalAt s src = some v → ∃ w : HolWordLab 64, v = .val w) :
+    Hoare Phase4LogSlotReady
+      (.seq (.store (.var .local (ofString "slot")) src)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → Phase4LogPointersReady t) :=
+  Hoare.seq_fall (hoare_logSlot_store src hword) hoare_logPointers_increment
+
 theorem phase4LogCounter_cut {tail : ProgHOL 64} {b : Nat}
     (htail : TerminatingProgBoundedOn
       (fun s => Phase4LogPointersReady s ∧ locN s "i" = 0) tail b) :
