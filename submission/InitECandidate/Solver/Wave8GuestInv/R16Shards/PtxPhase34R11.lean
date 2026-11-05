@@ -4044,6 +4044,26 @@ theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact stable_copy_complete s hp hn hh ha hcap
     (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
 
+/-- At copy completion, source record ownership transfers to the stable list
+when its header and live backing remain separated from the same world. -/
+theorem stableCopyInv_exit_owned {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i")
+    {S Nd : List Nat} (hown : LogsLiveOwned s S Nd (locN s "logs"))
+    (halloc : Allocated s (memW s (locN s "stable_logs"),
+      8 * memW s (locN s "stable_logs" + 8)))
+    (hsep : IvlsDisj [(locN s "stable_logs", 24),
+      (memW s (locN s "stable_logs"), 8 * memW s (locN s "stable_logs" + 8))]
+      (worldOwned s S Nd)) :
+    LogsLiveOwned s S Nd (locN s "stable_logs") := by
+  intro _
+  refine ⟨halloc, hsep, ?_⟩
+  intro j hj
+  have hlen := hp.1.2.2.2.2.2.1
+  have hsource := hp.1.2.2.2.1
+  have hjn : j < locN s "nl" := by simpa only [hlen] using hj
+  rw [hp.2.2.2.2.2 j (lt_of_lt_of_le hjn hexit) hjn]
+  exact (hown hp.2.1).2.2 j (by simpa only [← hsource] using hjn)
+
 /-- Exhaustion of the natural copy rank yields the receipt postcondition. -/
 theorem stableCopyInv_rank_zero_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hz : locN s "nl" - locN s "i" = 0) :
