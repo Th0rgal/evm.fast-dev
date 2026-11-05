@@ -7739,4 +7739,506 @@ theorem merge_set_call_bound_member {F : Type}
   · have hm := (merge_set_values_membership hp.2.1).1
     simpa [locN, hl, hi] using hm
 
+/-- Insertion into an outer table preserves every separately owned inner table. -/
+theorem merge_set_other_table_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t u : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hu : u ∈ S) (hne : u ≠ t)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    HtabWF post u ∧ htabFootprint post u = htabFootprint s u ∧
+      (∀ k, k < 11 → hdr post u k = hdr s u k) := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  have hunhit : ∀ i ∈ htabFootprint s u, IvlUnhit s post i := by
+    intro i hi
+    exact ivlUnhit_of_frameOutside_aligned
+      (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
+      (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
+      (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
+        (Or.inr ((hW.1.2.1 u hu).2 i hi).1))
+  have hheader : (u, 88) ∈ htabFootprint s u := by simp [htabFootprint]
+  have hfp := (hW.1.2.1 u hu).1.1
+  have h264 : heapEnd ≤ 2 ^ 64 := by decide
+  have hh := htabFootprint_eq_of_hdr_unhit ((hfp _ hheader).2.1)
+    (by have := (hfp _ hheader).1.2; dsimp at this; omega) (hunhit _ hheader)
+  exact ⟨htabWF_congr_unhit hA.1 hAp.1 (hW.1.2.1 u hu).1 hunhit, hh.2, hh.1⟩
+
+/-- Inserting an owned inner pointer preserves the outer table's value ownership. -/
+theorem merge_set_values_owned {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t value : Nat} {S : List Nat}
+    (hv : WkBal.HtabSetValuesPost s post t value)
+    (hold : HtabValuesIn s t S) (hvalue : value ∈ S) :
+    HtabValuesIn post t S := by
+  intro i hi
+  have hm : nodeF post (hdr post t 5) (memW post (hdr post t 6 + 8 * i)) 8 ∈
+      htabValues post t := List.mem_map.2 ⟨i, List.mem_range.2 hi, rfl⟩
+  rcases (merge_set_values_membership hv).2 _ hm with hm | heq
+  · obtain ⟨j, hj, heq⟩ := List.mem_map.1 hm
+    rw [← heq]
+    exact hold j (List.mem_range.1 hj)
+  · rw [heq]; exact hvalue
+
+/-- The concrete outer insertion retains the inner binding and nested ownership facts. -/
+theorem merge_set_call_nested_owned {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek : ExpHOL 64)
+    (tw kw iw : BitVec 64) (S Nd : List Nat)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : s.locals.lookup (ofString "binner") = some (.val (.word iw)))
+    (hAR : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (htS : tw.toNat ∈ S) (hiS : iw.toNat ∈ S) (hne : iw.toNat ≠ tw.toNat)
+    (howned : HtabValuesIn s tw.toNat S)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).1) :
+    let post := (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [et, ek, .var .local (ofString "binner")])).2
+    post.locals.lookup (ofString "binner") = some (.val (.word iw)) ∧
+    locN post "binner" ∈ htabValues post tw.toNat ∧
+    HtabValuesIn post tw.toNat S ∧
+    HtabWF post iw.toNat ∧
+    htabFootprint post iw.toNat = htabFootprint s iw.toNat ∧
+    (∀ k, k < 11 → hdr post iw.toNat k = hdr s iw.toNat k) := by
+  have hv : evalAt s (.var .local (ofString "binner")) = some (.val (.word iw)) := by
+    simpa [evalAt, evalHOLExact] using hi
+  have hwf := (hWT.1.2.1 tw.toNat htS).1
+  have hal : ∀ i ∈ htabFootprint s tw.toNat, Allocated s i :=
+    fun i hi => ((hWT.1.2.1 tw.toNat htS).2 i hi).1
+  have hp := merge_set_call_flow_props s et ek _ tw kw iw ht hk hv hAR hwf hal hfr
+  have hm := merge_set_call_bound_member s et ek tw kw iw ht hk hi hAR hwf hal hfr
+  exact ⟨hm.1, hm.2, merge_set_values_owned hp.2.1 howned hiS,
+    merge_set_other_table_frame hAR hWT htS hiS hne hp.1⟩
+
+/-- A fresh table with no world role cannot alias the block storage outer table. -/
+theorem merge_fresh_inner_ne_outer {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {inner : Nat} (hbs : globN s "bs" ≠ 0)
+    (hout : memW s (globN s "bs" + 32) ≠ 0)
+    (hfresh : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ inner) :
+    inner ≠ memW s (globN s "bs" + 32) := by
+  have hm : (memW s (globN s "bs" + 32), "bs+32") ∈ worldRoleSlots s := by
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs hout
+    simp [recRoles, hbs]
+  exact (hfresh _ (List.mem_append_left _ hm)).symm
+
+/-- Outer insertion leaves every nonempty fixed world object untouched. -/
+theorem merge_set_fixed_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    ∀ i ∈ fixedObjects s, i.2 ≠ 0 → IvlUnhit s post i := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  intro i hi hpos
+  have hal : Allocated s i := by
+    rcases hW.2.2.1.1 i hi with hz | ⟨hal, _⟩
+    · exact False.elim (hpos hz)
+    · exact hal
+  exact ivlUnhit_of_frameOutside_aligned hpos hfr ht_al hf_al
+    (fun j hj => (((hW.1.2.1 t ht).2 j hj).2 i hi).flip)
+    (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp (Or.inr hal))
+
+/-- Outer insertion preserves the block record's pointer to that outer table. -/
+theorem merge_set_bs_outer_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (hbs : globN s "bs" ≠ 0) :
+    globN post "bs" = globN s "bs" ∧
+    memW post (globN post "bs" + 32) = memW s (globN s "bs" + 32) := by
+  have hg : globN post "bs" = globN s "bs" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bs") (by decide))
+  have hm := typedRecord_mem_fixedObjects s (r := ("bs", 80)) (by simp [typedRecords])
+  simp only [hbs, ↓reduceIte] at hm
+  have hu := merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  exact ⟨hg, rec_word_eq_of_unhit hA.2 hW.2.2.1 "bs" 80
+    (by simp [typedRecords]) hg hbs hu (by decide) (by decide)⟩
+
+/-- Installing a fresh block inner-table role preserves role compatibility. -/
+theorem merge_roles_append_fresh {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {sl jr : List (Nat × String)} {inner : Nat}
+    (h : RolesOK s S sl jr) (hi : inner ∈ S)
+    (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ sl ++ jr, a.1 ≠ inner) :
+    RolesOK s S (sl ++ [(inner, "bs.inner")]) jr := by
+  refine ⟨?_, List.pairwise_append.2 ⟨h.2.1, by simp, ?_⟩, ?_⟩
+  · intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases List.mem_append.1 ha with ha | ha
+      · exact h.1 a (List.mem_append_left _ ha)
+      · have he := List.mem_singleton.1 ha
+        subst a
+        exact ⟨hi, hk⟩
+    · exact h.1 a (List.mem_append_right _ ha)
+  · intro a ha b hb heq
+    have hb := List.mem_singleton.1 hb
+    subst b
+    exact False.elim (hf a (List.mem_append_left _ ha) heq)
+  · intro a ha b hb heq
+    rcases List.mem_append.1 hb with hb | hb
+    · rcases List.mem_append.1 hb with hb | hb
+      · exact h.2.2 a ha b (List.mem_append_left _ hb) heq
+      · have hb := List.mem_singleton.1 hb
+        subst b
+        exact False.elim (hf a (List.mem_append_right _ ha) heq)
+    · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
+
+/-- Outer insertion introduces only the installed block-inner role. -/
+theorem merge_set_nestRoles_provenance {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {t inner : Nat}
+    (hbs : globN s "bs" ≠ 0) (ht : t = memW s (globN s "bs" + 32))
+    (ht0 : t ≠ 0) (hg : globN post "bs" = globN s "bs")
+    (hp : memW post (globN post "bs" + 32) = t)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    (inner, "bs.inner") ∈ nestRoles post "bs" "bs.inner" ∧
+    ∀ a ∈ nestRoles post "bs" "bs.inner",
+      a ∈ nestRoles s "bs" "bs.inner" ∨ a = (inner, "bs.inner") := by
+  have hpost : nestRoles post "bs" "bs.inner" =
+      (htabValues post t).map (fun v => (v, "bs.inner")) := by
+    have hbpost : globN post "bs" ≠ 0 := by rwa [hg]
+    simp [nestRoles, hbpost, hp, ht0]
+  have hpre : nestRoles s "bs" "bs.inner" =
+      (htabValues s t).map (fun v => (v, "bs.inner")) := by
+    simp [nestRoles, hbs, ← ht, ht0]
+  rw [hpost, hpre]
+  refine ⟨List.mem_map.2 ⟨inner, (merge_set_values_membership hv).1, rfl⟩, ?_⟩
+  intro a ha
+  obtain ⟨v, hv', rfl⟩ := List.mem_map.1 ha
+  rcases (merge_set_values_membership hv).2 v hv' with hold | heq
+  · exact Or.inl (List.mem_map.2 ⟨v, hold, rfl⟩)
+  · exact Or.inr (by rw [heq])
+
+/-- Replace the nested block-role segment using old-or-fresh provenance. -/
+theorem merge_roles_replace_inner {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {pre old new suf jr : List (Nat × String)} {inner : Nat}
+    (h : RolesOK s S (pre ++ old ++ suf) jr)
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ (pre ++ old ++ suf) ++ jr, a.1 ≠ inner)
+    (hp : ∀ a ∈ new, a ∈ old ∨ a = (inner, "bs.inner"))
+    (hr : ∀ a ∈ new, a.2 = "bs.inner") :
+    RolesOK s S (pre ++ new ++ suf) jr := by
+  have hold : ∀ a ∈ old, a ∈ pre ++ old ++ suf := by
+    intro a ha; simp only [List.mem_append]; exact Or.inl (Or.inr ha)
+  have hpre : ∀ a ∈ pre, a ∈ pre ++ old ++ suf := by
+    intro a ha; simp only [List.mem_append]; exact Or.inl (Or.inl ha)
+  have hsuf : ∀ a ∈ suf, a ∈ pre ++ old ++ suf := by
+    intro a ha; exact List.mem_append_right _ ha
+  have hprov : ∀ a ∈ pre ++ new ++ suf,
+      a ∈ pre ++ old ++ suf ∨ a = (inner, "bs.inner") := by
+    intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases List.mem_append.1 ha with ha | ha
+      · exact Or.inl (hpre a ha)
+      · exact (hp a ha).imp (hold a) id
+    · exact Or.inl (hsuf a ha)
+  have hpair := List.pairwise_append.1 h.2.1
+  have hleft := List.pairwise_append.1 hpair.1
+  refine ⟨?_, ?_, ?_⟩
+  · intro a ha
+    rcases List.mem_append.1 ha with ha | ha
+    · rcases hprov a ha with ha | rfl
+      · exact h.1 a (List.mem_append_left _ ha)
+      · exact ⟨hi, hk⟩
+    · exact h.1 a (List.mem_append_right _ ha)
+  · apply List.pairwise_append.2
+    refine ⟨List.pairwise_append.2 ⟨hleft.1, ?_, ?_⟩, hpair.2.1, ?_⟩
+    · have hall : ∀ l : List (Nat × String), (∀ a ∈ l, a.2 = "bs.inner") →
+          l.Pairwise (fun a b => a.1 = b.1 → a.2 = b.2 ∧ a.2 ∈ sharedRoles) := by
+        intro l
+        induction l with
+        | nil => simp
+        | cons a l ih =>
+          intro hh
+          apply List.pairwise_cons.2
+          refine ⟨?_, ih (fun b hb => hh b (List.mem_cons_of_mem _ hb))⟩
+          intro b hb heq
+          have ha := hh a (List.mem_cons_self)
+          have hb' := hh b (List.mem_cons_of_mem _ hb)
+          exact ⟨ha.trans hb'.symm, by rw [ha]; simp [sharedRoles]⟩
+      exact hall new hr
+    · intro a ha b hb heq
+      rcases hp b hb with hb | rfl
+      · exact hleft.2.2 a ha b hb heq
+      · exact False.elim (hf a (List.mem_append_left _ (hpre a ha)) heq)
+    · intro a ha b hb heq
+      rcases List.mem_append.1 ha with ha | ha
+      · exact hpair.2.2 a (List.mem_append_left _ ha) b hb heq
+      · rcases hp a ha with ha | rfl
+        · exact hpair.2.2 a (List.mem_append_right _ ha) b hb heq
+        · exact False.elim (hf b (List.mem_append_left _ (hsuf b hb)) heq.symm)
+  · intro a ha b hb heq
+    rcases List.mem_append.1 hb with hb | hb
+    · rcases hprov b hb with hb | rfl
+      · exact h.2.2 a ha b (List.mem_append_left _ hb) heq
+      · exact False.elim (hf a (List.mem_append_right _ ha) heq)
+    · exact h.2.2 a ha b (List.mem_append_right _ hb) heq
+
+/-- Transport filtered nested roles across insertion and preserved key-length headers. -/
+theorem merge_roles_transport_inner {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    {pre suf jr : List (Nat × String)} {t inner : Nat}
+    (h : RolesOK s S (pre ++ (nestRoles s "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) jr)
+    (hi : inner ∈ S) (hk : hdr s inner 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ (pre ++ (nestRoles s "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) ++ jr, a.1 ≠ inner)
+    (hh : ∀ u ∈ S, hdr post u 0 = hdr s u 0)
+    (hbs : globN s "bs" ≠ 0) (ht : t = memW s (globN s "bs" + 32))
+    (ht0 : t ≠ 0) (hg : globN post "bs" = globN s "bs")
+    (hp : memW post (globN post "bs" + 32) = t)
+    (hv : WkBal.HtabSetValuesPost s post t inner) :
+    RolesOK post S (pre ++ (nestRoles post "bs" "bs.inner").filter
+      (fun a => a.1 != 0) ++ suf) jr := by
+  have hprov := (merge_set_nestRoles_provenance hbs ht ht0 hg hp hv).2
+  have hnew := merge_roles_replace_inner h hi hk hf
+    (new := (nestRoles post "bs" "bs.inner").filter (fun a => a.1 != 0))
+    (by
+      intro a ha
+      obtain ⟨ha, hn⟩ := List.mem_filter.1 ha
+      rcases hprov a ha with ha | ha
+      · exact Or.inl (List.mem_filter.2 ⟨ha, hn⟩)
+      · exact Or.inr ha)
+    (by
+      intro a ha
+      have ha := (List.mem_filter.1 ha).1
+      unfold nestRoles at ha
+      split at ha
+      · simp at ha
+      · split at ha
+        · simp at ha
+        · obtain ⟨v, _, rfl⟩ := List.mem_map.1 ha
+          rfl)
+  refine ⟨?_, hnew.2⟩
+  intro a ha
+  obtain ⟨hm, hk'⟩ := hnew.1 a ha
+  exact ⟨hm, (hh a.1 hm).trans hk'⟩
+
+/-- Table insertion preserves journal roles and journal typing. -/
+theorem merge_set_journal_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    journalRoleSlots post = journalRoleSlots s ∧ JournalTyped post S := by
+  have hg := he.2.2.2.2.2.2.2
+  have hsp : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    globN_eq_of_lookup (hg (ofString "scratch_ptr") (by decide))
+  have hag : AllocatorGrows s post := ⟨he.2.2.2.2.1, by rw [hsp]⟩
+  have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
+    intro g hg'
+    apply globN_eq_of_lookup (hg (ofString g) ?_)
+    revert g hg'; decide
+  apply journalRoleSlots_eq_of_unhit hA.1 he.1.1 hA.2 hag
+    (fun _ hx => hx) hW.2.1 hW.2.2.1 hcore
+  · intro hnz
+    have hm := typedRecord_mem_fixedObjects s (r := ("ts", 72)) (by simp [typedRecords])
+    simp only [hnz, ↓reduceIte] at hm
+    exact merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  · intro hnz
+    apply merge_set_fixed_unhit hA hW ht he
+    · unfold fixedObjects
+      apply List.mem_append.2; left
+      apply List.mem_append.2; left
+      apply List.mem_append.2; right
+      simp [hnz]
+    · dsimp; omega
+
+/-- Insertion preserves all aligned table-role fields of a fixed world record. -/
+theorem merge_set_recRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (g : String) (sz : Nat) (ks : List (Nat × String))
+    (hrec : (g, sz) ∈ typedRecords) (hsz : sz ≠ 0)
+    (hg : ofString g ≠ ofString "heap_ptr")
+    (hks : ∀ k ∈ ks, k.1 % 8 = 0 ∧ k.1 + 8 ≤ sz) :
+    recRoles post g ks = recRoles s g ks := by
+  have hglob : globN post g = globN s g := by
+    apply globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString g) ?_)
+    simpa using hg
+  unfold recRoles
+  rw [hglob]
+  split
+  · rfl
+  · rename_i hnz
+    have hm := typedRecord_mem_fixedObjects s (r := (g, sz)) hrec
+    simp only [hnz, ↓reduceIte] at hm
+    have hu := merge_set_fixed_unhit hA hW ht he _ hm hsz
+    apply List.map_congr_left
+    intro k hk
+    have hw := rec_word_eq_of_unhit hA.2 hW.2.2.1 g sz hrec hglob hnz hu
+      (hks k hk).1 (hks k hk).2
+    rw [hglob] at hw
+    exact congrArg (fun v => (v, k.2)) hw
+
+/-- Insertion preserves the complete value lists of other owned tables. -/
+theorem merge_set_other_values_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t u : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd)
+    (ht : t ∈ S) (hu : u ∈ S) (hne : u ≠ t)
+    (he : SoloHtabSet.HtabExitAt t s post) :
+    htabValues post u = htabValues s u := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := he
+  have hf_al : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0 := by
+    have h1 := hA.2.2.2.2.2.2.1
+    have h2 := hAp.2.2.2.2.2.2.1
+    omega
+  have ht_al : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0 := by
+    intro j hj
+    have hw := ((hW.1.2.1 t ht).1.1 j hj).2
+    exact ⟨hw.1, hw.2.1⟩
+  apply htabValues_eq_of_unhit (hW.1.2.1 u hu).1
+  intro i hi
+  exact ivlUnhit_of_frameOutside_aligned
+    (htabFootprint_len_pos (hW.1.2.1 u hu).1 hi) hfr ht_al hf_al
+    (fun j hj => hW.1.2.2.1 u hu t ht hne i hi j hj)
+    (disj_fresh_of_zero_or_allocated hA.2 hAp.2 hhp
+      (Or.inr ((hW.1.2.1 u hu).2 i hi).1))
+
+/-- Insertion preserves nested roles of a separately owned record-rooted table. -/
+theorem merge_set_other_nestRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (g r : String) (sz : Nat) (hrec : (g, sz) ∈ typedRecords)
+    (hsz : 40 ≤ sz) (hg : ofString g ≠ ofString "heap_ptr")
+    (hroot : globN s g ≠ 0 → RootIn S (memW s (globN s g + 32)))
+    (hne : globN s g ≠ 0 → memW s (globN s g + 32) ≠ 0 →
+      memW s (globN s g + 32) ≠ t) :
+    nestRoles post g r = nestRoles s g r := by
+  have hglob : globN post g = globN s g :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString g) (by simpa using hg))
+  unfold nestRoles
+  rw [hglob]
+  by_cases hn : globN s g = 0
+  · simp [hn]
+  have hr := merge_set_recRoles_kept hA hW ht he g sz [(32, r)] hrec
+    (by omega) hg (by simp; omega)
+  simp only [recRoles, hglob, hn, ↓reduceIte, List.map_cons, List.map_nil] at hr
+  have hp : memW post (globN s g + 32) = memW s (globN s g + 32) := by
+    exact congrArg (fun l : List (Nat × String) => (l.headD (0, "")).1) hr
+  rw [hp]
+  by_cases hz : memW s (globN s g + 32) = 0
+  · simp [hz]
+  have hu : memW s (globN s g + 32) ∈ S := (hroot hn).resolve_left hz
+  rw [merge_set_other_values_kept hA hW ht hu (hne hn hz) he]
+
+/-- Insertion into a table distinct from the BAL root preserves record enumeration. -/
+theorem merge_set_balRecords_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hne : globN s "bal_accounts" ≠ t) :
+    balRecords post = balRecords s := by
+  have hg : globN post "bal_accounts" = globN s "bal_accounts" :=
+    globN_eq_of_lookup (he.2.2.2.2.2.2.2 (ofString "bal_accounts") (by decide))
+  change (if globN post "bal_accounts" = 0 then [] else
+    htabValues post (globN post "bal_accounts")) =
+    (if globN s "bal_accounts" = 0 then [] else htabValues s (globN s "bal_accounts"))
+  rw [hg]
+  by_cases hz : globN s "bal_accounts" = 0
+  · simp [hz]
+  have hu : globN s "bal_accounts" ∈ S :=
+    (hW.1.2.2.2.2.2.2.1 "bal_accounts" (by simp [globalTableRoots])).resolve_left hz
+  rw [merge_set_other_values_kept hA hW ht hu hne he]
+
+/-- The transaction's nested roles survive insertion into the block storage outer table. -/
+theorem merge_set_ts_nestRoles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    nestRoles post "ts" "ts.inner" = nestRoles s "ts" "ts.inner" := by
+  apply merge_set_other_nestRoles_kept hA hW ht he "ts" "ts.inner" 72
+    (by simp [typedRecords]) (by decide) (by decide)
+  · exact hW.1.2.2.2.2.2.1 32 (by simp [tsTableSlots])
+  · intro hts hu
+    have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+      rw [htbs]
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+        (by rwa [← htbs])
+      simp [recRoles, hbs]
+    have hx : (memW s (globN s "ts" + 32), "ts+32") ∈ worldRoleSlots s := by
+      apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ts" 32 _ hts hu
+      simp [recRoles, hts]
+    exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+      hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+
+/-- Block storage insertion cannot change the enumeration of BAL accounts. -/
+theorem merge_set_bs_balRecords_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    balRecords post = balRecords s := by
+  apply merge_set_balRecords_kept hA hW ht he
+  by_cases hz : globN s "bal_accounts" = 0
+  · rw [hz]; exact Ne.symm ht0
+  have hb : (t, "bs+32") ∈ worldRoleSlots s := by
+    rw [htbs]
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hbs
+      (by rwa [← htbs])
+    simp [recRoles, hbs]
+  have hx : (globN s "bal_accounts", "bal_accounts") ∈ worldRoleSlots s := by
+    simp [worldRoleSlots, hz]
+  exact R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role
+    hW.1.2.2.2.2.2.2.2.2.2.2.2 hx hb (by decide)
+
+/-- Every aligned field of an existing BAL account record survives table insertion. -/
+theorem merge_set_bal_record_fields_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t ad : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post) (had : ad ∈ balRecords s)
+    (k : Nat) (hk : k % 8 = 0) (hkb : k + 8 ≤ 40) :
+    memW post (ad + k) = memW s (ad + k) := by
+  have hm : (ad, 40) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+  have hu := merge_set_fixed_unhit hA hW ht he _ hm (by simp)
+  obtain hz | ⟨hal, hw⟩ := hW.2.2.1.1 _ hm
+  · simp at hz
+  have hb := (InitECandidate.Solver.Wave8Contracts.M08.ivl_allocated_bound hA.2 hal).2
+  apply memW_eq_of_ivlUnhit hu
+  · have ha := hw.1
+    omega
+  · exact hb
+  · constructor <;> omega
+
+/-- The BAL role segment is unchanged by insertion into the block outer table. -/
+theorem merge_set_bal_roles_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {t : Nat}
+    (hA : ArenaReady s) (hW : WorldTypedWith s S Nd) (ht : t ∈ S)
+    (he : SoloHtabSet.HtabExitAt t s post)
+    (hbs : globN s "bs" ≠ 0) (ht0 : t ≠ 0)
+    (htbs : t = memW s (globN s "bs" + 32)) :
+    (balRecords post).flatMap (fun ad =>
+      [(memW post ad, "bal.stor"), (memW post (ad + 8), "bal.reads")]) =
+    (balRecords s).flatMap (fun ad =>
+      [(memW s ad, "bal.stor"), (memW s (ad + 8), "bal.reads")]) := by
+  rw [merge_set_bs_balRecords_kept hA hW ht he hbs ht0 htbs]
+  apply List.flatMap_congr
+  intro ad had
+  have h0 := merge_set_bal_record_fields_kept hA hW ht he had 0 (by decide) (by decide)
+  have h8 := merge_set_bal_record_fields_kept hA hW ht he had 8 (by decide) (by decide)
+  simp only [Nat.add_zero] at h0
+  rw [h0, h8]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

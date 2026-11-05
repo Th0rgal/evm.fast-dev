@@ -7664,6 +7664,7 @@ theorem incorporate_child_on_error_gas {F : Type}
     Nat.mod_eq_of_lt (show c.toNat + 64 < 2 ^ 64 by omega)] at h
   exact h
 
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
 
 /-! ## Copied `htab_union_into` spec (from `R16Shards/HtabUnionIntoSpec.lean`, not importable)
@@ -8604,6 +8605,50 @@ theorem ics_prefix {F : Type} (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64
   change cpost.memory a = _
   rw [pm, updW_ne _ _ _ _ a3, updW_ne _ _ _ _ a2, updW_ne _ _ _ _ a1]; rfl
 
+/-- Preserve the child's gas credit when entering the success-incorporation prefix. -/
+theorem modular_repay_gas_le (g spill repay : BitVec 64)
+    (hr : repay.toNat ≤ spill.toNat) :
+    (g + repay).toNat + (spill - repay).toNat ≤ g.toNat + spill.toNat := by
+  have hsub : (spill - repay).toNat = spill.toNat - repay.toNat :=
+    BitVec.toNat_sub_of_le hr
+  rw [BitVec.toNat_add, hsub]
+  have hm := Nat.mod_le (g.toNat + repay.toNat) (2 ^ 64)
+  omega
+
+attribute [local irreducible] Ret in
+/-- The error-incorporation call supplies both its write frame and gas credit. -/
+theorem ics_prefix_gas {F : Type} (s : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (rest : ProgHOL 64) (Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop)
+    (hcode : s.code = originalRuntimeCode)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (hG : GuestInv s)
+    (hsep : c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72)
+    (hk : ∀ X, ICSW s X e c →
+      (readW X (e + 64)).toNat + (readW X (e + 192)).toNat ≤
+        (readW s (e + 64)).toNat + (readW s (c + 64)).toNat +
+          (readW s (e + 192)).toNat → Ret X rest Φ) :
+    Ret s (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+      [.var .local (ofString "child")]) rest) Φ := by
+  refine Ret.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, rfl, he1⟩ := evalList1_inv _ _ h1
+  rw [ev_loc, hc] at he1
+  obtain ⟨rfl, rfl⟩ := lk1 hcode lookup_incorporate_child_on_error c
+    (by rw [← Option.some.inj he1]) h2
+  have hchild : (callEntryStateHOLFinite s
+      (HolFiniteMapExact.empty.update (ofString "child", .val (.word c)))).locals.lookup
+      (ofString "child") = some (.val (.word c)) := by
+    simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  obtain ⟨pg, pc, pd, _, pm⟩ := Ret.apply
+    (incorporate_child_on_error_exact (callEntryStateHOLFinite s _) e c he hchild hsep) h3
+  apply hk
+  · refine ⟨pc, pd, pg, guestInv_congr (s := cpost) rfl rfl rfl rfl
+      (guestInv_post (guestInv_callEntry _ _ hG) h3), hc, fun a a1 a2 a3 _ => ?_⟩
+    change cpost.memory a = _
+    rw [pm, updW_ne _ _ _ _ a3, updW_ne _ _ _ _ a2, updW_ne _ _ _ _ a1]; rfl
+  · exact incorporate_child_on_error_head_gas (callEntryStateHOLFinite s _) cpost e c
+      he hchild hsep v h3
+
 /-- Write frame of the `incorporate_child_on_success` tail (from the `ev+96` store on). -/
 def ICSTail {F : Type} (X : PanSemStateFiniteExact 64 F) (e : BitVec 64) (T : Nat)
     (post : PanSemStateFiniteExact 64 F) : Prop :=
@@ -8728,6 +8773,36 @@ theorem noHit_of_disj {a : Nat} {i j : Ivl} (hd : Disj i j) (hj : 0 < j.2)
 theorem tn_add (e : BitVec 64) (k : Nat) (hk : k < 2 ^ 64) (h : e.toNat + k < 2 ^ 64) :
     (e + BitVec.ofNat 64 k).toNat = e.toNat + k := toNat_add_ofNat e k h
 
+theorem child_error_separated (e c : BitVec 64)
+    (he : e.toNat + 280 ≤ 2 ^ 64) (hc : c.toNat + 280 ≤ 2 ^ 64)
+    (hd : Disj (e.toNat, 280) (c.toNat, 280)) :
+    c + 72 ≠ e + 64 ∧ c + 184 ≠ e + 64 ∧ c + 184 ≠ e + 72 := by
+  have hne (i j : Nat) (hi : i < 280) (hj : j < 280) :
+      c + BitVec.ofNat 64 i ≠ e + BitVec.ofNat 64 j := by
+    intro h
+    have hn := congrArg BitVec.toNat h
+    rw [tn_add c i (by omega) (by omega), tn_add e j (by omega) (by omega)] at hn
+    unfold Disj at hd
+    dsimp only at hd
+    omega
+  exact ⟨hne 72 64 (by omega) (by omega), hne 184 64 (by omega) (by omega),
+    hne 184 72 (by omega) (by omega)⟩
+
+/-- Disjoint child/parent records discharge all cross-store separation obligations. -/
+theorem incorporate_child_on_error_gas_of_disj {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e c : BitVec 64)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hc : s.locals.lookup (ofString "child") = some (.val (.word c)))
+    (heB : e.toNat + 280 ≤ 2 ^ 64) (hcB : c.toNat + 280 ≤ 2 ^ 64)
+    (hd : Disj (e.toNat, 280) (c.toNat, 280))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_incorporate_child_on_error) = (some (.returned v), post)) :
+    memW post (e.toNat + 64) + memW post (e.toNat + 192) ≤
+      memW s (e.toNat + 64) + memW s (c.toNat + 64) + memW s (e.toNat + 192) :=
+  incorporate_child_on_error_gas s post e c he hc (child_error_separated e c heB hcB hd)
+    (by omega) (by omega) v hr
+
 
 theorem noHit_mono {a x y w z : Nat} (h : ¬ CellHits a (x, z - x)) (h1 : x ≤ y) (h2 : y ≤ w)
     (h3 : w ≤ z) : ¬ CellHits a (y, w - y) := by
@@ -8752,6 +8827,97 @@ theorem htab_fp_pos {F : Type} {s : PanSemStateFiniteExact 64 F} {t : Nat} (h : 
   · rw [hk2]; apply Nat.mul_pos (by omega); omega
   · omega
   · omega
+
+/-- The success tail's log-count store and table union preserve both gas words. -/
+theorem icsTail_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (heS : heapLimit ≤ e.toNat)
+    (hwf : HtabWF s T)
+    (hdisj : ∀ i ∈ htabFootprint s T, Disj (e.toNat, 280) i) :
+    readW post (e + 64) = readW s (e + 64) ∧
+      readW post (e + 192) = readW s (e + 192) := by
+  have hbound : globN post "heap_ptr" ≤ heapLimit := h.2.2.1.2.2.1
+  have hkeep (k : Nat) (hk : k = 64 ∨ k = 192) :
+      post.memory (e + BitVec.ofNat 64 k) = s.memory (e + BitVec.ofNat 64 k) := by
+    have hkb : k < 200 := by omega
+    have hkn : (e + BitVec.ofNat 64 k).toNat = e.toNat + k :=
+      tn_add e k (by omega) (by omega)
+    apply h.2.2.2.2.2
+    · rcases hk with rfl | rfl <;> bv_omega
+    · intro i hi
+      apply noHit_of_disj (hdisj i hi)
+      · exact htab_fp_pos hwf i hi
+      · rw [hkn]; dsimp only; omega
+    · unfold CellHits
+      rw [hkn]
+      dsimp only
+      have hhp := h.2.2.2.2.1
+      omega
+  constructor
+  · change readW post (e + BitVec.ofNat 64 64) = readW s (e + BitVec.ofNat 64 64)
+    unfold readW; rw [hkeep 64 (Or.inl rfl)]
+  · change readW post (e + BitVec.ofNat 64 192) = readW s (e + BitVec.ofNat 64 192)
+    unfold readW; rw [hkeep 192 (Or.inr rfl)]
+
+/-- Appending child logs preserves the parent's two gas words, including when
+the append loop reallocates its backing array. -/
+theorem laInv_gas {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    (heB : e.toNat + 200 ≤ 2 ^ 64) (heS : heapLimit ≤ e.toNat)
+    (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hcap : 0 < cap.toNat)
+    (hL : Disj (e.toNat, 280) (L.toNat, 24))
+    (hA : Disj (e.toNat, 280) (arr.toNat, 8 * cap.toNat)) :
+    readW post (e + 64) = readW s (e + 64) ∧
+      readW post (e + 192) = readW s (e + 192) := by
+  have ne_of_not_hits {a x : BitVec 64} {b n : Nat} (hn : ¬ CellHits a.toNat (b, n))
+      (hx : b ≤ x.toNat ∧ x.toNat + 8 ≤ b + n) : a ≠ x := by
+    rintro rfl; apply hn; unfold CellHits; omega
+  obtain ⟨_, _, hAR, _, hhp, _, _, _, _, _, _, _, _, _, _, _, _, _, _, hfr⟩ := h
+  have hbound : globN post "heap_ptr" ≤ heapLimit := hAR.2.2.1
+  have hkeep (k : Nat) (hk : k = 64 ∨ k = 192) :
+      post.memory (e + BitVec.ofNat 64 k) = s.memory (e + BitVec.ofNat 64 k) := by
+    have hkb : k < 200 := by omega
+    have hkn : (e + BitVec.ofNat 64 k).toNat = e.toNat + k :=
+      tn_add e k (by omega) (by omega)
+    have hL0 : ¬ CellHits (e + BitVec.ofNat 64 k).toNat (L.toNat, 24) :=
+      noHit_of_disj hL (by dsimp only; omega) (by rw [hkn]; dsimp only; omega)
+    apply hfr
+    · exact noHit_of_disj hA (by dsimp only; omega) (by rw [hkn]; dsimp only; omega)
+    · unfold CellHits; rw [hkn]; dsimp only; omega
+    · exact ne_of_not_hits hL0 (by omega)
+    · apply ne_of_not_hits hL0
+      change L.toNat ≤ (L + BitVec.ofNat 64 8).toNat ∧
+        (L + BitVec.ofNat 64 8).toNat + 8 ≤ L.toNat + 24
+      rw [tn_add L 8 (by omega) (by omega)]; omega
+    · apply ne_of_not_hits hL0
+      change L.toNat ≤ (L + BitVec.ofNat 64 16).toNat ∧
+        (L + BitVec.ofNat 64 16).toNat + 8 ≤ L.toNat + 24
+      rw [tn_add L 16 (by omega) (by omega)]; omega
+  constructor
+  · change readW post (e + BitVec.ofNat 64 64) = readW s (e + BitVec.ofNat 64 64)
+    unfold readW; rw [hkeep 64 (Or.inl rfl)]
+  · change readW post (e + BitVec.ofNat 64 192) = readW s (e + BitVec.ofNat 64 192)
+    unfold readW; rw [hkeep 192 (Or.inr rfl)]
+
+/-- A log-array reallocation stays below the heap pointer; without reallocation
+the saved scratch-release mark remains valid for the original backing array. -/
+theorem laInv_logs_release {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    {cm : Nat}
+    (hold : Inside (arr.toNat, 8 * cap.toNat) sourceBase (globN s "heap_ptr") ∨
+      Inside (arr.toNat, 8 * cap.toNat) cm scratchEnd)
+    (hsource : sourceBase ≤ globN s "heap_ptr") :
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat)
+      sourceBase (globN post "heap_ptr") ∨
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat) cm scratchEnd := by
+  obtain ⟨_, _, _, _, hhp, _, i, arr', cap', _, _, hm0, _, hm16, _, _, _, _, hloc, _⟩ := h
+  simp only [readW, hm0, hm16]
+  rcases hloc with ⟨rfl, rfl⟩ | ⟨hlo, hhi⟩
+  · rcases hold with ⟨hlo, hhi⟩ | hs
+    · exact Or.inl ⟨hlo, hhi.trans hhp⟩
+    · exact Or.inr hs
+  · exact Or.inl ⟨hsource.trans hlo, hhi⟩
 
 /-- Frame of a full `incorporate_child_on_success` run. -/
 def ICSFrame {F : Type} (s : PanSemStateFiniteExact 64 F) (e L arr0 cap0 tw : BitVec 64)
@@ -8990,6 +9156,292 @@ theorem incorporate_child_on_success_run {F : Type} (s : PanSemStateFiniteExact 
     noHit_mono hF uh ph (Nat.le_refl _)
   rw [pm a (ne_of_not_hits hE (by rw [hE96]; omega)) (by rw [hfpeq]; exact hfp) hF2]
   exact hTs a hE hL hAr hF1
+
+/-- Every allocated object separated from the success-incorporation write
+footprint is untouched, including across fresh heap allocation. -/
+theorem icsFrame_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i)
+    (hE : Disj i (e.toNat + 64, 136))
+    (hL : Disj i (L.toNat, 24))
+    (hAr : Disj i (arr.toNat, 8 * cap.toNat)) (hcap : 0 < cap.toNat)
+    (hwf : HtabWF s tw.toNat)
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, Disj i j) :
+    Wave8Contracts.M08.IvlUnhit s post i := by
+  intro a _ h1 h2
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := ⟨h1, h2⟩
+  apply h.2.2.2.2.2
+  · exact noHit_of_disj hE (by simp) hin
+  · exact noHit_of_disj hL (by simp) hin
+  · exact noHit_of_disj hAr (by dsimp only; omega) hin
+  · intro j hj; exact noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hin
+  · apply noFresh_of_alloc hA.2 hi hin _ h.2.2.2.2.1
+    have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    omega
+
+/-- Cell-level success frame, allowing protected alignment cells in the same
+parent record as the gas writes. -/
+theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i) {a : Nat}
+    (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+    (hE : ¬ CellHits a (e.toNat + 64, 136))
+    (hL : ¬ CellHits a (L.toNat, 24))
+    (hAr : ¬ CellHits a (arr.toNat, 8 * cap.toNat))
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, ¬ CellHits a j) :
+    memW post a = memW s a := by
+  apply memW_of
+  apply h.2.2.2.2.2
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hE
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hL
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hAr
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hT
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
+
+/-- Arena bounds are stronger than the explicit log-count bound: even the
+backing-array capacity is below `2^25`. -/
+theorem frameWF_logs_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ec : Ivl} (hA : ArenaOK s) (hf : FrameWF s S ec) :
+    memW s (memW s (ec.1 + 88) + 8) < 2 ^ 25 := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hlen, hloc, _⟩ := hf
+  have hhp := hA.2.1
+  have hsp := hA.2.2.1
+  have hfmsp := hA.2.2.2.1
+  rcases hloc with h | h
+  · unfold Inside frameLogs at h
+    have hsb := R11Shards.sourceBase_val
+    have hhl := R11Shards.heapLimit_val
+    dsimp only at h
+    omega
+  · unfold Inside frameLogs at h
+    have hss := R11Shards.scratchStart_val
+    have hse := R11Shards.scratchEnd_val
+    dsimp only at h
+    omega
+
+/-- Parent and child log counts jointly satisfy `LogsListOK`'s strict bound,
+using their allocated backing-array bounds rather than separate count limits. -/
+theorem frameWF_logs_combined_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} {ec₁ ec₂ : Ivl} (hA : ArenaOK s)
+    (h₁ : FrameWF s S ec₁) (h₂ : FrameWF s S ec₂) :
+    memW s (memW s (ec₁.1 + 88) + 8) +
+      memW s (memW s (ec₂.1 + 88) + 8) < 2 ^ 28 := by
+  have h₁b := frameWF_logs_count_bound hA h₁
+  have h₂b := frameWF_logs_count_bound hA h₂
+  omega
+
+/-- Normal loop exit fixes the exact combined log count, without modular
+wraparound. -/
+theorem laInv_exit_count {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} (h : LAInv s L arr cap n nc post)
+    (hnc : nc.toNat < 2 ^ 63)
+    (hsum : n.toNat + nc.toNat < 2 ^ 64)
+    (hexit : evalAt post (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    (readW post (L + 8)).toNat = n.toNat + nc.toNat := by
+  obtain ⟨_, _, _, _, _, hn, i, ar, cp, hi, hle, _, hm8, _⟩ := h
+  obtain ⟨a, b, ha, hb, hcw⟩ := evalAt_cmp post .less _ _ 0 hexit
+  simp [evalAt, evalHOLExact, hn, hi] at ha hb
+  subst ha hb
+  have hieq : i.toNat = nc.toNat := by
+    by_contra hh
+    have hlt : i.toNat < nc.toNat := by omega
+    simp [Flapjack.Compiler.Encoders.Asm.wordCmpHOL,
+      Flapjack.Compiler.Encoders.Asm.holAsmSignedLess] at hcw
+    split at hcw <;> omega
+  simp only [readW, hm8, BitVec.toNat_add, hieq, Nat.mod_eq_of_lt hsum]
+
+/-- Table union leaves the separated parent log header unchanged. -/
+theorem icsTail_logHeader {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L : BitVec 64} {T : Nat} (h : ICSTail s e T post)
+    (hA : ArenaReady s) (hL : Allocated s (L.toNat, 24))
+    (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint s T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF s T) :
+    readW post L = readW s L ∧
+      readW post (L + 8) = readW s (L + 8) ∧
+      readW post (L + 16) = readW s (L + 16) := by
+  have hkeep (k : Nat) (hk : k ≤ 16) :
+      readW post (L + BitVec.ofNat 64 k) = readW s (L + BitVec.ofNat 64 k) := by
+    have hkn : (L + BitVec.ofNat 64 k).toNat = L.toNat + k :=
+      tn_add L k (by omega) (by omega)
+    have hin : L.toNat ≤ (L + BitVec.ofNat 64 k).toNat ∧
+        (L + BitVec.ofNat 64 k).toNat + 8 ≤ L.toNat + 24 := by rw [hkn]; omega
+    unfold readW
+    rw [h.2.2.2.2.2 _ (Ne.symm (ne_of_not_hits hE hin))
+      (fun j hj => noHit_of_disj (hT j hj) (htab_fp_pos hwf j hj) hin) ?_]
+    have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    exact noFresh_of_alloc hA.2 hL hin (by omega) h.2.2.2.2.1
+  exact ⟨by simpa using hkeep 0 (by omega), hkeep 8 (by omega), hkeep 16 (by omega)⟩
+
+/-- Compose log-loop release bounds with the table-union tail. Both an
+unchanged scratch array and a freshly allocated heap array remain releasable. -/
+theorem laInv_icsTail_logs_release {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {e L arr cap n nc : BitVec 64}
+    {T cm : Nat} (hloop : LAInv s L arr cap n nc mid)
+    (htail : ICSTail mid e T post)
+    (hL : Allocated mid (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint mid T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF mid T)
+    (hold : Inside (arr.toNat, 8 * cap.toNat) sourceBase (globN s "heap_ptr") ∨
+      Inside (arr.toNat, 8 * cap.toNat) cm scratchEnd)
+    (hsource : sourceBase ≤ globN s "heap_ptr") :
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat)
+      sourceBase (globN post "heap_ptr") ∨
+    Inside ((readW post L).toNat, 8 * (readW post (L + 16)).toNat) cm scratchEnd := by
+  obtain ⟨h0, _, h16⟩ := icsTail_logHeader htail hloop.2.2.1 hL hLB hE hT hwf
+  rw [h0, h16]
+  rcases laInv_logs_release hloop hold hsource with hh | hh
+  · exact Or.inl ⟨hh.1, hh.2.trans htail.2.2.2.2.1⟩
+  · exact Or.inr hh
+
+/-- The exact combined log count survives the table-union tail. -/
+theorem laInv_icsTail_exit_count {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {e L arr cap n nc : BitVec 64}
+    {T : Nat} (hloop : LAInv s L arr cap n nc mid)
+    (htail : ICSTail mid e T post)
+    (hL : Allocated mid (L.toNat, 24)) (hLB : L.toNat + 24 ≤ 2 ^ 64)
+    (hE : ¬ CellHits (e + 96).toNat (L.toNat, 24))
+    (hT : ∀ j ∈ htabFootprint mid T, Disj (L.toNat, 24) j)
+    (hwf : HtabWF mid T) (hnc : nc.toNat < 2 ^ 63)
+    (hsum : n.toNat + nc.toNat < 2 ^ 64)
+    (hexit : evalAt mid (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "n"))) = some (.val (.word 0))) :
+    (readW post (L + 8)).toNat = n.toNat + nc.toNat := by
+  obtain ⟨_, h8, _⟩ := icsTail_logHeader htail hloop.2.2.1 hL hLB hE hT hwf
+  rw [h8]
+  exact laInv_exit_count hloop hnc hsum hexit
+
+/-- An exact count in a nonnull valid log list satisfies the invariant's
+strict count bound. -/
+theorem logsListOK_count_of_readW {F : Type} {post : PanSemStateFiniteExact 64 F}
+    {L : BitVec 64} {n : Nat} (hL : L.toNat ≠ 0)
+    (hLB : L.toNat + 16 ≤ 2 ^ 64)
+    (hcount : (readW post (L + 8)).toNat = n)
+    (hlogs : LogsListOK post L.toNat) : n < 2 ^ 28 := by
+  rcases hlogs with hz | hh
+  · exact False.elim (hL hz)
+  · have hc := hh.2.2.1
+    rw [readW_toNat] at hcount
+    change memW post (L + BitVec.ofNat 64 8).toNat = n at hcount
+    rw [tn_add L 8 (by omega) (by omega)] at hcount
+    simpa only [hcount] using hc
+
+/-- The success write frame preserves all four protected cells of every live
+frame.  Separation follows from the input invariant, including for the parent
+record that also contains the gas writes. -/
+theorem icsFrame_chainCells {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hI : EvmInv s)
+    (he : e.toNat = globN s "ev")
+    (hL : L.toNat = memW s (e.toNat + 88))
+    (harr : arr.toNat = memW s L.toNat)
+    (hcap : cap.toNat = memW s (L.toNat + 16))
+    {S : List Nat} (hInv : Wave8Contracts.M23.EvmInvAt s S)
+    (ht : tw.toNat ∈ S) : EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, _, _, hFW, _, _, hPair, hSep, _⟩ := hInv.2
+  let E := globN s "ev"
+  let C := globN s "cur_cont"
+  have hhead := head_mem_evmChain s
+  have hcs : evmChain s = (E, C) :: (evmChain s).tail := evmChain_cons s
+  have hL' : L.toNat = memW s (E + 88) := by simpa [E, he] using hL
+  have hLogs : frameLogs s (E, C) = (arr.toNat, 8 * cap.toNat) := by
+    simp only [frameLogs]
+    rw [← hL', ← harr, ← hcap]
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hP : ((E, 280) :: (C, 104) ::
+      [(memW s (E + 8), 32 * memW s (E + 232)),
+       (memW s (E + 24), memW s (E + 40)), (L.toNat, 24),
+       (arr.toNat, 8 * cap.toNat), frameRet s (E, C)]).Pairwise Disj := by
+    have := (List.pairwise_append.mp hP0).1
+    simpa only [frameObjects, List.pairwise_append, hLogs, ← hL'] using this
+  obtain ⟨hEsep, hP⟩ := List.pairwise_cons.mp hP
+  obtain ⟨hCsep, _⟩ := List.pairwise_cons.mp hP
+  have hcap0 : 0 < cap.toNat := by
+    have hf := hFW (E, C) hhead
+    have hh := hf.2.2.2.2.2.2.2.2.2.2.1
+    have hh' : 1 ≤ cap.toNat := by simpa only [← hL', ← hcap] using hh
+    omega
+  have hmemTail (ec : Ivl) (hc : ec ∈ (evmChain s).tail) (i : Ivl)
+      (hi : i ∈ frameObjects s ec) :
+      i ∈ (((evmChain s).tail.map (frameObjects s)).flatten) :=
+    List.mem_flatten.mpr ⟨_, List.mem_map_of_mem hc, hi⟩
+  intro ec hec
+  have hf := hFW ec hec
+  have hbounds := Wave8Contracts.M23.frameWF_bounds hI.1.2 hf
+  have halloc (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)]) : Allocated s i := by
+    apply Or.inr
+    exact (hf.1 i (by simp only [List.mem_cons, List.not_mem_nil, or_false] at hi ⊢; tauto)).1
+  have hds (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)]) :
+      Disj i (L.toNat, 24) ∧ Disj i (arr.toNat, 8 * cap.toNat) := by
+    rw [hcs] at hec
+    rcases List.mem_cons.mp hec with rfl | hc
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+      rcases hi with rfl | rfl
+      · exact ⟨hEsep _ (by simp), hEsep _ (by simp)⟩
+      · exact ⟨hCsep _ (by simp), hCsep _ (by simp)⟩
+    · have hit := hmemTail ec hc i (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+        rcases hi with rfl | rfl <;> simp [frameObjects])
+      constructor
+      · exact Wave8Contracts.M08.disj_symm (hcross _ (by simp [frameObjects, ← hL']) i hit)
+      · exact Wave8Contracts.M08.disj_symm (hcross _ (by simp [frameObjects, hLogs]) i hit)
+  have hkeep (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)])
+      (a : Nat) (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+      (hEa : ¬ CellHits a (e.toNat + 64, 136)) : memW post a = memW s a := by
+    obtain ⟨hdiL, hdiA⟩ := hds i hi
+    apply icsFrame_memW h hI.1 (halloc i hi) ha hab hEa
+    · exact noHit_of_disj hdiL (by simp) ha
+    · exact noHit_of_disj hdiA (by dsimp only; omega) ha
+    · intro j hj
+      apply noHit_of_disj ((hSep ec hec i (by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+        rcases hi with rfl | rfl <;> simp [frameObjects])).1 tw.toNat ht j hj)
+      · exact htab_fp_pos (hInv.1.1.2.1 tw.toNat ht).1 j hj
+      · exact ha
+  have hEa (a : Nat) (i : Ivl) (hi : i ∈ [(ec.1, 280), (ec.2, 104)])
+      (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2)
+      (hheadsafe : ec = (E, C) → ¬ CellHits a (E + 64, 136)) :
+      ¬ CellHits a (e.toNat + 64, 136) := by
+    rw [he]
+    rw [hcs] at hec
+    rcases List.mem_cons.mp hec with rfl | hc
+    · exact hheadsafe rfl
+    · have hd := Wave8Contracts.M08.disj_symm
+        (hcross (E, 280) (by simp [frameObjects]) i (hmemTail ec hc i (by
+          simp only [List.mem_cons, List.not_mem_nil, or_false] at hi
+          rcases hi with rfl | rfl <;> simp [frameObjects])))
+      have hn := noHit_of_disj hd (by simp) ha
+      unfold CellHits at hn ⊢; dsimp only at hn ⊢; omega
+  have hrec (k : Nat) (hk : k = 24 ∨ k = 32 ∨ k = 40) :
+      memW post (ec.1 + k) = memW s (ec.1 + k) := by
+    apply hkeep (ec.1, 280) (by simp) _ (by dsimp only; omega) (by omega)
+    apply hEa _ (ec.1, 280) (by simp) (by dsimp only; omega)
+    intro hh; subst ec; unfold CellHits; dsimp only; omega
+  refine ⟨hrec 24 (by simp), hrec 32 (by simp), hrec 40 (by simp), ?_⟩
+  apply hkeep (ec.2, 104) (by simp) _ (by dsimp only; omega) (by omega)
+  apply hEa _ (ec.2, 104) (by simp) (by dsimp only; omega)
+  intro hh; subst ec
+  have hd := Wave8Contracts.M08.disj_symm (hEsep (C, 104) (by simp))
+  have hn := noHit_of_disj hd (by simp) (show C ≤ C + 56 ∧ C + 56 + 8 ≤ C + 104 by omega)
+  unfold CellHits at hn ⊢; dsimp only at hn ⊢; omega
 
 end IcsRun
 
@@ -9954,5 +10406,93 @@ theorem fcPrelude_headMemChainWF (hCF : EvmEkFk.CreateFinishSpecs) {F : Type}
     unfold globN
     rw [hg]
     exact hfmp
+
+/-- Restoring caller locals preserves the destination table supplied by union. -/
+theorem unionExit_restore_tables {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (h : UnionExit s post) (L : HolFiniteMapExact MlS (ValueHOL 64)) :
+    HtabWF { post with locals := L } (locN s "dst") ∧
+      ∀ i ∈ htabFootprint { post with locals := L } (locN s "dst"),
+        Allocated { post with locals := L } i := by
+  refine ⟨(htabWF_with_locals post L post.clock _).2 h.2.1, ?_⟩
+  intro i hi
+  exact h.2.2.2.2.2.1 i hi
+
+attribute [local irreducible] Ret in
+/-- The success tail retains the destination table invariant as well as its write frame. -/
+theorem ics_tail_tables {F : Type} (X : PanSemStateFiniteExact 64 F) (e tw : BitVec 64)
+    (hcode : X.code = originalRuntimeCode)
+    (he : X.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (hA : ArenaReady X) (htw : X.memory (e + 136) = .word tw)
+    (hwf : HtabWF X tw.toNat) (hal : ∀ i ∈ htabFootprint X tw.toNat, Allocated X i)
+    (h96 : ∀ i ∈ htabFootprint X tw.toNat, ¬ CellHits (e + 96).toNat i) :
+    Ret X (.seq (.store (.op .add [.var .global (ofString "ev"), .const 96])
+        (.op .add [.load .one (.op .add [.var .global (ofString "ev"), .const 96]),
+          .load .one (.op .add [.var .local (ofString "child"), .const 96])]))
+      (.seq (.call (some (none, none)) (ofString "htab_union_into")
+          [.load .one (.op .add [.var .global (ofString "ev"), .const 136]),
+           .load .one (.op .add [.var .local (ofString "child"), .const 136])])
+        (.return (.const 0))))
+      (fun _ post => ICSTail X e tw.toNat post ∧ HtabWF post tw.toNat ∧
+        ∀ i ∈ htabFootprint post tw.toNat, Allocated post i) := by
+  refine Ret.storeGlobOp he fun w => ?_
+  let Y := { X with memory := updW X.memory (e + 96) w }
+  have hun : ∀ i ∈ htabFootprint X tw.toNat, Wave8Contracts.M08.IvlUnhit X Y i :=
+    fun i hi => ivlUnhit_updW X _ w i (h96 i hi)
+  have hG : GuestInv Y := guestInv_congr (s := X) rfl rfl rfl rfl hA.1
+  have hAY : ArenaReady Y := ⟨hG, arenaOK_congr (s := X) rfl hA.2⟩
+  have ht_fp : ((tw.toNat, 88) : Ivl) ∈ htabFootprint X tw.toNat := by simp [htabFootprint]
+  have ht8 : tw.toNat % 8 = 0 := (hwf.1 _ ht_fp).2.1
+  have hthi : tw.toNat + 88 ≤ 2 ^ 64 := by
+    have := (hwf.1 _ ht_fp).1
+    unfold Inside at this
+    have : heapEnd ≤ 2 ^ 64 := by decide
+    simp only at *; omega
+  have hfpeq := (Wave8Contracts.M08.htabFootprint_eq_of_hdr_unhit ht8 hthi (hun _ ht_fp)).2
+  have hwfY : HtabWF Y tw.toNat := Wave8Contracts.M08.htabWF_congr_unhit hA.1 hG hwf hun
+  have halY : ∀ i ∈ htabFootprint Y tw.toNat, Allocated Y i := by
+    rw [hfpeq]; exact hal
+  have h136 : Y.memory (e + 136) = .word tw := by
+    change updW X.memory (e + 96) w (e + 136) = _
+    rw [updW_ne _ _ _ _ (by bv_omega)]; exact htw
+  refine Ret.seq_call00 fun values body callee ret v cpost h1 h2 h3 => ?_
+  obtain ⟨v1, v2, rfl, hv1, _⟩ := evalList2_inv Y _ _ h1
+  have hv1' := ev_load_glob Y _ e 136 he v1 hv1
+  rw [h136] at hv1'
+  subst hv1'
+  obtain ⟨_, hdst⟩ := rb_param_at Y.code.lookup (ofString "htab_union_into") []
+    (ofString "dst") .one [(ofString "src", .one)] _ _
+    (by simp only [List.mem_singleton]; rintro _ rfl; decide)
+    (by rw [show Y.code = originalRuntimeCode from hcode];
+        simpa using UXT.HtabUnionInto.lookup_htab_union_into) (vpre := []) (by simp) h2
+  have hlocT : locN (callEntryStateHOLFinite Y callee) "dst" = tw.toNat := by
+    simp only [locN, callEntryStateHOLFinite, hdst]
+  have hPc : UnionArgWF (callEntryStateHOLFinite Y callee) := by
+    refine ⟨(arenaReady_with_locals Y callee (Y.clock - 1)).2 hAY, ?_, ?_⟩
+    · rw [hlocT]; exact (htabWF_with_locals Y callee (Y.clock - 1) _).2 hwfY
+    · rw [hlocT]; exact halY
+  have hQ := HtabC00Ports.FunSpec.at_lookup UXT.rb_htab_union_into_spec Y hcode
+    _ body callee ret h2 hPc (by rw [h3]; simp)
+  rw [h3] at hQ
+  have hx := hQ v rfl
+  have ht := unionExit_restore_tables hx (emptyLocalsHOLFinite cpost).locals
+  rw [hlocT] at ht
+  have hmeta := PanRunBounded.evaluateHOLFiniteState_metadata (callEntryStateHOLFinite Y callee) body
+  rw [h3] at hmeta
+  obtain ⟨hAR, _, _, _, hgrow, _, hfr, hglob⟩ := hx
+  rw [hlocT] at hfr
+  refine Ret.ret fun val _ => ⟨?_, ht⟩
+  refine ⟨hmeta.1, hmeta.2.1, ?_, ?_, hgrow, ?_⟩
+  · exact arenaReady_locals _ _ (arenaReady_locals _ _ hAR)
+  · intro k hk
+    exact (hglob k (by simpa using hk)).symm
+  · intro a ha hk hf
+    have h1 := hfr a (by
+        intro i hi
+        have hi' : i ∈ htabFootprint Y tw.toNat := hi
+        rw [hfpeq] at hi'; exact hk i hi') hf
+    change cpost.memory a = _
+    rw [h1]
+    change updW X.memory (e + 96) w a = _
+    rw [updW_ne _ _ _ _ ha]
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge

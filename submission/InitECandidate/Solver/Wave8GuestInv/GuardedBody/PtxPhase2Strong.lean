@@ -2,6 +2,7 @@ import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase34R11
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -13559,5 +13560,559 @@ theorem phase2_message_table_store_ready_of_unhit {ι F : Type}
   refine ⟨hs, ht, hb, hl, ?_, ha.trans hp.2.2.2.2.2.1, hk.trans hp.2.2.2.2.2.2⟩
   rw [hm, show 40 = 8 * 5 from rfl, phase2_message_unhit_fields hp.1.1 hu 5 (by decide)]
   exact hp.2.2.2.2.1
+
+/-- The create-branch account lookup retains the transaction environment. -/
+theorem phase2_get_account_txEnv (h : PtxCallees) (name : MlS) (args : List (ExpHOL 64))
+    (hi : name ≠ ofString "index") :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s) TxEnv name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" := by
+    have hg := hs.2.2.1 (ofString "bo") (by decide)
+    change s.globals.lookup (ofString "bo") = post.globals.lookup (ofString "bo") at hg
+    simp only [globN, hg]
+  have hj : globN post "journal_cap" = globN s "journal_cap" := by
+    have hg := hs.2.2.1 (ofString "journal_cap") (by decide)
+    change s.globals.lookup (ofString "journal_cap") = post.globals.lookup (ofString "journal_cap") at hg
+    simp only [globN, hg]
+  have hk : ∀ k ∈ ([24, 32, 40, 72, 80] : List Nat),
+      memW post (globN s "bo" + k) = memW s (globN s "bo" + k) := by
+    intro k hk
+    apply hs.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+      (by simp) hp.2.bo_nz k
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+      rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp
+    · intro i hi
+      change i ∈ [("keccak_pad", 136, 136), ("keccak_st", 200, 200),
+        ("mpt_nib_scratch", 64, 64)].map
+          (fun e => bufferRegion s (e.1, e.2.2)) at hi
+      obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+      have hspec : PtxP1.ScratchSpec [("keccak_pad", 136, 136),
+          ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)] := by
+        unfold PtxP1.ScratchSpec; decide
+      obtain ⟨hgb, hnu, hpos, hle⟩ := hspec e he
+      obtain ⟨S, hW⟩ := hp.1.2
+      obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hW
+      have hd := bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle
+        (globN s "bo", 88) (PtxP1.bo_mem_typed hp.2.bo_nz)
+      have h8 := (bo_words hw.2.2.1 hp.2.bo_nz).2.1
+      apply not_cellHits_of_disj (i := (globN s "bo", 88))
+      · change (globN s "bo" + k) % 8 = 0
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp [Nat.add_mod, h8]
+      · exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by omega)
+      · change globN s "bo" ≤ globN s "bo" + k ∧ globN s "bo" + k + 8 ≤ globN s "bo" + 88
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> omega
+      · exact disj_symm hd
+  have hi' : locN (setVarHOLFinite name v {post with locals := s.locals}) "index" =
+      locN s "index" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hi]
+  refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
+  · change globN post "bo" ≠ 0; rw [hbo]; exact hp.2.bo_nz
+  · change memW post (globN post "bo" + 24) ≠ 0; rw [hbo, hk 24 (by simp)]; exact hp.2.bo24
+  · change memW post (globN post "bo" + 32) ≠ 0; rw [hbo, hk 32 (by simp)]; exact hp.2.bo32
+  · change memW post (globN post "bo" + 40) ≠ 0; rw [hbo, hk 40 (by simp)]; exact hp.2.bo40
+  · change memW post (globN post "bo" + 72) ≠ 0; rw [hbo, hk 72 (by simp)]; exact hp.2.bo72
+  · change locN (setVarHOLFinite name v {post with locals := s.locals}) "index" <
+      memW post (globN post "bo" + 80)
+    rw [hi', hbo, hk 80 (by simp)]; exact hp.2.idx_lt
+  · change globN post "journal_cap" ≠ 0; rw [hj]; exact hp.2.jcap_nz
+
+/-- Account lookup frames all initialized message words, despite scratch writes. -/
+theorem phase2_get_account_message_fields (h : PtxCallees) {ι F : Type} [Nonempty ι]
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64)
+    (hc : s.code = GuestCodeLookup.originalRuntimeCode)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") vs = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, _, hd⟩ := hp.2.2.2.2.2 i
+  let gs : List (String × Nat × Nat) :=
+    [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+  have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+  have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+      (worldTypedIvls s S Nd) := by
+    intro x hx y hy
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨hgb, hnu, _, hle⟩ := hspec e he
+    exact bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle y hy
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+  intro k hk
+  apply phase2_world_frame_heap_disjoint s post (worldOwned s S Nd)
+    (gs.map (fun e => bufferRegion s (e.1, e.2.2))) (locN s "m", 176)
+    (locN s "m" + 8 * k) hp.1.1.2 hp.2.2.2.1
+  · constructor <;> dsimp <;> omega
+  · have hm := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hm]
+  · exact hf
+  · exact hd _ (by simp)
+  · intro x hx
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.heap_ivl_disj_bufferRegion_le (hd _ (by simp))
+      (e.1, e.2.1) (hspec e he).1 e.2.2 (hspec e he).2.2.2
+  · exact worldOwned_zero_aligned hw
+  · intro x hx hz
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hspec e he).2.2.1; omega) hz
+
+/-- Account lookup preserves a saved heap buffer and its separating message witness. -/
+theorem phase2_get_account_live_buffer (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = GuestCodeLookup.originalRuntimeCode) (ha : ArenaReady s)
+    (hw : WorldTypedWith s S Nd) (hp : PtxLiveBufferAt s S Nd buffer contents)
+    (hm : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hd : IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") vs = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ S' Nd', WorldTypedWith post S' Nd' ∧ PtxLiveBufferAt post S' Nd' buffer contents ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned post S' Nd') := by
+  have hworld : WorldOK s := ⟨ha, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hworld callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  let gs : List (String × Nat × Nat) :=
+    [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+  have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+  have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+      (worldTypedIvls s S Nd) := by
+    intro x hx y hy
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨hgb, hnu, _, hle⟩ := hspec e he
+    exact bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle y hy
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+  refine ⟨S', Nd', hw', ?_, phase2_packed_owned_growth s post _ _ _ hm hg hd⟩
+  apply phase2_live_buffer_step s post S Nd S' Nd' buffer contents
+    (gs.map (fun (e : String × Nat × Nat) => bufferRegion s (e.1, e.2.2))) hp ha.2 hw hs.2.1 hg hf
+  · intro x hx
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.heap_ivl_disj_bufferRegion_le (hp.2.1 _ (by simp))
+      (e.1, e.2.1) (hspec e he).1 e.2.2 (hspec e he).2.2.2
+  · intro x hx hz
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hspec e he).2.2.1; omega) hz
+
+/-- Restoring caller locals after lookup retains the entire saved-buffer family. -/
+theorem phase2_get_account_message_store_ready (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index") :
+    DecCallResumeOn (PtxMessageStoreReady buffers contents)
+      (PtxMessageStoreReady buffers contents) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  let out := setVarHOLFinite name v {post with locals := s.locals}
+  have hm' : locN out "m" = locN s "m" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  have hworld : WorldOK out := by
+    obtain ⟨S, hW⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hW
+    let gs : List (String × Nat × Nat) :=
+      [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+    have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+    have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+        (worldTypedIvls s S Nd) := by
+      intro x hx y hy
+      obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+      exact bufferRegion_disj_le hw (e.1, e.2.1) (hspec e he).1
+        (hspec e he).2.1 e.2.2 (hspec e he).2.2.2 y hy
+    obtain ⟨S', Nd', _, hw', _⟩ := hs.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+    exact localsFree_worldOK post _ post.clock
+      ⟨hs.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  refine ⟨hworld, phase2_get_account_txEnv h name args hi
+    s vs body callee ret v post hc ⟨hp.1, hp.2.1⟩ he hl hb, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨w, hw⟩ := hp.2.2.1
+    exact ⟨w, by simpa [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm] using hw⟩
+  · change Inside (locN out "m", 176) InitE.sourceBase (globN post "heap_ptr")
+    rw [hm']
+    exact ⟨hp.2.2.2.1.1, hp.2.2.2.1.2.trans hs.2.1⟩
+  · change WordsOK out (locN out "m", 176)
+    rw [hm']
+    exact wordsOK_transfer hp.1.1.1 hworld.1.1 hp.2.2.2.2.1
+  · intro i
+    obtain ⟨hd, S, Nd, hw, hpbuf, hsep⟩ := hp.2.2.2.2.2 i
+    obtain ⟨S', Nd', hw', hbuf', hsep'⟩ := phase2_get_account_live_buffer h
+      s post vs body callee ret v S Nd (buffers i) (contents i) hc hp.1.1 hw hpbuf
+      hp.2.2.2.1 hsep hl hb
+    refine ⟨?_, S', Nd', ?_, hbuf', ?_⟩
+    · rw [hm']; exact hd
+    · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+    · change IvlsDisj [(locN out "m", 176)] (worldOwned post S' Nd')
+      rw [hm']; exact hsep'
+
+/-- Account lookup retains the caller scalar witnesses used by the message suffix. -/
+theorem phase2_get_account_message_scalar_ready (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index")
+    (hn : ∀ n ∈ names, name ≠ ofString n) :
+    DecCallResumeOn (PtxMessageScalarReady buffers contents names)
+      (PtxMessageScalarReady buffers contents names) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  refine ⟨phase2_get_account_message_store_ready h buffers contents name args hm hi
+    s vs body callee ret v post hc hp.1 he hl hb, ?_⟩
+  intro n hmem
+  obtain ⟨w, hw⟩ := hp.2 n hmem
+  exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hn n hmem] using hw⟩
+
+/-- Transport nested backing through a call that frames the fixed world objects. -/
+theorem phase2_backing_of_fixed_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hu : ∀ i ∈ fixedObjects s, IvlUnhit s post i) : TxBacking post := by
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → Allocated s i ∧ WordsOK s i := by
+    intro i hi hn
+    rcases hw.2.2.1.1 i hi with hz | hh
+    · exact (hn hz).elim
+    · exact hh
+  have hbo : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  apply PtxP34.txBacking_of_unhit_headers hb hg
+  · exact (hf _ hbo (by simp)).2.1
+  · exact (ivl_allocated_bound ha.2 (hf _ hbo (by simp)).1).2
+  · exact hu _ hbo
+  · intro k hk; exact (hf _ (hl k hk) (by simp)).2.1
+  · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl k hk) (by simp)).1).2
+  · intro k hk; exact hu _ (hl k hk)
+
+/-- A narrow concrete effect frames any aligned interval disjoint from its writes. -/
+theorem phase2_worldEff_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {R : List Ivl} {B : List (String × Nat)} {gw : List String} {i : Ivl}
+    (h : R16Shards.WorldEff s post R B gw)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hR : ∀ j ∈ R, Disj i j)
+    (hB : ∀ b ∈ B, Disj i (bufferRegion s b))
+    (hgap : Disj i (freeGap s)) (hheap : Disj i (heapFree s)) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  by_contra he
+  have hh' : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  have hne : post.memory a ≠ s.memory a := he
+  have exclude : ∀ j, Disj i j → ¬ Fast_C08WkShard03.CellHitsPos a.toNat j := by
+    intro j hd hc
+    unfold Disj at hd
+    simp only [Fast_C08WkShard03.CellHitsPos, CellHits] at hc
+    rcases hd with hz | hz | hl | hr <;> dsimp at * <;> omega
+  rcases h.cell_frame _ hne with ⟨j, hj, hc⟩ | ⟨b, hb, hc⟩ | hc | hc
+  · exact exclude j (hR j hj) hc
+  · exact exclude _ (hB b hb) hc
+  · exact exclude _ hgap hc
+  · exact exclude _ hheap hc
+
+/-- Existing allocated intervals avoid both allocation gaps in a concrete effect. -/
+theorem phase2_worldEff_allocated_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : List Ivl} {B : List (String × Nat)} {gw : List String} {i : Ivl}
+    (h : R16Shards.WorldEff s post R B gw) (hs : ArenaReady s)
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (ha : Allocated s i)
+    (hR : ∀ j ∈ R, Disj i j)
+    (hB : ∀ b ∈ B, Disj i (bufferRegion s b)) : IvlUnhit s post i := by
+  apply phase2_worldEff_unhit h hi hR hB
+  · unfold Allocated Inside at ha
+    unfold Disj freeGap
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        omega)))
+  · unfold Allocated Inside at ha
+    unfold Disj heapFree
+    rcases ha with ⟨hlo, hhi⟩ | ⟨hlo, hhi⟩
+    · exact Or.inr (Or.inr (Or.inl hhi))
+    · exact Or.inr (Or.inr (Or.inr (by
+        have horder := hs.2
+        rcases horder with ⟨_, hp, hf, hsc, _⟩
+        dsimp at *
+        have sep : heapLimit ≤ InitE.scratchStart := by decide
+        omega)))
+
+/-- Backing needs only three headers framed, allowing writes to fixed scratch buffers. -/
+theorem phase2_backing_of_header_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hg : globN post "bo" = globN s "bo")
+    (hbo : IvlUnhit s post (globN s "bo", 88))
+    (hl : ∀ k ∈ ([40, 72] : List Nat),
+      IvlUnhit s post (memW s (globN s "bo" + k), 24)) : R16Shards.TxBacking post := by
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → Allocated s i ∧ WordsOK s i := by
+    intro i hi hn
+    exact (hw.2.2.1.1 i hi).resolve_left hn
+  have hbo_mem : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl_mem : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  apply PtxP34.txBacking_of_unhit_headers hb hg
+  · exact (hf _ hbo_mem (by simp)).2.1
+  · exact (ivl_allocated_bound ha.2 (hf _ hbo_mem (by simp)).1).2
+  · exact hbo
+  · intro k hk; exact (hf _ (hl_mem k hk) (by simp)).2.1
+  · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl_mem k hk) (by simp)).1).2
+  · exact hl
+
+/-- Concrete world-state account decoding frames existing objects outside its scratch buffers. -/
+theorem phase2_ws_get_account_optional_unhit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) {i : Ivl} (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hal : Allocated s i)
+    (hd : ∀ b ∈ R16Shards.wsBufs, Disj i (bufferRegion s b))
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    IvlUnhit s (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 i := by
+  have he := R16Shards.worldEff_ws_get_account_optional s s ha.2
+    (R16Shards.WorldEff.refl s [] R16Shards.wsBufs R16Shards.wsGw ha hc) hnt hr
+  exact phase2_worldEff_allocated_unhit he ha hi hal (by simp) hd
+
+/-- Fixed-object separation puts both nested list headers outside world-state scratch buffers. -/
+theorem phase2_nested_header_disj_wsBufs {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    {k : Nat} (hk : k ∈ ([40, 72] : List Nat)) :
+    ∀ b ∈ R16Shards.wsBufs,
+      Disj (memW s (globN s "bo" + k), 24) (bufferRegion s b) := by
+  have hm : (memW s (globN s "bo" + k), 24) ∈ blockOutObjects s := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, he.bo_nz, he.bo40]
+    · simp [blockOutObjects, he.bo_nz, he.bo72]
+  obtain ⟨_, _, hd, _, _⟩ := fixedObjects_disj_parts hw.2.2.1
+  intro b hb
+  have hbg : b ∈ globalBuffers := by
+    simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hb
+    rcases hb with rfl | rfl | rfl <;> decide
+  have hg := hd (bufferRegion s b) (List.mem_map.2 ⟨b, hbg, rfl⟩)
+    _ (List.mem_append_left _ (List.mem_append_right _ hm))
+  exact disj_symm hg
+
+/-- The concrete world-state lookup preserves both nested backing headers. -/
+theorem phase2_ws_get_account_optional_nested_unhit {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    ∀ k ∈ ([40, 72] : List Nat), IvlUnhit s
+      (evaluateHOLFiniteState s
+        (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2
+      (memW s (globN s "bo" + k), 24) := by
+  intro k hk
+  have hm : (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  have hf := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+  exact phase2_ws_get_account_optional_unhit s hc ha
+    ⟨hf.2.1, by norm_num⟩ hf.1 (phase2_nested_header_disj_wsBufs he hw hk) hnt hr
+
+/-- Table insertion frames allocated headers separated from its old footprint. -/
+theorem phase2_htabExit_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (hx : HtabExit s post) {i : Ivl}
+    (hi : i.1 % 8 = 0 ∧ i.2 % 8 = 0) (hal : Allocated s i)
+    (ht : ∀ j ∈ htabFootprint s (locN s "t"), j.1 % 8 = 0)
+    (hd : ∀ j ∈ htabFootprint s (locN s "t"), Disj i j) :
+    IvlUnhit s post i := by
+  intro a ha hh
+  have hin : i.1 ≤ a.toNat ∧ a.toNat + 8 ≤ i.1 + i.2 := by
+    unfold CellHits at hh
+    omega
+  apply hx.2.2.2.2.2.2.1 a
+  · intro j hj
+    have hja := ht j hj
+    have hdis := hd j hj
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> omega
+  · have hdis : Disj i (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr") := by
+      rcases hal with h | h
+      · exact Or.inr (Or.inr (Or.inl h.2))
+      · apply Or.inr; apply Or.inr; apply Or.inr
+        have hsp := hs.2
+        have hpp := hx.1.2
+        have hmono := hx.2.2.2.2.1
+        have hsep : heapLimit ≤ InitE.scratchStart := by decide
+        unfold Inside at h
+        rcases hsp with ⟨_, hp, hf, hsc, _⟩
+        rcases hpp with ⟨_, hp', hf', hsc', _⟩
+        dsimp at *
+        omega
+    have hhp8 := hs.2.2.2.2.2.2.1
+    unfold Disj at hdis
+    unfold CellHits
+    rcases hdis with hz | hz | hl | hr <;> dsimp at * <;> omega
+
+/-- World table typing discharges the footprint separation for fixed headers. -/
+theorem phase2_htabExit_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    {i : Ivl} (him : i ∈ fixedObjects s) (hin : i.2 ≠ 0)
+    (hi8 : i.2 % 8 = 0) : IvlUnhit s post i := by
+  have hf := (hw.2.2.1.1 i him).resolve_left hin
+  have htab := hw.1.2.1 _ ht
+  exact phase2_htabExit_unhit hs hx ⟨hf.2.1, hi8⟩ hf.1
+    (fun j hj => (htab.1.1 j hj).2.1)
+    (fun j hj => disj_symm ((htab.2 j hj).2 i him))
+
+/-- Inserting into an existing world table preserves the transaction's nested backing. -/
+theorem phase2_htabExit_backing {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd) (ht : locN s "t" ∈ S)
+    (hb : R16Shards.TxBacking s) (hx : HtabExit s post) : R16Shards.TxBacking post := by
+  apply phase2_backing_of_header_unhit hs he hw hb
+  · have hg := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    simp only [globN, ← hg]
+  · apply phase2_htabExit_fixed_unhit hs hw ht hx
+    · simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    · simp
+    · norm_num
+  · intro k hk
+    apply phase2_htabExit_fixed_unhit hs hw ht hx
+    · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+      · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+    · simp
+    · norm_num
+
+/-- Table calls preserve backing even though callee locals do not retain the transaction index. -/
+theorem phase2_htabExit_callEntry_backing {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hs : ArenaReady s) (he : TxEnv s) {S Nd : List Nat}
+    (hw : WorldTypedWith s S Nd)
+    (ht : locN (callEntryStateHOLFinite s callee) "t" ∈ S)
+    (hb : R16Shards.TxBacking s)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    R16Shards.TxBacking {post with locals := s.locals} := by
+  have hu : ∀ i ∈ fixedObjects s, i.2 ≠ 0 → i.2 % 8 = 0 → IvlUnhit s post i := by
+    intro i hi hn hi8
+    exact phase2_htabExit_fixed_unhit
+      ((arenaReady_with_locals s callee (s.clock - 1)).mpr hs)
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      ht hx hi hn hi8
+  apply phase2_backing_of_header_unhit hs he hw hb
+  · have hg := hx.2.2.2.2.2.2.2 (ofString "bo") (by decide)
+    simp only [globN, ← hg]; rfl
+  · apply hu _ _ (by simp) (by norm_num)
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  · intro k hk
+    apply hu _ _ (by simp) (by norm_num)
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+
+/-- The concrete table insertion shared by both account lookup bodies preserves backing. -/
+theorem phase2_htab_set_ts8_backing (key value : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → R16Shards.TxBacking s) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨S, hS⟩ := hp.1.2
+  obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hS
+  obtain ⟨v1, _, _, he1, _, _, hct, _, _⟩ := R16WkAcctWs.callee_param_three s
+    (ofString "htab_set") (ofString "t") (ofString "key") (ofString "value")
+    .one .one .one _ _ (by rw [hc]; exact EvmFrameSpecs.lookup_htab_set)
+    _ _ _ vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw, hts⟩ := R16WkAcctWs.evalAt_loadG_nz s hp.1.1.1 "ts" 8
+    (by decide) v1 he1
+  have ht : locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s "ts" + 8) := by
+    simp [locN, callEntryStateHOLFinite, hct, htw]
+  have hn := FunSpec.at_lookup EvmFrameSpecs.nz_htab_set s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1.1) (by rw [hr]; simp)
+  rw [hr] at hn
+  have hnz : memW s (globN s "ts" + 8) ≠ 0 := by
+    rw [← ht]; exact hn (Or.inl ⟨v, rfl⟩)
+  have hmem := (R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hnz).1
+  have harg : HtabArgWF (callEntryStateHOLFinite s callee) := by
+    refine ⟨(arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1, ?_, ?_⟩
+    · rw [ht]
+      exact (htabWF_with_locals s callee (s.clock - 1) _).mpr (hw.1.2.1 _ hmem).1
+    · rw [ht]
+      exact fun i hi => ((hw.1.2.1 _ hmem).2 i hi).1
+  have hx := FunSpec.at_lookup htab_set_spec s hc vs body callee ret hl
+    harg (by rw [hr]; simp)
+  rw [hr] at hx
+  exact phase2_htabExit_callEntry_backing callee hp.1.1 hp.2.1 hw
+    (ht.symm ▸ hmem) hp.2.2 (hx v rfl)
+
+/-- The concrete world-state lookup preserves the complete nested backing guard. -/
+theorem phase2_ws_get_account_optional_backing {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : R16Shards.TxBacking s)
+    (hnt : (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).1) :
+    R16Shards.TxBacking (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_ws_get_account_optional)).2 := by
+  have hx := R16Shards.worldEff_ws_get_account_optional s s ha.2
+    (R16Shards.WorldEff.refl s [] R16Shards.wsBufs R16Shards.wsGw ha hc) hnt hr
+  apply phase2_backing_of_header_unhit ha he hw hb
+  · have hg := hx.gw_kept (ofString "bo") (by decide)
+    simp only [globN, hg]
+  · have hm : (globN s "bo", 88) ∈ fixedObjects s := by
+      simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    have hf := (hw.2.2.1.1 _ hm).resolve_left (by simp)
+    apply phase2_ws_get_account_optional_unhit s hc ha ⟨hf.2.1, by norm_num⟩ hf.1 _ hnt hr
+    intro b hmem
+    have hbg : b ∈ globalBuffers := by
+      simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hmem
+      rcases hmem with rfl | rfl | rfl <;> decide
+    exact disj_symm (bufferRegion_disj_le hw b hbg (by
+      simp only [R16Shards.wsBufs, List.mem_cons, List.not_mem_nil, or_false] at hmem
+      rcases hmem with rfl | rfl | rfl <;> decide) b.2 (by omega)
+      (globN s "bo", 88) (R16Shards.PtxP1.bo_mem_typed he.bo_nz))
+  · exact phase2_ws_get_account_optional_nested_unhit s hc ha he hw hnt hr
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

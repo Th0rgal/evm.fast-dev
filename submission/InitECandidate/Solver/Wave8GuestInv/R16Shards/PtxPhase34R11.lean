@@ -1,6 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.SetLstNew
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -12072,6 +12073,507 @@ theorem txBacking_of_fixed_unhit {F : Type} {s post : PanSemStateFiniteExact 64 
     (fun k hk => (hlt k hk).2.1)
     (fun k hk => (ivl_allocated_bound hW.1.1.2 (hlt k hk).1).2)
     (fun k hk => hu _ (hlf k hk) (by simp))
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- Receipt encoding threads backing once its callee memory contract is supplied. -/
+theorem phase4EncodeReceipt_backing_cut (h : PtxCallees)
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post)
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn (fun s => Phase4ReceiptReady s ∧ TxBacking s)
+      (spinePlug 1 (spineAt 123 ptxCode) tail) (K.encode_receipt + b + 1) := by
+  unfold ptxCode
+  refine @TerminatingProgBoundedOn.decCall_on
+    (fun s => Phase4ReceiptReady s ∧ TxBacking s) GuestInv
+    (fun s => Phase4ReceiptEncoded s ∧ TxBacking s) _ _ _
+    h.fb_encode_receipt _ _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    have hg := encode_receipt_logs_param s _ _ _ vs body callee ret hc ha hl
+    refine ⟨encode_receipt_encoded_resume h s vs body callee ret v post hc hl hr hp.1 hg, ?_⟩
+    exact hkeep s vs body callee ret v post hc hp.1 hp.2 hl hr hg
+
+/-- The remaining Phase-4 prefix contracts are credit and receipt encoding;
+log pushes and stable copying are discharged concretely. -/
+theorem phase4BackingPrefix_of_credit_encode (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    (hkeep : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → Phase4ReceiptReady s → TxBacking s →
+      lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs" → TxBacking post) :
+    Phase4BackingPrefix := by
+  intro tail b ht
+  have hb := @phase4BeforeReceipt_backing_cut h hcredit _ _
+    (phase4EncodeReceipt_backing_cut h hkeep (phase4Encoded_stable_txBacking_cut h ht))
+  have he : spinePlug 38 (spineAt 99 ptxCode) tail =
+      spinePlug 24 (spineAt 99 ptxCode)
+        (spinePlug 1 (spineAt 123 ptxCode) (spinePlug 13 (spineAt 124 ptxCode) tail)) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp.1
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+/-- A concrete frame outside old allocated headers retains both backing words.
+The write regions may contain byte-sized scratch buffers. -/
+theorem txBacking_of_allocated_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hW : TxWorld s) (hb : TxBacking s) (hAp : ArenaOK post)
+    (hgrow : AllocatorGrows s post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hfr : FrameOutside s post (R ++ [freeGap s]) (heapFree s))
+    (hR0 : ∀ i ∈ R, i.2 = 0 → i.1 % 8 = 0)
+    (hRb : ∀ i ∈ R, Disj (globN s "bo", 88) i)
+    (hRl : ∀ k ∈ ([40, 72] : List Nat), ∀ i ∈ R,
+      Disj (memW s (globN s "bo" + k), 24) i) : TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hE := hW.2
+  have hbw := bo_words hWT.2.2.1 hE.bo_nz
+  have hlf : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+    · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+  have hlt : ∀ k ∈ ([40, 72] : List Nat),
+      Allocated s (memW s (globN s "bo" + k), 24) ∧
+      WordsOK s (memW s (globN s "bo" + k), 24) := by
+    intro k hk
+    exact (hWT.2.2.1.1 _ (hlf k hk)).resolve_left (by simp)
+  have hu : ∀ i : Ivl, Allocated s i → WordsOK s i →
+      (∀ j ∈ R, Disj i j) → IvlUnhit s post i := by
+    intro i ha hw hd
+    exact (allocated_ivl_survives_step (old := []) (new := [])
+      hW.1.1.2 hAp hgrow (by simp) hR0 (by intro o ho; cases ho)
+      (by simpa using hfr) hw.1 hw.2.1 ha (by simp) hd).2.2
+  exact txBacking_of_unhit_headers hb hbo hbw.2.1
+    (ivl_allocated_bound hW.1.1.2 hbw.1).2 (hu _ hbw.1 hbw.2 hRb)
+    (fun k hk => (hlt k hk).2.1)
+    (fun k hk => (ivl_allocated_bound hW.1.1.2 (hlt k hk).1).2)
+    (fun k hk => hu _ (hlt k hk).1 (hlt k hk).2 (hRl k hk))
+
+/-- Scratch-buffer separation from the record and both nested headers follows
+from world typing; only the concrete callee frame remains to be supplied. -/
+theorem txBacking_of_scratch_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {gs : List (String × Nat × Nat)} (hgs : ScratchSpec gs)
+    (hW : TxWorld s) (hb : TxBacking s) (hAp : ArenaOK post)
+    (hgrow : AllocatorGrows s post)
+    (hbo : globN post "bo" = globN s "bo")
+    (hfr : FrameOutside s post
+      (gs.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s]) (heapFree s)) :
+    TxBacking post := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  obtain ⟨Nd, htyped⟩ := (worldTyped_iff_with s S).mp hWT
+  have hdisj : ∀ j ∈ worldTypedIvls s S Nd,
+      ∀ i ∈ gs.map (fun e => bufferRegion s (e.1, e.2.2)), Disj j i := by
+    intro j hj i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact disj_symm (bufferRegion_disj_le htyped (e.1, e.2.1)
+      (hgs e he).1 (hgs e he).2.1 e.2.2 (hgs e he).2.2.2 j hj)
+  apply txBacking_of_allocated_frame hW hb hAp hgrow hbo hfr
+  · intro i hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_zero_aligned s e.1 e.2.2
+      (by have := (hgs e he).2.2.1; omega)
+  · exact hdisj _ (bo_mem_typed hW.2.bo_nz)
+  · intro k hk
+    apply hdisj
+    unfold worldTypedIvls
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40]
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo72]
+
+end PtxP34
+
+namespace PtxP34
+open PtxP1
+
+theorem create_ether_backing_resume_of_frame {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : TxAfterCallBackingStrong s)
+    (hfr : FrameOutside s post
+      (etherScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s)) : TxAfterCallBackingStrong {post with locals := s.locals} := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  refine ⟨create_ether_txAfterCallStrong_resume s vs body callee ret v post hc hl hr hp.1, ?_⟩
+  exact txBacking_of_scratch_frame etherScratchSpec_ok hp.1.1 hp.2 hs.1.1.2
+    ⟨hs.1.2.1, hs.2⟩
+    (R16Shards.globN_eq_of_lookup (hs.1.2.2.1 _ (by decide))) hfr
+
+theorem create_ether_backing_resume_of_header_words {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : TxAfterCallBackingStrong s)
+    (hdata : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k))) :
+    TxAfterCallBackingStrong {post with locals := s.locals} := by
+  have hw := funSpec_at_lookup EvmEkFk.wkSc_create_ether s hc vs body callee ret hl
+    (worldOK_callEntry hp.1.1.1 callee) (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hbo : globN post "bo" = globN s "bo" :=
+    R16Shards.globN_eq_of_lookup (hs.1.2.2.1 _ (by decide))
+  refine ⟨create_ether_txAfterCallStrong_resume s vs body callee ret v post hc hl hr hp.1, ?_⟩
+  apply txBacking_of_header_words hp.2 hbo ?_ hdata
+  intro k hk
+  have hW := hp.1.1
+  obtain ⟨S, Nd, hWT, _, _⟩ := hp.1.2.2.2.2
+  have hWTc := (R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hWT
+  have hR : ∀ i ∈ R16WkAcctWs.bufRegions EvmEkFk.acctMutBufs
+      (callEntryStateHOLFinite s callee), Disj i (globN s "bo", 88) := by
+    intro i hi
+    change i ∈ etherScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) at hi
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+    exact bufferRegion_disj_le hWT (e.1, e.2.1) (etherScratchSpec_ok e he).1
+      (etherScratchSpec_ok e he).2.1 e.2.2 (etherScratchSpec_ok e he).2.2.2 _
+      (bo_mem_typed hW.2.bo_nz)
+  apply hs.1.2.2.2.1 ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    (by decide) hW.2.bo_nz k
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl <;> simp
+  · intro i hi hh
+    change CellHits (globN s "bo" + k) i at hh
+    have hd := hR i hi
+    have hkbound : k + 8 ≤ 88 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl <;> omega
+    rcases hd with hz | hz | hd | hd
+    · change i.2 = 0 at hz
+      have hz8 : i.1 % 8 = 0 := by
+        change i ∈ etherScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) at hi
+        obtain ⟨e, he, rfl⟩ := List.mem_map.mp hi
+        exact bufferRegion_zero_aligned s e.1 e.2.2
+          (by have := (etherScratchSpec_ok e he).2.2.1; omega) hz
+      have hb8 := (bo_words hWT.2.2.1 hW.2.bo_nz).2.1
+      change globN s "bo" % 8 = 0 at hb8
+      have hk8 : k % 8 = 0 := by
+        simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+        rcases hk with rfl | rfl <;> decide
+      dsimp [CellHits] at hh
+      omega
+    · norm_num at hz
+    · dsimp [CellHits] at hh
+      dsimp at hd
+      omega
+    · dsimp [CellHits] at hh
+      dsimp at hd
+      omega
+
+theorem encode_receipt_backing_of_frame (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs")
+    (hfr : FrameOutside s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s)) : TxBacking post := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  exact txBacking_of_scratch_frame receiptScratchSpec_ok hp.1.1 hb hs.1.2
+    ⟨hs.2.1, by omega⟩
+    (R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))) hfr
+
+theorem receipt_heapByteEff_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (he : WkBlockTxEnc.HeapByteEff s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    FrameOutside s post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2)) ++ [freeGap s])
+      (heapFree s) := by
+  intro a hk hf
+  by_contra hn
+  rcases he.cell_frame a hn with ⟨i, hi, hhit⟩ | hgap | hheap
+  · exact hk i (List.mem_append_left _ hi) hhit.2
+  · exact hk _ (List.mem_append_right _ (by simp)) hgap.2
+  · exact hf hheap.2
+
+theorem encode_receipt_backing_of_heapByteEff (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4ReceiptReady s) (hb : TxBacking s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post))
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs")
+    (he : WkBlockTxEnc.HeapByteEff (callEntryStateHOLFinite s callee) post
+      (receiptScratchSpec.map (fun e => bufferRegion s (e.1, e.2.2))) ["heap_ptr"]) :
+    TxBacking post := by
+  apply encode_receipt_backing_of_frame h s vs body callee ret v post hc hp hb hl hr hg
+  have hf := receipt_heapByteEff_frame (s := callEntryStateHOLFinite s callee) he
+  exact hf
+
+theorem ro_logs_encoded_bound : ReadOnlyFn (ofString "logs_encoded_bound") :=
+  R16WkAcctWs.readOnlyFn_of_roProgR16 834 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_logs_encoded_bound rfl (fun _ => false)
+    (fun _ hf => by cases hf) (by decide)
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Effects on buffers freshly allocated since `s` fold into the original heap frame. -/
+theorem heapByteEff_trans_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R fresh : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw)
+    (hstep : HeapByteEff mid post (R ++ fresh) gw)
+    (hfresh : ∀ i ∈ fresh, globN s "heap_ptr" ≤ i.1 ∧ i.1 + i.2 ≤ heapLimit) :
+    HeapByteEff s post R gw := by
+  have hp : HeapByteEff s mid (R ++ fresh) gw := hpre.mono
+    (fun i hi _ => Or.inl ⟨i, List.mem_append_left _ hi, le_rfl, le_rfl⟩)
+    (fun _ h => h)
+  apply (hp.trans hstep).mono
+  · intro i hi _
+    rcases List.mem_append.mp hi with hi | hi
+    · exact Or.inl ⟨i, hi, le_rfl, le_rfl⟩
+    · exact Or.inr (Or.inr (hfresh i hi))
+  · exact fun _ h => h
+
+theorem heapByteEff_storeByte_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw) (addr value : ExpHOL 64)
+    (hr : evaluateHOLFiniteState mid (.storeByte addr value) = (none, post))
+    (haddr : ∀ a : BitVec 64,
+      @evalHOLExact 64 F _ mid.toExact (fun a => Classical.propDecidable (mid.memaddrs a)) addr =
+        some (.val (.word a)) →
+      globN s "heap_ptr" ≤ a.toNat ∧ a.toNat + 1 ≤ heapLimit) :
+    HeapByteEff s post R gw := by
+  obtain ⟨he, _⟩ := M11.ByteRegionEffect.of_storeByte hr
+    (Rl := [heapFree s]) (fun a ha _ => by
+      have hb := haddr a ha
+      exact ⟨heapFree s, by simp, hb.1, by dsimp [heapFree]; omega⟩)
+  have hs : HeapByteEff mid post (R ++ [heapFree s]) gw :=
+    (HeapByteEff.of_m11_bre hpre.arena he).mono
+      (fun i hi _ => Or.inl ⟨i, List.mem_append_right _ hi, le_rfl, le_rfl⟩)
+      (fun _ h => h)
+  apply heapByteEff_trans_fresh hpre hs
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  have hh := hpre.arena.2.2.1
+  have hbase := le_trans hpre.hp_le hh
+  dsimp [heapFree]
+  omega
+
+theorem rlp_encode_word_heapByteEff {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst w : BitVec 64) (v : ValueHOL 64)
+    (R : List Ivl) (gw : List String) (hA : ArenaReady s)
+    (hd : s.locals.lookup (ofString "dst") = some (.val (.word dst)))
+    (hw : s.locals.lookup (ofString "w") = some (.val (.word w)))
+    (hR : ∃ i ∈ R, i.1 ≤ dst.toNat ∧ dst.toNat + 9 ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_encode_word) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have ht := eval_rlp_encode_word_body_exact s dst w R hA.1.code hA.1.memaddrs hd hw hR
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨len, _, _, _, _, he⟩ := ht.1 v rfl
+  exact HeapByteEff.of_m11_bre hA he
+
+theorem rlp_encode_bytes_heapByteEff {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (dst src n : BitVec 64) (v : ValueHOL 64)
+    (R : List Ivl) (gw : List String) (hA : ArenaReady s)
+    (hd : s.locals.lookup (ofString "dst") = some (.val (.word dst)))
+    (hs : s.locals.lookup (ofString "src") = some (.val (.word src)))
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n)))
+    (hR : ∃ i ∈ R, i.1 ≤ dst.toNat ∧
+      dst.toNat + rlpHeaderLenPure n.toNat + n.toNat ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes) =
+      (some (.returned v), post)) : HeapByteEff s post R gw := by
+  have ht := eval_rlp_encode_bytes_body_exact s dst src n R hA.1.code hA.1.memaddrs hd hs hn hR
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨len, _, _, _, he⟩ := ht.1 v rfl
+  exact HeapByteEff.of_m11_bre hA he
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+/-- Zeroing the fresh bloom buffer preserves the original receipt frame. -/
+theorem heapByteEff_memzero_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw) (dstExp nExp : ExpHOL 64) (dst n : BitVec 64)
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hn : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) nExp = some (.val (.word n)))
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + n.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "memzero") [dstExp, nExp]) = (none, post)) :
+    HeapByteEff s post R gw := by
+  have hz := eval_call_memzero_heap mid dstExp nExp dst n
+    (R ++ [(dst.toNat, n.toNat)]) gw hpre.arena.1.code hpre.arena hd hn
+    (fun _ => ⟨(dst.toNat, n.toNat), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩)
+    (by rw [hr]; simp)
+  rw [hr] at hz
+  apply heapByteEff_trans_fresh hpre (hz.1 rfl).2.1
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.eval_call_logs_bloom WkBlockTxEnc.eval_call_local_encode_logs
+  WkBlockTxEnc.logsEncodedSum from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+theorem heapByteEff_logs_bloom_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hpre : HeapByteEff s mid R ["heap_ptr"])
+    (logsExp outExp : ExpHOL 64) (logs out : BitVec 64)
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (ho : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) outExp = some (.val (.word out)))
+    (hfresh : globN s "heap_ptr" ≤ out.toNat ∧ out.toNat + 256 ≤ heapLimit)
+    (hpad : globN mid "keccak_pad" ≠ 0 →
+      ∃ i ∈ R, i.1 ≤ globN mid "keccak_pad" ∧ globN mid "keccak_pad" + 136 ≤ i.1 + i.2)
+    (hst : globN mid "keccak_st" ≠ 0 →
+      ∃ i ∈ R, i.1 ≤ globN mid "keccak_st" ∧ globN mid "keccak_st" + 200 ≤ i.1 + i.2)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (none, none)) (ofString "logs_bloom") [logsExp, outExp]) = (none, post)) :
+    HeapByteEff s post R ["heap_ptr"] := by
+  have hb := WkBlockTxEnc.eval_call_logs_bloom mid logsExp outExp logs out (R ++ [(out.toNat, 256)])
+    hpre.arena.1.code hpre.arena hl ho
+    ⟨(out.toNat, 256), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩
+    (fun hn => by
+      obtain ⟨i, hi, hb⟩ := hpad hn
+      exact ⟨i, List.mem_append_left _ hi, hb⟩)
+    (fun hn => by
+      obtain ⟨i, hi, hb⟩ := hst hn
+      exact ⟨i, List.mem_append_left _ hi, hb⟩)
+    (by rw [hr]; simp) (by rw [hr]; simp)
+  rw [hr] at hb
+  apply heapByteEff_trans_fresh hpre hb.1
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+theorem heapByteEff_encode_logs_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl}
+    (hpre : HeapByteEff s mid R ["heap_ptr"])
+    (lname : String) (dstExp logsExp : ExpHOL 64) (dst logs : BitVec 64) (bound : Nat)
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (hlogframe : HeapByteEff s mid [(dst.toNat, bound)] ["heap_ptr"])
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ dst.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hlogs : LogsListOK s logs.toNat)
+    (harr : Allocated s (memW s logs.toNat, 8 * memW s (logs.toNat + 8)))
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat) (memW s (logs.toNat + 8)) ≤ bound)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hl : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) logsExp = some (.val (.word logs)))
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "encode_logs")
+        [dstExp, logsExp]) = (none, post)) :
+    HeapByteEff s post R ["heap_ptr"] := by
+  have he := WkBlockTxEnc.eval_call_local_encode_logs s mid lname dstExp logsExp dst logs bound
+    (R ++ [(dst.toNat, bound)]) ["heap_ptr"] hA hma hlogframe hfresh.1 hfresh.2
+    (by decide) hnz hlogs harr hfit
+    ⟨(dst.toNat, bound), List.mem_append_right _ (by simp), le_rfl, le_rfl⟩ hold hd hl
+    (by rw [hr]; simp)
+  rw [hr] at he
+  obtain ⟨w, hw, hg, hl, heff⟩ := he.1 rfl
+  apply heapByteEff_trans_fresh hpre heff
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact hfresh
+
+end PtxP34
+
+namespace PtxP34
+open WkBlockTxEnc
+
+theorem heapByteEff_rlp_finish_list_fresh {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {R : List Ivl} {gw : List String}
+    (hpre : HeapByteEff s mid R gw)
+    (lname : String) (dstExp endExp : ExpHOL 64) (dst pend : BitVec 64)
+    (hold : ∃ w : BitVec 64, mid.locals.lookup (ofString lname) = some (.val (.word w)))
+    (hd : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) dstExp = some (.val (.word dst)))
+    (he : @evalHOLExact 64 F _ mid.toExact
+      (fun a => Classical.propDecidable (mid.memaddrs a)) endExp = some (.val (.word pend)))
+    (hle : dst.toNat + 9 ≤ pend.toNat)
+    (hfresh : globN s "heap_ptr" ≤ dst.toNat ∧ pend.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState mid
+      (.call (some (some (.local, ofString lname), none)) (ofString "rlp_finish_list")
+        [dstExp, endExp]) = (none, post)) : HeapByteEff s post R gw := by
+  have ht := eval_call_local_rlp_finish_list mid lname dstExp endExp dst pend
+    (R ++ [(dst.toNat, pend.toNat - dst.toNat)]) gw hpre.arena.1.code hpre.arena hold hd he
+    hle (le_trans hfresh.2 (by decide))
+    ⟨(dst.toNat, pend.toNat - dst.toNat), List.mem_append_right _ (by simp), le_rfl, by omega⟩
+    (by rw [hr]; simp)
+  rw [hr] at ht
+  obtain ⟨w, hw, hb, hg, hl, heff⟩ := ht.1 rfl
+  apply heapByteEff_trans_fresh hpre heff
+  intro i hi
+  simp only [List.mem_singleton] at hi
+  subst i
+  exact ⟨hfresh.1, by dsimp; omega⟩
 
 end PtxP34
 

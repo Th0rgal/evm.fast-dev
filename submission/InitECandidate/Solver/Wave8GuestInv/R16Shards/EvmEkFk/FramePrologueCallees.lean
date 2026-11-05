@@ -3378,6 +3378,107 @@ theorem transfer_allocated_store_step {F : Type}
   obtain ⟨heff, hl⟩ := m23_bre_of_store_word halloc.1.1.1.1.memaddrs hrun hword hdst
   exact ⟨evmStepCC_of_allocated_heap_effect hInv halloc hmem hbe heff hin, heff, hl⟩
 
+theorem transfer_log_address_store_spec {F : Type}
+    (s allocated : PanSemStateFiniteExact 64 F) (logw sysw : BitVec 64)
+    (hInv : EvmInv s) (halloc : EvmStepCC ["heap_ptr"] s allocated)
+    (hmem : allocated.memory = s.memory) (hbe : allocated.be = s.be)
+    (hlog : allocated.locals.lookup (ofString "log") = some (.val (.word logw)))
+    (hsys : allocated.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)))
+    (hwords : WordsOK allocated (logw.toNat, 40))
+    (hin : Inside (logw.toNat, 40) (globN s "heap_ptr") (globN allocated "heap_ptr")) :
+    let out := evaluateHOLFiniteState allocated
+      (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address")))
+    out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
+      memW out.2 logw.toNat = globN out.2 "vm_system_address" ∧
+      ByteRegionEffect allocated out.2 [(logw.toNat, 40)] ∧ out.2.locals = allocated.locals := by
+  dsimp only
+  have hd : allocated.memaddrs logw := by
+    have hw := hwords.2.2 0 (by omega)
+    obtain ⟨w, hdom, _⟩ := hw
+    simpa using hdom
+  have hrun : evaluateHOLFiniteState allocated
+      (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address"))) =
+      (none, { allocated with memory := fun a => if a = logw then .word sysw else allocated.memory a }) := by
+    simp [evaluateHOLFiniteState_store, evalHOLExact, evalListHOLExact, hlog, hsys,
+      wordOpHOL, wordOp, valueIsWord, valueWord, flattenHOL, panMemStoresHOL,
+      panMemStoreHOL, hd]
+  rw [hrun]
+  obtain ⟨hstep, heff, hl⟩ := transfer_allocated_store_step hInv halloc hmem hbe hrun
+    (Rl := [(logw.toNat, 40)])
+    (fun v hv => ⟨sysw, by simpa [evalHOLExact, hsys] using hv.symm⟩)
+    (fun addr ha _ => by
+      have heq : addr = logw := by
+        simpa [evalHOLExact, evalListHOLExact, hlog, wordOpHOL, wordOp, valueIsWord, valueWord]
+          using ha.symm
+      subst addr
+      exact ⟨(logw.toNat, 40), by simp, le_rfl, by omega⟩)
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin)
+  refine ⟨rfl, hstep, ?_, heff, hl⟩
+  simp [memW, globN, hsys]
+
+theorem transfer_alloc_log_address_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p sysw : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hsys : s.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+          (.var .global (ofString "vm_system_address"))) cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "log") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 40 ∧
+      memW mid p.toNat = globN mid "vm_system_address" ∧
+      WordsOK mid (p.toNat, 40) ∧
+      EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+            (.var .global (ofString "vm_system_address"))) cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "log") .one (ofString "alloc") [.const 40]
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+            (.var .global (ofString "vm_system_address"))) cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "log", s.locals.lookup (ofString "log")) } := by
+  obtain ⟨allocated, hx, hhp, hwords, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "log") _ p 40 (Or.inl rfl) hInv hp hres
+  have hsys' : allocated.globals.lookup (ofString "vm_system_address") = some (.val (.word sysw)) :=
+    (hstep.1.2.2.1 _ (by decide)).symm.trans hsys
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 40) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨hnone, hstore_step, haddr, heff, hloc⟩ :=
+    transfer_log_address_store_spec s allocated p sysw hInv hstep hm hb hx hsys' hwords hin
+  let mid := (evaluateHOLFiniteState allocated
+    (.store (.op .add [.var .local (ofString "log"), .const 0])
+      (.var .global (ofString "vm_system_address")))).2
+  have hseq : evaluateHOLFiniteState allocated
+      (.seq (.store (.op .add [.var .local (ofString "log"), .const 0])
+        (.var .global (ofString "vm_system_address"))) cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    simp only [hnone]
+    rfl
+  change ByteRegionEffect allocated mid [(p.toNat, 40)] at heff
+  change EvmStepCC ["heap_ptr"] s mid at hstore_step
+  rw [hseq] at hr hs
+  refine ⟨mid, hloc ▸ hx, ?_, haddr, ?_, hstore_step, hr ▸ hres, hr, hs⟩
+  · simpa only [globN, heff.globals] using hhp
+  · apply wordsOK_of_inside_heap _ hstore_step.1.1.1.1.memaddrs
+    · exact hwords.1
+    · decide
+    · rw [← hp0]; exact hInv.1.2.1
+    · have hlim := hstore_step.1.1.1.2.2.1
+      have hhp_mid : globN mid "heap_ptr" = p.toNat + 40 := by
+        simpa only [globN, heff.globals] using hhp
+      have : heapLimit ≤ heapEnd := by decide
+      omega
+
 private theorem word_dom_lt_heapEnd_local {s_ma : BitVec 64 → Prop} (hma : s_ma = ordinaryDomain)
     (addr : BitVec 64) (hdom : s_ma addr) :
     addr.toNat + 8 ≤ heapEnd := by
@@ -3805,7 +3906,7 @@ private theorem u256_to_be32_aligned_body_bre {F : Type}
         (eval_add_local_const_eq mid3 "out" out 24 ho3)
         (eval_var_local_eq mid3 "w" wv3 hw_m3) fun s4 _ _ _ _ => return_eff_local s4 _ _
 
-private theorem eval_call_u256_to_be32_aligned_bre {F : Type}
+theorem eval_call_u256_to_be32_aligned_bre {F : Type}
     (s : PanSemStateFiniteExact 64 F) (aExp outExp : ExpHOL 64)
     (av : ValueHOL 64) (out0 : BitVec 64) (Rl : List Ivl)
     (hcode : s.code = originalRuntimeCode)
@@ -5659,6 +5760,18 @@ private theorem transfer_call0_no_return {F : Type} (s : PanSemStateFiniteExact 
           | returned _ => dsimp only; split <;> simp
           | _ => simp
 
+theorem transfer_u256_to_be32_call_no_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (amount dst : ExpHOL 64)
+    (hcode : s.code = originalRuntimeCode) :
+    ¬ Resumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])).1 := by
+  intro hr
+  rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, hne⟩
+  · exact transfer_call0_no_return s _ _ v hv
+  · exact evaluate_noCatchableRaise emitLogNcrCallees emitLogNcrCallees_good
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])
+      rfl s hcode e v hne hv
+
 theorem transfer_log_append_return_tail {F : Type}
     (s : PanSemStateFiniteExact 64 F)
     (hstep : (evaluateHOLFiniteState s
@@ -5735,6 +5848,573 @@ end EmitTransferLogStep
 /-! ## Precompile dispatch composition -/
 
 open InitECandidate.Solver.Wave8GuestInv.R13
+
+open InitECandidate.Solver.Wave8Contracts.M23
+
+theorem transfer_seq_resumes_left {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b : ProgHOL 64) (hr : Resumes (evaluateHOLFiniteState s (.seq a b)).1) :
+    (evaluateHOLFiniteState s a).1 = none ∨ Resumes (evaluateHOLFiniteState s a).1 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  cases he : (evaluateHOLFiniteState s a).1 with
+  | none => exact Or.inl rfl
+  | some r =>
+    right
+    simpa only [he] using hr
+
+theorem transfer_accumulated_memcpy_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (dst src n : ExpHOL 64)
+    (dw sw nw : BitVec 64) (Rl : List Ivl)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hd : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word dw)))
+    (hs : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) src = some (.val (.word sw)))
+    (hn : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) n = some (.val (.word nw)))
+    (hsub : 0 < nw.toNat → ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + nw.toNat ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 = none ∨
+      Resumes (evaluateHOLFiniteState cur
+        (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1) :
+    let out := evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])
+    out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
+      ByteRegionEffect cur out.2 Rl ∧ out.2.locals = cur.locals ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → out.2.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN out.2 "heap_ptr") → memB out.2 b = memB s b) := by
+  dsimp only
+  have hnt : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 ≠ some .timeOut := by
+    intro he
+    rcases hr with hz | hr
+    · rw [he] at hz; cases hz
+    · rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
+  obtain ⟨hgood, hbad⟩ := M11.eval_call_memcpy_bre cur dst src n dw sw nw Rl
+    hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs hd hs hn hsub hnt
+  have hz : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).1 = none := by
+    by_contra hne
+    exact hr.elim hne (hbad hne)
+  obtain ⟨heff, hl⟩ := hgood hz
+  have heff' : ByteRegionEffect cur (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy") [dst, src, n])).2 Rl :=
+    ⟨heff.code, heff.memaddrs, heff.shMemaddrs, heff.baseAddr, heff.be,
+      heff.globals, heff.out_dom, heff.cell_frame, heff.byte_frame⟩
+  obtain ⟨hstep', hout', hbyte'⟩ :=
+    evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte heff' hin
+  exact ⟨hz, hstep', heff', hl, hout', hbyte'⟩
+
+theorem transfer_topic_copy_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics topic : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hsrc : cur.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "topics"), .var .global (ofString "transfer_topic"), .const 32]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.var .local (ofString "topics"), .var .global (ofString "transfer_topic"), .const 32]) cont) =
+        evaluateHOLFiniteState mid cont := by
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "memcpy")
+    [.var .local (ofString "topics"), .var .global (ofString "transfer_topic"), .const 32]
+  have hleft := transfer_seq_resumes_left cur call cont hr
+  obtain ⟨hz, hstep', heff, hl, hout', hbyte'⟩ :=
+    transfer_accumulated_memcpy_step s cur _ _ _ topics topic 32 [(topics.toNat, 96)]
+      hInv hstep hbe hout hbyte
+      (by simpa [evalHOLExact] using ht)
+      (by simpa [evalHOLExact] using hsrc)
+      rfl
+      (fun _ => ⟨(topics.toNat, 96), by simp, le_rfl, by simp⟩)
+      (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hleft
+  let mid := (evaluateHOLFiniteState cur call).2
+  have heq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    change (evaluateHOLFiniteState cur call).1 = none at hz
+    simp only [hz]
+    rfl
+  exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
+
+theorem transfer_accumulated_memzero_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (dst n : ExpHOL 64)
+    (dw nw : BitVec 64) (Rl : List Ivl)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (hd : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word dw)))
+    (hn : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) n = some (.val (.word nw)))
+    (hsub : 0 < nw.toNat → ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + nw.toNat ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 = none ∨
+      Resumes (evaluateHOLFiniteState cur
+        (.call (some (none, none)) (ofString "memzero") [dst, n])).1) :
+    let out := evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memzero") [dst, n])
+    out.1 = none ∧ EvmStepCC ["heap_ptr"] s out.2 ∧
+      ByteRegionEffect cur out.2 Rl ∧ out.2.locals = cur.locals ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → out.2.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN out.2 "heap_ptr") → memB out.2 b = memB s b) := by
+  dsimp only
+  have hnt : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 ≠ some .timeOut := by
+    intro he
+    rcases hr with hz | hr
+    · rw [he] at hz; cases hz
+    · rcases hr with ⟨v, hv⟩ | ⟨e, v, hv, _⟩ <;> rw [he] at hv <;> cases hv
+  obtain ⟨hgood, hbad⟩ := R16Shards.OpHandlersB.eval_call_memzero_bre cur dst n dw nw Rl
+    hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs hd hn hsub hnt
+  have hz : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memzero") [dst, n])).1 = none := by
+    by_contra hne
+    exact hr.elim hne (hbad hne)
+  obtain ⟨heff, hl⟩ := hgood hz
+  obtain ⟨hstep', hout', hbyte'⟩ :=
+    evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte heff hin
+  exact ⟨hz, hstep', heff, hl, hout', hbyte'⟩
+
+theorem transfer_topic_padding_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics : BitVec 64) (offset : Nat) (cont : ProgHOL 64)
+    (hoff : offset = 32 ∨ offset = 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "memzero")
+        [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)], .const 12]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "memzero")
+          [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)], .const 12]) cont) =
+        evaluateHOLFiniteState mid cont := by
+  let dst : ExpHOL 64 := .op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)]
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "memzero") [dst, .const 12]
+  have hleft := transfer_seq_resumes_left cur call cont hr
+  have hbound : topics.toNat + 96 ≤ heapLimit := le_trans hin.2 hstep.1.1.1.2.2.1
+  have ho : offset ≤ 64 := by rcases hoff with rfl | rfl <;> omega
+  have hadd : (topics + BitVec.ofNat 64 offset).toNat = topics.toNat + offset := by
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt]
+    omega
+  obtain ⟨hz, hstep', heff, hl, hout', hbyte'⟩ :=
+    transfer_accumulated_memzero_step s cur dst (.const 12)
+      (topics + BitVec.ofNat 64 offset) 12 [(topics.toNat, 96)]
+      hInv hstep hbe hout hbyte
+      (by simp [dst, evalHOLExact, evalListHOLExact, ht, wordOpHOL, wordOp, valueIsWord, valueWord])
+      rfl
+      (fun _ => ⟨(topics.toNat, 96), by simp, by rw [hadd]; omega, by rw [hadd]; simp; omega⟩)
+      (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hleft
+  let mid := (evaluateHOLFiniteState cur call).2
+  have heq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    change (evaluateHOLFiniteState cur call).1 = none at hz
+    simp only [hz]
+    rfl
+  exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
+
+theorem transfer_topic_party_copy_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics party : BitVec 64)
+    (name : MlS) (offset : Nat) (cont : ProgHOL 64)
+    (hoff : offset = 44 ∨ offset = 76)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hparty : cur.locals.lookup name = some (.val (.word party)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)],
+          .var .local name, .const 20]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)],
+            .var .local name, .const 20]) cont) = evaluateHOLFiniteState mid cont := by
+  let dst : ExpHOL 64 := .op .add [.var .local (ofString "topics"), .const (BitVec.ofNat 64 offset)]
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "memcpy") [dst, .var .local name, .const 20]
+  have hleft := transfer_seq_resumes_left cur call cont hr
+  have hbound : topics.toNat + 96 ≤ heapLimit := le_trans hin.2 hstep.1.1.1.2.2.1
+  have ho : offset ≤ 76 := by rcases hoff with rfl | rfl <;> omega
+  have hadd : (topics + BitVec.ofNat 64 offset).toNat = topics.toNat + offset := by
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    rw [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt (by omega), Nat.mod_eq_of_lt]
+    omega
+  obtain ⟨hz, hstep', heff, hl, hout', hbyte'⟩ :=
+    transfer_accumulated_memcpy_step s cur dst (.var .local name) (.const 20)
+      (topics + BitVec.ofNat 64 offset) party 20 [(topics.toNat, 96)]
+      hInv hstep hbe hout hbyte
+      (by simp [dst, evalHOLExact, evalListHOLExact, ht, wordOpHOL, wordOp, valueIsWord, valueWord])
+      (by simpa [evalHOLExact] using hparty)
+      rfl
+      (fun _ => ⟨(topics.toNat, 96), by simp, by rw [hadd]; omega, by rw [hadd]; simp; omega⟩)
+      (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hleft
+  let mid := (evaluateHOLFiniteState cur call).2
+  have heq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    change (evaluateHOLFiniteState cur call).1 = none at hz
+    simp only [hz]
+    rfl
+  exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
+
+def transferTopicWrites (cont : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "memcpy")
+    [.var .local (ofString "topics"), .var .global (ofString "transfer_topic"), .const 32])
+  (.seq (.call (some (none, none)) (ofString "memzero")
+    [.op .add [.var .local (ofString "topics"), .const 32], .const 12])
+  (.seq (.call (some (none, none)) (ofString "memcpy")
+    [.op .add [.var .local (ofString "topics"), .const 44], .var .local (ofString "sender"), .const 20])
+  (.seq (.call (some (none, none)) (ofString "memzero")
+    [.op .add [.var .local (ofString "topics"), .const 64], .const 12])
+  (.seq (.call (some (none, none)) (ofString "memcpy")
+    [.op .add [.var .local (ofString "topics"), .const 76], .var .local (ofString "recipient"), .const 20]) cont))))
+
+theorem transfer_topic_writes_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hsrc : cur.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hs : cur.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrc : cur.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferTopicWrites cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur (transferTopicWrites cont) = evaluateHOLFiniteState mid cont := by
+  unfold transferTopicWrites at hr ⊢
+  obtain ⟨m1, st1, ef1, l1, r1, o1, b1, eq1⟩ :=
+    transfer_topic_copy_prefix s cur topics topic _ hInv hstep hbe hout hbyte ht hsrc hin hr
+  have in1 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m1 "heap_ptr") := by
+    simpa only [globN, ef1.globals] using hin
+  obtain ⟨m2, st2, ef2, l2, r2, o2, b2, eq2⟩ :=
+    transfer_topic_padding_prefix s m1 topics 32 _ (Or.inl rfl) hInv st1
+      (ef1.be.trans hbe) o1 b1 (l1 ▸ ht) in1 r1
+  have ef02 := ef1.trans ef2
+  have l02 := l2.trans l1
+  have in2 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m2 "heap_ptr") := by
+    simpa only [globN, ef02.globals] using hin
+  obtain ⟨m3, st3, ef3, l3, r3, o3, b3, eq3⟩ :=
+    transfer_topic_party_copy_prefix s m2 topics sender (ofString "sender") 44 _ (Or.inl rfl)
+      hInv st2 (ef02.be.trans hbe) o2 b2 (l02 ▸ ht) (l02 ▸ hs) in2 r2
+  have ef03 := ef02.trans ef3
+  have l03 := l3.trans l02
+  have in3 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m3 "heap_ptr") := by
+    simpa only [globN, ef03.globals] using hin
+  obtain ⟨m4, st4, ef4, l4, r4, o4, b4, eq4⟩ :=
+    transfer_topic_padding_prefix s m3 topics 64 _ (Or.inr rfl) hInv st3
+      (ef03.be.trans hbe) o3 b3 (l03 ▸ ht) in3 r3
+  have ef04 := ef03.trans ef4
+  have l04 := l4.trans l03
+  have in4 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m4 "heap_ptr") := by
+    simpa only [globN, ef04.globals] using hin
+  obtain ⟨m5, st5, ef5, l5, r5, o5, b5, eq5⟩ :=
+    transfer_topic_party_copy_prefix s m4 topics recipient (ofString "recipient") 76 cont (Or.inr rfl)
+      hInv st4 (ef04.be.trans hbe) o4 b4 (l04 ▸ ht) (l04 ▸ hrc) in4 r4
+  exact ⟨m5, st5, ef04.trans ef5, l5.trans l04, r5, o5, b5,
+    eq1.trans (eq2.trans (eq3.trans (eq4.trans eq5)))⟩
+
+theorem transfer_alloc_topics_writes_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 96 ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨allocated, ht, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") _ p 96
+      (Or.inr (Or.inl rfl)) hInv hp hr
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 96) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨mid, st', ef, loc, resum, out, bytes, eq⟩ :=
+    transfer_topic_writes_prefix s allocated p topic sender recipient cont hInv st hb
+      (fun _ _ => congrFun hm _) (fun _ _ _ => by simp only [memB, hm, hb]) ht
+      ((st.1.2.2.1 _ (by decide)).symm.trans htopic)
+      ((hl _ (by decide)).trans hsender)
+      ((hl _ (by decide)).trans hrecipient) hin (er ▸ hr)
+  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_⟩
+  · simpa only [globN, ef.globals] using hhp
+  · exact er.trans (congrArg Prod.fst eq)
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "topics", s.locals.lookup (ofString "topics"))) }) eq)
+
+theorem transfer_topics_alloc_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (logp p : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word logp)))
+    (haddr : memW s logp.toNat = globN s "vm_system_address")
+    (hwords : WordsOK s (logp.toNat, 40))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).1) :
+    ∃ next : PanSemStateFiniteExact 64 F,
+      next.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      next.locals.lookup (ofString "log") = some (.val (.word logp)) ∧
+      globN next "heap_ptr" = p.toNat + 96 ∧
+      memW next logp.toNat = globN next "vm_system_address" ∧
+      WordsOK next (logp.toNat, 40) ∧ WordsOK next (p.toNat, 96) ∧
+      EvmStepCC ["heap_ptr"] s next ∧
+      Resumes (evaluateHOLFiniteState next cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).1 =
+        (evaluateHOLFiniteState next cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).2 =
+        { (evaluateHOLFiniteState next cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState next cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨next, ht, hhp, htw, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") cont p 96
+      (Or.inr (Or.inl rfl)) hInv hp hres
+  refine ⟨next, ht, (hl _ (by decide)).trans hlog, hhp, ?_, ?_, htw,
+    hstep, hr ▸ hres, hr, hs⟩
+  · have hg := hstep.1.2.2.1 (ofString "vm_system_address") (by decide)
+    simpa only [memW, hm, globN, hg] using haddr
+  · refine ⟨hwords.1, hwords.2.1, ?_⟩
+    intro k hk
+    obtain ⟨w, ha, hw⟩ := hwords.2.2 k hk
+    refine ⟨w, ?_, hm ▸ hw⟩
+    rw [hstep.1.1.1.1.memaddrs, ← hInv.1.1.memaddrs]
+    exact ha
+
+theorem transfer_alloc_topics_writes_locals_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 96 ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } ∧
+      (∀ k, k ≠ ofString "topics" → mid.locals.lookup k = s.locals.lookup k) := by
+  obtain ⟨allocated, ht, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") _ p 96
+      (Or.inr (Or.inl rfl)) hInv hp hr
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 96) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨mid, st', ef, loc, resum, out, bytes, eq⟩ :=
+    transfer_topic_writes_prefix s allocated p topic sender recipient cont hInv st hb
+      (fun _ _ => congrFun hm _) (fun _ _ _ => by simp only [memB, hm, hb]) ht
+      ((st.1.2.2.1 _ (by decide)).symm.trans htopic)
+      ((hl _ (by decide)).trans hsender)
+      ((hl _ (by decide)).trans hrecipient) hin (er ▸ hr)
+  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_, ?_⟩
+  · simpa only [globN, ef.globals] using hhp
+  · exact er.trans (congrArg Prod.fst eq)
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "topics", s.locals.lookup (ofString "topics"))) }) eq)
+  · intro k hk
+    rw [loc]
+    exact hl k hk
+
+theorem transfer_alloc_topics_data_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).1) :
+    ∃ (mid : PanSemStateFiniteExact 64 F) (data : BitVec 64),
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      mid.locals.lookup (ofString "data") = some (.val (.word data)) ∧
+      data.toNat = p.toNat + 96 ∧ globN mid "heap_ptr" = data.toNat + 32 ∧
+      WordsOK mid (data.toNat, 32) ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+          (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+          (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+              (ofString "data", s.locals.lookup (ofString "data")))
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨topicsState, ht, hhp, st, resum, er, es, hlocals⟩ :=
+    transfer_alloc_topics_writes_locals_prefix s p topic sender recipient _ hInv hp htopic hsender hrecipient hr
+  obtain ⟨data, hd⟩ := globalWord_of_globN_pos topicsState "heap_ptr" (by rw [hhp]; omega)
+  have hdNat : data.toNat = p.toNat + 96 := by
+    have hg : globN topicsState "heap_ptr" = data.toNat := by
+      change topicsState.globals.lookup (ofString "heap_ptr") = _ at hd
+      simp [globN, hd]
+    exact hg.symm.trans hhp
+  obtain ⟨mid, hdata, hheap, hw, st', er', es', hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec topicsState (ofString "data") cont data 32
+      (Or.inr (Or.inr rfl)) st.1.1 hd resum
+  have hboth : EvmStepCC ["heap_ptr"] s mid := by
+    refine ⟨⟨st'.1.1, le_trans st.1.2.1 st'.1.2.1,
+      fun k hk => (st.1.2.2.1 k hk).trans (st'.1.2.2.1 k hk),
+      st'.1.2.2.2.trans st.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := st.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := st'.2 ec (st.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  refine ⟨mid, data, (hl _ (by decide)).trans ht, hdata, hdNat, hheap, hw,
+    hboth, er' ▸ resum, er.trans er', ?_⟩
+  have he : (evaluateHOLFiniteState topicsState
+      (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)).2 =
+      { (evaluateHOLFiniteState mid cont).2 with
+        locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+          (ofString "data", topicsState.locals.lookup (ofString "data")) } := es'
+  exact es.trans ((congrArg (fun out : PanSemStateFiniteExact 64 F =>
+    { out with locals := (HolFiniteMapExact.resVarEq out.locals
+      (ofString "topics", s.locals.lookup (ofString "topics"))) }) he).trans (by
+        rw [hlocals _ (by decide)]))
+
+theorem transfer_accumulated_u256_to_be32_step {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (amount dst : ExpHOL 64)
+    (av : ValueHOL 64) (dw : BitVec 64) (Rl : List Ivl)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) amount = some av)
+    (hd : @evalHOLExact 64 F _ cur.toExact
+      (fun a => Classical.propDecidable (cur.memaddrs a)) dst = some (.val (.word dw)))
+    (halign : dw.toNat % 8 = 0)
+    (hsub : ∃ i ∈ Rl, i.1 ≤ dw.toNat ∧ dw.toNat + 32 ≤ i.1 + i.2)
+    (hin : ∀ i ∈ Rl, Inside i (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hz : (evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])).1 = none) :
+    let out := evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "u256_to_be32") [amount, dst])
+    EvmStepCC ["heap_ptr"] s out.2 ∧ ByteRegionEffect cur out.2 Rl ∧
+      out.2.locals = cur.locals ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → out.2.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN out.2 "heap_ptr") → memB out.2 b = memB s b) := by
+  dsimp only
+  obtain ⟨eff, hl⟩ := eval_call_u256_to_be32_aligned_bre cur amount dst av dw Rl
+    hstep.1.1.1.1.code hstep.1.1.1.1.memaddrs ha hd halign hsub hz
+  obtain ⟨step, out, bytes⟩ :=
+    evmStepCC_of_accumulated_heap_effect hInv hstep hbe hout hbyte eff hin
+  exact ⟨step, eff, hl, out, bytes⟩
+
+theorem transfer_data_write_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (data : BitVec 64)
+    (av : ValueHOL 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ha : cur.locals.lookup (ofString "amount") = some av)
+    (hd : cur.locals.lookup (ofString "data") = some (.val (.word data)))
+    (halign : data.toNat % 8 = 0)
+    (hin : Inside (data.toNat, 32) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur
+      (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+        [.var .local (ofString "amount"), .var .local (ofString "data")]) cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(data.toNat, 32)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur
+        (.seq (.call (some (none, none)) (ofString "u256_to_be32")
+          [.var .local (ofString "amount"), .var .local (ofString "data")]) cont) =
+        evaluateHOLFiniteState mid cont := by
+  let call : ProgHOL 64 := .call (some (none, none)) (ofString "u256_to_be32")
+    [.var .local (ofString "amount"), .var .local (ofString "data")]
+  have hz : (evaluateHOLFiniteState cur call).1 = none := by
+    rcases transfer_seq_resumes_left cur call cont hr with hz | resum
+    · exact hz
+    · exact False.elim (transfer_u256_to_be32_call_no_resumes cur _ _ hstep.1.1.1.1.code resum)
+  obtain ⟨step, eff, hl, out, bytes⟩ := transfer_accumulated_u256_to_be32_step
+    s cur (.var .local (ofString "amount")) (.var .local (ofString "data")) av data
+    [(data.toNat, 32)] hInv hstep hbe hout hbyte
+    (by simpa only [evalHOLExact] using ha) (by simpa only [evalHOLExact] using hd)
+    halign ⟨(data.toNat, 32), by simp, le_refl _, le_refl _⟩
+    (fun i hi => by rcases List.mem_singleton.mp hi with rfl; exact hin) hz
+  let mid := (evaluateHOLFiniteState cur call).2
+  have eq : evaluateHOLFiniteState cur (.seq call cont) = evaluateHOLFiniteState mid cont := by
+    rw [evaluateHOLFiniteState_seq_line780]
+    simp only [hz]
+    rfl
+  exact ⟨mid, step, eff, hl, eq ▸ hr, out, bytes, eq⟩
 
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
@@ -5837,6 +6517,73 @@ theorem run_precompile_zero_index {F : Type} (s : PanSemStateFiniteExact 64 F)
   split <;> simp_all
   split <;> simp_all
   split_ifs at * <;> simp_all
+
+theorem run_precompile_invalid_index {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hinvalid : idx ∉ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64))) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_run_precompile) =
+      evaluateHOLFiniteState s (.raise (ofString "BlockErr") (.const 99)) := by
+  have hb : sourceFnBody Guest.Software.guestFn_run_precompile =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_run_precompile).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_run_precompile,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural]
+  simp only [List.mem_cons, List.not_mem_nil, or_false, not_or] at hinvalid
+  rcases hinvalid with ⟨h1, h2, h3, h4, h6, h7, h8, h5, h9, h10, h11, h12, h13,
+    h14, h15, h16, h17, h18⟩
+  change idx ≠ 1#64 at h1
+  change idx ≠ 2#64 at h2
+  change idx ≠ 3#64 at h3
+  change idx ≠ 4#64 at h4
+  change idx ≠ 5#64 at h5
+  change idx ≠ 6#64 at h6
+  change idx ≠ 7#64 at h7
+  change idx ≠ 8#64 at h8
+  change idx ≠ 9#64 at h9
+  change idx ≠ 10#64 at h10
+  change idx ≠ 11#64 at h11
+  change idx ≠ 12#64 at h12
+  change idx ≠ 13#64 at h13
+  change idx ≠ 14#64 at h14
+  change idx ≠ 15#64 at h15
+  change idx ≠ 16#64 at h16
+  change idx ≠ 17#64 at h17
+  change idx ≠ 18#64 at h18
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite,
+    evaluateHOLFiniteState_skip, evalHOLExact, hidx,
+    Compiler.Encoders.Asm.wordCmpHOL, h1, h2, h3, h4, h5, h6, h7, h8, h9, h10,
+    h11, h12, h13, h14, h15, h16, h17, h18]
+  split <;> simp_all
+  split <;> simp_all
+  split_ifs at * <;> simp_all
+
+theorem run_precompile_invalid_no_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hinvalid : idx ∉ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64))) (v : ValueHOL 64) :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_run_precompile)).1 ≠
+      some (.returned v) := by
+  rw [run_precompile_invalid_index s idx hidx hinvalid]
+  simp [evaluateHOLFiniteState_raise, evalHOLExact]
+  split <;> simp_all
+  split_ifs <;> simp
+
+theorem run_precompile_index_mem_of_return {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (idx : BitVec 64)
+    (hidx : s.locals.lookup (ofString "idx") = some (.val (.word idx)))
+    (hreturn : ∃ v, (evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_run_precompile)).1 = some (.returned v)) :
+    idx ∈ ([1, 2, 3, 4, 6, 7, 8, 5, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18] :
+      List (BitVec 64)) := by
+  by_contra hinvalid
+  obtain ⟨v, hv⟩ := hreturn
+  exact run_precompile_invalid_no_return s idx hidx hinvalid v hv
 
 theorem ek_cc_run_precompile_of_dispatch (h : PrecompileDispatchSpecs) :
     EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "run_precompile") ∧
