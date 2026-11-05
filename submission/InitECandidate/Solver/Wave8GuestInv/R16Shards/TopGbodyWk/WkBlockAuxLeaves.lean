@@ -10,6 +10,8 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.RlpHelpers
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.Batch1
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M13.wk_u256_to_be_min
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.rv_u256_to_be_min
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M18.ro_u256_mul
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
 
 set_option autoImplicit false
 set_option maxRecDepth 200000
@@ -5219,5 +5221,36 @@ theorem decCall_bal_account_item_resumes {F : Type}
   · have htn : tw.toNat ≠ 0 := by rwa [htN] at hnz
     simpa [balRecords, htN, htn, htabValues] using hval
   · simpa only [htN] using hkey
+
+/-! ## Withdrawal iteration: multiplication, credit, and journal reset. -/
+
+theorem wkSc_u256_mul :
+    WorldKeepsSc WorldOK (bufRegions []) [] stdKeep NoExtra (ofString "u256_mul") :=
+  worldKeepsSc_of_readOnly InitECandidate.Solver.Wave8Contracts.M18.ro_u256_mul
+
+theorem progWStep_withdrawal_iteration
+    (B : BufList) (gw : List String)
+    (hB : ValidBufList B) (hgw : SafeStepGlobals gw)
+    (hbuf : ∀ p ∈ [("keccak_pad", 136), ("keccak_st", 200),
+      ("mpt_nib_scratch", 64), ("sk_buf", 52)], p ∈ B)
+    (hglobals : ∀ g ∈ ["heap_ptr", "journal_n", "scratch_ptr"], g ∈ gw)
+    (e_w e_amt : ExpHOL 64) (args_mul args_ce : List (ExpHOL 64)) :
+    ProgWStep B gw
+      (.dec (ofString "w") .one e_w
+        (.dec (ofString "amt") (.comb [.one, .one, .one, .one]) e_amt
+          (.decCall (ofString "wei") (.comb [.one, .one, .one, .one])
+            (ofString "u256_mul") args_mul
+            (.seq (.call (some (none, none)) (ofString "create_ether") args_ce)
+              (.seq (.assign .global (ofString "journal_n") (.const 0#64))
+                (.assign .local (ofString "i")
+                  (.op .add [.var .local (ofString "i"), .const 1#64]))))))) := by
+  apply progWStep_dec
+  apply progWStep_dec
+  refine progWStep_decCall hB hgw (by simp) (by simp) wkSc_u256_mul ?_
+  refine progWStep_seq hB hgw ?_ ?_
+  · exact progWStep_call0 hbuf hglobals EvmEkFk.wkSc_create_ether
+  · exact progWStep_seq hB hgw
+      (progWStep_assign_journal_n_zero B gw (hglobals _ (by simp)))
+      (progWStep_assign_local B gw _ _)
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
