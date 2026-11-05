@@ -71,10 +71,6 @@ theorem «callees_mpt_set» : sameNames (progCallees (fnBody Guest.Software.gues
 theorem «gbody_mpt_set» : GBody.«mpt_set» := by sorry
 
 
-/-- The body of `build_mpt_indexed` alone (AST line 11243, guard `WorldOK`, #0 CTR). Its direct callees are
-exactly `heap_mark`, `heap_release`, `mpt_new`, `mpt_root`, `mpt_set`, `rlp_encode_word` (`«callees_build_mpt_indexed»`, checked against the AST). Hypotheses: the bound
-of each of these 6 callees, then the contract of each callee at a guard-carrying
-call site (5: `ro_heap_mark`, `wk_mpt_new`, `rt_mpt_new`, `mk_mpt_set`, `wk_rlp_encode_word`). Nothing else is assumed. -/
 /-- Strengthened `build_mpt_indexed` entry guard (wave8 cutover rehearsal; hoisted from
 `R16Shards/MptC10C12/BuildMptIndexed.lean`). -/
 def BuildMptIndexedReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
@@ -92,6 +88,10 @@ def BuildMptIndexedReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop 
 theorem buildMptIndexedReady_worldOK {F : Type} {s : PanSemStateFiniteExact 64 F}
     (h : BuildMptIndexedReady s) : WorldOK s := h.1
 
+/-- The body of `build_mpt_indexed` alone (AST line 11243, guard `WorldOK`, #0 CTR). Its direct callees are
+exactly `heap_mark`, `heap_release`, `mpt_new`, `mpt_root`, `mpt_set`, `rlp_encode_word` (`«callees_build_mpt_indexed»`, checked against the AST). Hypotheses: the bound
+of each of these 6 callees, then the contract of each callee at a guard-carrying
+call site (5: `ro_heap_mark`, `wk_mpt_new`, `rt_mpt_new`, `mk_mpt_set`, `wk_rlp_encode_word`). Nothing else is assumed. -/
 def GBody.«build_mpt_indexed» : Prop :=
   (TerminatingFunBoundedOn GuestInv (ofString "heap_mark") K.«heap_mark») →
   (TerminatingFunBoundedOn GuestInv (ofString "heap_release") K.«heap_release») →
