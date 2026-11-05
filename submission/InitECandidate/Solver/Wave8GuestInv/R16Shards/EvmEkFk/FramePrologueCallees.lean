@@ -5832,6 +5832,45 @@ end EmitTransferLogStep
 
 open InitECandidate.Solver.Wave8GuestInv.R13
 
+theorem transfer_topics_alloc_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (logp p : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word logp)))
+    (haddr : memW s logp.toNat = globN s "vm_system_address")
+    (hwords : WordsOK s (logp.toNat, 40))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).1) :
+    ∃ next : PanSemStateFiniteExact 64 F,
+      next.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      next.locals.lookup (ofString "log") = some (.val (.word logp)) ∧
+      globN next "heap_ptr" = p.toNat + 96 ∧
+      memW next logp.toNat = globN next "vm_system_address" ∧
+      WordsOK next (logp.toNat, 40) ∧ WordsOK next (p.toNat, 96) ∧
+      EvmStepCC ["heap_ptr"] s next ∧
+      Resumes (evaluateHOLFiniteState next cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).1 =
+        (evaluateHOLFiniteState next cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] cont)).2 =
+        { (evaluateHOLFiniteState next cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState next cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨next, ht, hhp, htw, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") cont p 96
+      (Or.inr (Or.inl rfl)) hInv hp hres
+  refine ⟨next, ht, (hl _ (by decide)).trans hlog, hhp, ?_, ?_, htw,
+    hstep, hr ▸ hres, hr, hs⟩
+  · have hg := hstep.1.2.2.1 (ofString "vm_system_address") (by decide)
+    simpa only [memW, hm, globN, hg] using haddr
+  · refine ⟨hwords.1, hwords.2.1, ?_⟩
+    intro k hk
+    obtain ⟨w, ha, hw⟩ := hwords.2.2 k hk
+    refine ⟨w, ?_, hm ▸ hw⟩
+    rw [hstep.1.1.1.1.memaddrs, ← hInv.1.1.memaddrs]
+    exact ha
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
