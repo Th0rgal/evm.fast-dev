@@ -11086,4 +11086,78 @@ theorem phase2_packed_source_outer_body_live_hoare (h : PtxCallees)
     exact hrestore s locals hl (hp hr)
   · exact fun _ _ hr => by cases hr
 
+theorem phase2_packed_live_outer_while {body : ProgHOL 64}
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hb : Hoare (fun s => (PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) ∧ PtxPackedLiveFrame buffer contents s)
+      body (fun r s => r = none → PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare (fun s => PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body)
+      (fun r s => r = none → (PtxPackedNalIteration s ∧ locN s "k" = locN s "nkeys") ∧
+        PtxPackedLiveFrame buffer contents s) := by
+  let guard : ExpHOL 64 := .cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s (.while guard body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode →
+      (PtxPackedNalIteration st ∧ PtxPackedLiveFrame buffer contents st) →
+      evaluateHOLFiniteState st (.while guard body) = (none, post) →
+      (PtxPackedNalIteration post ∧ locN post "k" = locN post "nkeys") ∧
+        PtxPackedLiveFrame buffer contents post from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      have hguard := phase2_packed_outer_nal_guard st w hp.1.1 hp.1.2.1 hp.1.2.2
+        (by simpa [evalAt, guard] using hw)
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd := phase2_packed_nal_iteration_decClock st hp.1
+          have hf := phase2_packed_live_frame_locals st st.locals (st.clock - 1)
+            buffer contents hp.2 rfl rfl rfl
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc ⟨⟨hd, hguard.mp hnz⟩, hf⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            exact ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨⟨hp.1, (phase2_packed_outer_exit hp.1.1.2.1
+          (fun hlt => hz (hguard.mpr hlt))).2⟩, hp.2⟩
+    · simp at he
+
+theorem phase2_packed_source_outer_loop_live_hoare (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (fun s => PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s)
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        phase2_packed_source_outer_body)
+      (fun r s => r = none → (PtxPackedNalIteration s ∧ locN s "k" = locN s "nkeys") ∧
+        PtxPackedLiveFrame buffer contents s) := by
+  exact phase2_packed_live_outer_while buffer contents
+    (phase2_packed_source_outer_body_live_hoare h buffer contents) rfl rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
