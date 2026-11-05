@@ -3332,12 +3332,42 @@ theorem stableCopyInv_rank_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
   have hn := (stableLengthPost_length_bound s hp.1 hp.2.1).1
   omega
 
+/-- Interpret the signed loop comparison in the bounded natural index range. -/
+theorem stableCopyInv_guard {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (i n w : BitVec 64)
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hib : locN s "i" < 2 ^ 63)
+    (he : evalAt s (.cmp .less (.var .local (ofString "i"))
+      (.var .local (ofString "nl"))) = some (.val (.word w)))
+    (hw : w ≠ 0) : locN s "i" < locN s "nl" := by
+  have hnb := (stableLengthPost_length_bound s hp.1 hp.2.1).1
+  have hil : locN s "i" = i.toNat := by simp [locN, hi]
+  have hnl : locN s "nl" = n.toNat := by simp [locN, hn]
+  rw [hil] at hib ⊢
+  rw [hnl] at hnb ⊢
+  have hnb' : n.toNat < 2 ^ 63 := by omega
+  have hc : Compiler.Encoders.Asm.wordCmpHOL .less i n = true := by
+    by_contra hc
+    simp [evalAt, evalHOLExact, hi, hn, hc] at he
+    exact hw he.symm
+  norm_num at hib hnb'
+  simpa [Compiler.Encoders.Asm.wordCmpHOL, Compiler.Encoders.Asm.holAsmSignedLess,
+    hib, hnb'] using hc
+
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
     PtxReceiptsDone s := by
   obtain ⟨hp, hn, hh, ha, hcap, hcopy⟩ := hp
   exact stable_copy_complete s hp hn hh ha hcap
     (fun i hi => hcopy i (lt_of_lt_of_le hi hexit) hi)
+
+/-- Exhaustion of the natural copy rank yields the receipt postcondition. -/
+theorem stableCopyInv_rank_zero_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableCopyInv s) (hz : locN s "nl" - locN s "i" = 0) :
+    PtxReceiptsDone s := by
+  apply stableCopyInv_exit s hp
+  omega
 
 /-- Separation from the whole backing allocation implies separation from
 the current copy destination, including its machine-address conversion. -/
@@ -3819,6 +3849,19 @@ theorem stableCopyInv_increment_decreases {F : Type} (s : PanSemStateFiniteExact
       show ofString "i" ≠ ofString "nl" from by decide]
   rw [hnl, hinc]
   omega
+
+/-- The increment retains a word-shaped counter for the next iteration. -/
+theorem stable_copy_increment_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w : BitVec 64) (v : ValueHOL 64)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (he : evalAt s (.op .add [.var .local (ofString "i"), .const 1]) = some v) :
+    (setVarHOLFinite (ofString "i") v s).locals.lookup (ofString "i") =
+      some (.val (.word (w + 1))) := by
+  have hv : v = .val (.word (w + 1)) := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+      valueWord, wordOpHOL, wordOp] using he.symm
+  subst v
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
 /-- Once the store has extended the prefix, the actual counter assignment
 re-establishes the loop invariant. -/
