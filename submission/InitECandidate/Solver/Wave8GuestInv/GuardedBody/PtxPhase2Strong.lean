@@ -4276,4 +4276,25 @@ theorem phase2_key_pass_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
     show ofString "i" ≠ ofString "nkeys" by decide,
     show ofString "i" ≠ ofString "tx" by decide] using ht
 
+/-- The concrete address-copy loop retains the cumulative key count at exit. -/
+theorem phase2_address_count_loop_hoare :
+    Hoare PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (fun r s => r = none → PtxAddressCountInv s ∧ locN s "i" = locN s "nal") := by
+  exact phase2_address_count_while_hoare phase2_address_count_body_hoare
+    (by decide) (by decide)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
