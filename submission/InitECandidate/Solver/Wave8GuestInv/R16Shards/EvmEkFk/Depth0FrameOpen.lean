@@ -5854,4 +5854,44 @@ theorem Hoare.decCall_returning_exception_fall
             · cases hr
             · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
 
+/-- Compose the external-code call with the delegated stores and common
+dispatch suffix, including the callee's catchable-exception path. -/
+theorem hoare_prepare_dispatch_ext_delegated (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (hsub : "scratch_ptr" ∈ gw)
+    (hres : DecCallResumeOn
+      (fun s => D0Pre gw hp G ch s ∧ ∃ dst : BitVec 64,
+        s.locals.lookup (ofString "daddr") = some (.val (.word dst)))
+      (fun s => D0Pre gw hp G ch s ∧ ∃ code code_n daddr : BitVec 64,
+        s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+        s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) ∧ code_n.toNat < 2 ^ 40)
+      (ofString "dcode") (ofString "ext_code_of") [.var .local (ofString "daddr")])
+    (hexc : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → D0Pre gw hp G ch s →
+      PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup (ofString "ext_code_of") values =
+        some (body, callee, ret) → ∀ e v post, e ≠ ofString "TrapErr" →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.exception e v), post) →
+      EvmMsgReady post ∧ StepFrom gw hp G ch post) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧ ∃ dst : BitVec 64,
+      s.locals.lookup (ofString "daddr") = some (.val (.word dst)))
+      (.decCall (ofString "dcode") (.comb [.one, .one]) (ofString "ext_code_of")
+        [.var .local (ofString "daddr")]
+        (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+          (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+              (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+                (.var .local (ofString "daddr"))) prepareDispatchCommon)))))
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.decCall_returning_exception_fall
+    (R := fun s => D0Pre gw hp G ch s ∧ ∃ code code_n daddr : BitVec 64,
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)) ∧ code_n.toNat < 2 ^ 40)
+    (fun s l k h => ⟨localsFree_evmMsgReady s l k h.1,
+      localsFree_stepFrom gw hp G ch s l k h.2⟩) (fun {F} => @hres F) ?_ ?_
+  · intro F s values body callee ret hc hP hl
+    exact hexc s values body callee ret hc hP.1 hl
+  · refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+    obtain ⟨hD, code, code_n, daddr, hdcode, hdaddr, hnb⟩ := hP
+    exact (hoare_prepare_dispatch_delegated_common gw hp G ch code code_n daddr hnb hsub).run
+      s hc ⟨hD, hdcode, hdaddr⟩ hnt hr
+
 end HeadStore
