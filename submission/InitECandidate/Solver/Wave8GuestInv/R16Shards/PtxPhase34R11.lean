@@ -1552,13 +1552,42 @@ theorem encode_receipt_result (h : PtxCallees) {F : Type}
   obtain ⟨S', Nd', _, _, _, _, hret⟩ := hs.2.2.2.2 S Nd hWTc hR
   simpa only [hg] using hret v rfl
 
+theorem encode_receipt_owned (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "encode_receipt") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) (hp : Phase4ReceiptReady s)
+    (hg : locN (callEntryStateHOLFinite s callee) "logs" = locN s "logs") :
+    LogsWorldOwned post (locN s "logs") := by
+  have hL : LogsListOK (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]
+    exact (R13Shards.logsListOK_with_locals s callee (s.clock - 1) _).mpr hp.2.1
+  have hD : LogsDisjFixed (callEntryStateHOLFinite s callee)
+      (locN (callEntryStateHOLFinite s callee) "logs") := by
+    rw [hg]; exact hp.2.2.1
+  have hw := funSpec_at_lookup h.wk_encode_receipt s hc vs body callee ret hl
+    ⟨worldOK_callEntry hp.1.1.1 callee, hL, hD⟩ (by rw [hr]; simp)
+  rw [hr] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  have hs' := R13Shards.worldStep_with_locals hs s.locals s.clock
+  exact (logsWorldOwned_scratchStep hs' hp.1.1.1.1
+    ⟨hs.2.1, by change globN post "scratch_ptr" ≤ globN s "scratch_ptr"; omega⟩
+    hp.2.1 hp.2.2.2 receiptScratchSpec_ok rfl (by decide)).2
+
 def Phase4ReceiptEncoded : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxAfterCallStrong s ∧ LogsListOK s (locN s "logs") ∧
     memW s (locN s "logs" + 8) < 2 ^ 28 ∧
     ∃ a b : BitVec 64,
       s.locals.lookup (ofString "rc") = some (.rStruct [.val (.word a), .val (.word b)]) ∧
       Inside (a.toNat, b.toNat) sourceBase (globN s "heap_ptr") ∧
-      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61
+      a.toNat < 2 ^ 61 ∧ b.toNat < 2 ^ 61 ∧ LogsWorldOwned s (locN s "logs")
 
 theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
@@ -1578,13 +1607,17 @@ theorem encode_receipt_encoded_resume (h : PtxCallees) {F : Type}
   have hlogs : locN t "logs" = locN s "logs" := by
     simp [t, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
       show ofString "rc" ≠ ofString "logs" from by decide]
-  refine ⟨LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _ ho, ?_, ?_, a, b, ?_, hi, ha, hb⟩
+  refine ⟨LocalsOnly.setVar localsOnly_txAfterCallStrong (by decide) v _ ho, ?_, ?_, a, b, ?_, hi, ha, hb, ?_⟩
   · change LogsListOK t (locN t "logs")
     rw [hlogs]
     exact (R13Shards.logsListOK_with_locals post t.locals post.clock _).mpr hL
   · change memW post (locN t "logs" + 8) < 2 ^ 28
     rw [hlogs]; exact hn
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hv]
+  · change LogsWorldOwned t (locN t "logs")
+    rw [hlogs]
+    exact logsWorldOwned_with_locals (s := post) t.locals post.clock
+      (encode_receipt_owned h s vs body callee ret v post hc hl hr hp hg)
 
 theorem encode_receipt_logs_param {F : Type} (s : PanSemStateFiniteExact 64 F)
     (e1 e2 e3 : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
