@@ -10947,4 +10947,79 @@ theorem phase2_packed_body_live_iteration_hoare (h : PtxCallees)
     hf.run s hc ⟨hp.1.1.1.1, ⟨hp.1.1.1.2.1, hp.2.1⟩,
       hp.1.1.1.2.2.1, hp.1.1.1.2.2.2, hp.2.2⟩ hnt hr⟩
 
+theorem phase2_packed_live_inner_while {body : ProgHOL 64}
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hb : Hoare (fun s => PtxPackedNsNalCopy s ∧ PtxPackedLiveFrame buffer contents s)
+      body (fun r s => r = none → PtxPackedNsNalIteration s ∧ PtxPackedLiveFrame buffer contents s))
+    (hnb : InitECandidate.Solver.GuestUniformClockBound.noTopBreak body = true)
+    (hnc : InitECandidate.Solver.PanRunBounded.noTopContinue body = true) :
+    Hoare (fun s => PtxPackedNsNalIteration s ∧ PtxPackedLiveFrame buffer contents s)
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))) body)
+      (fun r s => r = none → (PtxPackedNsNalIteration s ∧
+        locN s "k" = phase2_key_prefix s (locN s "i" + 1)) ∧ PtxPackedLiveFrame buffer contents s) := by
+  let guard : ExpHOL 64 := .cmp .less (.var .local (ofString "j")) (.var .local (ofString "ns"))
+  refine ⟨fun {F} s hc hp _ hr => ?_⟩
+  generalize he : evaluateHOLFiniteState s (.while guard body) = out at hr ⊢
+  obtain ⟨r, post⟩ := out
+  dsimp only at hr
+  subst r
+  suffices ∀ (k : Nat) (st : PanSemStateFiniteExact 64 F), st.clock = k →
+      st.code = originalRuntimeCode →
+      (PtxPackedNsNalIteration st ∧ PtxPackedLiveFrame buffer contents st) →
+      evaluateHOLFiniteState st (.while guard body) = (none, post) →
+      (PtxPackedNsNalIteration post ∧ locN post "k" = phase2_key_prefix post (locN post "i" + 1)) ∧
+        PtxPackedLiveFrame buffer contents post from
+    this s.clock s rfl hc hp he
+  intro k
+  induction k using Nat.strongRecOn with
+  | ind k ih =>
+    intro st hk hc hp he
+    rw [evaluateHOLFiniteState_while_total] at he
+    split at he
+    · rename_i w hw
+      have hguard := phase2_packed_ns_guard_eval st w hp.1.1 (by simpa [evalAt, guard] using hw)
+      split at he
+      · rename_i hnz
+        split at he
+        · simp at he
+        · dsimp only at he
+          rw [fixClockHOLFinite_evaluateState] at he
+          have hd := phase2_packed_ns_iteration_decClock st hp.1.1
+          have hf := phase2_packed_live_frame_locals st st.locals (st.clock - 1)
+            buffer contents hp.2 rfl rfl rfl
+          have hm := (InitECandidate.Solver.PanRunBounded.evaluateHOLFiniteState_metadata
+            (decClockHOLFinite st) body).1
+          have hclk := evaluateHOLFiniteState_clock_le (decClockHOLFinite st) body
+          have hbr := InitECandidate.Solver.GuestUniformClockBound.evaluate_noTopBreak body hnb (decClockHOLFinite st)
+          have hco := InitECandidate.Solver.PanRunBounded.evaluate_noTopContinue body hnc (decClockHOLFinite st)
+          rcases hrun : evaluateHOLFiniteState (decClockHOLFinite st) body with ⟨r, mid⟩
+          rw [hrun] at he hm hclk hbr hco
+          cases r with
+          | none =>
+            have hmid := hb.run (decClockHOLFinite st) hc
+              ⟨⟨⟨phase2_packed_iteration_guard_pre _ hd.1 (hguard.mp hnz), hd.2⟩, hp.1.2⟩, hf⟩
+              (by rw [hrun]; simp) (by rw [hrun])
+            rw [hrun] at hmid
+            exact ih mid.clock (by change mid.clock ≤ st.clock - 1 at hclk; omega)
+              mid rfl (hm.trans hc) hmid he
+          | some r => cases r <;> simp_all
+      · rename_i hz
+        simp at he
+        obtain ⟨_, rfl⟩ := he
+        exact ⟨⟨hp.1, (phase2_packed_separated_inner_exit hp.1.1.1.2.1
+          (fun hlt => hz (hguard.mpr hlt))).1⟩, hp.2⟩
+    · simp at he
+
+theorem phase2_packed_source_inner_tail_live_hoare (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (fun s => PtxPackedNsNalIteration s ∧ PtxPackedLiveFrame buffer contents s)
+      phase2_packed_source_inner_tail
+      (fun r s => r = none → PtxPackedNalIteration s ∧ PtxPackedLiveFrame buffer contents s) := by
+  apply Hoare.seq_fall (phase2_packed_live_inner_while buffer contents
+    (phase2_packed_body_live_iteration_hoare h _ _ buffer contents) rfl rfl)
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨phase2_packed_ns_nal_outer_increment_hoare.run s hc hp.1 hnt hr,
+    (phase2_packed_live_frame_assign buffer contents (ofString "i") _
+      (by decide) (by decide) (by decide)).run s hc hp.2 hnt hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
