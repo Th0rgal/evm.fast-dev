@@ -5872,4 +5872,120 @@ theorem htab_union_into_bs_world_spec :
   exact unionExit_worldStepSc_nonValue hW hbe hnon he.toUnionExit
     (fun i hi => (he.2.2.2.2.2.1 i hi).2)
 
+private theorem union_noCatchableRaise_mono {g1 g2 : MlS → Bool}
+    (himp : ∀ f, g1 f = true → g2 f = true) :
+    ∀ p : ProgHOL 64, noCatchableRaise g1 p = true → noCatchableRaise g2 p = true
+  | .skip, _ | .«break», _ | .«continue», _ | .annot _ _, _ | .«return» _, _
+  | .assign _ _ _, _ | .store _ _, _ | .storeByte _ _, _ | .store32 _ _, _
+  | .shMemStore _ _ _, _ | .extCall _ _ _ _ _, _ | .primitive _ _ _, _ => rfl
+  | .raise _ _, hp => hp
+  | .dec _ _ _ b, hp => union_noCatchableRaise_mono himp b hp
+  | .seq a b, hp | .ite _ a b, hp => by
+      simp only [noCatchableRaise, Bool.and_eq_true] at hp ⊢
+      exact ⟨union_noCatchableRaise_mono himp a hp.1,
+        union_noCatchableRaise_mono himp b hp.2⟩
+  | .while _ b, hp => union_noCatchableRaise_mono himp b hp
+  | .decCall _ _ fn _ cont, hp => by
+      simp only [noCatchableRaise, Bool.and_eq_true] at hp ⊢
+      exact ⟨himp fn hp.1, union_noCatchableRaise_mono himp cont hp.2⟩
+  | .call tail fn _, hp => by
+      rcases tail with _ | ⟨_, hdl⟩
+      · simp [noCatchableRaise] at hp
+      · rcases hdl with _ | _
+        · exact himp fn hp
+        · simp [noCatchableRaise] at hp
+  | .shMemLoad _ _ _ _, hp => by simp [noCatchableRaise] at hp
+
+private def unionTrapCallees (f : MlS) : Bool :=
+  trapOnlyCallees f || f == ofString "htab_item"
+
+private theorem unionTrapCallees_good :
+    ∀ f, unionTrapCallees f = true → ∀ values body callee rs,
+      lookupCodeHOLFinite originalRuntimeCode.lookup f values = some (body, callee, rs) →
+      noCatchableRaise unionTrapCallees body = true := by
+  intro f hf values body callee rs hfound
+  simp only [unionTrapCallees, Bool.or_eq_true, beq_iff_eq] at hf
+  rcases hf with hf | rfl
+  · exact union_noCatchableRaise_mono (fun g hg => by simp [unionTrapCallees, hg])
+      body (trapOnlyCallees_good f hf values body callee rs hfound)
+  · obtain ⟨_, _, hinst⟩ := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed hfound
+    rw [lookup_htab_item_bal] at hinst
+    rw [← (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1]
+    decide
+
+theorem htab_union_into_no_catchable_exn {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hcode : s.code = originalRuntimeCode) (e : MlS) (v : ValueHOL 64)
+    (hne : e ≠ ofString "TrapErr") :
+    (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_union_into)).1 ≠
+      some (.exception e v) :=
+  evaluate_noCatchableRaise unionTrapCallees unionTrapCallees_good
+    (sourceFnBody Guest.Software.guestFn_htab_union_into) (by decide) s hcode e v hne
+
+/-- The ordinary block-table union frame also covers all resumable exits. -/
+theorem wkSc_htab_union_into_bs :
+    WorldKeepsSc (fun s => WorldOK s ∧ ∃ k, k ∈ [8, 16, 24, 40, 48] ∧
+      globN s "bs" ≠ 0 ∧ locN s "dst" = memW s (globN s "bs" + k) ∧
+      locN s "dst" ≠ 0)
+      (bufRegions []) ["heap_ptr"] stdKeep NoExtra (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := htab_union_into_bs_world_spec
+  have hbody : body = sourceFnBody Guest.Software.guestFn_htab_union_into := by
+    rw [HtabUnionInto.lookup_htab_union_into] at hl
+    exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj hl)).2).1.symm
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  rcases hres with ⟨v, hv⟩ | ⟨e, v, he, hne⟩
+  · exact hb s hc hP hex hnt v hv
+  · exfalso
+    exact htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody])
+
+/-- Lift a callee world frame whose extra precondition is established at call entry. -/
+theorem progWStep_call0_of_entry {B : BufList} {gw : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)}
+    (hf : WorldKeepsSc P (bufRegions B) gw stdKeep NoExtra fname)
+    (hentry : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      s.code = originalRuntimeCode → WorldOK s → ∀ vs body callee ret,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some vs →
+      lookupCodeHOLFinite s.code.lookup fname vs = some (body, callee, ret) →
+      P (callEntryStateHOLFinite s callee)) :
+    ProgWStep B gw (.call (some (none, none)) fname args) := by
+  intro F s hc hW hnt hfr
+  rw [evaluateHOLFiniteState_call] at hnt hfr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vs
+  · simp [evalListHOLFinite, ha] at hfr; exact absurd hfr not_flowingOrResumes_error
+  · simp only [evalListHOLFinite, ha] at hnt hfr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fname vs with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hfr; exact absurd hfr not_flowingOrResumes_error
+    · simp only [hl] at hnt hfr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · rw [if_neg hz] at hnt hfr ⊢
+        have hP := hentry s hc hW vs body callee ret
+          (by rwa [evalListHOLFinite_eq_toExact]) hl
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [hr] at hnt hfr ⊢
+        have hnc : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body).1 ≠
+            some .timeOut := by rw [hr]; rintro rfl; simp at hnt
+        have hs := FunSpec.at_lookup hf s hc vs body callee ret hl hP hnc
+        rw [hr] at hs
+        cases res with
+        | none => exact absurd hfr not_flowingOrResumes_error
+        | some cr =>
+          cases cr with
+          | timeOut => simp at hnt
+          | error | «break» | «continue» => exact absurd hfr not_flowingOrResumes_error
+          | finalFfi _ => exact absurd hfr not_flowingOrResumes_finalFfi
+          | returned v =>
+            dsimp only at hfr ⊢
+            split
+            · exact (hs (Or.inl ⟨v, rfl⟩)).from_entry
+            · rename_i hbad; simp [hbad] at hfr; exact absurd hfr not_flowingOrResumes_error
+          | exception eid ev =>
+            dsimp only at hfr ⊢
+            have hres : Resumes (some (.exception eid ev)) := by
+              rcases hfr with h | h | h | h <;> try simp at h
+              exact h
+            exact (hs hres).from_entry
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
