@@ -2674,6 +2674,204 @@ theorem stable_backing_allocated {F : Type} {s post : PanSemStateFiniteExact 64 
   rw [hround] at hi hw
   exact ⟨halign, Or.inl ⟨hA.1.trans hi.1, hi.2⟩, hw⟩
 
+theorem lst_new_stable_backing_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    let p := memW resumed (locN resumed "stable_logs")
+    p % 8 = 0 ∧ Allocated resumed (p, 8 * locN resumed "stable_log_cap") ∧
+      WordsOK resumed (p, 8 * locN resumed "stable_log_cap") := by
+  obtain ⟨w, rfl, _, hb, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hb' := stable_backing_allocated
+    (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hb
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN,
+    show ofString "stable_logs" ≠ ofString "stable_log_cap" from by decide] using hb'
+
+def Phase4StableStorageReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableAllocated s ∧
+    memW s (locN s "stable_logs" + 16) = locN s "stable_log_cap" ∧
+    let p := memW s (locN s "stable_logs")
+    p % 8 = 0 ∧ Allocated s (p, 8 * locN s "stable_log_cap") ∧
+      WordsOK s (p, 8 * locN s "stable_log_cap")
+
+theorem lst_new_stable_storage_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableStorageReady (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  obtain ⟨hp', hcap⟩ := lst_new_stable_capacity_resume h s vs body callee ret v post hc hp ha hl hr
+  exact ⟨hp', hcap, lst_new_stable_backing_resume h s vs body callee ret v post hc hp ha hl hr⟩
+
+theorem phase4StableAllocation_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4StableCapReady
+      (spinePlug 1 (spineAt 132 ptxCode) tail) (K.lst_new + b + 1) := by
+  unfold ptxCode
+  refine TerminatingProgBoundedOn.decCall_on h.fb_lst_new _ _ _ ?_ ?_ htail
+  · intro F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1.1.1.1
+  · intro F s vs body callee ret v post hc hp ha hl hr
+    exact lst_new_stable_storage_resume h s vs body callee ret v post hc hp ha hl hr
+
+theorem phase4StableSetup_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 3 (spineAt 130 ptxCode) tail) (K.lst_new + b + 1) := by
+  have hb := @phase4StableCap_cut _ _ (phase4StableAllocation_cut h htail)
+  have he : spinePlug 3 (spineAt 130 ptxCode) tail =
+      spinePlug 2 (spineAt 130 ptxCode)
+        (spinePlug 1 (spineAt 132 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem phase4ThroughStableSetup_cut (h : PtxCallees)
+    (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8])
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableStorageReady tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 34 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + ((K.lst_new + 1) +
+        (K.encode_receipt + ((2 ^ 64 + 1) * ((K.lst_push + 1) + 1) +
+          (K.lst_new + b + 1)) + 1))) := by
+  have hb := @phase4ThroughLogCopy_cut h hresume _ _ (phase4StableSetup_cut h htail)
+  have he : spinePlug 34 (spineAt 99 ptxCode) tail =
+      spinePlug 31 (spineAt 99 ptxCode) (spinePlug 3 (spineAt 130 ptxCode) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+theorem stable_storage_length_fits {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s) :
+    locN s "nl" ≤ memW s (locN s "stable_logs" + 16) ∧
+      8 * locN s "nl" < 2 ^ 64 ∧
+      ∀ i : Nat, i < locN s "nl" →
+        WordAt s (memW s (locN s "stable_logs") + 8 * i) := by
+  have hb := phase4StableCap_bounds s hp.1.1
+  refine ⟨by rw [hp.2.1]; exact hb.2.1, ?_, ?_⟩
+  · exact lt_of_le_of_lt (Nat.mul_le_mul_left 8 hb.2.1) hb.2.2
+  · intro i hi
+    have hw := hp.2.2.2.2
+    apply hw.2.2 i
+    have hic : i < locN s "stable_log_cap" := lt_of_lt_of_le hi hb.2.1
+    simpa using hic
+
+theorem lst_new_stable_header_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    let resumed := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
+    WordsOK resumed (locN resumed "stable_logs", 24) ∧
+      Allocated resumed (locN resumed "stable_logs", 24) := by
+  obtain ⟨w, rfl, hh, _⟩ :=
+    lst_new_stable_fresh h s vs body callee ret v post hc hp ha hl hr
+  have hi : Inside (w.toNat, 24) sourceBase (globN post "heap_ptr") :=
+    ⟨(worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2.1.trans hh.2.1.1, hh.2.1.2⟩
+  have hw : WordsOK post (w.toNat, 24) := hh.2.2
+  have ho : Allocated post (w.toNat, 24) := Or.inl hi
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    Allocated, WordsOK, WordAt, globN] using And.intro hw ho
+
+theorem stable_length_field_word {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hh : WordsOK s (locN s "stable_logs", 24)) :
+    WordAt s (locN s "stable_logs" + 8) := by
+  have hw := hh.2.2 1 (by norm_num)
+  simpa using hw
+
+theorem stable_length_address_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24)) :
+    locN s "stable_logs" + 8 < 2 ^ 64 ∧
+      (BitVec.ofNat 64 (locN s "stable_logs") + (8 : BitVec 64)).toNat =
+        locN s "stable_logs" + 8 := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have hlt : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  refine ⟨hlt, ?_⟩
+  have hl : locN s "stable_logs" < 2 ^ 64 := by omega
+  simp only [BitVec.toNat_add, BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt hl, show (8 : BitVec 64).toNat = 8 from rfl,
+    Nat.mod_eq_of_lt hlt]
+
+theorem stable_length_store_value {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : Phase4StableStorageReady s)
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) =
+      .word (BitVec.ofNat 64 (locN s "nl"))) :
+    memW {s with memory := mem'} (locN s "stable_logs" + 8) = locN s "nl" := by
+  have hb := (stable_storage_length_fits s hp).2.1
+  have hn : locN s "nl" < 2 ^ 64 := by omega
+  change (valueWord (.val (mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8))))).toNat = _
+  rw [hm]
+  exact Nat.mod_eq_of_lt hn
+
+theorem stable_length_store_header_unchanged {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hA : ArenaOK s)
+    (hh : Allocated s (locN s "stable_logs", 24))
+    (mem' : BitVec 64 → HolWordLab 64)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a) :
+    memW {s with memory := mem'} (locN s "stable_logs") = memW s (locN s "stable_logs") ∧
+    memW {s with memory := mem'} (locN s "stable_logs" + 16) =
+      memW s (locN s "stable_logs" + 16) := by
+  have hb := (ivl_allocated_bound hA hh).2
+  have h0 : locN s "stable_logs" < 2 ^ 64 := by dsimp at hb; omega
+  have h8 : locN s "stable_logs" + 8 < 2 ^ 64 := by dsimp at hb; omega
+  have h16 : locN s "stable_logs" + 16 < 2 ^ 64 := by dsimp at hb; omega
+  have hn0 : BitVec.ofNat 64 (locN s "stable_logs") ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h0, Nat.mod_eq_of_lt h8] at he'
+    omega
+  have hn16 : BitVec.ofNat 64 (locN s "stable_logs" + 16) ≠
+      BitVec.ofNat 64 (locN s "stable_logs" + 8) := by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    simp only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h16, Nat.mod_eq_of_lt h8] at he'
+    omega
+  constructor <;> simp only [memW]
+  · rw [hm _ hn0]
+  · rw [hm _ hn16]
+
+theorem stable_length_store_words {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (w : BitVec 64)
+    (he : mem' (BitVec.ofNat 64 (locN s "stable_logs" + 8)) = .word w)
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    {i : Ivl} (hi : WordsOK s i) : WordsOK {s with memory := mem'} i := by
+  refine ⟨hi.1, hi.2.1, ?_⟩
+  intro k hk
+  obtain ⟨v, hd, hv⟩ := hi.2.2 k hk
+  by_cases ha : BitVec.ofNat 64 (i.1 + 8 * k) =
+      BitVec.ofNat 64 (locN s "stable_logs" + 8)
+  · exact ⟨w, hd, by change mem' _ = _; rw [ha, he]⟩
+  · exact ⟨v, hd, (hm _ ha).trans hv⟩
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
