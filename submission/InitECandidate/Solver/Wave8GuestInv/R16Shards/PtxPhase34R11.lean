@@ -3534,6 +3534,23 @@ theorem stable_copy_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
   exact memW_eq_of_ivlUnhit hu (by omega) (ivl_allocated_bound hA ha).2
     ⟨by dsimp; omega, by dsimp; omega⟩
 
+/-- The stable length write preserves each source pointer cell, enabling
+record separation to be transported into the copy-loop entry state. -/
+theorem stable_length_source_cells {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (mem' : BitVec 64 → HolWordLab 64) (src n : Nat)
+    (hA : ArenaOK s) (hh : Allocated s (locN s "stable_logs", 24))
+    (ha : Allocated s (src, 8 * n)) (hal : src % 8 = 0)
+    (hd : Disj (src, 8 * n) (locN s "stable_logs", 24))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) →
+      mem' a = s.memory a) :
+    ∀ j, j < n → memW {s with memory := mem'} (src + 8 * j) =
+      memW s (src + 8 * j) := by
+  apply stable_copy_source_cells s mem' src n _ hA ha hal _ hm
+  apply disj_of_inside_right _ hd
+  rw [BitVec.toNat_ofNat,
+    Nat.mod_eq_of_lt (stable_length_address_bound s hA hh).1]
+  constructor <;> dsimp <;> omega
+
 /-- Specialize source-array framing to the current stable-copy write. -/
 theorem stableCopyInv_source_preserved {F : Type} (s : PanSemStateFiniteExact 64 F)
     (mem' : BitVec 64 → HolWordLab 64) (hp : StableCopyInv s)
