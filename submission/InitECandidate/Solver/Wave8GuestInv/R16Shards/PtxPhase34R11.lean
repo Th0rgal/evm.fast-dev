@@ -10366,4 +10366,54 @@ theorem lst_new_stable_txBacking_resume :
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- A word write in a region separated from the fixed objects retains backing.
+This exposes the spatial premise used by the stable length and copy writes. -/
+theorem txBacking_store_disjoint_fixed {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hW : TxWorld s) (hback : TxBacking s) {i : Ivl} {x : BitVec 64}
+    (hx : i.1 ≤ x.toNat ∧ x.toNat + 8 ≤ i.1 + i.2)
+    (hd : ∀ j ∈ fixedObjects s, Disj i j)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxBacking {s with memory := mem'} := by
+  obtain ⟨S, hWT⟩ := hW.1.2
+  have hb := bo_words hWT.2.2.1 hW.2.bo_nz
+  have hbnd := (ivl_allocated_bound hW.1.1.2 hb.1).2
+  have hbo : (globN s "bo", 88) ∈ fixedObjects s := by
+    have hh := typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+    simpa only [hW.2.bo_nz, ↓reduceIte] using hh
+  have hh : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_right
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo40]
+    · simp [blockOutObjects, hW.2.bo_nz, hW.2.bo72]
+  apply txBacking_store hback hm
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hk' : k = 40 ∨ k = 72 := by simpa using hk
+    have hlt : globN s "bo" + k < 2 ^ 64 := by dsimp at hbnd; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hdis := hd _ hbo
+    unfold Disj at hdis
+    dsimp at hdis
+    omega
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hal := (hWT.2.2.1.1 _ (hh k hk)).resolve_left (by simp)
+    have hbound := (ivl_allocated_bound hW.1.1.2 hal.1).2
+    have hlt : memW s (globN s "bo" + k) < 2 ^ 64 := by dsimp at hbound; omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt] at ht
+    have hdis := hd _ (hh k hk)
+    unfold Disj at hdis
+    dsimp at hdis
+    omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
