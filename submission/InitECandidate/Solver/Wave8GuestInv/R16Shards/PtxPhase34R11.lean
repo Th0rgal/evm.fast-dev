@@ -59,6 +59,60 @@ theorem ptxPhase4LocalShapes_resume {F : Type}
 namespace PtxP34
 open PtxP1
 
+/-- Reassemble the log-list invariant from preservation of the header, live
+pointer cells and individual log records. This isolates the memory obligations
+of the two ether-creation calls from the list invariant itself. -/
+theorem logsListOK_congr_live {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {logs : Nat} (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (h : LogsListOK s logs)
+    (halloc : Allocated s (logs, 24) → Allocated post (logs, 24))
+    (hhead : ∀ k ∈ ([0, 8, 16] : List Nat),
+      memW post (logs + k) = memW s (logs + k))
+    (hptr : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i))
+    (hentry : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40)) :
+    LogsListOK post logs := by
+  rcases h with hz | ⟨hw, ha, hn, hc, he⟩
+  · exact Or.inl hz
+  have h0 : memW post logs = memW s logs := by simpa using hhead 0 (by simp)
+  have h8 := hhead 8 (by simp)
+  have h16 := hhead 16 (by simp)
+  refine Or.inr ⟨R13Shards.wordsOK_transfer hgS hgP hw, halloc ha, ?_, ?_, ?_⟩
+  · rw [h8]; exact hn
+  · rw [h8, h16]; exact hc
+  · intro i hi
+    rw [h8] at hi
+    rw [h0, hptr i hi]
+    exact ⟨R13Shards.wordAt_transfer hgS hgP (he i hi).1,
+      R13Shards.logEntryOK_congr_unhit hAs hgS hgP hhp (he i hi).2 (hentry i hi)⟩
+
+theorem logsListOK_congr_header_unhit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {logs : Nat}
+    (hAs : ArenaOK s) (hgS : GuestInv s) (hgP : GuestInv post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (h : LogsListOK s logs)
+    (halloc : Allocated s (logs, 24) → Allocated post (logs, 24))
+    (hhead : IvlUnhit s post (logs, 24))
+    (hptr : ∀ i, i < memW s (logs + 8) →
+      memW post (memW s logs + 8 * i) = memW s (memW s logs + 8 * i))
+    (hentry : ∀ i, i < memW s (logs + 8) →
+      IvlUnhit s post (memW s (memW s logs + 8 * i), 40)) :
+    LogsListOK post logs := by
+  rcases h with hz | hl
+  · exact Or.inl hz
+  apply logsListOK_congr_live hAs hgS hgP hhp (Or.inr hl) halloc _ hptr hentry
+  intro k hk
+  have h8 := hl.1.1
+  have hb := (R13Shards.ivl_allocated_bound hAs hl.2.1).2
+  apply R13Shards.memW_eq_of_ivlUnhit hhead
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl <;> omega
+  · exact hb
+  · simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl | rfl <;> (constructor <;> omega)
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
