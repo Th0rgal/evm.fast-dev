@@ -3143,7 +3143,7 @@ def StableCopyInv : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
     WordsOK s (locN s "stable_logs", 24) ∧
     Allocated s (locN s "stable_logs", 24) ∧
     locN s "nl" ≤ locN s "stable_log_cap" ∧
-    ∀ i, i < locN s "j" → i < locN s "nl" →
+    ∀ i, i < locN s "i" → i < locN s "nl" →
       memW s (memW s (locN s "stable_logs") + 8 * i) =
         memW s (memW s (locN s "logs") + 8 * i)
 
@@ -3152,21 +3152,21 @@ theorem stableCopyInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hh : WordsOK s (locN s "stable_logs", 24))
     (ha : Allocated s (locN s "stable_logs", 24))
     (hcap : locN s "nl" ≤ locN s "stable_log_cap")
-    (hj : locN s "j" = 0) : StableCopyInv s := by
+    (hj : locN s "i" = 0) : StableCopyInv s := by
   refine ⟨hp, hn, hh, ha, hcap, ?_⟩
   intro i hi _
   omega
 
 theorem stableCopyInv_source_word {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (hp : StableCopyInv s) (hj : locN s "j" < locN s "nl") :
-    WordAt s (locN s "lp" + 8 * locN s "j") ∧
-      LogEntryOK s (memW s (locN s "lp" + 8 * locN s "j")) := by
+    (hp : StableCopyInv s) (hj : locN s "i" < locN s "nl") :
+    WordAt s (locN s "lp" + 8 * locN s "i") ∧
+      LogEntryOK s (memW s (locN s "lp" + 8 * locN s "i")) := by
   have hl := hp.1.2.1.resolve_left hp.2.1
   rw [hp.1.2.2.2.2.1]
-  exact hl.2.2.2.2 (locN s "j") (by rw [← hp.1.2.2.2.1]; exact hj)
+  exact hl.2.2.2.2 (locN s "i") (by rw [← hp.1.2.2.2.1]; exact hj)
 
 theorem stableCopyInv_exit {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "j") :
+    (hp : StableCopyInv s) (hexit : locN s "nl" ≤ locN s "i") :
     PtxReceiptsDone s := by
   obtain ⟨hp, hn, hh, ha, hcap, hcopy⟩ := hp
   exact stable_copy_complete s hp hn hh ha hcap
