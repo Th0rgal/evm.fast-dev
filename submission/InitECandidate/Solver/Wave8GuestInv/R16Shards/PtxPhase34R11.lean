@@ -9763,4 +9763,55 @@ theorem resume_pmc_backing (hkeep : PmcBackingStrong) :
   rw [hb] at hk
   exact hk v rfl
 
+namespace PtxP34
+
+/-- Block-total stores preserve both nested backing words: the list headers
+are disjoint from the block-output record by fixed-object separation. -/
+theorem txAfterCallBackingStrong_store_bo {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : TxAfterCallBackingStrong s) {off : Nat} (hoff : off ∈ ([0, 8, 16, 48] : List Nat))
+    {x : BitVec 64} (hx : s.memaddrs x) (hxe : x.toNat = globN s "bo" + off)
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    TxAfterCallBackingStrong {s with memory := mem'} := by
+  refine ⟨txAfterCallStrong_store_bo h.1 hoff hx hxe hm, ?_⟩
+  obtain ⟨S, Nd, hW, _⟩ := h.1.2.2.2.2
+  have hE := h.1.1.2
+  have hA := h.1.1.1.1
+  obtain ⟨_, _, hgb_rest, _, _⟩ := fixedObjects_disj_parts hW.2.2.1
+  have hbo_hi := (ivl_allocated_bound hA.2 (bo_words hW.2.2.1 hE.bo_nz).1).2
+  have hbo_gbs : (globN s "bo", 88) ∈
+      (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) :=
+    List.mem_map.2 ⟨("bo", 88), by decide, by simp [hE.bo_nz]⟩
+  apply txBacking_store h.2 hm
+  · intro k hk heq
+    have ht := congrArg BitVec.toNat heq
+    have hb : globN s "bo" + k < 2 ^ 64 := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      dsimp at hbo_hi
+      rcases hk with rfl | rfl <;> omega
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb, hxe] at ht
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk hoff
+    rcases hk with rfl | rfl <;> rcases hoff with rfl | rfl | rfl | rfl <;> omega
+  · intro k hk heq
+    have hd : Disj (globN s "bo", 88) (memW s (globN s "bo" + k), 24) := by
+      apply hgb_rest _ hbo_gbs
+      apply List.mem_append_left
+      apply List.mem_append_right
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+      rcases hk with rfl | rfl
+      · simp [blockOutObjects, hE.bo_nz, hE.bo40]
+      · simp [blockOutObjects, hE.bo_nz, hE.bo72]
+    have ht := congrArg BitVec.toNat heq
+    have hb : memW s (globN s "bo" + k) < 2 ^ 64 := by
+      unfold memW
+      split
+      rename_i w hw
+      exact w.isLt
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb, hxe] at ht
+    unfold Disj at hd
+    dsimp at hd
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hoff
+    rcases hoff with rfl | rfl | rfl | rfl <;> omega
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
