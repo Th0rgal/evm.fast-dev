@@ -4990,4 +4990,55 @@ theorem phase2_packed_copy_world_destinations {F : Type} {s : PanSemStateFiniteE
   exact ⟨disj_of_inside_right hr.1 (disj_symm hsep),
     disj_of_inside_right hr.2 (disj_symm hsep)⟩
 
+/-- Backing cells touched by packed copies remain inside the rounded allocation. -/
+theorem phase2_packed_copy_cell_inside (base count k offset : Nat)
+    (hal : base % 8 = 0) (hk : k < count) (ho : offset < 52) :
+    Inside ((base + 52 * k + offset) / 8 * 8, 8) base
+      (base + (count * 52 + 8 + 7) / 8 * 8) := by
+  constructor <;> dsimp <;> omega
+
+/-- Copying bytes cannot invalidate packed-buffer backing words when the domain is retained. -/
+theorem phase2_packed_keys_words_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (base count : Nat)
+    (hw : WordsOK s (base, (count * 52 + 8 + 7) / 8 * 8))
+    (hd : ∀ a, s.memaddrs a → post.memaddrs a) :
+    WordsOK post (base, (count * 52 + 8 + 7) / 8 * 8) := by
+  refine ⟨hw.1, hw.2.1, ?_⟩
+  intro k hk
+  obtain ⟨w, ha, _⟩ := hw.2.2 k hk
+  cases hm : post.memory (BitVec.ofNat 64 (base + 8 * k)) with
+  | word v => exact ⟨v, hd _ ha, hm⟩
+
+/-- Successful evaluation of a bounded scalar increment gives its exact natural successor. -/
+theorem phase2_copy_increment_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (name : String) (v : ValueHOL 64) (hb : locN s name + 1 < 2 ^ 64)
+    (he : evalAt s (.op .add [.var .local (ofString name), .const 1]) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = locN s name + 1 := by
+  cases hl : s.locals.lookup (ofString name) with
+  | none => simp [evalAt, evalHOLExact, evalListHOLExact, hl] at he
+  | some u =>
+    rcases u with ⟨⟨w⟩⟩ | fs | ⟨nm, fs⟩
+    · have hv : v = .val (.word (w + 1)) := by
+        simpa [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord, valueWord,
+          wordOpHOL, wordOp] using he.symm
+      refine ⟨w + 1, hv, ?_⟩
+      have hn : locN s name = w.toNat := by simp [locN, hl]
+      rw [hn] at hb ⊢
+      change (w.toNat + 1) % 2 ^ 64 = w.toNat + 1
+      exact Nat.mod_eq_of_lt hb
+    · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
+    · simp [evalAt, evalHOLExact, evalListHOLExact, hl, valueIsWord] at he
+
+/-- The flattened-counter assignment retains the packed allocation facts. -/
+theorem phase2_packed_copy_increment_k_hoare :
+    Hoare PtxPackedCopyIndex
+      (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+      (fun r s => r = none → PtxPackedKeysReady s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v
+      (phase2_packed_copy_counter_bounds hp).1 he
+    exact fun _ => phase2_packed_keys_set_other s hp.1 _ _ (by decide)
+  · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
