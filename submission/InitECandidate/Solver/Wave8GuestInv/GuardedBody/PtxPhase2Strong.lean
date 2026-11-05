@@ -78,4 +78,31 @@ theorem phase1_resume_min_word (h : PtxCallees) :
   refine ⟨hstage, w, ?_⟩
   simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Shape facts concern only caller locals and therefore survive calls whose
+memory/world postconditions are proved separately. -/
+theorem ptxPhase2LocalShapes_restore {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (h : PtxPhase2LocalShapes s) :
+    PtxPhase2LocalShapes { post with locals := s.locals } := by
+  exact ⟨h.scalar, h.price, h.enc, h.intrinsic⟩
+
+theorem ptxPhase2LocalShapes_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (h : PtxPhase2LocalShapes s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["tx", "index", "sender", "mgas", "reservoir", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxPhase2LocalShapes (setVarHOLFinite name v s) := by
+  apply ptxPhase2LocalShapes_with_locals s _ s.clock _ h
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- The scalar gas witness survives the caller-local restoration at every
+subsequent call, including the balance-return assignment. -/
+theorem phase1_mgas_word_resume {F : Type} (s post : PanSemStateFiniteExact 64 F)
+    (h : ∃ w : BitVec 64, s.locals.lookup (ofString "mgas") = some (.val (.word w)))
+    (name : MlS) (v : ValueHOL 64) (hne : name ≠ ofString "mgas") :
+    ∃ w : BitVec 64,
+      (setVarHOLFinite name v { post with locals := s.locals }).locals.lookup (ofString "mgas") =
+        some (.val (.word w)) := by
+  obtain ⟨w, hw⟩ := h
+  exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hw⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
