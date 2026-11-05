@@ -5718,4 +5718,48 @@ theorem merge_bs_table_role {F : Type} {s : PanSemStateFiniteExact 64 F}
     apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" _ _ hbs hnz
     simp [recRoles, hbs]
 
+/-- Ordinary merge destinations cannot alias any value-owning table. -/
+theorem merge_bs_table_nonValue {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hT : TablesTyped s S) {k : Nat}
+    (hk : k ∈ [8, 16, 24, 40, 48]) (hbs : globN s "bs" ≠ 0)
+    (hnz : memW s (globN s "bs" + k) ≠ 0) :
+    let t := memW s (globN s "bs" + k)
+    t ∈ S ∧ (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ t) ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ t) ∧
+      globN s "bal_accounts" ≠ t ∧ (∀ ad ∈ balRecords s, memW s ad ≠ t) ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ t) := by
+  obtain ⟨ht, role, hr, hb, hts, hba, hstor, hws⟩ := merge_bs_table_role hT hk hbs hnz
+  have hroles := hT.2.2.2.2.2.2.2.2.2.2.2
+  have hne : ∀ u label, (u, label) ∈ worldRoleSlots s → role ≠ label →
+      u ≠ memW s (globN s "bs" + k) := by
+    intro u label hu hlabel
+    exact (R16WkMarkAccountCreated.slot_ne_of_diff_nonshared_role hroles hr hu hlabel).symm
+  refine ⟨ht, ?_, ?_, ?_, ?_, ?_⟩
+  · intro hb0 heq
+    apply hne _ "bs+32" ?_ hb heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "bs" 32 _ hb0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hb0]
+  · intro ht0 heq
+    apply hne _ "ts+32" ?_ hts heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ts" 32 _ ht0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, ht0]
+  · intro heq
+    apply hne _ "bal_accounts" ?_ hba heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    simp
+  · intro ad had heq
+    apply hne _ "bal.stor" ?_ hstor heq
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [heq, hnz]⟩
+    apply List.mem_append.2; right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp⟩
+  · intro hw0 heq
+    apply hne _ "ws+32" ?_ hws heq
+    apply R16WkMarkAccountCreated.mem_worldRoleSlots_recRole s "ws" 32 _ hw0
+      (by rw [heq]; exact hnz)
+    simp [recRoles, hw0]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
