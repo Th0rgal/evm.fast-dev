@@ -2854,4 +2854,129 @@ theorem Hoare.seq_assoc_fall
   rw [← heq] at hnt ⊢
   exact h.run s hc hp hnt
 
+theorem eval_seq_assoc_six {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c d e f : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq a (.seq (.seq b (.seq c d)) (.seq e f))) =
+      evaluateHOLFiniteState s (.seq a (.seq b (.seq c (.seq d (.seq e f))))) := by
+  have ht : ∀ t : PanSemStateFiniteExact 64 F,
+      evaluateHOLFiniteState t (.seq (.seq b (.seq c d)) (.seq e f)) =
+        evaluateHOLFiniteState t (.seq b (.seq c (.seq d (.seq e f)))) := by
+    intro t
+    rw [srd_eval_seq_assoc]
+    conv_lhs => rw [evaluateHOLFiniteState_seq_line780]
+    conv_rhs => rw [evaluateHOLFiniteState_seq_line780]
+    rcases evaluateHOLFiniteState t b with ⟨r, u⟩
+    cases r with
+    | none => exact srd_eval_seq_assoc u c d (.seq e f)
+    | some _ => rfl
+  conv_lhs => rw [evaluateHOLFiniteState_seq_line780]
+  conv_rhs => rw [evaluateHOLFiniteState_seq_line780]
+  rcases evaluateHOLFiniteState s a with ⟨r, t⟩
+  cases r with
+  | none => exact ht t
+  | some _ => rfl
+
+/-- The delegated message tail in the right-associated shape emitted by the
+source translator. -/
+theorem hoare_prepare_dispatch_delegated_msg_tail_source (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    (code code_n daddr : BitVec 64) :
+    Hoare (fun s => D0Pre gw hp G ch s ∧
+      s.locals.lookup (ofString "dcode") = some (.rStruct [.val (.word code), .val (.word code_n)]) ∧
+      s.locals.lookup (ofString "daddr") = some (.val (.word daddr)))
+      (.seq (.assign .local (ofString "code") (.rfield 0 (.var .local (ofString "dcode"))))
+        (.seq (.assign .local (ofString "code_n") (.rfield 1 (.var .local (ofString "dcode"))))
+          (.seq (.store (.op .add [.var .local (ofString "msg"), .const 168]) (.const 1))
+            (.seq (.store (.op .add [.var .local (ofString "msg"), .const 104])
+                (.var .local (ofString "daddr")))
+              (.seq (.store (.op .add [.var .local (ofString "msg"), .const 112])
+                  (.var .local (ofString "code")))
+                (.store (.op .add [.var .local (ofString "msg"), .const 120])
+                  (.var .local (ofString "code_n"))))))))
+      (Fall (fun s => D0Pre gw hp G ch s ∧
+        s.locals.lookup (ofString "code") = some (.val (.word code)) ∧
+        s.locals.lookup (ofString "code_n") = some (.val (.word code_n)))) := by
+  have h := Hoare.seq_assoc_fall
+    (hoare_prepare_dispatch_delegated_msg_tail gw hp G ch code code_n daddr)
+  refine ⟨fun {F} s hc hp hnt => ?_⟩
+  have hr := h.run s hc hp
+  rw [eval_seq_assoc_six] at hr
+  exact hr hnt
+
+/-- Dispatch's code pointer, length and jump-destination slots do not contribute
+to any frame-owned interval. This bridge exposes the exact unchanged footprint
+needed when transporting the head invariant through those stores. -/
+theorem frameObjects_eq_of_dispatch_slots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (ec : Ivl)
+    (hkeep : ∀ k, k + 8 ≤ 280 → k ∉ ([48, 56, 80] : List Nat) →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 → memW post (memW s (ec.1 + 88) + k) =
+      memW s (memW s (ec.1 + 88) + k))
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec) :
+    frameObjects post ec = frameObjects s ec ∧
+      frameScratch post ec = frameScratch s ec ∧
+      frameRoleSlots post [ec] = frameRoleSlots s [ec] := by
+  have h8 := hkeep 8 (by decide) (by decide)
+  have h24 := hkeep 24 (by decide) (by decide)
+  have h40 := hkeep 40 (by decide) (by decide)
+  have h88 := hkeep 88 (by decide) (by decide)
+  have h232 := hkeep 232 (by decide) (by decide)
+  have hfl : frameLogs post ec = frameLogs s ec := by
+    unfold frameLogs
+    rw [h88]
+    rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hheader 0 (by decide), hheader 16 (by decide)]
+  have hfr : frameRet post ec = frameRet s ec := by
+    unfold frameRet
+    rw [hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide)]
+  refine ⟨?_, ?_, ?_⟩
+  · simp only [frameObjects, h8, h24, h40, h88, h232, hfl, hfr, hlogs]
+  · simp only [frameScratch, h8, h88, h232]
+  · simp only [frameRoleSlots, List.flatMap_cons, List.flatMap_nil, List.append_nil,
+      hkeep 136 (by decide) (by decide), hkeep 168 (by decide) (by decide),
+      hkeep 176 (by decide) (by decide)]
+
+/-- Transport frame well-formedness across the three dispatch slots once the
+owned message and log predicates have been transported. -/
+theorem frameWF_of_dispatch_slots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} {ec : Ivl}
+    (hfw : FrameWF s S ec) (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hg : ∀ name, globN post name = globN s name)
+    (hkeep : ∀ k, k + 8 ≤ 280 → k ∉ ([48, 56, 80] : List Nat) →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hheader : ∀ k, k + 8 ≤ 24 → memW post (memW s (ec.1 + 88) + k) =
+      memW s (memW s (ec.1 + 88) + k))
+    (hlogs : LogsListOK post (memW s (ec.1 + 88)))
+    (hmsg : MsgOwned post S (memW s (ec.1 + 112))) :
+    FrameWF post S ec := by
+  have hfl : frameLogs post ec = frameLogs s ec := by
+    unfold frameLogs
+    rw [hkeep 88 (by decide) (by decide)]
+    rw [show memW post (memW s (ec.1 + 88)) = memW s (memW s (ec.1 + 88)) by
+      simpa only [Nat.add_zero] using hheader 0 (by decide), hheader 16 (by decide)]
+  have hfr : frameRet post ec = frameRet s ec := by
+    unfold frameRet
+    rw [hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide)]
+  obtain ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13,
+    c14, c15, _, _⟩ := hfw
+  unfold FrameWF
+  dsimp only
+  rw [hkeep 8 (by decide) (by decide), hkeep 232 (by decide) (by decide),
+    hkeep 88 (by decide) (by decide), hkeep 24 (by decide) (by decide),
+    hkeep 40 (by decide) (by decide), hkeep 16 (by decide) (by decide),
+    hkeep 32 (by decide) (by decide), hkeep 136 (by decide) (by decide),
+    hkeep 168 (by decide) (by decide), hkeep 176 (by decide) (by decide),
+    hheader 16 (by decide), hheader 8 (by decide), hfl,
+    hkeep 216 (by decide) (by decide), hkeep 144 (by decide) (by decide), hfr,
+    hkeep 112 (by decide) (by decide), hg "scratch_ptr", hg "frame_mem_ptr",
+    hg "heap_ptr", hg "evm_empty"]
+  refine ⟨?_, c2, wordsOK_transfer hAs.1 hAp.1 c3, c4, c5, c6, c7,
+    c8, c9, c10, c11, c12, c13, wordsOK_transfer hAs.1 hAp.1 c14, ?_, hlogs, hmsg⟩
+  · intro i hi
+    obtain ⟨hin, hw⟩ := c1 i hi
+    exact ⟨hin, wordsOK_transfer hAs.1 hAp.1 hw⟩
+  · rcases c15 with hz | ⟨hin, hw⟩
+    · exact Or.inl hz
+    · exact Or.inr ⟨hin, wordsOK_transfer hAs.1 hAp.1 hw⟩
+
 end HeadStore

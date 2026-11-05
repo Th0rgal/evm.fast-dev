@@ -10002,4 +10002,33 @@ theorem phase4CreditTotals_backing_cut (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Loading the live-log pointer retains both block-output backing facts. -/
+theorem phase4ThroughLogs_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn (fun s => Phase4LogsReady s ∧ TxBacking s) tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (spinePlug 21 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hl : TerminatingProgBoundedOn TxAfterCallBackingStrong
+      (.dec (ofString "logs") .one
+        (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) b :=
+    dec_bound_trans (fun s v hp he => ⟨phase4LogsReady_load s v hp.1 he, hp.2⟩) htail
+  have hb := @phase4CreditTotals_backing_cut h hcredit _ _ hl
+  have he : spinePlug 21 (spineAt 99 ptxCode) tail =
+      spinePlug 20 (spineAt 99 ptxCode)
+        (.dec (ofString "logs") .one
+          (.load .one (.op .add [.var .local (ofString "out"), .const 16])) tail) := by
+    unfold ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
