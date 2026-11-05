@@ -6429,4 +6429,35 @@ theorem progWithdrawalStep_while {cond : ExpHOL 64} {body : ProgHOL 64}
       · exact absurd hfr not_flowingOrResumes_error
       · exact absurd hfr not_flowingOrResumes_error
 
+/-- A reusable union entry condition for inner tables as well as ordinary roots. -/
+def UnionNonValueEntry {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ ∀ S, TablesTyped s S → locN s "dst" ∈ S ∧
+    (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "dst") ∧
+    (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "dst") ∧
+    globN s "bal_accounts" ≠ locN s "dst" ∧
+    (∀ ad ∈ balRecords s, memW s ad ≠ locN s "dst") ∧
+    (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "dst")
+
+/-- The union frame depends on destination ownership rather than its root slot. -/
+theorem wkSc_htab_union_into_nonValue :
+    WorldKeepsSc UnionNonValueEntry (bufRegions []) ["heap_ptr"] stdKeep NoExtra
+      (ofString "htab_union_into") := by
+  obtain ⟨params, body, ret, hl, hb⟩ := htab_union_into_provenance_spec
+  have hbody : body = sourceFnBody Guest.Software.guestFn_htab_union_into := by
+    rw [HtabUnionInto.lookup_htab_union_into] at hl
+    exact (Prod.mk.inj (Prod.mk.inj (Option.some.inj hl)).2).1.symm
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hP hex hnt hres
+  rcases hres with ⟨v, hv⟩ | ⟨e, v, he, hne⟩
+  · obtain ⟨hW, hnon⟩ := hP
+    have harg : UnionArgWF s := by
+      obtain ⟨S, hT, _⟩ := hW.2
+      have ht := (hnon S hT).1
+      exact ⟨hW.1, (hT.2.1 _ ht).1, fun i hi => ((hT.2.1 _ ht).2 i hi).1⟩
+    have he := hb s hc harg hex hnt v hv
+    have hbe := (M13.evaluateHOLFiniteState_guestInv_be s body hW.1.1).2
+    exact unionExit_worldStepSc_nonValue hW hbe hnon he.toUnionExit
+      (fun i hi => (he.2.2.2.2.2.1 i hi).2)
+  · exact False.elim (htab_union_into_no_catchable_exn s hc e v hne (by rwa [← hbody]))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
