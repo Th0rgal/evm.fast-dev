@@ -9182,6 +9182,31 @@ theorem icsFrame_unhit {F : Type} {s post : PanSemStateFiniteExact 64 F}
     rw [heq] at hp
     omega
 
+/-- Cell-level success frame, allowing protected alignment cells in the same
+parent record as the gas writes. -/
+theorem icsFrame_memW {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {e L arr cap tw : BitVec 64} (h : ICSFrame s e L arr cap tw post)
+    (hA : ArenaReady s) {i : Ivl} (hi : Allocated s i) {a : Nat}
+    (ha : i.1 ≤ a ∧ a + 8 ≤ i.1 + i.2) (hab : a < 2 ^ 64)
+    (hE : ¬ CellHits a (e.toNat + 64, 136))
+    (hL : ¬ CellHits a (L.toNat, 24))
+    (hAr : ¬ CellHits a (arr.toNat, 8 * cap.toNat))
+    (hT : ∀ j ∈ htabFootprint s tw.toNat, ¬ CellHits a j) :
+    memW post a = memW s a := by
+  apply memW_of
+  apply h.2.2.2.2.2
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hE
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hL
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hAr
+  · simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hT
+  · have hp := h.2.2.1.2.2.1
+    have hs := hA.2.2.2.1
+    have hs' := hA.2.2.2.2.1
+    have heq : heapLimit = scratchStart := rfl
+    rw [heq] at hp
+    simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using
+      noFresh_of_alloc hA.2 hi ha (by omega) h.2.2.2.2.1
+
 end IcsRun
 
 theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
