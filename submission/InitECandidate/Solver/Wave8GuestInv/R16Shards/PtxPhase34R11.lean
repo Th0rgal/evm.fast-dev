@@ -475,6 +475,34 @@ theorem store_seq_returned {F : Type} {s post : PanSemStateFiniteExact 64 F}
       · cases hs'
     · cases hs'
 
+/-- A falling word store leaves the local environment unchanged. -/
+theorem store_fall_locals {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {dst src : ExpHOL 64}
+    (h : evaluateHOLFiniteState s (.store dst src) = (none, post)) :
+    post.locals = s.locals := by
+  rw [evaluateHOLFiniteState_store] at h
+  split at h
+  · split at h
+    · split at h
+      · cases h; rfl
+      · cases h
+    · cases h
+  · cases h
+
+/-- Local preservation composes across falling sequences. -/
+theorem seq_fall_locals {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    {a b : ProgHOL 64}
+    (ha : ∀ mid, evaluateHOLFiniteState s a = (none, mid) → mid.locals = s.locals)
+    (hb : ∀ mid, evaluateHOLFiniteState mid b = (none, post) → post.locals = mid.locals)
+    (hr : evaluateHOLFiniteState s (.seq a b) = (none, post)) :
+    post.locals = s.locals := by
+  rw [evaluateHOLFiniteState_seq_line780] at hr
+  rcases hs : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  rw [hs] at hr
+  cases r with
+  | some r => cases hr
+  | none => exact (hb mid hr).trans (ha mid hs)
+
 /-- A successful ignored-result call restores caller locals. In particular,
 the copy preceding growth stores preserves `np`, `l`, `cap`, and `n`. -/
 theorem ignored_call_fall_locals {F : Type} (s mid : PanSemStateFiniteExact 64 F)
@@ -748,7 +776,8 @@ theorem dec_call_fall_inv {F : Type} {s t : PanSemStateFiniteExact 64 F}
       lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
       evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
       evaluateHOLFiniteState (setVarHOLFinite x rv { post with locals := s.locals }) cont = (none, u) ∧
-      t.memory = u.memory := by
+      t.memory = u.memory ∧
+      (∀ k, k ≠ x → t.locals.lookup k = u.locals.lookup k) := by
   rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h
   split at h
   · simp at h
@@ -774,7 +803,13 @@ theorem dec_call_fall_inv {F : Type} {s t : PanSemStateFiniteExact 64 F}
               | none =>
                 have he := (Prod.mk.inj h).2
                 exact ⟨_, body, callee, retShape, rv, post, u, hl, hr, ht,
-                  congrArg (fun st => st.memory) he.symm⟩
+                  congrArg (fun st => st.memory) he.symm, by
+                    intro k hk
+                    rw [← he]
+                    cases s.locals.lookup x <;>
+                      simp [HolFiniteMapExact.resVarEq, HolFiniteMapExact.lookup_eraseEq,
+                        HolFiniteMapExact.lookup_updateEq, FDOMSUB_HOL, FUPDATE_HOL,
+                        hk, Ne.symm hk]⟩
               | some r => simp at h
             · simp at h
           | _ => simp at h
@@ -819,7 +854,7 @@ theorem lst_push_alloc_branch_fall (h : PtxCallees) {F : Type}
             (.store (.op .add [.var .local (ofString "l"), .const 16])
               (.panop .mul [.var .local (ofString "cap"), .const 2]))))) = (none, post)) :
     memW post l.toNat ≠ 0 := by
-  obtain ⟨vs, body, callee, ret, rv, allocated, done, hlookup, hrun, hcont, hmem⟩ :=
+  obtain ⟨vs, body, callee, ret, rv, allocated, done, hlookup, hrun, hcont, hmem, _⟩ :=
     dec_call_fall_inv hr
   have hentry : ArenaReady (callEntryStateHOLFinite s callee) :=
     (arenaReady_with_locals s callee (s.clock - 1)).2 hA
