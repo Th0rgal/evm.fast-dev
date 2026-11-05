@@ -5783,4 +5783,75 @@ theorem dispatch_code_record_eval {F : Type} {s : PanSemStateFiniteExact 64 F}
   simp [ev, evalHOLExact, evalListHOLExact, h0, h8, memLoadHOLExact,
     isWfShapeExactHOL, hd0, hd8, hc, hn]
 
+/-- A returning call may resume by a catchable exception when the callee
+establishes the final invariant on that path. -/
+theorem Hoare.decCall_returning_exception_fall
+    {P Q R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {name fname : MlS} {shape : ShapeHOL} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hQ : LocalsFree Q) (hres : DecCallResumeOn P R name fname args)
+    (hexc : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) values body callee ret,
+      s.code = originalRuntimeCode → P s →
+      PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      ∀ e v post, e ≠ ofString "TrapErr" →
+        evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.exception e v), post) → Q post)
+    (hcont : Hoare R cont (Fall Q)) :
+    Hoare P (.decCall name shape fname args cont) (Fall Q) := by
+  refine ⟨fun {F} s hc hP hnt hr => ?_⟩
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at hnt hr ⊢
+  rcases ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args with _ | values
+  · rw [ha] at hr
+    rcases hr with hr | hr
+    · cases hr
+    · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+  · simp only [ha] at hnt hr ⊢
+    rcases hl : PanSemStateFiniteExact.lookupCodeHOLFinite s.code.lookup fname values with _ | ⟨body, callee, ret⟩
+    · rw [hl] at hr
+      rcases hr with hr | hr
+      · cases hr
+      · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+    · simp only [hl] at hnt hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hnt
+      · simp only [hz, ↓reduceIte] at hnt hr ⊢
+        have hm := (InitECandidate.Solver.GuestGlobalKeep.evaluateHOLFiniteState_metadata
+          (callEntryStateHOLFinite s callee) body).1
+        rcases hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hb] at hm
+        simp only [hb] at hnt hr ⊢
+        cases r with
+        | none =>
+          rcases hr with hr | hr
+          · cases hr
+          · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+        | some r =>
+          cases r with
+          | returned v =>
+            dsimp only at hnt hr ⊢
+            split at hr
+            · rename_i hsh
+              rw [if_pos hsh] at hnt ⊢
+              have hR := hres s values body callee ret v post hc hP ha hl hb
+              have hc' : (setVarHOLFinite name v {post with locals := s.locals}).code = originalRuntimeCode := hm.trans hc
+              exact hQ _ _ _ (hcont.run _ hc' hR hnt hr)
+            · rw [if_neg ‹_›] at hnt ⊢
+              rcases hr with hr | hr
+              · cases hr
+              · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | timeOut => simp at hnt
+          | exception e v =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨e', v', he, hne⟩
+              · cases h
+              cases he
+              exact hQ _ _ _ (hexc s values body callee ret hc hP hl e v post hne hb)
+          | error =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+          | _ =>
+            rcases hr with hr | hr
+            · cases hr
+            · rcases hr with ⟨_, h⟩ | ⟨_, _, h, _⟩ <;> cases h
+
 end HeadStore
