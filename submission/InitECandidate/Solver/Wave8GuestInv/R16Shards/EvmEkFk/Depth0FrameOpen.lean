@@ -2632,6 +2632,38 @@ theorem Hoare.while_fall {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Pr
       · cases hr
       · exact absurd hr not_resumes_error
 
+/-- Loading the owned message pointer establishes the common body invariant of
+`set_delegation` and `prepare_dispatch`, retaining the original step origin. -/
+theorem d0Pre_msg_init (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl)
+    {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64)
+    (hP : EvmMsgReady s ∧ StepFrom gw hp G ch s)
+    (hv : ev s (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) = some v) :
+    D0Pre gw hp G ch (setVarHOLFinite (ofString "msg") v s) := by
+  obtain ⟨m, rfl, hm⟩ := dec_msg_init s hP.1 v hv
+  refine ⟨⟨localsFree_evmMsgReady s _ _ hP.1,
+    localsFree_stepFrom gw hp G ch s _ _ hP.2⟩, m, ?_, hm⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
+/-- Common message-pointer binder for the two depth-zero callees. The body's
+postcondition is locals-free, so leaving the scope restores the caller's locals. -/
+theorem hoare_dec_msg_step (gw : List String) (hp : Nat)
+    (G : MlS → Option (ValueHOL 64)) (ch : List Ivl) (body : ProgHOL 64)
+    (hbody : Hoare (D0Pre gw hp G ch) body
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s))) :
+    Hoare (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)
+      (.dec (ofString "msg") .one
+        (.load .one (.op .add [.var .global (ofString "ev"), .const 112])) body)
+      (Fall (fun s => EvmMsgReady s ∧ StepFrom gw hp G ch s)) := by
+  refine Hoare.dec_fall (P' := D0Pre gw hp G ch) ?_ hbody ?_
+  · intro F s v hP hv
+    exact d0Pre_msg_init gw hp G ch s v hP hv
+  · intro F s locals k hP
+    exact ⟨localsFree_evmMsgReady s locals k hP.1,
+      localsFree_stepFrom gw hp G ch s locals k hP.2⟩
+
 #print axioms Hoare.while_fall
+#print axioms d0Pre_msg_init
+#print axioms hoare_dec_msg_step
 
 end HeadStore
