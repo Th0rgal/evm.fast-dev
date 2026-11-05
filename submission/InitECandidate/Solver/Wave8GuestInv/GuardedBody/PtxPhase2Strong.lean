@@ -3554,4 +3554,27 @@ theorem phase2_address_copy_while_bound {body : ProgHOL 64}
     rw [hmod] at *
     omega
 
+/-- The actual address-copy loop has a uniform terminating clock bound. -/
+theorem phase2_address_copy_loop_bound :
+    TerminatingProgBoundedOn PtxAddressCopyInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        (.dec (ofString "acc") .one
+          (.op .add [.load .one (.op .add [.var .local (ofString "tx"), .const 208]),
+            .panop .mul [.var .local (ofString "i"), .const 24]])
+          (.seq
+            (.store (.op .add [.var .local (ofString "al_addrs"),
+              .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+              (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+            (.seq
+              (.assign .local (ofString "nkeys")
+                (.op .add [.var .local (ofString "nkeys"),
+                  .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+              (.assign .local (ofString "i")
+                (.op .add [.var .local (ofString "i"), .const 1]))))))
+      (2 ^ 63 + 1) := by
+  intro F s hc hp
+  simpa only [Nat.zero_add, Nat.mul_one] using
+    phase2_address_copy_while_bound phase2_address_copy_body_hoare
+      phase2_address_copy_body_clock phase2_address_copy_body_incr s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
