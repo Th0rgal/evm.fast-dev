@@ -3077,7 +3077,8 @@ theorem stable_length_operand_resume {F : Type}
     let t := setVarHOLFinite (ofString "stable_logs") v {post with locals := s.locals}
     t.locals.lookup (ofString "nl") =
       some (.val (.word (BitVec.ofNat 64 (locN t "nl")))) := by
-  simpa [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE] using hn
+  simpa [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+    show ofString "stable_logs" ≠ ofString "nl" by decide] using hn
 
 def StableLengthPost : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
   fun s => TxWorld s ∧ LogsListOK s (locN s "logs") ∧
