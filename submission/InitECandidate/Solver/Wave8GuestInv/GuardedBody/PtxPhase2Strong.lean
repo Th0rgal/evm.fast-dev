@@ -233,6 +233,32 @@ theorem phase1_shapePrefix_of_stage2 {F : Type} {s : PanSemStateFiniteExact 64 F
   obtain ⟨a, b, c, hi, _⟩ := hstage.2.2.1 (by omega)
   exact ⟨hscalar, hprice, henc, a, b, c, hi⟩
 
+/-- Preserve the pre-price witnesses across validation, which updates only
+`intrinsic` in the restored caller locals. -/
+theorem phase1_resume_validate_shapes (h : PtxCallees) :
+    DecCallResumeOn
+      (fun s => R16Shards.PtxP1.StageP 1 s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (fun s => R16Shards.PtxP1.StageP 2 s ∧
+        (∀ n ∈ (["tx", "index", "sender"] : List String),
+          ∃ w : BitVec 64, s.locals.lookup (ofString n) = some (.val (.word w))) ∧
+        ∃ a b : BitVec 64, s.locals.lookup (ofString "enc") =
+          some (.rStruct [.val (.word a), .val (.word b)]))
+      (ofString "intrinsic") (ofString "validate_transaction")
+      [.var .local (ofString "tx"), .var .local (ofString "sender")] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  refine ⟨R16Shards.PtxP1.resume_validate h s vs body callee ret v post hc hp.1 ha hl hb, ?_, ?_⟩
+  · intro n hn
+    have hne : ofString "intrinsic" ≠ ofString n := by
+      simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+      rcases hn with rfl | rfl | rfl <;> decide
+    simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hp.2.1 n hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "intrinsic" ≠ ofString "enc" from by decide] using hp.2.2
+
 theorem phase1_resume_check_prefix (h : PtxCallees) :
     R16Shards.PtxP1.DecCallResumeShapeOn
       (fun s => R16Shards.PtxP1.StageP 2 s ∧
