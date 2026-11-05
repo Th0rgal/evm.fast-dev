@@ -6078,6 +6078,70 @@ theorem transfer_topic_party_copy_prefix {F : Type}
     rfl
   exact ⟨mid, hstep', heff, hl, heq ▸ hr, hout', hbyte', heq⟩
 
+def transferTopicWrites (cont : ProgHOL 64) : ProgHOL 64 :=
+  .seq (.call (some (none, none)) (ofString "memcpy")
+    [.var .local (ofString "topics"), .var .global (ofString "transfer_topic"), .const 32])
+  (.seq (.call (some (none, none)) (ofString "memzero")
+    [.op .add [.var .local (ofString "topics"), .const 32], .const 12])
+  (.seq (.call (some (none, none)) (ofString "memcpy")
+    [.op .add [.var .local (ofString "topics"), .const 44], .var .local (ofString "sender"), .const 20])
+  (.seq (.call (some (none, none)) (ofString "memzero")
+    [.op .add [.var .local (ofString "topics"), .const 64], .const 12])
+  (.seq (.call (some (none, none)) (ofString "memcpy")
+    [.op .add [.var .local (ofString "topics"), .const 76], .var .local (ofString "recipient"), .const 20]) cont))))
+
+theorem transfer_topic_writes_prefix {F : Type}
+    (s cur : PanSemStateFiniteExact 64 F) (topics topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s) (hstep : EvmStepCC ["heap_ptr"] s cur)
+    (hbe : cur.be = s.be)
+    (hout : ∀ a : BitVec 64, ¬ s.memaddrs a → cur.memory a = s.memory a)
+    (hbyte : ∀ b : Nat, b < 2 ^ 64 →
+      ¬ (globN s "heap_ptr" ≤ b ∧ b < globN cur "heap_ptr") → memB cur b = memB s b)
+    (ht : cur.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hsrc : cur.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hs : cur.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrc : cur.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hin : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN cur "heap_ptr"))
+    (hr : Resumes (evaluateHOLFiniteState cur (transferTopicWrites cont)).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      EvmStepCC ["heap_ptr"] s mid ∧ ByteRegionEffect cur mid [(topics.toNat, 96)] ∧
+      mid.locals = cur.locals ∧ Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
+      evaluateHOLFiniteState cur (transferTopicWrites cont) = evaluateHOLFiniteState mid cont := by
+  unfold transferTopicWrites at hr ⊢
+  obtain ⟨m1, st1, ef1, l1, r1, o1, b1, eq1⟩ :=
+    transfer_topic_copy_prefix s cur topics topic _ hInv hstep hbe hout hbyte ht hsrc hin hr
+  have in1 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m1 "heap_ptr") := by
+    simpa only [globN, ef1.globals] using hin
+  obtain ⟨m2, st2, ef2, l2, r2, o2, b2, eq2⟩ :=
+    transfer_topic_padding_prefix s m1 topics 32 _ (Or.inl rfl) hInv st1
+      (ef1.be.trans hbe) o1 b1 (l1 ▸ ht) in1 r1
+  have ef02 := ef1.trans ef2
+  have l02 := l2.trans l1
+  have in2 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m2 "heap_ptr") := by
+    simpa only [globN, ef02.globals] using hin
+  obtain ⟨m3, st3, ef3, l3, r3, o3, b3, eq3⟩ :=
+    transfer_topic_party_copy_prefix s m2 topics sender (ofString "sender") 44 _ (Or.inl rfl)
+      hInv st2 (ef02.be.trans hbe) o2 b2 (l02 ▸ ht) (l02 ▸ hs) in2 r2
+  have ef03 := ef02.trans ef3
+  have l03 := l3.trans l02
+  have in3 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m3 "heap_ptr") := by
+    simpa only [globN, ef03.globals] using hin
+  obtain ⟨m4, st4, ef4, l4, r4, o4, b4, eq4⟩ :=
+    transfer_topic_padding_prefix s m3 topics 64 _ (Or.inr rfl) hInv st3
+      (ef03.be.trans hbe) o3 b3 (l03 ▸ ht) in3 r3
+  have ef04 := ef03.trans ef4
+  have l04 := l4.trans l03
+  have in4 : Inside (topics.toNat, 96) (globN s "heap_ptr") (globN m4 "heap_ptr") := by
+    simpa only [globN, ef04.globals] using hin
+  obtain ⟨m5, st5, ef5, l5, r5, o5, b5, eq5⟩ :=
+    transfer_topic_party_copy_prefix s m4 topics recipient (ofString "recipient") 76 cont (Or.inr rfl)
+      hInv st4 (ef04.be.trans hbe) o4 b4 (l04 ▸ ht) (l04 ▸ hrc) in4 r4
+  exact ⟨m5, st5, ef04.trans ef5, l5.trans l04, r5, o5, b5,
+    eq1.trans (eq2.trans (eq3.trans (eq4.trans eq5)))⟩
+
 theorem transfer_topics_alloc_prefix {F : Type}
     (s : PanSemStateFiniteExact 64 F) (logp p : BitVec 64) (cont : ProgHOL 64)
     (hInv : EvmInv s)
