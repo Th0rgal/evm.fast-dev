@@ -1,5 +1,6 @@
 import InitECandidate.Solver.Wave8GuestInv.R11Shards.OpDispatchSpec.Base
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.StateRestoreEpilogue
+import InitECandidate.Solver.Wave8GuestInv.Deliveries.M15.Common
 
 set_option autoImplicit false
 
@@ -16,6 +17,39 @@ open InitECandidate.Solver.Wave8GuestInv.R11Shards
 
 set_option maxRecDepth 100000
 set_option maxHeartbeats 4000000
+
+theorem ro_is_zero_bytes :
+    InitECandidate.Solver.Wave8Contracts.M15.ReadOnlyFn (ofString "is_zero_bytes") :=
+  InitECandidate.Solver.Wave8Contracts.M15.readOnlyFn_of_guestAst
+    19 (by rw [guestAst_len]; decide) Guest.Software.guestFn_is_zero_bytes rfl
+    (fun _ => false) (fun _ h => by cases h) rfl
+
+def precompileIndexCallees (f : MlS) : Bool :=
+  f == ofString "is_zero_bytes"
+
+theorem precompileIndexCallees_good :
+    ∀ function, precompileIndexCallees function = true → ∀ values body callee rs,
+      lookupCodeHOLFinite originalRuntimeCode.lookup function values =
+        some (body, callee, rs) →
+      InitECandidate.Solver.Wave8Contracts.M15.readOnlyProg precompileIndexCallees body = true := by
+  intro function hfn values body callee rs hfound
+  have heq : function = ofString "is_zero_bytes" := by
+    simpa only [precompileIndexCallees, beq_iff_eq] using hfn
+  subst function
+  obtain ⟨params, rs', hinst⟩ := InitECandidate.Solver.GuestGlobalKeep.lookupCode_installed hfound
+  have hl := lookup_of_guestAst_getElem 19 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_is_zero_bytes) rfl
+  change originalRuntimeCode.lookup (ofString "is_zero_bytes") = _ at hl
+  rw [hl] at hinst
+  have hbody := (Prod.mk.inj (Prod.mk.inj (Option.some.inj hinst)).2).1
+  rw [← hbody]
+  rfl
+
+theorem ro_precompile_index :
+    InitECandidate.Solver.Wave8Contracts.M15.ReadOnlyFn (ofString "precompile_index") :=
+  InitECandidate.Solver.Wave8Contracts.M15.readOnlyFn_of_guestAst
+    822 (by rw [guestAst_len]; decide) Guest.Software.guestFn_precompile_index rfl
+    precompileIndexCallees precompileIndexCallees_good rfl
 
 theorem evmChainFrom_stable {F : Type} (s : PanSemStateFiniteExact 64 F)
     (fuel e c : Nat) (h : (evmChainFrom s fuel e c).length < fuel) :
@@ -165,6 +199,22 @@ theorem evmStep_locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
         OpDispatchSpec.evmChain_congr (s := s)
           (t := { s with locals := ls, clock := ks }) rfl rfl]
       exact hstep.2.2.2⟩
+
+theorem evmKeeps_of_readOnly {fname : MlS}
+    (hro : InitECandidate.Solver.Wave8Contracts.M15.ReadOnlyFn fname) :
+    EvmKeeps EvmInv [] fname := by
+  obtain ⟨params, body, ret, hl, hr⟩ := hro
+  refine ⟨params, body, ret, hl, ?_⟩
+  intro F s hc hi he hn hs
+  have hpost := hr s hc hi.1.1 he hn hs
+  rw [hpost]
+  exact evmStep_locals_clock ⟨hi, le_rfl, fun _ _ => rfl, rfl⟩ _ _ _ _
+
+theorem ek_precompile_index : EvmKeeps EvmInv [] (ofString "precompile_index") :=
+  evmKeeps_of_readOnly ro_precompile_index
+
+theorem ek_is_zero_bytes : EvmKeeps EvmInv [] (ofString "is_zero_bytes") :=
+  evmKeeps_of_readOnly ro_is_zero_bytes
 
 theorem frame_start_tail_step {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hInv : EvmInv s) (done : BitVec 64)
