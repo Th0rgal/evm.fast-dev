@@ -5393,4 +5393,28 @@ theorem ek_cc_run_precompile_of_dispatch (h : PrecompileDispatchSpecs) :
     exact (run_precompile_body_step_of_dispatch h s hcode (hInv hP) hnt
       (Or.inr (Or.inr (Or.inr hres)))).2
 
+theorem framePrologueCalleeSpecs_of_dispatch
+    (hemit : EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw
+      (ofString "emit_transfer_log"))
+    (hemit_cc : ChainCellsKept (EvmAvoids FrameStartAvoids)
+      (ofString "emit_transfer_log"))
+    (hdispatch : PrecompileDispatchSpecs) : FramePrologueCalleeSpecs :=
+  ⟨ek_move_ether, cc_move_ether, hemit, hemit_cc,
+    (ek_cc_run_precompile_of_dispatch hdispatch).1,
+    (ek_cc_run_precompile_of_dispatch hdispatch).2⟩
+
+theorem frame_prologue_start_of_dispatch
+    (hemit : EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw
+      (ofString "emit_transfer_log"))
+    (hemit_cc : ChainCellsKept (EvmAvoids FrameStartAvoids)
+      (ofString "emit_transfer_log"))
+    (hdispatch : PrecompileDispatchSpecs) :
+    EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "frame_prologue") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "frame_prologue") ∧
+      EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "frame_start") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "frame_start") := by
+  have h := framePrologueCalleeSpecs_of_dispatch hemit hemit_cc hdispatch
+  exact ⟨ek_frame_prologue_of_callees h, frame_prologue_chainCellsKept_of_callees h,
+    ek_frame_start_of_callees h, frame_start_chainCellsKept_of_callees h⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
