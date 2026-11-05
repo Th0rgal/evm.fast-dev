@@ -46,6 +46,14 @@ theorem op_mcopy_aligned_spec :
       OpDispatchSpec.OpDispatchPost (ofString "op_mcopy") :=
   R16Shards.OpHandlersB.op_mcopy_aligned_spec
 
+/-- The extcodecopy handler additionally requires preservation of every aligned
+head-frame word by ext_code_of. This premise must be discharged separately. -/
+theorem op_extcodecopy_aligned_spec
+    (h_ext_code_of : R16Shards.OpHandlersB.ExtCodeOfHeadSpec) :
+    FunSpec (fun s => EvmRun s ∧ R16Shards.OpHandlersB.HeadMemAligned s)
+      OpDispatchSpec.OpDispatchPost (ofString "op_extcodecopy") :=
+  R16Shards.OpHandlersB.op_extcodecopy_aligned_spec h_ext_code_of
+
 theorem wk_header_hash_strong :
     WorldKeeps
       (fun s => WorldOK s ∧ R16Shards.HeaderHashRecover.HeaderOKStrong s ∧
