@@ -6221,6 +6221,109 @@ theorem transfer_topics_alloc_prefix {F : Type}
     rw [hstep.1.1.1.1.memaddrs, ← hInv.1.1.memaddrs]
     exact ha
 
+theorem transfer_alloc_topics_writes_locals_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1) :
+    ∃ mid : PanSemStateFiniteExact 64 F,
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      globN mid "heap_ptr" = p.toNat + 96 ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96] (transferTopicWrites cont))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+            (ofString "topics", s.locals.lookup (ofString "topics")) } ∧
+      (∀ k, k ≠ ofString "topics" → mid.locals.lookup k = s.locals.lookup k) := by
+  obtain ⟨allocated, ht, hhp, hw, st, er, es, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s (ofString "topics") _ p 96
+      (Or.inr (Or.inl rfl)) hInv hp hr
+  have hp0 : globN s "heap_ptr" = p.toNat := by simp [globN, hp]
+  have hin : Inside (p.toNat, 96) (globN s "heap_ptr") (globN allocated "heap_ptr") :=
+    ⟨by rw [hp0], by rw [hhp]⟩
+  obtain ⟨mid, st', ef, loc, resum, out, bytes, eq⟩ :=
+    transfer_topic_writes_prefix s allocated p topic sender recipient cont hInv st hb
+      (fun _ _ => congrFun hm _) (fun _ _ _ => by simp only [memB, hm, hb]) ht
+      ((st.1.2.2.1 _ (by decide)).symm.trans htopic)
+      ((hl _ (by decide)).trans hsender)
+      ((hl _ (by decide)).trans hrecipient) hin (er ▸ hr)
+  refine ⟨mid, loc ▸ ht, ?_, st', resum, ?_, ?_, ?_⟩
+  · simpa only [globN, ef.globals] using hhp
+  · exact er.trans (congrArg Prod.fst eq)
+  · exact es.trans (congrArg (fun out : Option (PanSemResultExact 64) × PanSemStateFiniteExact 64 F =>
+      { out.2 with locals := (HolFiniteMapExact.resVarEq out.2.locals
+        (ofString "topics", s.locals.lookup (ofString "topics"))) }) eq)
+  · intro k hk
+    rw [loc]
+    exact hl k hk
+
+theorem transfer_alloc_topics_data_prefix {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p topic sender recipient : BitVec 64) (cont : ProgHOL 64)
+    (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (htopic : s.globals.lookup (ofString "transfer_topic") = some (.val (.word topic)))
+    (hsender : s.locals.lookup (ofString "sender") = some (.val (.word sender)))
+    (hrecipient : s.locals.lookup (ofString "recipient") = some (.val (.word recipient)))
+    (hr : Resumes (evaluateHOLFiniteState s
+      (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+        (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).1) :
+    ∃ (mid : PanSemStateFiniteExact 64 F) (data : BitVec 64),
+      mid.locals.lookup (ofString "topics") = some (.val (.word p)) ∧
+      mid.locals.lookup (ofString "data") = some (.val (.word data)) ∧
+      data.toNat = p.toNat + 96 ∧ globN mid "heap_ptr" = data.toNat + 32 ∧
+      WordsOK mid (data.toNat, 32) ∧ EvmStepCC ["heap_ptr"] s mid ∧
+      Resumes (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+          (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).1 =
+        (evaluateHOLFiniteState mid cont).1 ∧
+      (evaluateHOLFiniteState s
+        (.decCall (ofString "topics") .one (ofString "alloc") [.const 96]
+          (transferTopicWrites (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)))).2 =
+        { (evaluateHOLFiniteState mid cont).2 with
+          locals := HolFiniteMapExact.resVarEq
+            (HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+              (ofString "data", s.locals.lookup (ofString "data")))
+            (ofString "topics", s.locals.lookup (ofString "topics")) } := by
+  obtain ⟨topicsState, ht, hhp, st, resum, er, es, hlocals⟩ :=
+    transfer_alloc_topics_writes_locals_prefix s p topic sender recipient _ hInv hp htopic hsender hrecipient hr
+  obtain ⟨data, hd⟩ := globalWord_of_globN_pos topicsState "heap_ptr" (by rw [hhp]; omega)
+  have hdNat : data.toNat = p.toNat + 96 := by
+    have hg : globN topicsState "heap_ptr" = data.toNat := by
+      change topicsState.globals.lookup (ofString "heap_ptr") = _ at hd
+      simp [globN, hd]
+    exact hg.symm.trans hhp
+  obtain ⟨mid, hdata, hheap, hw, st', er', es', hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec topicsState (ofString "data") cont data 32
+      (Or.inr (Or.inr rfl)) st.1.1 hd resum
+  have hboth : EvmStepCC ["heap_ptr"] s mid := by
+    refine ⟨⟨st'.1.1, le_trans st.1.2.1 st'.1.2.1,
+      fun k hk => (st.1.2.2.1 k hk).trans (st'.1.2.2.1 k hk),
+      st'.1.2.2.2.trans st.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := st.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := st'.2 ec (st.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  refine ⟨mid, data, (hl _ (by decide)).trans ht, hdata, hdNat, hheap, hw,
+    hboth, er' ▸ resum, er.trans er', ?_⟩
+  have he : (evaluateHOLFiniteState topicsState
+      (.decCall (ofString "data") .one (ofString "alloc") [.const 32] cont)).2 =
+      { (evaluateHOLFiniteState mid cont).2 with
+        locals := HolFiniteMapExact.resVarEq (evaluateHOLFiniteState mid cont).2.locals
+          (ofString "data", topicsState.locals.lookup (ofString "data")) } := es'
+  exact es.trans ((congrArg (fun out : PanSemStateFiniteExact 64 F =>
+    { out with locals := (HolFiniteMapExact.resVarEq out.locals
+      (ofString "topics", s.locals.lookup (ofString "topics"))) }) he).trans (by
+        rw [hlocals _ (by decide)]))
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
