@@ -10207,4 +10207,261 @@ theorem phase2_packed_ns_nal_body_bound (h : PtxCallees) (addressSrc keySrc : Ex
     (fun t ht hpt => seq_bound_trans (phase2_packed_ns_nal_memcpy_bound h _)
       (phase2_packed_storage_copy_ns_nal_hoare h keySrc) hc t ht hpt) s hcode hp
 
+/-- The actual source inner loop and following record increment have the
+advertised nested-loop clock budget. -/
+theorem phase2_packed_source_inner_tail_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedNsNalIteration phase2_packed_source_inner_tail
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) := by
+  unfold phase2_packed_source_inner_tail
+  have hb : TerminatingProgBoundedOn PtxPackedNsNalIteration _
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) :=
+    phase2_packed_ns_nal_while_bound
+    (phase2_packed_body_ns_nal_hoare h
+      (.load .one (.op .add [.var .local (ofString "acc2"), .const 0]))
+      (.op .add [.load .one (.op .add [.var .local (ofString "acc2"), .const 8]),
+        .panop .mul [.var .local (ofString "j"), .const 32]]))
+    (phase2_packed_ns_nal_body_bound h _ _) (by ptx_incr)
+  have ht : TerminatingProgBoundedOn
+      (fun s => PtxPackedNsNalIteration s ∧ locN s "k" = phase2_key_prefix s (locN s "i" + 1))
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])) 0 := by
+    intro F s hc hp hn
+    rw [clock_assign]
+    exact ⟨by omega, le_rfl⟩
+  intro F s hc hp
+  simpa only [Nat.add_zero] using seq_bound_trans hb
+    (phase2_packed_ns_nal_while (phase2_packed_body_ns_nal_hoare h _ _) (by decide) (by decide))
+    ht s hc hp
+
+/-- The record-local declarations preserve the inner-loop clock budget. -/
+theorem phase2_packed_source_outer_body_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn (fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216)) phase2_packed_source_outer_body
+      ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1)) := by
+  unfold phase2_packed_source_outer_body
+  apply dec_bound_trans (Q := fun s => PtxPackedNalIteration s ∧
+    locN s "i" < memW s (locN s "tx" + 216) ∧
+    locN s "acc2" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+  · intro F s v hp he
+    have hd := phase2_packed_outer_declare_acc2 s hp.1.1 hp.2 v he
+    exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+  · apply dec_bound_trans (Q := fun s => PtxPackedNalIteration s ∧
+      locN s "i" < memW s (locN s "tx" + 216) ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "ns") = some (.val (.word n))) ∧
+      locN s "ns" = memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16))
+    · intro F s v hp he
+      have hd := phase2_packed_outer_declare_ns s hp.1.1 hp.2.1 hp.2.2 v he
+      exact ⟨phase2_packed_nal_set_other s hp.1 _ _ (by decide), hd.2⟩
+    · apply dec_bound_trans (Q := PtxPackedNsNalIteration)
+      · intro F s v hp he
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        refine ⟨phase2_packed_ns_reset s hp.1.1 hp.2.1 hp.2.2.1 hp.2.2.2, ?_⟩
+        exact (phase2_packed_nal_set_other s hp.1 (ofString "j") (.val (.word 0)) (by decide)).2
+      · exact phase2_packed_source_inner_tail_bound h
+
+/-- A decreasing record counter bounds the concrete outer packing loop. -/
+theorem phase2_packed_source_outer_loop_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedNalIteration
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+        phase2_packed_source_outer_body)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+  apply TerminatingProgBoundedOn.while_rank_active (fun s => 2 ^ 63 - locN s "i")
+  · intro F s hp
+    exact phase2_packed_nal_iteration_decClock s hp
+  · intro F s hc hp
+    obtain ⟨w, hw, hnz⟩ := hp.2
+    have hg := (phase2_packed_outer_nal_guard s w hp.1.1 hp.1.2.1 hp.1.2.2 hw).mp hnz
+    exact phase2_packed_source_outer_body_bound h s hc ⟨hp.1, hg⟩
+  · intro F s hc hp ha
+    omega
+  · intro F s hc hp ha hf
+    obtain ⟨w, hw, hnz⟩ := ha
+    have hg := (phase2_packed_outer_nal_guard s w hp.1 hp.2.1 hp.2.2 hw).mp hnz
+    have hd := phase2_packed_nal_iteration_decClock s hp
+    have hinc : IncrBody (ofString "i") phase2_packed_source_outer_body := by
+      unfold phase2_packed_source_outer_body phase2_packed_source_inner_tail
+      ptx_incr
+    obtain ⟨i, hi⟩ := hp.1.2.2.2.2.2.1
+    obtain ⟨hnc, hnext⟩ := hinc.run (decClockHOLFinite s) i hi
+    have hnone := hf.resolve_right hnc
+    have hpost := (phase2_packed_source_outer_body_nal_hoare h).run
+      (decClockHOLFinite s) hc ⟨hd, hg⟩ (by rw [hnone]; simp) hnone
+    refine ⟨hpost, ?_⟩
+    have hin : locN s "i" = i.toNat := by simp [locN, hi]
+    have hlt := (phase2_packed_outer_signed_bounds hp.1).1
+    have hpn : locN (evaluateHOLFiniteState (decClockHOLFinite s)
+        phase2_packed_source_outer_body).2 "i" = (i.toNat + 1) % 2 ^ 64 := by
+      simp [locN, hnext hnone, BitVec.toNat_add]
+    rw [hin] at hlt ⊢
+    rw [hpn, Nat.mod_eq_of_lt (by omega : i.toNat + 1 < 2 ^ 64)]
+    omega
+
+/-- Counter initialization and the disabled-access branch share the concrete
+packing-loop budget. -/
+theorem phase2_packed_cases_initialized_loop_bound (h : PtxCallees) :
+    TerminatingProgBoundedOn PtxPackedInitCases
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+  let P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+    ∃ before, PtxPackedInitCases before ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before
+  let Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop := fun s =>
+    PtxPackedNalIteration s ∨ (PtxPackedKeysReady s ∧
+      s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+      s.locals.lookup (ofString "nal") = some (.val (.word 0)))
+  apply dec_bound_trans (Q := P)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · have ha : Hoare P (.assign .local (ofString "i") (.const 0))
+        (fun r s => r = none → Q s) := by
+      apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        rcases hp with hp | hp
+        · exact Or.inl (phase2_packed_init_state before hp)
+        · exact Or.inr (phase2_packed_zero_init before hp.1 hp.2)
+      · exact fun _ _ hr => by cases hr
+    have hb : TerminatingProgBoundedOn P
+        (.assign .local (ofString "i") (.const 0)) 0 := by
+      intro F s hc hp hn
+      rw [clock_assign]
+      exact ⟨by omega, le_rfl⟩
+    have hl : TerminatingProgBoundedOn Q
+        (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+          phase2_packed_source_outer_body)
+        ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1)) := by
+      intro F s hc hp hn
+      rcases hp with hp | hp
+      · exact phase2_packed_source_outer_loop_bound h s hc hp hn
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hp.2.1 hp.2.2]
+        exact ⟨by dsimp; omega, le_rfl⟩
+    intro F s hc hp
+    simpa only [Nat.zero_add] using seq_bound_trans hb ha hl s hc hp
+
+/-- Both counting exits support the fresh packed allocation and its continuation. -/
+theorem phase2_count_cases_alloc_bound (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn PtxPackedInitCases tail b) :
+    TerminatingProgBoundedOn PtxAddressCountExit
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on (Q := PtxPackedInitCases) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr := phase2_count_exit_access_ready hp
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_cases_alloc_init h
+  · exact ht
+
+/-- Disabling access lists cannot increase the counting-loop clock budget. -/
+theorem phase2_count_cases_while_bound {body : ProgHOL 64} {b : Nat}
+    (hb : TerminatingProgBoundedOn PtxAddressCountInv
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) b) :
+    TerminatingProgBoundedOn PtxAddressCountCases
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal"))) body) b := by
+  intro F s hc hp hn
+  rcases hp with hp | hp
+  · exact hb s hc hp hn
+  · rw [phase2_address_zero_loop s body hp.1 hp.2.1]
+    exact ⟨by dsimp; omega, le_rfl⟩
+
+/-- Packing retains the world needed by the subsequent transaction setup calls. -/
+theorem phase2_packed_cases_initialized_world_hoare (h : PtxCallees) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedInitCases s)
+      (.dec (ofString "k") .one (.const 0)
+        (.seq (.assign .local (ofString "i") (.const 0))
+          (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+            phase2_packed_source_outer_body)))
+      (fun r s => r = none → WorldOK s ∧ PtxPackedKeysReady s) := by
+  apply Hoare.dec (names := ["al_keys", "nkeys", "tx"])
+    (P' := fun s => ∃ before, (WorldOK before ∧ PtxPackedInitCases before) ∧
+      s = setVarHOLFinite (ofString "k") (.val (.word 0)) before) (by decide)
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+    subst v
+    exact ⟨s, hp, rfl⟩
+  · apply Hoare.seq_fall (R := fun s => PtxPackedNalIteration s ∨
+      (WorldOK s ∧ PtxPackedKeysReady s ∧
+        s.locals.lookup (ofString "i") = some (.val (.word 0)) ∧
+        s.locals.lookup (ofString "nal") = some (.val (.word 0))))
+    · apply Hoare.assign
+      · intro F s v hp he
+        obtain ⟨before, hp, rfl⟩ := hp
+        have hv : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using he.symm
+        subst v
+        intro _
+        rcases hp.2 with hp' | hp'
+        · exact Or.inl (phase2_packed_init_state before hp')
+        · have hz := phase2_packed_zero_init before hp'.1 hp'.2
+          exact Or.inr ⟨phase2_packed_ready_worldOK _
+            ((arenaReady_with_locals before _ before.clock).mpr hp.1.1) hz.1, hz⟩
+      · exact fun _ _ hr => by cases hr
+    · refine ⟨?_⟩
+      intro F s hc hp hnt hr
+      rcases hp with hp | hp
+      · have ho := ((phase2_packed_source_outer_loop_hoare h).run s hc hp hnt hr).1
+        exact ⟨ho.1.1, ho.1.2.1.1⟩
+      · rw [phase2_zero_nal_loop s phase2_packed_source_outer_body hp.2.2.1 hp.2.2.2]
+        exact ⟨hp.1, hp.2.1⟩
+  · intro F r s locals hl hp hr
+    have hk := phase2_packed_keys_with_locals s locals s.clock (hp hr).2 hl
+    exact ⟨phase2_packed_ready_worldOK _
+      ((arenaReady_with_locals s locals s.clock).mpr (hp hr).1.1) hk, hk⟩
+  · exact fun _ _ hr => by cases hr
+
+/-- Allocation provides the world component for both packing entry cases. -/
+theorem phase2_count_cases_alloc_world_init (h : PtxCallees) :
+    DecCallResumeOn PtxAddressCountExit (fun s => WorldOK s ∧ PtxPackedInitCases s)
+      (ofString "al_keys") (ofString "alloc")
+      [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hi := phase2_count_cases_alloc_init h s vs body callee ret v post hc hp ha hl hb
+  have hk := phase2_count_cases_packed_ready h s vs body callee ret v post hc hp ha hl hb
+  have hr := phase2_count_exit_access_ready hp
+  have hw := R16Shards.PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hr.1.1.1.1.1.1.1 callee) (by rw [hb]; simp)
+  rw [hb] at hw
+  have hs := hw (Or.inl ⟨v, rfl⟩)
+  exact ⟨phase2_packed_ready_worldOK _
+    ((arenaReady_with_locals post _ post.clock).mpr hs.1) hk, hi⟩
+
+/-- The packed allocation exposes its retained world to any subsequent setup. -/
+theorem phase2_count_cases_alloc_world_bound (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedInitCases s) tail b) :
+    TerminatingProgBoundedOn PtxAddressCountExit
+      (.decCall (ofString "al_keys") .one (ofString "alloc")
+        [.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52], .const 8]] tail)
+      (K.alloc + b + 1) := by
+  apply TerminatingProgBoundedOn.decCall_on
+    (Q := fun s => WorldOK s ∧ PtxPackedInitCases s) h.fb_alloc
+  · intro F s vs body callee ret hc hp ha hl
+    have hr := phase2_count_exit_access_ready hp
+    exact guestInv_callEntry s callee hr.1.1.1.1.1.1.1.1.1
+  · exact phase2_count_cases_alloc_world_init h
+  · exact ht
+
+/-- Initialized packing composes with a world-aware continuation. -/
+theorem phase2_packed_world_continuation_bound (h : PtxCallees)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedKeysReady s) tail b) :
+    TerminatingProgBoundedOn (fun s => WorldOK s ∧ PtxPackedInitCases s)
+      (.seq
+        (.dec (ofString "k") .one (.const 0)
+          (.seq (.assign .local (ofString "i") (.const 0))
+            (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "nal")))
+              phase2_packed_source_outer_body))) tail)
+      ((2 ^ 63 + 1) * ((2 ^ 63 + 1) * ((K.memcpy + 1) + (K.memcpy + 1) + 1) + 1) + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (fun t hct hpt => phase2_packed_cases_initialized_loop_bound h t hct hpt.2)
+    (phase2_packed_cases_initialized_world_hoare h) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
