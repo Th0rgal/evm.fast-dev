@@ -10739,4 +10739,84 @@ theorem Flw.seq_memcpy_disj {F : Type} {s : PanSemStateFiniteExact 64 F}
   obtain ⟨_, c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ := hspec
   exact hk _ ⟨c1, c2, c3, c4, c5, c6, c7, c8, c9⟩ rfl
 
+/-- Aligned list reallocation retains every complete copied entry. -/
+theorem Flw.seq_memcpy_words {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {ed es en : ExpHOL 64} {cont : ProgHOL 64}
+    {Ψ : Option (PanSemResultExact 64) → PanSemStateFiniteExact 64 F → Prop}
+    (hcode : s.code = originalRuntimeCode) (dst src n : BitVec 64)
+    (hd_nw : dst.toNat + n.toNat < 2 ^ 64)
+    (hs_nw : src.toNat + n.toNat < 2 ^ 64)
+    (hn_small : n.toNat + 32 < 2 ^ 63)
+    (hdisj : Disj (dst.toNat, n.toNat) (src.toNat, n.toNat))
+    (hd8 : dst.toNat % 8 = 0) (hs8 : src.toNat % 8 = 0)
+    (hed : ev s ed = some (.val (.word dst)))
+    (hes : ev s es = some (.val (.word src)))
+    (hen : ev s en = some (.val (.word n)))
+    (hk : ∀ s' : PanSemStateFiniteExact 64 F,
+      SoloHtabSet.MemCopyRel s s' dst src n.toNat n.toNat →
+      (∀ i, 8 * i + 8 ≤ n.toNat →
+        memW s' (dst.toNat + 8 * i) = memW s (src.toNat + 8 * i)) →
+      s'.locals = s.locals → Flw s' cont Ψ) :
+    Flw s (.seq (.call (some (none, none)) (ofString "memcpy") [ed, es, en]) cont) Ψ := by
+  refine Flw.seq_memcpy_disj (cont := cont) (Ψ := Ψ) hcode dst src n
+    hd_nw hs_nw hn_small hdisj hed hes hen ?_
+  intro s' hr hl
+  apply hk s' hr _ hl
+  intro i hi
+  exact SoloHtabSet.memW_copied_of_memCopyRel hr hd8 hs8 (by omega) hi hd_nw hs_nw
+
+theorem log_slot_toNat (arr n : BitVec 64)
+    (h : arr.toNat + 8 * n.toNat < 2 ^ 64) :
+    (arr + n * 8).toNat = arr.toNat + 8 * n.toNat := by
+  rw [BitVec.toNat_add, BitVec.toNat_mul]
+  have h8 : (8 : BitVec 64).toNat = 8 := rfl
+  rw [h8, Nat.mod_eq_of_lt (show n.toNat * 8 < 2 ^ 64 by omega)]
+  rw [Nat.mod_eq_of_lt (by omega)]
+  omega
+
+/-- Appending one entry leaves the existing prefix intact. -/
+theorem log_store_prefix {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (arr n lg : BitVec 64) (h : arr.toNat + 8 * n.toNat < 2 ^ 64)
+    (i : Nat) (hi : i < n.toNat) :
+    memW { s with memory := updW s.memory (arr + n * 8) lg }
+      (arr.toNat + 8 * i) = memW s (arr.toNat + 8 * i) := by
+  unfold memW
+  dsimp only
+  rw [updW_ne _ _ _ _ (by
+    intro he
+    have he' := congrArg BitVec.toNat he
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt (show arr.toNat + 8 * i < 2 ^ 64 by omega),
+      log_slot_toNat arr n h] at he'
+    omega)]
+
+/-- The append store installs the exact new log pointer. -/
+theorem log_store_new {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (arr n lg : BitVec 64) (h : arr.toNat + 8 * n.toNat < 2 ^ 64) :
+    memW { s with memory := updW s.memory (arr + n * 8) lg }
+      (arr.toNat + 8 * n.toNat) = lg.toNat := by
+  have he : BitVec.ofNat 64 (arr.toNat + 8 * n.toNat) = arr + n * 8 := by
+    apply BitVec.eq_of_toNat_eq
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt h, log_slot_toNat arr n h]
+  unfold memW
+  dsimp only
+  rw [he, updW_eq]
+
+/-- One append extends the child suffix while retaining the parent's prefix. -/
+theorem append_contents_step (old child current next : Nat → Nat) (n i : Nat)
+    (hp : ∀ k, k < n → current k = old k)
+    (hs : ∀ k, k < i → current (n + k) = child k)
+    (hkeep : ∀ k, k < n + i → next k = current k)
+    (hnew : next (n + i) = child i) :
+    (∀ k, k < n → next k = old k) ∧
+      ∀ k, k < i + 1 → next (n + k) = child k := by
+  constructor
+  · intro k hk
+    exact (hkeep k (by omega)).trans (hp k hk)
+  · intro k hk
+    by_cases hki : k < i
+    · exact (hkeep (n + k) (by omega)).trans (hs k hki)
+    · have : k = i := by omega
+      subst k
+      exact hnew
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
