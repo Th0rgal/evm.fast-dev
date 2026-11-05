@@ -2622,6 +2622,32 @@ theorem lst_new_stable_owned (h : PtxCallees) {F : Type}
     (worldOK_callEntry hp.1.1.1.1.1.1 callee).1.2 hh hb hd hn
   exact ⟨w, hv, ho.1, ⟨S, Nd, hw, ho.2.1⟩, ho.2.2⟩
 
+def Phase4StableAllocated : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => Phase4StableCapReady s ∧ LogsListOK s (locN s "stable_logs") ∧
+    LogsWorldOwned s (locN s "stable_logs") ∧ LogsDisjFixed s (locN s "stable_logs")
+
+theorem lst_new_stable_allocated_resume (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    Phase4StableAllocated (setVarHOLFinite (ofString "stable_logs") v
+      {post with locals := s.locals}) := by
+  have hp' := lst_new_stable_source_resume h s vs body callee ret v post hc hp hl hr
+  obtain ⟨w, rfl, hlst, howned, hfixed⟩ :=
+    lst_new_stable_owned h s vs body callee ret v post hc hp ha hl hr
+  refine ⟨hp', ?_, ?_, ?_⟩
+  all_goals simp only [locN, setVarHOLFinite, HolFiniteMapExact.lookup_update,
+    if_pos rfl, valueWord, Option.getD]
+  · exact hlst
+  · exact logsWorldOwned_with_locals _ _ howned
+  · exact hfixed
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
