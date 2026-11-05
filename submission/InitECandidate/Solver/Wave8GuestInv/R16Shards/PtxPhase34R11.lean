@@ -4688,7 +4688,8 @@ theorem stableCopy_loop_cut {tail : ProgHOL 64} {b : Nat}
             .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
             (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))))
         tail) (2 ^ 28 + 1 + b) := by
-  exact seq_bound_trans stableCopy_loop_budget hoare_stableCopy_loop_done htail
+  intro F s hc hp
+  exact seq_bound_trans stableCopy_loop_budget hoare_stableCopy_loop_done htail s hc hp
 
 /-- Continue from the actual copy body without adding to the tail budget. -/
 theorem stableCopy_body_cut {tail : ProgHOL 64} {b : Nat}
