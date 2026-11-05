@@ -6608,4 +6608,47 @@ theorem phase2_memcpy_eval_globals (h : PtxCallees) {F : Type}
   rw [he] at hs
   exact phase2_memcpy_restore_globals s post callee (hs hr)
 
+/-- Guest invariants discharge the memory-domain premise of packed-copy restoration. -/
+theorem phase2_memcpy_domain_of_guestInv {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (hs : GuestInv s) (hp : GuestInv post) :
+    ∀ a, s.memaddrs a → post.memaddrs a := by
+  intro a ha
+  rw [hp.memaddrs, ← hs.memaddrs]
+  exact ha
+
+/-- A concrete resuming memcpy produces an arena-ready post-state. -/
+theorem phase2_memcpy_eval_arena (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee)) :
+    ArenaReady post := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  exact (hs hr).1
+
+/-- A concrete resuming copy supplies the invariant, domain and global guarantees together. -/
+theorem phase2_memcpy_eval_state (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee)) (hi : GuestInv s) :
+    GuestInv post ∧ GlobalsKept [] s { post with locals := s.locals } ∧
+      (∀ a, s.memaddrs a → post.memaddrs a) := by
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  have step := hs hr
+  exact ⟨step.1.1, phase2_memcpy_restore_globals s post callee step.2.2.1,
+    phase2_memcpy_domain_of_guestInv s post hi step.1.1⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
