@@ -14484,4 +14484,40 @@ theorem phase2_decCall_backing
             · simp at hrun
           | _ => simp [emptyLocalsHOLFinite] at hrun
 
+theorem phase2_return_backing (e : ExpHOL 64) :
+    Hoare R16Shards.TxBacking (.return e)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  refine ⟨fun s _ hp _ _ => ?_⟩
+  rw [evaluateHOLFiniteState_return]
+  split
+  · exact hp
+  · split <;> exact hp
+
+/-- A void call can reach a returned result only through its continuation. -/
+theorem phase2_call0_seq_backing
+    {P R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    (hcall : Hoare P (.call (some (none, none)) fname args) (fun r t => r = none → R t))
+    (hcont : Hoare R cont (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t)) :
+    Hoare P (.seq (.call (some (none, none)) fname args) cont)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply Hoare.seq
+  · refine ⟨fun s hc hp hn => ⟨hcall.run s hc hp hn, ?_⟩⟩
+    intro _ hr
+    obtain ⟨v, hv⟩ := hr
+    exact (phase2_call0_ne_returned s fname args v hv).elim
+  · exact hcont
+
+/-- The complete pre-state account miss tail preserves transaction backing. -/
+theorem phase2_pre_state_account_tail_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (.seq (.call (some (none, none)) (ofString "record_pre_state_read")
+        [.var .local (ofString "addr")])
+        (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+          [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))))
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  apply phase2_call0_seq_backing (phase2_record_pre_state_read_world_backing _)
+  exact phase2_decCall_backing (phase2_ws_get_account_optional_resume_backing _ _)
+    (phase2_return_backing _)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
