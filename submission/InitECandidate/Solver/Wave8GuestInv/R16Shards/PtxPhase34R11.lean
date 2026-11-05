@@ -6931,6 +6931,37 @@ theorem ptxReceiptsDone_worldStore {F : Type} {s : PanSemStateFiniteExact 64 F}
   rw [h8]
   exact hp.2.2
 
+/-- Specialize stable receipt preservation to the block receipt-log array. -/
+theorem ptxReceiptsDone_store_bo72 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxReceiptsDone s) (hn : locN s "stable_logs" ≠ 0)
+    {S Nd : List Nat} (hW : WorldTypedWith s S Nd)
+    (hown : LogsLiveOwned s S Nd (locN s "stable_logs"))
+    (hback : memW s (memW s (globN s "bo" + 72)) ≠ 0)
+    {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (memW s (memW s (globN s "bo" + 72)))
+      (memW s (memW s (globN s "bo" + 72)) +
+        8 * memW s (memW s (globN s "bo" + 72) + 16)))
+    {mem' : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem' a = s.memory a) :
+    PtxReceiptsDone {s with memory := mem'} := by
+  obtain ⟨hWT, heq, henv⟩ := store_bo_array_world hp.1.1.1 hp.1.2 hW
+    (Or.inr (Or.inr ⟨rfl, hback, rfl⟩)) hx hin hm
+  have hg : GuestInv {s with memory := mem'} :=
+    guestInv_congr (s := s) rfl rfl rfl rfl hp.1.1.1.1
+  apply ptxReceiptsDone_worldStore hp hn hW hown hm ?_
+    ⟨worldOK_of_parts ⟨hg, hp.1.1.1.2⟩ hWT, henv⟩ heq
+  obtain ⟨_, _, hbo⟩ := blockOutObjects_eq_list hp.1.2 hW.1
+  let arr := (memW s (memW s (globN s "bo" + 72)),
+    8 * memW s (memW s (globN s "bo" + 72) + 16))
+  have hmemb : arr ∈ blockOutObjects s := by
+    rw [hbo]
+    simp [arr, hback, hp.1.2.bo_nz,
+      show memW s (memW s (globN s "bo" + 72) + 16) ≠ 0 from by omega]
+  have hmemf : arr ∈ fixedObjects s := List.mem_append_left _ (List.mem_append_right _ hmemb)
+  refine ⟨arr, ?_, hin⟩
+  unfold worldOwned
+  simp only [List.mem_append]
+  exact Or.inl (Or.inr hmemf)
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
