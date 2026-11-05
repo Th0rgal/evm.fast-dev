@@ -6918,6 +6918,10 @@ theorem transfer_alloc_data_record_prefix {F : Type}
       memW mid (logw.toNat + 24) = data.toNat ∧ memW mid (logw.toNat + 32) = 32 ∧
       (∀ b : Nat, b < 2 ^ 64 → b + 8 ≤ data.toNat →
         b ≠ logw.toNat + 24 → b ≠ logw.toNat + 32 → memW mid b = memW cur b) ∧
+      mid.be = s.be ∧
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) ∧
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) ∧
       Resumes (evaluateHOLFiniteState mid cont).1 ∧
       (evaluateHOLFiniteState cur
         (.decCall (ofString "data") .one (ofString "alloc") [.const 32]
@@ -6952,7 +6956,7 @@ theorem transfer_alloc_data_record_prefix {F : Type}
     transfer_record_pair_writes_prefix s written logw data 32 24 (ofString "data") cont
       (Or.inr rfl) hInv step wb out bytes ((loc _ (by decide)).trans hl) hd ww wi resum
   refine ⟨mid, lc ▸ hd, lc ▸ ((loc _ (by decide)).trans hl), ?_, st', ?_, ?_, words, ptr, count,
-    ?_, res, er.trans (congrArg Prod.fst eq), ?_⟩
+    ?_, eff.be.trans wb, out', bytes', res, er.trans (congrArg Prod.fst eq), ?_⟩
   · simpa only [globN, eff.globals] using heap
   · exact (hstep.1.2.2.1 _ (by decide)).symm.trans (st'.1.2.2.1 _ (by decide)) |>.symm
   · unfold globN
@@ -6995,6 +6999,10 @@ theorem transfer_data_tail_step {F : Type}
     (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data.toNat)
     (hdisj : ∀ mid : PanSemStateFiniteExact 64 F,
       EvmStepCC ["heap_ptr"] s mid →
+      mid.be = s.be →
+      (∀ a : BitVec 64, ¬ s.memaddrs a → mid.memory a = s.memory a) →
+      (∀ b : Nat, b < 2 ^ 64 →
+        ¬ (globN s "heap_ptr" ≤ b ∧ b < globN mid "heap_ptr") → memB mid b = memB s b) →
       ∀ x ∈ [(logw.toNat, 40), (topics, 96), (data.toNat, 32)],
       (∀ t, ∀ S0, TablesTyped mid S0 → t ∈ S0 → ∀ i ∈ htabFootprint mid t, Disj x i) ∧
       (∀ j ∈ fixedObjects mid, Disj x j) ∧
@@ -7003,7 +7011,7 @@ theorem transfer_data_tail_step {F : Type}
       (∀ ec ∈ evmChain mid, Disj x (memW mid (ec.1 + 112), 176)))
     (hr : Resumes (evaluateHOLFiniteState cur transferDataTail).1) :
     EvmStepCC ["heap_ptr"] s (evaluateHOLFiniteState cur transferDataTail).2 := by
-  obtain ⟨mid, hd, hl', heap, step, ev, sys, words, dp, dn, frame, resum, er, es⟩ :=
+  obtain ⟨mid, hd, hl', heap, step, ev, sys, words, dp, dn, frame, be, out, bytes, resum, er, es⟩ :=
     transfer_alloc_data_record_prefix s cur data logw av transferAppendReturn
       hInv hstep hbe hout hbyte ha hl hw hin hp hr
   have hbound : logw.toNat + 40 < 2 ^ 64 := by
@@ -7031,7 +7039,7 @@ theorem transfer_data_tail_step {F : Type}
           change sourceBase ≤ data.toNat
           omega,
         by rw [heap]⟩ addr tp tn dp dn hlt htd
-      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step)
+      (by rw [logOwnedIvls_of_transfer addr tp tn dp dn]; exact hdisj mid step be out bytes)
       (by simpa only [evalHOLExact, ev] using hev)
       (by simpa only [evalHOLExact] using hl')
       (transfer_log_append_tail_resumes_returned mid step.1.1.1.1.code resum)
