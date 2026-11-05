@@ -9926,4 +9926,56 @@ theorem phase4Totals_backing_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
 
 end PtxP34
 
+namespace PtxP34
+open PtxP1
+
+/-- Refund arithmetic transports backing; only the two mutating ether credits
+require a strengthened preservation contract. -/
+theorem phase4CreditPrefix_backing_cut (h : PtxCallees)
+    (hcredit : ∀ args : List (ExpHOL 64), Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t))
+    {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallBackingStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (phase4CreditCost + b) := by
+  have he : ∀ fn args, CallEntryOn TxAfterCallBackingStrong GuestInv fn args := by
+    intro fn args F s vs body callee ret hc hp ha hl
+    exact guestInv_callEntry s callee hp.1.1.1.1.1
+  have hb : TerminatingProgBoundedOn TxAfterCallBackingStrong (phase4CreditPrefix tail)
+      (K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1) := by
+    unfold phase4CreditPrefix ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_udiv_small5 _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_udiv_small5 (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_min _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_min (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_max _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_max (by decide) _) ?_
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_txAfterCallBackingStrong _ (by decide) _ _ ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_u256_sub _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_u256_sub (by decide) _) ?_
+    refine TerminatingProgBoundedOn.decCall_on h.fb_fee_mul _ _ _ (he _ _)
+      (resume_ro_txAfterCallBackingStrong h.ro_fee_mul (by decide) _) ?_
+    refine seq_bound_trans ?_ (hcredit _) ?_
+    · exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+        (fun s hp => hp.1.1.1.1.1)
+    refine seq_bound_trans ?_ (hcredit _) htail
+    exact bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_create_ether none _)
+      (fun s hp => hp.1.1.1.1.1)
+  have heq : K.udiv_small5 + (K.min + (K.max + (K.fee_mul +
+        (K.u256_sub + (K.fee_mul + ((K.create_ether + 1) +
+          ((K.create_ether + 1) + b)) + 1) + 1) + 1) + 1) + 1) + 1 =
+      phase4CreditCost + b := by unfold phase4CreditCost; omega
+  rw [heq] at hb
+  intro F s hc hp
+  exact hb s hc hp
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
