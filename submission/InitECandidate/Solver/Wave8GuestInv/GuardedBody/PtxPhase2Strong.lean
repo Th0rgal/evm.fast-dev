@@ -10746,4 +10746,39 @@ theorem phase2_memcpy_packed_arguments_live (h : PtxCallees) {F : Type}
   rw [hentry.1, hentry.2]
   exact hpair
 
+/-- Call-ready packing state carrying a fixed caller buffer through both copies. -/
+def PtxPackedLiveCall {F : Type} (buffer : Ivl) (contents : Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  WorldOK s ∧ PtxPackedLiveCopy s buffer contents ∧
+    (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+    globN s "heap_ptr" ≤ 2 ^ 64 ∧
+    Disj buffer (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)
+
+/-- The source address-copy command preserves the caller-buffer call invariant. -/
+theorem phase2_packed_address_copy_live_hoare (h : PtxCallees) (src : ExpHOL 64)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    Hoare (PtxPackedLiveCall buffer contents)
+      (.call (some (none, none)) (ofString "memcpy")
+        [.op .add [.var .local (ofString "al_keys"),
+          .panop .mul [.var .local (ofString "k"), .const 52]], src, .const 20])
+      (fun r t => r = none → PtxPackedLiveCall buffer contents t) := by
+  apply Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp hargs hl he
+  obtain ⟨base, hbase⟩ := hp.2.1.1.1.1.1
+  obtain ⟨k, hk⟩ := hp.2.2.1
+  have hentry := R16Shards.PtxP1.worldOK_callEntry hp.1 callee
+  have hcopy := phase2_memcpy_packed_arguments_live h s post _ src (.const 20)
+    vs body callee ret (some (.returned v)) (base + k * 52) 20 buffer contents
+    hc hargs hl he (by simp) (by simp [Resumes]) hentry hp.1.1 hp.2.1 hp.2.2.2.2
+    (phase2_packed_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact]) (by
+      rw [phase2_packed_destination_toNat s hp.2.1.1.1 base k hbase hk hp.2.2.2.1]
+      simp)
+  have harena := phase2_memcpy_eval_next_arena h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry hp.2.2.2.1
+  have hg := phase2_memcpy_eval_globals h s post vs body callee ret
+    (some (.returned v)) hc hl he (by simp) (by simp [Resumes]) hentry
+  have hn := phase2_packed_next_call_pre s post harena.1 hcopy.1.1 ⟨k, hk⟩ hg hp.2.2.2.1
+  exact ⟨hn.1, hcopy.1, hn.2.2.1, hn.2.2.2, hcopy.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
