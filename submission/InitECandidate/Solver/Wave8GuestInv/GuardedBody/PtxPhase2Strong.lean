@@ -13667,4 +13667,97 @@ theorem phase2_get_account_message_fields (h : PtxCallees) {ι F : Type} [Nonemp
     obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
     exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hspec e he).2.2.1; omega) hz
 
+/-- Account lookup preserves a saved heap buffer and its separating message witness. -/
+theorem phase2_get_account_live_buffer (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = GuestCodeLookup.originalRuntimeCode) (ha : ArenaReady s)
+    (hw : WorldTypedWith s S Nd) (hp : PtxLiveBufferAt s S Nd buffer contents)
+    (hm : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hd : IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "get_account") vs = some (body, callee, ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ∃ S' Nd', WorldTypedWith post S' Nd' ∧ PtxLiveBufferAt post S' Nd' buffer contents ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned post S' Nd') := by
+  have hworld : WorldOK s := ⟨ha, S, (worldTyped_iff_with s S).mpr ⟨Nd, hw⟩⟩
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hworld callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  let gs : List (String × Nat × Nat) :=
+    [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+  have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+  have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+      (worldTypedIvls s S Nd) := by
+    intro x hx y hy
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    obtain ⟨hgb, hnu, _, hle⟩ := hspec e he
+    exact bufferRegion_disj_le hw (e.1, e.2.1) hgb hnu e.2.2 hle y hy
+  obtain ⟨S', Nd', _, hw', hg, hf, _⟩ := hs.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+  refine ⟨S', Nd', hw', ?_, phase2_packed_owned_growth s post _ _ _ hm hg hd⟩
+  apply phase2_live_buffer_step s post S Nd S' Nd' buffer contents
+    (gs.map (fun (e : String × Nat × Nat) => bufferRegion s (e.1, e.2.2))) hp ha.2 hw hs.2.1 hg hf
+  · intro x hx
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.heap_ivl_disj_bufferRegion_le (hp.2.1 _ (by simp))
+      (e.1, e.2.1) (hspec e he).1 e.2.2 (hspec e he).2.2.2
+  · intro x hx hz
+    obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+    exact PtxP1.bufferRegion_zero_aligned s e.1 e.2.2 (by have := (hspec e he).2.2.1; omega) hz
+
+/-- Restoring caller locals after lookup retains the entire saved-buffer family. -/
+theorem phase2_get_account_message_store_ready (h : PtxCallees)
+    {ι : Type} (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (name : MlS) (args : List (ExpHOL 64))
+    (hm : name ≠ ofString "m") (hi : name ≠ ofString "index") :
+    DecCallResumeOn (PtxMessageStoreReady buffers contents)
+      (PtxMessageStoreReady buffers contents) name (ofString "get_account") args := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := PtxP1.funSpec_at_lookup h.wk_get_account s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have hs := hh (Or.inl ⟨v, rfl⟩)
+  let out := setVarHOLFinite name v {post with locals := s.locals}
+  have hm' : locN out "m" = locN s "m" := by
+    simp [out, locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm]
+  have hworld : WorldOK out := by
+    obtain ⟨S, hW⟩ := hp.1.2
+    obtain ⟨Nd, hw⟩ := (worldTyped_iff_with s S).mp hW
+    let gs : List (String × Nat × Nat) :=
+      [("keccak_pad", 136, 136), ("keccak_st", 200, 200), ("mpt_nib_scratch", 64, 64)]
+    have hspec : PtxP1.ScratchSpec gs := by unfold PtxP1.ScratchSpec gs; decide
+    have hsafe : IvlsDisj (gs.map (fun e => bufferRegion s (e.1, e.2.2)))
+        (worldTypedIvls s S Nd) := by
+      intro x hx y hy
+      obtain ⟨e, he, rfl⟩ := List.mem_map.mp hx
+      exact bufferRegion_disj_le hw (e.1, e.2.1) (hspec e he).1
+        (hspec e he).2.1 e.2.2 (hspec e he).2.2.2 y hy
+    obtain ⟨S', Nd', _, hw', _⟩ := hs.2.2.2.2 S Nd
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hsafe
+    exact localsFree_worldOK post _ post.clock
+      ⟨hs.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  refine ⟨hworld, phase2_get_account_txEnv h name args hi
+    s vs body callee ret v post hc ⟨hp.1, hp.2.1⟩ he hl hb, ?_, ?_, ?_, ?_⟩
+  · obtain ⟨w, hw⟩ := hp.2.2.1
+    exact ⟨w, by simpa [out, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hm] using hw⟩
+  · change Inside (locN out "m", 176) InitE.sourceBase (globN post "heap_ptr")
+    rw [hm']
+    exact ⟨hp.2.2.2.1.1, hp.2.2.2.1.2.trans hs.2.1⟩
+  · change WordsOK out (locN out "m", 176)
+    rw [hm']
+    exact wordsOK_transfer hp.1.1.1 hworld.1.1 hp.2.2.2.2.1
+  · intro i
+    obtain ⟨hd, S, Nd, hw, hpbuf, hsep⟩ := hp.2.2.2.2.2 i
+    obtain ⟨S', Nd', hw', hbuf', hsep'⟩ := phase2_get_account_live_buffer h
+      s post vs body callee ret v S Nd (buffers i) (contents i) hc hp.1.1 hw hpbuf
+      hp.2.2.2.1 hsep hl hb
+    refine ⟨?_, S', Nd', ?_, hbuf', ?_⟩
+    · rw [hm']; exact hd
+    · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+    · change IvlsDisj [(locN out "m", 176)] (worldOwned post S' Nd')
+      rw [hm']; exact hsep'
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
