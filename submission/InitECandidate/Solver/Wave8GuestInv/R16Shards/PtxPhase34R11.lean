@@ -2459,6 +2459,21 @@ theorem hoare_phase4StableCap_adjust :
   · intro F s hp hr
     cases hr
 
+theorem phase4StableCap_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4StableCapReady tail b) :
+    TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 2 (spineAt 130 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4LogPointersReady
+      (spinePlug 2 (spineAt 130 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine dec_bound_trans (fun s v hp he => phase4StableCap_init s v hp he) ?_
+    refine seq_bound_trans ?_ hoare_phase4StableCap_adjust htail
+    exact TerminatingProgBoundedOn.ite_on
+      (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+      (TerminatingProgBoundedOn.of_clock clock_skip)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
