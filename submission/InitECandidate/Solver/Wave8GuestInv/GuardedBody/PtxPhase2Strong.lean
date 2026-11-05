@@ -3587,4 +3587,108 @@ theorem phase2_address_copy_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
       show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- The AST reset preserves the shared witness before the key-copy pass. -/
+theorem phase2_address_copy_reset_hoare :
+    Hoare PtxAddressCopyInv
+      (.assign .local (ofString "i") (.const 0))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    have hv : v = .val (.word 0) := by
+      simpa [evalHOLExact] using he.symm
+    subst v
+    exact fun _ => phase2_address_copy_reset s hp
+  · exact fun _ _ hr => by cases hr
+
+/-- Key-copy scratch declarations preserve the address pass's shared witness. -/
+theorem phase2_address_copy_set_other {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (name : MlS) (v : ValueHOL 64)
+    (hne : ∀ n ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      ofString n ≠ name) :
+    PtxAddressCopyInv (setVarHOLFinite name v s) := by
+  apply phase2_address_copy_with_locals s _ s.clock _ hp
+  intro n hn
+  simp [HolFiniteMapExact.update, FUPDATE, Ne.symm (hne n hn)]
+
+/-- Evaluate the actual key-allocation size, retaining its word modulus. -/
+theorem phase2_key_alloc_size {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = (locN s "nkeys" * 52 + 8) % 2 ^ 64 := by
+  obtain ⟨n, hn⟩ := hp.2.2.1
+  refine ⟨n * 52 + 8, ?_, ?_⟩
+  · simp [evalAt, evalHOLExact, evalListHOLExact, hn, valueIsWord, valueWord,
+      wordOpHOL, wordOp, panOpHOL]
+  · simp [locN, hn, BitVec.toNat_add, BitVec.toNat_mul, Nat.add_mod, Nat.mul_mod]
+
+/-- A bounded cumulative count removes the key-allocation word modulus. -/
+theorem phase2_key_alloc_size_nonwrapping {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hb : locN s "nkeys" * 52 + 8 < 2 ^ 64) :
+    ∃ w : BitVec 64,
+      evalAt s (.op .add [.panop .mul [.var .local (ofString "nkeys"), .const 52],
+        .const 8]) = some (.val (.word w)) ∧
+      w.toNat = locN s "nkeys" * 52 + 8 ∧
+      locN s "nkeys" * 52 ≤ (w.toNat + 7) / 8 * 8 := by
+  obtain ⟨w, he, hw⟩ := phase2_key_alloc_size s hp
+  rw [Nat.mod_eq_of_lt hb] at hw
+  refine ⟨w, he, hw, ?_⟩
+  rw [hw]
+  omega
+
+/-- The shared input witness bounds the total number of storage keys. -/
+theorem phase2_address_copy_total_keys {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) : txAccessSlots s (locN s "tx") < 2 ^ 32 := by
+  obtain ⟨S, Nd, hW, hT, hd, he⟩ := hp.1.2
+  exact hT.1.2.2.2.2.2.1
+
+/-- Relating the accumulated count to the input total suffices for allocation. -/
+theorem phase2_key_alloc_count_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s)
+    (hk : locN s "nkeys" ≤ txAccessSlots s (locN s "tx")) :
+    locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  have ht := phase2_address_copy_total_keys hp
+  omega
+
+/-- Natural cumulative key count for the first `count` access-list records. -/
+def phase2_key_prefix {F : Type} (s : PanSemStateFiniteExact 64 F) (count : Nat) : Nat :=
+  ((List.range count).map
+    (fun i => memW s (memW s (locN s "tx" + 208) + 24 * i + 16))).sum
+
+/-- Advancing the prefix adds exactly the current record's key count. -/
+theorem phase2_key_prefix_succ {F : Type} (s : PanSemStateFiniteExact 64 F) (i : Nat) :
+    phase2_key_prefix s (i + 1) = phase2_key_prefix s i +
+      memW s (memW s (locN s "tx" + 208) + 24 * i + 16) := by
+  simp [phase2_key_prefix, List.range_succ, List.map_append, List.sum_append]
+
+/-- Every processed prefix is bounded by the transaction's total key count. -/
+theorem phase2_key_prefix_le_total {F : Type} (s : PanSemStateFiniteExact 64 F)
+    {i : Nat} (hi : i ≤ memW s (locN s "tx" + 216)) :
+    phase2_key_prefix s i ≤ txAccessSlots s (locN s "tx") := by
+  have hm : ∀ j k, j ≤ k → phase2_key_prefix s j ≤ phase2_key_prefix s k := by
+    intro j k hjk
+    induction hjk with
+    | refl => exact Nat.le_refl _
+    | @step k hk ih =>
+      rw [phase2_key_prefix_succ]
+      exact Nat.le_trans ih (Nat.le_add_right _ _)
+  exact hm i _ hi
+
+/-- Counting-pass invariant connecting the machine accumulator to a natural prefix. -/
+def PtxAddressCountInv {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxAddressCopyInv s ∧
+  locN s "nal" = memW s (locN s "tx" + 216) ∧
+  locN s "nkeys" = phase2_key_prefix s (locN s "i")
+
+/-- The counting invariant supplies the previously conditional allocation bound. -/
+theorem phase2_address_count_alloc_bound {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCountInv s) : locN s "nkeys" * 52 + 8 < 2 ^ 64 := by
+  apply phase2_key_alloc_count_bound hp.1
+  rw [hp.2.2]
+  apply phase2_key_prefix_le_total
+  rw [← hp.2.1]
+  exact hp.1.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
