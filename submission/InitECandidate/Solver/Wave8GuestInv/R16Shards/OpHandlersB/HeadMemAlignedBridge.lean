@@ -10946,6 +10946,7 @@ theorem log_append_store_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
 def PushContents {F : Type} (s : PanSemStateFiniteExact 64 F) (l arr0 n : BitVec 64)
     (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F) : Prop :=
   ∃ arr : BitVec 64, post.memory l = .word arr ∧ v = .val (.word (arr + n * 8)) ∧
+    arr.toNat % 8 = 0 ∧
     ∀ i, i < n.toNat → memW post (arr.toNat + 8 * i) = memW s (arr0.toNat + 8 * i)
 
 attribute [local irreducible] Ret in
@@ -11071,8 +11072,9 @@ theorem lst_push_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
       (by rw [hT'l _ (by decide)]; exact hXe) (by rw [hT'l _ (by decide)]; exact hXn) hT'm
       (by show copied.memaddrs l; rw [hc.2.1]; exact hd0)) ?_
     rintro v post ⟨_, _, _, _, _, _, pm, rfl⟩
-    refine ⟨hp, ?_, rfl, ?_⟩
+    refine ⟨hp, ?_, rfl, ?_, ?_⟩
     · rw [pm, updW_ne _ _ _ _ (by bv_omega)]; exact hT'm
+    · rw [hhp']; exact hA.2.2.2.2.2.2.1
     · intro i hi
       unfold memW
       rw [pm]
@@ -11081,7 +11083,7 @@ theorem lst_push_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
   · refine Ret.seq_skip ?_
     refine Ret.mono (lst_push_tail S2 l 8 n arr0 hS2l hS2e hS2n hma hd0) ?_
     rintro v post ⟨_, _, _, _, _, _, pm, rfl⟩
-    refine ⟨arr0, ?_, rfl, ?_⟩
+    refine ⟨arr0, ?_, rfl, ha8, ?_⟩
     · rw [pm, updW_ne _ _ _ _ (by bv_omega)]; exact hma
     · intro i hi
       obtain ⟨_, h8, _⟩ := list_array_cell_ne_header arr0 l n.toNat i hi (by omega) hLw hsep
@@ -11172,7 +11174,7 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
     (hc1 : 1 ≤ cap.toNat) :
     Ret s (sourceFnBody Guest.Software.guestFn_log_append)
-      (fun _ post => ∃ arr : BitVec 64, post.memory L = .word arr ∧
+      (fun _ post => ∃ arr : BitVec 64, post.memory L = .word arr ∧ arr.toNat % 8 = 0 ∧
         (∀ i, i < n.toNat →
           memW post (arr.toNat + 8 * i) = memW s (arr0.toNat + 8 * i)) ∧
         memW post (arr.toNat + 8 * n.toNat) = lg.toNat) := by
@@ -11202,7 +11204,7 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
       (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
       (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
       hmn hmc hd0 hd8 hd16 hle (by omega) (by decide)) h3
-  obtain ⟨arr, pmL, hv, hprefix⟩ := Ret.apply
+  obtain ⟨arr, pmL, hv, halign, hprefix⟩ := Ret.apply
     (lst_push_run_contents (callEntryStateHOLFinite s _) L arr0 n cap hAE
       (by simp (config := {decide := true}) [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
       (by simp [callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
@@ -11250,7 +11252,7 @@ theorem log_append_run_contents {F : Type} (s : PanSemStateFiniteExact 64 F)
     (fun v hv => ⟨lg, by rw [ev_loc, hXlg] at hv; exact (Option.some.inj hv).symm⟩) fun w hw' _ => ?_
   have hwl : w = lg := by rw [ev_loc, hXlg] at hw'; simpa using hw'.symm
   subst w
-  refine Ret.ret fun _ _ => ⟨arr, ?_, ?_⟩
+  refine Ret.ret fun _ _ => ⟨arr, ?_, halign, ?_⟩
   · change updW X.memory (arr + n * 8) lg L = _
     rw [updW_ne _ _ _ _ (Ne.symm hslot)]; exact pmL
   · exact log_append_store_contents X arr n lg (fun i => memW s (arr0.toNat + 8 * i))
@@ -11281,7 +11283,7 @@ theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
     (h : LAContents s L arr0 n0 child i u)
     (hm : u.memory L = .word arr) (hn : n.toNat = n0.toNat + i)
     (hlg : lg.toNat = child i)
-    (hp : ∃ next : BitVec 64, post.memory L = .word next ∧
+    (hp : ∃ next : BitVec 64, post.memory L = .word next ∧ next.toNat % 8 = 0 ∧
       (∀ k, k < n.toNat →
         memW post (next.toNat + 8 * k) = memW u (arr.toNat + 8 * k)) ∧
       memW post (next.toNat + 8 * n.toNat) = lg.toNat) :
@@ -11289,7 +11291,7 @@ theorem laContents_step {F : Type} {s u post : PanSemStateFiniteExact 64 F}
   obtain ⟨old, hold, hprefix, hsuffix⟩ := h
   have heq : old = arr := by have he := hold.symm.trans hm; cases he; rfl
   subst old
-  obtain ⟨next, hnext, hkeep, hnew⟩ := hp
+  obtain ⟨next, hnext, _, hkeep, hnew⟩ := hp
   refine ⟨next, hnext, ?_⟩
   apply append_contents_step
     (fun k => memW s (arr0.toNat + 8 * k)) child
