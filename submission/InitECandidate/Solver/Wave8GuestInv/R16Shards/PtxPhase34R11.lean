@@ -783,6 +783,26 @@ theorem txAfterCallStrong_scratchStep {F : Type}
   · change LogsLiveOwned post S' Nd' (memW post (locN s "out" + 16))
     rw [hout16]; exact hlogs.2
 
+/-- Heap-only world steps preserve the output record and its live logs. -/
+theorem txAfterCallStrong_heapStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {Q : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Option (PanSemResultExact 64) →
+      PanSemStateFiniteExact 64 F → List Nat → List Nat → Prop}
+    {r : Option (PanSemResultExact 64)}
+    (hs : WorldStep (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]),
+       ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])] Q s r post)
+    (h : TxAfterCallStrong s) : TxAfterCallStrong { post with locals := s.locals } := by
+  have hsc : globN post "scratch_ptr" = globN s "scratch_ptr" :=
+    R16Shards.globN_eq_of_lookup (hs.2.2.1 _ (by decide))
+  exact txAfterCallStrong_scratchStep
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])
+    hs h ⟨hs.2.1, by omega⟩ (gs := []) (by intro e he; cases he)
+    rfl (by decide) (by decide) (by decide) (by simp)
+    (by intro k hk; simp only [List.mem_cons, List.not_mem_nil, or_false] at hk ⊢
+        rcases hk with rfl | rfl | rfl | rfl | rfl <;> simp)
+
 /-- Both ether credits retain the output record and its live logs. -/
 theorem create_ether_txAfterCallStrong_resume {F : Type}
     (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
