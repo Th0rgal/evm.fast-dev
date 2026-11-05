@@ -4839,6 +4839,34 @@ theorem stableCopyLoopInv_init_spatial {F : Type} (s : PanSemStateFiniteExact 64
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hq
   · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString] using hd
 
+/-- Loading the backing pointer and then zeroing the counter establishes the
+loop invariant directly from the post-length state. -/
+theorem stableCopyLoopInv_backing_init {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hz : locN s "logs" ≠ 0)
+    (hh : WordsOK s (locN s "stable_logs", 24))
+    (ha : Allocated s (locN s "stable_logs", 24))
+    (hc : locN s "nl" ≤ locN s "stable_log_cap")
+    (hs : StableCopySpatial s) (n p w : BitVec 64) (v : ValueHOL 64)
+    (hn : s.locals.lookup (ofString "nl") = some (.val (.word n)))
+    (hl : s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (hw : s.locals.lookup (ofString "stable_logs") = some (.val (.word w)))
+    (hword : WordAt s (locN s "stable_logs"))
+    (he : evalAt s (.load .one (.var .local (ofString "stable_logs"))) = some v) :
+    StableCopyLoopInv (setVarHOLFinite (ofString "i") (.val (.word 0))
+      (setVarHOLFinite (ofString "stable_lp") v s)) := by
+  obtain ⟨q, hq, hd⟩ := stable_backing_load_local s w v hw hword he
+  apply stableCopyLoopInv_init_spatial _ (stableLengthPost_set_backing s v hp)
+    (n := n) (p := p) (q := q)
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, ofString] using hz
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, WordsOK, WordAt, ofString] using hh
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, Allocated, globN, ofString] using ha
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, ofString] using hc
+  · exact stableCopySpatial_setVar s _ v (by decide) (by decide) (by decide) hs
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hn
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, ofString] using hl
+  · exact hq
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, locN, memW, ofString] using hd
+
 /-- Concrete counter initialization from the post-length spatial contract. -/
 theorem hoare_stableCopy_init_spatial :
     Hoare (fun s => StableLengthPost s ∧ locN s "logs" ≠ 0 ∧
