@@ -105,6 +105,24 @@ theorem phase1_mgas_word_resume {F : Type} (s post : PanSemStateFiniteExact 64 F
   obtain ⟨w, hw⟩ := h
   exact ⟨w, by simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE, hne] using hw⟩
 
+/-- Retain the scalar pointer returned by sender allocation instead of keeping
+only its numeric projection in the allocated-buffer predicate. -/
+theorem phase1_resume_alloc_sender_word (h : PtxCallees) :
+    DecCallResumeOn (R16Shards.PtxP1.StageP 0)
+      (fun s => R16Shards.PtxP1.SenderAllocated s ∧
+        ∃ w : BitVec 64, s.locals.lookup (ofString "sender") = some (.val (.word w)))
+      (ofString "sender") (ofString "alloc") [.const 24] := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hallocated := R16Shards.PtxP1.resume_alloc_sender h s vs body callee ret v post
+    hc hp ha hl hb
+  have hrt := R16Shards.PtxP1.funSpec_at_lookup h.rt_alloc s hc vs body callee ret hl
+    ((arenaReady_with_locals s callee (s.clock - 1)).mpr hp.1.1.1.1) (by rw [hb]; simp)
+  rw [hb] at hrt
+  obtain ⟨w, hv, _⟩ := hrt v rfl
+  subst v
+  refine ⟨hallocated, w, ?_⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 /-- Local information accumulated before `mgas` and `reservoir` are declared. -/
 def PtxPhase1ShapePrefix {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
   (∀ name ∈ (["tx", "index", "sender"] : List String),
