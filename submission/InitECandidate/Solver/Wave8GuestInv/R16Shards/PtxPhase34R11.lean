@@ -6962,6 +6962,34 @@ theorem ptxReceiptsDone_store_bo72 {F : Type} {s : PanSemStateFiniteExact 64 F}
   simp only [List.mem_append]
   exact Or.inl (Or.inr hmemf)
 
+/-- Spatial facts required at the final receipt slot. -/
+def Phase4ReceiptSlotReady : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => PtxReceiptsDone s ∧ locN s "stable_logs" ≠ 0 ∧
+    (∃ S Nd, WorldTypedWith s S Nd ∧ LogsLiveOwned s S Nd (locN s "stable_logs")) ∧
+    memW s (memW s (globN s "bo" + 72)) ≠ 0 ∧
+    Inside (locN s "rl", 8) (memW s (memW s (globN s "bo" + 72)))
+      (memW s (memW s (globN s "bo" + 72)) +
+        8 * memW s (memW s (globN s "bo" + 72) + 16)) ∧
+    ∃ w : BitVec 64, s.locals.lookup (ofString "stable_logs") = some (.val (.word w))
+
+/-- Storing the stable list into the returned receipt slot preserves the cut. -/
+theorem hoare_receiptSlot_store :
+    Hoare Phase4ReceiptSlotReady
+      (.store (.var .local (ofString "rl")) (.var .local (ofString "stable_logs")))
+      (fun r t => r = none → PtxReceiptsDone t) := by
+  refine R13Shards.Hoare.store_fall fun s x v mem' hp hx hv hst => ?_
+  obtain ⟨hdone, hn, ⟨S, Nd, hW, hown⟩, hback, hin, w, hw⟩ := hp
+  have hv' : v = .val (.word w) := by
+    simpa [evalAt, evalHOLExact, hw] using hv.symm
+  subst v
+  obtain ⟨hdom, _, hmem⟩ := R13Shards.panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  have hrl : locN s "rl" = x.toNat := by
+    have hlu : s.locals.lookup (ofString "rl") = some (.val (.word x)) := hx
+    simp only [locN, hlu]
+  apply ptxReceiptsDone_store_bo72 hdone hn hW hown hback hdom _ hmem
+  simpa only [hrl] using hin
+
 /-- The final receipt-list push and slot store compose with the Phase-5 cut. -/
 theorem phase4ReceiptPush_cut (h : PtxCallees)
     (R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop)
