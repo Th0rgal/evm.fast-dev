@@ -3265,4 +3265,20 @@ theorem phase2_address_copy_inner_hoare :
       (fun r s => r = none → PtxAddressCopyInv s) := by
   exact Hoare.seq_fall phase2_address_copy_store_hoare phase2_address_copy_updates_hoare
 
+/-- The copy invariant survives scope restoration and clock changes. -/
+theorem phase2_address_copy_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxAddressCopyInv s) :
+    PtxAddressCopyInv { s with locals := locals, clock := clock } := by
+  refine ⟨phase2_address_joint_with_locals s locals clock
+    (fun name hm => hl name (by simp only [List.mem_cons] at hm ⊢; tauto)) hp.1, ?_, ?_, ?_⟩
+  · exact (hl "i" (by simp)) ▸ hp.2.1
+  · exact (hl "nkeys" (by simp)) ▸ hp.2.2.1
+  · rw [locN_congr s locals clock "i" (hl "i" (by simp)),
+      locN_congr s locals clock "nal" (hl "nal" (by simp))]
+    exact hp.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
