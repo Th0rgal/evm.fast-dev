@@ -2423,6 +2423,27 @@ theorem phase4LogCopySrc_word {F : Type} (s : PanSemStateFiniteExact 64 F) (v : 
     · cases he
   · cases he
 
+/-- The log-push body preserves typed operands for subsequent stable allocation. -/
+theorem hoare_phase4LogCopyBody_typed
+    (hresume : DecCallResumeOn Phase4TypedLogPointers
+      (fun s => Phase4LogSlotReady s ∧
+        (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+        ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+      (ofString "slot") (ofString "lst_push")
+      [.load .one (.op .add [.var .global (ofString "bo"), .const 40]), .const 8]) :
+    Hoare Phase4TypedLogPointers phase4LogCopyBody
+      (fun r t => r = none → Phase4TypedLogPointers t) := by
+  apply Hoare.decCall_fall (R := fun s => Phase4LogSlotReady s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+    ∃ p : BitVec 64, s.locals.lookup (ofString "lp") = some (.val (.word p)))
+    (by decide) localsOnly_phase4TypedLogPointers hresume
+  refine Hoare.seq_fall (hoare_logSlot_store_typed phase4LogCopySrc phase4LogCopySrc_word) ?_
+  apply Hoare.assign
+  · intro F s v hp _ _
+    exact LocalsOnly.setVar localsOnly_phase4TypedLogPointers (by decide) v s hp
+  · intro F s _ hr
+    cases hr
+
 theorem hoare_phase4LogCopyBody
     (hresume : DecCallResumeOn Phase4LogPointersReady Phase4LogSlotReady
       (ofString "slot") (ofString "lst_push")
