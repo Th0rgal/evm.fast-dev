@@ -7745,4 +7745,28 @@ theorem phase2_packed_counters_next_hoare :
       exact fun _ => phase2_packed_counter_state before hp ha hbound
     · exact fun _ _ hr => by cases hr
 
+/-- The source-ordered copy body restores the complete inclusive iteration state. -/
+theorem phase2_packed_body_iteration_hoare (h : PtxCallees) (addressSrc keySrc : ExpHOL 64) :
+    Hoare (fun s => WorldOK s ∧ PtxPackedSeparatedCopy s ∧
+      (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+      globN s "heap_ptr" ≤ 2 ^ 64)
+      (.seq
+        (.call (some (none, none)) (ofString "memcpy")
+          [.op .add [.var .local (ofString "al_keys"),
+            .panop .mul [.var .local (ofString "k"), .const 52]], addressSrc, .const 20])
+        (.seq
+          (.call (some (none, none)) (ofString "memcpy")
+            [.op .add [.var .local (ofString "al_keys"),
+              .panop .mul [.var .local (ofString "k"), .const 52], .const 20], keySrc, .const 32])
+          (.seq
+            (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+            (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))))
+      (fun r s => r = none → WorldOK s ∧ PtxPackedSeparatedInner s ∧
+        (∃ k : BitVec 64, s.locals.lookup (ofString "k") = some (.val (.word k))) ∧
+        (∃ j : BitVec 64, s.locals.lookup (ofString "j") = some (.val (.word j))) ∧
+        globN s "heap_ptr" ≤ 2 ^ 64) := by
+  exact Hoare.seq_fall (phase2_packed_address_copy_next_hoare h addressSrc)
+    (Hoare.seq_fall (phase2_packed_storage_copy_next_hoare h keySrc)
+      phase2_packed_counters_full_hoare)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
