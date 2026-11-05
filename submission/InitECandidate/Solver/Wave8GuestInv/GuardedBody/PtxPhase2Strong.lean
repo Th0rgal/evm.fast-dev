@@ -1,6 +1,7 @@
 import InitECandidate.Solver.Wave8GuestInv.R13Shards.PtxPhase45R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase34R11
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -12678,5 +12679,78 @@ theorem phase2_alloc_message_tables_bound (h : PtxCallees) {ι : Type} [Nonempty
     exact guestInv_callEntry s callee hp.1.1.1.1
   · exact phase2_alloc_message_tables_ready h buffers contents aa ak name args hm hi
   · exact ht
+
+open R16Shards
+
+/-- A write outside world-owned objects preserves the nested list backing words. -/
+theorem phase2_backing_store_outside_world {F : Type}
+    {s : PanSemStateFiniteExact 64 F} (ha : ArenaReady s) (he : TxEnv s)
+    {S Nd : List Nat} (hw : WorldTypedWith s S Nd) (hb : TxBacking s)
+    {blk : Ivl} (hd : ∀ o ∈ worldOwned s S Nd, Disj blk o)
+    {x : BitVec 64} (_hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) blk.1 (blk.1 + blk.2))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    TxBacking {s with memory := mem} := by
+  have hu : ∀ i ∈ fixedObjects s, IvlUnhit s {s with memory := mem} i := by
+    intro i hi
+    apply ivlUnhit_single hm
+    · intro hz; rw [fixedObjects_zero_aligned i hi hz]
+    · exact disj_of_inside_right hin (disj_symm (hd i
+        (List.mem_append_left _ (List.mem_append_right _ hi))))
+  have hf : ∀ i ∈ fixedObjects s, i.2 ≠ 0 →
+      Allocated s i ∧ WordsOK s i := by
+    intro i hi hn
+    rcases hw.2.2.1.1 i hi with hz | hh
+    · exact (hn hz).elim
+    · exact hh
+  have hbo : (globN s "bo", 88) ∈ fixedObjects s := by
+    simpa [he.bo_nz] using typedRecord_mem_fixedObjects s (r := ("bo", 88)) (by decide)
+  have hl : ∀ k ∈ ([40, 72] : List Nat),
+      (memW s (globN s "bo" + k), 24) ∈ fixedObjects s := by
+    intro k hk
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+    rcases hk with rfl | rfl
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo40]
+    · simp [fixedObjects, blockOutObjects, he.bo_nz, he.bo72]
+  apply PtxP34.txBacking_of_unhit_headers (post := {s with memory := mem}) hb rfl
+  · exact (hf _ hbo (by simp)).2.1
+  · exact (ivl_allocated_bound ha.2 (hf _ hbo (by simp)).1).2
+  · exact hu _ hbo
+  · intro k hk; exact (hf _ (hl k hk) (by simp)).2.1
+  · intro k hk; exact (ivl_allocated_bound ha.2 (hf _ (hl k hk) (by simp)).1).2
+  · intro k hk; exact hu _ (hl k hk)
+
+/-- Message writes retain both the saved buffers and the true nested backing guard. -/
+theorem phase2_message_store_backing {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {s : PanSemStateFiniteExact 64 F} (hp : PtxMessageStoreReady buffers contents s)
+    (hb : TxBacking s) {x : BitVec 64} (hx : s.memaddrs x)
+    (hin : Inside (x.toNat, 8) (locN s "m") (locN s "m" + 176))
+    {mem : BitVec 64 → HolWordLab 64} (hm : ∀ a, a ≠ x → mem a = s.memory a) :
+    PtxMessageStoreReady buffers contents {s with memory := mem} ∧
+      TxBacking {s with memory := mem} := by
+  refine ⟨phase2_message_store_ready_store buffers contents hp hx hin hm, ?_⟩
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, _, hd⟩ := hp.2.2.2.2.2 i
+  exact phase2_backing_store_outside_world (blk := (locN s "m", 176)) hp.1.1 hp.2.1 hw hb
+    (fun o ho => hd _ (by simp) o ho) hx hin hm
+
+/-- Scalar message stores compose with backing-aware continuations. -/
+theorem phase2_message_offset_store_backing_hoare {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (off : Nat) (hoff : off + 8 ≤ 176) (value : ExpHOL 64)
+    (hv : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) (v : ValueHOL 64),
+      PtxMessageStoreReady buffers contents s → evalAt s value = some v →
+      ∃ w, v = .val (.word w)) :
+    Hoare (fun s => PtxMessageStoreReady buffers contents s ∧ TxBacking s)
+      (.store (.op .add [.var .local (ofString "m"), .const off]) value)
+      (fun r s => r = none → PtxMessageStoreReady buffers contents s ∧ TxBacking s) := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx he hst
+  obtain ⟨w, rfl⟩ := hv s v hp.1 he
+  obtain ⟨hdom, _, hmem⟩ := panMemStoresHOL_word_spec
+    (by simpa only [flattenHOL] using hst)
+  exact phase2_message_store_backing buffers contents hp.1 hp.2 hdom
+    (phase2_message_offset_inside hp.1 off hoff hx) hmem
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
