@@ -1,4 +1,5 @@
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.DecodeTransaction
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBalStateInit.WkLstPush
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.GbodyRunAttempt
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.HeaderHash
@@ -11,6 +12,14 @@ set_option autoImplicit false
 namespace InitECandidate.Solver.Wave8GuestInv.ContractParts.StrongBridges
 
 open Flapjack.Basis.Pure.MlString
+
+theorem wk_encode_transaction_strong :
+    WorldKeeps (fun s => WorldOK s ∧ R16Shards.WkBlockTxEnc.TxValidEncodeReady s)
+      (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "encode_transaction") :=
+  R16Shards.WkBlockTxEnc.wk_encode_transaction_strong
 
 theorem wk_decode_transaction_strong :
     WorldKeeps (fun s => WorldOK s ∧ R16Shards.WkBlockTxEnc.DecodeTxReady s)
