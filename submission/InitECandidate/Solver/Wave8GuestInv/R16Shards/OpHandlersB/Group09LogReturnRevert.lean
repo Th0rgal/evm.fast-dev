@@ -11625,4 +11625,41 @@ theorem lst_push_alloc_copy_preserves_g09 {F : Type}
     hRC.trans (hRE.trans hR), fun h => hHMC (hHME (hHM h)),
     (congrFun (globN_congr hgC) "heap_ptr").trans hqNat⟩
 
+/-- Readback of the four final growth writes, with every copied prefix cell
+preserved when it is disjoint from the header and insertion slot. -/
+theorem log_growth_final_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (h08 : l ≠ l + 8#64) (h016 : l ≠ l + 16#64)
+    (h816 : l + 8#64 ≠ l + 16#64)
+    (hslot0 : p + n * 8#64 ≠ l)
+    (hslot8 : p + n * 8#64 ≠ l + 8#64)
+    (hslot16 : p + n * 8#64 ≠ l + 16#64)
+    (hold : ∀ i : Nat, i < n.toNat →
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ p + n * 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 8#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l + 16#64 ∧
+      BitVec.ofNat 64 (p.toNat + 8 * i) ≠ l) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64)
+      else if a = l + 16#64 then .word (cap * 2#64)
+      else if a = l then .word p else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l + 8#64).toNat = (n + 1#64).toNat ∧
+    memW post (l + 16#64).toNat = (cap * 2#64).toNat ∧
+    memW post (p + n * 8#64).toNat = log.toNat ∧
+    (∀ i : Nat, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i)) := by
+  dsimp only
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · simp [memW, Ne.symm hslot0, h08, h016]
+  · simp only [memW, BitVec.ofNat_toNat]
+    simp [Ne.symm hslot8]
+  · simp only [memW, BitVec.ofNat_toNat]
+    simp [Ne.symm hslot16, Ne.symm h816]
+  · simp only [memW, BitVec.ofNat_toNat]
+    simp
+  · intro i hi
+    obtain ⟨hs, h8, h16, h0⟩ := hold i hi
+    simp [memW, hs, h8, h16, h0]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
