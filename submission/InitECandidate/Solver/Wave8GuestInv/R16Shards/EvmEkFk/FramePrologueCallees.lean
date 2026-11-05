@@ -2000,6 +2000,34 @@ theorem logOwnedIvls_of_transfer {F : Type}
   rw [haddr, htopics_ptr, htopics_len, hdata_ptr, hdata_len]
   simp
 
+theorem transfer_allocations_pairwise (log topics data : Nat)
+    (hlog_topics : log + 40 ≤ topics)
+    (htopics_data : topics + 96 ≤ data) :
+    ([(log, 40), (topics, 96), (data, 32)] : List Ivl).Pairwise Disj := by
+  refine List.pairwise_cons.2 ⟨?_, List.pairwise_cons.2 ⟨?_, by simp⟩⟩
+  · intro x hx
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hx
+    rcases hx with rfl | rfl
+    · exact Or.inr (Or.inr (Or.inl hlog_topics))
+    · exact Or.inr (Or.inr (Or.inl (by omega)))
+  · intro x hx
+    simp only [List.mem_singleton] at hx
+    subst x
+    exact Or.inr (Or.inr (Or.inl htopics_data))
+
+theorem transfer_logOwnedIvls_pairwise {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log topics data : Nat}
+    (haddr : memW s log = globN s "vm_system_address")
+    (htopics_ptr : memW s (log + 8) = topics)
+    (htopics_len : memW s (log + 16) = 3)
+    (hdata_ptr : memW s (log + 24) = data)
+    (hdata_len : memW s (log + 32) = 32)
+    (hlog_topics : log + 40 ≤ topics)
+    (htopics_data : topics + 96 ≤ data) :
+    (logOwnedIvls s log).Pairwise Disj := by
+  rw [logOwnedIvls_of_transfer haddr htopics_ptr htopics_len hdata_ptr hdata_len]
+  exact transfer_allocations_pairwise log topics data hlog_topics htopics_data
+
 theorem logsListOK_of_append {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {logs log : Nat}
     (hlogs : LogsListOK s logs) (hnz : logs ≠ 0)
@@ -5286,6 +5314,45 @@ private theorem log_append_head_returned_spec {F : Type}
                       ⟨a2.trans a1, b2.trans b1, c2.trans c1, d2.trans d1⟩⟩
         · simp at hcall
       | _ => simp at hcall
+
+theorem transfer_log_append_returned_step {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (evw logw : BitVec 64) (topics data : Nat)
+    (hInv : EvmInv s) (hev : evw.toNat = globN s "ev")
+    (hwords : WordsOK s (logw.toNat, 40))
+    (hlog : Inside (logw.toNat, 40) sourceBase (globN s "heap_ptr"))
+    (hsys : Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (htopics : Inside (topics, 96) sourceBase (globN s "heap_ptr"))
+    (hdata : Inside (data, 32) sourceBase (globN s "heap_ptr"))
+    (haddr : memW s logw.toNat = globN s "vm_system_address")
+    (htp : memW s (logw.toNat + 8) = topics)
+    (htn : memW s (logw.toNat + 16) = 3)
+    (hdp : memW s (logw.toNat + 24) = data)
+    (hdn : memW s (logw.toNat + 32) = 32)
+    (hlt : logw.toNat + 40 ≤ topics) (htd : topics + 96 ≤ data)
+    (hdisj : ∀ x ∈ logOwnedIvls s logw.toNat,
+      (∀ t, ∀ S0, TablesTyped s S0 → t ∈ S0 → ∀ i ∈ htabFootprint s t, Disj x i) ∧
+      (∀ j ∈ fixedObjects s, Disj x j) ∧
+      (∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj x o) ∧
+      (∀ S0 Nd0, TriesTypedWith s S0 Nd0 → ∀ j ∈ nodeExtents s Nd0, Disj x j) ∧
+      (∀ ec ∈ evmChain s, Disj x (memW s (ec.1 + 112), 176)))
+    (hdisj_header : Disj (memW s (globN s "ev" + 88), 24) (logw.toNat, 40))
+    (hdisj_array : Disj (frameLogs s (globN s "ev", globN s "cur_cont")) (logw.toNat, 40))
+    (hcall : (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])).1 = none)
+    (heval_ev : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global (ofString "ev")) = some (.val (.word evw)))
+    (heval_log : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .local (ofString "log")) = some (.val (.word logw))) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "log_append")
+        [.var .global (ofString "ev"), .var .local (ofString "log")])
+    EvmStepCC ["heap_ptr"] s out.2 ∧ out.2.locals = s.locals := by
+  exact log_append_head_returned_spec s evw logw hInv hev
+    (head_log_count_succ_lt_of_evmInv hInv)
+    (logEntryOK_of_transfer hwords hlog hsys htopics hdata haddr htp htn hdp hdn)
+    hdisj (transfer_logOwnedIvls_pairwise haddr htp htn hdp hdn hlt htd)
+    hdisj_header hdisj_array hcall heval_ev heval_log
 
 end EmitTransferLogStep
 
