@@ -4255,6 +4255,32 @@ theorem stableCopyLoopInv_zero {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rw [hz]; exact Nat.zero_le _
   · simpa only [hz] using hstore
 
+/-- Assigning zero to the counter establishes the full loop contract when its
+post-assignment allocation and separation obligations have been supplied. -/
+theorem hoare_stableCopy_init_loop :
+    Hoare (fun s =>
+      StableCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) ∧
+      (∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n))) ∧
+      (0 < locN s "nl" →
+        StableCopyStorePre (setVarHOLFinite (ofString "i") (.val (.word 0)) s)))
+      (.assign .local (ofString "i") (.const 0))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.assign
+  · intro F s v hp hv _
+    have hv' : v = .val (.word 0) := by simpa [evalAt, evalHOLExact] using hv.symm
+    subst v
+    obtain ⟨n, hn⟩ := hp.2.1
+    have hnl : (setVarHOLFinite (ofString "i") (.val (.word 0)) s).locals.lookup
+        (ofString "nl") = some (.val (.word n)) := by
+      simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "i" ≠ ofString "nl" by decide] using hn
+    apply stableCopyLoopInv_zero _ hp.1 n
+    · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+    · exact hnl
+    · simpa only [locN, hnl, hn] using hp.2.2
+  · intro F s hp hr
+    cases hr
+
 /-- Hoare composition interface for the increment with full loop-head
 preservation, including the separated contract for the next active index. -/
 theorem hoare_stableCopy_increment_loop :
