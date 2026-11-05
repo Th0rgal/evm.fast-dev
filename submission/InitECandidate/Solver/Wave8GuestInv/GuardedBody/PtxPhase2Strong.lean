@@ -6433,4 +6433,48 @@ theorem phase2_memcpy_access_metadata_contract (h : PtxCallees) :
   exact ⟨hs s hc hp he hn hr S Nd tx 208 ha hw ht (by decide) (by decide) hd htx hlen,
     hs s hc hp he hn hr S Nd tx 216 ha hw ht (by decide) (by decide) hd htx hlen⟩
 
+/-- Word-valued copy arguments determine the concrete destination and length at entry. -/
+theorem phase2_memcpy_entry_destination {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst src len : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (d n : BitVec 64) (hc : s.code = originalRuntimeCode)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hn : evalAt s len = some (.val (.word n))) :
+    locN { s with locals := callee, clock := s.clock - 1 } "dst" = d.toNat ∧
+    locN { s with locals := callee, clock := s.clock - 1 } "n" = n.toNat := by
+  obtain ⟨dv, sv, nv, heD, _, heN, hcD, _, hcN⟩ :=
+    phase2_memcpy_arguments s dst src len vs body callee ret hc ha hl
+  rw [hd] at heD
+  rw [hn] at heN
+  cases heD
+  cases heN
+  simp [locN, hcD, hcN]
+
+/-- Successful word-valued memcpy arguments determine the callee's numeric parameters. -/
+theorem phase2_memcpy_word_arguments {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (dst src len : ExpHOL 64) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (d v n : BitVec 64) (hc : s.code = originalRuntimeCode)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [dst, src, len] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (hd : evalAt s dst = some (.val (.word d)))
+    (hv : evalAt s src = some (.val (.word v)))
+    (hn : evalAt s len = some (.val (.word n))) :
+    locN (callEntryStateHOLFinite s callee) "dst" = d.toNat ∧
+    locN (callEntryStateHOLFinite s callee) "src" = v.toNat ∧
+    locN (callEntryStateHOLFinite s callee) "n" = n.toNat := by
+  obtain ⟨d', v', n', hd', hv', hn', hpd, hpv, hpn⟩ :=
+    phase2_memcpy_arguments s dst src len vs body callee ret hc ha hl
+  rw [hd] at hd'
+  rw [hv] at hv'
+  rw [hn] at hn'
+  cases hd'
+  cases hv'
+  cases hn'
+  simp [locN, callEntryStateHOLFinite, hpd, hpv, hpn]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
