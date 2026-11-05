@@ -9364,4 +9364,60 @@ theorem phase2_packed_storage_copy_ns_nal_hoare (h : PtxCallees) (src : ExpHOL 6
       (some (.returned v)) (base + k * 52 + 20) 32 hc hargs hl he (by simp)
       (by simp [Resumes]) hentry hs.1.1.1 hs.1.2.1 hd hlen hpair hp.2.2
 
+/-- Inner iteration retaining the outer cached count. -/
+def PtxPackedNsNalIteration {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  PtxPackedNsIteration s ∧
+    (∃ n : BitVec 64, s.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+    locN s "nal" = memW s (locN s "tx" + 216)
+
+theorem phase2_packed_nal_counters {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxPackedNsNalCopy s) (k j : ValueHOL 64) :
+    let post := setVarHOLFinite (ofString "j") j (setVarHOLFinite (ofString "k") k s)
+    (∃ n : BitVec 64, post.locals.lookup (ofString "nal") = some (.val (.word n))) ∧
+    locN post "nal" = memW post (locN post "tx" + 216) := by
+  simpa [locN, memW, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+    show ofString "j" ≠ ofString "nal" by decide,
+    show ofString "k" ≠ ofString "nal" by decide,
+    show ofString "j" ≠ ofString "tx" by decide,
+    show ofString "k" ≠ ofString "tx" by decide] using hp.2
+
+/-- Both counter assignments preserve the two cached loop bounds. -/
+theorem phase2_packed_counters_ns_nal_hoare :
+    Hoare PtxPackedNsNalCopy
+      (.seq
+        (.assign .local (ofString "k") (.op .add [.var .local (ofString "k"), .const 1]))
+        (.assign .local (ofString "j") (.op .add [.var .local (ofString "j"), .const 1])))
+      (fun r s => r = none → PtxPackedNsNalIteration s) := by
+  apply Hoare.seq_fall (R := fun s => ∃ before, PtxPackedNsNalCopy before ∧
+    s = setVarHOLFinite (ofString "k")
+      (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before)
+  · apply Hoare.assign
+    · intro F s v hp he
+      have hb := (phase2_packed_copy_counter_bounds hp.1.1.2.1.1).1
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval s "k" v hb he
+      have heq : w = BitVec.ofNat 64 (locN s "k" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨s, hp, rfl⟩
+    · exact fun _ _ hr => by cases hr
+  · apply Hoare.assign
+    · intro F s v hp he
+      obtain ⟨before, hp, rfl⟩ := hp
+      have hj : locN (setVarHOLFinite (ofString "k")
+          (.val (.word (BitVec.ofNat 64 (locN before "k" + 1)))) before) "j" =
+          locN before "j" := by
+        simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+          show ofString "k" ≠ ofString "j" by decide]
+      have hb := (phase2_packed_copy_counter_bounds hp.1.1.2.1.1).2
+      obtain ⟨w, rfl, hw⟩ := phase2_copy_increment_eval _ "j" v (by rw [hj]; exact hb) he
+      have heq : w = BitVec.ofNat 64 (locN before "j" + 1) := by
+        apply BitVec.eq_of_toNat_eq
+        rw [hw, hj, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb]
+      subst w
+      exact fun _ => ⟨⟨phase2_packed_counters_iteration_state before hp.1.1.1 hp.1.1.2.1
+        hp.1.1.2.2.2, phase2_packed_ns_counters before hp.1 _ _⟩,
+        phase2_packed_nal_counters before hp _ _⟩
+    · exact fun _ _ hr => by cases hr
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
