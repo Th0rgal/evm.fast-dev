@@ -1325,6 +1325,38 @@ theorem phase4NullLogs_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   simpa only [Nat.max_zero] using hb s hc hp
 
+theorem localsOnly_phase4ReceiptReady : LocalsOnly ["index", "out", "logs"] Phase4ReceiptReady := by
+  intro F s locals k hl hp
+  have hg := locN_congr s locals k "logs" (hl "logs" (by simp))
+  refine ⟨txAfterCallStrong_with_locals s locals k
+    (hl "index" (by simp)) (hl "out" (by simp)) hp.1, ?_, ?_⟩
+  · rw [hg]
+    exact (R13Shards.logsListOK_with_locals s locals k _).mpr hp.2.1
+  · rw [hg]; exact hp.2.2
+
+theorem phase4Succeeded_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn Phase4ReceiptReady tail b) :
+    TerminatingProgBoundedOn Phase4ReceiptReady
+      (spinePlug 2 (spineAt 121 ptxCode) tail) b := by
+  have hb : TerminatingProgBoundedOn Phase4ReceiptReady
+      (spinePlug 2 (spineAt 121 ptxCode) tail) (0 + b) := by
+    unfold ptxCode
+    refine TerminatingProgBoundedOn.dec_onLocals localsOnly_phase4ReceiptReady _ (by decide) _ _ ?_
+    refine seq_bound_trans (Q := Phase4ReceiptReady) ?_ ?_ htail
+    · exact TerminatingProgBoundedOn.ite_on
+        (TerminatingProgBoundedOn.of_clock (fun s => clock_assign s .local _ _))
+        (TerminatingProgBoundedOn.of_clock clock_skip)
+    · apply Hoare.ite
+      · apply Hoare.mono (P' := Phase4ReceiptReady) _ (fun _ hp => hp.1)
+        exact Hoare.assign
+          (fun s v hp _ _ => LocalsOnly.setVar localsOnly_phase4ReceiptReady
+            (name := ofString "succeeded") (by decide) v s hp)
+          (fun _ _ hr => absurd hr (by simp))
+      · exact Hoare.skip (fun _ hp _ => hp.1)
+      · exact fun _ _ hr => absurd hr (by simp)
+  intro F s hc hp
+  simpa only [Nat.zero_add] using hb s hc hp
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
