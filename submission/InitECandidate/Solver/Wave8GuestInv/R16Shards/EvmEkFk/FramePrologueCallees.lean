@@ -5376,6 +5376,25 @@ theorem lookup_run_precompile :
   lookup_of_guestAst_getElem 830 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_run_precompile) rfl
 
+theorem run_precompile_zero_index {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hz : s.locals.lookup (ofString "idx") = some (.val (.word 0))) :
+    evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_run_precompile) =
+      evaluateHOLFiniteState s (.raise (ofString "BlockErr") (.const 99)) := by
+  have hb : sourceFnBody Guest.Software.guestFn_run_precompile =
+      InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural
+        (extractFn Guest.Software.guestFn_run_precompile).body := rfl
+  rw [hb]
+  dsimp only [extractFn, Guest.Software.guestFn_run_precompile,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural]
+  simp [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite,
+    evaluateHOLFiniteState_skip, evalHOLExact, hz,
+    Compiler.Encoders.Asm.wordCmpHOL]
+  split <;> simp_all
+  split <;> simp_all
+  split_ifs at * <;> simp_all
+
 theorem ek_cc_run_precompile_of_dispatch (h : PrecompileDispatchSpecs) :
     EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "run_precompile") ∧
       ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "run_precompile") := by
