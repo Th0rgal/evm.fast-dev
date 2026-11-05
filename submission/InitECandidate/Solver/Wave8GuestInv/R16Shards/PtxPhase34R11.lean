@@ -1077,6 +1077,22 @@ theorem phase4Totals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
   intro F s hc hp
   simpa only [Nat.zero_add] using hb s hc hp
 
+/-- The first twenty Phase-4 steps preserve the complete output/log invariant. -/
+theorem phase4CreditTotals_cut (h : PtxCallees) {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn TxAfterCallStrong tail b) :
+    TerminatingProgBoundedOn TxAfterCallStrong
+      (spinePlug 20 (spineAt 99 ptxCode) tail)
+      (phase4CreditCost + (K.max + 1) + b) := by
+  have hb := @phase4CreditPrefix_cut h _ _ (phase4Totals_cut h htail)
+  have he : spinePlug 20 (spineAt 99 ptxCode) tail =
+      phase4CreditPrefix (spinePlug 9 (spineAt 110 ptxCode) tail) := by
+    unfold phase4CreditPrefix ptxCode
+    rfl
+  rw [he]
+  intro F s hc hp
+  have hr := hb s hc hp
+  convert hr using 1 <;> omega
+
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
       some ((sourceFunctionEntry Guest.Software.guestFn_process_message_call).2) :=
