@@ -13636,4 +13636,70 @@ theorem receipt_cursor_continuation_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- The post-bloom cursor advance composes with log encoding and receipt return. -/
+theorem receipt_advance_logs_finish_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (start p logs w : BitVec 64) (bound : Nat) (v : ValueHOL 64)
+    (hs : mid.locals.lookup (ofString "start") = some (.val (.word start)))
+    (hp : mid.locals.lookup (ofString "p") = some (.val (.word p)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hw : mid.locals.lookup (ofString "w") = some (.val (.word w)))
+    (hle : start.toNat + 9 ≤ p.toNat)
+    (hfresh : globN s "heap_ptr" + 1 ≤ start.toNat ∧ p.toNat + w.toNat + bound ≤ heapLimit)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound)
+    (hr : evaluateHOLFiniteState mid
+      (.seq
+        (.assign .local (ofString "p")
+          (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+        (.seq
+          (.call (some (some (.local, ofString "w"), none)) (ofString "encode_logs")
+            [.var .local (ofString "p"), .var .local (ofString "logs")])
+          (.seq
+            (.assign .local (ofString "p")
+              (.op .add [.var .local (ofString "p"), .var .local (ofString "w")]))
+            (.seq
+              (.call (some (some (.local, ofString "w"), none)) (ofString "rlp_finish_list")
+                [.var .local (ofString "start"), .var .local (ofString "p")])
+              (.seq
+                (.ite (.cmp .notEqual (.var .local (ofString "tx_type")) (.const 0))
+                  (.seq
+                    (.storeByte (.op .sub [.var .local (ofString "start"), .const 1])
+                      (.var .local (ofString "tx_type")))
+                    (.return (.rstruct
+                      [.op .sub [.var .local (ofString "start"), .const 1],
+                       .op .add [.var .local (ofString "w"), .const 1]]))) .skip)
+                (.return (.rstruct [.var .local (ofString "start"), .var .local (ofString "w")]))))))) =
+      (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  have hn : (p + w).toNat = p.toNat + w.toNat := by
+    rw [BitVec.toNat_add]
+    apply Nat.mod_eq_of_lt
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    omega
+  apply receipt_cursor_continuation_frame he p w hp hw _ v ?_ hr
+  intro next he' hp' hloc hr'
+  apply receipt_logs_finish_return_frame hA hma he' start (p + w) logs w bound v
+  · rw [hloc _ (by decide)]; exact hs
+  · exact hp'
+  · rw [hloc _ (by decide)]; exact hl
+  · rw [hloc _ (by decide)]; exact hw
+  · rw [hn]; omega
+  · exact ⟨hfresh.1, by rw [hn]; exact hfresh.2⟩
+  · exact hnz
+  · exact hL
+  · exact hD
+  · exact hfit
+  · exact hr'
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
