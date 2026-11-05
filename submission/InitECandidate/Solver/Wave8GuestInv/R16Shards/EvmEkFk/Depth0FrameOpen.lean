@@ -532,4 +532,25 @@ theorem fk_frame_open_of_ret
   obtain ⟨v, hv⟩ := frame_open_resumes_returned s hcode hw1 hr
   exact hrun s hcode hP m k hm hk (by rw [← hlk]; exact hP.2) v hv
 
+/-! ## `depth0_prepare`: lookup and contract plumbing -/
+
+theorem lookup_depth0_prepare :
+    originalRuntimeCode.lookup (ofString "depth0_prepare") =
+      some ([], sourceFnBody Guest.Software.guestFn_depth0_prepare, .one) :=
+  lookup_of_guestAst_getElem 587 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_depth0_prepare) rfl
+
+/-- `ek_depth0_prepare` reduced to the body: every resuming, non-timeout run of the
+`depth0_prepare` body from an `EvmMsgReady` entry is an `EvmStep`. -/
+theorem ek_depth0_prepare_of_body
+    (hrun : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), s.code = originalRuntimeCode →
+      EvmMsgReady s →
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_depth0_prepare)).1 ≠
+        some .timeOut →
+      Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_depth0_prepare)).1 →
+      EvmStep ["heap_ptr", "journal_n", "scratch_ptr"] s
+        (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_depth0_prepare)).2) :
+    EvmKeeps EvmMsgReady ["heap_ptr", "journal_n", "scratch_ptr"] (ofString "depth0_prepare") :=
+  ⟨_, _, _, lookup_depth0_prepare, fun s hcode hP _hex hnt hr => hrun s hcode hP hnt hr⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
