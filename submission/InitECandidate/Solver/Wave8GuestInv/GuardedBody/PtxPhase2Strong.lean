@@ -10628,4 +10628,39 @@ theorem phase2_packed_live_copy_frame {F : Type}
       buffer contents [(dst, len)] hb ha.2 hw hh ho hf
       (by simpa only [List.mem_singleton, forall_eq] using hbuf) hz
 
+/-- A concrete resuming copy preserves packing together with caller contents. -/
+theorem phase2_memcpy_eval_packed_live (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedLiveCopy s buffer contents)
+    (hd : ∀ S Nd, WorldTypedWith s S Nd →
+      IvlsDisj [(locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)]
+        (worldOwned s S Nd) →
+      IvlsDisj [(locN (callEntryStateHOLFinite s callee) "dst",
+        locN (callEntryStateHOLFinite s callee) "n")]
+        (worldTypedIvls (callEntryStateHOLFinite s callee) S Nd))
+    (htx : Disj (locN s "tx", 384) (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hrec : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN (callEntryStateHOLFinite s callee) "dst", locN (callEntryStateHOLFinite s callee) "n"))
+    (hbuf : Disj buffer (locN (callEntryStateHOLFinite s callee) "dst",
+      locN (callEntryStateHOLFinite s callee) "n"))
+    (hlen : 0 < locN (callEntryStateHOLFinite s callee) "n") :
+    PtxPackedLiveCopy {post with locals := s.locals} buffer contents := by
+  obtain ⟨hindex, S, Nd, hw, ht, hsep, hb⟩ := hi
+  have hs := R16Shards.PtxP1.funSpec_at_lookup h.wk_memcpy
+    s hc vs body callee ret hl hp (by rw [he]; exact hn)
+  rw [he] at hs
+  have step := hs hr
+  have hwe := (worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw
+  obtain ⟨S', Nd', _, hw', ho, hf, _⟩ := step.2.2.2.2 S Nd hwe (hd S Nd hw hsep)
+  exact phase2_packed_live_copy_frame s post S Nd S' Nd' _ _ buffer contents
+    hindex ha step.1.1 step.2.2.1 hw hw' ht hsep hb ho hf htx hrec hbuf hlen
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
