@@ -3073,4 +3073,212 @@ theorem phase2_address_copy_init {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
   · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
 
+/-- Copying an address preserves the scalar loop counters and their bound. -/
+theorem phase2_address_copy_inv_store {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal")
+    (w : HolWordLab 64) {mem : BitVec 64 → HolWordLab 64}
+    (hst : @panMemStoresHOL 64 _
+      (BitVec.ofNat 64 (locN s "al_addrs" + 8 * (locN s "i" + 1)))
+      [w] s.memaddrs (fun a => Classical.propDecidable (s.memaddrs a)) s.memory = some mem) :
+    PtxAddressCopyInv { s with memory := mem } := by
+  exact ⟨phase2_address_copy_store hp.1 (locN s "i") hi w hst, hp.2⟩
+
+/-- Updating the key counter with a scalar preserves the address-copy invariant. -/
+theorem phase2_address_copy_set_nkeys {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (w : BitVec 64) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "nkeys") (.val (.word w)) s) := by
+  refine ⟨phase2_address_joint_set_other s hp.1 _ _ (by decide), ?_, ⟨w, ?_⟩, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide] using hp.2.1
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2.2.2
+
+/-- The guarded index increment preserves the loop bound and advances exactly
+one step without word wraparound. -/
+theorem phase2_address_copy_increment {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) (hi : locN s "i" < locN s "nal") :
+    let post := setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s
+    PtxAddressCopyInv post ∧ locN post "i" = locN s "i" + 1 := by
+  obtain ⟨n, hn⟩ := hp.1.1.1.2.1
+  have hnlt : locN s "nal" < 2 ^ 64 := by
+    simpa [locN, hn] using n.isLt
+  have hlt : locN s "i" + 1 < 2 ^ 64 := by omega
+  have he : (BitVec.ofNat 64 (locN s "i" + 1)).toNat = locN s "i" + 1 := by
+    rw [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt]
+  have hidx : locN (setVarHOLFinite (ofString "i")
+      (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) "i" = locN s "i" + 1 := by
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using he
+  refine ⟨⟨phase2_address_joint_set_other s hp.1 _ _ (by decide),
+    ⟨BitVec.ofNat 64 (locN s "i" + 1), by simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]⟩, ?_, ?_⟩, hidx⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
+  · rw [hidx]
+    have hnal : locN (setVarHOLFinite (ofString "i")
+        (.val (.word (BitVec.ofNat 64 (locN s "i" + 1)))) s) "nal" = locN s "nal" := by
+      simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+        show ofString "i" ≠ ofString "nal" by decide]
+    rw [hnal]
+    omega
+
+/-- The AST key-count assignment preserves the address-copy invariant. -/
+theorem phase2_address_copy_nkeys_hoare :
+    Hoare PtxAddressCopyInv
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+    exact fun _ => phase2_address_copy_set_nkeys s hp w
+  · exact fun _ _ hr => by cases hr
+
+/-- The AST increment preserves the guarded copy invariant. -/
+theorem phase2_address_copy_increment_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.assign .local (ofString "i")
+        (.op .add [.var .local (ofString "i"), .const 1]))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, hw⟩ := hp.1.2.1
+    have hv : v = .val (.word (w + 1)) := by
+      simpa [evalAt, evalHOLExact, evalListHOLExact, hw, valueIsWord,
+        valueWord, wordOpHOL, wordOp] using he.symm
+    subst v
+    have hwN : locN s "i" = w.toNat := by simp [locN, hw]
+    have hadd : w + 1 = BitVec.ofNat 64 (locN s "i" + 1) := by
+      rw [hwN]
+      apply BitVec.eq_of_toNat_eq
+      simp [BitVec.toNat_add, BitVec.toNat_ofNat]
+    rw [hadd]
+    exact fun _ => (phase2_address_copy_increment s hp.1 hp.2).1
+  · exact fun _ _ hr => by cases hr
+
+/-- The key-count assignment also retains the strict guard needed by the
+following index increment. -/
+theorem phase2_address_copy_nkeys_guard_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.assign .local (ofString "nkeys")
+        (.op .add [.var .local (ofString "nkeys"),
+          .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") := by
+  apply Hoare.assign
+  · intro F s v hp he
+    obtain ⟨w, rfl⟩ := R16Shards.PtxP1.eval_is_word_op he
+    intro _
+    refine ⟨phase2_address_copy_set_nkeys s hp.1 w, ?_⟩
+    simpa [locN, setKvarHOLFinite, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "nkeys" ≠ ofString "i" by decide,
+      show ofString "nkeys" ≠ ofString "nal" by decide] using hp.2
+  · exact fun _ _ hr => by cases hr
+
+/-- The two assignments at the end of the copy body preserve its invariant. -/
+theorem phase2_address_copy_updates_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.seq
+        (.assign .local (ofString "nkeys")
+          (.op .add [.var .local (ofString "nkeys"),
+            .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+        (.assign .local (ofString "i")
+          (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  exact Hoare.seq_fall phase2_address_copy_nkeys_guard_hoare
+    phase2_address_copy_increment_hoare
+
+/-- Declaring the current access-list record preserves the guarded copy state. -/
+theorem phase2_address_copy_set_acc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") (v : ValueHOL 64) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "acc") v s) ∧
+      locN (setVarHOLFinite (ofString "acc") v s) "i" <
+        locN (setVarHOLFinite (ofString "acc") v s) "nal" := by
+  have hi : locN (setVarHOLFinite (ofString "acc") v s) "i" = locN s "i" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide]
+  have hn : locN (setVarHOLFinite (ofString "acc") v s) "nal" = locN s "nal" := by
+    simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "nal" by decide]
+  refine ⟨⟨phase2_address_joint_set_other s hp.1.1 _ v (by decide), ?_, ?_, ?_⟩, ?_⟩
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "i" by decide] using hp.1.2.1
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "acc" ≠ ofString "nkeys" by decide] using hp.1.2.2.1
+  · rw [hi, hn]; exact hp.1.2.2.2
+  · rw [hi, hn]; exact hp.2
+
+/-- Word arithmetic for the copy destination agrees with its natural slot. -/
+theorem phase2_address_copy_word_addr {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxAddressCopyInv s) (a i : BitVec 64)
+    (ha : s.locals.lookup (ofString "al_addrs") = some (.val (.word a)))
+    (hi : s.locals.lookup (ofString "i") = some (.val (.word i))) :
+    a + (i + 1) * 8 = BitVec.ofNat 64 (locN s "al_addrs" + 8 * (locN s "i" + 1)) := by
+  have han : locN s "al_addrs" = a.toNat := by simp [locN, ha]
+  have hin : locN s "i" = i.toNat := by simp [locN, hi]
+  rw [han, hin]
+  apply BitVec.eq_of_toNat_eq
+  simp [BitVec.toNat_add, BitVec.toNat_mul, BitVec.toNat_ofNat,
+    Nat.add_mod, Nat.mul_mod, Nat.mul_comm]
+
+/-- The AST address store preserves the joint witness and the strict loop guard. -/
+theorem phase2_address_copy_store_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.store (.op .add [.var .local (ofString "al_addrs"),
+        .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+        (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+      (fun r s => r = none → PtxAddressCopyInv s ∧ locN s "i" < locN s "nal") := by
+  apply Hoare.store_fall
+  intro F s x v mem hp hx hv hst
+  have hlen := phase2_load_one_length s _ v hv
+  have hex : ∃ w, flattenHOL v = [w] := by
+    cases hs : flattenHOL v with
+    | nil => simp [hs] at hlen
+    | cons w ws =>
+      cases ws with
+      | nil => exact ⟨w, rfl⟩
+      | cons a rest => simp [hs] at hlen
+  obtain ⟨w, hw⟩ := hex
+  rw [hw] at hst
+  obtain ⟨a, ha⟩ := hp.1.1.1.2.1
+  obtain ⟨i, hi⟩ := hp.1.2.1
+  have he : x = a + (i + 1) * 8 := by
+    simpa [evalAt, evalHOLExact, evalListHOLExact, ha, hi,
+      valueIsWord, valueWord, wordOpHOL, wordOp, panOpHOL] using hx.symm
+  rw [he, phase2_address_copy_word_addr hp.1 a i ha hi] at hst
+  exact ⟨phase2_address_copy_inv_store hp.1 hp.2 w hst, hp.2⟩
+
+/-- The store and both counter updates compose inside the record declaration. -/
+theorem phase2_address_copy_inner_hoare :
+    Hoare (fun s => PtxAddressCopyInv s ∧ locN s "i" < locN s "nal")
+      (.seq
+        (.store (.op .add [.var .local (ofString "al_addrs"),
+          .panop .mul [.op .add [.var .local (ofString "i"), .const 1], .const 8]])
+          (.load .one (.op .add [.var .local (ofString "acc"), .const 0])))
+        (.seq
+          (.assign .local (ofString "nkeys")
+            (.op .add [.var .local (ofString "nkeys"),
+              .load .one (.op .add [.var .local (ofString "acc"), .const 16])]))
+          (.assign .local (ofString "i")
+            (.op .add [.var .local (ofString "i"), .const 1]))))
+      (fun r s => r = none → PtxAddressCopyInv s) := by
+  exact Hoare.seq_fall phase2_address_copy_store_hoare phase2_address_copy_updates_hoare
+
+/-- The copy invariant survives scope restoration and clock changes. -/
+theorem phase2_address_copy_with_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (locals : HolFiniteMapExact MlS (ValueHOL 64)) (clock : Nat)
+    (hl : ∀ name ∈ (["i", "nkeys", "al_addrs", "nal", "te", "tx", "index", "sender",
+      "mgas", "reservoir", "gas", "tx_blob_gas_used", "price", "enc", "intrinsic"] : List String),
+      locals.lookup (ofString name) = s.locals.lookup (ofString name))
+    (hp : PtxAddressCopyInv s) :
+    PtxAddressCopyInv { s with locals := locals, clock := clock } := by
+  refine ⟨phase2_address_joint_with_locals s locals clock
+    (fun name hm => hl name (by simp only [List.mem_cons] at hm ⊢; tauto)) hp.1, ?_, ?_, ?_⟩
+  · exact (hl "i" (by simp)) ▸ hp.2.1
+  · exact (hl "nkeys" (by simp)) ▸ hp.2.2.1
+  · rw [locN_congr s locals clock "i" (hl "i" (by simp)),
+      locN_congr s locals clock "nal" (hl "nal" (by simp))]
+    exact hp.2.2.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
