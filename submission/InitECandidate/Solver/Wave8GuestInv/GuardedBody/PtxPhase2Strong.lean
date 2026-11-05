@@ -3577,4 +3577,14 @@ theorem phase2_address_copy_loop_bound :
     phase2_address_copy_while_bound phase2_address_copy_body_hoare
       phase2_address_copy_body_clock phase2_address_copy_body_incr s hc hp
 
+/-- Resetting the outer index prepares another pass over the access list. -/
+theorem phase2_address_copy_reset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCopyInv s) :
+    PtxAddressCopyInv (setVarHOLFinite (ofString "i") (.val (.word 0)) s) := by
+  refine ⟨phase2_address_joint_set_other s hp.1 _ _ (by decide), ⟨0, ?_⟩, ?_, ?_⟩
+  · simp [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+  · simpa [setVarHOLFinite, HolFiniteMapExact.update, FUPDATE,
+      show ofString "i" ≠ ofString "nkeys" by decide] using hp.2.2.1
+  · simp [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
