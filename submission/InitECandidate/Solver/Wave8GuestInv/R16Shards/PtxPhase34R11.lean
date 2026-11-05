@@ -4405,6 +4405,21 @@ theorem hoare_stableCopy_store_for_increment :
   exact stableCopyInv_separated_store_increment s mem' w value hinv hi hpost hw
     hwrite hm hh hd ha' hvalue
 
+/-- Combine store framing and increment preservation into the full loop-head
+contract for the concrete body. -/
+theorem hoare_stableCopy_body_loop :
+    Hoare (fun s => StableCopyStorePre s ∧
+      ∃ n : BitVec 64, s.locals.lookup (ofString "nl") = some (.val (.word n)))
+      (.seq (.store (.op .add [.var .local (ofString "stable_lp"),
+        .panop .mul [.var .local (ofString "i"), .const 8]]) phase4LogCopySrc)
+        (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))
+      (fun r t => r = none → StableCopyLoopInv t) := by
+  apply Hoare.seq_fall (h2 := hoare_stableCopy_increment_loop)
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  exact ⟨hoare_stableCopy_store_pre.run s hc hp.1 hnt hr,
+    hoare_stableCopy_store_length_word.run s hc hp.2 hnt hr,
+    hoare_stableCopy_store_for_increment.run s hc hp.1 hnt hr⟩
+
 /-- The indexed copy store followed by the real increment preserves the invariant. -/
 theorem hoare_stableCopy_body :
     Hoare StableCopyStorePre
