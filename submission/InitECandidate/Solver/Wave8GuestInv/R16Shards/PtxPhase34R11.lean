@@ -3060,6 +3060,30 @@ theorem hoare_stable_length_store :
   · exact hp.1.1.1.1.2.1.trans h8.symm
   · exact hp.1.1.1.2.trans h0.symm
 
+/-- Connect the actual length write at spine position 133 to its continuation. -/
+theorem phase4StableLength_cut {tail : ProgHOL 64} {b : Nat}
+    (htail : TerminatingProgBoundedOn StableLengthPost tail b) :
+    TerminatingProgBoundedOn StableLengthPre
+      (spinePlug 1 (spineAt 133 ptxCode) tail) b := by
+  have hb := @seq_bound_trans _ _ _ _ _ _
+    (TerminatingProgBoundedOn.of_clock (fun s => clock_store s _ _))
+    hoare_stable_length_store htail
+  unfold ptxCode
+  intro F s hc hp
+  have hr := hb s hc hp
+  simp only [Nat.zero_add] at hr
+  exact hr
+
+/-- The copied length inherits the source list's receipt-size bound. -/
+theorem stableLengthPost_length_bound {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPost s) (hn : locN s "logs" ≠ 0) :
+    locN s "nl" < 2 ^ 28 ∧ memW s (locN s "stable_logs" + 8) < 2 ^ 28 := by
+  have hl := hp.2.1.resolve_left hn
+  have hb : locN s "nl" < 2 ^ 28 := by
+    rw [hp.2.2.2.1]
+    exact hl.2.2.1
+  exact ⟨hb, hp.2.2.2.2.2.1.symm ▸ hb⟩
+
 theorem stable_header_disj_source {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {p : Nat} (hA : ArenaOK s) (hPost : ArenaOK post)
     (hh : FreshBlock s post p 24) (hp : Phase4LogPointersReady s) :
