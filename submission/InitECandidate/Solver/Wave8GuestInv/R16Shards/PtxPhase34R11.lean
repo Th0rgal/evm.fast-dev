@@ -3591,6 +3591,28 @@ theorem stable_copy_source_address_eval {F : Type} (s : PanSemStateFiniteExact 6
   rw [← he, BitVec.ofNat_toNat, BitVec.setWidth_eq]
   simp
 
+/-- Evaluate the destination address of the actual stable-copy store. -/
+theorem stable_copy_destination_address_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (w p : BitVec 64) (hp : StableCopyInv s)
+    (hw : s.locals.lookup (ofString "i") = some (.val (.word w)))
+    (hl : s.locals.lookup (ofString "stable_lp") = some (.val (.word p)))
+    (hptr : p.toNat = memW s (locN s "stable_logs"))
+    (hi : locN s "i" < locN s "nl") :
+    evalAt s (.op .add [.var .local (ofString "stable_lp"),
+      .panop .mul [.var .local (ofString "i"), .const 8]]) =
+      some (.val (.word (BitVec.ofNat 64 (memW s (locN s "stable_logs") + 8 * locN s "i")))) := by
+  have hpw : p = BitVec.ofNat 64 (memW s (locN s "stable_logs")) := by
+    rw [← hptr, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+  have hoff := stable_copy_offset_eval s w hp hw hi
+  simp only [evalAt, evalHOLExact, evalListHOLExact] at hoff ⊢
+  rw [hl, hoff]
+  simp only [valueIsWord, valueWord, List.all, List.map, Option.map,
+    Bool.and_self, ↓reduceIte, wordOpHOL, wordOp, List.foldr]
+  have he := (stableCopyInv_address_words s hp hi).2
+  rw [hpw]
+  rw [← he, BitVec.ofNat_toNat, BitVec.setWidth_eq]
+  simp
+
 /-- The copy source load returns the word at the indexed source cell. -/
 theorem stable_copy_source_load_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
     (w p : BitVec 64) (hp : StableCopyInv s)
