@@ -14695,4 +14695,53 @@ theorem phase2_acct_new_backing {F : Type}
   unfold globN
   rw [← hg]
 
+/-- Resolve account-constructor parameters and restore the caller backing. -/
+theorem phase2_acct_new_resume_backing (name : MlS) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      R16Shards.TxBacking name (ofString "acct_new") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_new") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_new] at hx
+  rcases vs with _ | ⟨vn, _ | ⟨vb, _ | ⟨vc, _ | rest⟩⟩⟩ <;> try simp at hx
+  rcases vn with ⟨⟨wn⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    rcases vc with ⟨⟨wc⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    try simp [shapeOfHOLExact, shapeEqHOL] at hx
+  simp [show ofString "nonce" ≠ ofString "balance" by decide,
+    show ofString "nonce" ≠ ofString "code_hash" by decide,
+    show ofString "balance" ≠ ofString "code_hash" by decide] at hx
+  obtain ⟨hsh, rfl, hL, rfl⟩ := hx
+  have hi : callee.lookup (ofString "index") = none := by
+    rw [← hL]; simp [show ofString "index" ≠ ofString "nonce" by decide,
+      show ofString "index" ≠ ofString "balance" by decide,
+      show ofString "index" ≠ ofString "code_hash" by decide]
+  have hn : callee.lookup (ofString "nonce") = some (.val (.word wn)) := by
+    rw [← hL]; simp [show ofString "nonce" ≠ ofString "balance" by decide,
+      show ofString "nonce" ≠ ofString "code_hash" by decide]
+  have hb : callee.lookup (ofString "balance") = some vb := by
+    rw [← hL]; simp [show ofString "balance" ≠ ofString "code_hash" by decide]
+  have hw : callee.lookup (ofString "code_hash") = some (.val (.word wc)) := by
+    rw [← hL]; simp
+  have hback := phase2_acct_new_backing (callEntryStateHOLFinite s callee) hc
+    ⟨R16Shards.PtxP1.worldOK_callEntry hp.1 callee,
+      phase2_txEnv_callEntry_without_index s callee hp.2.1 hi, hp.2.2⟩ hsh hn hb hw
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at hback
+  exact hback
+
+/-- The empty-account constructor preserves transaction backing. -/
+theorem phase2_acct_empty_backing :
+    Hoare (fun s => WorldOK s ∧ TxEnv s ∧ R16Shards.TxBacking s)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_empty)
+      (fun r t => (∃ v, r = some (.returned v)) → R16Shards.TxBacking t) := by
+  dsimp only [GuestTrapAndLookup.sourceFnBody, sourceFunctionEntry, Guest.Software.guestFn_acct_empty,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  exact phase2_decCall_backing (phase2_acct_new_resume_backing _ _) (phase2_return_backing _)
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
