@@ -11764,4 +11764,39 @@ theorem phase2_live_buffer_store {F : Type} {s : PanSemStateFiniteExact 64 F}
     rw [hm _ hne]
     exact hb.2.2 p hlo hhi hal
 
+/-- Message allocation retains a saved buffer and separates the new message from
+the same world witness. This is the ownership cut for the message-field stores. -/
+theorem phase2_msg_new_live_buffer_resume (h : PtxCallees)
+    (buffer : Ivl) (contents : Nat → BitVec 64) :
+    DecCallResumeOn
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents)
+      (fun s => WorldOK s ∧ ∃ S Nd, WorldTypedWith s S Nd ∧
+        PtxLiveBufferAt s S Nd buffer contents ∧
+        IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+      (ofString "m") (ofString "msg_new") [] := by
+  intro F s vs body callee ret v post hc hp he hl hb
+  have hh := R16Shards.PtxP1.funSpec_at_lookup h.wk_msg_new s hc vs body callee ret hl
+    (R16Shards.PtxP1.worldOK_callEntry hp.1 callee) (by rw [hb]; simp)
+  rw [hb] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  obtain ⟨S, Nd, hw, hbuf⟩ := hp.2
+  obtain ⟨S', Nd', _, hw', hg, hf, hr⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (by simp [IvlsDisj])
+  have hbuf' : PtxLiveBufferAt post S' Nd' buffer contents := by
+    apply phase2_live_buffer_step (callEntryStateHOLFinite s callee) post S Nd S' Nd'
+      buffer contents [] hbuf hp.1.1.2
+      ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+      step.2.1 hg hf
+    · simp
+    · simp
+  obtain ⟨w, rfl, hd⟩ := hr v rfl
+  refine ⟨?_, S', Nd', ?_, hbuf', ?_⟩
+  · exact localsFree_worldOK post _ post.clock
+      ⟨step.1, S', (worldTyped_iff_with post S').mpr ⟨Nd', hw'⟩⟩
+  · exact (worldTypedWith_with_locals post _ post.clock S' Nd').mpr hw'
+  · change IvlsDisj [(locN (setVarHOLFinite (ofString "m") (.val (.word w))
+      {post with locals := s.locals}) "m", 176)] (worldOwned post S' Nd')
+    simpa [locN, setVarHOLFinite, HolFiniteMapExact.update, FUPDATE] using hd
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
