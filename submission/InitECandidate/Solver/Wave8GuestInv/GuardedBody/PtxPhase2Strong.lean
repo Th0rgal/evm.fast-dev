@@ -3964,4 +3964,36 @@ theorem phase2_count_load_local {F : Type} (s : PanSemStateFiniteExact 64 F)
   · simp [hl, valueIsWord] at h
   · simp [hl, valueIsWord] at h
 
+/-- Identify the word computed by the concrete key-count addition. -/
+theorem phase2_count_add_eval {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : PtxAddressCountInv s) (v : ValueHOL 64)
+    (ha : locN s "acc" = memW s (locN s "tx" + 208) + 24 * locN s "i")
+    (he : evalAt s (.op .add [.var .local (ofString "nkeys"),
+      .load .one (.op .add [.var .local (ofString "acc"), .const 16])]) = some v) :
+    v = .val (.word (BitVec.ofNat 64 (locN s "nkeys" +
+      memW s (memW s (locN s "tx" + 208) + 24 * locN s "i" + 16)))) := by
+  obtain ⟨n, hn⟩ := hp.1.2.2.1
+  cases hl : evalAt s (.load .one (.op .add [.var .local (ofString "acc"), .const 16])) with
+  | none =>
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    simp at he
+  | some u =>
+    obtain ⟨w, rfl, hw⟩ := phase2_count_load_local s "acc" 16 u hl
+    unfold evalAt at hl
+    simp only [evalHOLExact, evalListHOLExact] at hl
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he
+    rw [hl] at he
+    have hv : v = .val (.word (n + w)) := by
+      simpa [hn,
+        valueIsWord, valueWord, wordOpHOL, wordOp] using he.symm
+    rw [hv]
+    congr 2
+    rw [BitVec.add_def]
+    congr 1
+    have hnn : locN s "nkeys" = n.toNat := by simp [locN, hn]
+    simpa [ha, hnn] using congrArg (fun k => n.toNat + k) hw
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
