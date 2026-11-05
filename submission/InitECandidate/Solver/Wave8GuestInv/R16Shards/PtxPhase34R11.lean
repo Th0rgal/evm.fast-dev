@@ -4051,6 +4051,27 @@ theorem stable_copy_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F
   rw [hd]
   exact hp o ho
 
+/-- Preserve backing/world separation across the length write using the
+same ownership witnesses as the length-store contract. -/
+theorem stableLengthPre_world_separation {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hp : StableLengthPre s) (mem' : BitVec 64 → HolWordLab 64)
+    (hx : s.memaddrs (BitVec.ofNat 64 (locN s "stable_logs" + 8)))
+    (hm : ∀ a, a ≠ BitVec.ofNat 64 (locN s "stable_logs" + 8) → mem' a = s.memory a)
+    (S Nd : List Nat) (hW : WorldTypedWith s S Nd)
+    (ho : LogsLiveOwned s S Nd (locN s "logs"))
+    (hs : ∀ o ∈ worldOwned s S Nd, Disj (locN s "stable_logs", 24) o)
+    (hb : ∀ o ∈ worldOwned s S Nd,
+      Disj (memW s (locN s "stable_logs"), 8 * locN s "stable_log_cap") o) :
+    let t := {s with memory := mem'}
+    WorldTypedWith t S Nd ∧ LogsLiveOwned t S Nd (locN t "logs") ∧
+      ∀ o ∈ worldOwned t S Nd,
+        Disj (memW t (locN t "stable_logs"), 8 * locN t "stable_log_cap") o := by
+  obtain ⟨_, _, _, _, _, hh, ha, hr⟩ := hp.2.2.2.2
+  have hf := stable_length_store_source s hp.1 hp.2.1 S Nd hW ho hs hh ha hr hx mem' hm
+  have hd := (stable_length_store_header_unchanged s hp.1.1.1.1.1.1.1.1.1.1.2
+    hp.2.1 mem' hm).1
+  exact ⟨hf.1, hf.2.2.2.2.1, stable_copy_world_separation s mem' S Nd hd hf.2.1 hb⟩
+
 /-- Reassemble the separated store contract from framed source cells and
 preserved ownership after a memory update. -/
 theorem stableCopyStorePre_memory {F : Type} (s : PanSemStateFiniteExact 64 F)
@@ -5076,6 +5097,29 @@ theorem lst_new_stable_post_source_array (h : PtxCallees) {F : Type}
   refine ⟨w, hv, ?_⟩
   rw [hptr, hlen]
   exact (hs _ (by simp)).2.1
+
+/-- Fresh stable headers remain separate from the source header and backing
+when source addresses are read in the returned memory. -/
+theorem lst_new_stable_post_header_separation (h : PtxCallees) {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (hc : s.code = originalRuntimeCode) (hp : Phase4StableCapReady s)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.const 8, .var .local (ofString "stable_log_cap")] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "lst_new") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧
+      Disj (locN s "logs", 24) (w.toNat, 24) ∧
+      Disj (memW post (locN s "logs"), 8 * memW post (locN s "logs" + 8))
+        (w.toNat, 24) := by
+  obtain ⟨w, hv, hs⟩ := lst_new_stable_source_separation h s vs body callee ret v post hc hp ha hl hr
+  obtain ⟨hptr, hlen⟩ := lst_new_stable_source_cells h s vs body callee ret v post hc hp hl hr
+  have hd := hs (w.toNat, 24) (by simp)
+  refine ⟨w, hv, R13Shards.disj_symm hd.1, ?_⟩
+  rw [hptr, hlen]
+  exact R13Shards.disj_symm hd.2.1
 
 theorem lookup_process_message_call :
     originalRuntimeCode.lookup (ofString "process_message_call") =
