@@ -6178,4 +6178,67 @@ theorem phase2_packed_copy_input_disjoint (input : Ivl) (base count k : Nat)
   obtain ⟨ha, hb⟩ := phase2_key_copy_destinations base count k hk
   exact ⟨disj_of_inside_right ha hd, disj_of_inside_right hb hd⟩
 
+/-- Guarded indices specialize packed-buffer separation to either concrete copy call. -/
+theorem phase2_packed_guarded_input_disjoint {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s) (input : Ivl)
+    (hd : Disj input
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) :
+    Disj input (locN s "al_keys" + 52 * locN s "k", 20) ∧
+    Disj input (locN s "al_keys" + 52 * locN s "k" + 20, 32) := by
+  exact phase2_packed_copy_input_disjoint input _ _ _
+    (phase2_packed_copy_index_bound hp) hd
+
+/-- Input separation needed by both memcpy calls follows from two buffer-level facts. -/
+theorem phase2_packed_copy_input_regions {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s)
+    (ht : Disj (locN s "tx", 384)
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8))
+    (hr : Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216))
+      (locN s "al_keys", (locN s "nkeys" * 52 + 8 + 7) / 8 * 8)) :
+    ∀ region ∈ [(locN s "al_keys" + 52 * locN s "k", 20),
+      (locN s "al_keys" + 52 * locN s "k" + 20, 32)],
+      Disj (locN s "tx", 384) region ∧
+      Disj (memW s (locN s "tx" + 208), 24 * memW s (locN s "tx" + 216)) region := by
+  have ha := phase2_packed_guarded_input_disjoint s hp _ ht
+  have hb := phase2_packed_guarded_input_disjoint s hp _ hr
+  intro region hm
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+  rcases hm with rfl | rfl
+  · exact ⟨ha.1, hb.1⟩
+  · exact ⟨ha.2, hb.2⟩
+
+/-- Previously allocated packed storage stays separate from a growing world. -/
+theorem phase2_packed_owned_growth {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (old new : List Ivl) (buffer : Ivl)
+    (hin : Inside buffer InitE.sourceBase (globN s "heap_ptr"))
+    (hg : OwnedGrows s post old new) (hd : IvlsDisj [buffer] old) :
+    IvlsDisj [buffer] new := by
+  intro b hb o ho
+  simp only [List.mem_singleton] at hb
+  subst b
+  rcases hg o ho with rfl | ⟨j, hj, hsub⟩ | hfresh
+  · exact disj_zero_right buffer
+  · exact disj_of_inside_right hsub (hd buffer (by simp) j hj)
+  · have hbefore : buffer.1 + buffer.2 ≤ o.1 := by
+      exact hin.2.trans hfresh.1
+    exact Or.inr (Or.inr (Or.inl hbefore))
+
+/-- Packed-buffer ownership supplies the typing separation required by memcpy. -/
+theorem phase2_packed_memcpy_typing_separation {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxPackedCopyIndex s) :
+    ∃ S Nd, WorldTypedWith s S Nd ∧ TxAccessListAt s S Nd (locN s "tx") ∧
+      IvlsDisj [(locN s "al_keys" + 52 * locN s "k", 20),
+        (locN s "al_keys" + 52 * locN s "k" + 20, 32)] (worldTypedIvls s S Nd) := by
+  obtain ⟨S, Nd, hw, ht, hd⟩ := hp.1.2.2.2.2
+  refine ⟨S, Nd, hw, ht, ?_⟩
+  intro dest hdest region hregion
+  rcases worldTypedIvls_mem hregion with rfl | howned
+  · exact disj_zero_right dest
+  · have hb := hd _ (by simp) region howned
+    have hs := phase2_packed_guarded_input_disjoint s hp region (disj_symm hb)
+    simp only [List.mem_cons, List.mem_singleton] at hdest
+    rcases hdest with rfl | rfl
+    · exact disj_symm hs.1
+    · exact disj_symm hs.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
