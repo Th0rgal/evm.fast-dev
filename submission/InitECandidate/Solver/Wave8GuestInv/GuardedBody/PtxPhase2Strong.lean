@@ -7233,4 +7233,56 @@ theorem phase2_packed_address_copy_eval (h : PtxCallees) {F : Type}
   rw [phase2_packed_destination_toNat s hi.1 base k hbase hk hb]
   simp
 
+/-- The concrete 32-byte key copy preserves the separated packed invariant. -/
+theorem phase2_packed_key_copy_eval (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (src : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (base k : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.op .add [.var .local (ofString "al_keys"),
+        .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hbase : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  apply phase2_memcpy_packed_arguments_preserve h s post _ src (.const 32) vs body callee ret r
+    (base + k * 52 + 20) 32 hc hargs hl he hn hr hp ha hi
+    (phase2_packed_key_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact])
+  rw [phase2_packed_key_destination_toNat s hi.1 base k hbase hk hb]
+  simp
+
+/-- The concrete 32-byte storage-key copy preserves the separated packed invariant. -/
+theorem phase2_packed_storage_copy_eval (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (src : ExpHOL 64)
+    (vs : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64)) (base k : BitVec 64)
+    (hc : s.code = originalRuntimeCode)
+    (hargs : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.op .add [.var .local (ofString "al_keys"),
+        .panop .mul [.var .local (ofString "k"), .const 52], .const 20], src, .const 32] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "memcpy") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hn : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : WorldOK (callEntryStateHOLFinite s callee))
+    (ha : ArenaReady s) (hi : PtxPackedSeparatedCopy s)
+    (hbase : s.locals.lookup (ofString "al_keys") = some (.val (.word base)))
+    (hk : s.locals.lookup (ofString "k") = some (.val (.word k)))
+    (hb : globN s "heap_ptr" ≤ 2 ^ 64) :
+    PtxPackedSeparatedCopy { post with locals := s.locals } := by
+  apply phase2_memcpy_packed_arguments_preserve h s post _ src (.const 32) vs body callee ret r
+    (base + k * 52 + 20) 32 hc hargs hl he hn hr hp ha hi
+    (phase2_packed_key_destination_eval s base k hbase hk)
+    (by simp [evalAt, evalHOLExact])
+  rw [phase2_packed_key_destination_toNat s hi.1 base k hbase hk hb]
+  simp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
