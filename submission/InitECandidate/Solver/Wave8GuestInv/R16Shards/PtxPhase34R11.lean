@@ -17306,4 +17306,22 @@ theorem dec_return_replace_tail {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Replace a continuation after a concrete falling-through prefix. -/
+theorem seq_return_replace_tail {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F} {pre body : ProgHOL 64}
+    {rv : ValueHOL 64}
+    (hp : evaluateHOLFiniteState s pre = (none, mid))
+    (h : evaluateHOLFiniteState s (.seq pre body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64)
+    (hbody : evaluateHOLFiniteState mid body = (some (.returned rv), post) →
+      ∃ post', evaluateHOLFiniteState mid body' = (some (.returned rv'), post')) :
+    ∃ post', evaluateHOLFiniteState s (.seq pre body') = (some (.returned rv'), post') := by
+  rw [evaluateHOLFiniteState_seq_line780, hp] at h
+  obtain ⟨post', hb⟩ := hbody h
+  exact ⟨post', by rw [evaluateHOLFiniteState_seq_line780, hp]; exact hb⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
