@@ -16048,4 +16048,53 @@ theorem wsAcct_step_header_roots {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Expose the callee memory of a successful local-assignment call. -/
+theorem local_call_fall_inv_args {F : Type} {s t : PanSemStateFiniteExact 64 F}
+    {fname name : MlS} {args : List (ExpHOL 64)}
+    (h : evaluateHOLFiniteState s (.call (some (some (.local, name), none)) fname args) = (none, t)) :
+    ∃ values body callee retShape rv post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values ∧
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, retShape) ∧
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned rv), post) ∧
+      t.memory = post.memory := by
+  rw [evaluateHOLFiniteState_call] at h
+  split at h
+  · cases h
+  · split at h
+    · cases h
+    · rename_i optvalues values hargs optbody body callee retShape hl
+      split at h
+      · cases h
+      · rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => cases h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          split at h
+          · split at h
+            · exact ⟨_, body, callee, retShape, rv, post, hargs, hl, hr,
+                congrArg (fun st => st.memory) (Prod.mk.inj h).2.symm⟩
+            · cases h
+          · cases h
+
+/-- The local-assignment form of missing-account allocation preserves backing. -/
+theorem acct_empty_local_call_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat)
+    (name : MlS) (args : List (ExpHOL 64))
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (.call (some (some (.local, name), none))
+      (ofString "acct_empty") args) = (none, post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, _, hl, hc, hm⟩ := local_call_fall_inv_args hr
+  have hf := acct_empty_tx_header_words s cp vs body callee ret rv S Nd hW hT hl hc
+  intro k hk
+  simpa only [memW, hm] using hf k hk
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
