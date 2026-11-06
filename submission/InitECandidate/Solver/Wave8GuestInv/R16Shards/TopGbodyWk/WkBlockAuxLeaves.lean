@@ -10043,4 +10043,42 @@ theorem mergeStorageInv_body_post {F : Type} (s : PanSemStateFiniteExact 64 F)
   · rwa [hts]
   · exact hots0.trans hots.symm
 
+/-- Heap-only effects retain the transaction root and its storage-table field. -/
+theorem merge_heap_ts_outer_kept {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hts : globN s "ts" ≠ 0)
+    (hs : WorldStep (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post) :
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  have hg := globN_eq_of_lookup (hs.2.2.1 (ofString "ts") (by decide))
+  refine ⟨hg, ?_⟩
+  rw [hg]
+  exact hs.2.2.2.1 ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64])
+    (by decide) hts 32 (by decide) (by simp [bufRegions])
+
+/-- Caller-selected insertion effects retain the same transaction fields. -/
+theorem merge_heap_stepIn_ts_outer_kept
+    {T : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Nat}
+    {F : Type} {s post : PanSemStateFiniteExact 64 F} {r : Option (PanSemResultExact 64)}
+    (hts : globN s "ts" ≠ 0)
+    (hs : WorldStepIn T (bufRegions []) ["heap_ptr"] stdKeep NoExtra s r post) :
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) := by
+  have hg := globN_eq_of_lookup (hs.2.2.1 (ofString "ts") (by decide))
+  refine ⟨hg, ?_⟩
+  rw [hg]
+  exact hs.2.2.2.1 ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64])
+    (by decide) hts 32 (by decide) (by simp [bufRegions])
+
+/-- A transaction-field frame composes independently of ownership witnesses. -/
+theorem merge_ts_outer_kept_trans {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (h1 : globN mid "ts" = globN s "ts" ∧
+      memW mid (globN mid "ts" + 32) = memW s (globN s "ts" + 32))
+    (h2 : globN post "ts" = globN mid "ts" ∧
+      memW post (globN post "ts" + 32) = memW mid (globN mid "ts" + 32)) :
+    globN post "ts" = globN s "ts" ∧
+      memW post (globN post "ts" + 32) = memW s (globN s "ts" + 32) :=
+  ⟨h2.1.trans h1.1, h2.2.trans h1.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
