@@ -10626,4 +10626,120 @@ theorem FNRL.storeStepU {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : Bi
     exact hnu a ha hc
   exact (memW_upd_ne a rfl hne).trans hval
 
+/-! ### Transport helpers for the frozen deletion table and the write frame
+
+After `htab_new_scratch`, the deletion table at `tb` lives entirely below the record base
+`e`, so the remaining body steps (record-cell stores at `e + k` and the two memory-equal
+`htab_count` calls) never touch its cells.  `TbOK` bundles the table facts that must
+survive to the exit state. -/
+
+/-- A record store at `e + k` preserves any word cell strictly below `e`. -/
+theorem memW_store_below {F : Type} {t : PanSemStateFiniteExact 64 F} {e : BitVec 64}
+    {k : Nat} {w : BitVec 64} (b : Nat) (hb : b + 8 ≤ e.toNat)
+    (hk : k < 280) (hlt : e.toNat + 280 < 2 ^ 64) :
+    memW { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } b = memW t b := by
+  have hb64 : b < 2 ^ 64 := by omega
+  have hne : BitVec.ofNat 64 b ≠ e + BitVec.ofNat 64 k := by
+    intro heq
+    have hc := congrArg BitVec.toNat heq
+    rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt b hb64,
+      toNat_add_ofNat e k (by omega)] at hc
+    omega
+  exact memW_upd_ne b rfl hne
+
+/-- Frozen deletion-table facts relative to the `frame_new` entry state `s`: the table is
+well-formed with `key_len = 20` and count `0`, sits entirely below the record base `e`, and
+its blocks are allocated inside the arena grown since `s`. -/
+def TbOK {F : Type} (s t : PanSemStateFiniteExact 64 F) (tb : Nat) (e : BitVec 64) : Prop :=
+  tb % 8 = 0 ∧ HtabWF t tb ∧ hdr t tb 0 = 20 ∧ hdr t tb 3 = 0 ∧
+  (∀ i ∈ htabFootprint t tb, i.1 + i.2 ≤ e.toNat) ∧
+  (∀ i ∈ htabFootprint t tb, Allocated t i ∧
+    (Inside i (globN s "heap_ptr") (globN t "heap_ptr") ∨
+      Inside i (globN t "scratch_ptr") (globN s "scratch_ptr")))
+
+/-- A record-cell store at `e + k` preserves the frozen table facts. -/
+theorem TbOK.store {F : Type} {s t : PanSemStateFiniteExact 64 F} {tb : Nat} {e : BitVec 64}
+    (h : TbOK s t tb e) (hG : GuestInv t) (k : Nat) (w : BitVec 64)
+    (hk : k < 280) (hlt : e.toNat + 280 < 2 ^ 64) :
+    TbOK s { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } tb e := by
+  obtain ⟨h8, hwf, h0, h3, hfp, hlast⟩ := h
+  have h88 : tb + 88 ≤ e.toNat := hfp (tb, 88) (by simp [htabFootprint])
+  have hhdr : ∀ j ≤ 10, hdr { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } tb j
+      = hdr t tb j := fun j hj => memW_store_below (tb + 8 * j) (by omega) hk hlt
+  have hfpEq : htabFootprint { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } tb
+      = htabFootprint t tb := by
+    unfold htabFootprint
+    rw [hhdr 4 (by omega), hhdr 10 (by omega), hhdr 1 (by omega), hhdr 5 (by omega),
+      hhdr 6 (by omega)]
+  refine ⟨h8, ?_, (hhdr 0 (by omega)).trans h0, (hhdr 3 (by omega)).trans h3, ?_, ?_⟩
+  · have hG' : GuestInv { t with memory := updW t.memory (e + BitVec.ofNat 64 k) w } :=
+      guestInv_congr (s := t) rfl rfl rfl rfl hG
+    refine R13Shards.htabWF_congr_unhit hG hG' hwf ?_
+    intro i hi a _ hchi
+    obtain ⟨hc1, hc2⟩ := hchi
+    have hbelow := hfp i hi
+    have hane : a ≠ e + BitVec.ofNat 64 k := by
+      intro heq
+      have hc := congrArg BitVec.toNat heq
+      rw [toNat_add_ofNat e k (by omega)] at hc
+      omega
+    show (updW t.memory (e + BitVec.ofNat 64 k) w) a = t.memory a
+    simp only [updW, if_neg hane]
+  · intro i hi
+    rw [hfpEq] at hi
+    exact hfp i hi
+  · intro i hi
+    rw [hfpEq] at hi
+    exact hlast i hi
+
+/-- Transport across a step with pointwise-equal memory and globals (the memory-equal
+`htab_count` calls and their `setVar` continuations). -/
+theorem TbOK.congr {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {tb : Nat} {e : BitVec 64}
+    (h : TbOK s t tb e) (hG : GuestInv t) (hG' : GuestInv t')
+    (hmem : ∀ a : BitVec 64, t'.memory a = t.memory a)
+    (hgl : ∀ n, globN t' n = globN t n) : TbOK s t' tb e := by
+  obtain ⟨h8, hwf, h0, h3, hfp, hlast⟩ := h
+  have hhdr : ∀ j, hdr t' tb j = hdr t tb j := fun j => memW_of (tb + 8 * j) (hmem _)
+  have hfpEq : htabFootprint t' tb = htabFootprint t tb := by
+    unfold htabFootprint
+    rw [hhdr 4, hhdr 10, hhdr 1, hhdr 5, hhdr 6]
+  refine ⟨h8, R13Shards.htabWF_congr_unhit hG hG' hwf (fun i _ a _ _ => hmem a),
+    (hhdr 0).trans h0, (hhdr 3).trans h3, ?_, ?_⟩
+  · intro i hi
+    rw [hfpEq] at hi
+    exact hfp i hi
+  · intro i hi
+    rw [hfpEq] at hi
+    obtain ⟨hal, hzo⟩ := hlast i hi
+    refine ⟨?_, ?_⟩
+    · unfold Allocated at hal ⊢
+      simp only [hgl]
+      exact hal
+    · simp only [hgl]
+      exact hzo
+
+/-- A store whose address lies inside a kept interval preserves the write frame. -/
+theorem frameOutside_store {F : Type} {s t : PanSemStateFiniteExact 64 F} {keep : List Ivl}
+    {fresh : Ivl} (h : FrameOutside s t keep fresh) {X w : BitVec 64}
+    (hX : ∃ i ∈ keep, CellHits X.toNat i) :
+    FrameOutside s { t with memory := updW t.memory X w } keep fresh := by
+  intro a hkeep hfresh
+  have h1 := h a hkeep hfresh
+  have hne : a ≠ X := by
+    intro heq
+    obtain ⟨i, hi, hci⟩ := hX
+    subst heq
+    exact hkeep i hi hci
+  show (updW t.memory X w) a = s.memory a
+  simp only [updW, if_neg hne]
+  exact h1
+
+/-- Transport of the write frame across a memory-equal step. -/
+theorem frameOutside_congr {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {keep : List Ivl}
+    {fresh : Ivl} (h : FrameOutside s t keep fresh)
+    (hmem : ∀ a : BitVec 64, t'.memory a = t.memory a) : FrameOutside s t' keep fresh := by
+  intro a hkeep hfresh
+  rw [hmem a]
+  exact h a hkeep hfresh
+
 end FrameOpenRich
