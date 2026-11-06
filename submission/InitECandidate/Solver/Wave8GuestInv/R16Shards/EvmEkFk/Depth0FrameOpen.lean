@@ -10045,4 +10045,18 @@ theorem fixedObjects_eq_of_witness_effect {F : Type}
     balObjects_eq_of_witness_effect hWT hA heff,
     hg "journal" (by simp),hg "journal_cap" (by simp)]
 
+open InitECandidate.Solver.Wave8GuestInv.R16Shards in
+/-- The narrow witness effect preserves the full structural payload invariant. -/
+theorem codeDbPayloadStrong_of_witness_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db)
+    (hWT : WorldTypedWith s S Nd) (hA : ArenaReady s)
+    (heff : WorldEff s post [] wsBufs wsGw) (hdb : db ∈ S) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_preserved_layout he hA heff.arena heff.hp_lo
+    (htabValues_eq_of_witness_effect hWT hA heff db hdb)
+    (protected_payload_words_of_witness_effect he hA heff)
+    (htabFootprint_eq_of_witness_effect hWT hA heff)
+    (fixedObjects_eq_of_witness_effect hWT hA heff)
+
 end HeadStore
