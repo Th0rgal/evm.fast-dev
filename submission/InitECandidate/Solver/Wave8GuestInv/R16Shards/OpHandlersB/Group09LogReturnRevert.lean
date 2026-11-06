@@ -15632,4 +15632,28 @@ theorem op_log_data_tail_step_g09 {F : Type}
   rw [← evaluate_seq_assoc_g09] at hnt ⊢
   exact op_log_data_stores_step_g09 log data n cont hc hw hl hr hlog hdata hn hb hd24 hd32 hdj hcont hnt
 
+/-- Payload copies preserve a completed detached record and its ownership view. -/
+theorem op_log_record_preserved_by_copy_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {log : Nat} {Rl : List Ivl}
+    (hma : s.memaddrs = ordinaryDomain) (hb : log + 40 ≤ 2^64)
+    (he : ByteRegionEffect s post Rl)
+    (hd : ∀ i ∈ Rl, Disj i (log, 40))
+    (hok : LogEntryOK s log) :
+    LogEntryOK post log ∧ logOwnedIvls post log = logOwnedIvls s log := by
+  have hf : ∀ k, k + 8 ≤ 40 → k % 8 = 0 → memW post (log + k) = memW s (log + k) := by
+    intro k hk hk8
+    exact memW_eq_of_frameDisj_g09 hma he hb hok.1.1 hk8 hk hd
+  have h0 := hf 0 (by omega) (by omega)
+  simp only [Nat.add_zero] at h0
+  have h8 := hf 8 (by omega) (by omega)
+  have h16 := hf 16 (by omega) (by omega)
+  have h24 := hf 24 (by omega) (by omega)
+  have h32 := hf 32 (by omega) (by omega)
+  have hg : globN post = globN s := by funext g; simp [globN, he.globals]
+  constructor
+  · unfold LogEntryOK at hok ⊢
+    rw [h0,h8,h16,h24,h32,hg]
+    exact ⟨(wordsOK_congr_of_dom_g09 he.memaddrs).2 hok.1, hok.2⟩
+  · simp only [logOwnedIvls, logRecordIvls, h0,h8,h16,h24,h32,hg]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
