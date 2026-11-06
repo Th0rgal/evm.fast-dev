@@ -8527,4 +8527,31 @@ theorem witness_return_after_access_lookup {F : Type}
   exact witness_return_after_access_execution_preload db hash tw.toNat callee hAs hW h hdb ht
     hne hloc hc _ v hlone hb hshape hws hload hhash
 
+/-- Compose the access update itself with resumed bounded witness retrieval. -/
+theorem access_set_then_witness_return {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (S : List Nat) (db hash tw : BitVec 64) (key : ValueHOL 64)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db.toNat) (hdb : db.toNat ∈ S) (ht : tw.toNat ∈ S)
+    (hne : db.toNat ≠ tw.toNat) (hc : s.code = originalRuntimeCode)
+    (hs : s.eshapes.lookup (ofString "StateErr") = some .one) (hws : globN s "ws" ≠ 0)
+    (hload : evalHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (.load .one (.op .add [.var .global (ofString "ws"), .const 16])) = some (.val (.word db)))
+    (hh : s.locals.lookup (ofString "code_hash") = some (.val (.word hash)))
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+        .var .local (ofString "k"), .const 1] = some [.val (.word tw), key, .val (.word 1)]) :
+    Ret s (.seq (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 40]),
+        .var .local (ofString "k"), .const 1])
+      (.decCall (ofString "c") (.comb [.one, .one]) (ofString "ws_get_code")
+        [.var .local (ofString "code_hash")] (.return (.var .local (ofString "c")))))
+      (fun v _ => ∃ code code_n : BitVec 64,
+        v = .rStruct [.val (.word code), .val (.word code_n)] ∧ code_n.toNat < 2 ^ 40) := by
+  apply Ret.seq_call00
+  intro values body callee ret v post ha' hl hb
+  have hv := Option.some.inj (ha.symm.trans ha')
+  subst values
+  exact witness_return_after_access_lookup db hash tw key (.val (.word 1)) body callee ret
+    hAs hW h hdb ht hne hc v hl hb hs hws hload hh
+
 end HeadStore
