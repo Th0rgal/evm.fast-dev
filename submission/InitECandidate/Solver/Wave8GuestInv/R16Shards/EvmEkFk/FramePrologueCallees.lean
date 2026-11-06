@@ -8389,6 +8389,14 @@ theorem precompile_charge_gas_chain_cells {F : Type} (s : PanSemStateFiniteExact
   · have hn := hx (globN s "ev" + 184) (by simp [R11Shards.headAllowedOffsets])
     simpa [← hevn, BitVec.ofNat_add, BitVec.ofNat_toNat] using hn
 
+theorem precompile_charge_gas_chainCellsKept :
+    ChainCellsKept EvmInv (ofString "charge_gas") := by
+  refine ⟨_, _, _, EvmFrameSpecs.lookup_charge_gas, ?_⟩
+  intro F s hcode hInv hex hnt hres
+  obtain ⟨amtw, hamt⟩ := R11Shards.one_word_param_of_lookup
+    EvmFrameSpecs.lookup_charge_gas hex
+  exact precompile_charge_gas_chain_cells s hInv amtw hamt
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by
