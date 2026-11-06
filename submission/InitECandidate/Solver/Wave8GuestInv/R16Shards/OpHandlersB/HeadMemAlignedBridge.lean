@@ -12030,4 +12030,51 @@ theorem laInv_logEntryOK {F : Type} {s u : PanSemStateFiniteExact 64 F}
     · exact hread 3 (by decide)
     · exact hread 4 (by decide)
 
+/-- Reconstruct the parent's valid log list at an executable loop exit.
+Exact segments and the new count come from the completed loop, while the
+capacity bound is recovered from its allocation invariant. -/
+theorem laInvContents_logsListOK {F : Type} {s u post : PanSemStateFiniteExact 64 F}
+    {L arr cap n nc : BitVec 64} {child : Nat} (a2 : ExpHOL 64)
+    (h : LAInvContents s L arr cap n nc
+      (fun k => memW s (memW s child + 8 * k)) post)
+    (hr : evaluateHOLFiniteState u
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "n")))
+        (.seq (.call (some (none, none)) (ofString "log_append") [.var .global (ofString "ev"), a2])
+          (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1])))) =
+      (none, post))
+    (hma : memW s L.toNat = arr.toNat)
+    (hp : LogsListOK s L.toNat) (hc : LogsListOK s child)
+    (hn : memW s (L.toNat + 8) = n.toNat)
+    (hnc : memW s (child + 8) = nc.toNat)
+    (hpn : L.toNat ≠ 0) (hcn : child ≠ 0)
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hwords : WordsOK post (L.toNat, 24)) (halloc : Allocated post (L.toNat, 24))
+    (hbound : n.toNat + nc.toNat < 2 ^ 28)
+    (hslots : ∀ i, i < n.toNat + nc.toNat → WordAt post (memW post L.toNat + 8 * i))
+    (hkeepP : ∀ i, i < n.toNat →
+      LogEntryOK post (memW s (memW s L.toNat + 8 * i)))
+    (hkeepC : ∀ i, i < nc.toNat →
+      LogEntryOK post (memW s (memW s child + 8 * i))) :
+    LogsListOK post L.toNat := by
+  obtain ⟨hcontents, hcount⟩ := laInvContents_complete a2 h (by omega) hr
+  have h8 : (L + 8).toNat = L.toNat + 8 := by
+    rw [BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt (by change L.toNat + 8 < 2 ^ 64; omega)
+  rw [h8] at hcount
+  obtain ⟨_, _, _, _, _, _, i, ar, cp, _, _, _, hm8, hm16, hle, _⟩ := h.1
+  have hcount' : (n + i).toNat = n.toNat + nc.toNat := by
+    have hm : memW post (L + 8).toNat = (n + i).toNat := by
+      simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm8]
+    rw [h8, hcount] at hm
+    exact hm.symm
+  have hcapacity : memW post (L.toNat + 16) = cp.toNat := by
+    have h16 : (L + 16).toNat = L.toNat + 16 := by
+      rw [BitVec.toNat_add]
+      exact Nat.mod_eq_of_lt (by change L.toNat + 16 < 2 ^ 64; omega)
+    rw [← h16]
+    simp only [memW, BitVec.ofNat_toNat, BitVec.setWidth_eq, hm16]
+  exact laContents_logsListOK hcontents hma hp hc hn hnc hpn hcn
+    hwords halloc hcount hbound (by rw [hcapacity]; rwa [← hcount'])
+    hslots hkeepP hkeepC
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
