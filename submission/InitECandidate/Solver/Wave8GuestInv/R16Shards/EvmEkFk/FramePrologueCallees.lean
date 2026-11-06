@@ -8288,4 +8288,24 @@ theorem frame_prologue_start_of_dispatch
   exact ⟨ek_frame_prologue_of_callees h, frame_prologue_chainCellsKept_of_callees h,
     ek_frame_start_of_callees h, frame_start_chainCellsKept_of_callees h⟩
 
+theorem framePrologueCalleeSpecs_of_system_heap_and_dispatch
+    (hready : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      EvmAvoids FrameStartAvoids s →
+      Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (hdispatch : PrecompileDispatchSpecs) : FramePrologueCalleeSpecs := by
+  obtain ⟨hemit, hcells⟩ := ek_cc_emit_transfer_log_of_system_heap hready
+  exact framePrologueCalleeSpecs_of_dispatch hemit hcells hdispatch
+
+theorem frame_prologue_start_of_system_heap_and_dispatch
+    (hready : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      EvmAvoids FrameStartAvoids s →
+      Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr"))
+    (hdispatch : PrecompileDispatchSpecs) :
+    EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "frame_prologue") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "frame_prologue") ∧
+      EvmKeeps (EvmAvoids FrameStartAvoids) frameStartGw (ofString "frame_start") ∧
+      ChainCellsKept (EvmAvoids FrameStartAvoids) (ofString "frame_start") := by
+  obtain ⟨hemit, hcells⟩ := ek_cc_emit_transfer_log_of_system_heap hready
+  exact frame_prologue_start_of_dispatch hemit hcells hdispatch
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
