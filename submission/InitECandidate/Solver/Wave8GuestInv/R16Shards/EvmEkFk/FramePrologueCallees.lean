@@ -8579,6 +8579,30 @@ theorem precompile_step_decCall_ro {fn : MlS} (hf : ReadOnlyFn fn)
           | timeOut => simp at hnt
           | _ => rcases hfr with h | h | h | ⟨⟨_, h⟩ | ⟨_, _, h, _⟩⟩ <;> simp at h
 
+theorem precompile_ro_add_sat : ReadOnlyFn (ofString "add_sat") := by
+  refine R13.readOnlyFn_of_guestAst 441 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_add_sat rfl ?_
+  dsimp only [Guest.Software.guestFn_add_sat, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.dec _ _ _ (R13.ReadOnlyProg.seq
+    (R13.ReadOnlyProg.ite _ (R13.ReadOnlyProg.ret _) R13.ReadOnlyProg.skip) (R13.ReadOnlyProg.ret _))
+
+theorem precompile_ro_ceil32 : ReadOnlyFn (ofString "ceil32") := by
+  refine R13.readOnlyFn_of_guestAst 442 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_ceil32 rfl ?_
+  dsimp only [Guest.Software.guestFn_ceil32, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.dec _ _ _ (R13.ReadOnlyProg.seq
+    (R13.ReadOnlyProg.ite _ (R13.ReadOnlyProg.ret _) R13.ReadOnlyProg.skip)
+    (R13.ReadOnlyProg.decCall precompile_ro_add_sat _ _ _ (R13.ReadOnlyProg.ret _)))
+
+theorem precompile_ro_words_of : ReadOnlyFn (ofString "words_of") := by
+  refine R13.readOnlyFn_of_guestAst 443 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_words_of rfl ?_
+  dsimp only [Guest.Software.guestFn_words_of, extractFn,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural]
+  exact R13.ReadOnlyProg.decCall precompile_ro_ceil32 _ _ _ (R13.ReadOnlyProg.ret _)
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by
