@@ -15366,4 +15366,25 @@ theorem acct_empty_tx_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Compose backing-word preservation across a step retaining the header roots. -/
+theorem tx_header_words_trans {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hbo : globN mid "bo" = globN s "bo")
+    (hheaders : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (globN s "bo" + k) = memW s (globN s "bo" + k))
+    (hfirst : ∀ k ∈ ([40, 72] : List Nat),
+      memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (hsecond : ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW mid (globN mid "bo" + k)) = memW mid (memW mid (globN mid "bo" + k))) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have h := hsecond k hk
+  rw [hbo, hheaders k hk] at h
+  exact h.trans (hfirst k hk)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
