@@ -11581,4 +11581,64 @@ theorem laInv_source_memW {F : Type} {s u : PanSemStateFiniteExact 64 F}
   rw [hfr.2 _ (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using harr)
     (by simpa only [BitVec.toNat_ofNat, Nat.mod_eq_of_lt hab] using hnot) h0 h8 h16]
 
+attribute [local irreducible] Ret in
+/-- Discharge the append-callee contents obligation using the active invariant.
+Only the source-load identity and the protected `e+88` cell are supplied by the
+surrounding success-handler frame; current array bounds come from `LAInv`. -/
+theorem laInv_append_callee_contents {F : Type} (s u : PanSemStateFiniteExact 64 F)
+    (e L arr0 cap0 n0 nc i lg : BitVec 64) (child : Nat → Nat)
+    (h : LAInvContents s L arr0 cap0 n0 nc child u)
+    (hi : u.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hlg : lg.toNat = child i.toNat)
+    (hd88 : s.memaddrs (e + 88)) (hm88 : u.memory (e + 88) = .word L)
+    (hd0 : s.memaddrs L) (hd8 : s.memaddrs (L + 8)) (hd16 : s.memaddrs (L + 16))
+    (hLw : L.toNat + 24 ≤ 2 ^ 64)
+    (hLd : L.toNat + 24 ≤ arr0.toNat ∨ arr0.toNat + 8 * cap0.toNat ≤ L.toNat)
+    (hLh : L.toNat + 24 ≤ globN s "heap_ptr" ∨ heapLimit ≤ L.toNat)
+    (hold : arr0.toNat + 8 * cap0.toNat ≤ globN s "heap_ptr" ∨
+      (heapLimit ≤ arr0.toNat ∧ arr0.toNat + 8 * cap0.toNat < 2 ^ 64))
+    (hsum : n0.toNat + nc.toNat < 2 ^ 58) :
+    Ret (callEntryStateHOLFinite (decClockHOLFinite u)
+      ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+        (ofString "log", .val (.word lg))))
+      (sourceFnBody Guest.Software.guestFn_log_append)
+      (fun _ post => LAContents s L arr0 n0 child (i.toNat + 1) post) := by
+  obtain ⟨uc, ud, uA, ug, uh, un, j, arr, cap, uj, hjle, hmL, hm8, hm16,
+    hle, hcap, hc1, hw, hregion, hfr⟩ := h.1
+  have hji : j = i := by have he := uj.symm.trans hi; cases he; rfl
+  subst j
+  have hcontents := h.2 i hi
+  have ha8 := laContents_array_aligned hcontents hmL
+  have hcopy := laInv_array_copy_region h.1 hmL hm8 hm16 hold
+  have hsep : L.toNat + 24 ≤ arr.toNat ∨ arr.toNat + 8 * cap.toNat ≤ L.toNat := by
+    rcases hregion with ⟨rfl, rfl⟩ | ⟨hb, he⟩
+    · exact hLd
+    · have hheap : globN u "heap_ptr" ≤ 2952790016 := uA.2.2.1
+      rcases hLh with hh | hh
+      · left; omega
+      · right; change 2952790016 ≤ L.toNat at hh; omega
+  let E := callEntryStateHOLFinite (decClockHOLFinite u)
+    ((HolFiniteMapExact.empty.update (ofString "e", .val (.word e))).update
+      (ofString "log", .val (.word lg)))
+  have hEA : ArenaReady E :=
+    ⟨guestInv_callEntry _ _ (guestInv_congr (s := u) rfl rfl rfl rfl uA.1),
+      arenaOK_congr (s := u) rfl uA.2⟩
+  have hCE : LAContents s L arr0 n0 child i.toNat E := hcontents
+  have hrun := log_append_run_contents_step s E e L lg arr0 arr n0 (n0 + i) cap
+    child i.toNat hCE (by rw [BitVec.toNat_add]; exact Nat.mod_eq_of_lt (by omega))
+    hlg hEA
+    (by simp (config := {decide := true}) [E, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by simp [E, callEntryStateHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE])
+    (by change u.memaddrs _; rw [ud]; exact hd88)
+    hm88 hmL hm8 hm16
+    (by change u.memaddrs _; rw [ud]; exact hd0)
+    (by change u.memaddrs _; rw [ud]; exact hd8)
+    (by change u.memaddrs _; rw [ud]; exact hd16)
+    hle hcap ha8 hw hcopy hLw hsep
+    (by change L.toNat + 24 ≤ globN u "heap_ptr" ∨ heapLimit ≤ L.toNat
+        rcases hLh with hh | hh
+        · left; omega
+        · exact Or.inr hh) hc1
+  exact Ret.mono hrun (fun _ _ hp => hp.2)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
