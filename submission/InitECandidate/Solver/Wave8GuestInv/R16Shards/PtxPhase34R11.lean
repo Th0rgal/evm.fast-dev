@@ -17443,4 +17443,32 @@ theorem journal_append_cut_return {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The return-only journal cut preserves allocated block-output backing. -/
+theorem jset_journal_cut_backing_frame {F : Type}
+    {s cur cut : PanSemStateFiniteExact 64 F} {S : List Nat} {b : Ivl}
+    (j n cap p t f0 f1 : BitVec 64)
+    (hA : ArenaOK s) (hJ : JournalTyped s S) (hfix : FixedTyped s)
+    (hb : b ∈ blockOutObjects s) (hal : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (heff : WorldEff s cur [] [] ["heap_ptr"])
+    (hj : s.globals.lookup (ofString "journal") = some (.val (.word j)))
+    (hn : s.globals.lookup (ofString "journal_n") = some (.val (.word n)))
+    (hc : s.globals.lookup (ofString "journal_cap") = some (.val (.word cap)))
+    (hp : cur.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word t)))
+    (hold : cur.locals.lookup (ofString "old") = some (.rStruct [.val (.word f0), .val (.word f1)]))
+    (hr : evaluateHOLFiniteState cur
+      (journalAppendTailProg 4#64 (.rfield 0 (.var .local (ofString "old"))) (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) : IvlUnhit s cut b := by
+  obtain ⟨mid, u, hf, ht, hm⟩ := jset_journal_append_backing_resume j n cap p t f0 f1 _ _
+    hA hJ hfix hb hal hb1 hb2 heff hj hn hc hp ht hold hr
+  have he := hm.trans (return_memory_eq ht)
+  intro a ha hit
+  rw [he]
+  exact hf a ha hit
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
