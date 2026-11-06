@@ -3,6 +3,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase1R11
 import InitECandidate.Solver.Wave8GuestInv.Deliveries.M27.TeNewSupport
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.PtxPhase34R11
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.WkGetAccount
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
 
 set_option autoImplicit false
 set_option maxRecDepth 100000
@@ -17049,5 +17050,38 @@ theorem phase2_private_table_nonValue {F : Type}
     refine List.mem_filter.2 ⟨?_, by simpa [memW] using hnz⟩
     apply List.mem_append.2; right
     exact List.mem_flatMap.2 ⟨ad, had, by simp [memW]⟩
+
+/-- Private-address warming preserves world and journal role slots. -/
+theorem phase2_htabExit_aa_roles {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hnv := phase2_private_table_nonValue s S Nd aa hw ha haf
+  rw [← ht] at hnv
+  exact phase2_htabExit_nonValue_roles hs hw hnv hx
+
+/-- Private-address insertion transports the same joint table witness. -/
+theorem phase2_htabExit_aa_message_tables {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hl : locN post "m" = locN s "m") (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    PtxMessageTables post aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  have hf := R16Shards.MptC10C12.worldTypedWith_htab_set_local_csr hs hw
+    (ht.symm ▸ ha) (ht.symm ▸ haf) hx hbe
+  refine ⟨S, Nd, hf.1, ha, hk, (hf.2.2.2.2.1 aa ha).trans hal,
+    (hf.2.2.2.2.1 ak hk).trans hkl, ?_, ?_, ?_⟩
+  · simpa only [hf.2.1, hf.2.2.1] using haf
+  · simpa only [hf.2.1, hf.2.2.1] using hkf
+  · intro o ho j hj
+    simp only [List.mem_singleton] at ho
+    subst o
+    rw [hl]
+    exact (hf.2.2.2.2.2.2 (locN s "m", 176) (by intro h; omega) hin
+      (fun j hj => hd _ (by simp) j hj)).2.1 j hj
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards

@@ -11475,4 +11475,120 @@ theorem create_add_sat_return_positive_g10 {F : Type}
   have hp := create_base_cost_positive_g10 w hw
   cases isCreate2 <;> simp_all
 
+def PositiveCostLocal_g10 {F : Type} (name : MlS)
+    (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ w : BitVec 64, s.locals.lookup name = some (.val (.word w)) ∧ 0 < w.toNat
+
+theorem bound_cost_local_positive_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS) (w : BitVec 64)
+    (hw : 0 < w.toNat) :
+    PositiveCostLocal_g10 name (setVarHOLFinite name (.val (.word w)) s) := by
+  refine ⟨w, ?_, hw⟩
+  simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+
+theorem charge_positive_local_then_child_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (name : MlS) (cont : ProgHOL 64)
+    (charged : Bool) (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 name) cont) :
+    HandlerRunA s0 (PositiveCostLocal_g10 name) charged
+      (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local name]) cont) := by
+  apply charge_then_childContinuation_g10 s0 (PositiveCostLocal_g10 name)
+    (PositiveCostLocal_g10 name) charged (.var .local name) cont
+  · intro t w he hi hf hp
+    obtain ⟨cw, hc, hpos⟩ := hp
+    have he' : t.locals.lookup name = some (.val (.word w)) := he
+    rw [hc] at he'
+    cases he'
+    exact hpos
+  · intro t post hi hf hp hpi hpf hg hchain
+    exact hp
+  · exact hchild
+
+theorem create_cost_binding_then_charge_g10 {F : Type}
+    (callee caller s0 : PanSemStateFiniteExact 64 F)
+    (w memoryCost : BitVec 64) (hw : w.toNat < 2 ^ 59) (isCreate2 : Bool)
+    (ha : callee.locals.lookup (ofString "a") = some (.val (.word
+      (if isCreate2 then 12000#64 + 6#64 * w + 2#64 * w else 12000#64 + 2#64 * w))))
+    (hb : callee.locals.lookup (ofString "b") = some (.val (.word memoryCost)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState callee (sourceFnBody Guest.Software.guestFn_add_sat)).1 =
+      some (.returned v))
+    (name : MlS) (cont : ProgHOL 64) (charged : Bool)
+    (hchild : ChildContinuationA (F := F) (PositiveCostLocal_g10 name) cont) :
+    PositiveCostLocal_g10 name (setVarHOLFinite name v caller) ∧
+    HandlerRunA s0 (PositiveCostLocal_g10 name) charged
+      (.seq (.call (some (none, none)) (ofString "charge_gas") [.var .local name]) cont) := by
+  obtain ⟨cost, rfl, hpos⟩ := create_add_sat_return_positive_g10 callee w memoryCost hw isCreate2 ha hb v hr
+  exact ⟨bound_cost_local_positive_g10 caller name cost hpos,
+    charge_positive_local_then_child_g10 s0 name cont charged hchild⟩
+
+theorem words_shift_return_bound_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (cw : BitVec 64)
+    (hc : s.locals.lookup (ofString "c") = some (.val (.word cw)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState s
+      (.return (.shift .lsr (.var .local (ofString "c")) (.const 5#64)))).1 = some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59 := by
+  have h5 : (5#64 : BitVec 64).toNat = 5 := rfl
+  have hsh : wordShiftHOL .lsr cw 5 = some (cw >>> (5 : Nat)) := by simp [wordShiftHOL]
+  rw [evaluateHOLFiniteState_return] at hr
+  have he : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.shift .lsr (.var .local (ofString "c")) (.const 5#64)) =
+      some (.val (.word (cw >>> (5 : Nat)))) := by
+    simp [evalHOLExact, hc, h5, hsh]
+  rw [he] at hr
+  dsimp only at hr
+  split at hr
+  · injection hr with hh
+    injection hh with hv
+    refine ⟨cw >>> (5 : Nat), hv.symm, ?_⟩
+    rw [BitVec.toNat_ushiftRight, Nat.shiftRight_eq_div_pow]
+    have := cw.isLt
+    omega
+  · simp at hr
+
+theorem words_of_return_bound_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (nw : BitVec 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word nw)))
+    (v : ValueHOL 64)
+    (hr : (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_words_of)).1 =
+      some (.returned v)) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat < 2 ^ 59 := by
+  have hb : sourceFnBody Guest.Software.guestFn_words_of =
+      .decCall (ofString "c") .one (ofString "ceil32") [.var .local (ofString "n")]
+        (.return (.shift .lsr (.var .local (ofString "c")) (.const 5#64))) := rfl
+  rw [hb, evaluateHOLFiniteState_decCall_fixClockRewrite] at hr
+  have ha : evalListHOLFinite s (h := fun x => Classical.propDecidable (s.memaddrs x))
+      [.var .local (ofString "n")] = some [.val (.word nw)] := by
+    simp [evalListHOLFinite, evalListHOLExact, evalHOLExact, hn]
+  rw [ha] at hr
+  dsimp only at hr
+  have hl := pan_one_word_lookup s.code.lookup (ofString "ceil32") (ofString "v")
+    (sourceFnBody Guest.Software.guestFn_ceil32) nw
+    (by rw [hcode]; exact Group10.lookup_ceil32)
+  rw [hl] at hr
+  dsimp only at hr
+  split at hr
+  · simp at hr
+  · rcases he : evaluateHOLFiniteState
+        (callEntryStateHOLFinite s (HolFiniteMapExact.empty.update (ofString "v", .val (.word nw))))
+        (sourceFnBody Guest.Software.guestFn_ceil32) with ⟨rb, pb⟩
+    rw [he] at hr
+    cases rb with
+    | none => simp at hr
+    | some rb =>
+      cases rb with
+      | returned vb =>
+        cases vb with
+        | val scalar =>
+          cases scalar with
+          | word cw =>
+            dsimp only at hr
+            split at hr
+            · apply words_shift_return_bound_g10 _ cw _ v hr
+              simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+            · simp at hr
+        | _ => simp [shapeOfHOLExact, shapeEqHOL] at hr
+      | _ => simp at hr
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

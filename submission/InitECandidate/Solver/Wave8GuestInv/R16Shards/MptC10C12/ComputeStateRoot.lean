@@ -6123,4 +6123,1183 @@ theorem pBounded_cache_get_root_csrMptBufs
   simp only [List.map_nil, hc_mid, hr_mid, hm_mid]
   exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
 
+theorem pBounded_roDecCall_csr {names : List String}
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    {fname : MlS} {B Bc : Nat}
+    (hf : TerminatingFunBoundedOn GuestInv fname B)
+    (hro : ReadOnlyFn fname)
+    (hP : LocalsOnly names P)
+    (hPG : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → GuestInv s)
+    (name : MlS) (hne : ∀ n ∈ names, ofString n ≠ name)
+    (shape : ShapeHOL) (args : List (ExpHOL 64)) {cont : ProgHOL 64}
+    (hcont : PBounded P cont Bc) :
+    PBounded P (.decCall name shape fname args cont) (B + Bc + 1) :=
+  PBounded.decCallTrans hf hP name hne shape args
+    (callEntryOn_guestInv_csr hPG fname args)
+    (ReadOnlyFn.resumeOn hP hPG hro name hne args)
+    hcont.bounded hcont.hoare
+
+theorem pBounded_ite_yes_csr
+    {P Y : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (cond : ExpHOL 64) {yes no : ProgHOL 64} {a b : Nat}
+    (himp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s → CondTrue cond s → Y s)
+    (hout : ∀ {F : Type} (t : PanSemStateFiniteExact 64 F), Y t → P t)
+    (hy : PBounded Y yes a) (hn : PBounded P no b) :
+    PBounded P (.ite cond yes no) (max a b) := by
+  refine ⟨?_, Hoare.ite
+    ⟨fun s hc hPs hnt hr => hout _ (hy.hoare.run s hc (himp s hPs.1 hPs.2) hnt hr)⟩
+    ⟨fun s hc hPs hnt hr => hn.hoare.run s hc hPs.1 hnt hr⟩
+    (fun _ _ hr => absurd hr (by simp))⟩
+  intro F state hcode hP hnt
+  rw [evaluateHOLFiniteState_ite] at hnt ⊢
+  revert hnt
+  split <;> intro hnt
+  · rename_i w hw
+    revert hnt
+    split <;> intro hnt
+    · exact TerminatingRunBounded.weaken (hn.bounded state hcode hP) (Nat.le_max_right a b) hnt
+    · rename_i hz
+      exact TerminatingRunBounded.weaken
+        (hy.bounded state hcode (himp state hP ⟨w, hw, hz⟩)) (Nat.le_max_left a b) hnt
+  · exact ⟨Nat.le_add_right _ _, Nat.le_refl _⟩
+
+theorem pass0_cond_nonNeg_csr {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hc : CondTrue
+      (.op .and
+        [.cmp .notEqual (.const (0#64))
+          (.cmp .equal (.var .local (ofString "pass")) (.const (0#64))),
+         .cmp .notEqual (.const (0#64))
+          (.cmp .equal (.var .local (ofString "z")) (.const (0#64)))]) s) :
+    ∃ wp : BitVec 64, s.locals.lookup (ofString "pass") = some (.val (.word wp)) ∧ 0 ≤ wp.toInt := by
+  obtain ⟨w, hw, hz⟩ := hc
+  change @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) _ = some (.val (.word w)) at hw
+  simp only [evalHOLExact, evalListHOLExact] at hw
+  rcases hlp : s.locals.lookup (ofString "pass") with _ | vp
+  · simp [hlp, valueIsWord] at hw
+  · rcases vp with ⟨⟨wp⟩⟩ | _ | _
+    · rcases hlz : s.locals.lookup (ofString "z") with _ | vz
+      · simp [hlp, hlz, valueIsWord] at hw
+      · rcases vz with ⟨⟨wz⟩⟩ | _ | _
+        · by_cases hp0 : wp = 0#64
+          · subst hp0
+            exact ⟨0#64, rfl, by decide⟩
+          · simp [hlp, hlz, hp0, wordCmpHOL, valueIsWord, valueWord, wordOpHOL, wordOp,
+              List.all, List.map, Option.map, List.foldr] at hw
+            subst hw
+            exact absurd rfl hz
+        · simp [hlp, hlz, valueIsWord] at hw
+        · simp [hlp, hlz, valueIsWord] at hw
+    · simp [hlp, valueIsWord] at hw
+    · simp [hlp, valueIsWord] at hw
+
+theorem pBounded_rlp_encode_bytes_flat_csr
+    (tf_reb : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_bytes") K.«rlp_encode_bytes»)
+    {Bc : Nat} {cont : ProgHOL 64}
+    (hcont : PBounded (CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))) cont Bc)
+    (hpres_n : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F),
+      (evaluateHOLFiniteState s cont).1 = none →
+      (evaluateHOLFiniteState s cont).2.locals.lookup (ofString "n") = s.locals.lookup (ofString "n")) :
+    PBounded (CsrBound "n" 32 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)])))
+      (.decCall (ofString "w") .one (ofString "rlp_encode_bytes")
+        [.op .add [.var .local (ofString "vbuf"), .const (8#64), .const (32#64)],
+         .op .add [.var .local (ofString "vbuf"), .const (8#64)],
+         .var .local (ofString "n")] cont)
+      (K.«rlp_encode_bytes» + Bc + 1) := by
+  have hne : ∀ nm ∈ "n" :: "pass" :: (["cache", "new_roots", "mpt"] ++ ([("vbuf", 96)] : List (String × Nat)).map Prod.fst),
+      ofString nm ≠ ofString "w" := by decide
+  refine PBounded.decCallTrans (R := CsrBound "n" 32 (CsrBound "w" 33 (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))))
+    tf_reb
+    (localsOnly_csrBound (localsOnly_csrNonNeg (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) "pass") "n" 32)
+    (ofString "w") hne .one _
+    (callEntryOn_guestInv_csr (fun s hs => (csrMptBufs_worldOK "mpt" [("vbuf", 96)] hs.1.1).1.1) _ _)
+    ?_ (fun s hc hR => hcont.1 s hc hR.1)
+    ⟨fun s hc hR hnt hr => by
+      have hpost := (hcont.2.run s hc hR.1 hnt hr).1
+      have hn_eq : locN (evaluateHOLFiniteState s cont).2 "n" = locN s "n" := by
+        unfold locN; rw [hpres_n s hr]
+      exact ⟨hpost, hn_eq ▸ hR.2⟩⟩
+  intro F s values body callee ret v post hc hs ha hl hb
+  obtain ⟨v1, v2, v3, he1, he2, he3, hc1, hc2, hc3, hbody_eq⟩ :=
+    callee_param_three_exp_body_csr s (ofString "rlp_encode_bytes")
+      (ofString "dst") (ofString "src") (ofString "n") .one .one .one
+      (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes) .one
+      (hc ▸ R16Rlp.lookup_rlp_encode_bytes)
+      (.op .add [.var .local (ofString "vbuf"), .const (8#64), .const (32#64)])
+      (.op .add [.var .local (ofString "vbuf"), .const (8#64)])
+      (.var .local (ofString "n")) values body callee ret ha hl
+  subst hbody_eq
+  have hvbuf_ex : ∃ vb : BitVec 64, s.locals.lookup (ofString "vbuf") = some (.val (.word vb)) ∧
+      v1 = .val (.word (vb + 40#64)) ∧ v2 = .val (.word (vb + 8#64)) := by
+    simp only [evalAt, evalHOLExact, evalListHOLExact] at he1 he2
+    rcases hlk : s.locals.lookup (ofString "vbuf") with _ | vv
+    · simp [hlk] at he2
+    · rcases vv with ⟨⟨vb⟩⟩ | _ | _
+      · simp [hlk, valueIsWord, valueWord, wordOpHOL, wordOp, List.all, List.map,
+          Option.map, List.foldr, BitVec.add_assoc] at he1 he2
+        exact ⟨vb, rfl, he1.symm, he2.symm⟩
+      · simp [hlk, valueIsWord] at he2
+      · simp [hlk, valueIsWord] at he2
+  obtain ⟨vb, hvb_lk, rfl, rfl⟩ := hvbuf_ex
+  have hn_ex : ∃ n0 : BitVec 64, s.locals.lookup (ofString "n") = some (.val (.word n0)) ∧
+      v3 = .val (.word n0) := by
+    have hl_orig : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "rlp_encode_bytes") values =
+        some (sourceFnBody Guest.Software.guestFn_rlp_encode_bytes, callee, ret) := hc ▸ hl
+    have hret_eq : ret = .one :=
+      lookupCodeHOLFinite_installed_return s (ofString "rlp_encode_bytes")
+        _ _ _ _ ret values callee (hc ▸ R16Rlp.lookup_rlp_encode_bytes) hl
+    subst hret_eq
+    obtain ⟨_, _, n0, hvs, _, _, _⟩ := lookupCode_three_words
+      (by decide) (by decide) (by decide) R16Rlp.lookup_rlp_encode_bytes hl_orig
+    have hv3_eq : v3 = .val (.word n0) := by
+      rw [evalListHOLFinite_eq_toExact] at ha
+      simp only [evalListHOLExact] at ha
+      simp only [evalAt] at he1 he2 he3
+      rw [he1, he2, he3] at ha
+      injection ha with hvs'
+      rw [← hvs'] at hvs
+      injection hvs with _ htl1; injection htl1 with _ htl2; injection htl2 with hv3 _
+    subst hv3_eq
+    simp only [evalAt, evalHOLExact] at he3
+    exact ⟨n0, he3, rfl⟩
+  obtain ⟨n0, hn_lk, rfl⟩ := hn_ex
+  have hn0_le : n0.toNat ≤ 32 := by
+    have hln : locN s "n" = n0.toNat := by simp [locN, hn_lk]
+    have := hs.2; omega
+  let ent := callEntryStateHOLFinite s callee
+  have hs_live : CsrLiveBufsAt s (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] := hs.1.1
+  have hvb_nat : locN s "vbuf" = vb.toNat := by simp [locN, hvb_lk]
+  have hvb_hi : vb.toNat + 96 ≤ heapLimit := by
+    obtain ⟨hA, _, _, _, _, _, _, _, _, _, _, _, hbs, _⟩ := hs_live
+    have hb_in := (hbs (locN s "vbuf", 96) (by simp)).1
+    rw [hvb_nat] at hb_in
+    exact Nat.le_trans hb_in.2 hA.2.2.1
+  have h264 : heapLimit < 2 ^ 64 := by rw [heapLimit_val]; decide
+  have hdst_nat : (vb + 40#64).toNat = vb.toNat + 40 :=
+    BitVec.toNat_add_of_lt (by change vb.toNat + 40 < 2 ^ 64; omega)
+  have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs_live
+  obtain ⟨r, hrb, _, hr_hi, _, heff_b⟩ := R16Rlp.eval_rlp_encode_bytes_bounded ent
+    (vb + 40#64) (vb + 8#64) n0 [(locN s "vbuf", 96)]
+    hc hs_ent.1.1
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc1)
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc2)
+    (by unfold ent callEntryStateHOLFinite; dsimp only; exact hc3)
+    (Nat.le_trans hn0_le (by decide))
+    ⟨(locN s "vbuf", 96), by simp, by rw [hdst_nat, hvb_nat]; omega, by rw [hdst_nat, hvb_nat]; omega⟩
+    (by rw [hb]; simp)
+    (by rw [hb]; exact Or.inl ⟨v, rfl⟩)
+  rw [hb] at hrb heff_b; dsimp only at hrb heff_b
+  have hv_eq : v = .val (.word r) := by injection hrb with hr'; injection hr'
+  subst hv_eq
+  have heff_w : R16Shards.WorldEff ent post [(locN s "vbuf", 96)] [] [] :=
+    worldEff_of_p26ByteEff_csr (R16Shards.WorldEff.refl ent [(locN s "vbuf", 96)] [] [] hs_ent.1 hc) heff_b
+      (fun iv hiv _ => Or.inl ⟨iv, hiv, le_rfl, le_rfl⟩)
+  have hpost_live : CsrLiveBufsAt post (locN s "cache") (locN s "new_roots") (locN s "mpt") [(locN s "vbuf", 96)] :=
+    worldEff_csrLiveBufsAt hs_ent (by decide) (by decide) heff_w
+      (fun iv hiv _ => ⟨iv, hiv, le_rfl, le_rfl⟩)
+  let mid := setVarHOLFinite (ofString "w") (.val (.word r)) { post with locals := s.locals }
+  refine ⟨⟨⟨?_, ?_⟩, ?_⟩, ?_⟩
+  · have hc_mid : locN mid "cache" = locN s "cache" := locN_setVar_ne _ "cache" (ofString "w") _ (by decide)
+    have hr_mid : locN mid "new_roots" = locN s "new_roots" := locN_setVar_ne _ "new_roots" (ofString "w") _ (by decide)
+    have hm_mid : locN mid "mpt" = locN s "mpt" := locN_setVar_ne _ "mpt" (ofString "w") _ (by decide)
+    have hv_mid : locN mid "vbuf" = locN s "vbuf" := locN_setVar_ne _ "vbuf" (ofString "w") _ (by decide)
+    show CsrMptBufs "mpt" [("vbuf", 96)] mid
+    unfold CsrMptBufs
+    simp only [List.map_cons, List.map_nil, hc_mid, hr_mid, hm_mid, hv_mid]
+    exact localsFree_csrLiveBufsAt _ _ _ _ post mid.locals mid.clock hpost_live
+  · obtain ⟨wp, hwp, hwp0⟩ := hs.1.2
+    refine ⟨wp, ?_, hwp0⟩
+    simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hwp,
+      show ofString "pass" ≠ ofString "w" by decide, show ofString "w" ≠ ofString "pass" by decide]
+  · show locN mid "w" ≤ 33
+    rw [locN_setVar_same]; omega
+  · show locN mid "n" ≤ 32
+    rw [locN_setVar_ne _ "n" (ofString "w") _ (by decide)]; exact hs.2
+
+def CsrCacheAt {F : Type} (s : PanSemStateFiniteExact 64 F) (cache : Nat) : Prop :=
+  ArenaReady s ∧ ∃ S Nd,
+    WorldTypedWith s S Nd ∧ cache ∈ S ∧
+    ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ cache
+
+def CsrCache : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop :=
+  fun s => CsrCacheAt s (locN s "cache")
+
+theorem localsFree_csrCacheAt (cache : Nat) :
+    LocalsFree (fun s => CsrCacheAt s cache) := by
+  intro F s locals k h
+  obtain ⟨hA, S, Nd, hW, hc, hcl⟩ := h
+  exact ⟨localsFree_arenaReady s locals k hA, S, Nd,
+    (worldTypedWith_with_locals_csr s locals k S Nd).2 hW, hc, hcl⟩
+
+theorem decCall_htab_copy_entry_csr
+    (fb_hc : TerminatingFunBoundedOn GuestInv (ofString "htab_copy") K.«htab_copy»)
+    (wk_hc : WorldKeeps WorldOK (fun _ => []) ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (RetAvoidsIf (fun s => HtabWF s (locN s "t") ∧
+          ∀ i ∈ htabFootprint s (locN s "t"), Allocated s i)
+        (fun _ post w => htabFootprint post w)) (ofString "htab_copy"))
+    (rt_hc : Returns ArenaReady (fun s post n => locN s "t" ≠ 0 ∧
+        (HtabWF s (locN s "t") → (∀ i ∈ htabFootprint s (locN s "t"), Allocated s i) →
+          HtabWF post n ∧ hdr post n 3 = hdr s (locN s "t") 3 ∧
+          ∀ i ∈ htabFootprint post n, Inside i (globN s "heap_ptr") (globN post "heap_ptr")))
+      (ofString "htab_copy"))
+    {Bc : Nat} {cont : ProgHOL 64}
+    (hcont : TerminatingProgBoundedOn CsrCache cont Bc) :
+    TerminatingProgBoundedOn WorldOK
+      (.decCall (ofString "cache") .one (ofString "htab_copy")
+        [.load .one (.op .add [.var .global (ofString "bs"), .const (72#64)])] cont)
+      (K.«htab_copy» + Bc + 1) := by
+  refine TerminatingProgBoundedOn.decCall_on fb_hc (ofString "cache") .one _
+    (callEntryOn_guestInv_csr (fun _ hs => hs.1.1) _ _) ?_ hcont
+  intro F s vs body callee ret v post hc hs ha hl hb
+  obtain ⟨v1, he1, hc1, _⟩ := callee_param_one_exp_csr s (ofString "htab_copy")
+    (ofString "t") .one (sourceFnBody Guest.Software.guestFn_htab_copy) .one
+    (hc ▸ lookup_htab_copy_csr)
+    (.load .one (.op .add [.var .global (ofString "bs"), .const (72#64)]))
+    vs body callee ret ha hl
+  obtain ⟨tw, rfl, htw_nat, hbs_nz⟩ :=
+    evalAt_loadG_nz s hs.1.1 "bs" 72#64 (by rw [sourceBase_val]; decide) v1 he1
+  let ent := callEntryStateHOLFinite s callee
+  have ht_ent : locN ent "t" = memW s (globN s "bs" + 72) := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]; exact htw_nat
+  have hA_ent : ArenaReady ent := localsFree_arenaReady s callee _ hs.1
+  have hWOK_ent : WorldOK ent := localsFree_worldOK s callee _ hs
+  have hret := FunSpec.at_lookup rt_hc s hc vs body callee ret hl hA_ent (by rw [hb]; simp)
+  rw [hb] at hret
+  have hstep0 := FunSpec.at_lookup wk_hc s hc vs body callee ret hl hWOK_ent (by rw [hb]; simp)
+  rw [hb] at hstep0
+  have hstep := hstep0 (Or.inl ⟨v, rfl⟩)
+  obtain ⟨_, _, _, _, ht_nz, _⟩ := hret v rfl
+  obtain ⟨S, hWT⟩ := hs.2
+  obtain ⟨Nd, hW0⟩ := (worldTyped_iff_with s S).1 hWT
+  have hW_ent : WorldTypedWith ent S Nd := (worldTypedWith_with_locals_csr s callee _ S Nd).2 hW0
+  have hslot : memW ent (globN ent "bs" + 72) = 0 ∨ memW ent (globN ent "bs" + 72) ∈ S :=
+    hW_ent.1.2.2.2.2.1 72 (by simp [bsTableSlots]) hbs_nz
+  have ht_in_S : locN ent "t" ∈ S := by
+    change memW s (globN s "bs" + 72) = 0 ∨ memW s (globN s "bs" + 72) ∈ S at hslot
+    rw [← ht_ent] at hslot
+    exact hslot.resolve_left ht_nz
+  have hwf_t := hW_ent.1.2.1 (locN ent "t") ht_in_S
+  have harg : HtabWF ent (locN ent "t") ∧ ∀ i ∈ htabFootprint ent (locN ent "t"), Allocated ent i :=
+    ⟨hwf_t.1, fun i hi => (hwf_t.2 i hi).1⟩
+  obtain ⟨w, S', Nd', rfl, _, hW_post, _, _, hlocal, _⟩ :=
+    htabCopy_local_table_csr hA_ent hW_ent harg hstep hret
+  let mid := setVarHOLFinite (ofString "cache") (.val (.word w)) { post with locals := s.locals }
+  have hc_mid : locN mid "cache" = w.toNat := locN_setVar_same _ "cache" w
+  show CsrCache mid
+  unfold CsrCache; rw [hc_mid]
+  exact localsFree_csrCacheAt w.toNat post mid.locals mid.clock
+    ⟨hstep.1, S' ++ [w.toNat], Nd', hW_post, by simp, hlocal⟩
+
+theorem decCall_htab_new_entry_csr
+    (fb_hn : TerminatingFunBoundedOn GuestInv (ofString "htab_new") K.«htab_new»)
+    (hn_spec : type_of% @htab_new_spec)
+    {Bc : Nat} {cont : ProgHOL 64}
+    (hcont : TerminatingProgBoundedOn CsrTabs cont Bc) :
+    TerminatingProgBoundedOn CsrCache
+      (.decCall (ofString "new_roots") .one (ofString "htab_new")
+        [.const (20#64), .const (64#64)] cont)
+      (K.«htab_new» + Bc + 1) := by
+  refine TerminatingProgBoundedOn.decCall_on fb_hn (ofString "new_roots") .one _
+    (callEntryOn_guestInv_csr (fun _ hs => hs.1.1) _ _) ?_ hcont
+  intro F s vs body callee ret v post hc hs ha hl hb
+  obtain ⟨v1, v2, he1, he2, hc1, hc2, _⟩ := callee_param_two_exp_csr s (ofString "htab_new")
+    (ofString "key_len") (ofString "cap") .one .one
+    (sourceFnBody Guest.Software.guestFn_htab_new) .one
+    (hc ▸ lookup_htab_new_fn) (.const (20#64)) (.const (64#64)) vs body callee ret ha hl
+  have hv1 : v1 = .val (.word (20#64)) := by simp [evalAt, evalHOLExact] at he1; exact he1.symm
+  have hv2 : v2 = .val (.word (64#64)) := by simp [evalAt, evalHOLExact] at he2; exact he2.symm
+  subst hv1; subst hv2
+  let ent := callEntryStateHOLFinite s callee
+  have hkl_ent : locN ent "key_len" = 20 := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]; decide
+  have hcap_ent : locN ent "cap" = 64 := by
+    unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc2]; decide
+  obtain ⟨hA0, S, Nd, hW0, hc_S, hcl⟩ := hs
+  have hA_ent : ArenaReady ent := localsFree_arenaReady s callee _ hA0
+  have hready : HtabNewReady ent :=
+    ⟨hA_ent, by rw [hkl_ent]; decide, by rw [hcap_ent]; decide⟩
+  have hexit := FunSpec.at_lookup hn_spec s hc vs body callee ret hl hready (by rw [hb]; simp)
+  rw [hb] at hexit
+  have hW_ent : WorldTypedWith ent S Nd := (worldTypedWith_with_locals_csr s callee _ S Nd).2 hW0
+  have hmeta := (evaluateHOLFiniteState_metadata ent body).2.2.1
+  rw [hb] at hmeta
+  obtain ⟨w, rfl, hAp, _, hnotS, _, _, _, hrl, hW_post, hwrs, hjrs, _, _, _⟩ :=
+    htabNewExit_local_table_csr hA_ent hW_ent hmeta hexit
+  have hne_cr : locN s "cache" ≠ w.toNat := fun heq => hnotS (heq ▸ hc_S)
+  have hcl_post : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ locN s "cache" := by
+    rw [hwrs, hjrs]; exact hcl
+  have htabs_post : CsrTablesAt post (locN s "cache") w.toNat :=
+    ⟨hAp, hne_cr, S ++ [w.toNat], Nd, hW_post, List.mem_append_left _ hc_S,
+     by simp, hcl_post, hrl⟩
+  let mid := setVarHOLFinite (ofString "new_roots") (.val (.word w)) { post with locals := s.locals }
+  have hc_mid : locN mid "cache" = locN s "cache" :=
+    locN_setVar_ne _ "cache" (ofString "new_roots") _ (by decide)
+  have hr_mid : locN mid "new_roots" = w.toNat :=
+    locN_setVar_same _ "new_roots" w
+  show CsrTabs mid
+  unfold CsrTabs; rw [hc_mid, hr_mid]
+  exact localsFree_csrTablesAt _ _ post mid.locals mid.clock htabs_post
+
+private theorem seq_return_ne_none_csr {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (p : ProgHOL 64) (e : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.seq p (.return e))).1 ≠ none := by
+  rw [evaluateHOLFiniteState_seq_line780]
+  rcases hr : evaluateHOLFiniteState s p with ⟨r, mid⟩
+  dsimp only
+  cases r with
+  | none => exact return_ne_none mid e
+  | some _ => simp
+
+theorem pBounded_csr_final_mpt_root
+    (g_mr : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root») :
+    PBounded (CsrMptBufs "state_mpt" [])
+      (.seq
+        (.call (some (none, none)) (ofString "mpt_root")
+          [.var .local (ofString "state_mpt"), .var .local (ofString "out")])
+        (.return (.const (0#64))))
+      (K.«mpt_root» + 1) := by
+  have hentry : CallEntryOn (CsrMptBufs "state_mpt" []) MptObjReady (ofString "mpt_root")
+      [.var .local (ofString "state_mpt"), .var .local (ofString "out")] := by
+    intro F s vs body callee ret hc hs ha hl
+    obtain ⟨v1, _, he1, _, hc1, _, _⟩ := callee_param_two_exp_csr s (ofString "mpt_root")
+      (ofString "m") (ofString "out") .one .one
+      (sourceFnBody Guest.Software.guestFn_mpt_root) .one
+      (hc ▸ lookup_mpt_root_csr)
+      (.var .local (ofString "state_mpt")) (.var .local (ofString "out"))
+      vs body callee ret ha hl
+    let ent := callEntryStateHOLFinite s callee
+    have hm_eq : locN ent "m" = locN s "state_mpt" := by
+      unfold locN ent callEntryStateHOLFinite; dsimp only; rw [hc1]
+      simp only [evalAt, evalHOLExact] at he1; rw [← he1]
+    have hs_ent : CsrLiveBufsAt ent (locN s "cache") (locN s "new_roots") (locN ent "m") [] := by
+      rw [hm_eq]; exact localsFree_csrLiveBufsAt _ _ _ _ s callee _ hs
+    exact csrLiveBufsAt_mptObjReady hs_ent
+  refine ⟨TerminatingProgBoundedOn.mono_bound
+    (TerminatingProgBoundedOn.seq_guestInv_after
+      (TerminatingProgBoundedOn.call_on g_mr none
+        [.var .local (ofString "state_mpt"), .var .local (ofString "out")] hentry)
+      (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+      (TerminatingProgBoundedOn.of_clock (fun s => clock_return s (.const (0#64)))))
+    (by omega),
+    ⟨fun s _ _ _ hr => absurd hr (seq_return_ne_none_csr s _ _)⟩⟩
+
+theorem pBounded_csr_j_loop
+    (fb_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (fb_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»)
+    (fb_memcpy : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
+    (g_mpt_set : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (fb_rlp_encode_bytes : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_bytes") K.«rlp_encode_bytes»)
+    (fb_u256_is_zero : TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero»)
+    (fb_u256_to_be_min : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min»)
+    (ro_htab_item : ReadOnlyFn (ofString "htab_item"))
+    (mk_mpt_set : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (ro_u256_is_zero : ReadOnlyFn (ofString "u256_is_zero"))
+    (rv_u256_to_be_min : RetLe (fun _ => 32) (ofString "u256_to_be_min")) :
+    PBounded (CsrMptBufs "mpt" [("vbuf", 96)])
+      (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "icount")))
+        (.decCall (ofString "e") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "inner"), .var .local (ofString "j")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "e"))) (.const (0#64)))
+              (.dec (ofString "v") (.comb [.one, .one, .one, .one])
+                (.load (.comb [.one, .one, .one, .one]) (.rfield 2 (.var .local (ofString "e"))))
+                (.decCall (ofString "z") .one (ofString "u256_is_zero")
+                  [.var .local (ofString "v")]
+                  (.seq
+                    (.ite (.op .and
+                      [.cmp .notEqual (.const (0#64))
+                        (.cmp .equal (.var .local (ofString "pass")) (.const (0#64))),
+                       .cmp .notEqual (.const (0#64))
+                        (.cmp .equal (.var .local (ofString "z")) (.const (0#64)))])
+                      (.decCall (ofString "n") .one (ofString "u256_to_be_min")
+                        [.var .local (ofString "v"),
+                         .op .add [.var .local (ofString "vbuf"), .const (8#64)]]
+                        (.decCall (ofString "w") .one (ofString "rlp_encode_bytes")
+                          [.op .add [.var .local (ofString "vbuf"), .const (8#64), .const (32#64)],
+                           .op .add [.var .local (ofString "vbuf"), .const (8#64)],
+                           .var .local (ofString "n")]
+                          (.decCall (ofString "enc") .one (ofString "alloc") [.const (40#64)]
+                            (.seq
+                              (.call (some (none, none)) (ofString "memcpy")
+                                [.var .local (ofString "enc"),
+                                 .op .add [.var .local (ofString "vbuf"), .const (40#64)],
+                                 .var .local (ofString "w")])
+                              (.call (some (none, none)) (ofString "mpt_set")
+                                [.var .local (ofString "mpt"),
+                                 .rfield 1 (.var .local (ofString "e")),
+                                 .const (32#64),
+                                 .var .local (ofString "enc"),
+                                 .var .local (ofString "w")])))))
+                      .skip)
+                    (.ite (.op .and
+                      [.cmp .notEqual (.const (0#64))
+                        (.cmp .equal (.var .local (ofString "pass")) (.const (1#64))),
+                       .cmp .notEqual (.const (0#64))
+                        (.cmp .notEqual (.var .local (ofString "z")) (.const (0#64)))])
+                      (.call (some (none, none)) (ofString "mpt_set")
+                        [.var .local (ofString "mpt"),
+                         .rfield 1 (.var .local (ofString "e")),
+                         .const (32#64), .const (0#64), .const (0#64)])
+                      .skip))))
+              .skip)
+            (.assign .local (ofString "j")
+              (.op .add [.var .local (ofString "j"), .const (1#64)])))))
+      ((2 ^ 64 + 1) *
+        ((K.«htab_item» + 1) +
+          Nat.max
+            ((K.«u256_is_zero» + 1) +
+              Nat.max
+                ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+                  (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+                0 +
+              Nat.max (K.«mpt_set» + 1) 0)
+            0 + 1)) := by
+  have hp0_yes : PBounded (CsrNonNeg "pass" (CsrMptBufs "mpt" [("vbuf", 96)]))
+      (.decCall (ofString "n") .one (ofString "u256_to_be_min")
+        [.var .local (ofString "v"),
+         .op .add [.var .local (ofString "vbuf"), .const (8#64)]]
+        (.decCall (ofString "w") .one (ofString "rlp_encode_bytes")
+          [.op .add [.var .local (ofString "vbuf"), .const (8#64), .const (32#64)],
+           .op .add [.var .local (ofString "vbuf"), .const (8#64)],
+           .var .local (ofString "n")]
+          (.decCall (ofString "enc") .one (ofString "alloc") [.const (40#64)]
+            (.seq
+              (.call (some (none, none)) (ofString "memcpy")
+                [.var .local (ofString "enc"),
+                 .op .add [.var .local (ofString "vbuf"), .const (40#64)],
+                 .var .local (ofString "w")])
+              (.call (some (none, none)) (ofString "mpt_set")
+                [.var .local (ofString "mpt"),
+                 .rfield 1 (.var .local (ofString "e")),
+                 .const (32#64),
+                 .var .local (ofString "enc"),
+                 .var .local (ofString "w")])))))
+      ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+        (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1)) :=
+    pBounded_mono_bound_csr
+      (pBounded_u256_to_be_min_csr fb_u256_to_be_min rv_u256_to_be_min
+        (.var .local (ofString "v"))
+        (pBounded_rlp_encode_bytes_flat_csr fb_rlp_encode_bytes
+          (pBounded_alloc_csrBound_csrNonNeg_csrMptBufs fb_alloc "w" 33 "pass" "mpt" "enc"
+            [("vbuf", 96)] (40#64) (by decide) (by decide) (by decide)
+            (PBounded.seq
+              (pBounded_memcpy_csr fb_memcpy
+                (.op .add [.var .local (ofString "vbuf"), .const (40#64)]))
+              (pBounded_mpt_set_bound_csrNonNeg_csrMptBufs g_mpt_set mk_mpt_set
+                "w" 33 "pass" "mpt" [("enc", 40), ("vbuf", 96)]
+                (.rfield 1 (.var .local (ofString "e")))
+                (.var .local (ofString "enc")) (32#64)
+                (by decide) (by decide))))
+          (fun s hr => evaluate_avoidsLocal_flowing (ofString "n") _ (by decide) s (Or.inl hr))))
+      (by omega)
+  have hp0_ite :=
+    pBounded_ite_yes_csr
+      (.op .and
+        [.cmp .notEqual (.const (0#64))
+          (.cmp .equal (.var .local (ofString "pass")) (.const (0#64))),
+         .cmp .notEqual (.const (0#64))
+          (.cmp .equal (.var .local (ofString "z")) (.const (0#64)))])
+      (fun s hs hc => ⟨hs, pass0_cond_nonNeg_csr s hc⟩)
+      (fun _ ht => ht.1)
+      hp0_yes PBounded.skip
+  have hp1_ite :=
+    PBounded.ite
+      (.op .and
+        [.cmp .notEqual (.const (0#64))
+          (.cmp .equal (.var .local (ofString "pass")) (.const (1#64))),
+         .cmp .notEqual (.const (0#64))
+          (.cmp .notEqual (.var .local (ofString "z")) (.const (0#64)))])
+      (pBounded_mpt_set_const_csrMptBufs g_mpt_set mk_mpt_set "mpt" [("vbuf", 96)]
+        (.rfield 1 (.var .local (ofString "e"))) (.const (0#64))
+        (32#64) (0#64) (by decide) (by decide))
+      PBounded.skip
+  have hj_yes : PBounded (CsrMptBufs "mpt" [("vbuf", 96)]) _
+      ((K.«u256_is_zero» + 1) +
+        Nat.max
+          ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+            (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+          0 +
+        Nat.max (K.«mpt_set» + 1) 0) :=
+    pBounded_mono_bound_csr
+      (PBounded.dec (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) (ofString "v") (by decide)
+        (.comb [.one, .one, .one, .one])
+        (.load (.comb [.one, .one, .one, .one]) (.rfield 2 (.var .local (ofString "e"))))
+        (pBounded_roDecCall_csr fb_u256_is_zero ro_u256_is_zero
+          (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+          (fun _ hs => (csrMptBufs_worldOK "mpt" [("vbuf", 96)] hs).1.1)
+          (ofString "z") (by decide) .one [.var .local (ofString "v")]
+          (PBounded.seq hp0_ite hp1_ite)))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  have hj_body : PBounded (CsrMptBufs "mpt" [("vbuf", 96)]) _
+      ((K.«htab_item» + 1) +
+        Nat.max
+          ((K.«u256_is_zero» + 1) +
+            Nat.max
+              ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+                (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+              0 +
+            Nat.max (K.«mpt_set» + 1) 0)
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_item ro_htab_item
+        (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+        (fun _ hs => (csrMptBufs_worldOK "mpt" [("vbuf", 96)] hs).1.1)
+        (ofString "e") (by decide) (.comb [.one, .one, .one])
+        [.var .local (ofString "inner"), .var .local (ofString "j")]
+        (PBounded.seq
+          (PBounded.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "e"))) (.const (0#64)))
+            hj_yes PBounded.skip)
+          (PBounded.assignLocal (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+            (ofString "j") (by decide) (.op .add [.var .local (ofString "j"), .const (1#64)]))))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  exact PBounded.whileLess (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+    (ofString "j") (.var .local (ofString "icount")) hj_body
+    (IncrBody.decCall _ _ _ _ (by decide) (IncrBody.seq _ (by decide) (by decide) IncrBody.incr))
+    (by decide)
+
+theorem pBounded_csr_loop1
+    (fb_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (fb_htab_has : TerminatingFunBoundedOn GuestInv (ofString "htab_has") K.«htab_has»)
+    (fb_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»)
+    (fb_htab_set : TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set»)
+    (fb_memcpy : TerminatingFunBoundedOn GuestInv (ofString "memcpy") K.«memcpy»)
+    (g_mpt_from_witness : TerminatingFunBoundedOn ArenaReady (ofString "mpt_from_witness") K.«mpt_from_witness»)
+    (g_mpt_root : TerminatingFunBoundedOn MptObjReady (ofString "mpt_root") K.«mpt_root»)
+    (g_mpt_set : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (fb_rlp_encode_bytes : TerminatingFunBoundedOn GuestInv (ofString "rlp_encode_bytes") K.«rlp_encode_bytes»)
+    (fb_u256_is_zero : TerminatingFunBoundedOn GuestInv (ofString "u256_is_zero") K.«u256_is_zero»)
+    (fb_u256_to_be_min : TerminatingFunBoundedOn GuestInv (ofString "u256_to_be_min") K.«u256_to_be_min»)
+    (fb_ws_storage_root_of : TerminatingFunBoundedOn GuestInv (ofString "ws_storage_root_of") K.«ws_storage_root_of»)
+    (ro_htab_has : ReadOnlyFn (ofString "htab_has"))
+    (ro_htab_item : ReadOnlyFn (ofString "htab_item"))
+    (h_htab_set : type_of% @htab_set_spec)
+    (wk_mpt_from_witness : WorldKeeps WorldOK (fun _ => []) ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      RetMptObj (ofString "mpt_from_witness"))
+    (mk_mpt_root : MptKeeps MptObjReady
+      (fun s => [(locN s "out", 32),
+                 (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_root"))
+    (mk_mpt_set : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set"))
+    (ro_u256_is_zero : ReadOnlyFn (ofString "u256_is_zero"))
+    (rv_u256_to_be_min : RetLe (fun _ => 32) (ofString "u256_to_be_min"))
+    (wk_ws_storage_root_of : WorldKeeps WorldOK
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_nib_scratch", if globN s "mpt_nib_scratch" = 0 then 0 else 64)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "ws_storage_root_of")) :
+    PBounded CsrTabs
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+        (.decCall (ofString "s") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "sw"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const (0#64)))
+              (.dec (ofString "addr") .one (.rfield 1 (.var .local (ofString "s")))
+                (.dec (ofString "inner") .one (.rfield 2 (.var .local (ofString "s")))
+                  (.decCall (ofString "has") .one (ofString "htab_has")
+                    [.var .local (ofString "cache"), .var .local (ofString "addr")]
+                    (.seq
+                      (.ite (.cmp .equal (.var .local (ofString "has")) (.const (0#64)))
+                        (.call (some (none, none)) (ofString "htab_set")
+                          [.var .local (ofString "cache"), .var .local (ofString "addr"), .const (1#64)])
+                        .skip)
+                      (.decCall (ofString "old_root") .one (ofString "ws_storage_root_of")
+                        [.var .local (ofString "addr")]
+                        (.decCall (ofString "mpt") .one (ofString "mpt_from_witness")
+                          [.var .local (ofString "nodedb"), .var .local (ofString "old_root"), .const (1#64)]
+                          (.decCall (ofString "vbuf") .one (ofString "alloc") [.const (96#64)]
+                            (.dec (ofString "pass") .one (.const (0#64))
+                              (.seq
+                                (.while (.cmp .less (.var .local (ofString "pass")) (.const (2#64)))
+                                  (.dec (ofString "j") .one (.const (0#64))
+                                    (.dec (ofString "icount") .one
+                                      (.load .one (.op .add [.var .local (ofString "inner"), .const (24#64)]))
+                                      (.seq
+                                        (.while (.cmp .less (.var .local (ofString "j")) (.var .local (ofString "icount")))
+                                          (.decCall (ofString "e") (.comb [.one, .one, .one]) (ofString "htab_item")
+                                            [.var .local (ofString "inner"), .var .local (ofString "j")]
+                                            (.seq
+                                              (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "e"))) (.const (0#64)))
+                                                (.dec (ofString "v") (.comb [.one, .one, .one, .one])
+                                                  (.load (.comb [.one, .one, .one, .one]) (.rfield 2 (.var .local (ofString "e"))))
+                                                  (.decCall (ofString "z") .one (ofString "u256_is_zero")
+                                                    [.var .local (ofString "v")]
+                                                    (.seq
+                                                      (.ite (.op .and
+                                                        [.cmp .notEqual (.const (0#64))
+                                                          (.cmp .equal (.var .local (ofString "pass")) (.const (0#64))),
+                                                         .cmp .notEqual (.const (0#64))
+                                                          (.cmp .equal (.var .local (ofString "z")) (.const (0#64)))])
+                                                        (.decCall (ofString "n") .one (ofString "u256_to_be_min")
+                                                          [.var .local (ofString "v"),
+                                                           .op .add [.var .local (ofString "vbuf"), .const (8#64)]]
+                                                          (.decCall (ofString "w") .one (ofString "rlp_encode_bytes")
+                                                            [.op .add [.var .local (ofString "vbuf"), .const (8#64), .const (32#64)],
+                                                             .op .add [.var .local (ofString "vbuf"), .const (8#64)],
+                                                             .var .local (ofString "n")]
+                                                            (.decCall (ofString "enc") .one (ofString "alloc") [.const (40#64)]
+                                                              (.seq
+                                                                (.call (some (none, none)) (ofString "memcpy")
+                                                                  [.var .local (ofString "enc"),
+                                                                   .op .add [.var .local (ofString "vbuf"), .const (40#64)],
+                                                                   .var .local (ofString "w")])
+                                                                (.call (some (none, none)) (ofString "mpt_set")
+                                                                  [.var .local (ofString "mpt"),
+                                                                   .rfield 1 (.var .local (ofString "e")),
+                                                                   .const (32#64),
+                                                                   .var .local (ofString "enc"),
+                                                                   .var .local (ofString "w")])))))
+                                                        .skip)
+                                                      (.ite (.op .and
+                                                        [.cmp .notEqual (.const (0#64))
+                                                          (.cmp .equal (.var .local (ofString "pass")) (.const (1#64))),
+                                                         .cmp .notEqual (.const (0#64))
+                                                          (.cmp .notEqual (.var .local (ofString "z")) (.const (0#64)))])
+                                                        (.call (some (none, none)) (ofString "mpt_set")
+                                                          [.var .local (ofString "mpt"),
+                                                           .rfield 1 (.var .local (ofString "e")),
+                                                           .const (32#64), .const (0#64), .const (0#64)])
+                                                        .skip))))
+                                                .skip)
+                                              (.assign .local (ofString "j")
+                                                (.op .add [.var .local (ofString "j"), .const (1#64)])))))
+                                        (.assign .local (ofString "pass")
+                                          (.op .add [.var .local (ofString "pass"), .const (1#64)]))))))
+                                (.decCall (ofString "root") .one (ofString "alloc") [.const (32#64)]
+                                  (.seq
+                                    (.call (some (none, none)) (ofString "mpt_root")
+                                      [.var .local (ofString "mpt"), .var .local (ofString "root")])
+                                    (.call (some (none, none)) (ofString "htab_set")
+                                      [.var .local (ofString "new_roots"), .var .local (ofString "addr"),
+                                       .var .local (ofString "root")]))))))))))))
+              .skip)
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const (1#64)])))))
+      ((2 ^ 64 + 1) *
+        ((K.«htab_item» + 1) +
+          Nat.max
+            ((K.«htab_has» + 1) + Nat.max (K.«htab_set» + 1) 0 +
+              (K.«ws_storage_root_of» + 1) + (K.«mpt_from_witness» + 1) + (K.«alloc» + 1) +
+              (2 ^ 64 + 1) *
+                ((2 ^ 64 + 1) *
+                  ((K.«htab_item» + 1) +
+                    Nat.max
+                      ((K.«u256_is_zero» + 1) +
+                        Nat.max
+                          ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+                            (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+                          0 +
+                        Nat.max (K.«mpt_set» + 1) 0)
+                      0 + 1) + 1) +
+              (K.«alloc» + 1) + (K.«mpt_root» + 1) + (K.«htab_set» + 1))
+            0 + 1)) := by
+  have hj := pBounded_csr_j_loop fb_alloc fb_htab_item fb_memcpy g_mpt_set
+    fb_rlp_encode_bytes fb_u256_is_zero fb_u256_to_be_min
+    ro_htab_item mk_mpt_set ro_u256_is_zero rv_u256_to_be_min
+  have hpass_body :=
+    PBounded.dec (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) (ofString "j") (by decide)
+      .one (.const (0#64))
+      (PBounded.dec (localsOnly_csrMptBufs "mpt" [("vbuf", 96)]) (ofString "icount") (by decide)
+        .one (.load .one (.op .add [.var .local (ofString "inner"), .const (24#64)]))
+        (PBounded.seq hj
+          (PBounded.assignLocal (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+            (ofString "pass") (by decide) (.op .add [.var .local (ofString "pass"), .const (1#64)]))))
+  have hpass_loop :=
+    PBounded.whileLess (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+      (ofString "pass") (.const (2#64)) hpass_body
+      (IncrBody.dec _ _ _ (by decide)
+        (IncrBody.dec _ _ _ (by decide)
+          (IncrBody.seq _ (by decide) (by decide) IncrBody.incr)))
+      (by decide)
+  have hroot_tail :=
+    pBounded_alloc_csrMptBufs fb_alloc "mpt" "root" [("vbuf", 96)] (32#64) (by decide)
+      (PBounded.seq
+        (pBounded_mpt_root_buf_csr g_mpt_root mk_mpt_root "mpt" "root" [("vbuf", 96)])
+        (pBounded_htab_set_csrMptBufs fb_htab_set h_htab_set
+          "mpt" [("root", 32), ("vbuf", 96)] "new_roots" (Or.inr rfl)
+          (.var .local (ofString "addr")) (.var .local (ofString "root"))))
+  have hi_yes : PBounded CsrTabs _
+      ((K.«htab_has» + 1) + Nat.max (K.«htab_set» + 1) 0 +
+        (K.«ws_storage_root_of» + 1) + (K.«mpt_from_witness» + 1) + (K.«alloc» + 1) +
+        (2 ^ 64 + 1) *
+          ((2 ^ 64 + 1) *
+            ((K.«htab_item» + 1) +
+              Nat.max
+                ((K.«u256_is_zero» + 1) +
+                  Nat.max
+                    ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+                      (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+                    0 +
+                  Nat.max (K.«mpt_set» + 1) 0)
+                0 + 1) + 1) +
+        (K.«alloc» + 1) + (K.«mpt_root» + 1) + (K.«htab_set» + 1)) :=
+    pBounded_mono_bound_csr
+      (PBounded.dec localsOnly_csrTabs (ofString "addr") (by decide)
+        .one (.rfield 1 (.var .local (ofString "s")))
+        (PBounded.dec localsOnly_csrTabs (ofString "inner") (by decide)
+          .one (.rfield 2 (.var .local (ofString "s")))
+          (pBounded_roDecCall_csr fb_htab_has ro_htab_has localsOnly_csrTabs
+            (fun _ hs => (csrTabs_worldOK hs).1.1) (ofString "has") (by decide) .one
+            [.var .local (ofString "cache"), .var .local (ofString "addr")]
+            (PBounded.seq
+              (PBounded.ite (.cmp .equal (.var .local (ofString "has")) (.const (0#64)))
+                (pBounded_htab_set_csrTabs fb_htab_set h_htab_set "cache" (Or.inl rfl)
+                  (.var .local (ofString "addr")) (.const (1#64)))
+                PBounded.skip)
+              (pBounded_ws_storage_root_of_csrTabs fb_ws_storage_root_of wk_ws_storage_root_of
+                (name := ofString "old_root") (args := [.var .local (ofString "addr")]) (by decide)
+                (pBounded_mpt_from_witness_csr g_mpt_from_witness wk_mpt_from_witness
+                  "mpt" (args := [.var .local (ofString "nodedb"), .var .local (ofString "old_root"), .const (1#64)])
+                  (by decide)
+                  (pBounded_alloc_csrMptBufs fb_alloc "mpt" "vbuf" [] (96#64) (by decide)
+                    (PBounded.dec (localsOnly_csrMptBufs "mpt" [("vbuf", 96)])
+                      (ofString "pass") (by decide) .one (.const (0#64))
+                      (PBounded.seq hpass_loop hroot_tail)))))))))
+      (by
+        simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl,
+          Nat.max_zero, Nat.zero_max]
+        omega)
+  have hi_body : PBounded CsrTabs _
+      ((K.«htab_item» + 1) +
+        Nat.max
+          ((K.«htab_has» + 1) + Nat.max (K.«htab_set» + 1) 0 +
+            (K.«ws_storage_root_of» + 1) + (K.«mpt_from_witness» + 1) + (K.«alloc» + 1) +
+            (2 ^ 64 + 1) *
+              ((2 ^ 64 + 1) *
+                ((K.«htab_item» + 1) +
+                  Nat.max
+                    ((K.«u256_is_zero» + 1) +
+                      Nat.max
+                        ((K.«u256_to_be_min» + 1) + (K.«rlp_encode_bytes» + 1) +
+                          (K.«alloc» + 1) + (K.«memcpy» + 1) + (K.«mpt_set» + 1))
+                        0 +
+                      Nat.max (K.«mpt_set» + 1) 0)
+                    0 + 1) + 1) +
+            (K.«alloc» + 1) + (K.«mpt_root» + 1) + (K.«htab_set» + 1))
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_item ro_htab_item localsOnly_csrTabs
+        (fun _ hs => (csrTabs_worldOK hs).1.1) (ofString "s") (by decide) (.comb [.one, .one, .one])
+        [.var .local (ofString "sw"), .var .local (ofString "i")]
+        (PBounded.seq
+          (PBounded.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s"))) (.const (0#64)))
+            hi_yes PBounded.skip)
+          (PBounded.assignLocal localsOnly_csrTabs (ofString "i") (by decide)
+            (.op .add [.var .local (ofString "i"), .const (1#64)]))))
+      (by
+        simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl,
+          Nat.max_zero, Nat.zero_max]
+        omega)
+  exact PBounded.whileLess localsOnly_csrTabs (ofString "i") (.var .local (ofString "cap"))
+    hi_body
+    (IncrBody.decCall _ _ _ _ (by decide) (IncrBody.seq _ (by decide) (by decide) IncrBody.incr))
+    (by decide)
+
+theorem pBounded_csr_loop2
+    (fb_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (fb_encode_account : TerminatingFunBoundedOn GuestInv (ofString "encode_account") K.«encode_account»)
+    (fb_htab_get : TerminatingFunBoundedOn GuestInv (ofString "htab_get") K.«htab_get»)
+    (fb_htab_has : TerminatingFunBoundedOn GuestInv (ofString "htab_has") K.«htab_has»)
+    (fb_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»)
+    (fb_htab_set : TerminatingFunBoundedOn GuestInv (ofString "htab_set") K.«htab_set»)
+    (g_mpt_set : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (fb_ws_get_account_optional : TerminatingFunBoundedOn GuestInv (ofString "ws_get_account_optional") K.«ws_get_account_optional»)
+    (ro_htab_get : ReadOnlyFn (ofString "htab_get"))
+    (ro_htab_has : ReadOnlyFn (ofString "htab_has"))
+    (ro_htab_item : ReadOnlyFn (ofString "htab_item"))
+    (h_htab_set : type_of% @htab_set_spec)
+    (mk_mpt_set : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set")) :
+    PBounded (CsrMptBufs "state_mpt" [])
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "cap")))
+        (.decCall (ofString "s2") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "sw"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s2"))) (.const (0#64)))
+              (.decCall (ofString "inaw") .one (ofString "htab_has")
+                [.var .local (ofString "aw"), .rfield 1 (.var .local (ofString "s2"))]
+                (.ite (.cmp .equal (.var .local (ofString "inaw")) (.const (0#64)))
+                  (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+                    [.rfield 1 (.var .local (ofString "s2"))]
+                    (.seq
+                      (.call (some (none, none)) (ofString "htab_set")
+                        [.var .local (ofString "cache"), .rfield 1 (.var .local (ofString "s2")), .const (1#64)])
+                      (.ite (.cmp .notEqual (.var .local (ofString "a")) (.const (1#64)))
+                        (.decCall (ofString "nr") (.comb [.one, .one]) (ofString "htab_get")
+                          [.var .local (ofString "new_roots"), .rfield 1 (.var .local (ofString "s2"))]
+                          (.dec (ofString "sr") .one (.var .global (ofString "empty_trie_root"))
+                            (.seq
+                              (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "nr"))) (.const (0#64)))
+                                (.assign .local (ofString "sr") (.rfield 1 (.var .local (ofString "nr"))))
+                                .skip)
+                              (.decCall (ofString "enc") .one (ofString "alloc") [.const (128#64)]
+                                (.decCall (ofString "n") .one (ofString "encode_account")
+                                  [.load .one (.op .add [.var .local (ofString "a"), .const (0#64)]),
+                                   .load (.comb [.one, .one, .one, .one])
+                                     (.op .add [.var .local (ofString "a"), .const (8#64)]),
+                                   .var .local (ofString "sr"),
+                                   .load .one (.op .add [.var .local (ofString "a"), .const (48#64)]),
+                                   .var .local (ofString "enc")]
+                                  (.call (some (none, none)) (ofString "mpt_set")
+                                    [.var .local (ofString "state_mpt"),
+                                     .rfield 1 (.var .local (ofString "s2")),
+                                     .const (20#64),
+                                     .var .local (ofString "enc"),
+                                     .var .local (ofString "n")]))))))
+                        .skip)))
+                  .skip))
+              .skip)
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const (1#64)])))))
+      ((2 ^ 64 + 1) *
+        ((K.«htab_item» + 1) +
+          Nat.max
+            ((K.«htab_has» + 1) +
+              Nat.max
+                ((K.«ws_get_account_optional» + 1) + (K.«htab_set» + 1) +
+                  Nat.max
+                    ((K.«htab_get» + 1) + (K.«alloc» + 1) +
+                      (K.«encode_account» + 1) + (K.«mpt_set» + 1))
+                    0)
+                0)
+            0 + 1)) := by
+  have ha_yes : PBounded (CsrMptBufs "state_mpt" [])
+      (.decCall (ofString "nr") (.comb [.one, .one]) (ofString "htab_get")
+        [.var .local (ofString "new_roots"), .rfield 1 (.var .local (ofString "s2"))]
+        (.dec (ofString "sr") .one (.var .global (ofString "empty_trie_root"))
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "nr"))) (.const (0#64)))
+              (.assign .local (ofString "sr") (.rfield 1 (.var .local (ofString "nr"))))
+              .skip)
+            (.decCall (ofString "enc") .one (ofString "alloc") [.const (128#64)]
+              (.decCall (ofString "n") .one (ofString "encode_account")
+                [.load .one (.op .add [.var .local (ofString "a"), .const (0#64)]),
+                 .load (.comb [.one, .one, .one, .one])
+                   (.op .add [.var .local (ofString "a"), .const (8#64)]),
+                 .var .local (ofString "sr"),
+                 .load .one (.op .add [.var .local (ofString "a"), .const (48#64)]),
+                 .var .local (ofString "enc")]
+                (.call (some (none, none)) (ofString "mpt_set")
+                  [.var .local (ofString "state_mpt"),
+                   .rfield 1 (.var .local (ofString "s2")),
+                   .const (20#64),
+                   .var .local (ofString "enc"),
+                   .var .local (ofString "n")]))))))
+      ((K.«htab_get» + 1) + (K.«alloc» + 1) +
+        (K.«encode_account» + 1) + (K.«mpt_set» + 1)) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_get ro_htab_get
+        (localsOnly_csrMptBufs "state_mpt" [])
+        (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+        (ofString "nr") (by decide) (.comb [.one, .one])
+        [.var .local (ofString "new_roots"), .rfield 1 (.var .local (ofString "s2"))]
+        (PBounded.dec (localsOnly_csrMptBufs "state_mpt" []) (ofString "sr") (by decide) .one
+          (.var .global (ofString "empty_trie_root"))
+          (PBounded.seq
+            (PBounded.ite
+              (.cmp .notEqual (.rfield 0 (.var .local (ofString "nr"))) (.const (0#64)))
+              (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+                (ofString "sr") (by decide) (.rfield 1 (.var .local (ofString "nr"))))
+              PBounded.skip)
+            (pBounded_alloc_csrMptBufs fb_alloc "state_mpt" "enc" [] (128#64) (by decide)
+              (pBounded_encode_account_csr fb_encode_account "state_mpt" "enc" "n"
+                (.load .one (.op .add [.var .local (ofString "a"), .const (0#64)]))
+                (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "a"), .const (8#64)]))
+                (.var .local (ofString "sr"))
+                (.load .one (.op .add [.var .local (ofString "a"), .const (48#64)]))
+                (by decide)
+                (pBounded_mpt_set_bound_csrMptBufs g_mpt_set mk_mpt_set
+                  "n" 110 "state_mpt" [("enc", 128)]
+                  (.rfield 1 (.var .local (ofString "s2")))
+                  (.var .local (ofString "enc"))
+                  (20#64)
+                  (by decide) (by decide)))))))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  have hinaw_yes : PBounded (CsrMptBufs "state_mpt" []) _
+      ((K.«ws_get_account_optional» + 1) + (K.«htab_set» + 1) +
+        Nat.max
+          ((K.«htab_get» + 1) + (K.«alloc» + 1) +
+            (K.«encode_account» + 1) + (K.«mpt_set» + 1))
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_ws_get_account_optional_csrMptBufs fb_ws_get_account_optional
+        "state_mpt" "a" (.rfield 1 (.var .local (ofString "s2"))) (by decide)
+        (PBounded.seq
+          (pBounded_htab_set_csrMptBufs fb_htab_set h_htab_set
+            "state_mpt" [] "cache" (Or.inl rfl)
+            (.rfield 1 (.var .local (ofString "s2"))) (.const (1#64)))
+          (PBounded.ite (.cmp .notEqual (.var .local (ofString "a")) (.const (1#64)))
+            ha_yes PBounded.skip)))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  have hs2_yes : PBounded (CsrMptBufs "state_mpt" []) _
+      ((K.«htab_has» + 1) +
+        Nat.max
+          ((K.«ws_get_account_optional» + 1) + (K.«htab_set» + 1) +
+            Nat.max
+              ((K.«htab_get» + 1) + (K.«alloc» + 1) +
+                (K.«encode_account» + 1) + (K.«mpt_set» + 1))
+              0)
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_has ro_htab_has
+        (localsOnly_csrMptBufs "state_mpt" [])
+        (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+        (ofString "inaw") (by decide) .one
+        [.var .local (ofString "aw"), .rfield 1 (.var .local (ofString "s2"))]
+        (PBounded.ite (.cmp .equal (.var .local (ofString "inaw")) (.const (0#64)))
+          hinaw_yes PBounded.skip))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  have hbody : PBounded (CsrMptBufs "state_mpt" []) _
+      ((K.«htab_item» + 1) +
+        Nat.max
+          ((K.«htab_has» + 1) +
+            Nat.max
+              ((K.«ws_get_account_optional» + 1) + (K.«htab_set» + 1) +
+                Nat.max
+                  ((K.«htab_get» + 1) + (K.«alloc» + 1) +
+                    (K.«encode_account» + 1) + (K.«mpt_set» + 1))
+                  0)
+              0)
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_item ro_htab_item
+        (localsOnly_csrMptBufs "state_mpt" [])
+        (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+        (ofString "s2") (by decide) (.comb [.one, .one, .one])
+        [.var .local (ofString "sw"), .var .local (ofString "i")]
+        (PBounded.seq
+          (PBounded.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s2"))) (.const (0#64)))
+            hs2_yes PBounded.skip)
+          (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+            (ofString "i") (by decide) (.op .add [.var .local (ofString "i"), .const (1#64)]))))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  exact PBounded.whileLess (localsOnly_csrMptBufs "state_mpt" [])
+    (ofString "i") (.var .local (ofString "cap")) hbody
+    (IncrBody.decCall _ _ _ _ (by decide) (IncrBody.seq _ (by decide) (by decide) IncrBody.incr))
+    (by decide)
+
+theorem pBounded_csr_loop3
+    (fb_alloc : TerminatingFunBoundedOn GuestInv (ofString "alloc") K.«alloc»)
+    (fb_cache_get_root : TerminatingFunBoundedOn GuestInv (ofString "cache_get_root") K.«cache_get_root»)
+    (fb_encode_account : TerminatingFunBoundedOn GuestInv (ofString "encode_account") K.«encode_account»)
+    (fb_htab_get : TerminatingFunBoundedOn GuestInv (ofString "htab_get") K.«htab_get»)
+    (fb_htab_item : TerminatingFunBoundedOn GuestInv (ofString "htab_item") K.«htab_item»)
+    (g_mpt_set : TerminatingFunBoundedOn MptSetReady (ofString "mpt_set") K.«mpt_set»)
+    (ro_htab_get : ReadOnlyFn (ofString "htab_get"))
+    (ro_htab_item : ReadOnlyFn (ofString "htab_item"))
+    (mk_mpt_set : MptKeeps MptSetReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "mpt_hash_scratch", if globN s "mpt_hash_scratch" = 0 then 0 else 40)])
+      ["heap_ptr", "scratch_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      (ofString "mpt_set")) :
+    PBounded (CsrMptBufs "state_mpt" [])
+      (.while (.cmp .less (.var .local (ofString "i")) (.var .local (ofString "acap")))
+        (.decCall (ofString "s3") (.comb [.one, .one, .one]) (ofString "htab_item")
+          [.var .local (ofString "aw"), .var .local (ofString "i")]
+          (.seq
+            (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s3"))) (.const (0#64)))
+              (.dec (ofString "addr3") .one (.rfield 1 (.var .local (ofString "s3")))
+                (.dec (ofString "acct") .one (.rfield 2 (.var .local (ofString "s3")))
+                  (.ite (.cmp .equal (.var .local (ofString "acct")) (.const (1#64)))
+                    (.call (some (none, none)) (ofString "mpt_set")
+                      [.var .local (ofString "state_mpt"),
+                       .var .local (ofString "addr3"),
+                       .const (20#64), .const (0#64), .const (0#64)])
+                    (.decCall (ofString "nr2") (.comb [.one, .one]) (ofString "htab_get")
+                      [.var .local (ofString "new_roots"), .var .local (ofString "addr3")]
+                      (.dec (ofString "sr2") .one (.const (0#64))
+                        (.seq
+                          (.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "nr2"))) (.const (0#64)))
+                            (.assign .local (ofString "sr2") (.rfield 1 (.var .local (ofString "nr2"))))
+                            (.call (some (some (.local, ofString "sr2"), none)) (ofString "cache_get_root")
+                              [.var .local (ofString "cache"), .var .local (ofString "addr3")]))
+                          (.decCall (ofString "enc2") .one (ofString "alloc") [.const (128#64)]
+                            (.decCall (ofString "n2") .one (ofString "encode_account")
+                              [.load .one (.op .add [.var .local (ofString "acct"), .const (0#64)]),
+                               .load (.comb [.one, .one, .one, .one])
+                                 (.op .add [.var .local (ofString "acct"), .const (8#64)]),
+                               .var .local (ofString "sr2"),
+                               .load .one (.op .add [.var .local (ofString "acct"), .const (48#64)]),
+                               .var .local (ofString "enc2")]
+                              (.call (some (none, none)) (ofString "mpt_set")
+                                [.var .local (ofString "state_mpt"),
+                                 .var .local (ofString "addr3"),
+                                 .const (20#64),
+                                 .var .local (ofString "enc2"),
+                                 .var .local (ofString "n2")])))))))))
+              .skip)
+            (.assign .local (ofString "i")
+              (.op .add [.var .local (ofString "i"), .const (1#64)])))))
+      ((2 ^ 64 + 1) *
+        ((K.«htab_item» + 1) +
+          Nat.max
+            (Nat.max (K.«mpt_set» + 1)
+              ((K.«htab_get» + 1) + Nat.max 0 (K.«cache_get_root» + 1) +
+                (K.«alloc» + 1) + (K.«encode_account» + 1) + (K.«mpt_set» + 1)))
+            0 + 1)) := by
+  have hacct_no : PBounded (CsrMptBufs "state_mpt" []) _
+      ((K.«htab_get» + 1) + Nat.max 0 (K.«cache_get_root» + 1) +
+        (K.«alloc» + 1) + (K.«encode_account» + 1) + (K.«mpt_set» + 1)) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_get ro_htab_get
+        (localsOnly_csrMptBufs "state_mpt" [])
+        (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+        (ofString "nr2") (by decide) (.comb [.one, .one])
+        [.var .local (ofString "new_roots"), .var .local (ofString "addr3")]
+        (PBounded.dec (localsOnly_csrMptBufs "state_mpt" []) (ofString "sr2") (by decide) .one (.const (0#64))
+          (PBounded.seq
+            (PBounded.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "nr2"))) (.const (0#64)))
+              (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+                (ofString "sr2") (by decide) (.rfield 1 (.var .local (ofString "nr2"))))
+              (pBounded_cache_get_root_csrMptBufs fb_cache_get_root
+                "state_mpt" "sr2" (.var .local (ofString "cache")) (.var .local (ofString "addr3")) (by decide)))
+            (pBounded_alloc_csrMptBufs fb_alloc "state_mpt" "enc2" [] (128#64) (by decide)
+              (pBounded_encode_account_csr fb_encode_account "state_mpt" "enc2" "n2"
+                (.load .one (.op .add [.var .local (ofString "acct"), .const (0#64)]))
+                (.load (.comb [.one, .one, .one, .one]) (.op .add [.var .local (ofString "acct"), .const (8#64)]))
+                (.var .local (ofString "sr2"))
+                (.load .one (.op .add [.var .local (ofString "acct"), .const (48#64)]))
+                (by decide)
+                (pBounded_mpt_set_bound_csrMptBufs g_mpt_set mk_mpt_set
+                  "n2" 110 "state_mpt" [("enc2", 128)]
+                  (.var .local (ofString "addr3"))
+                  (.var .local (ofString "enc2"))
+                  (20#64)
+                  (by decide) (by decide)))))))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  have hs3_yes :=
+    PBounded.dec (localsOnly_csrMptBufs "state_mpt" []) (ofString "addr3") (by decide)
+      .one (.rfield 1 (.var .local (ofString "s3")))
+      (PBounded.dec (localsOnly_csrMptBufs "state_mpt" []) (ofString "acct") (by decide)
+        .one (.rfield 2 (.var .local (ofString "s3")))
+        (PBounded.ite (.cmp .equal (.var .local (ofString "acct")) (.const (1#64)))
+          (pBounded_mpt_set_const_csrMptBufs g_mpt_set mk_mpt_set
+            "state_mpt" [] (.var .local (ofString "addr3")) (.const (0#64)) (20#64) (0#64) (by decide) (by decide))
+          hacct_no))
+  have hbody : PBounded (CsrMptBufs "state_mpt" []) _
+      ((K.«htab_item» + 1) +
+        Nat.max
+          (Nat.max (K.«mpt_set» + 1)
+            ((K.«htab_get» + 1) + Nat.max 0 (K.«cache_get_root» + 1) +
+              (K.«alloc» + 1) + (K.«encode_account» + 1) + (K.«mpt_set» + 1)))
+          0) :=
+    pBounded_mono_bound_csr
+      (pBounded_roDecCall_csr fb_htab_item ro_htab_item
+        (localsOnly_csrMptBufs "state_mpt" [])
+        (fun _ hs => (csrMptBufs_worldOK "state_mpt" [] hs).1.1)
+        (ofString "s3") (by decide) (.comb [.one, .one, .one])
+        [.var .local (ofString "aw"), .var .local (ofString "i")]
+        (PBounded.seq
+          (PBounded.ite (.cmp .notEqual (.rfield 0 (.var .local (ofString "s3"))) (.const (0#64)))
+            hs3_yes PBounded.skip)
+          (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+            (ofString "i") (by decide) (.op .add [.var .local (ofString "i"), .const (1#64)]))))
+      (by simp only [Nat.max_def]; repeat (first | split | omega))
+  exact PBounded.whileLess (localsOnly_csrMptBufs "state_mpt" [])
+    (ofString "i") (.var .local (ofString "acap")) hbody
+    (IncrBody.decCall _ _ _ _ (by decide) (IncrBody.seq _ (by decide) (by decide) IncrBody.incr))
+    (by decide)
+
+theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by
+  intro fb_alloc fb_cache_get_root fb_encode_account fb_htab_copy fb_htab_get
+    fb_htab_has fb_htab_item fb_htab_new fb_htab_set fb_memcpy
+    g_mpt_from_witness g_mpt_root g_mpt_set fb_rlp_encode_bytes
+    fb_u256_is_zero fb_u256_to_be_min fb_ws_get_account_optional fb_ws_storage_root_of
+    _wk_alloc _rt_alloc _wk_cache_get_root _wk_encode_account
+    wk_htab_copy rt_htab_copy ro_htab_get ro_htab_has ro_htab_item
+    h_htab_new h_htab_set _wk_memcpy wk_mpt_from_witness mk_mpt_root mk_mpt_set
+    _wk_rlp_encode_bytes _rv_rlp_encode_bytes ro_u256_is_zero
+    _wk_u256_to_be_min rv_u256_to_be_min _wk_ws_get_account_optional wk_ws_storage_root_of
+  refine ⟨_, _, _, lookup_compute_state_root_csr, ?_⟩
+  simp only [sourceFunctionEntry, Guest.Software.guestFn_compute_state_root,
+    InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.funDeclToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.progToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.expListToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeToHOLStructural,
+    InitECandidate.Solver.FrontendCodecComputation.shapeListToHOLStructural,
+    Option.map_none, Option.map_some, List.map_cons, List.map_nil]
+  have hloop1 := pBounded_csr_loop1 fb_alloc fb_htab_has fb_htab_item fb_htab_set
+    fb_memcpy g_mpt_from_witness g_mpt_root g_mpt_set fb_rlp_encode_bytes
+    fb_u256_is_zero fb_u256_to_be_min fb_ws_storage_root_of
+    ro_htab_has ro_htab_item h_htab_set wk_mpt_from_witness
+    mk_mpt_root mk_mpt_set ro_u256_is_zero rv_u256_to_be_min wk_ws_storage_root_of
+  have hloop2 := pBounded_csr_loop2 fb_alloc fb_encode_account fb_htab_get
+    fb_htab_has fb_htab_item fb_htab_set g_mpt_set fb_ws_get_account_optional
+    ro_htab_get ro_htab_has ro_htab_item h_htab_set mk_mpt_set
+  have hloop3 := pBounded_csr_loop3 fb_alloc fb_cache_get_root fb_encode_account
+    fb_htab_get fb_htab_item g_mpt_set ro_htab_get ro_htab_item mk_mpt_set
+  have hfinal := pBounded_csr_final_mpt_root g_mpt_root
+  have hstate_tail :=
+    pBounded_mpt_from_witness_csr g_mpt_from_witness wk_mpt_from_witness
+      "state_mpt"
+      (args := [.var .local (ofString "nodedb"),
+                .load .one (.op .add [.var .global (ofString "ws"), .const (8#64)]),
+                .const (1#64)])
+      (by decide)
+      (PBounded.seq
+        (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+          (ofString "i") (by decide) (.const (0#64)))
+        (PBounded.seq hloop2
+          (PBounded.dec (localsOnly_csrMptBufs "state_mpt" [])
+            (ofString "acap") (by decide) .one
+            (.load .one (.op .add [.var .local (ofString "aw"), .const (24#64)]))
+            (PBounded.seq
+              (PBounded.assignLocal (localsOnly_csrMptBufs "state_mpt" [])
+                (ofString "i") (by decide) (.const (0#64)))
+              (PBounded.seq hloop3 hfinal)))))
+  have htabs_body :=
+    PBounded.dec localsOnly_csrTabs (ofString "sw") (by decide) .one
+      (.load .one (.op .add [.var .global (ofString "bs"), .const (32#64)]))
+      (PBounded.dec localsOnly_csrTabs (ofString "aw") (by decide) .one
+        (.load .one (.op .add [.var .global (ofString "bs"), .const (16#64)]))
+        (PBounded.dec localsOnly_csrTabs (ofString "nodedb") (by decide) .one
+          (.load .one (.op .add [.var .global (ofString "ws"), .const (0#64)]))
+          (PBounded.dec localsOnly_csrTabs (ofString "cap") (by decide) .one
+            (.load .one (.op .add [.var .local (ofString "sw"), .const (24#64)]))
+            (PBounded.dec localsOnly_csrTabs (ofString "i") (by decide) .one (.const (0#64))
+              (PBounded.seq hloop1 hstate_tail)))))
+  refine @TerminatingProgBoundedOn.mono_bound WorldOK _ _ K.«compute_state_root»
+    (decCall_htab_copy_entry_csr fb_htab_copy wk_htab_copy rt_htab_copy
+      (decCall_htab_new_entry_csr fb_htab_new h_htab_new htabs_body.bounded)) ?_
+  unfold K.«compute_state_root»
+  simp only [show ∀ a b : Nat, Nat.max a b = max a b from fun _ _ => rfl,
+    Nat.max_zero, Nat.zero_max]
+  omega
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
