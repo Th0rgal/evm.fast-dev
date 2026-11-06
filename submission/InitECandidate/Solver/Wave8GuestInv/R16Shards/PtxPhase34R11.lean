@@ -18087,4 +18087,32 @@ theorem journal_worldStep_frames_of_cut {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+open private journalAppendTailProg from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Resume the original tail with both world typing and backing frames at its actual entry. -/
+theorem journal_cut_world_frames_tail_output {F : Type}
+    (s cur out cut mid : PanSemStateFiniteExact 64 F) (jn jc trapCode : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64) (bs : List Ivl)
+    (hcode : cur.code = InitECandidate.Solver.GuestCodeLookup.originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    ∃ (entry u : PanSemStateFiniteExact 64 F),
+      WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none entry ∧
+      (∀ b ∈ bs, IvlUnhit s entry b) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, he, ht, ho⟩ := journal_cut_state_tail_output cur out cut jn jc trapCode e16 tail rv
+    hcode hjn hjc hr hcut
+  obtain ⟨hw', hf'⟩ := journal_worldStep_frames_of_cut s mid cut entry bs hw hm he hf
+  exact ⟨entry, u, hw', hf', ht, congrArg (fun st => st.memory) ho⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
