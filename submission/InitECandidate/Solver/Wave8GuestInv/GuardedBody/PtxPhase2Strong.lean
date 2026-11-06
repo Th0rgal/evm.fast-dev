@@ -12548,6 +12548,27 @@ theorem phase2_message_tables_world_step {F : Type}
   · rw [hm]
     exact phase2_packed_owned_growth s post _ _ _ hin hg hd
 
+/-- Transport the joint witness when world roles change but still exclude the
+two private access tables. This permits account creation to add world roles. -/
+theorem phase2_message_tables_world_step_roles {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) {aa ak : Nat}
+    (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    (hm : locN post "m" = locN s "m")
+    (haf : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ aa)
+    (hkf : ∀ a ∈ worldRoleSlots post ++ journalRoleSlots post, a.1 ≠ ak)
+    (haa : hdr post aa 0 = hdr s aa 0) (hak : hdr post ak 0 = hdr s ak 0)
+    (hs : ∀ S Nd, WorldTypedWith s S Nd →
+      ∃ S' Nd', (∀ t ∈ S, t ∈ S') ∧ WorldTypedWith post S' Nd' ∧
+        OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd')) :
+    PtxMessageTables post aa ak := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, _, _, hd⟩ := ht
+  obtain ⟨S', Nd', hsub, hw', hg⟩ := hs S Nd hw
+  refine ⟨S', Nd', hw', hsub aa ha, hsub ak hk, haa.trans hal, hak.trans hkl,
+    haf, hkf, ?_⟩
+  rw [hm]
+  exact phase2_packed_owned_growth s post _ _ _ hin hg hd
+
 /-- Restoring caller locals only needs to preserve the message pointer. -/
 theorem phase2_message_tables_with_locals {F : Type}
     (s : PanSemStateFiniteExact 64 F) (locals : HolFiniteMapExact MlS (ValueHOL 64))
@@ -15126,5 +15147,27 @@ theorem phase2_htab_set_ts8_message_initialized_bound (h : PtxCallees)
     intro F s vs body callee ret hc hp he hl
     exact guestInv_callEntry s callee hp.1.1.1.1.1.1
   · exact phase2_htab_set_ts8_message_initialized buffers contents names aa ak key value
+
+/-- The initialized-call guard and joint access-table witness recover the complete suffix. -/
+theorem phase2_message_initialized_tables_iff_suffix {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names : List String} {aa ak : Nat} {s : PanSemStateFiniteExact 64 F} :
+    (PtxMessageInitialized buffers contents names aa ak s ∧ PtxMessageTables s aa ak) ↔
+      PtxMessageSuffixReady buffers contents names aa ak s := by
+  constructor
+  · rintro ⟨⟨⟨hs, hb⟩, hl, ha, hk, hg⟩, ht⟩
+    exact ⟨hs, ht, hb, hl, ha, hk, hg⟩
+  · rintro ⟨hs, ht, hb, hl, ha, hk, hg⟩
+    exact ⟨⟨⟨hs, hb⟩, hl, ha, hk, hg⟩, ht⟩
+
+/-- A completed initialized-call cut discharges the exact downstream backing-aware guard. -/
+theorem phase2_message_initialized_ready {ι F : Type}
+    {buffers : ι → Ivl} {contents : ι → Nat → BitVec 64}
+    {names : List String} {aa ak : Nat} {s : PanSemStateFiniteExact 64 F}
+    (hp : PtxMessageInitialized buffers contents names aa ak s)
+    (ht : PtxMessageTables s aa ak) :
+    (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s := by
+  exact phase2_message_ready_backing_shapes hp.1.1.1 ht hp.1.2 hp.2.1
+    hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
 
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
