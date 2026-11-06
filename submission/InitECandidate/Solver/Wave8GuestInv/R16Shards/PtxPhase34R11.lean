@@ -17036,4 +17036,23 @@ theorem journal_record_bound_of_typed {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The key-length declaration exposes its word value while retaining the journal effect. -/
+theorem journal_klen_dec_effect {F : Type}
+    {s cur out : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (init : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hr : evaluateHOLFiniteState cur (.dec (ofString "klen") .one init tail) = (some (.returned rv), out)) :
+    ∃ n mid u, WorldEff s mid [jrec] [] ["heap_ptr"] ∧
+      mid.locals = cur.locals.update (ofString "klen", .val (.word n)) ∧
+      mid.globals = cur.globals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨n, _, u, ht, hout⟩ := dec_ret_inv hr
+  refine ⟨n, _, u, heff.locals_clock _ _, rfl, rfl, ht, ?_⟩
+  rw [hout]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
