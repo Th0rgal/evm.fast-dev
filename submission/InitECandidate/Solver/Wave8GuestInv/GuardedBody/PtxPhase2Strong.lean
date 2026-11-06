@@ -17819,4 +17819,40 @@ theorem phase2_htab_set_ts8_message_table_bound (h : PtxCallees)
     (PtxP1.bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_htab_set _ _) (fun _ hp => hp.1.1.1.1.1))
     (phase2_htab_set_ts8_message_table_ready buffers contents names aa ak key value) ht s hc hp
 
+/-- Creation stores feed the final warming and pointer writes. -/
+theorem phase2_message_create_stores_final_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (hc : "ct" ∈ names) (he : "empty" ∈ names)
+    (ha : "aa" ∈ names) (hk : "ak" ∈ names)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq phase2_message_create_stores (spinePlug 6 (spineAt 92 ptxCode) tail))
+      (K.htab_set + 1 + b) := by
+  intro F s hcode hp
+  simpa only [Nat.zero_add] using seq_bound_trans
+    (PtxP1.bound_of_clock (fun s => phase2_message_create_stores_clock s))
+    (phase2_message_create_stores_table_ready buffers contents names aa ak hc he)
+    (phase2_final_source_bound h buffers contents names aa ak ha hk ht) s hcode hp
+
+/-- The ordinary-call allocation and stores compose with final warming. -/
+theorem phase2_message_empty8_call_final_bound (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64) (aa ak : Nat)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn
+      (fun s => (PtxMessageReady s ∧ TxBacking s) ∧ PtxPhase4LocalShapes s) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents ["aa", "ak"] aa ak)
+      (.decCall (ofString "empty") .one (ofString "alloc") [.const 8]
+        (.seq phase2_message_call_stores (spinePlug 6 (spineAt 92 ptxCode) tail)))
+      (K.alloc + (K.htab_set + 1 + b) + 1) := by
+  apply phase2_alloc_message_table_word_bound h buffers contents ["aa", "ak"] aa ak "empty" _
+    (by decide) (by decide) (by decide) (by decide)
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl <;> decide)
+    (by intro n hn; simp only [List.mem_cons, List.not_mem_nil, or_false] at hn
+        rcases hn with rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> decide)
+  exact phase2_message_call_stores_final_bound h buffers contents ["empty", "aa", "ak"] aa ak
+    (by simp) (by simp) (by simp) ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
