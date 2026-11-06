@@ -18234,4 +18234,50 @@ theorem journal_store_suffix_cut_entry {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private dec_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The address declaration retains the table local at the same entry identified
+by the return-only cut, including all nonlocal state and the original output. -/
+theorem journal_address_suffix_cut_entry {F : Type}
+    (cur out cut : PanSemStateFiniteExact 64 F) (addr e16 : ExpHOL 64)
+    (tail : ProgHOL 64) (rv : ValueHOL 64) (tw : BitVec 64)
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one addr
+        (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) e16)
+              (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+                (.seq (.assign .global (ofString "journal_n")
+                  (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail)))))) =
+      (some (.returned rv), out))
+    (hc : evaluateHOLFiniteState cur
+      (.dec (ofString "r") .one addr
+        (.seq (.store (.var .local (ofString "r")) (.var .local (ofString "t")))
+          (.seq (.store (.op .add [.var .local (ofString "r"), .const 8#64]) (.var .local (ofString "kc")))
+            (.seq (.store (.op .add [.var .local (ofString "r"), .const 16#64]) e16)
+              (.seq (.store (.op .add [.var .local (ofString "r"), .const 24#64]) (.rfield 1 (.var .local (ofString "old"))))
+                (.seq (.assign .global (ofString "journal_n")
+                  (.op .add [.var .global (ofString "journal_n"), .const 1#64])) (.return (.const 0#64)))))))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ entry u, entry.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      cut.emptyLocalsHOLFinite = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧
+      out.emptyLocalsHOLFinite = u.emptyLocalsHOLFinite := by
+  obtain ⟨w, he, u, hb, ho⟩ := dec_ret_inv hr
+  obtain ⟨w', he', u', hb', ho'⟩ := dec_ret_inv hc
+  have hw : w' = w := by rw [he] at he'; cases he'; rfl
+  subst w'
+  obtain ⟨entry, hl, hcut, htail⟩ := journal_store_suffix_cut_entry _ _ _ _ _ _ _ _ _ _ _ tail rv hb hb'
+  refine ⟨entry, u, ?_, ?_, htail, ?_⟩
+  · simp [hl, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, ht,
+      show ofString "r" ≠ ofString "t" by decide]
+  · rw [ho', hcut]
+    rfl
+  · rw [ho]
+    rfl
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
