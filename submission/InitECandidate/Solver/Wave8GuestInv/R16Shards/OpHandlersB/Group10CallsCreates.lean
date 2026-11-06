@@ -10592,4 +10592,379 @@ theorem opDispatchPostA_return_of_resource_drop {F : Type}
   rintro ⟨ev, he⟩
   cases he
 
+/-! Account lookup table mutations and their caller argument bindings. -/
+
+theorem ts8_worldTableRef_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (hts : globN s "ts" ≠ 0) :
+    memW s (globN s "ts" + 8) ∈ worldTableRefs s S := by
+  unfold worldTableRefs
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right
+  unfold recordSlots
+  rw [if_neg hts]
+  exact List.mem_map.2 ⟨8, by decide, rfl⟩
+
+theorem ts8_not_delExclusive_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (hts : globN s "ts" ≠ 0) (i : Nat) :
+    ¬ DelExclusive s S (evmChain s) i (memW s (globN s "ts" + 8)) := by
+  intro h
+  exact h.1 (ts8_worldTableRef_g10 s S hts)
+
+theorem worldRole_unique_g10 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hi : EvmInvAt s S) {t : Nat} {r r' : String}
+    (h : (t, r) ∈ worldRoleSlots s) (h' : (t, r') ∈ worldRoleSlots s) :
+    r = r' := by
+  obtain ⟨_, _, _, _, _, _, _, _, _, _, _, hRoles, _⟩ := hi
+  have hpw : (worldRoleSlots s).Pairwise
+      (fun a b => a.1 = b.1 → a.2 = b.2 ∧ a.2 ∈ sharedRoles) :=
+    (List.pairwise_append.1 hRoles.2.1).1
+  obtain ⟨i, hi, hei⟩ := List.mem_iff_getElem.1 h
+  obtain ⟨j, hj, hej⟩ := List.mem_iff_getElem.1 h'
+  by_cases heq : i = j
+  · subst j
+    exact (Prod.mk.inj (hei.symm.trans hej)).2
+  · rcases Nat.lt_or_gt_of_ne heq with hlt | hgt
+    · have hp := List.pairwise_iff_getElem.1 hpw i j hi hj hlt
+      rw [hei, hej] at hp
+      exact (hp rfl).1
+    · have hp := List.pairwise_iff_getElem.1 hpw j i hj hi hgt
+      rw [hei, hej] at hp
+      exact (hp rfl).1.symm
+
+theorem ts8_worldRole_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hts : globN s "ts" ≠ 0) (ht : memW s (globN s "ts" + 8) ≠ 0) :
+    (memW s (globN s "ts" + 8), "ts+8") ∈ worldRoleSlots s := by
+  unfold worldRoleSlots
+  refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+  apply List.mem_append_left; apply List.mem_append_right
+  unfold recRoles
+  rw [if_neg hts]
+  exact List.mem_map.2 ⟨(8, "ts+8"), by decide, rfl⟩
+
+theorem ts8_separation_g10 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hi : EvmInvAt s S)
+    (hts : globN s "ts" ≠ 0) (ht : memW s (globN s "ts" + 8) ≠ 0) :
+    (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ memW s (globN s "ts" + 8)) ∧
+    (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ memW s (globN s "ts" + 8)) ∧
+    globN s "bal_accounts" ≠ memW s (globN s "ts" + 8) ∧
+    (∀ ad ∈ balRecords s, memW s ad ≠ memW s (globN s "ts" + 8)) ∧
+    memW s (globN s "ts" + 32) ≠ memW s (globN s "ts" + 8) := by
+  have hnot : ∀ r, r ≠ "ts+8" → (memW s (globN s "ts" + 8), r) ∉ worldRoleSlots s := by
+    intro r hr hm
+    exact hr (worldRole_unique_g10 hi hm (ts8_worldRole_g10 s hts ht))
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro hws heq
+    apply hnot "ws+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    unfold recRoles; simp [hws, heq]
+  · intro hbs heq
+    apply hnot "bs+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right
+    unfold recRoles; simp [hbs, heq]
+  · intro heq
+    apply hnot "bal_accounts" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_right
+    simp [heq]
+  · intro ad had heq
+    apply hnot "bal.stor" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp [heq]⟩
+  · intro heq
+    apply hnot "ts+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_right
+    unfold recRoles
+    rw [if_neg hts]
+    exact List.mem_map.2 ⟨(32, "ts+32"), by decide, by simp [heq]⟩
+
+theorem epsA_htab_set_ts8_g10 :
+    EvmPreservingSpecA
+      (fun s => globN s "ts" ≠ 0 ∧ locN s "t" = memW s (globN s "ts" + 8) ∧ locN s "t" ≠ 0)
+      (fun s _ post => GlobalsKept ["heap_ptr"] s post ∧ evmR post = evmR s)
+      (ofString "htab_set") := by
+  obtain ⟨params, body, rs, hlk, hfn⟩ := SoloHtabSet.htab_set_spec_proof
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hi hw hp hl hn
+  obtain ⟨hts, heq, hnz⟩ := hp
+  have ht : memW s (globN s "ts" + 8) ≠ 0 := by rwa [heq] at hnz
+  have hb := Option.some.inj (SoloHtabSet.lookup_htab_set.symm.trans hlk)
+  rcases Prod.mk.inj hb with ⟨_, hbr⟩
+  rcases Prod.mk.inj hbr with ⟨hbody, _⟩
+  subst hbody
+  obtain ⟨ha, S, hi⟩ := hi
+  have hS : memW s (globN s "ts" + 8) ∈ S := by
+    rcases hi.1.1.2.2.2.2.2.1 8 (by decide) hts with hz | hm
+    · exact False.elim (ht hz)
+    · exact hm
+  have harg : HtabArgWF s := by
+    refine ⟨ha, ?_, ?_⟩
+    · rw [heq]; exact (hi.1.1.2.1 _ hS).1
+    · rw [heq]; intro i hi'; exact ((hi.1.1.2.1 _ hS).2 i hi').1
+  dsimp only
+  refine ⟨fun v hv => ?_, ?_⟩
+  · have hx := hfn s hc harg hl hn v hv
+    unfold HtabExit at hx
+    dsimp only at hx
+    rw [heq] at hx
+    obtain ⟨hap, htf, hhdr, _, hhp, hfp, hfr, hg⟩ := hx
+    set post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).2
+    obtain ⟨hws, hbs, hba, had, hts32⟩ := ts8_separation_g10 hi hts ht
+    have hgw : GlobalsKept ["heap_ptr", "journal_n"] s post := by
+      intro name hn
+      apply hg name
+      intro hm
+      apply hn
+      simp only [List.mem_map, List.mem_cons, List.not_mem_nil, or_false] at hm ⊢
+      obtain ⟨x, rfl, hx⟩ := hm
+      exact ⟨"heap_ptr", Or.inl rfl, hx⟩
+    have hj : globN post "journal_n" ≤ globN s "journal_n" := by
+      exact le_of_eq (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "journal_n") (by decide))).symm
+    obtain ⟨hip, hch, hr, hu⟩ := R16Shards.evmInvAt_of_htab_step ha hi hap
+      (R16Shards.evaluate_be_eq s _) htf hhdr hhp hfp hfr hgw hj hS
+      (fun i _ => ts8_not_delExclusive_g10 s S hts i) hws hbs hba had (Or.inl (fun _ => hts32))
+    have hev := (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "ev") (by decide))).symm
+    have hfm := (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "frame_mem_ptr") (by decide))).symm
+    exact ⟨⟨⟨hap, S, hip⟩, headMemChainWF_of_unhit_g10 ⟨ha, S, hi⟩ hw hch hu hev hfm⟩,
+      hch, le_of_eq hr, hg, hr⟩
+  · intro ⟨ev, hev⟩
+    have hnc := R16Shards.StateRestoreEpilogue.evaluate_noCatchableRaise
+      R16Shards.StateRestoreEpilogue.htabMutCallees R16Shards.StateRestoreEpilogue.htabMutCallees_good
+      (sourceFnBody Guest.Software.guestFn_htab_set) (by decide) s hc
+    exact False.elim (hnc (ofString "EvmErr") ev (by decide) hev)
+
+theorem bs72_worldTableRef_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (hbs : globN s "bs" ≠ 0) :
+    memW s (globN s "bs" + 72) ∈ worldTableRefs s S := by
+  unfold worldTableRefs
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+  apply List.mem_append_right
+  unfold recordSlots
+  rw [if_neg hbs]
+  exact List.mem_map.2 ⟨72, by decide, rfl⟩
+
+theorem bs72_worldRole_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hbs : globN s "bs" ≠ 0) (ht : memW s (globN s "bs" + 72) ≠ 0) :
+    (memW s (globN s "bs" + 72), "bs+72") ∈ worldRoleSlots s := by
+  unfold worldRoleSlots
+  refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+  apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right
+  unfold recRoles
+  rw [if_neg hbs]
+  exact List.mem_map.2 ⟨(72, "bs+72"), by decide, rfl⟩
+
+theorem bs72_not_delExclusive_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (hbs : globN s "bs" ≠ 0) (i : Nat) :
+    ¬ DelExclusive s S (evmChain s) i (memW s (globN s "bs" + 72)) := by
+  intro h
+  exact h.1 (bs72_worldTableRef_g10 s S hbs)
+
+theorem bs72_separation_g10 {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {S : List Nat} (hi : EvmInvAt s S)
+    (hbs : globN s "bs" ≠ 0) (ht : memW s (globN s "bs" + 72) ≠ 0) :
+    (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ memW s (globN s "bs" + 72)) ∧
+    (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ memW s (globN s "bs" + 72)) ∧
+    globN s "bal_accounts" ≠ memW s (globN s "bs" + 72) ∧
+    (∀ ad ∈ balRecords s, memW s ad ≠ memW s (globN s "bs" + 72)) ∧
+    (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ memW s (globN s "bs" + 72)) := by
+  have hnot : ∀ r, r ≠ "bs+72" → (memW s (globN s "bs" + 72), r) ∉ worldRoleSlots s := by
+    intro r hr hm
+    exact hr (worldRole_unique_g10 hi hm (bs72_worldRole_g10 s hbs ht))
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · intro hws heq
+    apply hnot "ws+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    unfold recRoles; simp [hws, heq]
+  · intro _ heq
+    apply hnot "bs+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_right
+    unfold recRoles; simp [hbs, heq]
+  · intro heq
+    apply hnot "bal_accounts" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_right
+    simp [heq]
+  · intro ad had heq
+    apply hnot "bal.stor" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_right
+    exact List.mem_flatMap.2 ⟨ad, had, by simp [heq]⟩
+  · intro hts heq
+    apply hnot "ts+32" (by decide)
+    unfold worldRoleSlots
+    refine List.mem_filter.2 ⟨?_, by simp [ht]⟩
+    apply List.mem_append_left; apply List.mem_append_left; apply List.mem_append_left
+    apply List.mem_append_left; apply List.mem_append_right
+    unfold recRoles
+    rw [if_neg hts]
+    exact List.mem_map.2 ⟨(32, "ts+32"), by decide, by simp [heq]⟩
+
+theorem epsA_htab_set_bs72_g10 :
+    EvmPreservingSpecA
+      (fun s => globN s "bs" ≠ 0 ∧ locN s "t" = memW s (globN s "bs" + 72) ∧ locN s "t" ≠ 0)
+      (fun s _ post => GlobalsKept ["heap_ptr"] s post ∧ evmR post = evmR s)
+      (ofString "htab_set") := by
+  obtain ⟨params, body, rs, hlk, hfn⟩ := SoloHtabSet.htab_set_spec_proof
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hi hw hp hl hn
+  obtain ⟨hbs, heq, hnz⟩ := hp
+  have ht : memW s (globN s "bs" + 72) ≠ 0 := by rwa [heq] at hnz
+  have hb := Option.some.inj (SoloHtabSet.lookup_htab_set.symm.trans hlk)
+  rcases Prod.mk.inj hb with ⟨_, hbr⟩
+  rcases Prod.mk.inj hbr with ⟨hbody, _⟩
+  subst hbody
+  obtain ⟨ha, S, hi⟩ := hi
+  have hS : memW s (globN s "bs" + 72) ∈ S := by
+    rcases hi.1.1.2.2.2.2.1 72 (by decide) hbs with hz | hm
+    · exact False.elim (ht hz)
+    · exact hm
+  have harg : HtabArgWF s := by
+    refine ⟨ha, ?_, ?_⟩
+    · rw [heq]; exact (hi.1.1.2.1 _ hS).1
+    · rw [heq]; intro i hi'; exact ((hi.1.1.2.1 _ hS).2 i hi').1
+  dsimp only
+  refine ⟨fun v hv => ?_, ?_⟩
+  · have hx := hfn s hc harg hl hn v hv
+    unfold HtabExit at hx
+    dsimp only at hx
+    rw [heq] at hx
+    obtain ⟨hap, htf, hhdr, _, hhp, hfp, hfr, hg⟩ := hx
+    set post := (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_htab_set)).2
+    obtain ⟨hws, hbs32, hba, had, hts32⟩ := bs72_separation_g10 hi hbs ht
+    have hgw : GlobalsKept ["heap_ptr", "journal_n"] s post := by
+      intro name hn
+      apply hg name
+      intro hm
+      apply hn
+      simp only [List.mem_map, List.mem_cons, List.not_mem_nil, or_false] at hm ⊢
+      obtain ⟨x, rfl, hx⟩ := hm
+      exact ⟨"heap_ptr", Or.inl rfl, hx⟩
+    have hj : globN post "journal_n" ≤ globN s "journal_n" := by
+      exact le_of_eq (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "journal_n") (by decide))).symm
+    obtain ⟨hip, hch, hr, hu⟩ := R16Shards.evmInvAt_of_htab_step ha hi hap
+      (R16Shards.evaluate_be_eq s _) htf hhdr hhp hfp hfr hgw hj hS
+      (fun i _ => bs72_not_delExclusive_g10 s S hbs i) hws hbs32 hba had (Or.inl hts32)
+    have hev := (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "ev") (by decide))).symm
+    have hfm := (OpHandlers.globN_eq_of_lookup_eq (hg (ofString "frame_mem_ptr") (by decide))).symm
+    exact ⟨⟨⟨hap, S, hip⟩, headMemChainWF_of_unhit_g10 ⟨ha, S, hi⟩ hw hch hu hev hfm⟩,
+      hch, le_of_eq hr, hg, hr⟩
+  · intro ⟨ev, hev⟩
+    have hnc := R16Shards.StateRestoreEpilogue.evaluate_noCatchableRaise
+      R16Shards.StateRestoreEpilogue.htabMutCallees R16Shards.StateRestoreEpilogue.htabMutCallees_good
+      (sourceFnBody Guest.Software.guestFn_htab_set) (by decide) s hc
+    exact False.elim (hnc (ofString "EvmErr") ev (by decide) hev)
+
+theorem htab_set_callee_first_arg_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (tw : BitVec 64) (key value : ValueHOL 64)
+    {body : ProgHOL 64} {callee : HolFiniteMapExact Flapjack.Pancake.PanLang.MlS (ValueHOL 64)}
+    {rs : ShapeHOL}
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set")
+      [.val (.word tw), key, value] = some (body, callee, rs)) :
+    locN (callEntryStateHOLFinite s callee) "t" = tw.toNat := by
+  have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some s.code.lookup
+    (ofString "htab_set") [.val (.word tw), key, value] body callee rs hl
+  rw [hc] at hx
+  simp only [Flapjack.lookupCodeHOLExact, SoloHtabSet.lookup_htab_set] at hx
+  split at hx
+  · have hm := congrArg (fun x => x.2.1) (Option.some.inj hx)
+    have ht : callee.lookup (ofString "t") = some (.val (.word tw)) := by
+      have hh := congrFun hm.symm (ofString "t")
+      have h1 : ofString "t" ≠ ofString "value" := by decide
+      have h2 : ofString "t" ≠ ofString "key" := by decide
+      have h3 : ofString "value" ≠ ofString "t" := by decide
+      have h4 : ofString "key" ≠ ofString "t" := by decide
+      simpa [List.map, List.zip, List.foldl, FUPDATE_LIST, FUPDATE, h1, h2, h3, h4] using hh
+    simp [callEntryStateHOLFinite, locN, ht]
+  · cases hx
+
+theorem loaded_word_nat_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr : ExpHOL 64) (a : Nat) (v : ValueHOL 64)
+    (ha : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) addr =
+      some (.val (.word (BitVec.ofNat 64 a))))
+    (hv : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x))
+      (.load .one addr) = some v) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ w.toNat = memW s a := by
+  unfold evalHOLExact at hv
+  rw [ha] at hv
+  dsimp only at hv
+  unfold memLoadHOLExact at hv
+  split at hv
+  · split at hv
+    · injection hv with heq
+      unfold memW
+      cases hm : s.memory (BitVec.ofNat 64 a) with
+      | word w =>
+        change ValueHOL.val (s.memory (BitVec.ofNat 64 a)) = v at heq
+        rw [hm] at heq
+        exact ⟨w, heq.symm, rfl⟩
+    · cases hv
+  · cases hv
+
+theorem global_offset_eval_g10 {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (g : String) (w : BitVec 64) (off : Nat)
+    (hg : s.globals.lookup (ofString g) = some (.val (.word w))) :
+    @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x))
+      (.op .add [.var .global (ofString g), .const (BitVec.ofNat 64 off)]) =
+      some (.val (.word (BitVec.ofNat 64 (globN s g + off)))) := by
+  have hn : globN s g = w.toNat := by simp [globN, hg]
+  simp only [evalHOLExact, evalListHOLExact, hg, wordOpHOL, wordOp, valueIsWord,
+    valueWord, List.all, List.map, Option.map, Bool.and_self, ↓reduceIte, List.foldr]
+  congr 3
+  apply BitVec.eq_of_toNat_eq
+  simp [BitVec.toNat_add, hn, Nat.add_mod]
+
+theorem htab_set_loaded_global_callee_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (g : String) (off : Nat) (w : BitVec 64)
+    (hg : s.globals.lookup (ofString g) = some (.val (.word w)))
+    (keyExp : ExpHOL 64) {values : List (ValueHOL 64)}
+    {body : ProgHOL 64} {callee : HolFiniteMapExact Flapjack.Pancake.PanLang.MlS (ValueHOL 64)}
+    {rs : ShapeHOL}
+    (hargs : evalListHOLFinite s (h := fun x => Classical.propDecidable (s.memaddrs x))
+      [.load .one (.op .add [.var .global (ofString g), .const (BitVec.ofNat 64 off)]),
+       keyExp, .const 1] = some values)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_set") values = some (body, callee, rs)) :
+    locN (callEntryStateHOLFinite s callee) "t" = memW s (globN s g + off) := by
+  rw [evalListHOLFinite_eq_toExact] at hargs
+  unfold evalListHOLExact at hargs
+  rcases hv : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x))
+      (.load .one (.op .add [.var .global (ofString g), .const (BitVec.ofNat 64 off)])) with _ | v
+  · rw [hv] at hargs; simp at hargs
+  · rw [hv] at hargs
+    unfold evalListHOLExact at hargs
+    rcases hk : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x)) keyExp with _ | key
+    · rw [hk] at hargs; simp at hargs
+    · rw [hk] at hargs
+      unfold evalListHOLExact at hargs
+      dsimp only [evalHOLExact] at hargs
+      injection hargs with heq
+      subst values
+      obtain ⟨tw, rfl, htw⟩ := loaded_word_nat_g10 s _ _ v (global_offset_eval_g10 s g w off hg) hv
+      exact (htab_set_callee_first_arg_g10 s hc tw key (.val (.word 1)) hl).trans htw
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
