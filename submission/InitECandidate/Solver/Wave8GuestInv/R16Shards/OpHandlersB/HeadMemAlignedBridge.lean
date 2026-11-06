@@ -15168,5 +15168,41 @@ theorem fcCore_pop_poppedChild_of_createFinish (hCF : EvmEkFk.CreateFinishSpecs)
   obtain ⟨s2, hpre, hRel2, hrun⟩ := fcCore_afterPrelude_of_createFinish hCF hRel0 hRes hnt
   obtain ⟨S, hBS, hPC, hR1, hR2⟩ := fcPopPoppedChild_concrete hRel2 hk0
   exact ⟨s2, S, hpre, hrun.trans (finish_child_pop_step hRel2), hBS, hPC, hR1, hR2⟩
-end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
 
+/-- Interface adapter: feed the `FcPoppedChild` bundle straight into the
+staging `rollback_child_access_step`, so the kind-2 branch walk can
+invoke the rollback call from the pair of invariants alone. -/
+theorem fcRollback_of_popped {F : Type}
+    {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hBS : FcBranchState s0 st S)
+    (hPC : FcPoppedChild s0 st S)
+    (hnt : (evaluateHOLFiniteState st
+      (.call (some (none, none)) (ofString "rollback_child_access")
+        [.var .local (ofString "child")])).1 ≠ some .timeOut) :
+    let prog : ProgHOL 64 := .call (some (none, none)) (ofString "rollback_child_access")
+      [.var .local (ofString "child")]
+    (∀ u, (evaluateHOLFiniteState st prog).1 ≠ some (.returned u)) ∧
+    ¬ OpDispatchSpec.IsEvmErr (evaluateHOLFiniteState st prog).1 ∧
+    ((evaluateHOLFiniteState st prog).1 = none →
+      let post := (evaluateHOLFiniteState st prog).2
+      FcBranchState s0 post S ∧
+      post.locals = st.locals ∧
+      globN post "scratch_ptr" = globN st "scratch_ptr" ∧
+      globN post "ev" = globN st "ev" ∧
+      evmChain post = evmChain st ∧
+      OpDispatchSpec.evmR post = OpDispatchSpec.evmR st ∧
+      Inside (globN s0 "ev", 280) (globN post "scratch_ptr") scratchEnd ∧
+      WordsOK post (globN s0 "ev", 280) ∧
+      (∀ t ∈ S, ∀ i ∈ htabFootprint post t, Disj (globN s0 "ev", 280) i) ∧
+      (∀ j ∈ fixedObjects post, Disj (globN s0 "ev", 280) j) ∧
+      (∀ ec ∈ evmChain post, ∀ o ∈ frameObjects post ec, Disj (globN s0 "ev", 280) o) ∧
+      (∀ off : Nat, off + 8 ≤ 280 → off % 8 = 0 →
+        memW post (globN s0 "ev" + off) = memW st (globN s0 "ev" + off)) ∧
+      (∀ ec ∈ evmChain st,
+        memW post (ec.1 + 16) = memW st (ec.1 + 16) ∧
+        memW post (ec.1 + 40) = memW st (ec.1 + 40) ∧
+        memW post (ec.1 + 232) = memW st (ec.1 + 232))) := by
+  exact rollback_child_access_step hBS hPC.child_scr hPC.rec_scr
+    hPC.child_disj_ht hPC.rec_disj_ht hPC.child_disj_fix hPC.child_disj_fo
+    hPC.addr_table_ok hPC.key_table_ok hnt
+end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
