@@ -9579,6 +9579,7 @@ theorem eval_merge_new_set_then_union {F : Type}
     (tw kw : BitVec 64) (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
     (howned : ∀ S Nd, WorldTypedWith s S Nd → tw.toNat ∈ S)
     (hentry : ∀ (mid : PanSemStateFiniteExact 64 F) (iw : BitVec 64),
+      WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s none mid →
       WorldOK mid → mid.locals.lookup (ofString "binner") = some (.val (.word iw)) →
       (∀ y, y ≠ ofString "binner" → mid.locals.lookup y = s.locals.lookup y) →
       evalAt mid et = some (.val (.word tw)) ∧
@@ -9632,7 +9633,7 @@ theorem eval_merge_new_set_then_union {F : Type}
     hW.1 hw (by decide) (by decide) hflow
   rw [he] at ho
   obtain ⟨iw, hi, hl, _, _, hkey, _, hf, hw', _⟩ := ho
-  obtain ⟨ht, hk, hbs, ht0, htbs⟩ := hentry mid iw hWm hi hl
+  obtain ⟨ht, hk, hbs, ht0, htbs⟩ := hentry mid iw hs hWm hi hl
   have hm := (PanRunBounded.evaluateHOLFiniteState_metadata s
       (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
         [.const 32#64, .const 8#64])).1
@@ -9654,5 +9655,109 @@ theorem eval_merge_new_set_then_union {F : Type}
   rcases ht with rfl | rfl
   · exact List.mem_append_left _ (howned S0 Nd0 hw0)
   · simp
+
+/-- The concrete fresh-inner branch keeps its outer pointer and key across allocation. -/
+theorem eval_merge_new_set_union_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "bouter"), .rfield 1 (.var .local (ofString "s")), .var .local (ofString "binner")])
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])))).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "bouter"), .rfield 1 (.var .local (ofString "s")), .var .local (ofString "binner")])
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])))).1) :
+    let out := evaluateHOLFiniteState s (.seq
+      (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+        [.const 32#64, .const 8#64])
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "bouter"), .rfield 1 (.var .local (ofString "s")), .var .local (ofString "binner")])
+        (.call (some (none, none)) (ofString "htab_union_into")
+          [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])))
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra s out.1 out.2 := by
+  apply eval_merge_new_set_then_union s _ _ _ tw kw hc hW ?_ ?_ hnt hfr
+  · intro S Nd hw
+    have hT := (WkBal.worldTyped_iff_with s S).2 ⟨Nd, hw⟩
+    have hr := hT.1.2.2.2.2.1 32 (by simp [bsTableSlots]) hbs
+    rw [← htbs] at hr
+    exact hr.resolve_left ht0
+  · intro mid iw hs _ _ hl
+    have htm := (hl (ofString "bouter") (by decide)).trans ht
+    have hkm := (hl (ofString "s") (by decide)).trans hk
+    have hgb : globN mid "bs" = globN s "bs" :=
+      globN_eq_of_lookup (hs.1.2.2.1 (ofString "bs") (by decide))
+    have hmem := hs.1.2.2.2.1 ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72])
+      (by simp [stdKeep]) hbs 32 (by simp) (by simp [bufRegions])
+    refine ⟨by simp [evalAt, evalHOLExact, htm], by simp [evalAt, evalHOLExact, hkm],
+      by rwa [hgb], ht0, ?_⟩
+    rw [hgb]
+    exact htbs.trans hmem.symm
+
+theorem merge_eval_seq_assoc {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b c : ProgHOL 64) :
+    evaluateHOLFiniteState s (.seq (.seq a b) c) =
+      evaluateHOLFiniteState s (.seq a (.seq b c)) := by
+  simp only [evaluateHOLFiniteState_seq_line780]
+  cases he : evaluateHOLFiniteState s a with
+  | mk r mid => cases r <;> rfl
+
+def mergeFreshInner : ProgHOL 64 :=
+  .seq (.call (some (some (.local, ofString "binner"), none)) (ofString "htab_new")
+    [.const 32#64, .const 8#64])
+    (.call (some (none, none)) (ofString "htab_set")
+      [.var .local (ofString "bouter"), .rfield 1 (.var .local (ofString "s")), .var .local (ofString "binner")])
+
+def mergeInnerBranch : ProgHOL 64 :=
+  .seq (.ite (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64))
+    mergeFreshInner (.assign .local (ofString "binner") (.rfield 1 (.var .local (ofString "m")))))
+    (.call (some (none, none)) (ofString "htab_union_into")
+      [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])
+
+/-- Both lookup outcomes preserve the withdrawal frame in the actual merge branch. -/
+theorem eval_merge_inner_branch {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw m0 m1 : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hm : s.locals.lookup (ofString "m") = some (.rStruct [.val (.word m0), .val (.word m1)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hi : m0 ≠ 0 → m1.toNat ∈ htabValues s (memW s (globN s "bs" + 32)))
+    (hnt : (evaluateHOLFiniteState s mergeInnerBranch).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeInnerBranch).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeInnerBranch).1 (evaluateHOLFiniteState s mergeInnerBranch).2 := by
+  by_cases hz : m0 = 0
+  · subst m0
+    have hcond : evalAt s (.cmp .equal (.rfield 0 (.var .local (ofString "m"))) (.const 0#64)) =
+        some (.val (.word 1#64)) := by
+      simp [evalAt, evalHOLExact, hm, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+    have heq : evaluateHOLFiniteState s mergeInnerBranch =
+        evaluateHOLFiniteState s (.seq mergeFreshInner
+          (.call (some (none, none)) (ofString "htab_union_into")
+            [.var .local (ofString "binner"), .rfield 2 (.var .local (ofString "s"))])) := by
+      unfold mergeInnerBranch
+      rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+      dsimp only [evalAt] at hcond
+      rw [hcond]
+      simp only [show (1#64 : BitVec 64) ≠ 0 by decide, ↓reduceIte]
+      rw [evaluateHOLFiniteState_seq_line780]
+    rw [heq] at hnt hfr ⊢
+    unfold mergeFreshInner at hnt hfr ⊢
+    rw [merge_eval_seq_assoc] at hnt hfr ⊢
+    exact eval_merge_new_set_union_locals s tw f0 kw vw hc hW ht hk hbs ht0 htbs hnt hfr
+  · exact eval_merge_hit_branch s m0 m1 mergeFreshInner hc hW hbs
+      (by rwa [← htbs]) hm hz (hi hz) hnt hfr
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk

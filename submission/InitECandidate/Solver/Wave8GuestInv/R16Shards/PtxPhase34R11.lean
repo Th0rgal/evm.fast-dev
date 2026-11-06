@@ -15661,4 +15661,72 @@ theorem guarded_recorded_trie_header_words {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Read-only table lookup restores the caller state except for its clock. -/
+theorem htab_get_restored_state {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (hG : GuestInv s)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "htab_get") vs = some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post)) :
+    ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) = {s with clock := post.clock} := by
+  have hs := PtxP1.funSpec_at_lookup EvmFrameSpecs.ro_htab_get s hG.code vs body callee ret hl
+    (guestInv_callEntry s callee hG) (by rw [hr]; simp)
+  rw [hr] at hs
+  have he := hs (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  rw [he]
+  rfl
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The read-only table lookup and both continuation branches preserve backing. -/
+theorem htab_get_guarded_trie_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (args : List (ExpHOL 64)) (cond e : ExpHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.decCall (ofString "w") (.comb [.one, .one]) (ofString "htab_get") args
+        (.seq (.ite cond (.return e) .skip)
+          (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+            (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+              [.var .local (ofString "addr")] (.return (.var .local (ofString "a"))))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨vs, body, callee, ret, rv, cp, u, _, hl, hb, ht, hm⟩ := dec_call_return_inv_args hr
+  have he := htab_get_restored_state s cp vs body callee ret rv hW.1.1.1 hl hb
+  rw [he] at ht
+  have hwc : TxWorld ({s with clock := cp.clock}) :=
+    localsOnly_txWorld s s.locals cp.clock (by intros; rfl) hW
+  have hwr := LocalsOnly.setVar localsOnly_txWorld (name := ofString "w") (by decide) rv _ hwc
+  have htr : WorldTypedWith (setVarHOLFinite (ofString "w") rv {s with clock := cp.clock}) S Nd :=
+    (R13Shards.worldTypedWith_with_locals s (s.locals.update (ofString "w", rv)) cp.clock S Nd).2 hT
+  have hf := guarded_recorded_trie_header_words _ u S Nd v cond e hwr htr ht
+  intro k hk
+  simpa only [memW, hm, globN, setVarHOLFinite] using hf k hk
+
+end PtxP34
+
+namespace PtxP34
+
+/-- The initial account-touch table update has no scratch write regions. -/
+theorem account_touch_worldStep {F : Type}
+    (s mid : PanSemStateFiniteExact 64 F) (hW : WorldOK s)
+    (hc : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+       .var .local (ofString "addr"), .const 1]) = (none, mid)) :
+    WorldStep (fun _ => []) ["heap_ptr"] R10Shards.P26_P28.stdKeep NoExtra s none mid := by
+  have hp := R16WkAcctWs.progWStep_call0_htab_set_recSlot (B := []) (gw := ["heap_ptr"])
+    "ts" "ts+8" 8 (.var .local (ofString "addr")) (.const 1) (by simp) (by decide)
+    (fun s S hT hts ht0 => R16WkAcctWs.nonValueSlot_ts8 s S hT hts ht0) s
+  have hs := hp hW.1.1.code hW (by rw [hc]; simp) (by rw [hc]; exact Or.inl rfl)
+  rw [hc] at hs
+  simpa only [WorldStep, RecordsKept, R16WkAcctWs.bufRegions, List.map_nil] using hs.1
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
