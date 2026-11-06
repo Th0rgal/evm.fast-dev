@@ -17675,7 +17675,12 @@ theorem op_log_no_growth_execution_of_log_ownership_g09 {F : Type}
     unfold Disj at hd ⊢
     dsimp only at hd ⊢
     rcases hd with hz | hz | hz | hz <;> omega
-  have hne : l ≠ l + 8#64 := by bv_decide
+  have hne : l ≠ l + 8#64 := by
+    intro heq
+    have hn := congrArg BitVec.toNat heq
+    have hb := l.isLt
+    simp only [BitVec.toNat_add, BitVec.toNat_ofNat] at hn
+    omega
   exact op_log_no_growth_execution_of_new_ownership_g09 s head tail S e l p n cap log
     hA hinv hcons hl hn hm0 hm16 hnonnull hlt hlog hdheader hdbuffer
     hnewMsg hnew hnewOld hnewWorld hclock he hlg hde hme hm0w hm8w hm16w hne hHM
