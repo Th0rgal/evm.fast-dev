@@ -8543,6 +8543,40 @@ theorem ek_cc_precompile_alloc :
     intro F s hcode hi hex hnt hres
     exact (alloc_body_evmStepCC s hi hres).2
 
+theorem precompile_decCall_alloc_step {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (x : MlS) (cont : ProgHOL 64) (p : BitVec 64) (n : Nat)
+    (hn : n = 40 ∨ n = 96 ∨ n = 32) (hInv : EvmInv s)
+    (hp : s.globals.lookup (ofString "heap_ptr") = some (.val (.word p)))
+    (hres : Resumes (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).1)
+    (hcont : ∀ next : PanSemStateFiniteExact 64 F,
+      next.locals.lookup x = some (.val (.word p)) →
+      globN next "heap_ptr" = p.toNat + n →
+      WordsOK next (p.toNat, n) → EvmStepCC frameStartGw s next →
+      next.memory = s.memory → next.be = s.be →
+      (∀ k, k ≠ x → next.locals.lookup k = s.locals.lookup k) →
+      Resumes (evaluateHOLFiniteState next cont).1 →
+      EvmStepCC frameStartGw next (evaluateHOLFiniteState next cont).2) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s
+      (.decCall x .one (ofString "alloc") [.const (BitVec.ofNat 64 n)] cont)).2 := by
+  obtain ⟨next, hx, hhp, hwords, hstep, hr, hs, hm, hb, hl⟩ :=
+    transfer_decCall_alloc_exact_spec s x cont p n hn hInv hp hres
+  have hstep' : EvmStepCC frameStartGw s next := precompile_step_weaken
+    (by intro k hk; simp only [List.map_cons, List.map_nil, List.mem_singleton] at hk
+        subst k; simp [frameStartGw]) hstep
+  have hc := hcont next hx hhp hwords hstep' hm hb hl (hr ▸ hres)
+  have hboth : EvmStepCC frameStartGw s (evaluateHOLFiniteState next cont).2 := by
+    refine ⟨⟨hc.1.1, le_trans hstep'.1.2.1 hc.1.2.1,
+      fun k hk => (hstep'.1.2.2.1 k hk).trans (hc.1.2.2.1 k hk),
+      hc.1.2.2.2.trans hstep'.1.2.2.2⟩, ?_⟩
+    intro ec hec
+    obtain ⟨a, b, c, d⟩ := hstep'.2 ec hec
+    obtain ⟨a', b', c', d'⟩ := hc.2 ec (hstep'.1.2.2.2.symm ▸ hec)
+    exact ⟨a'.trans a, b'.trans b, c'.trans c, d'.trans d⟩
+  rw [hs]
+  exact ⟨⟨localsFree_evmInv _ _ _ hboth.1.1, hboth.1.2.1, hboth.1.2.2.1,
+    (evmChain_with_locals _ _ _).trans hboth.1.2.2.2⟩, hboth.2⟩
+
 theorem precompile_alloc_call_step (args : List (ExpHOL 64)) :
     EvmProgStep frameStartGw (.call (some (none, none)) (ofString "alloc") args) :=
   precompile_step_call0 ek_cc_precompile_alloc.1 ek_cc_precompile_alloc.2 args
