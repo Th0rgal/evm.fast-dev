@@ -13263,4 +13263,54 @@ theorem log_no_growth_final_effect_g09 {F : Type}
     ⟨(p.toNat + 8 * n.toNat, 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
   exact hlen.trans hstore
 
+/-- In-place append readback preserves the buffer pointer, capacity and every
+old slot, while incrementing length and installing the new record pointer. -/
+theorem log_no_growth_final_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hn : n.toNat + 1 < 2 ^ 64)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l.toNat + 8) = n.toNat + 1 ∧
+    memW post (l.toNat + 16) = cap.toNat ∧
+    memW post (p.toNat + 8 * n.toNat) = log.toNat ∧
+    ∀ i, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i) := by
+  dsimp only
+  obtain ⟨h08, h016, h816, hs0, hs8, hs16, hold⟩ :=
+    log_growth_write_disjoint_g09 hl hp hdisj
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hn1 : (n + 1#64).toNat = n.toNat + 1 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt hn
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · simpa [memW, Ne.symm hs0, h08] using hm0
+  · rw [← hl8]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW, Ne.symm hs8, hn1]
+  · rw [← hl16] at hm16 ⊢
+    simp only [memW, BitVec.ofNat_toNat] at hm16 ⊢
+    simpa [memW, Ne.symm hs16, Ne.symm h816] using hm16
+  · rw [← hs]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW]
+  · intro i hi
+    obtain ⟨hns, hn8', _, _⟩ := hold i hi
+    simp [memW, hns, hn8']
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
