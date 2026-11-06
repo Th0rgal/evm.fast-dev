@@ -7452,7 +7452,7 @@ theorem lookup_incorporate_child_on_error :
 private theorem allocated_of_scratch_fc {F : Type} {s : PanSemStateFiniteExact 64 F} {i : Ivl}
     (hA : ArenaOK s) (hin : Inside i (globN s "scratch_ptr") scratchEnd) :
     Allocated s i := by
-  exact Or.inr ⟨le_trans hA.2.2.1 (le_trans hA.2.2.2.1 hin.1), hin.2⟩
+  exact Or.inr hin
 
 theorem call_htab_truncate_nonDel_step {F : Type}
     {s0 st : PanSemStateFiniteExact 64 F} {S : List Nat}
