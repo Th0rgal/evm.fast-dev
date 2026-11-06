@@ -9760,4 +9760,49 @@ theorem eval_merge_inner_branch {F : Type}
   · exact eval_merge_hit_branch s m0 m1 mergeFreshInner hc hW hbs
       (by rwa [← htbs]) hm hz (hi hz) hnt hfr
 
+def mergeGetInner : ProgHOL 64 :=
+  .decCall (ofString "m") (.comb [.one, .one]) (ofString "htab_get")
+    [.var .local (ofString "bouter"), .rfield 1 (.var .local (ofString "s"))]
+    (.dec (ofString "binner") .one (.const 0#64) mergeInnerBranch)
+
+/-- Lookup, local initialization, and both inner-table paths compose. -/
+theorem eval_merge_get_inner {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (tw f0 kw vw : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hW : WorldOK s)
+    (ht : s.locals.lookup (ofString "bouter") = some (.val (.word tw)))
+    (hk : s.locals.lookup (ofString "s") = some (.rStruct [.val (.word f0), .val (.word kw), .val (.word vw)]))
+    (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (hnt : (evaluateHOLFiniteState s mergeGetInner).1 ≠ some .timeOut)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s mergeGetInner).1) :
+    WorldStepSc (bufRegions withdrawalBufs) withdrawalGlobals withdrawalKeep NoExtra
+      s (evaluateHOLFiniteState s mergeGetInner).1 (evaluateHOLFiniteState s mergeGetInner).2 := by
+  apply merge_outer_get_flow_continuation s (ofString "m") _ _ _ hc hW hbs ?_ ?_ hnt hfr
+  · intro t ht'
+    have ht'' : evalAt s (.var .local (ofString "bouter")) = some (.val (.word tw)) := by
+      simp [evalAt, evalHOLExact, ht]
+    rw [ht''] at ht'
+    cases ht'
+    exact htbs
+  · intro m0 m1 ck hi
+    dsimp only
+    intro hnt hfr
+    rw [evaluateHOLFiniteState_dec_total] at hnt hfr ⊢
+    simp only [evalHOLExact, shapeOfHOLExact, shapeEqHOL, ↓reduceIte] at hnt hfr ⊢
+    let mid := setVarHOLFinite (ofString "binner") (.val (.word 0#64))
+      (setVarHOLFinite (ofString "m") (.rStruct [.val (.word m0), .val (.word m1)]) {s with clock := ck})
+    have hWm : WorldOK mid := localsFree_worldOK s _ _ hW
+    have hs := eval_merge_inner_branch mid tw f0 kw vw m0 m1 hc hWm
+      (by simpa [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "bouter" by decide,
+        show ofString "m" ≠ ofString "bouter" by decide] using ht)
+      (by simpa [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "s" by decide,
+        show ofString "m" ≠ ofString "s" by decide] using hk)
+      (by simp [mid, setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "binner" ≠ ofString "m" by decide])
+      hbs ht0 htbs hi hnt hfr
+    exact (WorldStepSc.of_pre_locals_clock hs).with_locals_clock _
+      (evaluateHOLFiniteState mid mergeInnerBranch).2.clock
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
