@@ -7302,4 +7302,153 @@ theorem «gbody_compute_state_root» : GBody.«compute_state_root» := by
     Nat.max_zero, Nat.zero_max]
   omega
 
+/-! ## WorldEff walk helpers toward `wk_compute_state_root`
+
+The ambient walk fixes `B = []` and `gw = ["heap_ptr", "scratch_ptr"]`; regions are either the
+fixed global `csrW_R` region list or freshly allocated heap (`heapFree s`). -/
+
+section WkWalk
+
+variable {F : Type}
+
+/-- Transitivity with no global buffers and the standard kept-globals list. -/
+private theorem worldEff_trans_csrW {s mid post : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl}
+    (h1 : R16Shards.WorldEff s mid Rl [] ["heap_ptr", "scratch_ptr"])
+    (h2 : R16Shards.WorldEff mid post Rl [] ["heap_ptr", "scratch_ptr"]) :
+    R16Shards.WorldEff s post Rl [] ["heap_ptr", "scratch_ptr"] := by
+  have hbuf : FreshBufsOK s post := freshBufsOK_of_no_globalBuf_writes
+    (fun k hk => (h1.gw_kept k hk).trans (h2.gw_kept k hk)) (by decide)
+  exact R16Shards.WorldEff.trans h1 h2 (fun gs hgs => by simp at hgs) hbuf
+
+/-- Dest-only call combinator: `.call (some (some (VarKind.local, d), none)) fname args` with the
+returned value stored into the local `d`. -/
+private theorem worldEff_call_dest_csrW {s cur : PanSemStateFiniteExact 64 F}
+    {Rl : List Ivl} {B : List (String × Nat)} {gw : List String}
+    (h : R16Shards.WorldEff s cur Rl B gw)
+    (fname : MlS) (d : MlS) (args : List (ExpHOL 64))
+    (params : List (MlS × ShapeHOL)) (fbody : ProgHOL 64) (retSh : ShapeHOL)
+    (hlook : originalRuntimeCode.lookup fname = some (params, fbody, retSh))
+    (hcallee : ∀ (callee : HolFiniteMapExact MlS (ValueHOL 64)) (vals : List (ValueHOL 64)),
+      evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) args = some vals →
+      lookupCodeHOLFinite cur.code.lookup fname vals = some (fbody, callee, retSh) →
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠ some .timeOut →
+      Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 →
+      R16Shards.WorldEff s (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).2
+        Rl B gw)
+    (hvalid : ∀ (callee : HolFiniteMapExact MlS (ValueHOL 64)) (vals : List (ValueHOL 64))
+        (rv : ValueHOL 64),
+      evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) args = some vals →
+      lookupCodeHOLFinite cur.code.lookup fname vals = some (fbody, callee, retSh) →
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 = some (.returned rv) →
+      isValidValueHOLExact cur.toExact VarKind.local d rv = true)
+    (hnt : (evaluateHOLFiniteState cur
+      (.call (some (some (VarKind.local, d), none)) fname args)).1 ≠ some .timeOut)
+    (hcr : ContOrRes (evaluateHOLFiniteState cur
+      (.call (some (some (VarKind.local, d), none)) fname args)).1) :
+    R16Shards.WorldEff s (evaluateHOLFiniteState cur
+      (.call (some (some (VarKind.local, d), none)) fname args)).2 Rl B gw := by
+  rw [evaluateHOLFiniteState_call] at hnt hcr ⊢
+  rcases hargs : evalListHOLFinite cur (h := fun a => Classical.propDecidable (cur.memaddrs a)) args
+    with _ | vals
+  · exact h
+  · simp only [hargs] at hnt hcr ⊢
+    rcases hl : lookupCodeHOLFinite cur.code.lookup fname vals with _ | ⟨body', callee, ret'⟩
+    · exact h
+    · simp only [hl] at hnt hcr ⊢
+      have hsame := lookupCodeHOLFinite_installed_body cur.code.lookup fname params fbody body'
+        retSh ret' vals callee (by rw [h.code]; exact hlook) hl
+      cases hsame
+      have hret_eq := lookupCodeHOLFinite_installed_return cur fname params fbody fbody
+        retSh ret' vals callee (by rw [h.code]; exact hlook) hl
+      cases hret_eq
+      by_cases hz : cur.clock = 0
+      · rw [if_pos hz] at hnt; exact absurd rfl hnt
+      · rw [if_neg hz] at hnt hcr ⊢
+        rcases hrun : evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody with ⟨res, cpost⟩
+        simp only [hrun] at hnt hcr ⊢
+        cases res with
+        | none => rcases hcr with hc0 | hc0 | hc0 | ⟨⟨_, hc0⟩ | ⟨_, _, hc0, _⟩⟩ <;> simp at hc0
+        | some r1 =>
+          cases r1 with
+          | timeOut => exact absurd rfl hnt
+          | «break» | «continue» | error | finalFfi _ =>
+            rcases hcr with hc0 | hc0 | hc0 | ⟨⟨_, hc0⟩ | ⟨_, _, hc0, _⟩⟩ <;> simp at hc0
+          | returned rv =>
+            have hnt_c : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠
+                some .timeOut := by rw [hrun]; simp
+            have hres_c : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 :=
+              by rw [hrun]; exact Or.inl ⟨rv, rfl⟩
+            have heff_c := hcallee callee vals hargs hl hnt_c hres_c
+            rw [hrun] at heff_c
+            have hv := hvalid callee vals rv hargs hl (by rw [hrun])
+            dsimp only at hcr ⊢
+            split
+            · exact heff_c.locals_clock _ _
+            · rename_i hbad; rw [if_neg hbad] at hcr
+              rcases hcr with hc0 | hc0 | hc0 | ⟨⟨_, hc0⟩ | ⟨_, _, hc0, _⟩⟩ <;> simp at hc0
+          | exception exId exVal =>
+            by_cases htrap : exId = ofString "TrapErr"
+            · subst htrap
+              rcases hcr with hc0 | hc0 | hc0 | hres4
+              · simp at hc0
+              · simp at hc0
+              · simp at hc0
+              · exfalso
+                unfold Resumes at hres4
+                rcases hres4 with ⟨e', v', heq, hne⟩ | ⟨e', v', heq, hne⟩
+                · simp at heq
+                  exact hne heq.1.symm
+            · have hnt_e : (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 ≠
+                some .timeOut := by rw [hrun]; simp
+              have hres_e : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee) fbody).1 :=
+                by rw [hrun]; exact Or.inr ⟨exId, exVal, rfl, htrap⟩
+              have heff_c := hcallee callee vals hargs hl hnt_e hres_e
+              rw [hrun] at heff_c
+              exact heff_c.locals_clock _ _
+
+/-- Callee-side factory for `u256_to_be_min`: the body writes only the 32 bytes at its `out`
+parameter, so it is a `WorldEff` step once `(out, 32)` lands in the frame. -/
+private theorem csrW_hcallee_u256_to_be_min {s cur : PanSemStateFiniteExact 64 F}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {Rl : List Ivl}
+    (h : R16Shards.WorldEff s cur Rl [] ["heap_ptr", "scratch_ptr"])
+    (hdom : cur.memaddrs = ordinaryDomain)
+    (hout : globN cur "heap_ptr" ≤ locN (callEntryStateHOLFinite cur callee) "out" ∧
+      locN (callEntryStateHOLFinite cur callee) "out" + 32 ≤ heapLimit) :
+    R16Shards.WorldEff s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_u256_to_be_min)).2 Rl [] ["heap_ptr", "scratch_ptr"] := by
+  have hent_code : (callEntryStateHOLFinite cur callee).code = originalRuntimeCode := by
+    cases cur; simp [callEntryStateHOLFinite, h.code]
+  have hent_ma : (callEntryStateHOLFinite cur callee).memaddrs = ordinaryDomain := by
+    have hm := hdom
+    cases cur; simpa [callEntryStateHOLFinite] using hm
+  have hbf := byteFrame_u256_to_be_min_body_csr (callEntryStateHOLFinite cur callee) hent_code hent_ma
+  have hstep : R16Shards.WorldEff cur
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_u256_to_be_min)).2
+      [(locN (callEntryStateHOLFinite cur callee) "out", 32)] [] [] :=
+    worldEff_of_byteFrame_csr h.arena hent_code
+      (fun r hr => by
+        rcases List.mem_singleton.1 hr with rfl
+        show 0 < 32
+        decide) hbf
+  have hmono : R16Shards.WorldEff cur
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_u256_to_be_min)).2 Rl [] ["heap_ptr", "scratch_ptr"] :=
+    hstep.mono
+      (fun iv hiv _ => by
+        rcases List.mem_singleton.1 hiv with rfl
+        exact Or.inr (Or.inr (Or.inr hout)))
+      (fun gs hgs => by simp at hgs)
+      (fun g hg => by simp at hg)
+  have hbuf : FreshBufsOK s
+      (evaluateHOLFiniteState (callEntryStateHOLFinite cur callee)
+        (sourceFnBody Guest.Software.guestFn_u256_to_be_min)).2 :=
+    freshBufsOK_of_no_globalBuf_writes
+      (fun k hk => (h.gw_kept k hk).trans (hmono.gw_kept k hk)) (by decide)
+  exact R16Shards.WorldEff.trans h hmono (fun gs hgs => by simp at hgs) hbuf
+
+end WkWalk
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
