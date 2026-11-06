@@ -17227,4 +17227,33 @@ theorem journal_worldStep_table_tail_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R13Shards InitECandidate.Solver.Wave8GuestInv.R16WkAcctWs
+
+/-- Journal world steps retain the original backing-header intervals among fixed objects. -/
+theorem journal_worldStep_header_fixed {F : Type}
+    {s mid : PanSemStateFiniteExact 64 F} (hW : TxWorld s)
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (k : Nat) (hk : k ∈ ([40, 72] : List Nat)) :
+    (memW s (globN s "bo" + k), 24) ∈ fixedObjects mid := by
+  have hs : WorldStep (fun _ => []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid := by
+    have he : (fun {F : Type} => @bufRegions [] F) =
+        (fun {F : Type} (_ : PanSemStateFiniteExact 64 F) => []) := by
+      funext F st; simp [bufRegions]
+    rw [← he]; exact hw.1
+  have hr := worldStep_empty_tx_header_roots hs hW (by decide)
+    (boKeep := [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80]) (by decide)
+    (by intro k hk; simp at hk ⊢; omega)
+  have hk' : k = 40 ∨ k = 72 := by simpa using hk
+  unfold fixedObjects
+  apply List.mem_append_left
+  apply List.mem_append_right
+  rcases hk' with rfl | rfl
+  · have hm := hr.2 40 (by simp)
+    simp [blockOutObjects, hr.1, hm, hW.2.bo40, hW.2.bo_nz]
+  · have hm := hr.2 72 (by simp)
+    simp [blockOutObjects, hr.1, hm, hW.2.bo72, hW.2.bo_nz]
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
