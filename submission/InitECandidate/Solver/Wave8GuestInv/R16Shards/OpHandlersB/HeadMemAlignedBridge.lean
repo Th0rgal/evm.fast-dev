@@ -14754,6 +14754,7 @@ namespace InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
 open InitECandidate.Solver.GuestTrapAndLookup
 open InitECandidate.Solver.Wave8Contracts.M23 (EvmStep EvmKeeps EvmAvoids GlobalsKept)
 open InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB.HeadMemBridge
+open InitECandidate.Solver.Wave8M19.Htab
 
 theorem preludeRel_pop_MlS {F : Type}
     {s0 s post : PanSemStateFiniteExact 64 F} (h : PreludeRel s0 s)
@@ -15228,4 +15229,49 @@ theorem dec_glob_unwrap {F : Type} (s : PanSemStateFiniteExact 64 F)
     simp [shapeOfHOLExact, shapeEqHOL]
   rw [if_pos hsh]; dsimp only
   exact ⟨rfl, rfl⟩
+theorem ev_cmp_intro {F : Type} (t : PanSemStateFiniteExact 64 F) (op : Cmp)
+    (l r : ExpHOL 64) (a b : BitVec 64)
+    (hl : ev t l = some (.val (.word a))) (hr : ev t r = some (.val (.word b))) :
+    ev t (.cmp op l r) =
+      some (.val (.word (if Flapjack.Compiler.Encoders.Asm.wordCmpHOL op a b then 1 else 0))) := by
+  simp only [ev, evalHOLExact]
+  rw [show @evalHOLExact 64 F _ t.toExact
+      (fun a_ => Classical.propDecidable (t.memaddrs a_)) l = some (.val (.word a)) from hl,
+    show @evalHOLExact 64 F _ t.toExact
+      (fun a_ => Classical.propDecidable (t.memaddrs a_)) r = some (.val (.word b)) from hr]
+
+/-- Walk helper for the branch ite: a `child != 0`-style test on a loaded
+word splits the branch on the loaded value alone (no address arithmetic
+left in the statement). -/
+theorem fcIte_load_ne0_eq {F : Type} (st : PanSemStateFiniteExact 64 F)
+    (x : MlS) (a k w : BitVec 64)
+    (hx : st.locals.lookup x = some (.val (.word a)))
+    (hd : st.memaddrs (a + k)) (hm : st.memory (a + k) = .word w)
+    (thenBranch elseBranch : ProgHOL 64) :
+    evaluateHOLFiniteState st
+        (.ite (.cmp .notEqual
+            (.load .one (.op .add [.var .local x, .const k]))
+            (.const 0#64))
+          thenBranch elseBranch) =
+      (if w = 0#64 then evaluateHOLFiniteState st elseBranch
+       else evaluateHOLFiniteState st thenBranch) := by
+  rw [evaluateHOLFiniteState_ite]
+  have hload : ev st (.load .one (.op .add [.var .local x, .const k])) =
+      some (.val (.word w)) :=
+    ev_load_loc_eq st x a k w hx hd hm
+  have hc : @evalHOLExact 64 F _ st.toExact
+      (fun a_ => Classical.propDecidable (st.memaddrs a_))
+      (.cmp .notEqual
+        (.load .one (.op .add [.var .local x, .const k]))
+        (.const 0#64)) =
+      some (.val (.word
+        (if Flapjack.Compiler.Encoders.Asm.wordCmpHOL .notEqual w 0 then 1 else 0))) :=
+    ev_cmp_intro st .notEqual
+      (.load .one (.op .add [.var .local x, .const k])) (.const 0#64) w 0
+      hload (ev_const st 0#64)
+  rw [hc]
+  by_cases hw : w = 0#64
+  · simp [hw, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  · simp [hw, Flapjack.Compiler.Encoders.Asm.wordCmpHOL, beq_iff_eq]
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk
