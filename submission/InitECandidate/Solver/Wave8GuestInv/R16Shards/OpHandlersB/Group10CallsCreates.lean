@@ -11333,4 +11333,56 @@ theorem ts8_call_preserves_g10 {F : Type} {s post : PanSemStateFiniteExact 64 F}
   · exact (evm_congr (s := cp) (t := {cp with locals := s.locals}) rfl rfl).2.1.trans
       (hR.trans (evm_congr (s := s) (t := callEntryStateHOLFinite s callee) rfl rfl).2.1)
 
+theorem readOnly_preserves_aligned_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (p : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (hp : readOnlyProg opRoCallees p = true)
+    (hr : Resumes (evaluateHOLFiniteState s p).1) :
+    let post := (evaluateHOLFiniteState s p).2
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      evmR post = evmR s ∧ LocFrame s post := by
+  have hlf := (evaluate_readOnlyProg opRoCallees opRoCallees_good p hp s hc).to_resumes hr
+  dsimp only
+  have hip : EvmInv (evaluateHOLFiniteState s p).2 := by
+    have h := localsFree_evmInv s (evaluateHOLFiniteState s p).2.locals
+      (evaluateHOLFiniteState s p).2.clock hi
+    rwa [← hlf] at h
+  have hm : (evaluateHOLFiniteState s p).2.memory = s.memory := by rw [hlf]
+  have hg : (evaluateHOLFiniteState s p).2.globals = s.globals := by rw [hlf]
+  exact ⟨hip, headMemChainWF_of_locFrame hw hlf, evmChain_congr hm hg,
+    (evm_congr hm hg).2.1, hlf⟩
+
+theorem epsA_htab_get_ro_g10 :
+    EvmPreservingSpecA (fun _ => True) (fun s _ post => LocFrame s post)
+      (ofString "htab_get") :=
+  epsA_of_readOnly 132 (by rw [guestAst_len]; decide)
+    Guest.Software.guestFn_htab_get rfl opRoCallees opRoCallees_good rfl
+
+theorem ts8_then_readOnly_preserves_g10 {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (keyExp : ExpHOL 64) (cont : ProgHOL 64)
+    (hcall : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), keyExp, .const 1]) = (none, mid))
+    (hro : readOnlyProg opRoCallees cont = true)
+    (v : ValueHOL 64) (hret : evaluateHOLFiniteState mid cont = (some (.returned v), post)) :
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      evmR post = evmR s ∧ GlobalsKept ["heap_ptr"] s post := by
+  obtain ⟨him, hwm, hch, hR, hg⟩ := ts8_call_preserves_g10 hc hi hw keyExp hcall
+  have hmeta := (PanRunBounded.evaluateHOLFiniteState_metadata s
+    (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), keyExp, .const 1])).1
+  rw [hcall] at hmeta
+  have hp := readOnly_preserves_aligned_g10 mid cont (hmeta.trans hc) him hwm hro
+    (Or.inl ⟨v, congrArg Prod.fst hret⟩)
+  dsimp only at hp
+  rw [hret] at hp
+  obtain ⟨hip, hwp, hchp, hRp, hlf⟩ := hp
+  change LocFrame mid post at hlf
+  refine ⟨hip, hwp, hchp.trans hch, hRp.trans hR, ?_⟩
+  intro n hn
+  have hgp : post.globals = mid.globals := by rw [hlf]
+  rw [hgp]
+  exact hg n hn
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
