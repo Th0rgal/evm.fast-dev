@@ -89,6 +89,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransact
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk.WkBlockAuxLeaves
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -493,7 +494,7 @@ theorem primitives : Primitives where
   «fb_logs_bloom» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_logs_bloom»
   «fb_track_ancestor_access» := Merged.fb_track_ancestor_access
   «fb_validate_block_access_list_gas_limit» := InitECandidate.Solver.Wave8GuestInv.R11Adapters.«fb_validate_block_access_list_gas_limit»
-  «wk_bal_init» := R16Shards.WkBal.wk_bal_init
+  «wk_bal_init» := R16Shards.TopGbodyWk.wk_bal_init
   «wk_build_block_access_list_rlp» := «wk_build_block_access_list_rlp»
   «wk_build_mpt_indexed» := «wk_build_mpt_indexed»
   «wk_compute_state_root» := «wk_compute_state_root»
