@@ -9608,4 +9608,57 @@ theorem code_roots_kept_of_recordsKept {F : Type}
   obtain ⟨ks,hks,hk⟩ := hr
   exact hR (g,ks) hks hn k hk (hsep g k hm)
 
+/-- Valid nonempty untyped buffers cannot hit fields of a live typed record. -/
+theorem typed_record_field_avoids_buffers {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd) {B : R16WkAcctWs.BufList}
+    (hB : R16WkAcctWs.ValidBufList B)
+    (hpos : ∀ b ∈ B, 0 < b.2)
+    (g : String) (sz k : Nat) (hg : (g,sz) ∈ typedRecords)
+    (hn : globN s g ≠ 0) (hk : k+8 ≤ sz) :
+    ∀ i ∈ R16WkAcctWs.bufRegions B s, ¬ CellHits (globN s g+k) i := by
+  have hi : (globN s g,sz) ∈ worldTypedIvls s S Nd := by
+    unfold worldTypedIvls
+    simp only [List.mem_append]
+    exact Or.inl (Or.inl (Or.inl (Or.inl (Or.inr (List.mem_map.2 ⟨(g,sz),hg,by simp [hn]⟩)))))
+  intro i him hit
+  have hd := R16WkAcctWs.validBufList_disj hB hWT i him _ hi
+  obtain ⟨b,hb,rfl⟩ := List.mem_map.1 him
+  by_cases hz : globN s b.1 = 0
+  · simp [bufferRegion,hz,CellHits] at hit
+  · simp only [bufferRegion,hz,↓reduceIte] at hd hit
+    have hbp := hpos b hb
+    unfold Disj at hd
+    unfold CellHits at hit
+    dsimp only at hd hit
+    rcases hd with hd | hd | hd | hd <;> omega
+
+/-- Account output buffers leave the live code and access roots unchanged. -/
+theorem account_records_preserve_code_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd)
+    (hR : RecordsKept (R16WkAcctWs.bufRegions wsAcctBufs) stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hp : ∀ b ∈ wsAcctBufs, 0 < b.2 := by decide
+  simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+  rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+  · exact hR ("ws",[0,8,16,24,32]) (by decide) hn 16 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ws" 40 16 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 40 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 40 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 48 (by decide) hn (by decide))
+  · exact hR ("bs",[0,8,16,24,32,40,48,56,64,72]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "bs" 80 48 (by decide) hn (by decide))
+
 end HeadStore

@@ -15447,4 +15447,61 @@ theorem op_log_header_stores_effect_g09 {F : Type} (s : PanSemStateFiniteExact 6
     ⟨(log.toNat, 40), by simp, by dsimp only; rw [h16]; omega⟩
   exact (he0.trans he8).trans he16
 
+/-- Copy into a detached log-owned buffer, retaining the exposed invariant. -/
+theorem op_log_copy_step_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (dstExp srcExp nExp : ExpHOL 64) (dst src n : BitVec 64) (Rl : List Ivl)
+    (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hw : EvmInvWith s S Nd)
+    (hl : (evmChain s).length = (evmChain s0).length) (hr : evmR s < evmR s0)
+    (hd : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) dstExp = some (.val (.word dst)))
+    (hs : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) srcExp = some (.val (.word src)))
+    (hn : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a)) nExp = some (.val (.word n)))
+    (hsub : 0 < n.toNat → ∃ i ∈ Rl, i.1 ≤ dst.toNat ∧ dst.toNat + n.toNat ≤ i.1 + i.2)
+    (hdj : IvlsDisj Rl (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
+    (hcont : ∀ last : PanSemStateFiniteExact 64 F,
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      ByteRegionEffect s last Rl → last.locals = s.locals →
+      worldTypedIvls last S Nd = worldTypedIvls s S Nd →
+      (evmChain last).map (frameObjects last) = (evmChain s).map (frameObjects s) →
+      (HeadMemAligned s → HeadMemAligned last) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]) cont)).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]) cont)).1
+      (evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]) cont)).2 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt ⊢
+  let call := ProgHOL.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]
+  have hnc : (evaluateHOLFiniteState s call).1 ≠ some .timeOut := by
+    intro h
+    change (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp])).1 = some .timeOut at h
+    rcases hh : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]) with ⟨r, post⟩
+    rw [hh] at h
+    dsimp only at h
+    subst r
+    rw [hh] at hnt
+    exact hnt rfl
+  have he := Wave8GuestInv.M11.eval_call_memcpy_bre s dstExp srcExp nExp dst src n Rl
+    hc hw.1.1.memaddrs hd hs hn hsub hnc
+  rcases heval : evaluateHOLFiniteState s call with ⟨r, last⟩
+  change evaluateHOLFiniteState s (.call (some (none, none)) (ofString "memcpy") [dstExp, srcExp, nExp]) = (r, last) at heval
+  simp only [heval] at hnt he ⊢
+  cases r with
+  | none =>
+    obtain ⟨heff, hlocals⟩ := he.1 rfl
+    have heff' := m11_bre_to_m23 heff
+    obtain ⟨hwi,hworld,hframes,hg,hchain,hR,hHM⟩ := evmInvWith_of_bre hw hdj heff'
+    exact hcont last (heff'.code.trans hc) hwi (by rw [hchain]; exact hl)
+      (by rw [hR]; exact hr) heff' hlocals hworld hframes hHM hnt
+  | some res =>
+    apply opDispatchPost_other
+    · intro v hv
+      exact he.2 (by simp) (Or.inl ⟨v, hv⟩)
+    · intro hE
+      obtain ⟨v,hv⟩ := hE
+      exact he.2 (by simp) (Or.inr ⟨ofString "EvmErr", v, hv, by decide⟩)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

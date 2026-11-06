@@ -9604,16 +9604,14 @@ theorem chain_cells_ne_head_pc {F : Type} (s : PanSemStateFiniteExact 64 F)
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
 
 /-- Error incorporation's three head writes avoid every chain alignment cell. -/
-theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
-    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+theorem chain_cells_ne_head_offset {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hkbound : k < 280)
+    (hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40) :
     ∀ ec ∈ evmChain s,
       BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
       BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
-  have hkbound : k < 280 := by simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
-  have hkne : k ≠ 24 ∧ k ≠ 32 ∧ k ≠ 40 := by
-    simp only [List.mem_cons, List.not_mem_nil, or_false] at hk; omega
   obtain ⟨_, S, _, hrest⟩ := hi
   dsimp only at hrest
   obtain ⟨_, _, _, hFW, _, _, hPair, _⟩ := hrest
@@ -9659,6 +9657,45 @@ theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
       hneq _ (by omega) (by omega), hneq _ (by omega) (by omega)⟩
 
 /-- The error incorporation callee preserves the chain's memory contract. -/
+theorem chain_cells_ne_head_error {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hi : EvmInv s) (k : Nat) (hk : k ∈ [64, 72, 184]) :
+    ∀ ec ∈ evmChain s,
+      BitVec.ofNat 64 (ec.1 + 24) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 32) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.1 + 40) ≠ BitVec.ofNat 64 (globN s "ev" + k) ∧
+      BitVec.ofNat 64 (ec.2 + 56) ≠ BitVec.ofNat 64 (globN s "ev" + k) := by
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hk
+  exact chain_cells_ne_head_offset s hi k (by omega) (by omega)
+
+theorem credit_state_gas_refund_cells {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
+    (hi : EvmInv s) (hcode : s.code = originalRuntimeCode)
+    (he : s.globals.lookup (ofString "ev") = some (.val (.word e)))
+    (v : ValueHOL 64)
+    (hr : evaluateHOLFiniteState s
+      (sourceFnBody Guest.Software.guestFn_credit_state_gas_refund) = (some (.returned v), post)) :
+    EvmEkFk.ChainCellsAgree s post := by
+  obtain ⟨_, ⟨w1, w2, w3, hm⟩, _, _⟩ :=
+    Ret.apply (credit_state_gas_refund_run s e hcode he) hr
+  have heq : BitVec.ofNat 64 (globN s "ev") = e := by simp [globN, he]
+  have h64 := chain_cells_ne_head_offset s hi 64 (by omega) (by omega)
+  have h72 := chain_cells_ne_head_offset s hi 72 (by omega) (by omega)
+  have h192 := chain_cells_ne_head_offset s hi 192 (by omega) (by omega)
+  rw [BitVec.ofNat_add (globN s "ev") 64, heq] at h64
+  rw [BitVec.ofNat_add (globN s "ev") 72, heq] at h72
+  rw [BitVec.ofNat_add (globN s "ev") 192, heq] at h192
+  intro ec hec
+  obtain ⟨h1, h2, h3, h4⟩ := h64 ec hec
+  obtain ⟨h5, h6, h7, h8⟩ := h72 ec hec
+  obtain ⟨h9, h10, h11, h12⟩ := h192 ec hec
+  have hkeep (a : Nat) (ha : BitVec.ofNat 64 a ≠ e + 64)
+      (hb : BitVec.ofNat 64 a ≠ e + 72) (hc : BitVec.ofNat 64 a ≠ e + 192) :
+      memW post a = memW s a := by
+    unfold memW
+    rw [hm, updW_ne _ _ _ _ hb, updW_ne _ _ _ _ hc, updW_ne _ _ _ _ ha]
+  exact ⟨hkeep _ h1 h5 h9, hkeep _ h2 h6 h10,
+    hkeep _ h3 h7 h11, hkeep _ h4 h8 h12⟩
+
 theorem incorporate_child_on_error_cells {F : Type}
     (s post : PanSemStateFiniteExact 64 F) (e : BitVec 64)
     (hi : EvmInv s)
