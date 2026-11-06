@@ -6959,4 +6959,21 @@ theorem get_code_ws_fallback_return_strong {F : Type} (s : PanSemStateFiniteExac
   obtain ⟨hv, hn, _⟩ := ext_code_of_tail_return _ code code_n hc hn w hw
   exact ⟨code, code_n, hv, hn⟩
 
+/-- Returning assignment calls expose the actual resumed caller state. This
+handles the second cache lookup, which reuses `w` rather than declaring it. -/
+theorem Ret.seq_callAssign_gen {F : Type} {s : PanSemStateFiniteExact 64 F} {x fname : MlS}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64}
+    {Φ : ValueHOL 64 → PanSemStateFiniteExact 64 F → Prop}
+    (hk : ∀ values body callee ret v post,
+      evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a)) args = some values →
+      lookupCodeHOLFinite s.code.lookup fname values = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post) →
+      Ret (setVarHOLFinite x v {post with locals := s.locals}) cont Φ) :
+    Ret s (.seq (.call (some (some (.local, x), none)) fname args) cont) Φ := by
+  refine Ret.seq (fun v hv => False.elim (callAssign_noRet s x fname args v hv)) ?_
+  intro t ht
+  obtain ⟨values, body, callee, ret, v, post, ha, hl, hb, hr⟩ := callAssign_inv ht
+  rw [hr]
+  exact hk values body callee ret v post ha hl hb
+
 end HeadStore
