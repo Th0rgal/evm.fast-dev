@@ -9633,4 +9633,32 @@ theorem typed_record_field_avoids_buffers {F : Type}
     dsimp only at hd hit
     rcases hd with hd | hd | hd | hd <;> omega
 
+/-- Account output buffers leave the live code and access roots unchanged. -/
+theorem account_records_preserve_code_roots {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hWT : WorldTypedWith s S Nd)
+    (hR : RecordsKept (R16WkAcctWs.bufRegions wsAcctBufs) stdKeep s post)
+    (hG : GlobalsKept ["heap_ptr","scratch_ptr"] s post) :
+    ∀ g k, (g,k) ∈ ([("ws",16),("ts",40),("ts",48),("bs",48)] : List (String × Nat)) →
+      globN s g ≠ 0 → memW post (globN post g+k) = memW s (globN s g+k) := by
+  intro g k hm hn
+  have hg : globN post g = globN s g := by
+    have heq : s.globals.lookup (ofString g) = post.globals.lookup (ofString g) := hG _ (by
+      simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+      rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ <;> decide)
+    unfold globN
+    rw [heq]
+  rw [hg]
+  have hp : ∀ b ∈ wsAcctBufs, 0 < b.2 := by decide
+  simp only [List.mem_cons,List.not_mem_nil,or_false,Prod.mk.injEq] at hm
+  rcases hm with ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩ | ⟨rfl,rfl⟩
+  · exact hR ("ws",[0,8,16,24,32]) (by decide) hn 16 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ws" 40 16 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 40 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 40 (by decide) hn (by decide))
+  · exact hR ("ts",[0,8,16,24,32,40,48,56,64]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "ts" 72 48 (by decide) hn (by decide))
+  · exact hR ("bs",[0,8,16,24,32,40,48,56,64,72]) (by decide) hn 48 (by decide)
+      (typed_record_field_avoids_buffers hWT validBufList_wsAcctBufs hp "bs" 80 48 (by decide) hn (by decide))
+
 end HeadStore
