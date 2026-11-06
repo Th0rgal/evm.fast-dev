@@ -16989,4 +16989,22 @@ theorem phase2_final_pointer_source_bound {ι : Type} [Nonempty ι]
   simpa only [Nat.zero_add] using seq_bound_trans
     (PtxP1.bound_of_clock (P := P) (fun s => clock_store s _ _)) hh hb s hc hp
 
+/-- Inserting into the private address table retains both private key lengths. -/
+theorem phase2_htabExit_aa_headers {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hs : ArenaReady s) (hm : PtxMessageTables s aa ak)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    hdr post aa 0 = 20 ∧ hdr post ak 0 = 52 := by
+  obtain ⟨S, Nd, hw, ha, hk, hal, hkl, haf, hkf, hd⟩ := hm
+  constructor
+  · have he := hx.2.2.1
+    rw [ht] at he
+    exact he.trans hal
+  · exact (phase2_htabExit_other_table_header hs hw (ht.symm ▸ ha) hx hk
+      (by
+        rw [ht]
+        intro he
+        rw [he] at hkl
+        omega) 0 (by decide)).trans hkl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
