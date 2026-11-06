@@ -15198,4 +15198,29 @@ theorem htab_set_recSlot_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Recording a pre-state read preserves the fixed headers used by credit. -/
+theorem record_pre_state_read_body_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl) (v : ValueHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hr : evaluateHOLFiniteState s (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+     .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  have hu := htab_set_recSlot_fixed_frame s mid S Nd b "bs" 72 _ _ hA hT hb hbpos
+    (by decide) (fun hn hz => (hT.1.2.2.2.2.1 72 (by simp [bsTableSlots]) hn).resolve_left hz) hc
+  rw [evaluateHOLFiniteState_return] at ht
+  simp only [evalHOLExact] at ht
+  split at ht
+  · have hp := (Prod.mk.inj ht).2
+    subst post
+    exact hu
+  · cases ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
