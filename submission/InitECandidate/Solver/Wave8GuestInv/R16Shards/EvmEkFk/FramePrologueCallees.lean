@@ -8438,6 +8438,32 @@ private theorem precompile_step_locals_right {F : Type} {gw : List String}
     (evmChain_with_locals post ls k).trans h.1.2.2.2⟩, ?_⟩
   exact h.2
 
+theorem precompile_call0_locals_on_flow {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fn : MlS) (args : List (ExpHOL 64))
+    (hr : (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).1 = none) :
+    (evaluateHOLFiniteState s (.call (some (none, none)) fn args)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_call] at hr ⊢
+  simp only [evalListHOLFinite_eq_toExact] at hr ⊢
+  rcases ha : @evalListHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a)) args with _ | vals
+  · simp [ha] at hr
+  · simp only [ha] at hr ⊢
+    rcases hl : lookupCodeHOLFinite s.code.lookup fn vals with _ | ⟨body, callee, ret⟩
+    · simp [hl] at hr
+    · simp only [hl] at hr ⊢
+      by_cases hz : s.clock = 0
+      · simp [hz] at hr
+      · simp only [hz, ↓reduceIte] at hr ⊢
+        rcases run : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨res, post⟩
+        simp only [run] at hr ⊢
+        cases res with
+        | none => simp at hr
+        | some r =>
+          cases r <;> try simp at hr
+          case returned v =>
+            dsimp only at hr ⊢
+            split at hr <;> simp_all
+
 theorem precompile_step_call0 {fname : MlS}
     (hk : EvmKeeps EvmInv frameStartGw fname) (hc : ChainCellsKept EvmInv fname)
     (args : List (ExpHOL 64)) :
@@ -8668,6 +8694,84 @@ private theorem dispatch_step_seq {a b : ProgHOL 64}
     have hs := ha s hcode hInv (by rw [hr]; exact hnt) (by rw [hr]; exact hfr)
     rw [hr] at hs
     exact hs
+
+theorem precompile_step_seq_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (a b : ProgHOL 64)
+    (ha : (evaluateHOLFiniteState s a).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState s a).1 →
+        EvmStepCC frameStartGw s (evaluateHOLFiniteState s a).2)
+    (hb : (evaluateHOLFiniteState s a).1 = none →
+      (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).1 ≠ some .timeOut →
+      R13.FlowsOrResumes (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).1 →
+      EvmStepCC frameStartGw (evaluateHOLFiniteState s a).2
+        (evaluateHOLFiniteState (evaluateHOLFiniteState s a).2 b).2)
+    (hnt : (evaluateHOLFiniteState s (.seq a b)).1 ≠ some .timeOut)
+    (hfr : R13.FlowsOrResumes (evaluateHOLFiniteState s (.seq a b)).1) :
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s (.seq a b)).2 := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hfr ⊢
+  rcases hr : evaluateHOLFiniteState s a with ⟨r, mid⟩
+  simp only [hr] at ha hb hnt hfr ⊢
+  cases r with
+  | none => exact dispatch_step_trans (ha (by simp) (Or.inl rfl)) (hb rfl hnt hfr)
+  | some r => exact ha hnt hfr
+
+theorem precompile_store_locals {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (addr val : ExpHOL 64) :
+    (evaluateHOLFiniteState s (.store addr val)).2.locals = s.locals := by
+  rw [evaluateHOLFiniteState_store]
+  split <;> (try split) <;> (try split) <;> rfl
+
+theorem precompile_identity_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (args : List (ExpHOL 64)) (n : BitVec 64)
+    (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
+    (hn : s.locals.lookup (ofString "n") = some (.val (.word n))) :
+    let p : ProgHOL 64 := .seq (.call (some (none, none)) (ofString "charge_gas") args)
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 120])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))
+      (.seq (.store (.op .add [.var .global (ofString "ev"), .const 128])
+        (.var .local (ofString "n"))) (.return (.const 0))))
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    R13.FlowsOrResumes (evaluateHOLFiniteState s p).1 →
+    EvmStepCC frameStartGw s (evaluateHOLFiniteState s p).2 := by
+  dsimp only
+  intro hnt hfr
+  apply precompile_step_seq_at s _ _ _ _ hnt hfr
+  · exact precompile_charge_gas_call_step args s hcode hi
+  · intro hflow hnt hfr
+    let mid := (evaluateHOLFiniteState s (.call (some (none, none)) (ofString "charge_gas") args)).2
+    have hs := precompile_charge_gas_call_step args s hcode hi
+      (by rw [hflow]; simp) (Or.inl hflow)
+    have hmcode : mid.code = originalRuntimeCode :=
+      ((evaluateHOLFiniteState_metadata s _).1).trans hcode
+    have hmn : mid.locals.lookup (ofString "n") = some (.val (.word n)) := by
+      dsimp only [mid]
+      rw [precompile_call0_locals_on_flow s _ _ hflow]
+      exact hn
+    apply precompile_step_seq_at mid _ _ _ _ hnt hfr
+    · exact precompile_store_output_step 120 (Or.inl rfl) _
+        (fun s v hv => EvmFrameSpecs.word_of_load_one s _ v hv) mid hmcode hs.1.1
+    · intro hstore hnt hfr
+      change (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 120#64])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))).1 = none at hstore
+      let post := (evaluateHOLFiniteState mid (.store
+        (.op .add [.var .global (ofString "ev"), .const 120])
+        (.load .one (.op .add [.var .local (ofString "msg"), .const 88])))).2
+      have ht := precompile_store_output_step 120 (Or.inl rfl) _
+        (fun s v hv => EvmFrameSpecs.word_of_load_one s _ v hv) mid hmcode hs.1.1
+        (by rw [hstore]; simp) (Or.inl hstore)
+      have hpcode : post.code = originalRuntimeCode :=
+        ((evaluateHOLFiniteState_metadata mid _).1).trans hmcode
+      have hpn : post.locals.lookup (ofString "n") = some (.val (.word n)) := by
+        dsimp only [post]; rw [precompile_store_locals]; exact hmn
+      apply precompile_step_seq_at post _ _ _ _ hnt hfr
+      · intro _ hfr
+        exact precompile_store_output_local_at post 128 (Or.inr rfl) _ n ht.1.1 hpn hfr
+      · intro hstore hnt hfr
+        have hu := precompile_store_output_local_at post 128 (Or.inr rfl) _ n ht.1.1 hpn
+          (Or.inl hstore)
+        exact dispatch_step_ro (ReadOnlyProg.ret _) _
+          (((evaluateHOLFiniteState_metadata post _).1).trans hpcode) hu.1.1 hnt hfr
 
 private theorem dispatch_step_ite (cond : ExpHOL 64) {a b : ProgHOL 64}
     (ha : EvmProgStep frameStartGw a) (hb : EvmProgStep frameStartGw b) :

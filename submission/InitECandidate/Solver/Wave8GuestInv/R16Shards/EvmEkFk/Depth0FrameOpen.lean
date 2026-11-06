@@ -7860,4 +7860,69 @@ theorem fallback_ws_return_after_access_set {F : Type}
   · exact (WkBal.htabWF_with_locals post locals post.clock db.toNat).2 hw
   · simpa [NodeDbEntriesStrong, htabValues, hdr, nodeF, memW, WordsOK, WordAt, globN] using he
 
+/-- Transport the structural part as well as entry typing when the key
+builder leaves the old table and fixed-object footprints unchanged. -/
+theorem codeDbPayloadStrong_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db)
+    (hfp : ∀ t ∈ S, htabFootprint post t = htabFootprint s t)
+    (hfixed : fixedObjects post = fixedObjects s) : CodeDbPayloadStrong post S db := by
+  refine ⟨codeDbPayloadStrong_entries_of_sk_make db h hc hma hfit v hb hAs hAp hvalues, ?_⟩
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hhp : globN post "heap_ptr" = globN s "heap_ptr" := by
+    unfold globN
+    rw [heff.globals]
+  intro p hp
+  rw [hvalues] at hp
+  obtain ⟨hin, hp64, htables, hobjects⟩ := h.2 p hp
+  refine ⟨?_, hp64, ?_, ?_⟩
+  · rw [hhp]; exact hin
+  · intro t ht i hi
+    rw [hfp t ht] at hi
+    exact htables t ht i hi
+  · intro i hi
+    rw [hfixed] at hi
+    exact hobjects i hi
+
+/-- The key builder preserves a table's footprint whenever its header is
+separated from the concrete scratch-buffer write. -/
+theorem htabFootprint_eq_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hw : HtabWF s db)
+    (hd : Disj (db, 88) (globN s "sk_buf", 52)) :
+    htabFootprint post db = htabFootprint s db := by
+  have hhdr : (db, 88) ∈ htabFootprint s db := by simp [htabFootprint]
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hd8 := (hw.1 _ hhdr).2.1
+  have h264 : heapEnd ≤ 2 ^ 64 := by decide
+  apply (InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabFootprint_eq_of_hdr_unhit
+    hd8 (by have := (hw.1 _ hhdr).1.2; dsimp only at this; omega) ?_).2
+  right
+  intro a ha hh
+  apply heff.cell_frame
+  intro j hj _ hhj
+  simp only [List.mem_singleton] at hj
+  subst j
+  unfold CellHits at hh hhj
+  rcases hd with hz | hz | hz | hz <;> try dsimp only at hz
+  all_goals omega
+
 end HeadStore

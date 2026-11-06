@@ -15234,15 +15234,17 @@ theorem phase2_message_initialized_ready {ι F : Type}
     hp.2.2.1 hp.2.2.2.1 hp.2.2.2.2
 
 open R10Shards.P26_P28 in
-/-- Insertion into the non-value transaction table preserves all world and journal roles. -/
-theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+/-- Insertion into any non-value table preserves all world and journal roles. -/
+theorem phase2_htabExit_nonValue_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
     (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
-    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
-    (ht : locN s "t" = memW s (globN s "ts" + 8)) (hx : HtabExit s post) :
+    (hnv : locN s "t" ∈ S ∧
+      (globN s "bs" ≠ 0 → memW s (globN s "bs" + 32) ≠ locN s "t") ∧
+      (globN s "ts" ≠ 0 → memW s (globN s "ts" + 32) ≠ locN s "t") ∧
+      globN s "bal_accounts" ≠ locN s "t" ∧
+      (∀ ad ∈ balRecords s, memW s ad ≠ locN s "t") ∧
+      (globN s "ws" ≠ 0 → memW s (globN s "ws" + 32) ≠ locN s "t"))
+    (hx : HtabExit s post) :
     worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
-  have hnv := R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hn
-  simp only [show (8 : BitVec 64).toNat = 8 by decide] at hnv
-  rw [← ht] at hnv
   have hcore : ∀ g ∈ coreWorldGlobals, globN post g = globN s g := by
     intro g hg
     have hne : ofString g ≠ ofString "heap_ptr" := by revert g hg; decide
@@ -15303,6 +15305,26 @@ theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64
       dsimp at h1
       omega
   exact ⟨hlow 0 (by decide), hlow 8 (by decide), hlow 16 (by decide)⟩
+
+/-- Transaction-table insertion is an instance of non-value role preservation. -/
+theorem phase2_htabExit_ts8_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hts : globN s "ts" ≠ 0) (hn : memW s (globN s "ts" + 8) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "ts" + 8)) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  apply phase2_htabExit_nonValue_roles hs hw _ hx
+  rw [ht]
+  exact R16WkAcctWs.nonValueSlot_ts8 s S hw.1 hts hn
+
+/-- Recording a pre-state read preserves all world and journal roles. -/
+theorem phase2_htabExit_bs72_roles {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hs : ArenaReady s) {S Nd : List Nat} (hw : WorldTypedWith s S Nd)
+    (hbs : globN s "bs" ≠ 0) (hn : memW s (globN s "bs" + 72) ≠ 0)
+    (ht : locN s "t" = memW s (globN s "bs" + 72)) (hx : HtabExit s post) :
+    worldRoleSlots post = worldRoleSlots s ∧ journalRoleSlots post = journalRoleSlots s := by
+  apply phase2_htabExit_nonValue_roles hs hw _ hx
+  rw [ht]
+  exact R16WkAcctWs.nonValueSlot_bs72 s S hw.1 hbs hn
 
 /-- Warming the transaction table retains the complete private-table witness. -/
 theorem phase2_htabExit_ts8_message_tables {F : Type}
