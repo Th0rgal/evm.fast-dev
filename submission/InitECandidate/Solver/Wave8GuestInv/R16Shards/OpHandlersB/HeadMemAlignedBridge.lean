@@ -14298,6 +14298,103 @@ theorem fcBranches_eq :
                  .var .local (ofString "actual")])
               .skip))) := rfl
 
+theorem fcBranches_kind2_eq {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    (hlocs : EvmEkFk.FcEntryLocals s0 s)
+    (hkind2 : BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64) :
+    evaluateHOLFiniteState s EvmEkFk.fcBranches =
+      evaluateHOLFiniteState s
+        (.dec (ofString "empty") .one (.var .global (ofString "evm_empty"))
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.var .local (ofString "empty"), .const 0#64])
+                (.decCall (ofString "av") (.comb [.one, .one, .one, .one])
+                    (ofString "address_to_u256")
+                    [.var .local (ofString "contract_address")]
+                  (.call (some (none, none)) (ofString "stack_push")
+                    [.var .local (ofString "av")])))))) := by
+  rw [fcBranches_eq, evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .equal (.var .local (ofString "kind")) (.const 2#64)) =
+      some (.val (.word (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+        then 1 else 0))) := by
+    simp [evalHOLExact, hlocs.kind_lk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  have h1ne0 : (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+      then (1 : BitVec 64) else 0) ≠ 0 := by simp [hkind2]
+  rw [if_neg h1ne0]
+
+theorem fcBranches_kind_ne2_eq {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    (hlocs : EvmEkFk.FcEntryLocals s0 s)
+    (hkindne2 : BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) ≠ 2#64) :
+    evaluateHOLFiniteState s EvmEkFk.fcBranches =
+      evaluateHOLFiniteState s
+        (.seq
+          (.ite (.cmp .notEqual
+              (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+              (.const 0#64))
+            (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                  [.var .local (ofString "child")])
+                (.seq (.ite (.cmp .notEqual
+                        (.var .local (ofString "new_account_charged")) (.const 0#64))
+                      (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                        [.const 183600#64])
+                      .skip)
+                  (.seq (.call (some (none, none)) (ofString "set_retdata")
+                      [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                       .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                    (.call (some (none, none)) (ofString "stack_push")
+                      [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+            (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                [.var .local (ofString "child")])
+              (.seq (.call (some (none, none)) (ofString "set_retdata")
+                  [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                   .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                (.call (some (none, none)) (ofString "stack_push")
+                  [.rstruct [.const 1#64, .const 0#64, .const 0#64, .const 0#64]]))))
+          (.decCall (ofString "actual") .one (ofString "min")
+              [.var .local (ofString "out_size"),
+               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])]
+            (.ite (.cmp .notEqual (.var .local (ofString "actual")) (.const 0#64))
+              (.call (some (none, none)) (ofString "memcpy")
+                [.op .add
+                   [.load .one (.op .add [.var .global (ofString "ev"), .const 24#64]),
+                    .var .local (ofString "out_start")],
+                 .load .one (.op .add [.var .global (ofString "ev"), .const 144#64]),
+                 .var .local (ofString "actual")])
+              .skip))) := by
+  rw [fcBranches_eq, evaluateHOLFiniteState_ite]
+  have hcmp : @evalHOLExact 64 F _ s.toExact (fun a => Classical.propDecidable (s.memaddrs a))
+      (.cmp .equal (.var .local (ofString "kind")) (.const 2#64)) =
+      some (.val (.word (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+        then 1 else 0))) := by
+    simp [evalHOLExact, hlocs.kind_lk, Flapjack.Compiler.Encoders.Asm.wordCmpHOL]
+  rw [hcmp]
+  dsimp only
+  have h0 : (if BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64
+      then (1 : BitVec 64) else 0) = 0 := by simp [hkindne2]
+  rw [if_pos h0]
+
 end FcNoEvmErr
 
 
