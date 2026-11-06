@@ -15294,4 +15294,23 @@ theorem ws_get_account_optional_call_allocated_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Block-output objects are separated from the global scratch buffers. -/
+theorem blockOut_disj_global_buffer {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {b : Ivl} {g : String × Nat}
+    (hfix : FixedTyped s) (hb : b ∈ blockOutObjects s) (hg : g ∈ globalBuffers) :
+    Disj b (bufferRegion s g) := by
+  have hp := hfix.2
+  unfold fixedObjects at hp
+  have hpair := (List.pairwise_append.mp hp).1
+  have hbg : bufferRegion s g ∈ globalBuffers.map
+      (fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+    exact List.mem_map.mpr ⟨g, hg, rfl⟩
+  have hp3 := (List.pairwise_append.mp hpair).2.2
+  have hd := hp3 (bufferRegion s g) (List.mem_append_left _ hbg) b hb
+  simpa only [Disj, or_comm, or_left_comm, or_assoc] using hd
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
