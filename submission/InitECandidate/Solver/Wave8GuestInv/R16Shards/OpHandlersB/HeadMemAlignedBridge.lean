@@ -14395,6 +14395,107 @@ theorem fcBranches_kind_ne2_eq {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
       then (1 : BitVec 64) else 0) = 0 := by simp [hkindne2]
   rw [if_pos h0]
 
+theorem fcBranches_kind2_dec_empty {F : Type} {s0 s : PanSemStateFiniteExact 64 F}
+    {w_emp : BitVec 64}
+    (hlocs : EvmEkFk.FcEntryLocals s0 s)
+    (hkind2 : BitVec.ofNat 64 (memW s0 (globN s0 "cur_cont" + 16)) = 2#64)
+    (hw_emp : s.globals.lookup (ofString "evm_empty") = some (.val (.word w_emp))) :
+    evaluateHOLFiniteState s EvmEkFk.fcBranches =
+      ((evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.ite (.cmp .notEqual
+                      (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                      (.const 0#64))
+                    (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                          [.var .local (ofString "child")])
+                        (.seq (.ite (.cmp .notEqual
+                                (.var .local (ofString "new_account_charged")) (.const 0#64))
+                              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64])
+                              .skip)
+                          (.seq (.call (some (none, none)) (ofString "set_retdata")
+                              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                            (.call (some (none, none)) (ofString "stack_push")
+                              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+                    (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "set_retdata")
+                          [.var .local (ofString "empty"), .const 0#64])
+                        (.decCall (ofString "av") (.comb [.one, .one, .one, .one])
+                            (ofString "address_to_u256")
+                            [.var .local (ofString "contract_address")]
+                          (.call (some (none, none)) (ofString "stack_push")
+                            [.var .local (ofString "av")])))))).1,
+       { (evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.ite (.cmp .notEqual
+                      (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                      (.const 0#64))
+                    (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                          [.var .local (ofString "child")])
+                        (.seq (.ite (.cmp .notEqual
+                                (.var .local (ofString "new_account_charged")) (.const 0#64))
+                              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64])
+                              .skip)
+                          (.seq (.call (some (none, none)) (ofString "set_retdata")
+                              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                            (.call (some (none, none)) (ofString "stack_push")
+                              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+                    (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "set_retdata")
+                          [.var .local (ofString "empty"), .const 0#64])
+                        (.decCall (ofString "av") (.comb [.one, .one, .one, .one])
+                            (ofString "address_to_u256")
+                            [.var .local (ofString "contract_address")]
+                          (.call (some (none, none)) (ofString "stack_push")
+                            [.var .local (ofString "av")])))))).2 with
+         locals := HolFiniteMapExact.resVarEq
+           (evaluateHOLFiniteState (setVarHOLFinite (ofString "empty") (.val (.word w_emp)) s)
+        (.ite (.cmp .notEqual
+                      (.load .one (.op .add [.var .local (ofString "child"), .const 160#64]))
+                      (.const 0#64))
+                    (.seq (.call (some (none, none)) (ofString "rollback_child_access")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "incorporate_child_on_error")
+                          [.var .local (ofString "child")])
+                        (.seq (.ite (.cmp .notEqual
+                                (.var .local (ofString "new_account_charged")) (.const 0#64))
+                              (.call (some (none, none)) (ofString "credit_state_gas_refund")
+                                [.const 183600#64])
+                              .skip)
+                          (.seq (.call (some (none, none)) (ofString "set_retdata")
+                              [.load .one (.op .add [.var .local (ofString "child"), .const 120#64]),
+                               .load .one (.op .add [.var .local (ofString "child"), .const 128#64])])
+                            (.call (some (none, none)) (ofString "stack_push")
+                              [.rstruct [.const 0#64, .const 0#64, .const 0#64, .const 0#64]])))))
+                    (.seq (.call (some (none, none)) (ofString "incorporate_child_on_success")
+                        [.var .local (ofString "child")])
+                      (.seq (.call (some (none, none)) (ofString "set_retdata")
+                          [.var .local (ofString "empty"), .const 0#64])
+                        (.decCall (ofString "av") (.comb [.one, .one, .one, .one])
+                            (ofString "address_to_u256")
+                            [.var .local (ofString "contract_address")]
+                          (.call (some (none, none)) (ofString "stack_push")
+                            [.var .local (ofString "av")])))))).2.locals
+           (ofString "empty", s.locals.lookup (ofString "empty")) }) := by
+  rw [fcBranches_kind2_eq hlocs hkind2, evaluateHOLFiniteState_dec_total]
+  have hinit : @evalHOLExact 64 F _ s.toExact
+      (fun a => Classical.propDecidable (s.memaddrs a))
+      (.var .global (ofString "evm_empty")) = some (.val (.word w_emp)) := by
+    simp [evalHOLExact, hw_emp]
+  dsimp only
+  rw [hinit]
+  dsimp only
+  have hshape : shapeEqHOL .one (shapeOfHOLExact (.val (.word w_emp))) = true := by
+    simp [shapeOfHOLExact, shapeEqHOL]
+  rw [if_pos hshape]
+
 end FcNoEvmErr
 
 
