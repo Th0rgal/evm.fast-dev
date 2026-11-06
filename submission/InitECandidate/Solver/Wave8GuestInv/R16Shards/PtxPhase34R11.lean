@@ -15657,4 +15657,25 @@ theorem early_return_or_tail_memory {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Both the cached-account early return and recorded trie fallback retain backing. -/
+theorem guarded_recorded_trie_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (cond e : ExpHOL 64) (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s
+      (.seq (.ite cond (.return e) .skip)
+        (.seq (.call (some (none, none)) (ofString "record_pre_state_read") [.var .local (ofString "addr")])
+          (.decCall (ofString "a") .one (ofString "ws_get_account_optional")
+            [.var .local (ofString "addr")] (.return (.var .local (ofString "a")))))) =
+      (some (.returned v), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  rcases early_return_or_tail_memory hr with hm | ht
+  · intro k hk
+    simp only [memW, hm]
+  · exact recorded_trie_lookup_header_words s post S Nd v hW hT ht
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
