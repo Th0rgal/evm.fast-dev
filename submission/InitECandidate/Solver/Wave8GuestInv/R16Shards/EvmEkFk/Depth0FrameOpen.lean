@@ -10059,4 +10059,18 @@ theorem codeDbPayloadStrong_of_witness_effect {F : Type}
     (htabFootprint_eq_of_witness_effect hWT hA heff)
     (fixedObjects_eq_of_witness_effect hWT hA heff)
 
+/-- Actual installed witness lookup preserves the full code payload invariant. -/
+theorem ws_get_account_execution_payload_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (values : List (ValueHOL 64)) (body : ProgHOL 64)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (post : PanSemStateFiniteExact 64 F)
+    (S Nd : List Nat) (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hA : ArenaReady s)
+    (hWT : WorldTypedWith s S Nd) (he : CodeDbPayloadStrong s S db) (hm : db ∈ S)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "ws_get_account_optional") values = some (body,callee,ret))
+    (hb : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v),post)) :
+    CodeDbPayloadStrong post S db := by
+  exact codeDbPayloadStrong_of_witness_effect he hWT hA
+    (ws_get_account_execution_effect s values body callee ret v post hc hA hl hb) hm
+
 end HeadStore
