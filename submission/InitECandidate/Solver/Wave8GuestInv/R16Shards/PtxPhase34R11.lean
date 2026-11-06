@@ -14834,4 +14834,57 @@ theorem acct_copy_allocated_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Updating a freshly copied account cannot write an older list header.
+The accumulated effect also allows intervening read-only arithmetic calls. -/
+theorem fresh_account_balance_store_effect {F : Type}
+    {s cur : PanSemStateFiniteExact 64 F}
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4) :
+    WorldEff s (evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb")))).2 [] [] ["heap_ptr"] := by
+  apply EvmEkFk.worldEff_store_multi he _ _ 4 (by decide)
+  · intro v hev
+    simp [evalHOLExact, hv] at hev
+    subst v
+    exact hflat
+  · intro x hx
+    simp [evalHOLExact, evalListHOLExact, ha, wordOpHOL, wordOp,
+      valueIsWord, valueWord] at hx
+    subst x
+    have hlim : heapLimit < 2 ^ 64 := by decide
+    have hheap : heapLimit ≤ heapEnd := by decide
+    have hx8 : (bw + 8#64).toNat = bw.toNat + 8 := by
+      apply BitVec.toNat_add_of_lt
+      change bw.toNat + 8 < 2 ^ 64
+      omega
+    rw [hx8]
+    exact ⟨by omega, Or.inr (Or.inr (Or.inr ⟨by omega, by omega⟩))⟩
+
+/-- The balance store in `create_ether` frames every old aligned allocation. -/
+theorem fresh_account_balance_store_frame {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} (b : Ivl)
+    (bw : BitVec 64) (value : ValueHOL 64)
+    (hA : ArenaOK s) (he : WorldEff s cur [] [] ["heap_ptr"])
+    (ha : cur.locals.lookup (ofString "a") = some (.val (.word bw)))
+    (hv : cur.locals.lookup (ofString "nb") = some value)
+    (hlo : globN s "heap_ptr" ≤ bw.toNat) (hhi : bw.toNat + 56 ≤ heapLimit)
+    (hflat : (flattenHOL value).length = 4)
+    (hb : Allocated s b) (hb1 : b.1 % 8 = 0) (hb2 : b.2 % 8 = 0)
+    (hr : evaluateHOLFiniteState cur
+      (.store (.op .add [.var .local (ofString "a"), .const 8])
+        (.var .local (ofString "nb"))) = (none, post)) :
+    Allocated post b ∧ IvlUnhit s post b := by
+  have hm := fresh_account_balance_store_effect bw value he ha hv hlo hhi hflat
+  rw [hr] at hm
+  exact worldEff_allocated_frame b hA hm hb hb1 hb2
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
