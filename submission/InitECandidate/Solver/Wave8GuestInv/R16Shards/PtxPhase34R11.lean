@@ -15409,4 +15409,29 @@ theorem worldStep_empty_tx_header_roots {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- The concrete pre-state lookup's initial table update preserves backing. -/
+theorem get_pre_state_account_optional_prefix_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (v : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hr : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_get_pre_state_account_optional) =
+      (some (.returned v), post)) :
+    ∃ mid, evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+       .var .local (ofString "addr"), .const 1]) = (none, mid) ∧
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW mid (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]),
+     .var .local (ofString "addr"), .const 1]) _) = _ at hr
+  obtain ⟨mid, hc, _, _, _⟩ := ignored_call_seq_returned hr
+  refine ⟨mid, hc, tx_header_words_of_fixed_frame hW hT ?_⟩
+  intro b hb hn
+  exact htab_set_recSlot_fixed_frame s mid S Nd b "ts" 8 _ _ hW.1.1 hT hb hn
+    (by decide) (fun hts hz => (hT.1.2.2.2.2.2.1 8 (by simp [tsTableSlots]) hts).resolve_left hz) hc
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
