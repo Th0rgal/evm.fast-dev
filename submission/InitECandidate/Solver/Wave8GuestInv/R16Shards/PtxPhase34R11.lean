@@ -16482,4 +16482,34 @@ theorem journal_guard_fallthrough {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private worldEff_call0_memcpy from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Copying the journal key into fresh heap space retains the narrow record effect. -/
+theorem journal_key_copy_effect {F : Type}
+    {s cur post : PanSemStateFiniteExact 64 F} {jrec : Ivl}
+    (p n : BitVec 64)
+    (heff : WorldEff s cur [jrec] [] ["heap_ptr"])
+    (hp : cur.locals.lookup (ofString "kc") = some (.val (.word p)))
+    (hn : cur.locals.lookup (ofString "klen") = some (.val (.word n)))
+    (hlo : globN s "heap_ptr" ≤ p.toNat)
+    (hhi : p.toNat + n.toNat ≤ heapLimit)
+    (hr : evaluateHOLFiniteState cur
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .local (ofString "kc"), .var .local (ofString "key"), .var .local (ofString "klen")]) =
+      (none, post)) : WorldEff s post [jrec] [] ["heap_ptr"] := by
+  have hm := worldEff_call0_memcpy heff
+    (.var .local (ofString "kc")) (.var .local (ofString "key")) (.var .local (ofString "klen"))
+    (by rw [hr]; simp) (by rw [hr]; exact Or.inl rfl)
+    (fun dw sw nw hd _ hn' _ => by
+      simp [evalHOLExact, hp] at hd
+      subst hd
+      simp [evalHOLExact, hn] at hn'
+      subst hn'
+      exact Or.inr (Or.inr (Or.inr ⟨hlo, hhi⟩)))
+  rw [hr] at hm
+  exact hm
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
