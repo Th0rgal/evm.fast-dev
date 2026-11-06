@@ -15808,4 +15808,48 @@ theorem op_log_header_tail_step_g09 {F : Type}
   exact op_log_header_stores_step_g09 log address topics nt cont hc hw hl hr
     hlog haddress htopics hntop hb hd0 hd8 hd16 hdj hcont hnt
 
+/-- Allocation-order bounds establish both internal and external ownership for a new log. -/
+theorem op_log_detached_ownership_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {log address topics data nt n : Nat}
+    {objects : List Ivl}
+    (h0 : memW s log = address)
+    (h8 : memW s (log + 8) = topics)
+    (h16 : memW s (log + 16) = nt)
+    (h24 : memW s (log + 24) = data)
+    (h32 : memW s (log + 32) = n)
+    (ht : topics + 32 * nt ≤ log)
+    (hl : log + 40 ≤ address)
+    (ha : address + 20 ≤ data)
+    (hdj : IvlsDisj [(log, 40), (address, 20), (topics, 32 * nt), (data, n)] objects) :
+    (logOwnedIvls s log).Pairwise Disj ∧
+      IvlsDisj (logOwnedIvls s log) objects := by
+  have hpair : ([(log, 40), (address, 20), (topics, 32 * nt), (data, n)] : List Ivl).Pairwise Disj := by
+    simp only [List.pairwise_cons, List.mem_cons, List.not_mem_nil, or_false,
+      List.Pairwise.nil, false_implies, implies_true, and_true]
+    constructor
+    · intro x hx
+      rcases hx with rfl | rfl | rfl
+      · exact Or.inr (Or.inr (Or.inl hl))
+      · exact Or.inr (Or.inr (Or.inr ht))
+      · exact Or.inr (Or.inr (Or.inl (by omega)))
+    · constructor
+      · intro x hx
+        rcases hx with rfl | rfl
+        · exact Or.inr (Or.inr (Or.inr (by omega)))
+        · exact Or.inr (Or.inr (Or.inl ha))
+      · intro x hx
+        have hx' : x = (data, n) := by simpa using hx
+        subst x
+        exact Or.inr (Or.inr (Or.inl (by omega)))
+  have heq : logRecordIvls s log = [(log, 40), (address, 20), (topics, 32 * nt), (data, n)] := by
+    simp only [logRecordIvls, h0, h8, h16, h24, h32]
+  constructor
+  · unfold logOwnedIvls
+    rw [heq]
+    exact hpair.filter _
+  · intro i hi j hj
+    have hi' := (List.mem_filter.1 hi).1
+    rw [heq] at hi'
+    exact hdj i hi' j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
