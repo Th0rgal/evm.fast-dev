@@ -12637,4 +12637,22 @@ theorem heap_step_world_ivls_g10 {F : Type}
   have hne : ofString r.1 ≠ ofString "heap_ptr" := by revert r hr; decide
   rw [hglob r.1 hne]
 
+theorem heap_step_evm_avoids_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (os : List Ivl)
+    (hav : EvmAvoids (fun _ => os) s) (hap : ArenaReady post)
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hm : post.memory = s.memory) (hbe : post.be = s.be)
+    (hg : GlobalsKept ["heap_ptr"] s post) : EvmAvoids (fun _ => os) post := by
+  obtain ⟨ha, S, hi, Nd, htr, hd⟩ := hav
+  have hw : WorldTypedWith s S Nd := ⟨hi.1.1, hi.1.2.1, hi.1.2.2.1, htr⟩
+  have hwp := heap_step_world_typed_g10 ha hap hw hh hm hbe hg
+  obtain ⟨hip, hch, _⟩ := evmInvAt_of_fresh_heap_step ha hi hap hbe hh hg
+    (by intro a hn; rw [hm])
+    (by intro b hb hn; unfold memB; rw [hm, hbe])
+  refine ⟨hap, S, hip, Nd, hwp.2.2.2, ?_⟩
+  have hfo : frameObjects post = frameObjects s := by
+    funext ec
+    exact heap_step_frame_objects_g10 hm hg ec
+  simpa only [heap_step_world_ivls_g10 ha hap hw hm hbe hg, hch, hfo] using hd
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
