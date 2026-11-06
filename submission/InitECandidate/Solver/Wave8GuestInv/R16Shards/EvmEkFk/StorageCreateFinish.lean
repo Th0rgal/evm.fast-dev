@@ -5234,6 +5234,22 @@ theorem decoderNodeStep_evm_and_witness {F : Type}
   exact ⟨evmStep_of_worldStepSc hB hgw hInv.1 hInv.2 hplain,
     witnessDbOK_of_worldStepSc hB hgw hInv.1 hdb hplain, hfull⟩
 
+theorem decoder_evm_witness_contract_so
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop} {fname : MlS}
+    (hdecode : FunSpec (fun s => ArenaReady s ∧ P s)
+      (fun s r post => Resumes r → ∀ Nd, NodeHeap s Nd →
+        ∃ Nd', DecoderNodeStep s post Nd Nd' ∧ RetRootIn s r post [] Nd') fname) :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s ∧ P s)
+      (fun s r post => Resumes r →
+        EvmStep ["heap_ptr", "scratch_ptr"] s post ∧ WitnessDbOK post ∧
+        R16WkAcctWs.WorldStepSc (R16WkAcctWs.bufRegions [])
+          ["heap_ptr", "scratch_ptr"] EvmBase.stdKeep RetRootIn s r post) fname := by
+  obtain ⟨params, body, rs, hlk, hdecode⟩ := hdecode
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hpre hex hnt hr
+  exact decoderNodeStep_evm_and_witness hpre.1 hpre.2.1
+    (hdecode s hc ⟨hpre.1.1, hpre.2.2⟩ hex hnt hr)
+
 theorem nodeStep_of_stepFrame {F : Type}
     {s post : PanSemStateFiniteExact 64 F} {Nd : List Nat}
     (ha : ArenaReady s) (hNd : NodeHeap s Nd)
@@ -9336,6 +9352,23 @@ theorem nodedb_lookup_ret_slice_so {F : Type}
         Nat.mod_eq_of_lt (show memW mid (ptr.toNat + 8) < 2 ^ 64 by omega)]
       have hheap : globN mid "heap_ptr" = globN s "heap_ptr" := by rw [hmid]; rfl
       exact ⟨⟨hvok.2.2.2.1, by simpa only [hheap] using hvok.2.2.2.2⟩, hvok.2.2.1⟩
+
+theorem evm_witness_of_readOnly_so {fname : MlS} (hro : ReadOnlyFn fname) :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post) fname := by
+  obtain ⟨params, body, rs, hlk, hro⟩ := hro
+  refine ⟨params, body, rs, hlk, ?_⟩
+  intro F s hc hpre hex hnt hr
+  have heq := hro s hc hpre.1.1.1 hex hnt hr
+  rw [heq]
+  exact ⟨evmStep_with_locals_clock (evmStep_refl_gw hpre.1) _ _,
+    witnessDbOK_with_locals_clock hpre.2 _ _⟩
+
+theorem nodedb_lookup_evm_witness_so :
+    FunSpec (fun s => EvmInv s ∧ WitnessDbOK s)
+      (fun s r post => Resumes r → EvmStep [] s post ∧ WitnessDbOK post)
+      (ofString "nodedb_lookup") :=
+  evm_witness_of_readOnly_so R11Adapters.ReadOnlyLeaves.ro_nodedb_lookup
 
 theorem witness_nodedb_lookup_ret_slice_so {F : Type}
     (s : PanSemStateFiniteExact 64 F) (db hash : BitVec 64) (rv : ValueHOL 64)

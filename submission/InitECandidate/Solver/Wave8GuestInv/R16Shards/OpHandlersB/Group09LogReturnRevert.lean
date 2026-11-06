@@ -13263,4 +13263,101 @@ theorem log_no_growth_final_effect_g09 {F : Type}
     ⟨(p.toNat + 8 * n.toNat, 8), by simp [Rl], by dsimp only; rw [hs]; omega⟩
   exact hlen.trans hstore
 
+/-- In-place append readback preserves the buffer pointer, capacity and every
+old slot, while incrementing length and installing the new record pointer. -/
+theorem log_no_growth_final_cells_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (l p n cap log : BitVec 64)
+    (hl : l.toNat + 24 ≤ 2 ^ 64)
+    (hp : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hn : n.toNat + 1 < 2 ^ 64)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post l.toNat = p.toNat ∧
+    memW post (l.toNat + 8) = n.toNat + 1 ∧
+    memW post (l.toNat + 16) = cap.toNat ∧
+    memW post (p.toNat + 8 * n.toNat) = log.toNat ∧
+    ∀ i, i < n.toNat → memW post (p.toNat + 8 * i) = memW s (p.toNat + 8 * i) := by
+  dsimp only
+  obtain ⟨h08, h016, h816, hs0, hs8, hs16, hold⟩ :=
+    log_growth_write_disjoint_g09 hl hp hdisj
+  have hl8 : (l + 8#64).toNat = l.toNat + 8 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hl16 : (l + 16#64).toNat = l.toNat + 16 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hn8 : (n * 8#64).toNat = n.toNat * 8 := by
+    rw [BitVec.toNat_mul]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt (by omega)
+  have hs : (p + n * 8#64).toNat = p.toNat + 8 * n.toNat := by
+    rw [BitVec.toNat_add, hn8, Nat.mod_eq_of_lt (by omega)]; omega
+  have hn1 : (n + 1#64).toNat = n.toNat + 1 := by
+    rw [BitVec.toNat_add]; simp only [BitVec.toNat_ofNat]
+    exact Nat.mod_eq_of_lt hn
+  refine ⟨?_, ?_, ?_, ?_, ?_⟩
+  · simpa [memW, Ne.symm hs0, h08] using hm0
+  · rw [← hl8]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW, Ne.symm hs8, hn1]
+  · rw [← hl16] at hm16 ⊢
+    simp only [memW, BitVec.ofNat_toNat] at hm16 ⊢
+    simpa [memW, Ne.symm hs16, Ne.symm h816] using hm16
+  · rw [← hs]
+    simp only [memW, BitVec.ofNat_toNat]
+    simp [memW]
+  · intro i hi
+    obtain ⟨hns, hn8', _, _⟩ := hold i hi
+    simp [memW, hns, hn8']
+
+/-- Concrete in-place readback and byte framing establish the semantic append
+contract, including preservation of all pre-existing log-owned intervals. -/
+theorem log_no_growth_semantic_post_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (ec : Ivl) (S : List Nat)
+    (l p n cap log : BitVec 64)
+    (hA : ArenaReady s) (hFW : FrameWF s S ec)
+    (hl : memW s (ec.1 + 88) = l.toNat)
+    (hn : memW s (l.toNat + 8) = n.toNat)
+    (hm0 : memW s l.toNat = p.toNat)
+    (hm16 : memW s (l.toNat + 16) = cap.toNat)
+    (hlt : n.toNat < cap.toNat) (hn_bound : n.toNat + 1 < 2 ^ 64)
+    (hl_bound : l.toNat + 24 ≤ 2 ^ 64)
+    (hp_bound : p.toNat + 8 * n.toNat + 8 ≤ 2 ^ 64)
+    (hdisj : Disj (p.toNat, 8 * n.toNat + 8) (l.toNat, 24))
+    (hd8 : s.memaddrs (l + 8#64)) (hdslot : s.memaddrs (p + n * 8#64))
+    (hrecords : ∀ x ∈ ([(l.toNat + 8, 8), (p.toNat + 8 * n.toNat, 8)] : List Ivl),
+      ∀ i, i < n.toNat → Disj x (memW s (p.toNat + 8 * i), 40)) :
+    let post := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    memW post (ec.1 + 88) = l.toNat →
+    WordsOK post (l.toNat, 24) → Allocated post (l.toNat, 24) →
+    (∀ i, i ≤ n.toNat → WordAt post (p.toNat + 8 * i)) →
+    LogEntryOK post log.toNat →
+    LogsListOK post (memW post (ec.1 + 88)) ∧
+      frameLogObjects post ec = frameLogObjects s ec ++ logOwnedIvls post log.toNat := by
+  dsimp only
+  intro hframe hwords hallocated hslots hlog
+  have heff := log_no_growth_final_effect_g09 s l p n log hA.1.memaddrs
+    hd8 hdslot hl_bound hp_bound
+  obtain ⟨h0, h8, h16, hstore, hprefix⟩ :=
+    log_no_growth_final_cells_g09 s l p n cap log hl_bound hp_bound hdisj hn_bound hm0 hm16
+  apply log_append_post_of_frame_effect_g09 hA hFW heff (le_refl _) rfl
+  · simpa only [hl, hn, hm0] using hrecords
+  · exact hframe.trans hl.symm
+  · simpa only [hl] using hwords
+  · simpa only [hl] using hallocated
+  · simpa only [hl, hn] using h8
+  · rw [hl, hn, h16]; omega
+  · intro i hi
+    rw [hl, hn] at hi
+    simp only [hl, h0, hm0]
+    exact ⟨hslots i (Nat.le_of_lt hi), hprefix i hi⟩
+  · simpa only [hl, hn, h0] using hslots n.toNat (le_refl _)
+  · simpa only [hl, hn, h0] using hstore
+  · exact hlog
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB

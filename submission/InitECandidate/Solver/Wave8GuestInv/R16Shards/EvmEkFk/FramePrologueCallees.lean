@@ -8090,6 +8090,27 @@ theorem system_heap_premise_iff_evmInv :
     obtain ⟨arena, S, invAt, _⟩ := avoids
     exact h s ((evmInv_iff_at s).2 ⟨arena, S, invAt⟩)
 
+theorem system_heap_excludes_scratch {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (hArena : ArenaOK s)
+    (hscratch : globN s "scratch_ptr" ≤ globN s "vm_system_address") :
+    ¬ Inside (globN s "vm_system_address", 20) sourceBase (globN s "heap_ptr") := by
+  intro hheap
+  have hhi := hArena.2.1
+  have hlo := hArena.2.2.1
+  have hsep := hArena.2.2.2.1
+  dsimp [Inside] at hheap
+  unfold heapLimit at hhi
+  omega
+
+theorem system_log_excludes_scratch {F : Type} {s : PanSemStateFiniteExact 64 F}
+    {log : Nat} (hArena : ArenaOK s) (hlog : LogEntryOK s log)
+    (haddr : memW s log = globN s "vm_system_address") :
+    ¬ globN s "scratch_ptr" ≤ globN s "vm_system_address" := by
+  intro hscratch
+  apply system_heap_excludes_scratch hArena hscratch
+  rw [← haddr]
+  exact hlog.2.2.2.2.1
+
 def PrecompileDispatchSpecs : Prop :=
   ∀ f ∈ (["pre_ecrecover", "pre_sha256", "pre_ripemd160", "pre_identity",
     "pre_alt_bn128_add", "pre_alt_bn128_mul", "pre_alt_bn128_pairing_check",
@@ -8097,6 +8118,23 @@ def PrecompileDispatchSpecs : Prop :=
     "pre_bls_g1_msm", "pre_bls_g2_add", "pre_bls_g2_msm", "pre_bls_pairing",
     "pre_bls_map_fp_to_g1", "pre_bls_map_fp2_to_g2", "pre_p256verify"] : List String),
     EvmProgStep frameStartGw (.call (some (none, none)) (ofString f) [])
+
+theorem precompile_head_update_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hGuest : GuestInv post)
+    (hglobals : post.globals = s.globals) (hbe : post.be = s.be)
+    (hmemory : ∀ x : BitVec 64,
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        x ≠ BitVec.ofNat 64 addr) → post.memory x = s.memory x)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192))
+    (hcells : ChainCellsAgree s post) : EvmStepCC frameStartGw s post := by
+  obtain ⟨inv, chain, _⟩ := R11Shards.evmInv_of_head_status_gas_update
+    hInv hGuest hglobals hbe hmemory hgas
+  refine ⟨⟨inv, ?_, ?_, chain⟩, hcells⟩
+  · simp [globN, hglobals]
+  · intro k _
+    rw [hglobals]
 
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
