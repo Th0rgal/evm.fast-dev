@@ -13807,4 +13807,42 @@ theorem log_no_growth_chain_object_separation_g09 {F : Type}
     · exact hnewWorld x hx y hy
   · exact holdWorld x (List.mem_append_right _ hx) y hy
 
+/-- For a head-only in-place append, new-object separation supplies the
+pairwise and world-separation premises of invariant reconstruction. -/
+theorem evmInvAt_of_log_no_growth_new_objects_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    {head : Ivl} {tail : List Ivl} {newObjects : List Ivl}
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hinv : EvmInvAt s S) (hWT : WorldTypedWith s S Nd)
+    (hglobals : post.globals = s.globals)
+    (hcell : SameTypedCells s post S Nd)
+    (hchain : evmChain post = evmChain s)
+    (hcons : evmChain s = head :: tail)
+    (hfields : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 → k % 8 = 0 →
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hcont : ∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 → k % 8 = 0 →
+      memW post (ec.2 + k) = memW s (ec.2 + k))
+    (hframes : ∀ ec ∈ evmChain s, FrameWF post S ec)
+    (hhead : frameObjects post head = frameObjects s head ++ newObjects)
+    (htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec)
+    (hlogs : ∀ ec ∈ tail, frameLogs post ec = frameLogs s ec)
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hnew : newObjects.Pairwise Disj)
+    (hnewOld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten newObjects)
+    (holdWorld : IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd))
+    (hnewWorld : IvlsDisj newObjects (worldOwned s S Nd)) :
+    EvmInvAt post S := by
+  obtain ⟨hpw, hdisj⟩ := log_no_growth_chain_object_separation_g09
+    hchain hcons hhead htail hold hnew hnewOld holdWorld hnewWorld
+  have hg : ∀ g, globN post g = globN s g := by
+    intro g
+    unfold globN
+    rw [hglobals]
+  apply evmInvAt_of_log_growth_cells_g09 hAs hAp hinv hWT
+    (by rw [hg "heap_ptr"])
+    (by rw [hg "scratch_ptr"])
+    (by intros; exact hg _) hcell hchain hfields hcont hframes hpw hdisj
+  · simpa only [hcons, List.tail_cons] using htail
+  · simpa only [hcons, List.tail_cons] using hlogs
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
