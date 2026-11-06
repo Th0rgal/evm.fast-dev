@@ -16652,4 +16652,27 @@ theorem journal_four_stores_effect {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_assign_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- The journal-counter increment preserves memory and locals before the tail. -/
+theorem journal_counter_tail_frame {F : Type}
+    {cur out : PanSemStateFiniteExact 64 F} (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.assign .global (ofString "journal_n")
+        (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail) =
+      (some (.returned rv), out)) :
+    ∃ mid, mid.memory = cur.memory ∧ mid.locals = cur.locals ∧
+      evaluateHOLFiniteState mid tail = (some (.returned rv), out) := by
+  obtain ⟨mid, hass, htail⟩ := seq_assign_ret_inv hr
+  refine ⟨mid, ?_, ?_, htail⟩ <;>
+    (rw [evaluateHOLFiniteState_assign] at hass
+     split at hass
+     · cases hass
+     · split at hass
+       · cases hass; rfl
+       · cases hass)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
