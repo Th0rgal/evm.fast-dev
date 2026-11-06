@@ -7698,4 +7698,44 @@ theorem htabValues_eq_of_sk_make {F : Type}
   rcases hs with hs | hs | hs | hs <;> try dsimp only at hs
   all_goals omega
 
+/-- A table-mutator frame preserves another allocated table's live values.
+The explicit alignment premises cover empty write regions as well. -/
+theorem htabValues_eq_of_mutator_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db t : Nat)
+    (hw : HtabWF s db)
+    (hal : ∀ i ∈ htabFootprint s db, Allocated s i)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hfr : FrameOutside s post (htabFootprint s t)
+      (globN s "heap_ptr", globN post "heap_ptr" - globN s "heap_ptr"))
+    (hkal : ∀ j ∈ htabFootprint s t, j.1 % 8 = 0 ∧ j.2 % 8 = 0)
+    (hfal : (globN s "heap_ptr") % 8 = 0 ∧
+      (globN post "heap_ptr" - globN s "heap_ptr") % 8 = 0)
+    (hd : ∀ i ∈ htabFootprint s db, ∀ j ∈ htabFootprint s t, Disj i j) :
+    htabValues post db = htabValues s db := by
+  apply InitECandidate.Solver.Wave8GuestInv.R10Shards.GbodyProcessMsg.htabValues_eq_of_unhit hw
+  intro i hi
+  right
+  exact ivlUnhit_of_frameOutside ⟨(hw.1 i hi).2.1, (hw.1 i hi).2.2.1⟩
+    hfr hkal hfal (hd i hi) (disj_fresh_of_allocated hAs.2 hAp.2 hhp (hal i hi))
+
+/-- The table-exit contract and old-world allocation discharge the frame's
+alignment and fresh-heap premises without additional entry assumptions. -/
+theorem htabValues_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hw : HtabWF s db) (ht : HtabWF s (locN s "t"))
+    (hal : ∀ i ∈ htabFootprint s db, Allocated s i)
+    (hAs : ArenaReady s) (hx : HtabExit s post)
+    (hd : ∀ i ∈ htabFootprint s db,
+      ∀ j ∈ htabFootprint s (locN s "t"), Disj i j) :
+    htabValues post db = htabValues s db := by
+  obtain ⟨hAp, _, _, _, hhp, _, hfr, _⟩ := hx
+  apply htabValues_eq_of_mutator_frame db (locN s "t") hw hal hAs hAp hhp hfr
+  · intro j hj
+    exact ⟨(ht.1 j hj).2.1, (ht.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hAp.2.2.2.2.2.2.1
+    exact ⟨hs, by omega⟩
+  · exact hd
+
 end HeadStore
