@@ -7608,6 +7608,150 @@ private theorem csrW_hcallee_rlp_encode_bytes {F : Type} {s cur : PanSemStateFin
       hbe.byte_frame)
     (fun iv hiv _ => Or.inl ⟨iv, hiv, le_rfl, le_rfl⟩)
 
+/-- Relational-to-frame adapter: a resuming `mpt_set`/`mpt_root` call whose post-state satisfies
+`MptObjStep` yields a `WorldEff` step for the walk, given the evaluation-side metadata facts
+(`be`/`eshapes`, from `evaluateInvariantsHOLFinite`), the write-domain fact (`out_dom`, part of the
+strengthened callee contract), and the walk-side world coverage (`hwiden`: every world/scratch
+interval the callee may touch is covered by a same-start, at-least-as-long interval of `Rl`;
+`halign`: those intervals are word-aligned). Alignment makes every aligned cell hitting a kept
+interval lie inside it, which upgrades the cell frame to the byte frame. -/
+private theorem csrW_worldEff_of_mptObjStep {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    {R : ∀ {F : Type}, PanSemStateFiniteExact 64 F → List Ivl}
+    {gw : List String} {keep : List (String × List Nat)}
+    {Rl : List Ivl} {S Nd Nm : List Nat}
+    (hG : GuestInv s) (hA : ArenaOK s)
+    (hhp : globN s "heap_ptr" < heapLimit)
+    (hstep : MptObjStep R gw keep s post)
+    (hW : WorldTypedWith s S Nd)
+    (hm : MptObjInWith s S Nm (locN s "m"))
+    (hd : IvlsDisj (mptObjIvls s Nm (locN s "m")) (nodeExtents s Nd))
+    (hR : IvlsDisj (R s) (worldTypedIvls s S Nd ++ mptObjIvls s Nm (locN s "m")))
+    (hRN : IvlsDisj (R s) (nodeExtents s Nd))
+    (hesh : post.eshapes = s.eshapes)
+    (hbe : post.be = s.be)
+    (hout : ∀ a : BitVec 64, post.memory a ≠ s.memory a → s.memaddrs a)
+    (hno_gb : ∀ gs ∈ globalBuffers, ofString gs.1 ∉ gw.map ofString)
+    (hgw_map : gw.map ofString = ["heap_ptr", "scratch_ptr"].map ofString)
+    (hsp : globN s "frame_mem_ptr" < globN s "scratch_ptr")
+    (hsp_le : globN post "scratch_ptr" ≤ globN s "scratch_ptr")
+    (halign : ∀ i ∈ worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s,
+      i.1 % 8 = 0 ∧ i.2 % 8 = 0)
+    (hwiden : ∀ i ∈ worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s,
+      ∃ j ∈ Rl, 0 < j.2 ∧ j.1 = i.1 ∧ i.2 ≤ j.2) :
+    R16Shards.WorldEff s post Rl [] ["heap_ptr", "scratch_ptr"] := by
+  have hmem_fmp : ofString "frame_mem_ptr" ∉ gw.map ofString := by
+    rw [hgw_map]; decide
+  obtain ⟨S', Nd', Nm', _, _, _, _, _, hfr⟩ :=
+    mptObjStep_parts_csr hstep hW hm hd hR hRN
+  refine ⟨hstep.1, hstep.1.1.code, hstep.1.1.memaddrs.trans hG.memaddrs.symm, hbe, hesh,
+    hstep.2.1, R10Shards.P26_P28.globN_eq_of_lookup (hstep.2.2.1 _ hmem_fmp),
+    hsp_le,
+    ?_, freshBufsOK_of_no_globalBuf_writes hstep.2.2.1 hno_gb, hout, ?_, ?_⟩
+  · intro k hk
+    exact hstep.2.2.1 k (by rw [hgw_map]; exact hk)
+  · -- cell frame
+    intro a hne
+    have hhit : (∃ i ∈ worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s,
+        CellHits a.toNat i) ∨ CellHits a.toNat (freeGap s) ∨ CellHits a.toNat (heapFree s) := by
+      by_contra hall
+      push Not at hall
+      refine hne (hfr a (fun i hi => ?_) hall.2.2)
+      rcases List.mem_append.mp hi with h | h
+      · exact hall.1 i h
+      · rcases List.mem_singleton.mp h with rfl
+        exact hall.2.1
+    rcases hhit with ⟨i, hi, hci⟩ | hfg | hhf
+    · obtain ⟨j, hj, hjp, hj1, hj2⟩ := hwiden i hi
+      refine Or.inl ⟨j, hj, hjp, ?_⟩
+      rcases hci with ⟨h1, h2⟩
+      constructor
+      · rw [hj1]; exact h1
+      · rw [hj1]; omega
+    · exact Or.inr (Or.inr (Or.inl ⟨by dsimp only [freeGap]; omega, hfg⟩))
+    · refine Or.inr (Or.inr (Or.inr ⟨?_, hhf⟩))
+      dsimp only [heapFree]
+      omega
+  · -- byte frame
+    intro b hb64 hbb
+    have hmod8 : ∀ x y : Nat, x % 8 = 0 → y % 8 = 0 → y < x + 8 → y ≤ x := by
+      intro x y h1 h2 h3
+      omega
+    have hc8 : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat % 8 = 0 := by
+      rw [panByteAlign_toNat64]; omega
+    have hcf : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat = b / 8 * 8 := by
+      rw [panByteAlign_toNat64, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hb64]
+    have hc_lb : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat ≤ b := by omega
+    have hb_lt : b < (panByteAlignHOL (BitVec.ofNat 64 b)).toNat + 8 := by omega
+    have hcell_ne : post.memory (panByteAlignHOL (BitVec.ofNat 64 b)) ≠
+        s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) := by
+      intro h0
+      refine hbb ?_
+      unfold memB
+      change (match post.memory (panByteAlignHOL (BitVec.ofNat 64 b)) with
+          | .word v => (panGetByteHOL (BitVec.ofNat 64 b) v post.be).toNat) =
+          (match s.memory (panByteAlignHOL (BitVec.ofNat 64 b)) with
+          | .word v => (panGetByteHOL (BitVec.ofNat 64 b) v s.be).toNat)
+      rw [h0, hbe]
+    have hhit : (∃ i ∈ worldOwned s S Nd ++ mptObjIvls s Nm (locN s "m") ++ R s,
+        CellHits (panByteAlignHOL (BitVec.ofNat 64 b)).toNat i) ∨
+        CellHits (panByteAlignHOL (BitVec.ofNat 64 b)).toNat (freeGap s) ∨
+        CellHits (panByteAlignHOL (BitVec.ofNat 64 b)).toNat (heapFree s) := by
+      by_contra hall
+      push Not at hall
+      rw [hcf] at hall
+      refine hcell_ne (hfr (panByteAlignHOL (BitVec.ofNat 64 b)) (fun i hi => by
+        rw [hcf]
+        rcases List.mem_append.mp hi with h | h
+        · exact hall.1 i h
+        · rcases List.mem_singleton.mp h with rfl
+          exact hall.2.1) (by rw [hcf]; exact hall.2.2))
+    clear hcf hcell_ne
+    rcases hhit with ⟨i, hi, hci⟩ | hfg | hhf
+    · obtain ⟨hal1, hal2⟩ := halign i hi
+      obtain ⟨j, hj, hjp, hj1, hj2⟩ := hwiden i hi
+      rcases hci with ⟨h1, h2⟩
+      have hsub1 : i.1 ≤ (panByteAlignHOL (BitVec.ofNat 64 b)).toNat :=
+        hmod8 _ _ hc8 hal1 h1
+      have hsub2 : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat + 8 ≤ i.1 + i.2 :=
+        hmod8 _ _ (by omega) (by omega) (by omega)
+      refine Or.inl ⟨j, hj, ?_⟩
+      unfold InIvl
+      rw [hj1]
+      refine ⟨?_, ?_⟩
+      · omega
+      · omega
+    · rcases hfg with ⟨h1, h2⟩
+      have hfmp_le : globN s "frame_mem_ptr" ≤
+          (panByteAlignHOL (BitVec.ofNat 64 b)).toNat := hmod8 _ _ hc8 hA.2.2.2.2.2.2.1 h1
+      have hsp_ge : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat + 8 ≤
+          globN s "scratch_ptr" := by
+        have hsp8 : globN s "scratch_ptr" % 8 = 0 := hA.2.2.2.2.2.2.2.1
+        have hfmp_le2 : globN s "frame_mem_ptr" ≤ globN s "scratch_ptr" := hA.2.2.2.1
+        have h2' : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat <
+            globN s "frame_mem_ptr" + (globN s "scratch_ptr" - globN s "frame_mem_ptr") := h2
+        have hc_lt : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat <
+            globN s "scratch_ptr" := by omega
+        exact hmod8 _ _ (by omega) (by omega) (by omega)
+      refine Or.inr (Or.inr (Or.inl ?_))
+      unfold InIvl
+      dsimp only [freeGap]
+      constructor <;> omega
+    · rcases hhf with ⟨h1, h2⟩
+      have hhp_le : globN s "heap_ptr" ≤
+          (panByteAlignHOL (BitVec.ofNat 64 b)).toNat := hmod8 _ _ hc8 hA.2.2.2.2.2.1 h1
+      have hhl_ge : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat + 8 ≤ heapLimit := by
+        have hlim : heapLimit % 8 = 0 := by decide
+        have hhp2 : globN s "heap_ptr" ≤ heapLimit := hA.2.1
+        have h2' : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat <
+            globN s "heap_ptr" + (heapLimit - globN s "heap_ptr") := h2
+        have hc_lt : (panByteAlignHOL (BitVec.ofNat 64 b)).toNat < heapLimit := by omega
+        exact hmod8 _ _ hlim (by omega) (by omega)
+      refine Or.inr (Or.inr (Or.inr ?_))
+      unfold InIvl
+      dsimp only [heapFree]
+      constructor <;> omega
+
 end WkWalk
 
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12
