@@ -16691,4 +16691,33 @@ theorem op_log_growth_invariant_g09 {F : Type}
     (fun ec hec k hk _ => hcont ec hec k hk) hframes hpairwise hold hbuffer hnew hlogs
     (fun ec hec => (ht ec hec).1) (fun ec hec => (ht ec hec).2)
 
+/-- Derive whole-chain growth disjointness from old ownership and fresh-region separation. -/
+theorem op_log_growth_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {head : Ivl} {tail : List Ivl} {log : Nat}
+    (hcons : evmChain s = head :: tail) (hchain : evmChain post = evmChain s)
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (head.1 + k) = memW s (head.1 + k))
+    (hret : frameRet post head = frameRet s head)
+    (hlogs : frameLogObjects post head = frameLogObjects s head ++ logOwnedIvls post log)
+    (htail : ∀ ec ∈ tail, frameObjects post ec = frameObjects s ec)
+    (hold : ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj)
+    (hbuffer : ∀ ec ∈ evmChain s, ∀ o ∈ frameObjects s ec, Disj (frameLogs post head) o)
+    (hnew : (logOwnedIvls post log).Pairwise Disj)
+    (hnewOld : ∀ x ∈ logOwnedIvls post log, ∀ ec ∈ evmChain s,
+      ∀ o ∈ frameObjects s ec, Disj x o)
+    (hnewBuffer : ∀ x ∈ logOwnedIvls post log, Disj x (frameLogs post head)) :
+    ((evmChain post).map (frameObjects post)).flatten.Pairwise Disj := by
+  have hhead : head ∈ evmChain s := by rw [hcons]; exact List.mem_cons_self
+  have hpw : (frameObjects s head).Pairwise Disj := by
+    rw [hcons, List.map_cons, List.flatten_cons, List.pairwise_append] at hold
+    exact hold.1
+  have hp := log_growth_frame_objects_pairwise_g09 hfields hret hlogs hpw
+    (hbuffer head hhead) hnew (fun x hx => hnewOld x hx head hhead) hnewBuffer
+  apply log_growth_chain_objects_pairwise_g09 hcons hchain hold hp htail
+  intro o ho
+  rcases log_growth_frame_object_cases_g09 hfields hret hlogs o ho with ho | rfl | ho
+  · exact Or.inl ho
+  · exact Or.inr (fun ec hec => hbuffer ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
+  · exact Or.inr (fun ec hec => hnewOld o ho ec (by rw [hcons]; exact List.mem_cons_of_mem _ hec))
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
