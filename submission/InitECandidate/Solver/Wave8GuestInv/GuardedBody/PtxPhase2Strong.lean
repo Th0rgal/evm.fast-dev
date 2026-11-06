@@ -16936,4 +16936,21 @@ theorem phase2_message_final_warm_bound (h : PtxCallees)
   obtain ⟨hi, ht'⟩ := phase2_message_initialized_tables_iff_suffix.mpr hp
   exact ht s hc (phase2_message_initialized_ready hi ht')
 
+/-- The final six Phase-2 instructions warm the private address table before
+installing the two private-table pointers in the message. -/
+theorem phase2_final_source_eq (tail : ProgHOL 64) :
+    spinePlug 6 (spineAt 92 ptxCode) tail =
+      .seq .skip
+        (.seq (.store (.op .add [.var .local (ofString "m"), .const 136]) (.const 1))
+          (.seq (.call (some (none, none)) (ofString "htab_set")
+            [.var .local (ofString "aa"),
+             .load .one (.op .add [.var .local (ofString "m"), .const 32]), .const 1])
+            (.seq .skip
+              (.seq (.store (.op .add [.var .local (ofString "m"), .const 152])
+                (.var .local (ofString "aa")))
+                (.seq (.store (.op .add [.var .local (ofString "m"), .const 160])
+                  (.var .local (ofString "ak"))) tail))))) := by
+  simp only [ptxCode, sourceFunctionEntry, Guest.Software.guestFn_process_transaction]
+  rfl
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
