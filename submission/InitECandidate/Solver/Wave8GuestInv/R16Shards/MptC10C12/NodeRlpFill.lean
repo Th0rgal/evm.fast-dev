@@ -7185,7 +7185,9 @@ private theorem eval__node_rlp_begin_returned {F : Type}
         unfold memW; rw [hpost_m.1, hmem_st3 _ (by omega) (by omega)]; exact hw32_st2
       have hw40 : memW postSt (frw.toNat + 40) = payw.toNat := hw40_st3
       exact ⟨hw8.trans hfr8_eq, hw16, hw24, hw32, hw40⟩
-    refine ⟨rfl, heff_post, hN_post.1, hN_post.2, hKS_post, hnd_memW_eq, ?_⟩
+    have heff_s1_post : HeapByteEff s1 postSt [(frw.toNat + 24, 24)] ["heap_ptr"] := by
+      dsimp [postSt, emptyLocalsHOLFinite]
+      exact (((heff_st1.trans heff_st2).trans heff_st3).locals_clock _ _).locals_clock _ _
     obtain ⟨hw8_p, hw16_p, hw24_p, hw32_p, hw40_p⟩ := hw_fr_post
     have hsp_eq : globN postSt "scratch_ptr" = globN s "scratch_ptr" := by
       unfold globN; rw [← heff_post.globals (ofString "scratch_ptr") (by decide)]
@@ -7201,9 +7203,6 @@ private theorem eval__node_rlp_begin_returned {F : Type}
       intro _ hcl1 hcb_in
       obtain ⟨hcb_lo, hcb_hi⟩ := hcb_in
       dsimp only at hcb_lo hcb_hi
-      have heff_s1_post : HeapByteEff s1 postSt [(frw.toNat + 24, 24)] ["heap_ptr"] := by
-        dsimp [postSt, emptyLocalsHOLFinite]
-        exact (((heff_st1.trans heff_st2).trans heff_st3).locals_clock _ _).locals_clock _ _
       apply memB_eq_of_heapByteEff_disj hs1_AR heff_s1_post
       · exact Or.inl ⟨by omega, by omega⟩
       · have := hs1_AR.2.2.1.trans hhl_he; omega
@@ -7214,6 +7213,7 @@ private theorem eval__node_rlp_begin_returned {F : Type}
         have h2 := hAR.2.2.2.1.trans hAR.2.2.2.2.1
         obtain ⟨hfr_lo, _⟩ := hfr_in; dsimp only at hfr_lo
         exact Or.inr (Or.inr (Or.inr (by omega)))
+    refine ⟨rfl, heff_post, hN_post.1, hN_post.2, hKS_post, hnd_memW_eq, ?_⟩
     refine ⟨hfr_W.1, by rw [hsp_eq]; exact hfr_in, hfr_W_post,
       by rw [hw8_p]; exact hnode_in,
       by rw [hw8_p, hk_post_eq]; exact hk1,
@@ -8296,6 +8296,35 @@ private theorem finishWriteLen_fits_alloc {F : Type}
       finishWriteLen s fr (memW s (fr + 8)) ≤ heapLimit := by
   rw [finishWriteLen_eq_payload s Nd fr hfr hleaf]
   exact halloc.trans hq
+
+private theorem nodeExtents_allocated {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (hN : NodeHeap s Nd) :
+    ∀ o ∈ nodeExtents s Nd, o.2 ≠ 0 → Allocated s o := by
+  intro o ho hpos
+  obtain ⟨n, hn, ho⟩ := List.mem_flatMap.mp ho
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at ho
+  rcases ho with rfl | rfl
+  · exact (hN.1 n hn).2.1
+  · unfold nodePath at hpos ⊢
+    by_cases hk : (memW s n = 1 ∨ memW s n = 2) ∧ memW s (n + 40) ≠ 0
+    · rw [if_pos hk]
+      rcases (hN.1 n hn).2.2.2.2.2.2.1 hk.1 with hz | hp
+      · exact False.elim (hk.2 hz)
+      · exact hp.2.1
+    · rw [if_neg hk] at hpos
+      exact False.elim (hpos rfl)
+
+private theorem nodeExtents_disj_heapLimit_word {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (Nd : List Nat)
+    (hA : ArenaOK s) (hN : NodeHeap s Nd)
+    (hsp : heapLimit < globN s "scratch_ptr") :
+    ∀ o ∈ nodeExtents s Nd, Disj (heapLimit, 8) o := by
+  intro o ho
+  by_cases hz : o.2 = 0
+  · exact Or.inr (Or.inl hz)
+  · exact allocated_disj_heapLimit_word s o hA hsp
+      (nodeExtents_allocated s Nd hN o ho hz)
 
 end NodeRlpFillProof
 
