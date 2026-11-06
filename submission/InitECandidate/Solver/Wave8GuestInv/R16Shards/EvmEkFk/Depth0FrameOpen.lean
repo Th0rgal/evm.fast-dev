@@ -8465,4 +8465,18 @@ theorem witness_return_after_access_execution_preload {F : Type}
     hc values v hl hb hshape
     (ws_code_load_after_access_exit t callee hAs hW ht hloc hws hx _ hload) hhash
 
+/-- Concrete access lookup installs both the expected body and table local. -/
+theorem access_lookup_body_and_table
+    (tw : BitVec 64) (key value : ValueHOL 64)
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (hl : lookupCodeHOLFinite originalRuntimeCode.lookup (ofString "htab_set")
+      [.val (.word tw), key, value] = some (body, callee, ret)) :
+    body = sourceFnBody Guest.Software.guestFn_htab_set ∧
+    callee.lookup (ofString "t") = some (.val (.word tw)) := by
+  exact lookupCodeHOLFinite_param_at originalRuntimeCode.lookup (ofString "htab_set") []
+    (ofString "t") .one [(ofString "key", .one), (ofString "value", .one)]
+    (sourceFnBody Guest.Software.guestFn_htab_set) .one
+    (by intro p hp; simp at hp; rcases hp with rfl | rfl <;> decide)
+    lookup_htab_set (vpre := []) (by simp) hl
+
 end HeadStore
