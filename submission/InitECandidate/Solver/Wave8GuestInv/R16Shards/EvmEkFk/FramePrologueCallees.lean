@@ -11098,6 +11098,34 @@ theorem precompile_sha256_call_evmStep {F : Type}
     (precompile_byteEff_to_region (precompile_sha256_call_effect s pad stp out len ptr count dest hc
       hav.1.1 hp hs hlength hout hbound hpad hob hnt hr))
 
+theorem precompile_sha256_buffers_avoid {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad stp : BitVec 64)
+    (hi : EvmInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hs : s.globals.lookup (ofString "sha_st") = some (.val (.word stp)))
+    (hpad : pad.toNat ≠ 0) (hst : stp.toNat ≠ 0) :
+    Wave8Contracts.M23.EvmAvoids (fun {_} _ => [(pad.toNat,128),(stp.toNat,64)]) s := by
+  have hav := evmAvoids_frameStart_of_evmInv s hi
+  obtain ⟨ha,S,hin,Nd,htr,hdj⟩ := hav
+  refine ⟨ha,S,hin,Nd,htr,?_⟩
+  intro i him j hjm
+  apply hdj i ?_ j hjm
+  change i ∈ [bufferRegion s ("b2_v",128),bufferRegion s ("bn_expw",352),
+    bufferRegion s ("bn_gamma",384),bufferRegion s ("keccak_pad",136),
+    bufferRegion s ("keccak_st",200),bufferRegion s ("mpt_nib_scratch",64),
+    bufferRegion s ("pre_hdr_buf",96),bufferRegion s ("rmd_h",40),
+    bufferRegion s ("rmd_pad",128),bufferRegion s ("rmd_x",128),
+    bufferRegion s ("sha_pad",128),bufferRegion s ("sha_st",64),
+    bufferRegion s ("sk_buf",52),bufferRegion s ("u256_ws",640)]
+  have hp' : bufferRegion s ("sha_pad",128) = (pad.toNat,128) := by
+    simp [bufferRegion,globN,hp,hpad]
+  have hs' : bufferRegion s ("sha_st",64) = (stp.toNat,64) := by
+    simp [bufferRegion,globN,hs,hst]
+  simp only [List.mem_cons,List.not_mem_nil,or_false] at him
+  rcases him with rfl|rfl
+  · rw [←hp']; simp
+  · rw [←hs']; simp
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
