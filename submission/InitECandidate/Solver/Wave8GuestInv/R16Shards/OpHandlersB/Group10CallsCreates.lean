@@ -11273,4 +11273,64 @@ theorem epsA_record_pre_state_read_g10 :
       (sourceFnBody Guest.Software.guestFn_record_pre_state_read) (by decide) s hc
     exact False.elim (hnc (ofString "EvmErr") ev (by decide) hev)
 
+theorem ts8_call_roots_nonzero_g10 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (keyExp : ExpHOL 64)
+    (hcall : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), keyExp, .const 1]) = (none, post)) :
+    globN s "ts" ≠ 0 ∧ memW s (globN s "ts" + 8) ≠ 0 := by
+  obtain ⟨values, body, callee, rs, v, cp, hargs, hl, hr, _⟩ := call0_returned_inv_g10 hcall
+  have hts : globN s "ts" ≠ 0 := by
+    have ha := hargs
+    rw [evalListHOLFinite_eq_toExact] at ha
+    unfold evalListHOLExact at ha
+    rcases hv : @evalHOLExact 64 F _ s.toExact (fun x => Classical.propDecidable (s.memaddrs x))
+        (.load .one (.op .add [.var .global (ofString "ts"), .const 8])) with _ | value
+    · rw [hv] at ha; simp at ha
+    · exact global_offset_load_success_nonzero_g10 s hi.1.1 "ts" 8 (by decide) value hv
+  obtain ⟨w, hg, _⟩ := global_word_of_pos s "ts" (Nat.pos_of_ne_zero hts)
+  exact ⟨hts, loaded_global_return_nonzero_g10 s hc "ts" 8 w hg keyExp
+    (localsFree_evmInv s callee (s.clock - 1) hi).1.1 hargs hl v (congrArg Prod.fst hr)⟩
+
+theorem ts8_call_preserves_g10 {F : Type} {s post : PanSemStateFiniteExact 64 F}
+    (hc : s.code = originalRuntimeCode) (hi : EvmInv s) (hw : Group10.HeadMemChainWF s)
+    (keyExp : ExpHOL 64)
+    (hcall : evaluateHOLFiniteState s (.call (some (none, none)) (ofString "htab_set")
+      [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), keyExp, .const 1]) = (none, post)) :
+    EvmInv post ∧ Group10.HeadMemChainWF post ∧ evmChain post = evmChain s ∧
+      evmR post = evmR s ∧ GlobalsKept ["heap_ptr"] s post := by
+  obtain ⟨hts, ht⟩ := ts8_call_roots_nonzero_g10 hc hi keyExp hcall
+  obtain ⟨values, body, callee, rs, v, cp, hargs, hl, hr, rfl⟩ := call0_returned_inv_g10 hcall
+  obtain ⟨params, body0, rs0, hl0, hs⟩ := epsA_htab_set_ts8_g10
+  have hbody : body = body0 := lookupCodeHOLFinite_installed_body s.code.lookup
+    (ofString "htab_set") params body0 body rs0 rs values callee (by rwa [hc]) hl
+  subst body
+  have hrs : rs = rs0 := by
+    have hx := PanSemStateFiniteExact.lookupCodeHOLFinite_eq_some s.code.lookup
+      (ofString "htab_set") values body0 callee rs hl
+    rw [hc] at hx
+    simp only [Flapjack.lookupCodeHOLExact, hl0] at hx
+    split at hx
+    · exact (congrArg (fun x => x.2.2) (Option.some.inj hx)).symm
+    · cases hx
+  subst rs
+  obtain ⟨w, hg, _⟩ := global_word_of_pos s "ts" (Nat.pos_of_ne_zero hts)
+  have heq := htab_set_loaded_global_callee_g10 s hc "ts" 8 w hg keyExp hargs hl
+  have hp : let ce := callEntryStateHOLFinite s callee
+      globN ce "ts" ≠ 0 ∧ locN ce "t" = memW ce (globN ce "ts" + 8) ∧ locN ce "t" ≠ 0 :=
+    ⟨hts, heq, by rw [heq]; exact ht⟩
+  have hs' := hs (callEntryStateHOLFinite s callee) hc
+    (localsFree_evmInv s callee (s.clock - 1) hi)
+    (Group10.headMemChainWF_locals s callee (s.clock - 1) hw) hp
+    ⟨values, by rwa [← hc]⟩
+  dsimp only at hs'
+  rw [hr] at hs'
+  obtain ⟨⟨hic, hwc⟩, hch, _, hglobals, hR⟩ := (hs' (by simp)).1 v rfl
+  refine ⟨localsFree_evmInv cp s.locals cp.clock hic,
+    Group10.headMemChainWF_locals cp s.locals cp.clock hwc, ?_, ?_, hglobals⟩
+  · have h1 : evmChain {cp with locals := s.locals} = evmChain cp := evmChain_congr rfl rfl
+    have h2 : evmChain (callEntryStateHOLFinite s callee) = evmChain s := evmChain_congr rfl rfl
+    exact h1.trans (hch.trans h2)
+  · exact (evm_congr (s := cp) (t := {cp with locals := s.locals}) rfl rfl).2.1.trans
+      (hR.trans (evm_congr (s := s) (t := callEntryStateHOLFinite s callee) rfl rfl).2.1)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
