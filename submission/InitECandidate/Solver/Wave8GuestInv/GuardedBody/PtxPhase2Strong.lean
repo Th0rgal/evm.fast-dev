@@ -15683,4 +15683,79 @@ theorem phase2_ws_get_account_optional_resume_message_tables
   exact phase2_message_tables_with_locals _ _ _ hb
     (by simp [HolFiniteMapExact.update, FUPDATE, hne])
 
+/-- Fresh account construction preserves the private message tables. -/
+theorem phase2_acct_new_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (ha : ArenaReady s) {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    {wn wc : BitVec 64} {vb : ValueHOL 64}
+    (hb : shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact vb) = true)
+    (hn : s.locals.lookup (ofString "nonce") = some (.val (.word wn)))
+    (hbal : s.locals.lookup (ofString "balance") = some vb)
+    (hcode : s.locals.lookup (ofString "code_hash") = some (.val (.word wc)))
+    (hnt : (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState s (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1) :
+    let post := (evaluateHOLFiniteState s
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).2
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have he := R16Shards.EvmEkFk.worldEff_acct_new s s (Rl := []) (B := []) (gw := ["heap_ptr"])
+    (by decide) (WorldEff.refl s [] [] ["heap_ptr"] ha hc)
+    hb hn hbal hcode hnt hr
+  exact phase2_worldEff_message_tables ha ht (he.locals_clock s.locals _) (by simp) (by decide) hin rfl
+
+/-- The constructor's effect is relative to the caller, so its private tables survive entry. -/
+theorem phase2_acct_new_callEntry_message_tables {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hc : s.code = originalRuntimeCode) (ha : ArenaReady s)
+    {aa ak : Nat} (ht : PtxMessageTables s aa ak)
+    (hin : Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+    {wn wc : BitVec 64} {vb : ValueHOL 64}
+    (hb : shapeEqHOL (.comb [.one, .one, .one, .one]) (shapeOfHOLExact vb) = true)
+    (hn : callee.lookup (ofString "nonce") = some (.val (.word wn)))
+    (hbal : callee.lookup (ofString "balance") = some vb)
+    (hcode : callee.lookup (ofString "code_hash") = some (.val (.word wc)))
+    (hnt : (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1 ≠ some .timeOut)
+    (hr : Resumes (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).1) :
+    let post := (evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+      (GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_acct_new)).2
+    PtxMessageTables {post with locals := s.locals} aa ak := by
+  have he := R16Shards.EvmEkFk.worldEff_acct_new s (callEntryStateHOLFinite s callee)
+    (Rl := []) (B := []) (gw := ["heap_ptr"]) (by decide)
+    ((WorldEff.refl s [] [] ["heap_ptr"] ha hc).locals_clock callee (s.clock - 1))
+    hb hn hbal hcode hnt hr
+  exact phase2_worldEff_message_tables ha ht (he.locals_clock s.locals _) (by simp) (by decide) hin rfl
+
+/-- Restore private tables after a returning account constructor. -/
+theorem phase2_acct_new_resume_message_tables
+    (aa ak : Nat) (name : MlS) (hne : name ≠ ofString "m") (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables s aa ak ∧
+      Inside (locN s "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => PtxMessageTables s aa ak) name (ofString "acct_new") args := by
+  intro F s vs body callee ret v post hc hp ha hl hr
+  have hx := lookupCodeHOLFinite_eq_some s.code.lookup (ofString "acct_new") vs body callee ret hl
+  rw [hc] at hx
+  simp only [lookupCodeHOLExact, R16Shards.EvmEkFk.lookup_acct_new] at hx
+  rcases vs with _ | ⟨vn, _ | ⟨vb, _ | ⟨vc, _ | rest⟩⟩⟩ <;> try simp at hx
+  rcases vn with ⟨⟨wn⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    rcases vc with ⟨⟨wc⟩⟩ | fs | ⟨nm, fs⟩ <;>
+    try simp [shapeOfHOLExact, shapeEqHOL] at hx
+  simp [show ofString "nonce" ≠ ofString "balance" by decide,
+    show ofString "nonce" ≠ ofString "code_hash" by decide,
+    show ofString "balance" ≠ ofString "code_hash" by decide] at hx
+  obtain ⟨hsh, rfl, hL, rfl⟩ := hx
+  have hn : callee.lookup (ofString "nonce") = some (.val (.word wn)) := by
+    rw [← hL]; simp [show ofString "nonce" ≠ ofString "balance" by decide,
+      show ofString "nonce" ≠ ofString "code_hash" by decide]
+  have hb : callee.lookup (ofString "balance") = some vb := by
+    rw [← hL]; simp [show ofString "balance" ≠ ofString "code_hash" by decide]
+  have hw : callee.lookup (ofString "code_hash") = some (.val (.word wc)) := by
+    rw [← hL]; simp
+  have ht := phase2_acct_new_callEntry_message_tables s callee hc hp.1 hp.2.1 hp.2.2
+    hsh hn hb hw (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  rw [hr] at ht
+  exact phase2_message_tables_with_locals _ _ _ ht
+    (by simp [HolFiniteMapExact.update, FUPDATE, hne])
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
