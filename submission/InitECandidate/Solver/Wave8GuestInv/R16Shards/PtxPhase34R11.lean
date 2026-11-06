@@ -14770,4 +14770,26 @@ theorem phase4BackingPrefix_of_credit (h : PtxCallees)
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Keeping the two nested list backing words suffices for the credit calls. -/
+theorem hoare_create_ether_backing_of_header_words
+    (hdata : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F) vs body callee ret v post,
+      s.code = originalRuntimeCode → TxAfterCallBackingStrong s →
+      lookupCodeHOLFinite s.code.lookup (ofString "create_ether") vs = some (body, callee, ret) →
+      evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+        (some (.returned v), post) →
+      ∀ k ∈ ([40, 72] : List Nat),
+        memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)))
+    (args : List (ExpHOL 64)) :
+    Hoare TxAfterCallBackingStrong
+      (.call (some (none, none)) (ofString "create_ether") args)
+      (fun r t => r = none → TxAfterCallBackingStrong t) := by
+  apply R13Shards.Hoare.call0_resume
+  intro F s vs body callee ret v post hc hp _ hl hr
+  exact create_ether_backing_resume_of_header_words s vs body callee ret v post hc hl hr hp
+    (hdata s vs body callee ret v post hc hp hl hr)
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards

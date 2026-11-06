@@ -8914,4 +8914,29 @@ theorem merge_set_worldStepSc {F : Type}
       dsimp at h1 h2 ⊢
       omega
 
+/-- The evaluator-level outer insertion inherits the complete world step. -/
+theorem merge_set_call_worldStepSc {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (et ek ev : ExpHOL 64)
+    (tw kw iw : BitVec 64)
+    (ht : evalAt s et = some (.val (.word tw)))
+    (hk : evalAt s ek = some (.val (.word kw)))
+    (hi : evalAt s ev = some (.val (.word iw)))
+    (hW : WorldOK s) (hbs : globN s "bs" ≠ 0) (ht0 : tw.toNat ≠ 0)
+    (htbs : tw.toNat = memW s (globN s "bs" + 32))
+    (howned : ∀ S Nd, WorldTypedWith s S Nd → tw.toNat ∈ S ∧ iw.toNat ∈ S)
+    (hkey : hdr s iw.toNat 0 = roleKeyLen "bs.inner")
+    (hf : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ iw.toNat)
+    (hfr : FlowingOrResumes (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])).1) :
+    let out := evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set") [et, ek, ev])
+    WorldStepSc (bufRegions []) ["heap_ptr"] stdKeep NoExtra s out.1 out.2 := by
+  obtain ⟨S, hw⟩ := hW.2
+  obtain ⟨Nd, hw⟩ := (WkBal.worldTyped_iff_with s S).1 hw
+  have htab := (hw.1.2.1 tw.toNat (howned S Nd hw).1).1
+  obtain ⟨he, hv, hbe, _, _⟩ := merge_set_call_flow_props s et ek ev tw kw iw
+    ht hk hi hW.1 htab
+      (fun i him => ((hw.1.2.1 tw.toNat (howned S Nd hw).1).2 i him).1) hfr
+  exact merge_set_worldStepSc hW he hbe hbs ht0 htbs howned hkey hf hv
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
