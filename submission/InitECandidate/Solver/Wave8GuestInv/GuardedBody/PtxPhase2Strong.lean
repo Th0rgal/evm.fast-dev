@@ -17278,4 +17278,89 @@ theorem phase2_htab_set_aa_message_words (aa ak : Nat) (key value : ExpHOL 64)
   rw [hmt]
   exact hp.2.2.2.2.2 k hk
 
+/-- Private insertion transports a saved buffer sharing the table's world witness. -/
+theorem phase2_htabExit_private_live_buffer {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hs : ArenaReady s) (hw : WorldTypedWith s S Nd)
+    (ht : locN s "t" ∈ S)
+    (hlocal : ∀ a ∈ worldRoleSlots s ++ journalRoleSlots s, a.1 ≠ locN s "t")
+    (hx : HtabExit s post) (hbe : post.be = s.be)
+    (buffer : Ivl) (contents : Nat → BitVec 64)
+    (hb : PtxLiveBufferAt s S Nd buffer contents) :
+    WorldTypedWith post S Nd ∧ PtxLiveBufferAt post S Nd buffer contents := by
+  have hf := R16Shards.MptC10C12.worldTypedWith_htab_set_local_csr hs hw ht hlocal hx hbe
+  refine ⟨hf.1, phase2_live_buffer_step s post S Nd S Nd buffer contents [] hb hs.2 hw
+    hx.2.2.2.2.1 hf.2.2.2.2.2.1 ?_ (by simp) (by simp)⟩
+  intro a ha hfree
+  apply hx.2.2.2.2.2.2.1 a ?_ ?_
+  · intro j hj
+    apply ha j
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    exact List.mem_flatMap.mpr ⟨locN s "t", ht, hj⟩
+  · intro hin
+    apply hfree
+    exact ⟨hin.1, by
+      have hg := hx.2.2.2.2.1
+      have hb := hx.1.2.2.1
+      change a.toNat < globN s "heap_ptr" + (heapLimit - globN s "heap_ptr")
+      have hi := hin.2
+      dsimp at hi
+      omega⟩
+
+/-- The message gas bound survives the concrete private-address warming call. -/
+theorem phase2_htab_set_aa_gas {ι : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => PtxMessageStoreReady buffers contents s ∧
+      PtxMessageTables s aa ak ∧ locN s "aa" = aa ∧
+      memW s (locN s "m" + 40) < 2 ^ 63)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.var .local (ofString "aa"), key, value])
+      (fun r s => r = none → memW s (locN s "m" + 40) < 2 ^ 63) := by
+  refine ⟨fun s hc hp hn hr => ?_⟩
+  have hf := (phase2_htab_set_aa_message_words aa ak key value
+    (fun k => memW s (locN s "m" + 8 * k))).run s hc
+      ⟨hp.1.1.1, hp.2.1, hp.1.2.2.2.1, hp.1.2.2.2.2.1.1,
+        hp.2.2.1, fun _ _ => rfl⟩ hn hr 5 (by decide)
+  change memW _ (locN _ "m" + 40) = memW s (locN s "m" + 40) at hf
+  rw [hf]
+  exact hp.2.2.2
+
+/-- Joint buffer witnesses suffice to retain message-store readiness during warming. -/
+theorem phase2_htabExit_aa_store_ready {ι F : Type}
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    {s post : PanSemStateFiniteExact 64 F} {aa ak : Nat}
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hm : PtxMessageTables s aa ak)
+    (hbuf : ∀ i, ∃ S Nd, WorldTypedWith s S Nd ∧ aa ∈ S ∧
+      PtxLiveBufferAt s S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd))
+    (hl : post.locals = s.locals) (he : TxEnv post) (hbe : post.be = s.be)
+    (ht : locN s "t" = aa) (hx : HtabExit s post) :
+    PtxMessageStoreReady buffers contents post := by
+  have hml : locN post "m" = locN s "m" := by simp only [locN, hl]
+  have htab := phase2_htabExit_aa_message_tables hp.1.1 hm hp.2.2.2.1 hml hbe ht hx
+  obtain ⟨S, Nd, hw, _⟩ := htab
+  refine ⟨⟨hx.1, S, (worldTyped_iff_with post S).mpr ⟨Nd, hw⟩⟩,
+    he, ?_, ?_, ?_, ?_⟩
+  · simpa only [hl] using hp.2.2.1
+  · rw [hml]
+    exact ⟨hp.2.2.2.1.1, hp.2.2.2.1.2.trans hx.2.2.2.2.1⟩
+  · rw [hml]
+    exact wordsOK_transfer hp.1.1.1 hx.1.1 hp.2.2.2.2.1
+  · intro i
+    obtain ⟨S', Nd', hw', ha, hb, hd⟩ := hbuf i
+    have hlocal := hm.choose_spec.choose_spec.2.2.2.2.2.1
+    have hf := R16Shards.MptC10C12.worldTypedWith_htab_set_local_csr hp.1.1 hw'
+      (ht.symm ▸ ha) (ht.symm ▸ hlocal) hx hbe
+    have hb' := phase2_htabExit_private_live_buffer hp.1.1 hw'
+      (ht.symm ▸ ha) (ht.symm ▸ hlocal) hx hbe (buffers i) (contents i) hb
+    rw [hml]
+    exact ⟨(hp.2.2.2.2.2 i).1, S', Nd', hf.1, hb'.2,
+      phase2_packed_owned_growth s post _ _ (locN s "m", 176)
+        hp.2.2.2.1 hf.2.2.2.2.2.1 hd⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
