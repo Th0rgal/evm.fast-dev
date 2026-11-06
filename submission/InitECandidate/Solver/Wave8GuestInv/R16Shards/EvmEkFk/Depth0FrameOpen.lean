@@ -7560,4 +7560,110 @@ theorem nodeDbEntriesStrong_of_htab_exit {F : Type}
   obtain ⟨hb, hb64, hd⟩ := hrec p hp
   exact htab_frame_preserves_code_record (locN s "t") p hb hb64 hpos hd hfr
 
+/-- The concrete key-builder preserves database payload typing for separated
+records, using its actual two-cell frame rather than a whole-memory premise. -/
+theorem nodeDbEntriesStrong_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (he : NodeDbEntriesStrong s db) (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db)
+    (hrec : ∀ p ∈ htabValues s db, p + 16 ≤ 2 ^ 64 ∧
+      Disj (p, 16) (globN s "sk_buf", 52)) :
+    NodeDbEntriesStrong post db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hhp : globN s "heap_ptr" = globN post "heap_ptr" := by
+    unfold globN
+    rw [heff.globals]
+  apply nodeDbEntriesStrong_of_preserved_payloads he hAs hAp (Nat.le_of_eq hhp) hvalues
+  intro p hp
+  obtain ⟨hp64, hd⟩ := hrec p hp
+  exact sk_make_preserves_code_record s hc hma hfit p hp64 hd v post hb
+
+/-! ## Explicit code-payload strengthening
+
+Cutover bridge: replace `WorldTyped s S` by `WorldTypedCodeStrong s S` in the
+world conjunct shared by `WorldOK` and `EvmInvAt` in `ContractParts/C00.lean`.
+The additional conjunct describes record contents and separation, not execution
+or the desired postcondition. Existing world consumers use its first projection.
+-/
+
+/-- Code payload records occupy protected old heap; their code bytes are
+bounded by `NodeDbEntriesStrong`. Table values themselves remain unrestricted. -/
+def CodeDbPayloadStrong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (db : Nat) : Prop :=
+  NodeDbEntriesStrong s db ∧ ∀ p ∈ htabValues s db,
+    Inside (p, 16) sourceBase (globN s "heap_ptr") ∧ p + 16 ≤ 2 ^ 64 ∧
+    (∀ t ∈ S, ∀ i ∈ htabFootprint s t, Disj (p, 16) i) ∧
+    ∀ i ∈ fixedObjects s, Disj (p, 16) i
+
+/-- Only the three code databases gain payload typing: the witness database
+at `ws+16` and the block/transaction code caches at `bs+48` and `ts+48`. -/
+def WorldTypedCodeStrong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) : Prop :=
+  WorldTyped s S ∧
+  ∀ g k, (g, k) ∈ ([("ws", 16), ("bs", 48), ("ts", 48)] : List (String × Nat)) →
+    globN s g ≠ 0 → CodeDbPayloadStrong s S (memW s (globN s g + k))
+
+def WorldOKCodeStrong {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ArenaReady s ∧ ∃ S, WorldTypedCodeStrong s S
+
+theorem worldOK_of_codeStrong {F : Type} {s : PanSemStateFiniteExact 64 F}
+    (h : WorldOKCodeStrong s) : WorldOK s := by
+  obtain ⟨hA, S, hW, _⟩ := h
+  exact ⟨hA, S, hW⟩
+
+/-- The strengthened entry invariant supplies all payload-side premises of
+the mutating-table transport lemma. -/
+theorem codeDbPayloadStrong_entries_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db) (hAs : ArenaReady s)
+    (hx : HtabExit s post) (ht : locN s "t" ∈ S)
+    (hw : HtabWF s (locN s "t"))
+    (hv : htabValues post db = htabValues s db) : NodeDbEntriesStrong post db := by
+  apply nodeDbEntriesStrong_of_htab_exit db h.1 hAs hx hv
+  · intro p hp
+    obtain ⟨hin, hp64, hd, _⟩ := h.2 p hp
+    exact ⟨hin.2, hp64, hd _ ht⟩
+  · exact htabFootprint_pos s _ hw.2.2.1 hw.2.2.2.2.1
+
+/-- Fixed-object separation in the strong invariant discharges the key
+builder's payload-separation premise, including its shorter 52-byte write. -/
+theorem codeDbPayloadStrong_entries_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db) : NodeDbEntriesStrong post db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, hnz, _⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  apply nodeDbEntriesStrong_of_sk_make db hc hma hfit v hb h.1 hAs hAp hvalues
+  intro p hp
+  obtain ⟨_, hp64, _, hd⟩ := h.2 p hp
+  refine ⟨hp64, ?_⟩
+  have hmem : (globN s "sk_buf", 64) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.mpr
+    exact ⟨("sk_buf", 64), by decide, by simp [hnz]⟩
+  have hsep := hd _ hmem
+  rcases hsep with h | h | h | h
+  · exact (by omega)
+  · exact (by omega)
+  · exact Or.inr (Or.inr (Or.inl h))
+  · exact Or.inr (Or.inr (Or.inr (by omega)))
+
 end HeadStore

@@ -15198,4 +15198,73 @@ theorem htab_set_recSlot_fixed_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+
+/-- Recording a pre-state read preserves the fixed headers used by credit. -/
+theorem record_pre_state_read_body_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (b : Ivl) (v : ValueHOL 64)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hr : evaluateHOLFiniteState s (InitECandidate.Solver.GuestTrapAndLookup.sourceFnBody Guest.Software.guestFn_record_pre_state_read) =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  change evaluateHOLFiniteState s (.seq (.call (some (none, none)) (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "bs"), .const 72]),
+     .var .local (ofString "addr"), .const 1]) (.return (.const 0))) = _ at hr
+  obtain ⟨mid, hc, _, _, ht⟩ := ignored_call_seq_returned hr
+  have hu := htab_set_recSlot_fixed_frame s mid S Nd b "bs" 72 _ _ hA hT hb hbpos
+    (by decide) (fun hn hz => (hT.1.2.2.2.2.1 72 (by simp [bsTableSlots]) hn).resolve_left hz) hc
+  rw [evaluateHOLFiniteState_return] at ht
+  simp only [evalHOLExact] at ht
+  split at ht
+  · have hp := (Prod.mk.inj ht).2
+    subst post
+    exact hu
+  · cases ht
+
+end PtxP34
+
+namespace PtxP34
+open InitECandidate.Solver.GuestTrapAndLookup
+
+/-- Lift the concrete pre-state read frame to its installed callee interface. -/
+theorem record_pre_state_read_fixed_frame {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (ret : ShapeHOL) (v : ValueHOL 64) (S Nd : List Nat) (b : Ivl)
+    (hA : ArenaReady s) (hT : WorldTypedWith s S Nd)
+    (hb : b ∈ fixedObjects s) (hbpos : b.2 ≠ 0)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "record_pre_state_read") vs =
+      some (body, callee, ret))
+    (hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body =
+      (some (.returned v), post)) : IvlUnhit s post b := by
+  have hbdy := lookupCodeHOLFinite_installed_body originalRuntimeCode.lookup
+    (ofString "record_pre_state_read") _ _ body _ ret vs callee
+    R16WkAcctWs.lookup_record_pre_state_read (by rwa [← hA.1.code])
+  subst body
+  change evaluateHOLFiniteState (callEntryStateHOLFinite s callee)
+    (sourceFnBody Guest.Software.guestFn_record_pre_state_read) = (some (.returned v), post) at hr
+  exact record_pre_state_read_body_fixed_frame (callEntryStateHOLFinite s callee) post S Nd b v
+    ((arenaReady_with_locals s callee (s.clock - 1)).2 hA)
+    ((R13Shards.worldTypedWith_with_locals s callee (s.clock - 1) S Nd).2 hT) hb hbpos hr
+
+end PtxP34
+
+namespace PtxP34
+
+/-- Convert a fixed-object frame into the two backing-word equalities. -/
+theorem tx_header_words_of_fixed_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hframe : ∀ b ∈ fixedObjects s, b.2 ≠ 0 → IvlUnhit s post b) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  intro k hk
+  have hb := txWorld_header_fixed hW k hk
+  have hf := (hT.2.2.1.1 _ hb).resolve_left (by simp)
+  apply memW_eq_of_ivlUnhit (hframe _ hb (by simp)) hf.2.1
+    (ivl_allocated_bound hW.1.1.2 hf.1).2
+  exact ⟨le_rfl, by dsimp; omega⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
