@@ -18151,4 +18151,38 @@ theorem phase2_message_keccak_separation {ι F : Type} [Nonempty ι]
     obtain ⟨_, S, Nd, _, hb, _⟩ := hp.2.2.2.2.2 j
     exact phase2_owned_disjoint_global_buffer s S Nd _ hb.2.1 name size hn
 
+/-- All contract-address writes are separated from the message and saved buffers. -/
+theorem phase2_creation_write_separation {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s : PanSemStateFiniteExact 64 F) (hp : PtxMessageStoreReady buffers contents s)
+    (hm : Disj (locN s "m", 176) (locN s "ct", 20))
+    (hb : ∀ i, Disj (buffers i) (locN s "ct", 20)) :
+    ∀ region ∈ [(locN s "ct", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+      Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region := by
+  intro region hr
+  simp only [List.mem_cons, List.not_mem_nil, or_false] at hr
+  rcases hr with rfl | rfl | rfl
+  · exact ⟨hm, hb⟩
+  · exact phase2_message_keccak_separation buffers contents s hp "keccak_pad" 136 (by decide)
+  · exact phase2_message_keccak_separation buffers contents s hp "keccak_st" 200 (by decide)
+
+/-- The concrete address allocation establishes the full saved-data write separation. -/
+theorem phase2_ct_alloc_ready_write_separated (h : PtxCallees) {ι : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat)
+    (hs : ∀ n ∈ names, ofString "ct" ≠ ofString n) :
+    DecCallResumeOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (fun s => PtxMessageTableStoreReady buffers contents ("ct" :: names) aa ak s ∧
+        ∀ region ∈ [(locN s "ct", 20),
+          (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+          (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+          Disj (locN s "m", 176) region ∧ ∀ i, Disj (buffers i) region)
+      (ofString "ct") (ofString "alloc") [.const 24] := by
+  intro F s vs body callee ret v post hc hp he hl hr
+  obtain ⟨ht, hm, hb⟩ := phase2_ct_alloc_ready_separated h buffers contents names aa ak hs
+    s vs body callee ret v post hc hp he hl hr
+  exact ⟨ht, phase2_creation_write_separation buffers contents _ ht.1.1 hm hb⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
