@@ -10129,6 +10129,74 @@ theorem precompile_sha256_marker_tail_effect {F : Type}
       (by rw [hgm]; exact hp) (by rw [hgm]; exact hs) (by rw [hlm]; exact ho)
       (lt_of_le_of_lt hpad (by decide : heapEnd < 2^64)) hob hntm hrm
 
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_copy_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad rem : BitVec 64)
+    (src : ExpHOL 64) (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hr : s.locals.lookup (ofString "rem") = some (.val (.word rem)))
+    (hb : rem.toNat < 64)
+    (hin : ∀ i ∈ [(pad.toNat,128)], 0 < i.2 →
+      ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals → m.locals = s.locals →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    let p := ProgHOL.seq
+      (.call (some (none, none)) (ofString "memcpy")
+        [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")]) body
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2 Rl := by
+  dsimp only
+  intro hnt hres
+  refine precompile_byteEff_seq_resumes s _ _ _ hnt hres ?_ ?_
+  · intro hnta hra
+    exact (precompile_sha256_padding_copy_effect s pad rem src hc hi hp hr hb hnta hra).mono hin
+  · intro m hm hntm hrm
+    have he := precompile_sha256_padding_copy_effect s pad rem src hc hi hp hr hb
+      (by rw [hm]; simp) (Or.inl (by rw [hm]))
+    have hl := precompile_call0_locals_on_flow s (ofString "memcpy")
+      [.var .global (ofString "sha_pad"), src, .var .local (ofString "rem")] (by rw [hm])
+    rw [hm] at he hl
+    exact hbody m (he.code.trans hc)
+      (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals hl hntm hrm
+
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_zero_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (pad : BitVec 64)
+    (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hp : s.globals.lookup (ofString "sha_pad") = some (.val (.word pad)))
+    (hin : ∀ i ∈ [(pad.toNat,128)], 0 < i.2 →
+      ∃ j ∈ Rl, j.1 ≤ i.1 ∧ i.1 + i.2 ≤ j.1 + j.2)
+    (hbody : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m →
+      m.globals = s.globals → m.locals = s.locals →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    let p := ProgHOL.seq
+      (.call (some (none, none)) (ofString "memzero")
+        [.var .global (ofString "sha_pad"), .const 128]) body
+    (evaluateHOLFiniteState s p).1 ≠ some .timeOut →
+    ((evaluateHOLFiniteState s p).1 = none ∨ Resumes (evaluateHOLFiniteState s p).1) →
+    ByteEff s (evaluateHOLFiniteState s p).2 Rl := by
+  dsimp only
+  intro hnt hres
+  refine precompile_byteEff_seq_resumes s _ _ _ hnt hres ?_ ?_
+  · intro hnta hra
+    exact (precompile_sha256_padding_zero_effect s pad hc hi hp hnta hra).mono hin
+  · intro m hm hntm hrm
+    have he := precompile_sha256_padding_zero_effect s pad hc hi hp
+      (by rw [hm]; simp) (Or.inl (by rw [hm]))
+    have hl := precompile_call0_locals_on_flow s (ofString "memzero")
+      [.var .global (ofString "sha_pad"), .const 128] (by rw [hm])
+    rw [hm] at he hl
+    exact hbody m (he.code.trans hc)
+      (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals hl hntm hrm
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
