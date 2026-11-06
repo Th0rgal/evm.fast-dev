@@ -185,45 +185,54 @@ private partial def solveLeftSpineChunks (currNs : Name) (functionS chunkFn fstS
   return (accInProg, curData, accOutProg, accProof)
 
 open Lean Meta Elab Command in
-private partial def solveCseTree (currNs : Name) (functionS chunkFn fstS seqFn skipExpr bv64 prodMk : Expr)
-    (e : Expr) (inData : Expr) : Sym.Simp.SimpM (Expr × Expr × Expr) := do
-  if countCseLeaves e <= 500 then
-    let (outData, outProg) ← evalCseSimp functionS fstS seqFn bv64 e inData
-    let lhs := mkApp2 functionS inData e
-    let rhs := mkApp2 prodMk outData outProg
-    let thm ← liftMetaM <| mkFreshUserName (currNs ++ `cseLeaf)
-    let rflPrf ← liftMetaM <| mkEqRefl rhs
-    liftMetaM <| addDecl (.thmDecl {
-      name := thm, levelParams := [],
-      type := ← liftMetaM <| mkEq lhs rhs, value := rflPrf })
-    return (outData, outProg, mkConst thm)
-  else if e.isAppOfArity ``WordLangProgHOL.seq 3 then
+private partial def solveCseExact
+    (currNs : Name)
+    (function functionS fstS seqFn bv64 prodMk : Expr)
+    (e : Expr) (inData : Expr) (forceSeal : Bool) :
+    Sym.Simp.SimpM (Expr × Expr × Expr × Nat) := do
+  if e.isAppOfArity ``WordLangProgHOL.seq 3 then
     let args := e.getAppArgs
-    let left := args[1]!
-    let right := args[2]!
-    if countCseLeaves right > 500 then
-      let (midData, outLeft, prfLeft) ← solveCseTree currNs functionS chunkFn fstS seqFn skipExpr bv64 prodMk left inData
-      let (outData, outRight, prfRight) ← solveCseTree currNs functionS chunkFn fstS seqFn skipExpr bv64 prodMk right midData
-      let outProg := mkApp3 seqFn bv64 outLeft outRight
-      let stepThm ← liftMetaM <| mkFreshUserName (currNs ++ `cseSplit)
-      let lhs := mkApp2 functionS inData e
+    let s1 := args[1]!
+    let s2 := args[2]!
+    let (midData, out1, prf1, cnt1) ←
+      solveCseExact currNs function functionS fstS seqFn bv64 prodMk s1 inData false
+    let (outData, out2, prf2, cnt2) ←
+      solveCseExact currNs function functionS fstS seqFn bv64 prodMk s2 midData false
+    let outProg := mkApp3 seqFn bv64 out1 out2
+    let prf := mkAppN (mkConst ``cse_seq_split_pair)
+      #[s1, s2, out1, out2, inData, midData, outData, prf1, prf2]
+    let totalCnt := cnt1 + cnt2
+    if forceSeal || totalCnt >= 200 then
+      let stepThm ← liftMetaM <| mkFreshUserName (currNs ++ `cseStep)
+      let lhs := mkApp2 function inData e
       let rhs := mkApp2 prodMk outData outProg
-      let val := mkAppN (mkConst ``cse_seq_split_pair)
-        #[left, right, outLeft, outRight, inData, midData, outData, prfLeft, prfRight]
       liftMetaM <| addDecl (.thmDecl {
         name := stepThm, levelParams := [],
-        type := ← liftMetaM <| mkEq lhs rhs, value := val })
-      return (outData, outProg, mkConst stepThm)
+        type := ← liftMetaM <| mkEq lhs rhs, value := prf })
+      return (outData, outProg, mkConst stepThm, 0)
     else
-      let items := collectLeftSpine e #[]
-      let (_, outData, outProg, prf) ←
-        solveLeftSpineChunks currNs functionS chunkFn fstS seqFn skipExpr bv64 prodMk items inData
-      return (outData, outProg, prf)
+      return (outData, outProg, prf, totalCnt)
   else
-    let (outData, outProg) ← evalCseSimp functionS fstS seqFn bv64 e inData
-    let rhs := mkApp2 prodMk outData outProg
-    let prf ← liftMetaM <| mkEqRefl rhs
-    return (outData, outProg, prf)
+    let eU ← liftMetaM <| Sym.unfoldReducible e
+    let eS ← Sym.shareCommon eU
+    let tJ ← Sym.Internal.mkAppS₂ functionS inData eS
+    let rJ ← Sym.Simp.simp tJ
+    let outJ := rJ.getResultExpr tJ
+    let pOut := outJ.getAppArgs[3]!
+    let fstApp ← Sym.Internal.mkAppS fstS outJ
+    let resFst ← Sym.Simp.simp fstApp
+    let nextData := resFst.getResultExpr fstApp
+    let rhs := mkApp2 prodMk nextData pOut
+    let rflPrf ← liftMetaM <| mkEqRefl rhs
+    if forceSeal then
+      let stepThm ← liftMetaM <| mkFreshUserName (currNs ++ `cseLeaf)
+      let lhs := mkApp2 function inData e
+      liftMetaM <| addDecl (.thmDecl {
+        name := stepThm, levelParams := [],
+        type := ← liftMetaM <| mkEq lhs rhs, value := rflPrf })
+      return (nextData, pOut, mkConst stepThm, 0)
+    else
+      return (nextData, pOut, rflPrf, 1)
 
 open Lean Meta Elab Command in
 elab "wave8_certified_cse " id:ident " := " value:term : command => do
@@ -231,18 +240,19 @@ elab "wave8_certified_cse " id:ident " := " value:term : command => do
     let expression ← Term.elabTerm value none
     Term.synthesizeSyntheticMVarsNoPostponing
     let expression ← instantiateMVars expression
-    let cleaned ← cleanCseProg expression
+    let cleaned ← if expression.isConst then
+      pure (← getConstInfo expression.constName!).value!
+    else
+      cleanCseProg expression
     let data := mkConst ``WordCse.emptyData
     let width := mkNatLit 64
     let inst ← synthInstance (← mkAppM ``NeZero #[width])
     let function := mkApp2 (mkConst ``WordCse.wordCse) width inst
-    let chunkFn := mkApp2 (mkConst ``wordCseChunk) width inst
     let knowledge := mkConst ``WordCse.Knowledge
-    let progType ← inferType cleaned
+    let bv64 := mkApp (mkConst ``BitVec) width
+    let progType := mkApp (mkConst ``WordLangProgHOL [Level.zero]) bv64
     let fst := mkApp2 (mkConst ``Prod.fst [Level.zero, Level.zero]) knowledge progType
     let seqFn := mkConst ``WordLangProgHOL.seq [Level.zero]
-    let bv64 := mkApp (mkConst ``BitVec) width
-    let skipExpr := mkApp (mkConst ``WordLangProgHOL.skip [Level.zero]) bv64
     let prodMk := mkApp2 (mkConst ``Prod.mk [Level.zero, Level.zero]) knowledge progType
 
     let mut simprocs ← Lean.Meta.Tactic.Cbv.getCbvSimprocs
@@ -261,12 +271,12 @@ elab "wave8_certified_cse " id:ident " := " value:term : command => do
     let fstU ← Sym.unfoldReducible fst
     let currNs ← getCurrNamespace
 
-    let (finalData, finalOutProg, finalProof) ← liftMetaM <| (Sym.withoutShareCommonChecks do
+    let (finalData, finalOutProg, finalProof, _) ← liftMetaM <| (Sym.withoutShareCommonChecks do
       let dataS ← Sym.shareCommon dataU
       let functionS ← Sym.shareCommon functionU
       let fstS ← Sym.shareCommon fstU
-      let simpAct : Sym.Simp.SimpM (Expr × Expr × Expr) :=
-        solveCseTree currNs functionS chunkFn fstS seqFn skipExpr bv64 prodMk cleaned dataS
+      let simpAct : Sym.Simp.SimpM (Expr × Expr × Expr × Nat) :=
+        solveCseExact currNs functionU functionS fstS seqFn bv64 prodMk cleaned dataS true
       simpAct.run' methods config).run
 
     let name := currNs ++ id.getId
