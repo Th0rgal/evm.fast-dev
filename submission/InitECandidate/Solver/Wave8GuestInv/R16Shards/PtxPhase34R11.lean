@@ -18192,4 +18192,46 @@ theorem journal_address_suffix_table_local {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open private seq_store_ret_inv seq_assign_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Identify the cut state and retained locals at one concrete journal suffix entry. -/
+theorem journal_store_suffix_cut_entry {F : Type}
+    (cur out cut : PanSemStateFiniteExact 64 F)
+    (d0 e0 d1 e1 d2 e2 d3 e3 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out))
+    (hc : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) (.return (.const 0#64))))))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ entry, entry.locals = cur.locals ∧ cut = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), out) := by
+  obtain ⟨m1, h1, hr1⟩ := seq_store_ret_inv hr
+  obtain ⟨m2, h2, hr2⟩ := seq_store_ret_inv hr1
+  obtain ⟨m3, h3, hr3⟩ := seq_store_ret_inv hr2
+  obtain ⟨m4, h4, hr4⟩ := seq_store_ret_inv hr3
+  obtain ⟨entry, ha, ht⟩ := seq_assign_ret_inv hr4
+  simp only [evaluateHOLFiniteState_seq_line780, h1, h2, h3, h4, ha] at hc
+  have he : evaluateHOLFiniteState entry (.return (.const 0#64)) =
+      (some (.returned (.val (.word 0#64))), entry.emptyLocalsHOLFinite) := by
+    simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact]
+  have hl0 : entry.locals = m4.locals := by
+    rw [evaluateHOLFiniteState_assign] at ha
+    split at ha
+    · simp at ha
+    · split at ha
+      · have hh := (Prod.mk.inj ha).2
+        rw [← hh]
+        rfl
+      · simp at ha
+  exact ⟨entry, hl0.trans ((store_fall_locals h4).trans ((store_fall_locals h3).trans
+    ((store_fall_locals h2).trans (store_fall_locals h1)))), (Prod.mk.inj (hc.symm.trans he)).2, ht⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
