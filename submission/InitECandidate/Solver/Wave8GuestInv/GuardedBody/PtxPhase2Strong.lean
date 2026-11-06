@@ -17781,4 +17781,42 @@ theorem phase2_get_account_message_table_bound (h : PtxCallees)
   · exact phase2_get_account_message_table_ready h buffers contents names aa ak name args hm hi ha hk hn hshape
   · exact ht
 
+/-- Transaction-table warming retains readiness before the final pointer stores. -/
+theorem phase2_htab_set_ts8_message_table_ready
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none → PtxMessageTableStoreReady buffers contents names aa ak s) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have hs := (phase2_htab_set_ts8_message_scalar_backing_tables buffers contents names aa ak key value).run
+    s hc ⟨⟨hp.1, hp.2.2.1⟩, hp.2.1⟩ hnt hr
+  have hf := phase2_htab_set_ts8_message_fields buffers contents s key value hc hp.1.1 hnt hr
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  refine ⟨hs.1.1, hs.2, hs.1.2, ?_, ?_, ?_, ?_⟩
+  · exact phase2_phase4_shapes_localsOnly s _ (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2.clock
+      (fun n _ => congrArg (fun locals => locals.lookup (ofString n)) hl) hp.2.2.2.1
+  · rw [show 40 = 8 * 5 from rfl, hf 5 (by decide)]
+    exact hp.2.2.2.2.1
+  · simpa only [locN, hl] using hp.2.2.2.2.2.1
+  · simpa only [locN, hl] using hp.2.2.2.2.2.2
+
+theorem phase2_htab_set_ts8_message_table_bound (h : PtxCallees)
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64)
+    {tail : ProgHOL 64} {b : Nat}
+    (ht : TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak) tail b) :
+    TerminatingProgBoundedOn (PtxMessageTableStoreReady buffers contents names aa ak)
+      (.seq (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value]) tail)
+      (K.htab_set + 1 + b) := by
+  intro F s hc hp
+  exact seq_bound_trans
+    (PtxP1.bound_mono (TerminatingProgBoundedOn.call_guestInv h.fb_htab_set _ _) (fun _ hp => hp.1.1.1.1.1))
+    (phase2_htab_set_ts8_message_table_ready buffers contents names aa ak key value) ht s hc hp
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
