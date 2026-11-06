@@ -9375,4 +9375,23 @@ theorem old_heap_word_of_fresh_world_effect {F : Type}
       omega
   rw [hm]
 
+/-- Fresh-region writes preserve the protected database payload words. -/
+theorem codeDbPayloadStrong_of_fresh_frame {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} {db : Nat}
+    (he : CodeDbPayloadStrong s S db) (hW : WorldTypedWith s S Nd) (hm : db ∈ S)
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hC : EvmBase.SameTypedCells s post S Nd)
+    (hhp : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hframe : ∀ a : BitVec 64, post.memory a ≠ s.memory a →
+      ((freeGap s).1 < a.toNat+8 ∧ a.toNat < (freeGap s).1+(freeGap s).2) ∨
+      ((heapFree s).1 < a.toNat+8 ∧ a.toNat < (heapFree s).1+(heapFree s).2))
+    (hfixed : fixedObjects post = fixedObjects s) :
+    CodeDbPayloadStrong post S db := by
+  apply codeDbPayloadStrong_of_typed_frame he hW hm hAs hAp hC hhp ?_ hfixed
+  intro p hp
+  have hi := (he.2 p hp).1.2
+  dsimp only at hi
+  exact ⟨old_heap_word_of_fresh_world_effect hAs hframe p (by omega),
+    old_heap_word_of_fresh_world_effect hAs hframe (p+8) (by omega)⟩
+
 end HeadStore
