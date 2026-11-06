@@ -10742,4 +10742,83 @@ theorem frameOutside_congr {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {ke
   rw [hmem a]
   exact h a hkeep hfresh
 
+/-! ### Generic call step
+
+Every call of the `frame_new` body either leaves memory unchanged or writes only inside
+the fresh scratch below the old `scratch_ptr` (the callee's own allocations) or inside the
+heap growth of the call.  `FNRL.step` transports the invariant across any such step. -/
+
+theorem FNR.words {F : Type} {s t : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    (h : FNR s t m e) :
+    ∃ sp fp : BitVec 64, t.globals.lookup (ofString "scratch_ptr") = some (.val (.word sp)) ∧
+      t.globals.lookup (ofString "frame_mem_ptr") = some (.val (.word fp)) ∧
+      globN t "scratch_ptr" = sp.toNat ∧ globN t "frame_mem_ptr" = fp.toNat := by
+  obtain ⟨-, -, -, ⟨-, hA⟩, -⟩ := h
+  obtain ⟨sp, h1, h2⟩ := glob_of_words t hA "scratch_ptr" (by decide)
+  obtain ⟨fp, h3, h4⟩ := glob_of_words t hA "frame_mem_ptr" (by decide)
+  exact ⟨sp, fp, h1, h3, h2, h4⟩
+
+/-- Generic call step: `t'` restores the `msg`/`e` lookups of `t.locals`, keeps
+code/memaddrs/be and the non-pointer globals, is arena-ready with monotonically moved
+pointers, and differs from `t` in memory only inside the fresh scratch zone
+`[loS, loS + lenS)` below the old `scratch_ptr` or the heap zone `[loH, loH + lenH)` grown
+by the call. -/
+theorem FNRL.step {F : Type} {s t t' : PanSemStateFiniteExact 64 F} {m e : BitVec 64}
+    {fv : Nat → Nat} {keep : List Nat} (h : FNRL s t m e fv keep)
+    (hlm : t'.locals.lookup (ofString "msg") = t.locals.lookup (ofString "msg"))
+    (hle : t'.locals.lookup (ofString "e") = t.locals.lookup (ofString "e"))
+    (hcode : t'.code = t.code) (hme : t'.memaddrs = t.memaddrs) (hbe : t'.be = t.be)
+    (hAR : ArenaReady t') (hsp : globN t' "scratch_ptr" ≤ globN t "scratch_ptr")
+    (hspE : globN t' "scratch_ptr" ≤ e.toNat) (hheap : globN t "heap_ptr" ≤ globN t' "heap_ptr")
+    (hg : ∀ k, k ≠ ofString "scratch_ptr" → k ≠ ofString "heap_ptr" →
+      k ≠ ofString "frame_mem_ptr" → t'.globals.lookup k = t.globals.lookup k)
+    {loS lenS loH lenH : Nat}
+    (hloS : globN t' "scratch_ptr" ≤ loS) (hhiS : loS + lenS ≤ globN t "scratch_ptr")
+    (hloH : globN t "heap_ptr" ≤ loH) (hhiH : loH + lenH ≤ globN t' "heap_ptr")
+    (hmem : ∀ a : BitVec 64, ¬ CellHits a.toNat (loS, lenS) → ¬ CellHits a.toNat (loH, lenH) →
+      t'.memory a = t.memory a) :
+    FNRL s t' m e fv keep := by
+  obtain ⟨hfr, hled⟩ := h
+  have hfacts := FNR.facts hfr
+  obtain ⟨h1, h2, h3, h4, h5, h6, h7, h8, h9, h10, h11, h12, h13, h14, h15⟩ := hfr
+  have hspS : globN t' "scratch_ptr" ≤ globN s "scratch_ptr" := by
+    have := hloS; have := hhiS; have := h6; have := h7; omega
+  refine ⟨⟨hcode.trans h1, hme.trans h2, hbe.trans h3, hAR, hAR.2.2.2.2.1, hspE, h7, h8, h9,
+    h10.trans hheap, h11, ?_, ?_, hlm.trans h14, hle.trans h15⟩, ?_⟩
+  · intro k hk1 hk2 hk3
+    rw [hg k hk1 hk2 hk3]
+    exact h12 k hk1 hk2 hk3
+  · intro a haS haH
+    have hms : ¬ CellHits a.toNat (loS, lenS) := by
+      intro hchi
+      exact haS (R13SoloHtabSet.cellHits_of_inside hchi ⟨hloS, by omega⟩)
+    have hmh : ¬ CellHits a.toNat (loH, lenH) := by
+      intro hchi
+      exact haH (R13SoloHtabSet.cellHits_of_inside hchi ⟨le_trans h10 hloH, by omega⟩)
+    have h1' := hmem a hms hmh
+    refine h1'.trans (h13 a ?_ ?_)
+    · intro hchi
+      exact haS (R13SoloHtabSet.cellHits_of_inside hchi ⟨hsp, by omega⟩)
+    · intro hchi
+      exact haH (R13SoloHtabSet.cellHits_of_inside hchi ⟨le_refl _, by omega⟩)
+  · intro a ha
+    obtain ⟨h8a, hge, hhiA, hval⟩ := hled a ha
+    refine ⟨h8a, hge, hhiA, ?_⟩
+    have halt : a < 2 ^ 64 := by have := hfacts.1; omega
+    have hms : ¬ CellHits (BitVec.ofNat 64 a).toNat (loS, lenS) := by
+      intro hchi
+      obtain ⟨-, hc2⟩ := hchi
+      rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt a halt] at hc2
+      omega
+    have hmh : ¬ CellHits (BitVec.ofNat 64 a).toNat (loH, lenH) := by
+      intro hchi
+      obtain ⟨-, hc2⟩ := hchi
+      rw [OpHandlersB.HeadMemBridge.toNat_ofNat_lt a halt] at hc2
+      have hhL : globN t' "heap_ptr" ≤ heapLimit := hAR.2.2.1
+      have hsc : heapLimit = scratchStart := rfl
+      have := hfacts.2.2
+      omega
+    rw [memW_of a (hmem (BitVec.ofNat 64 a) hms hmh)]
+    exact hval
+
 end FrameOpenRich
