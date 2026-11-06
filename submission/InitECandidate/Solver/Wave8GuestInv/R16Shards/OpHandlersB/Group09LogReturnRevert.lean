@@ -16959,4 +16959,27 @@ theorem op_log_growth_invariant_from_cells_g09 {F : Type}
     hheader hslots hrecords hlogs hmsgBuffer hmsgNew hFW hheadWF holdpw hbufferOld
     hnewpw hnewOld hnewBuffer hold hbuffer hnew
 
+/-- Expose the invariant's matching typed-world witness and old-chain ownership. -/
+theorem op_log_old_ownership_g09 {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {S : List Nat} (hinv : EvmInvAt s S) :
+    ∃ Nd, WorldTypedWith s S Nd ∧
+      (∀ ec ∈ evmChain s, FrameWF s S ec) ∧
+      ((evmChain s).map (frameObjects s)).flatten.Pairwise Disj ∧
+      IvlsDisj ((evmChain s).map (frameObjects s)).flatten (worldOwned s S Nd) := by
+  obtain ⟨hw, hne, hlen, hlast, hframes, hroom, hret, hpw, hsep,
+    ⟨Nd, htries, hav⟩, _⟩ := hinv
+  refine ⟨Nd, ⟨hw.1, hw.2.1, hw.2.2.1, htries⟩, hframes, hpw, ?_⟩
+  intro o ho j hj
+  unfold worldOwned at hj
+  rcases List.mem_append.1 hj with hj | hj
+  · rcases List.mem_append.1 hj with hj | hj
+    · obtain ⟨t, ht, hj⟩ := List.mem_flatMap.1 hj
+      obtain ⟨os, hos, ho⟩ := List.mem_flatten.1 ho
+      obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hos
+      exact (hsep ec hec o ho).1 t ht j hj
+    · obtain ⟨os, hos, ho⟩ := List.mem_flatten.1 ho
+      obtain ⟨ec, hec, rfl⟩ := List.mem_map.1 hos
+      exact (hsep ec hec o ho).2 j hj
+  · exact hav o ho j hj
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
