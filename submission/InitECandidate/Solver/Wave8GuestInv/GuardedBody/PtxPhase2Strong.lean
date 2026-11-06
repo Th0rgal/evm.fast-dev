@@ -16836,4 +16836,32 @@ theorem phase2_get_account_message_scalar_backing_tables_bound (h : PtxCallees)
   · exact phase2_get_account_message_scalar_backing_tables h buffers contents names aa ak name args hm hi hn
   · exact ht
 
+/-- Transaction warming preserves the joint message assembly and private-table guard. -/
+theorem phase2_htab_set_ts8_message_scalar_backing_tables
+    {ι : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (names : List String) (aa ak : Nat) (key value : ExpHOL 64) :
+    Hoare (fun s => (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+      PtxMessageTables s aa ak)
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])
+      (fun r s => r = none →
+        (PtxMessageScalarReady buffers contents names s ∧ R16Shards.TxBacking s) ∧
+          PtxMessageTables s aa ak) := by
+  refine ⟨fun s hc hp hnt hr => ?_⟩
+  have ht := (phase2_htab_set_ts8_saved_tables s.locals aa ak key value).run s hc
+    ⟨hp.1.1.1.1.1, hp.2, hp.1.1.1.2.2.2.1⟩ hnt hr
+  have hl := phase2_call0_locals s (ofString "htab_set")
+    [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value] hr
+  refine ⟨(phase2_htab_set_ts8_message_scalar_backing buffers contents names key value).run
+    s hc hp.1 hnt hr, ?_⟩
+  have he : {(evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2
+      with locals := s.locals} = (evaluateHOLFiniteState s
+      (.call (some (none, none)) (ofString "htab_set")
+        [.load .one (.op .add [.var .global (ofString "ts"), .const 8]), key, value])).2 := by
+    rw [← hl]
+  rw [he] at ht
+  exact ht
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
