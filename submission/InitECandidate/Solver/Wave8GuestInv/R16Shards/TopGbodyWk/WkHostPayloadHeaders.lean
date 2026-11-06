@@ -394,6 +394,13 @@ private theorem lookup_htr_new_payload_request :
   lookup_of_guestAst_getElem 218 (by rw [guestAst_len]; decide)
     (extractFn Guest.Software.guestFn_htr_new_payload_request) rfl
 
+private theorem lookup_payload_header :
+    originalRuntimeCode.lookup (ofString "payload_header") =
+      some ([(ofString "si", .one)],
+        sourceFnBody Guest.Software.guestFn_payload_header, .one) :=
+  lookup_of_guestAst_getElem 864 (by rw [guestAst_len]; decide)
+    (extractFn Guest.Software.guestFn_payload_header) rfl
+
 private theorem funByteEff_htr_u64_at :
     FunByteEff (ofString "htr_u64_at")
       (fun vals _ => [(valWordNat (vals[1]?.getD (.rStruct [])), 32)]) := by
