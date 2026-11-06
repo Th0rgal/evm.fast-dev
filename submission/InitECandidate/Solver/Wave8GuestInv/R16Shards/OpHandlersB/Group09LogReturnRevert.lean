@@ -16205,4 +16205,44 @@ theorem op_log_no_growth_invariant_of_separation_g09 {F : Type}
     hh.1 hh.2.1 hh.2.2 hlog hdheader hdbuffer hnewMsg hold hnew hnewOld holdWorld hnewWorld
     hcell hfields hcont hheaders hslots hreads
 
+/-- Concrete in-place execution inherits the reconstructed invariant and structural readback. -/
+theorem op_log_no_growth_execution_of_invariant_g09 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (e log l n cap p : BitVec 64) (S : List Nat)
+    (hA : ArenaReady s) (hcode : s.code = originalRuntimeCode) (hclock : s.clock ≠ 0)
+    (he : s.locals.lookup (ofString "e") = some (.val (.word e)))
+    (hlg : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (hde : s.memaddrs (e + 88#64)) (hme : s.memory (e + 88#64) = .word l)
+    (hd0 : s.memaddrs l) (hd8 : s.memaddrs (l + 8#64)) (hd16 : s.memaddrs (l + 16#64))
+    (hm0 : s.memory l = .word p) (hm8 : s.memory (l + 8#64) = .word n)
+    (hm16 : s.memory (l + 16#64) = .word cap)
+    (hlt : n.toNat < cap.toNat) (hne : l ≠ l + 8#64)
+    (hdslot : s.memaddrs (p + n * 8#64)) (hHM : HeadMemAligned s) :
+    let stores := {s with memory := fun a =>
+      if a = p + n * 8#64 then .word log
+      else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+    EvmInvAt stores S →
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 280 →
+      memW stores (ec.1 + k) = memW s (ec.1 + k)) →
+    (∀ ec ∈ evmChain s, ∀ k, k + 8 ≤ 104 →
+      memW stores (ec.2 + k) = memW s (ec.2 + k)) →
+    let out := evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_log_append)
+    out.1 = some (.returned (.val (.word 0))) ∧
+      EvmInv out.2 ∧ evmR out.2 = evmR s ∧ HeadMemAligned out.2 := by
+  dsimp only
+  intro hinv hfields hcont
+  let stores := {s with memory := fun a =>
+    if a = p + n * 8#64 then .word log
+    else if a = l + 8#64 then .word (n + 1#64) else s.memory a}
+  have hAp : ArenaReady stores :=
+    ⟨⟨hA.1.code, hA.1.memaddrs, hA.1.shMemaddrs, hA.1.baseAddr⟩,
+      arenaOK_congr rfl hA.2⟩
+  have hchain : evmChain stores = evmChain s := log_chain_of_cont_readback_g09 rfl rfl hcont
+  have hhead : (globN s "ev", globN s "cur_cont") ∈ evmChain s := by
+    unfold evmChain
+    simp only [evmChainFrom, List.mem_cons, true_or]
+  have hp := log_growth_handler_post_g09 hAp hinv hchain
+    (fun ec hec k hk _ => hfields ec hec k hk) rfl rfl hhead hHM
+  exact log_append_no_growth_execution_post_g09 s e log l n cap p hcode hclock
+    he hlg hde hme hd0 hd8 hd16 hm0 hm8 hm16 hlt hne hdslot hp
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
