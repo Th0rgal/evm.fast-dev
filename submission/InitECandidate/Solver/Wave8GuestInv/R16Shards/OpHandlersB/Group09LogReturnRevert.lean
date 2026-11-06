@@ -13720,4 +13720,48 @@ theorem evmInvAt_of_log_no_growth_cells_g09 {F : Type}
     (fun ec hec k hk _ => (hrecords ec hec).2 k hk)
     hframes hpairwise hdisj hobjects hlogs
 
+/-- With unchanged buffer extent, the head frame objects grow only by the
+new record's owned intervals. -/
+theorem frameObjects_of_log_no_growth_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {newObjects : List Ivl}
+    (hfields : ∀ k ∈ ([8, 24, 40, 88, 232] : List Nat),
+      memW post (ec.1 + k) = memW s (ec.1 + k))
+    (hret : frameRet post ec = frameRet s ec)
+    (hbuffer : frameLogs post ec = frameLogs s ec)
+    (hlogs : frameLogObjects post ec = frameLogObjects s ec ++ newObjects) :
+    frameObjects post ec = frameObjects s ec ++ newObjects := by
+  unfold frameObjects
+  rw [hfields 8 (by simp), hfields 232 (by simp), hfields 24 (by simp),
+    hfields 40 (by simp), hfields 88 (by simp), hret, hbuffer, hlogs, List.append_assoc]
+
+/-- The in-place head frame stays pairwise disjoint when the new owned
+intervals are internally disjoint and separated from all old frame objects. -/
+theorem log_no_growth_frame_objects_pairwise_g09 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {ec : Ivl} {newObjects : List Ivl}
+    (hobjects : frameObjects post ec = frameObjects s ec ++ newObjects)
+    (hold : (frameObjects s ec).Pairwise Disj)
+    (hnew : newObjects.Pairwise Disj)
+    (hdisj : IvlsDisj (frameObjects s ec) newObjects) :
+    (frameObjects post ec).Pairwise Disj := by
+  rw [hobjects]
+  exact List.pairwise_append.2 ⟨hold, hnew, hdisj⟩
+
+/-- Replacing the head object list by its append preserves chain-wide
+pairwise disjointness if the new objects are separated from the old chain. -/
+theorem log_no_growth_chain_objects_pairwise_g09
+    (head : List Ivl) (tail : List (List Ivl)) (newObjects : List Ivl)
+    (hold : (head ++ tail.flatten).Pairwise Disj)
+    (hnew : newObjects.Pairwise Disj)
+    (hdisj : IvlsDisj (head ++ tail.flatten) newObjects) :
+    ((head ++ newObjects) ++ tail.flatten).Pairwise Disj := by
+  obtain ⟨hh, ht, hht⟩ := List.pairwise_append.1 hold
+  apply List.pairwise_append.2
+  refine ⟨List.pairwise_append.2 ⟨hh, hnew, ?_⟩, ht, ?_⟩
+  · intro x hx y hy
+    exact hdisj x (List.mem_append_left _ hx) y hy
+  · intro x hx y hy
+    rcases List.mem_append.1 hx with hx | hx
+    · exact hht x hx y hy
+    · exact R11Shards.Disj.symm (hdisj y (List.mem_append_right _ hy) x hx)
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
