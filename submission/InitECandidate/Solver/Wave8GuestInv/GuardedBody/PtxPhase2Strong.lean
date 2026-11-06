@@ -16404,4 +16404,52 @@ theorem phase2_pre_state_account_tail_saved_tables
       (phase2_ws_get_account_optional_resume_saved_tables saved aa ak _ _)
       (phase2_return_saved_tables saved aa ak _)
 
+/-- An early cache hit and a returning miss continuation preserve the same saved tables. -/
+theorem phase2_lookup_hit_or_miss_saved_tables
+    {P : ∀ {F : Type}, PanSemStateFiniteExact 64 F → Prop}
+    (saved : HolFiniteMapExact MlS (ValueHOL 64)) (aa ak : Nat)
+    (c e : ExpHOL 64) (cont : ProgHOL 64)
+    (hp : ∀ {F : Type} (s : PanSemStateFiniteExact 64 F), P s →
+      PtxMessageTables {s with locals := saved} aa ak)
+    (hcont : Hoare P cont (fun r s => (∃ v, r = some (.returned v)) →
+      PtxMessageTables {s with locals := saved} aa ak)) :
+    Hoare P (.seq (.ite c (.return e) .skip) cont)
+      (fun r s => (∃ v, r = some (.returned v)) → PtxMessageTables {s with locals := saved} aa ak) := by
+  apply Hoare.seq
+  · apply Hoare.ite
+    · refine ⟨fun s hc hs hn => ⟨?_, ?_⟩⟩
+      · intro hr
+        exact (return_ne_none s e hr).elim
+      · intro _ hr
+        exact (phase2_return_saved_tables saved aa ak e).run s hc (hp s hs.1) hn hr
+    · exact Hoare.skip (fun s hs => ⟨fun _ => hs.1, fun hn => (hn rfl).elim⟩)
+    · intro F s hs
+      refine ⟨?_, ?_⟩
+      · intro hr; cases hr
+      · intro _ hr
+        obtain ⟨v, hv⟩ := hr
+        cases hv
+  · exact hcont
+
+/-- Read-only cache queries preserve the complete saved-table guard across result binding. -/
+theorem phase2_resume_ro_saved_tables {fname name : MlS}
+    (hro : ReadOnlyFn fname) (saved : HolFiniteMapExact MlS (ValueHOL 64))
+    (aa ak : Nat) (args : List (ExpHOL 64)) :
+    DecCallResumeOn (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+      Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr"))
+      (fun s => ArenaReady s ∧ PtxMessageTables {s with locals := saved} aa ak ∧
+        Inside (locN {s with locals := saved} "m", 176) InitE.sourceBase (globN s "heap_ptr")) name fname args := by
+  intro F s vs body callee ret v post hc hp ha hl hb
+  have hr := R16Shards.PtxP1.funSpec_at_lookup hro s hc vs body callee ret hl
+    (guestInv_callEntry s callee hp.1.1) (by rw [hb]; simp)
+  rw [hb] at hr
+  have he := hr (Or.inl ⟨v, rfl⟩)
+  dsimp only at he
+  have hrestore : ({post with locals := s.locals} : PanSemStateFiniteExact 64 F) =
+      {s with locals := s.locals, clock := post.clock} := by rw [he]; rfl
+  rw [hrestore]
+  exact ⟨(arenaReady_with_locals s _ post.clock).mpr hp.1,
+    phase2_message_tables_with_locals {s with locals := saved} saved post.clock hp.2.1 rfl,
+    hp.2.2⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
