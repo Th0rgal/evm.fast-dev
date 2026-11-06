@@ -12347,4 +12347,42 @@ theorem epsA_alloc_buffer_g10 :
   refine ⟨hiw, hch, hR, hm, p0, hv0, hp0n, hal, ?_⟩
   simpa only [locN, hn] using hb
 
+def SaltBufferLocal_g10 {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ p : BitVec 64, s.locals.lookup (ofString "salt") = some (.val (.word p)) ∧
+    p.toNat % 8 = 0 ∧ p.toNat + 32 ≤ globN s "heap_ptr"
+
+theorem alloc_salt_buffer_sequence_g10 {F : Type}
+    (s0 : PanSemStateFiniteExact 64 F) (charged : Bool) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0 (fun s => MemoryExpansionLocal_g10 s ∧ SaltBufferLocal_g10 s) charged cont) :
+    HandlerRunA s0 MemoryExpansionLocal_g10 charged
+      (.decCall (ofString "salt") .one (ofString "alloc") [.const 32] cont) := by
+  apply HandlerRunA.decCall epsA_alloc_buffer_g10
+    (Q := fun s => MemoryExpansionLocal_g10 s ∧ SaltBufferLocal_g10 s)
+  · intros; trivial
+  · intro t values body callee rs v post hi hw hp ha hl hpi hpw hch hq
+    have hvals : values = [.val (.word (32 : BitVec 64))] := by
+      simpa [evalListHOLExact, evalHOLExact] using ha.symm
+    subst values
+    obtain ⟨_, _, n, hvn, hn⟩ := one_word_arg_lookup GuestTrapAndLookup.lookup_alloc hl
+    have hn32 : n = (32 : BitVec 64) := by simpa using hvn.symm
+    subst n
+    obtain ⟨hm, p, rfl, hpn, hal, hb⟩ := hq
+    have hev : globN post "ev" = globN t "ev" := by
+      have he := congrArg (fun l => l.head?.map Prod.fst) hch
+      simpa [evmChain, evmChainFrom, callEntryStateHOLFinite, globN] using he
+    constructor
+    · apply memoryExpansionLocal_transport_g10 hp
+      · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE,
+          show ofString "salt" ≠ ofString "x" by decide]
+      · exact hev
+      · change memW post _ = memW t _
+        unfold memW
+        rw [hm]
+        rfl
+    · refine ⟨p, ?_, hal, ?_⟩
+      · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+      · change p.toNat + 32 ≤ globN post "heap_ptr"
+        simpa [locN, callEntryStateHOLFinite, hn] using hb
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
