@@ -15760,4 +15760,52 @@ theorem op_log_valid_data_tail_step_g09 {F : Type}
     exact hcont last hcL hwL hlL hrL he hlocals hvL hHM hnL
   · exact hnt
 
+/-- The actual right-associated header stores preserve the detached-record invariant. -/
+theorem op_log_header_tail_step_g09 {F : Type}
+    {s0 s : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (log address topics nt : BitVec 64) (cont : ProgHOL 64)
+    (hc : s.code = originalRuntimeCode) (hw : EvmInvWith s S Nd)
+    (hl : (evmChain s).length = (evmChain s0).length) (hr : evmR s < evmR s0)
+    (hlog : s.locals.lookup (ofString "log") = some (.val (.word log)))
+    (haddress : s.locals.lookup (ofString "log_address") = some (.val (.word address)))
+    (htopics : s.locals.lookup (ofString "topics") = some (.val (.word topics)))
+    (hntop : s.locals.lookup (ofString "ntopics") = some (.val (.word nt)))
+    (hb : log.toNat + 40 ≤ 2^64)
+    (hd0 : s.memaddrs log) (hd8 : s.memaddrs (log + 8#64)) (hd16 : s.memaddrs (log + 16#64))
+    (hdj : IvlsDisj [(log.toNat, 40)]
+      (worldTypedIvls s S Nd ++ ((evmChain s).map (frameObjects s)).flatten))
+    (hcont : ∀ last : PanSemStateFiniteExact 64 F,
+      last.code = originalRuntimeCode → EvmInvWith last S Nd →
+      (evmChain last).length = (evmChain s0).length → evmR last < evmR s0 →
+      ByteRegionEffect s last [(log.toNat, 40)] → last.locals = s.locals →
+      last.memory = (fun a => if a = log + 16#64 then .word nt else
+        if a = log + 8#64 then .word topics else if a = log then .word address else s.memory a) →
+      (HeadMemAligned s → HeadMemAligned last) →
+      (evaluateHOLFiniteState last cont).1 ≠ some .timeOut →
+      OpDispatchPost s0 (evaluateHOLFiniteState last cont).1 (evaluateHOLFiniteState last cont).2)
+    (hnt : (evaluateHOLFiniteState s (.seq
+      (.store (.op .add [.var .local (ofString "log"), .const 0]) (.var .local (ofString "log_address")))
+        (.seq (.store (.op .add [.var .local (ofString "log"), .const 8]) (.var .local (ofString "topics")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 16]) (.var .local (ofString "ntopics"))) cont)))).1 ≠ some .timeOut) :
+    OpDispatchPost s0
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 0]) (.var .local (ofString "log_address")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 8]) (.var .local (ofString "topics")))
+            (.seq (.store (.op .add [.var .local (ofString "log"), .const 16]) (.var .local (ofString "ntopics"))) cont)))).1
+      (evaluateHOLFiniteState s (.seq
+        (.store (.op .add [.var .local (ofString "log"), .const 0]) (.var .local (ofString "log_address")))
+          (.seq (.store (.op .add [.var .local (ofString "log"), .const 8]) (.var .local (ofString "topics")))
+            (.seq (.store (.op .add [.var .local (ofString "log"), .const 16]) (.var .local (ofString "ntopics"))) cont)))).2 := by
+  have hassoc : ∀ (t : PanSemStateFiniteExact 64 F) (a b c d : ProgHOL 64),
+      evaluateHOLFiniteState t (.seq (.seq a (.seq b c)) d) =
+        evaluateHOLFiniteState t (.seq a (.seq b (.seq c d))) := by
+    intro t a b c d
+    rw [evaluate_seq_assoc_g09, evaluateHOLFiniteState_seq_line780,
+      evaluateHOLFiniteState_seq_line780]
+    rcases he : evaluateHOLFiniteState t a with ⟨r, post⟩
+    cases r <;> simp [he, evaluate_seq_assoc_g09]
+  rw [← hassoc] at hnt ⊢
+  exact op_log_header_stores_step_g09 log address topics nt cont hc hw hl hr
+    hlog haddress htopics hntop hb hd0 hd8 hd16 hdj hcont hnt
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
