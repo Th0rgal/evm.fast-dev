@@ -9590,7 +9590,8 @@ theorem gbody_process_transaction_strong_of_cuts
     InitECandidate.Solver.FrontendCodecComputation.declToHOLStructural] using
     (hb (F := F) s hc hp)
 
-open PtxP34 in
+section
+open PtxP34
 /-- Transaction composition now needs only the prefix and local push contracts. -/
 theorem gbody_process_transaction_strong_of_h12_slots
     (h : PtxCallees) (hwk : PtxP34.PmcStrong)
@@ -9615,6 +9616,8 @@ theorem gbody_process_transaction_strong_of_h12_slots
   apply gbody_process_transaction_strong_of_cuts h hwk h12
   intro tail b ht F s hc hp
   exact ptxPhase4_cut_strong_of_slots h hlogs R hreceipt hstore ht s hc hp.1
+
+end
 
 /-- The complete transaction bound, with the remaining backing contract explicit.
 `BoListArg` and `TxReadyStrong` constrain list headers but do not assert that
@@ -20051,6 +20054,33 @@ theorem jdel_ts32_call0_header_words {F : Type}
             rw [← hp]
             exact hu
           · cases hr
+
+end PtxP34
+
+namespace PtxP34
+open R16WkAcctWs
+open private seq_call0_ret_inv from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+theorem destroy_storage_delete_tail_header_words {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (S Nd : List Nat) (tw : BitVec 64) (rv : ValueHOL 64)
+    (hW : TxWorld s) (hT : WorldTypedWith s S Nd)
+    (hout : s.locals.lookup (ofString "outer") = some (.val (.word tw)))
+    (hts : globN s "ts" ≠ 0) (htw : tw.toNat = memW s (globN s "ts" + 32))
+    (hr : evaluateHOLFiniteState s
+      (.seq (.call (some (none, none)) (ofString "jdel")
+        [.var .local (ofString "outer"), .var .local (ofString "addr")])
+        (.return (.const 0#64))) = (some (.returned rv), post)) :
+    ∀ k ∈ ([40, 72] : List Nat),
+      memW post (memW s (globN s "bo" + k)) = memW s (memW s (globN s "bo" + k)) := by
+  obtain ⟨mid, hm, ht⟩ := seq_call0_ret_inv hr
+  have hh := jdel_ts32_call0_header_words s mid S Nd (.var .local (ofString "outer"))
+    (.var .local (ofString "addr")) tw hW hT (by simpa [evalAt, evalHOLExact] using hout) hts htw hm
+  have hp : post.memory = mid.memory := by
+    rw [evaluateHOLFiniteState_return] at ht
+    simp [evalHOLExact] at ht
+    split at ht <;> simp_all [emptyLocalsHOLFinite]
+    rw [← ht.2]
+  simpa only [memW, hp] using hh
 
 end PtxP34
 
