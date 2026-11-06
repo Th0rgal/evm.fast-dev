@@ -8191,4 +8191,27 @@ theorem world_and_payload_after_sk_call {F : Type}
   exact ⟨localsFree_arenaReady post _ _ hAp,
     (worldTyped_with_locals post _ _ S).2 hworld, hp⟩
 
+/-- Transport through access-table callee entry and caller restoration,
+retaining all database facts required by the resumed witness lookup. -/
+theorem protected_db_after_access_call {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db t : Nat)
+    (callee : HolFiniteMapExact MlS (ValueHOL 64))
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (h : CodeDbPayloadStrong s S db) (hdb : db ∈ S) (ht : t ∈ S)
+    (hne : db ≠ t) (hloc : locN (callEntryStateHOLFinite s callee) "t" = t)
+    (hx : HtabExit (callEntryStateHOLFinite s callee) post) :
+    let resumed := {post with locals := s.locals}
+    ArenaReady resumed ∧ HtabWF resumed db ∧ NodeDbEntriesStrong resumed db := by
+  let ent := callEntryStateHOLFinite s callee
+  have hAe : ArenaReady ent := localsFree_arenaReady s _ _ hAs
+  have hWe : WorldTyped ent S := (worldTyped_with_locals s _ _ S).2 hW
+  have he : CodeDbPayloadStrong ent S db := h
+  have hte : locN ent "t" ∈ S := by rw [hloc]; exact ht
+  have hne' : db ≠ locN ent "t" := by rw [hloc]; exact hne
+  have hp := codeDbPayloadStrong_entries_of_separated_htab_exit db he hAe hWe hdb hte hne' hx
+  have hw := htabWF_of_separated_htab_exit db hAe hWe hdb hte hne' hx
+  refine ⟨localsFree_arenaReady post _ _ hx.1,
+    (WkBal.htabWF_with_locals post _ _ db).2 hw, ?_⟩
+  exact hp
+
 end HeadStore
