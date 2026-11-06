@@ -9838,6 +9838,76 @@ theorem precompile_sha256_length_tail_effect {F : Type}
       · exact ⟨_, by simp, le_rfl, le_rfl⟩
       · exact ⟨_, by simp, le_rfl, le_rfl⟩)
 
+theorem precompile_sha256_padding_choice_locals {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (name : MlS)
+    (hne : name ≠ ofString "total") :
+    (evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip)).2.locals.lookup name =
+      s.locals.lookup name := by
+  rw [evaluateHOLFiniteState_ite]
+  split
+  · split
+    · simp [evaluateHOLFiniteState, evaluateHOLFiniteStateWithDeciders,
+        evalPanSemRecursiveCallFiniteContext]
+    · simp only [evaluateHOLFiniteState_assign]
+      simp [evalHOLExact, setKvarHOLFinite, setVarHOLFinite]
+      split
+      · simp [HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hne]
+      · rfl
+  · rfl
+
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_choice_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (Rl : List Ivl) :
+    ByteEff s (evaluateHOLFiniteState s
+      (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip)).2 Rl := by
+  apply byteEff_ite
+  · exact byteEff_assign_local s _ _ _
+  · exact byteEff_skip s _
+
+open R10Shards.P26_P28 in
+theorem precompile_sha256_padding_choice_then {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (body : ProgHOL 64) (Rl : List Ivl)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (ht : s.locals.lookup (ofString "total") = some (.val (.word 64)))
+    (hv : isValidValueHOLExact s.toExact .local (ofString "total")
+      (.val (.word 128)) = true)
+    (hnt : (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) body)).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) body)).1 = none ∨
+      Resumes (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) body)).1)
+    (hb : ∀ (m : PanSemStateFiniteExact 64 F), m.code = originalRuntimeCode → GuestInv m → m.globals = s.globals →
+      (∀ name, name ≠ ofString "total" → m.locals.lookup name = s.locals.lookup name) →
+      (∃ total : BitVec 64, m.locals.lookup (ofString "total") = some (.val (.word total)) ∧
+        (total.toNat = 64 ∨ total.toNat = 128)) →
+      (evaluateHOLFiniteState m body).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m body).1 = none ∨ Resumes (evaluateHOLFiniteState m body).1) →
+      ByteEff m (evaluateHOLFiniteState m body).2 Rl) :
+    ByteEff s (evaluateHOLFiniteState s
+      (.seq (.ite (.cmp .notLower (.var .local (ofString "rem")) (.const 56))
+        (.assign .local (ofString "total") (.const 128)) .skip) body)).2 Rl := by
+  refine precompile_byteEff_seq_resumes s _ _ _ hnt hr
+    (fun _ _ => precompile_sha256_padding_choice_effect s Rl) ?_
+  intro m hm hntm hrm
+  have he := precompile_sha256_padding_choice_effect s Rl
+  have htotal := precompile_sha256_padding_total_choice s ht hv
+  rw [hm] at he htotal
+  apply hb m (he.code.trans hc)
+    (guestInv_congr he.code he.memaddrs he.shMemaddrs he.baseAddr hi) he.globals
+  · intro name hne
+    have hl := precompile_sha256_padding_choice_locals s name hne
+    simpa only [hm] using hl
+  · exact htotal
+  · exact hntm
+  · exact hrm
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
