@@ -9000,6 +9000,39 @@ theorem precompile_sha256_finish_store_effect {F : Type}
       rw [ha]; omega
   · simp at hvals
 
+theorem precompile_sha256_finish_guard {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (i : BitVec 64)
+    (hindex : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hsmall : i.toNat < 2^63)
+    (ha : LoopActive (.cmp .less (.var .local (ofString "i")) (.const 8)) s) :
+    i.toNat < 8 := by
+  obtain ⟨v, hv, hn⟩ := ha
+  simp [evalHOLFinite, evalHOLExact, hindex, Compiler.Encoders.Asm.wordCmpHOL] at hv
+  have hs := holAsmSignedLess_small i (8#64) hsmall (by decide)
+  simp only [hs, BitVec.toNat_ofNat, Nat.reducePow, Nat.reduceMod,
+    decide_eq_true_eq] at hv
+  by_cases h : i.toNat < 8
+  · exact h
+  · simp [h] at hv
+    exact False.elim (hn hv.symm)
+
+theorem precompile_sha256_finish_increment {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out i : BitVec 64)
+    (hout : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hindex : s.locals.lookup (ofString "i") = some (.val (.word i)))
+    (hvalid : isValidValueHOLExact s.toExact .local (ofString "i")
+      (.val (.word (i+1))) = true) :
+    let post := (evaluateHOLFiniteState s
+      (.assign .local (ofString "i") (.op .add [.var .local (ofString "i"), .const 1]))).2
+    post.locals.lookup (ofString "out") = some (.val (.word out)) ∧
+    post.locals.lookup (ofString "i") = some (.val (.word (i+1))) := by
+  change isValidValueHOLExact s.toExact .local (ofString "i")
+    (.val (.word (i+1#64))) = true at hvalid
+  simp [evaluateHOLFiniteState_assign, evalHOLExact, evalListHOLExact, hindex,
+    valueIsWord, valueWord, wordOpHOL, wordOp, setVarHOLFinite,
+    HolFiniteMapExact.lookup_update, FUPDATE, hout, hvalid, setKvarHOLFinite,
+    show ofString "i" ≠ ofString "out" by decide]
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
