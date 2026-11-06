@@ -7560,4 +7560,30 @@ theorem nodeDbEntriesStrong_of_htab_exit {F : Type}
   obtain ⟨hb, hb64, hd⟩ := hrec p hp
   exact htab_frame_preserves_code_record (locN s "t") p hb hb64 hpos hd hfr
 
+/-- The concrete key-builder preserves database payload typing for separated
+records, using its actual two-cell frame rather than a whole-memory premise. -/
+theorem nodeDbEntriesStrong_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (db : Nat)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (he : NodeDbEntriesStrong s db) (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db)
+    (hrec : ∀ p ∈ htabValues s db, p + 16 ≤ 2 ^ 64 ∧
+      Disj (p, 16) (globN s "sk_buf", 52)) :
+    NodeDbEntriesStrong post db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hhp : globN s "heap_ptr" = globN post "heap_ptr" := by
+    unfold globN
+    rw [heff.globals]
+  apply nodeDbEntriesStrong_of_preserved_payloads he hAs hAp (Nat.le_of_eq hhp) hvalues
+  intro p hp
+  obtain ⟨hp64, hd⟩ := hrec p hp
+  exact sk_make_preserves_code_record s hc hma hfit p hp64 hd v post hb
+
 end HeadStore
