@@ -88,6 +88,7 @@ import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.DecodeTransact
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeTransaction
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.HeaderHashRecover.RecoverSender
 import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.MptSetRootKeeps
+import InitECandidate.Solver.Wave8GuestInv.R16Shards.MptC10C12.ComputeStateRoot
 
 /-! Primitive instance. merge_shard.py replaces placeholders with checked leaf applications.
 Ported from campaign/specs-proposed/GuestInv.lean (working tree based on 664524baaf0aff6938ff399c2017a85b8ccc0c59).
@@ -216,7 +217,7 @@ theorem primitives : Primitives where
   «rv_u256_to_be_min» := Merged.rv_u256_to_be_min
   «wk_ws_get_account_optional» := R13Shards.WkShard01.«wk_ws_get_account_optional»
   «wk_ws_storage_root_of» := R13Shards.WkShard01.«wk_ws_storage_root_of»
-  «gbody_compute_state_root» := «gbody_compute_state_root»
+  «gbody_compute_state_root» := R16Shards.MptC10C12.«gbody_compute_state_root»
   «fb_rlp_decode_fully» := PrimShardP10P30.fb_rlp_decode_fully
   «fb_trie_lookup» := Merged.fb_trie_lookup
   «fb_u256_from_be» := P12_P15.Callees.fb_u256_from_be
