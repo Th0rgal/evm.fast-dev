@@ -18294,4 +18294,31 @@ theorem phase2_alloc_typed_intervals (h : PtxCallees) {F : Type}
     simpa only [List.map_cons, List.map_nil, List.mem_cons, List.not_mem_nil, or_false] using hg
   exact R16Shards.globN_eq_of_lookup (step.2.2.1 (ofString g) hne)
 
+/-- The concrete address allocation separates its output from the preserved
+typed intervals of each pre-call witness. -/
+theorem phase2_ct_alloc_output_typed_separation (h : PtxCallees) {F : Type}
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (v : ValueHOL 64) (hc : s.code = originalRuntimeCode) (hp : WorldOK s)
+    (ha : @evalListHOLFinite 64 F _ s (fun a => Classical.propDecidable (s.memaddrs a)) [.const 24] = some vs)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "alloc") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (some (.returned v), post))
+    (S Nd : List Nat) (hw : WorldTypedWith s S Nd) :
+    ∃ w : BitVec 64, v = .val (.word w) ∧ IvlsDisj [(w.toNat, 20)] (worldTypedIvls post S Nd) := by
+  obtain ⟨w, hv, hf⟩ := phase2_ct_alloc_fresh h s vs body callee ret v post hc hp.1 ha hl he
+  have hh := PtxP1.funSpec_at_lookup h.wk_alloc s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp callee) (by rw [he]; simp)
+  rw [he] at hh
+  have step := hh (Or.inl ⟨v, rfl⟩)
+  refine ⟨w, hv, ?_⟩
+  rw [phase2_alloc_typed_intervals h s post vs body callee ret v hc hp hl he S Nd]
+  intro o ho i hi
+  simp only [List.mem_singleton] at ho
+  subst o
+  apply phase2_ct_fresh_disjoint_allocated (callEntryStateHOLFinite s callee) post w.toNat
+    hp.1.2 step.1.2 hf i
+  rcases worldOwned_zero_or_allocated hw i (worldTypedIvls_sub_worldOwned hi) with hz | hh
+  · exact Or.inl hz
+  · exact Or.inr hh.2
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
