@@ -14961,4 +14961,29 @@ theorem worldEff_to_heapByteEff {F : Type} {s post : PanSemStateFiniteExact 64 F
     · exact Or.inr (Or.inl hfg)
     · exact Or.inr (Or.inr hhf)
 
+/-- Cutover wrapper: the strong-guard htr export under a distinct name, ready to be
+renamed once `ContractParts/C08.lean` carries `HtrNewPayloadReady`. -/
+theorem «wk_htr_new_payload_request_cutover» :
+    WorldKeeps HtrNewPayloadReady
+      (fun s => [(locN s "out", 32),
+                 (globN s "ssz_len_chunk", if globN s "ssz_len_chunk" = 0 then 0 else 32)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "htr_new_payload_request") :=
+  «wk_htr_new_payload_request_strong»
+
+/-- Cutover wrapper: the strong-guard validate_header export under a distinct name, ready to be
+renamed once `ContractParts/C08.lean` carries `ValidateHeaderReady`. -/
+theorem «wk_validate_header_cutover» :
+    WorldKeeps ValidateHeaderReady
+      (fun s => [(globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+                 (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200),
+                 (globN s "u256_ws", if globN s "u256_ws" = 0 then 0 else 640)])
+      ["heap_ptr"]
+      [("ws", [0, 8, 16, 24, 32]), ("bs", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72]),
+       ("ts", [0, 8, 16, 24, 32, 40, 48, 56, 64]), ("bo", [0, 8, 16, 24, 32, 40, 48, 56, 64, 72, 80])]
+      NoExtra (ofString "validate_header") :=
+  «wk_validate_header_strong»
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.TopGbodyWk
