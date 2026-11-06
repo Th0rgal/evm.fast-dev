@@ -7978,4 +7978,31 @@ theorem code_entries_after_key_and_access {F : Type}
       (hp db hdb).1 (fun t ht => (hp t ht).2) hfixed
   exact codeDbPayloadStrong_entries_of_separated_htab_exit db hm hAm hWm hdb ht hne hx
 
+/-- Key construction preserves fixed-object identities once its typed-cell
+frame is established; globals are obtained from the concrete execution. -/
+theorem fixedObjects_eq_of_sk_make_typed_cells {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat}
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hcells : EvmBase.SameTypedCells s post S Nd)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) : fixedObjects post = fixedObjects s := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  have hg : ∀ name, globN post name = globN s name := by
+    intro name
+    unfold globN
+    rw [heff.globals]
+  have hgb : (globalBuffers.map fun gn => (globN post gn.1, if globN post gn.1 = 0 then 0 else gn.2)) =
+      (globalBuffers.map fun gn => (globN s gn.1, if globN s gn.1 = 0 then 0 else gn.2)) := by
+    simp only [hg]
+  unfold fixedObjects
+  rw [hgb, blockOutObjects_eq hAs.2 hWT.2.2.1 hcells (hg "bo"),
+    balObjects_eq hAs.2 hWT.1 hWT.2.2.1 hcells (hg "bal_accounts"),
+    hg "journal", hg "journal_cap"]
+
 end HeadStore
