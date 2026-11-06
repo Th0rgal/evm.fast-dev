@@ -14579,4 +14579,73 @@ theorem receipt_start_scope_return_frame {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open WkBlockTxEnc
+open private WkBlockTxEnc.receiptKeccakIvls WkBlockTxEnc.logsEncodedSum
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.WkBlockTxEnc.EncodeReceipt
+
+/-- Receipt buffer allocation supplies enough fresh space to the complete
+initialized encoder and restores the buffer local on return. -/
+theorem receipt_buffer_alloc_return_frame {F : Type}
+    {s mid post : PanSemStateFiniteExact 64 F}
+    (hA : ArenaOK s) (hma : s.memaddrs = ordinaryDomain)
+    (he : HeapByteEff s mid (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"])
+    (bound logs gas succeeded : BitVec 64) (v : ValueHOL 64)
+    (hb : mid.locals.lookup (ofString "bound") = some (.val (.word bound)))
+    (hl : mid.locals.lookup (ofString "logs") = some (.val (.word logs)))
+    (hg : mid.locals.lookup (ofString "cumulative_gas") = some (.val (.word gas)))
+    (hsu : mid.locals.lookup (ofString "succeeded") = some (.val (.word succeeded)))
+    (hbound : bound.toNat + 400 < 2 ^ 64)
+    (hnz : logs.toNat ≠ 0) (hL : LogsListOK s logs.toNat) (hD : LogsDisjFixed s logs.toNat)
+    (hfit : 9 + WkBlockTxEnc.logsEncodedSum s (memW s logs.toNat)
+      (memW s (logs.toNat + 8)) ≤ bound.toNat)
+    (hr : evaluateHOLFiniteState mid
+      (.decCall (ofString "buf") .one (ofString "alloc")
+        [.op .add [.var .local (ofString "bound"), .const 400]]
+        (.dec (ofString "start") .one (.op .add [.var .local (ofString "buf"), .const 1])
+          (.dec (ofString "p") .one (.op .add [.var .local (ofString "start"), .const 9])
+            (.dec (ofString "w") .one (.const 0) receiptStatusReturnCode)))) =
+      (some (.returned v), post)) :
+    HeapByteEff s post (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+  obtain ⟨buf, n, q, next, hn, hbuf, _, _, hspace, hlim, _, _, _, _, hloc,
+      he', _, _, hrun⟩ := eval_decCall_alloc_resumes mid "buf"
+        (.op .add [.var .local (ofString "bound"), .const 400]) _
+        (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] he.arena.1.code he.arena
+        (by simp) (by rw [hr]; simp) (by rw [hr]; exact Or.inl ⟨v, rfl⟩)
+  have hn' : n = bound + 400#64 := by
+    simpa [evalHOLExact, evalListHOLExact, hb, wordOpHOL, wordOp,
+      valueIsWord, valueWord] using hn.symm
+  have hnn : n.toNat = bound.toNat + 400 := by
+    rw [hn', BitVec.toNat_add]
+    exact Nat.mod_eq_of_lt hbound
+  have hret := congrArg Prod.fst (hrun.symm.trans hr)
+  have hf : HeapByteEff s (evaluateHOLFiniteState next
+      (.dec (ofString "start") .one (.op .add [.var .local (ofString "buf"), .const 1])
+        (.dec (ofString "p") .one (.op .add [.var .local (ofString "start"), .const 9])
+          (.dec (ofString "w") .one (.const 0) receiptStatusReturnCode)))).2
+      (WkBlockTxEnc.receiptKeccakIvls s) ["heap_ptr"] := by
+    apply receipt_start_scope_return_frame hA hma (he.trans he') buf logs gas succeeded bound.toNat v
+    · rw [hloc]; simp [HolFiniteMapExact.lookup_update, FUPDATE]
+    · rw [hloc]; simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "buf" ≠ ofString "logs" by decide] using hl
+    · rw [hloc]; simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "buf" ≠ ofString "cumulative_gas" by decide] using hg
+    · rw [hloc]; simpa [HolFiniteMapExact.lookup_update, FUPDATE,
+        show ofString "buf" ≠ ofString "succeeded" by decide] using hsu
+    · constructor
+      · rw [hbuf]; exact he.hp_le
+      · rw [hnn] at hspace; omega
+    · exact hnz
+    · exact hL
+    · exact hD
+    · exact hfit
+    · exact Prod.ext hret rfl
+  rw [hr] at hrun
+  have hp := congrArg Prod.snd hrun
+  dsimp only at hp
+  rw [hp]
+  exact hf.locals_clock _ _
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
