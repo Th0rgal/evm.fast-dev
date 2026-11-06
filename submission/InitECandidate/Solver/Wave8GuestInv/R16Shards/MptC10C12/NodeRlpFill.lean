@@ -8254,6 +8254,16 @@ private theorem finishWriteLen_overflow_boundary {F : Type}
       · omega
   exact ⟨by omega, by omega, by omega, hkind⟩
 
+private theorem allocated_disj_heapLimit_word {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (i : Ivl)
+    (hA : ArenaOK s) (hsp : heapLimit < globN s "scratch_ptr")
+    (hi : Allocated s i) : Disj (heapLimit, 8) i := by
+  have hsp8 : globN s "scratch_ptr" % 8 = 0 := hA.2.2.2.2.2.2.2.1
+  have hlimit8 : heapLimit % 8 = 0 := by decide
+  rcases hi with hi | hi
+  · exact Or.inr (Or.inr (Or.inr (hi.2.trans hA.2.1)))
+  · exact Or.inr (Or.inr (Or.inl (by have := hi.1; omega)))
+
 private theorem finishWriteLen_eq_payload {F : Type}
     (s : PanSemStateFiniteExact 64 F) (Nd : List Nat) (fr : Nat)
     (hfr : ValidRlpFrame s Nd fr)
