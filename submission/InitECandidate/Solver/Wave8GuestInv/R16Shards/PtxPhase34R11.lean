@@ -18280,4 +18280,221 @@ theorem journal_address_suffix_cut_entry {F : Type}
 
 end PtxP34
 
+namespace PtxP34
+open R16WkAcctWs
+open private dec_ret_inv seq_store_ret_inv seq_assign_ret_inv journalAppendTailProg seq_call0_ret_inv
+  from InitECandidate.Solver.Wave8GuestInv.R16Shards.EvmEkFk.AccountWk
+
+/-- Retain a caller lookup while replacing a declared-call continuation. -/
+theorem decCall_return_replace_state_rel_lookup {F : Type}
+    {s out : PanSemStateFiniteExact 64 F} {x fname : MlS} {sh : ShapeHOL}
+    {args : List (ExpHOL 64)} {cont : ProgHOL 64} {v : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.decCall x sh fname args cont) = (some (.returned v), out))
+    (cont' : ProgHOL 64) (v' : ValueHOL 64) (k : MlS) (hk : k ≠ x)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      entry.locals.lookup k = s.locals.lookup k →
+      evaluateHOLFiniteState entry cont = (some (.returned v), u) →
+      ∃ u', evaluateHOLFiniteState entry cont' = (some (.returned v'), u') ∧
+        P u.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ out', evaluateHOLFiniteState s (.decCall x sh fname args cont') = (some (.returned v'), out') ∧
+      P out.emptyLocalsHOLFinite out'.emptyLocalsHOLFinite := by
+  rw [evaluateHOLFiniteState_decCall_fixClockRewrite] at h ⊢
+  split at h
+  · simp at h
+  · rename_i valuesOpt values ha
+    split at h
+    · simp at h
+    · rename_i bodyOpt body callee ret hl
+      split at h
+      · simp at h
+      · rename_i hclock
+        simp only [hclock, ↓reduceIte]
+        dsimp only at h ⊢
+        rcases hr : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body with ⟨r, post⟩
+        rw [hr] at h
+        cases r with
+        | none => simp at h
+        | some r =>
+          cases r <;> try simp at h
+          rename_i rv
+          dsimp only at h ⊢
+          split at h
+          · rename_i hshape
+            simp only [hshape]
+            rcases ht : evaluateHOLFiniteState (setVarHOLFinite x rv {post with locals := s.locals}) cont with ⟨rc, u⟩
+            rw [ht] at h
+            cases rc with
+            | none => simp at h
+            | some r =>
+              cases r <;> try simp at h
+              rename_i w
+              obtain ⟨rfl, hout⟩ := h
+              obtain ⟨u', hu, hP⟩ := hc _ _ (by
+                simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hk]) ht
+              rw [hu]
+              refine ⟨_, rfl, ?_⟩
+              rw [← hout]
+              exact hP
+          · simp at h
+
+/-- Retain a lookup outside a declaration's binding during continuation replacement. -/
+theorem dec_return_replace_state_rel_lookup {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {nm : MlS} {init : ExpHOL 64}
+    {body : ProgHOL 64} {rv : ValueHOL 64}
+    (h : evaluateHOLFiniteState s (.dec nm .one init body) = (some (.returned rv), post))
+    (body' : ProgHOL 64) (rv' : ValueHOL 64) (k : MlS) (hk : k ≠ nm)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hc : ∀ (entry mid : PanSemStateFiniteExact 64 F),
+      entry.locals.lookup k = s.locals.lookup k →
+      evaluateHOLFiniteState entry body = (some (.returned rv), mid) →
+      ∃ mid', evaluateHOLFiniteState entry body' = (some (.returned rv'), mid') ∧
+        P mid.emptyLocalsHOLFinite mid'.emptyLocalsHOLFinite) :
+    ∃ post', evaluateHOLFiniteState s (.dec nm .one init body') = (some (.returned rv'), post') ∧
+      P post.emptyLocalsHOLFinite post'.emptyLocalsHOLFinite := by
+  obtain ⟨w, he, mid, hb, hout⟩ := dec_ret_inv h
+  obtain ⟨mid', hb', hP⟩ := hc _ _ (by
+    simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, Ne.symm hk]) hb
+  refine ⟨{mid' with locals := HolFiniteMapExact.resVarEq mid'.locals (nm, s.locals.lookup nm)}, ?_, ?_⟩
+  · rw [evaluateHOLFiniteState_dec_total]
+    simp [he, shapeEqHOL, shapeOfHOLExact, hb']
+  · rw [hout]
+    exact hP
+
+/-- The store suffix retains every local when replacing its original tail. -/
+theorem journal_store_suffix_replace_state_rel {F : Type}
+    (cur out : PanSemStateFiniteExact 64 F)
+    (d0 e0 d1 e1 d2 e2 d3 e3 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hr : evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail))))) =
+      (some (.returned rv), out))
+    (hc : ∀ entry, entry.locals = cur.locals →
+      evaluateHOLFiniteState entry tail = (some (.returned rv), out) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧
+        P out.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ out', evaluateHOLFiniteState cur
+      (.seq (.store d0 e0) (.seq (.store d1 e1) (.seq (.store d2 e2) (.seq (.store d3 e3)
+        (.seq (.assign .global (ofString "journal_n")
+          (.op .add [.var .global (ofString "journal_n"), .const 1#64])) tail'))))) =
+      (some (.returned rv'), out') ∧ P out.emptyLocalsHOLFinite out'.emptyLocalsHOLFinite := by
+  obtain ⟨m1, h1, hr1⟩ := seq_store_ret_inv hr
+  obtain ⟨m2, h2, hr2⟩ := seq_store_ret_inv hr1
+  obtain ⟨m3, h3, hr3⟩ := seq_store_ret_inv hr2
+  obtain ⟨m4, h4, hr4⟩ := seq_store_ret_inv hr3
+  obtain ⟨entry, ha, ht⟩ := seq_assign_ret_inv hr4
+  have hl0 : entry.locals = m4.locals := by
+    rw [evaluateHOLFiniteState_assign] at ha
+    split at ha
+    · simp at ha
+    · split at ha
+      · have hh := (Prod.mk.inj ha).2
+        rw [← hh]
+        rfl
+      · simp at ha
+  obtain ⟨u', hu', hP⟩ := hc entry
+    (hl0.trans ((store_fall_locals h4).trans ((store_fall_locals h3).trans
+      ((store_fall_locals h2).trans (store_fall_locals h1))))) ht
+  refine ⟨u', ?_, hP⟩
+  simp only [evaluateHOLFiniteState_seq_line780, h1, h2, h3, h4, ha]
+  exact hu'
+
+/-- Replace the full journal continuation while retaining its table lookup. -/
+theorem journal_append_replace_state_rel_table {F : Type}
+    (s out : PanSemStateFiniteExact 64 F) (jn jc trapCode tw : BitVec 64)
+    (e16 : ExpHOL 64) (tail tail' : ProgHOL 64) (rv rv' : ValueHOL 64)
+    (P : PanSemStateFiniteExact 64 F → PanSemStateFiniteExact 64 F → Prop)
+    (hcode : s.code = originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hc : ∀ (entry u : PanSemStateFiniteExact 64 F),
+      entry.locals.lookup (ofString "t") = some (.val (.word tw)) →
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) →
+      ∃ u', evaluateHOLFiniteState entry tail' = (some (.returned rv'), u') ∧
+        P u.emptyLocalsHOLFinite u'.emptyLocalsHOLFinite) :
+    ∃ out', evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail') = (some (.returned rv'), out') ∧
+      P out.emptyLocalsHOLFinite out'.emptyLocalsHOLFinite := by
+  unfold journalAppendTailProg at hr ⊢
+  have ⟨hn, hrest⟩ := journal_guard_seq_resume s out jn jc trapCode _ rv hcode hjn hjc hr
+  have hcmp : Compiler.Encoders.Asm.wordCmpHOL .notLower jn jc = false := by
+    simp [Compiler.Encoders.Asm.wordCmpHOL, BitVec.lt_def, hn]
+  rw [evaluateHOLFiniteState_seq_line780, evaluateHOLFiniteState_ite]
+  simp only [evalHOLExact, hjn, hjc, hcmp, evaluateHOLFiniteState_skip]
+  apply dec_return_replace_state_rel_lookup hrest _ _ (ofString "t") (by decide)
+  intro entry u hl hu
+  have ht1 := hl.trans ht
+  apply decCall_return_replace_state_rel_lookup hu _ _ (ofString "t") (by decide)
+  intro entry2 u2 hl2 hu2
+  have ht2 := hl2.trans ht1
+  obtain ⟨m, hm, hu3⟩ := seq_call0_ret_inv hu2
+  have ht3 : m.locals.lookup (ofString "t") = some (.val (.word tw)) := by
+    rw [(ignored_call_fall_locals entry2 m _ _ hm).1]
+    exact ht2
+  rw [evaluateHOLFiniteState_seq_line780, hm]
+  apply dec_return_replace_state_rel_lookup hu3 _ _ (ofString "t") (by decide)
+  intro entry4 u4 hl4 hu4
+  have ht4 := hl4.trans ht3
+  apply journal_store_suffix_replace_state_rel _ _ _ _ _ _ _ _ _ _ tail tail' rv rv' P hu4
+  intro entry5 hl5 hu5
+  apply hc entry5 u4 _ hu5
+  rw [hl5]
+  exact ht4
+
+/-- The deterministic journal cut identifies the actual tail entry and its table. -/
+theorem journal_cut_state_table_tail_output {F : Type}
+    (s out cut : PanSemStateFiniteExact 64 F) (jn jc trapCode tw : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64)
+    (hcode : s.code = originalRuntimeCode)
+    (hjn : s.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : s.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : s.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState s (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut)) :
+    ∃ entry u, entry.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      cut.emptyLocalsHOLFinite = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧
+      out.emptyLocalsHOLFinite = u.emptyLocalsHOLFinite := by
+  obtain ⟨cut', hr', hP⟩ := journal_append_replace_state_rel_table s out jn jc trapCode tw e16 tail
+    (.return (.const 0#64)) rv (.val (.word 0#64))
+    (fun orig st => ∃ (entry u : PanSemStateFiniteExact 64 F),
+      entry.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      st = entry.emptyLocalsHOLFinite ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ orig = u.emptyLocalsHOLFinite)
+    hcode hjn hjc ht hr (by
+      intro entry u ht' hu
+      refine ⟨entry.emptyLocalsHOLFinite, ?_, entry, u, ht', rfl, hu, rfl⟩
+      simp [evaluateHOLFiniteState_return, evalHOLExact, shapeOfHOLExact])
+  have he : cut' = cut := (Prod.mk.inj (hr'.symm.trans hcut)).2
+  simpa only [he] using hP
+
+/-- World typing, header frames, and the table lookup hold at one original tail entry. -/
+theorem journal_cut_world_frames_table_tail_output {F : Type}
+    (s cur out cut mid : PanSemStateFiniteExact 64 F) (jn jc trapCode tw : BitVec 64)
+    (e16 : ExpHOL 64) (tail : ProgHOL 64) (rv : ValueHOL 64) (bs : List Ivl)
+    (hcode : cur.code = originalRuntimeCode)
+    (hjn : cur.globals.lookup (ofString "journal_n") = some (.val (.word jn)))
+    (hjc : cur.globals.lookup (ofString "journal_cap") = some (.val (.word jc)))
+    (ht : cur.locals.lookup (ofString "t") = some (.val (.word tw)))
+    (hr : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 tail) = (some (.returned rv), out))
+    (hcut : evaluateHOLFiniteState cur (journalAppendTailProg trapCode e16 (.return (.const 0#64))) =
+      (some (.returned (.val (.word 0#64))), cut))
+    (hw : WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none mid)
+    (hm : cut = {mid with locals := cut.locals})
+    (hf : ∀ b ∈ bs, IvlUnhit s cut b) :
+    ∃ entry u, WorldStepSc (bufRegions []) ["heap_ptr", "journal_n"] EvmBase.stdKeep NoExtra s none entry ∧
+      (∀ b ∈ bs, IvlUnhit s entry b) ∧
+      entry.locals.lookup (ofString "t") = some (.val (.word tw)) ∧
+      evaluateHOLFiniteState entry tail = (some (.returned rv), u) ∧ out.memory = u.memory := by
+  obtain ⟨entry, u, ht', he, hr', ho⟩ := journal_cut_state_table_tail_output cur out cut
+    jn jc trapCode tw e16 tail rv hcode hjn hjc ht hr hcut
+  obtain ⟨hw', hf'⟩ := journal_worldStep_frames_of_cut s mid cut entry bs hw hm he hf
+  exact ⟨entry, u, hw', hf', ht', hr', congrArg (fun st => st.memory) ho⟩
+
+end PtxP34
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards
