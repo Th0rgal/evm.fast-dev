@@ -10538,4 +10538,41 @@ theorem op_selfdestruct_specA (hW : WorldAccountSpecsA) :
       simpa [globN] using R14Shards.OpHandlersA.memW_updW_same t (globN t "ev" + 104) 0)
     (HandlerRunA.ret_done hRun0 (fun _ _ hP => Or.inr (Or.inl hP)) _)
 
+/-- Preserve the aligned frame-chain invariant when a child is pushed and the
+old frames' structural cells are unchanged. The saved mark links the child to
+the old head's memory end. -/
+theorem Group10.headMemChainWF_push {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hs : Group10.HeadMemChainWF s)
+    (hchain : evmChain post =
+      (globN post "ev", globN post "cur_cont") :: evmChain s)
+    (hmem : ∀ ec ∈ evmChain s,
+      memW post (ec.1 + 24) = memW s (ec.1 + 24) ∧
+      memW post (ec.1 + 32) = memW s (ec.1 + 32) ∧
+      memW post (ec.1 + 40) = memW s (ec.1 + 40) ∧
+      memW post (ec.2 + 56) = memW s (ec.2 + 56))
+    (hlen : memW post (globN post "ev" + 32) % 32 = 0)
+    (hcap : memW post (globN post "ev" + 40) % 8 = 0)
+    (hend : memW post (globN post "ev" + 24) +
+      memW post (globN post "ev" + 40) = globN post "frame_mem_ptr")
+    (hmark : memW post (globN post "cur_cont" + 56) = globN s "frame_mem_ptr") :
+    Group10.HeadMemChainWF post := by
+  refine ⟨?_, hend, ?_⟩
+  · intro ec hec
+    rw [hchain, List.mem_cons] at hec
+    rcases hec with rfl | hec
+    · exact ⟨hlen, hcap⟩
+    · rw [(hmem ec hec).2.1, (hmem ec hec).2.2.1]
+      exact hs.1 ec hec
+  · rw [hchain]
+    have ht := Group10.chainLinks_transport (memW s) (memW post) (evmChain s)
+      (fun ec hec => ⟨(hmem ec hec).1, (hmem ec hec).2.2.1,
+        (hmem ec hec).2.2.2⟩) hs.2.2
+    have hh : (globN s "ev", globN s "cur_cont") ∈ evmChain s :=
+      List.mem_cons_self
+    change _ ∧ Group10.ChainLinks (memW post) (evmChain s)
+    refine ⟨?_, ht⟩
+    rw [(hmem _ hh).1, (hmem _ hh).2.2.1, hmark]
+    exact hs.2.1
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
