@@ -18379,4 +18379,44 @@ theorem phase2_compute_contract_address_selected_tables (h : PtxCallees) {F : Ty
     ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) hd
   exact ⟨S', Nd', hsub, (worldTypedWith_with_locals post s.locals post.clock S' Nd').mpr hw', hg⟩
 
+/-- Saved-buffer transport uses only the selected witness for each buffer. -/
+theorem phase2_message_store_ready_selected_write_step {ι F : Type} [Nonempty ι]
+    (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F) (writes : List Ivl)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (ha : ArenaReady post) (he : TxEnv post)
+    (hl : post.locals.lookup (ofString "m") = s.locals.lookup (ofString "m"))
+    (hh : globN s "heap_ptr" ≤ globN post "heap_ptr")
+    (hd : ∀ i region, region ∈ writes → Disj (buffers i) region)
+    (hz : ∀ region ∈ writes, region.2 = 0 → region.1 % 8 = 0)
+    (hs : ∀ i, ∃ S Nd S' Nd', WorldTypedWith s S Nd ∧
+      PtxLiveBufferAt s S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned s S Nd) ∧
+      WorldTypedWith post S' Nd' ∧
+      OwnedGrows s post (worldOwned s S Nd) (worldOwned post S' Nd') ∧
+      FrameOutside s post (worldOwned s S Nd ++ writes ++ [freeGap s]) (heapFree s)) :
+    PtxMessageStoreReady buffers contents post := by
+  have hm : locN post "m" = locN s "m" := by simp only [locN, hl]
+  have hf : ∀ i, ∃ S Nd, WorldTypedWith post S Nd ∧
+      PtxLiveBufferAt post S Nd (buffers i) (contents i) ∧
+      IvlsDisj [(locN s "m", 176)] (worldOwned post S Nd) := by
+    intro i
+    obtain ⟨S, Nd, S', Nd', hw, hb, hmd, hw', hg, hfr⟩ := hs i
+    refine ⟨S', Nd', hw', ?_, ?_⟩
+    · exact phase2_live_buffer_step s post S Nd S' Nd' (buffers i) (contents i) writes
+        hb hp.1.1.2 hw hh hg hfr (hd i) hz
+    · exact phase2_packed_owned_growth s post _ _ (locN s "m", 176)
+        hp.2.2.2.1 hg hmd
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨S, Nd, hw, _, _⟩ := hf i
+  refine ⟨⟨ha, S, (worldTyped_iff_with post S).mpr ⟨Nd, hw⟩⟩, he, ?_, ?_, ?_, ?_⟩
+  · simpa only [hl] using hp.2.2.1
+  · rw [hm]
+    exact ⟨hp.2.2.2.1.1, hp.2.2.2.1.2.trans hh⟩
+  · rw [hm]
+    exact wordsOK_transfer hp.1.1.1 ha.1 hp.2.2.2.2.1
+  · intro j
+    rw [hm]
+    exact ⟨(hp.2.2.2.2.2 j).1, hf j⟩
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
