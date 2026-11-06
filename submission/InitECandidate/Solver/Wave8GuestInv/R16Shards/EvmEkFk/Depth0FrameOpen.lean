@@ -7633,4 +7633,37 @@ theorem codeDbPayloadStrong_entries_of_htab_exit {F : Type}
     exact ⟨hin.2, hp64, hd _ ht⟩
   · exact htabFootprint_pos s _ hw.2.2.1 hw.2.2.2.2.1
 
+/-- Fixed-object separation in the strong invariant discharges the key
+builder's payload-separation premise, including its shorter 52-byte write. -/
+theorem codeDbPayloadStrong_entries_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (db : Nat)
+    (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hAs : ArenaReady s) (hAp : ArenaReady post)
+    (hvalues : htabValues post db = htabValues s db) : NodeDbEntriesStrong post db := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, hnz, _⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  apply nodeDbEntriesStrong_of_sk_make db hc hma hfit v hb h.1 hAs hAp hvalues
+  intro p hp
+  obtain ⟨_, hp64, _, hd⟩ := h.2 p hp
+  refine ⟨hp64, ?_⟩
+  have hmem : (globN s "sk_buf", 64) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.mpr
+    exact ⟨("sk_buf", 64), by decide, by simp [hnz]⟩
+  have hsep := hd _ hmem
+  rcases hsep with h | h | h | h
+  · exact (by omega)
+  · exact (by omega)
+  · exact Or.inr (Or.inr (Or.inl h))
+  · exact Or.inr (Or.inr (Or.inr (by omega)))
+
 end HeadStore
