@@ -9332,6 +9332,33 @@ theorem precompile_sha256_finish_loop_effect {F : Type}
       exact hival
     · simp [hvalid] at hflow
 
+theorem precompile_sha256_finish_effect {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (out : BitVec 64)
+    (hc : s.code = originalRuntimeCode) (hi : GuestInv s)
+    (hout : s.locals.lookup (ofString "out") = some (.val (.word out)))
+    (hob : out.toNat + 32 < 2^64) :
+    R10Shards.P26_P28.ByteEff s
+      (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sha256_finish)).2
+      [(out.toNat,32)] := by
+  change R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s
+    (.dec (ofString "i") .one (.const 0) _)).2 _
+  apply R10Shards.P26_P28.byteEff_dec
+  intro v hv
+  simp only [evalHOLExact] at hv
+  injection hv with hv
+  subst v
+  apply R10Shards.P26_P28.byteEff_seq
+  · apply precompile_sha256_finish_loop_effect
+      (setVarHOLFinite (ofString "i") (.val (.word 0)) s) out _ hc
+      (guestInv_congr (s := s) (t := setVarHOLFinite (ofString "i") (.val (.word 0)) s)
+        rfl rfl rfl rfl hi) ?_ ?_ hob
+    · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hout,
+        show ofString "i" ≠ ofString "out" by decide]
+    · refine ⟨0, ?_, by decide⟩
+      simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE]
+  · intro m hm
+    exact R10Shards.P26_P28.byteEff_return m _ _
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
