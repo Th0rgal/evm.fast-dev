@@ -9108,4 +9108,21 @@ theorem get_code_return_of_world_nonzero {F : Type} (s : PanSemStateFiniteExact 
   obtain ⟨db,tw,h⟩ := get_code_entry_of_world_nonzero s S Nd hash hA hW hWT hc hs hfit hsk hws hts hbs hh hdn htn hcn
   exact get_code_return_entry_world_strong s S Nd db hash tw h
 
+/-- Fixed buffer ownership bounds the concrete key-builder write range. -/
+theorem key_buffer_fit_of_world {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (hA : ArenaReady s) (hF : FixedTyped s) (hn : globN s "sk_buf" ≠ 0) :
+    globN s "sk_buf" + 52 ≤ 2 ^ 64 := by
+  have hi : (globN s "sk_buf", 64) ∈ fixedObjects s := by
+    unfold fixedObjects
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_append_left
+    apply List.mem_map.2
+    exact ⟨("sk_buf",64),by decide,by simp [hn]⟩
+  rcases hF.1 _ hi with hz | ⟨ha,_⟩
+  · norm_num at hz
+  · have hb := allocated_le_2pow64 hA.2 ha
+    dsimp only at hb
+    omega
+
 end HeadStore
