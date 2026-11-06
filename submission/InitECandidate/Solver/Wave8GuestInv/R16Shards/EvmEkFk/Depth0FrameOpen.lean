@@ -8073,4 +8073,37 @@ theorem worldTypedWith_of_sk_make {F : Type}
   exact ⟨(worldTypedWith_congr_w1 hAs hAp hhp hsp (fun g _ => hg g) hcells hWT
     ⟨hFT, fun o ho => Or.inl (by rw [← hfixed]; exact ho)⟩).1, hfixed⟩
 
+/-- Key construction preserves arena readiness directly from its byte effect. -/
+theorem arenaReady_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hAs : ArenaReady s)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post)) : ArenaReady post := by
+  have hr : Resumes (evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make)).1 := by
+    rw [hb]; exact Or.inl ⟨v, rfl⟩
+  obtain ⟨_, _, _, _, heff⟩ := eval_sk_make_body_evm s hc hma hfit (by rw [hb]; simp) hr
+  rw [hb] at heff
+  exact ⟨guestInv_congr heff.code heff.memaddrs heff.shMemaddrs heff.baseAddr hAs.1,
+    arenaOK_congr heff.globals hAs.2⟩
+
+/-- The combined intermediate state needed before access-table insertion. -/
+theorem world_and_payload_of_sk_make {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S Nd : List Nat} (db : Nat)
+    (hAs : ArenaReady s) (hWT : WorldTypedWith s S Nd)
+    (hW : WorldTyped s S) (hdb : db ∈ S) (h : CodeDbPayloadStrong s S db)
+    (hc : s.code = originalRuntimeCode) (hma : s.memaddrs = ordinaryDomain)
+    (hfit : ∀ (_ : globN s "sk_buf" ≠ 0), globN s "sk_buf" + 52 ≤ 2 ^ 64)
+    (v : ValueHOL 64)
+    (hb : evaluateHOLFiniteState s (sourceFnBody Guest.Software.guestFn_sk_make) =
+      (some (.returned v), post))
+    (hd : ∀ i ∈ worldTypedIvls s S Nd, Disj i (globN s "sk_buf", 52)) :
+    ArenaReady post ∧ WorldTypedWith post S Nd ∧ CodeDbPayloadStrong post S db := by
+  have hAp := arenaReady_of_sk_make hAs hc hma hfit v hb
+  obtain ⟨hWp, hfixed⟩ := worldTypedWith_of_sk_make hAs hAp hWT hc hma hfit v hb hd
+  have hp := typed_tables_preserved_of_sk_make hW hc hma hfit v hb
+  exact ⟨hAp, hWp, codeDbPayloadStrong_of_sk_make db h hc hma hfit v hb hAs hAp
+    (hp db hdb).1 (fun t ht => (hp t ht).2) hfixed⟩
+
 end HeadStore
