@@ -11778,4 +11778,70 @@ theorem create2_prefix_run_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
     (.var .local (ofString "n")) (.rfield 0 (.var .local (ofString "x")))
     create2ChargedSuffix_g10 hchild
 
+def MemoryExpansionLocal_g10 {F : Type} (s : PanSemStateFiniteExact 64 F) : Prop :=
+  ∃ cw ebw : BitVec 64,
+    s.locals.lookup (ofString "x") = some (.rStruct [.val (.word cw), .val (.word ebw)]) ∧
+    (ebw = 0#64 ∨ (memW s (globN s "ev" + 32) + ebw.toNat < 2 ^ 37 ∧
+      (memW s (globN s "ev" + 32) + ebw.toNat) % 32 = 0))
+
+theorem memoryExpansionLocal_transport_g10 {F : Type}
+    {s t : PanSemStateFiniteExact 64 F} (hp : MemoryExpansionLocal_g10 s)
+    (hx : t.locals.lookup (ofString "x") = s.locals.lookup (ofString "x"))
+    (he : globN t "ev" = globN s "ev")
+    (hm : memW t (globN s "ev" + 32) = memW s (globN s "ev" + 32)) :
+    MemoryExpansionLocal_g10 t := by
+  obtain ⟨cw, ebw, hl, hb⟩ := hp
+  exact ⟨cw, ebw, hx.trans hl, by rwa [he, hm]⟩
+
+theorem memoryExpansionLocal_bind_ro_g10 {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hp : MemoryExpansionLocal_g10 s)
+    (hlf : LocFrame s post) (name : MlS) (v : ValueHOL 64)
+    (hne : name ≠ ofString "x") :
+    MemoryExpansionLocal_g10 (setVarHOLFinite name v {post with locals := s.locals}) := by
+  apply memoryExpansionLocal_transport_g10 hp
+  · simp [setVarHOLFinite, HolFiniteMapExact.lookup_update, FUPDATE, hne]
+  · change globN post "ev" = globN s "ev"
+    unfold globN
+    rw [congrArg PanSemStateFiniteExact.globals hlf]
+  · change memW post _ = memW s _
+    unfold memW
+    rw [congrArg PanSemStateFiniteExact.memory hlf]
+
+theorem memoryExpansionLocal_callee_pre_g10 {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (hc : s.code = originalRuntimeCode)
+    (hw : Group10.HeadMemChainWF s) (hp : MemoryExpansionLocal_g10 s)
+    {values : List (ValueHOL 64)} {body : ProgHOL 64}
+    {callee : HolFiniteMapExact MlS (ValueHOL 64)} {rs : ShapeHOL}
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.rfield 1 (.var .local (ofString "x"))] = some values)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "extend_memory") values = some (body, callee, rs)) :
+    Group10.ExtendMemoryPre (callEntryStateHOLFinite s callee) := by
+  obtain ⟨cw, ebw, hx, hb⟩ := hp
+  have ha' : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      [.rfield 1 (.var .local (ofString "x"))] = some [.val (.word ebw)] := by
+    rw [evalListHOLFinite_eq_toExact]
+    simp [evalListHOLExact, evalHOLExact, hx]
+  rw [ha'] at ha
+  have hv := Option.some.inj ha
+  subst values
+  rw [hc] at hl
+  obtain ⟨_, _, ebw', heq, hcal⟩ := one_word_arg_lookup Group10.lookup_extend_memory hl
+  cases heq
+  refine ⟨ebw, hcal, ?_⟩
+  rcases hb with hz | hb
+  · exact Or.inl hz
+  · exact Or.inr ⟨hb.1, hb.2, hw.2.1⟩
+
+theorem extend_memory_sequence_g10 {F : Type} (s0 : PanSemStateFiniteExact 64 F)
+    (charged : Bool) (cont : ProgHOL 64)
+    (hcont : HandlerRunA s0 (fun _ => True) charged cont) :
+    HandlerRunA s0 MemoryExpansionLocal_g10 charged
+      (.seq (.call (some (none, none)) (ofString "extend_memory")
+        [.rfield 1 (.var .local (ofString "x"))]) cont) := by
+  apply HandlerRunA.seq_call epsA_extend_memory (Q := fun _ => True)
+  · intro t values body callee rs hc hi hw hp ha hl
+    exact memoryExpansionLocal_callee_pre_g10 t hc hw hp ha hl
+  · intros; trivial
+  · exact hcont
+
 end InitECandidate.Solver.Wave8GuestInv.R16Shards.OpHandlersB
