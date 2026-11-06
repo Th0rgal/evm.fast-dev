@@ -4984,6 +4984,49 @@ theorem branch_store_child_decoder_so {F : Type}
   · dsimp [post]; rw [hslot]
   · exact hstep.kinds
 
+theorem branch_store_value_decoder_so {F : Type}
+    {s : PanSemStateFiniteExact 64 F} {Nd : List Nat} {br vp vn : BitVec 64}
+    (ha : ArenaReady s) (hNd : NodeHeap s Nd)
+    (hbr : br.toNat ∈ Nd) (hk : memW s br.toNat = 3) (hv : vn.toNat < 2 ^ 40) :
+    let m1 := Wave8Contracts.M26.updW s.memory (br + BitVec.ofNat 64 160) vp
+    let post := { s with memory := Wave8Contracts.M26.updW m1 (br + BitVec.ofNat 64 168) vn }
+    s.memaddrs (br + BitVec.ofNat 64 160) ∧ s.memaddrs (br + BitVec.ofNat 64 168) ∧
+      DecoderNodeStep s post Nd Nd ∧ memW post br.toNat = 3 := by
+  intro m1 post
+  obtain ⟨hd1, hd2, hstep, hkpost⟩ := R14Shards.branch_store_value_step ha hNd hbr hk hv
+  refine ⟨hd1, hd2, ⟨hstep, ?_, fun x hx hnx => absurd hx hnx⟩, hkpost⟩
+  intro n hn
+  unfold nodePath
+  rw [hstep.kinds n hn]
+  by_cases hkind : memW s n = 1 ∨ memW s n = 2
+  · have hne : n ≠ br.toNat := by intro heq; subst n; rcases hkind with h | h <;> omega
+    have hd := hNd.2 n hn br.toNat hbr hne
+    have hnsize : 48 ≤ nodeSize (memW s n) := by
+      rcases hkind with h | h <;> simp [nodeSize, h]
+    have hbrsize : nodeSize (memW s br.toNat) = 176 := by simp [nodeSize, hk]
+    have hhi := (hNd.1 br.toNat hbr).2.2.1.2
+    have hnhi := (hNd.1 n hn).2.2.1.2
+    have hlimit : heapLimit < 2 ^ 64 := by decide
+    dsimp [Disj, nodeIvl] at hd hhi hnhi
+    rw [hbrsize] at hd hhi
+    have haddr : ∀ off k : Nat, (off = 32 ∨ off = 40) → (k = 160 ∨ k = 168) →
+        BitVec.ofNat 64 (n + off) ≠ br + BitVec.ofNat 64 k := by
+      intro off k hoff hk'
+      have hn64 : n + off < 2 ^ 64 := by rcases hoff with rfl | rfl <;> omega
+      have hb64 : br.toNat + k < 2 ^ 64 := by rcases hk' with rfl | rfl <;> omega
+      intro heq
+      have heq' := congrArg BitVec.toNat heq
+      simp only [BitVec.toNat_add, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hn64] at heq'
+      have hk64 : k < 2 ^ 64 := by rcases hk' with rfl | rfl <;> decide
+      rw [Nat.mod_eq_of_lt hk64, Nat.mod_eq_of_lt hb64] at heq'
+      rcases hd with hd | hd <;> rcases hoff with rfl | rfl <;> rcases hk' with rfl | rfl <;> omega
+    have hw : ∀ off, off = 32 ∨ off = 40 → memW post (n + off) = memW s (n + off) := by
+      intro off hoff
+      simp only [memW, post, m1, Wave8Contracts.M26.updW,
+        if_neg (haddr off 168 hoff (Or.inr rfl)), if_neg (haddr off 160 hoff (Or.inl rfl))]
+    rw [hw 32 (Or.inl rfl), hw 40 (Or.inr rfl)]
+  · simp [hkind]
+
 theorem DecoderNodeStep.with_locals_clock {F : Type} {s post : PanSemStateFiniteExact 64 F}
     {Nd Nd' : List Nat} (h : DecoderNodeStep s post Nd Nd')
     (L : HolFiniteMapExact MlS (ValueHOL 64)) (C : Nat) :
