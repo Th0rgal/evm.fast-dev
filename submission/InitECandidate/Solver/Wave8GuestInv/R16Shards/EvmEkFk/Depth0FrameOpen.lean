@@ -10188,4 +10188,45 @@ theorem blockOutObjects_eq_of_htab_exit {F : Type}
       exact List.mem_append_right _ hi
     · omega
 
+theorem table_ivl_unhit_of_separated_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat} (u : Nat)
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (hu : u ∈ S) (ht : locN s "t" ∈ S) (hne : u ≠ locN s "t")
+    (hx : HtabExit s post) :
+    ∀ i ∈ htabFootprint s u, Fast_C08WkShard03.IvlUnhit s post i := by
+  intro i hi
+  have hw := (hW.1.2.1 u hu).1
+  have htw := (hW.1.2.1 (locN s "t") ht).1
+  apply ivlUnhit_of_frameOutside ⟨(hw.1 i hi).2.1,(hw.1 i hi).2.2.1⟩ hx.2.2.2.2.2.2.1
+  · intro j hj
+    exact ⟨(htw.1 j hj).2.1,(htw.1 j hj).2.2.1⟩
+  · have hs := hAs.2.2.2.2.2.2.1
+    have hp := hx.1.2.2.2.2.2.2.1
+    exact ⟨hs,by omega⟩
+  · exact hW.1.2.2.1 u hu (locN s "t") ht hne i hi
+  · exact disj_fresh_of_allocated hAs.2 hx.1.2 hx.2.2.2.2.1 ((hW.1.2.1 u hu).2 i hi).1
+
+theorem low_word_eq_of_htab_exit {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} {S : List Nat}
+    (hAs : ArenaReady s) (hW : WorldTyped s S)
+    (ht : locN s "t" ∈ S) (hx : HtabExit s post)
+    (a : Nat) (ha : a + 8 ≤ sourceBase) : memW post a = memW s a := by
+  have hb : a < 2 ^ 64 := by
+    have : sourceBase < 2 ^ 64 := by decide
+    omega
+  have hm := hx.2.2.2.2.2.2.1 (BitVec.ofNat 64 a) ?_ ?_
+  · unfold memW
+    rw [hm]
+  · intro j hj hh
+    have hlo := ((hW.1.2.1 _ ht).1.1 j hj).1.1
+    unfold CellHits at hh
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hh
+    omega
+  · intro hh
+    have hlo := hAs.2.1
+    unfold CellHits at hh
+    rw [BitVec.toNat_ofNat,Nat.mod_eq_of_lt hb] at hh
+    dsimp at hh
+    omega
+
 end HeadStore
