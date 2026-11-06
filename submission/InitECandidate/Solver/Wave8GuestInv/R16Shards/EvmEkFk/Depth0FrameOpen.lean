@@ -8906,4 +8906,32 @@ theorem ext_code_tail_of_world_entry {F : Type} (s : PanSemStateFiniteExact 64 F
   obtain ⟨hv,hn,_⟩ := ext_code_of_tail_return _ code code_n hlocal hn w hw
   exact ⟨code,code_n,hv,hn⟩
 
+/-- Strong world payloads supply the cache lookup's live-record invariant. -/
+theorem code_cache_entry_of_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (owner : String) (db hash : BitVec 64)
+    (hA : ArenaReady s) (hW : WorldTypedCodeStrong s S)
+    (ho : owner = "ts" ∨ owner = "bs") (hn : globN s owner ≠ 0)
+    (hdb : db.toNat = memW s (globN s owner + 48)) (hm : db.toNat ∈ S)
+    (ha : evalListHOLFinite s (h := fun a => Classical.propDecidable (s.memaddrs a))
+      (getCodeCacheArgs owner) = some [.val (.word db), .val (.word hash)]) :
+    CodeCacheLookupStrong s owner := by
+  refine ⟨hA, db, hash, ha, (hW.1.1.2.1 _ hm).1, ?_⟩
+  have hp := hW.2 owner 48 (by rcases ho with rfl | rfl <;> simp) hn
+  rw [← hdb] at hp
+  exact hp.1
+
+/-- Actual witness/access roots obtain membership, distinction, and payload typing. -/
+theorem fallback_payload_of_world_strong {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (S : List Nat) (db tw : BitVec 64) (hW : WorldTypedCodeStrong s S)
+    (hws : globN s "ws" ≠ 0) (hts : globN s "ts" ≠ 0)
+    (hdb : db.toNat = memW s (globN s "ws" + 16))
+    (ht : tw.toNat = memW s (globN s "ts" + 40))
+    (hdn : db.toNat ≠ 0) (htn : tw.toNat ≠ 0) :
+    db.toNat ∈ S ∧ tw.toNat ∈ S ∧ db.toNat ≠ tw.toNat ∧ CodeDbPayloadStrong s S db.toNat := by
+  have hd := fallback_code_roots_distinct s S hW.1 hws hts (by rwa [← hdb]) (by rwa [← ht])
+  rw [← hdb, ← ht] at hd
+  refine ⟨hd.1, hd.2.1, hd.2.2, ?_⟩
+  rw [hdb]
+  exact hW.2 "ws" 16 (by simp) hws
+
 end HeadStore
