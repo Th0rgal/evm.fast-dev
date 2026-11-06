@@ -8136,6 +8136,107 @@ theorem precompile_head_update_step {F : Type}
   · intro k _
     rw [hglobals]
 
+theorem precompile_chain_cells_of_head_update {F : Type}
+    {s post : PanSemStateFiniteExact 64 F} (hE : EvmInv s)
+    (hmem : ∀ x : BitVec 64,
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        x ≠ BitVec.ofNat 64 addr) → post.memory x = s.memory x) :
+    ChainCellsAgree s post := by
+  obtain ⟨_, S, _, hrest⟩ := hE
+  dsimp only at hrest
+  obtain ⟨_, _, _, hFWF, _, _, hPair, _⟩ := hrest
+  obtain ⟨tl, hcs⟩ : ∃ tl, evmChain s = (globN s "ev", globN s "cur_cont") :: tl :=
+    ⟨_, OpHandlersB.HeadMemBridge.evmChain_cons s⟩
+  have hSE : scratchEnd = 2965299200 := rfl
+  have hhead := hFWF _ (by rw [hcs]; exact List.mem_cons_self)
+  have he_in := (hhead.1 (globN s "ev", 280) (by simp)).1.2
+  have hc_in := (hhead.1 (globN s "cur_cont", 104) (by simp)).1.2
+  dsimp only at he_in hc_in
+  rw [hcs, List.map_cons, List.flatten_cons, List.pairwise_append] at hPair
+  obtain ⟨hP0, _, hcross⟩ := hPair
+  have hdec : Disj (globN s "ev", 280) (globN s "cur_cont", 104) := by
+    unfold frameObjects at hP0
+    exact (List.pairwise_cons.mp (List.pairwise_append.mp hP0).1).1 _ (by simp)
+  have hsafe : ∀ a : Nat, a < 2 ^ 64 →
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        a ≠ addr) → memW post a = memW s a := by
+    intro a hlt hne
+    unfold memW
+    rw [hmem (BitVec.ofNat 64 a)]
+    intro addr haddr heq
+    have hal : addr < 2 ^ 64 := by
+      simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+      rw [hSE] at he_in hc_in
+      rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega
+    have := congrArg BitVec.toNat heq
+    rw [BitVec.toNat_ofNat, BitVec.toNat_ofNat, Nat.mod_eq_of_lt hlt,
+      Nat.mod_eq_of_lt hal] at this
+    exact hne addr haddr this
+  intro ec hec
+  rw [hcs] at hec
+  rcases List.mem_cons.mp hec with rfl | htl
+  · unfold Disj at hdec
+    dsimp only at hdec
+    rw [hSE] at he_in hc_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try dsimp only) <;> (try omega) <;>
+      (intro addr haddr
+       simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+       rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+  · have hFec := hFWF ec (by rw [hcs]; exact List.mem_cons_of_mem _ htl)
+    have hr_in := (hFec.1 (ec.1, 280) (by simp)).1.2
+    have hk_in := (hFec.1 (ec.2, 104) (by simp)).1.2
+    dsimp only at hr_in hk_in
+    have hmemb : ∀ o ∈ [(ec.1, 280), (ec.2, 104)],
+        o ∈ ((tl.map (frameObjects s)).flatten) := by
+      intro o ho
+      exact List.mem_flatten.2 ⟨frameObjects s ec, List.mem_map_of_mem htl,
+        by unfold frameObjects
+           simp only [List.mem_cons, List.mem_append] at ho ⊢
+           tauto⟩
+    have hA : (globN s "ev", 280) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have hB : (globN s "cur_cont", 104) ∈ frameObjects s (globN s "ev", globN s "cur_cont") := by
+      unfold frameObjects; simp
+    have d1 := hcross _ hA _ (hmemb (ec.1, 280) (by simp))
+    have d2 := hcross _ hB _ (hmemb (ec.1, 280) (by simp))
+    have d3 := hcross _ hA _ (hmemb (ec.2, 104) (by simp))
+    have d4 := hcross _ hB _ (hmemb (ec.2, 104) (by simp))
+    unfold Disj at d1 d2 d3 d4
+    dsimp only at d1 d2 d3 d4
+    rw [hSE] at he_in hc_in hr_in hk_in
+    refine ⟨?_, ?_, ?_, ?_⟩ <;> apply hsafe <;> (try omega) <;>
+      (intro addr haddr
+       simp only [R11Shards.headAllowedOffsets, List.mem_cons, List.not_mem_nil, or_false] at haddr
+       rcases haddr with rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl | rfl <;> omega)
+
+theorem precompile_head_update_step_of_effect {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hGuest : GuestInv post)
+    (hglobals : post.globals = s.globals) (hbe : post.be = s.be)
+    (hmemory : ∀ x : BitVec 64,
+      (∀ addr ∈ R11Shards.headAllowedOffsets (globN s "ev") (globN s "cur_cont"),
+        x ≠ BitVec.ofNat 64 addr) → post.memory x = s.memory x)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
+    EvmStepCC frameStartGw s post :=
+  precompile_head_update_step hInv hGuest hglobals hbe hmemory hgas
+    (precompile_chain_cells_of_head_update hInv hmemory)
+
+theorem precompile_output_fields_step {F : Type}
+    {s post : PanSemStateFiniteExact 64 F}
+    (hInv : EvmInv s) (hGuest : GuestInv post)
+    (hglobals : post.globals = s.globals) (hbe : post.be = s.be)
+    (hmemory : ∀ x : BitVec 64,
+      x ≠ BitVec.ofNat 64 (globN s "ev" + 120) →
+      x ≠ BitVec.ofNat 64 (globN s "ev" + 128) → post.memory x = s.memory x)
+    (hgas : memW post (globN s "ev" + 64) + memW post (globN s "ev" + 192) ≤
+      memW s (globN s "ev" + 64) + memW s (globN s "ev" + 192)) :
+    EvmStepCC frameStartGw s post := by
+  apply precompile_head_update_step_of_effect hInv hGuest hglobals hbe _ hgas
+  intro x hx
+  exact hmemory x (hx _ (by simp [R11Shards.headAllowedOffsets]))
+    (hx _ (by simp [R11Shards.headAllowedOffsets]))
+
 private theorem dispatch_step_trans {F : Type} {s mid post : PanSemStateFiniteExact 64 F}
     (h1 : EvmStepCC frameStartGw s mid) (h2 : EvmStepCC frameStartGw mid post) :
     EvmStepCC frameStartGw s post := by
