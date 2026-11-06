@@ -5936,15 +5936,10 @@ private def ValidRlpFrame {F : Type} (s : PanSemStateFiniteExact 64 F)
     (∀ o ∈ nodeExtents s Nd, Disj (memW s (fr + 24), memW s (fr + 32)) o) ∧
     (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
       Disj (memW s (fr + 24), memW s (fr + 32)) (bufferRegion s gs)) ∧
-    memW s (fr + 40) = rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)) +
-      rlpBytesLenPure (if 0 < memW s (memW s (fr + 8) + 56) then memB s (memW s (memW s (fr + 8) + 48)) else 0)
-        (memW s (memW s (fr + 8) + 56)) ∧
+    rlpBytesLenPure (memB s (memW s (fr + 24))) (memW s (fr + 32)) +
+      rlpBytesLenPure 128 (memW s (memW s (fr + 8) + 56)) ≤ memW s (fr + 40) + 1 ∧
     (0 < memW s (memW s (fr + 8) + 56) →
-      s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (memW s (fr + 8) + 48)))) ∧
-      Allocated s (memW s (memW s (fr + 8) + 48), 1) ∧
-      (∀ n ∈ Nd, Disj (memW s (memW s (fr + 8) + 48), 1) (n + 8, 24)) ∧
-      (∀ gs ∈ [("keccak_pad", 136), ("keccak_st", 200)],
-        Disj (memW s (memW s (fr + 8) + 48), 1) (bufferRegion s gs)))) ∧
+      s.memaddrs (panByteAlignHOL (BitVec.ofNat 64 (memW s (memW s (fr + 8) + 48)))))) ∧
   (memW s (memW s (fr + 8)) = 2 →
     1 ≤ memW s (fr + 32) ∧
     memW s (fr + 32) ≤ memW s (memW s (fr + 8) + 40) / 2 + 1 ∧
@@ -8065,6 +8060,67 @@ private theorem eval_finishWriteLoop_none {F : Type} :
       exact ⟨offw, by rw [hj_eq]; simp [branchRefsLenSum],
         HeapByteEff.refl hAR _ ["heap_ptr"], hN, rfl, hKS,
         fun _ _ _ _ _ _ => rfl, hln, hlf, hlk, hlp, hlcb, hlcl, hlhl, hlb, hlo⟩
+
+private def finishPayloadLen {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (fr node : Nat) : Nat :=
+  if memW s node = 2 then
+    memW s (fr + 40) + nodeRefBytes s (memW s (node + 48))
+  else if memW s node = 3 then
+    memW s (fr + 40) + branchRefsLenSum s node 16 +
+      rlpBytesLenPure
+        (if 0 < memW s (node + 168) then memB s (memW s (node + 160)) else 0)
+        (memW s (node + 168))
+  else memW s (fr + 40)
+
+private theorem finishPayloadLen_lt {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (Nd : List Nat) (fr : Nat) (hN : NodeHeap s Nd)
+    (hfr : ValidRlpFrame s Nd fr) :
+    finishPayloadLen s fr (memW s (fr + 8)) < 2 ^ 42 := by
+  obtain ⟨_, _, _, hn, _, _, _, hpay, hpay3, _, _⟩ := hfr
+  unfold finishPayloadLen
+  by_cases h2 : memW s (memW s (fr + 8)) = 2
+  · rw [if_pos h2]
+    have := nodeRefBytes_le33 s (memW s (memW s (fr + 8) + 48))
+    omega
+  · rw [if_neg h2]
+    by_cases h3 : memW s (memW s (fr + 8)) = 3
+    · rw [if_pos h3]
+      have hzero := hpay3 h3
+      have hsum := branchRefsLenSum_le s (memW s (fr + 8)) 16
+      obtain ⟨_, _, _, _, _, _, _, _, _, hbranch⟩ := hN.1 _ hn
+      have hlen := hbranch h3
+      have hrlp := (rlpBytesLenPure_bounds
+        (if 0 < memW s (memW s (fr + 8) + 168) then
+          memB s (memW s (memW s (fr + 8) + 160)) else 0)
+        (memW s (memW s (fr + 8) + 168))).2.2
+      omega
+    · rw [if_neg h3]
+      omega
+
+private theorem finishPayloadLen_pos {F : Type} (s : PanSemStateFiniteExact 64 F)
+    (Nd : List Nat) (fr : Nat) (hfr : ValidRlpFrame s Nd fr) :
+    1 ≤ finishPayloadLen s fr (memW s (fr + 8)) := by
+  obtain ⟨_, _, _, _, hk1, hk3, _, _, _, hleaf, hext⟩ := hfr
+  unfold finishPayloadLen
+  by_cases h2 : memW s (memW s (fr + 8)) = 2
+  · rw [if_pos h2]
+    obtain ⟨_, _, _, _, _, hpay2⟩ := hext h2
+    have hb := (rlpBytesLenPure_bounds (memB s (memW s (fr + 24))) (memW s (fr + 32))).1
+    omega
+  · rw [if_neg h2]
+    by_cases h3 : memW s (memW s (fr + 8)) = 3
+    · rw [if_pos h3]
+      have hb := (rlpBytesLenPure_bounds
+        (if 0 < memW s (memW s (fr + 8) + 168) then
+          memB s (memW s (memW s (fr + 8) + 160)) else 0)
+        (memW s (memW s (fr + 8) + 168))).1
+      omega
+    · rw [if_neg h3]
+      have h1 : memW s (memW s (fr + 8)) = 1 := by omega
+      obtain ⟨_, _, _, _, _, hpay1, _⟩ := hleaf h1
+      have hb1 := (rlpBytesLenPure_bounds (memB s (memW s (fr + 24))) (memW s (fr + 32))).1
+      have hb2 := (rlpBytesLenPure_bounds 128 (memW s (memW s (fr + 8) + 56))).1
+      omega
 
 end NodeRlpFillProof
 
