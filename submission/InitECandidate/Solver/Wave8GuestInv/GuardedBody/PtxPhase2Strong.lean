@@ -17892,4 +17892,49 @@ theorem phase2_compute_contract_address_live_buffer (h : PtxCallees) {F : Type}
   · simp at hz; simp [hz]
   · simp at hz; simp [hz]
 
+/-- Contract-address computation preserves all message words under its write separation. -/
+theorem phase2_compute_contract_address_message_fields (h : PtxCallees)
+    {ι F : Type} [Nonempty ι] (buffers : ι → Ivl) (contents : ι → Nat → BitVec 64)
+    (s post : PanSemStateFiniteExact 64 F) (vs : List (ValueHOL 64))
+    (body : ProgHOL 64) (callee : HolFiniteMapExact MlS (ValueHOL 64)) (ret : ShapeHOL)
+    (r : Option (PanSemResultExact 64))
+    (hc : s.code = originalRuntimeCode)
+    (hl : lookupCodeHOLFinite s.code.lookup (ofString "compute_contract_address") vs = some (body, callee, ret))
+    (he : evaluateHOLFiniteState (callEntryStateHOLFinite s callee) body = (r, post))
+    (hnt : r ≠ some .timeOut) (hr : Resumes r)
+    (hp : PtxMessageStoreReady buffers contents s)
+    (hd : ∀ S Nd, WorldTypedWith s S Nd → IvlsDisj
+      [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)] (worldTypedIvls s S Nd))
+    (hf : ∀ region ∈ [(locN (callEntryStateHOLFinite s callee) "out", 20),
+      (globN s "keccak_pad", if globN s "keccak_pad" = 0 then 0 else 136),
+      (globN s "keccak_st", if globN s "keccak_st" = 0 then 0 else 200)],
+      Disj (locN s "m", 176) region) :
+    ∀ k, k < 22 → memW post (locN s "m" + 8 * k) = memW s (locN s "m" + 8 * k) := by
+  obtain ⟨i⟩ := ‹Nonempty ι›
+  obtain ⟨_, S, Nd, hw, _, hmd⟩ := hp.2.2.2.2.2 i
+  have hh := PtxP1.funSpec_at_lookup h.wk_compute_contract_address s hc vs body callee ret hl
+    (PtxP1.worldOK_callEntry hp.1 callee) (by rw [he]; exact hnt)
+  rw [he] at hh
+  have step := hh hr
+  obtain ⟨S', Nd', _, hw', hg, hframe, _⟩ := step.2.2.2.2 S Nd
+    ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw) (hd S Nd hw)
+  intro k hk
+  apply phase2_world_frame_heap_disjoint (callEntryStateHOLFinite s callee) post _ _
+    (locN s "m", 176) (locN s "m" + 8 * k) hp.1.1.2 hp.2.2.2.1
+  · constructor <;> dsimp <;> omega
+  · have hal := hp.2.2.2.2.1.1
+    simp [Nat.add_mod, hal]
+  · exact hframe
+  · exact hmd _ (by simp)
+  · exact hf
+  · exact worldOwned_zero_aligned ((worldTypedWith_with_locals s callee (s.clock - 1) S Nd).mpr hw)
+  · intro region hm hz
+    simp only [List.mem_cons, List.not_mem_nil, or_false] at hm
+    rcases hm with rfl | rfl | rfl
+    · simp at hz
+    · simp at hz; simp [hz]
+    · simp at hz; simp [hz]
+
 end InitECandidate.Solver.Wave8GuestInv.R13Shards
