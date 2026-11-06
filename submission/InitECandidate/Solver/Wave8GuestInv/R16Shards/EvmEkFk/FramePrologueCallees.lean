@@ -9701,6 +9701,32 @@ theorem precompile_sha256_final_tail_effect {F : Type}
     intro i hi hpos; simp only [List.mem_singleton] at hi; subst i
     exact ⟨_, by simp, le_rfl, le_rfl⟩)
 
+theorem precompile_byteEff_seq_resumes {F : Type}
+    (s : PanSemStateFiniteExact 64 F) (a b : ProgHOL 64) (Rl : List Ivl)
+    (hnt : (evaluateHOLFiniteState s (.seq a b)).1 ≠ some .timeOut)
+    (hr : (evaluateHOLFiniteState s (.seq a b)).1 = none ∨
+      Resumes (evaluateHOLFiniteState s (.seq a b)).1)
+    (ha : (evaluateHOLFiniteState s a).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState s a).1 = none ∨ Resumes (evaluateHOLFiniteState s a).1) →
+      R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s a).2 Rl)
+    (hb : ∀ m, evaluateHOLFiniteState s a = (none,m) →
+      (evaluateHOLFiniteState m b).1 ≠ some .timeOut →
+      ((evaluateHOLFiniteState m b).1 = none ∨ Resumes (evaluateHOLFiniteState m b).1) →
+      R10Shards.P26_P28.ByteEff m (evaluateHOLFiniteState m b).2 Rl) :
+    R10Shards.P26_P28.ByteEff s (evaluateHOLFiniteState s (.seq a b)).2 Rl := by
+  rw [evaluateHOLFiniteState_seq_line780] at hnt hr ⊢
+  rcases run : evaluateHOLFiniteState s a with ⟨r,m⟩
+  cases r with
+  | none =>
+    simp only [run] at hnt hr ⊢
+    have he := ha (by simp [run]) (Or.inl (by simp [run]))
+    rw [run] at he
+    exact he.trans (hb m run hnt hr)
+  | some r =>
+    simp only [run] at hnt hr ⊢
+    have he := ha (by simpa [run] using hnt) (by simpa [run] using hr)
+    simpa only [run] using he
+
 theorem precompile_output_tail_at {F : Type} (s : PanSemStateFiniteExact 64 F)
     (name : MlS) (out size : BitVec 64)
     (hcode : s.code = originalRuntimeCode) (hi : EvmInv s)
